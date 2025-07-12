@@ -61,10 +61,11 @@
   - [ ] Implement the essential custom Jinja function `env(var_name)` to read system environment variables.
 
   - [ ] Implement the critical `glob(pattern)` custom function to perform file path globbing, bridging a key feature gap not supported by Ninja.
+  - [ ] Support user-defined Jinja macros declared in a top-level `macros` list.
 
 - **Success Criterion:**
 
-  - [ ] Netsuke can successfully build a manifest that uses variables, conditional logic (e.g., different flags based on a variable), and the `glob()` function to discover source files.
+  - [ ] Netsuke can successfully build a manifest that uses variables, conditional logic (e.g., different flags based on a variable), custom macros, and the `glob()` function to discover source files.
 
 ---
 

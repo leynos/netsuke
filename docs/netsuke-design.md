@@ -63,6 +63,7 @@ A `Netsukefile` file is a YAML mapping containing a set of well-defined top-leve
 - `netsuke_version`: A mandatory string that specifies the version of the Netsuke schema the manifest conforms to (e.g., `"1.0"`). This allows for future evolution of the schema while maintaining backward compatibility. This version string should be parsed and validated using the `semver` crate.4
 
 - `vars`: A mapping of global key-value string pairs. These variables are available for substitution in rule commands and target definitions and are exposed to the Jinja templating context.
+- `macros`: An optional list of Jinja macro definitions. Each item provides a `signature` string using standard Jinja syntax and a `body` declared with the YAML `|` block style. Netsuke registers these macros in the template environment before rendering other sections.
 
 - `rules`: A list of rule definitions. Each rule is a reusable template for a command, analogous to a Ninja `rule` block.2
 
@@ -97,6 +98,7 @@ Each entry in the `targets` list is a mapping that defines a build edge in the d
 - `order_only_deps`: An optional list of other target names that must be built before this target, but whose modification does not trigger a rebuild of this target. This maps directly to Ninja's order-only dependencies, specified with the `||` operator.7
 
 - `vars`: An optional mapping of local variables. These variables override any global variables defined in the top-level `vars` section for the scope of this target only. This provides the same functionality as Ninja's build-local variables.3
+- `macros`: An optional list of Jinja macro definitions. Each item provides a `signature` string using standard Jinja syntax and a `body` declared with the YAML `|` block style. Netsuke registers these macros in the template environment before rendering other sections.
 
 ### 2.5 Table: Netsuke Manifest vs. Makefile
 
@@ -267,7 +269,23 @@ targets:
     #...
 ```
 
-### 4.3 Essential Custom Functions
+### 4.3 User-Defined Macros
+
+Netsuke allows users to declare reusable Jinja macros directly in the manifest.
+These are provided in a top-level `macros` list where each entry defines a
+`signature` and a `body` string. The body must use YAML's `|` block syntax so
+multi-line macro definitions remain readable. All macros are registered with the
+template environment before any other section is rendered.
+
+YAML
+
+```yaml
+macros:
+  - signature: "greet(name)"
+    body: |
+      Hello {{ name }}
+```
+### 4.4 Essential Custom Functions
 
 To transform `minijinja` from a general-purpose templating engine into a powerful build tool, Netsuke must expose a curated set of custom functions to the template environment. These functions will be implemented in safe Rust, providing a secure bridge to the underlying system.
 
@@ -281,7 +299,7 @@ To transform `minijinja` from a general-purpose templating engine into a powerfu
 
   `">=3.8"`). This allows for conditional logic in the build based on toolchain versions.
 
-### 4.4 Essential Custom Filters
+### 4.5 Essential Custom Filters
 
 In addition to functions, custom filters provide a concise, pipe-based syntax for transforming data within templates.
 
@@ -291,7 +309,7 @@ In addition to functions, custom filters provide a concise, pipe-based syntax fo
 
 - `| parent`: A filter that takes a path string and returns its parent directory.
 
-### 4.5 Jinja as the "Logic Layer"
+### 4.6 Jinja as the "Logic Layer"
 
 The integration of Jinja is more than a simple convenience for string substitution. It effectively serves as the **logic layer** for the entire build system. Traditional `make` provides powerful but often opaque functions like `$(shell...)` and `$(wildcard...)`. Netsuke achieves and surpasses this functionality in a much friendlier and safer way.
 
