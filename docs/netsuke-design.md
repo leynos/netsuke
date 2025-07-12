@@ -60,7 +60,7 @@ before execution, a critical requirement for compatibility with Ninja.
 
 1. Stage 4: IR Generation & Validation
 
-   The AST is traversed to construct a canonical, fully-resolved Intermediate
+   The AST is traversed to construct a canonical, fully resolved Intermediate
    Representation (IR) of the build. This IR represents the build as a static
    dependency graph, with all file paths, commands, and dependencies explicitly
    defined. During this transformation, Netsuke performs critical validation
@@ -242,16 +242,13 @@ Netsuke.
 ### 3.1 Crate Selection: `serde_yaml`
 
 For YAML parsing and deserialization, the recommended crate is `serde_yaml`.
-
 This choice is based on its deep and direct integration with the `serde`
-framework, which is the de-facto standard for serialization and deserialization
-in the Rust ecosystem.10 By using
-
-`serde_yaml`, we can leverage `serde`'s powerful derive macros to automatically
-generate the deserialization logic for our Rust structs. This approach is
-idiomatic, highly efficient, and significantly reduces the amount of boilerplate
-code that needs to be written and maintained. A simple `#` annotation on a
-struct is sufficient to make it a deserialization target.
+framework, the de-facto standard for serialization and deserialization in the
+Rust ecosystem. Using `serde_yaml` allows `serde`'s powerful derive macros to
+automatically generate the deserialization logic for Rust structs. This approach
+is idiomatic, highly efficient, and significantly reduces the amount of
+boilerplate code that needs to be written and maintained. A simple `#`
+annotation on a struct is sufficient to make it a deserialization target.
 
 While other promising YAML libraries like `saphyr` exist, their `serde`
 integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
@@ -402,7 +399,7 @@ The recommended templating engine is `minijinja`.
 
 This crate is the ideal choice for several reasons. It is explicitly designed as
 a Rust implementation of the Jinja2 template engine, aiming for close
-compatibility with its syntax and behavior.15 This is advantageous as Jinja2 is
+compatibility with its syntax and behaviour.15 This is advantageous as Jinja2 is
 a mature, well-documented, and widely understood language, reducing the learning
 curve for new Netsuke users. Furthermore,
 
@@ -549,7 +546,7 @@ and then synthesizing the final `build.ninja` file from that IR.
 ### 5.1 The Role of the Intermediate Representation (IR)
 
 The Intermediate Representation is a critical architectural component that
-serves as the static, fully-resolved, and validated representation of the entire
+serves as the static, fully resolved, and validated representation of the entire
 build graph. It is the bridge between the user-facing front-end (the YAML schema
 and its corresponding AST) and the machine-facing back-end (the Ninja file
 format).
@@ -981,9 +978,9 @@ enum Commands {
 treated as the default subcommand if none is provided, allowing for the common*
 `Netsuke [targets...]` *invocation.*
 
-### 8.3 Command Behavior
+### 8.3 Command Behaviour
 
-The behavior of each subcommand is clearly defined:
+The behaviour of each subcommand is clearly defined:
 
 - `Netsuke build [targets...]`: This is the primary and default command. It
   executes the full five-stage pipeline: ingestion, Jinja rendering, YAML
