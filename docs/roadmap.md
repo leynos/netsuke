@@ -19,6 +19,9 @@ compilation pipeline from parsing to execution.
   - [ ] Annotate the AST structs with `#[derive(Deserialize)]` and
     `#[serde(deny_unknown_fields)]` to enable parsing.
 
+  - [ ] Support `phony` and `always` boolean flags on targets and parse an
+    optional `actions` list that treats each entry as a `phony` target.
+
   - [ ] Implement the YAML parsing logic using `serde_yaml` to deserialize a
     static `Netsuke.yml` file into the `NetsukeManifest` AST.
 

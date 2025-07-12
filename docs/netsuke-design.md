@@ -153,6 +153,9 @@ top-level keys.
   the sources it depends on, and the rule used to produce it. This corresponds
   to a Ninja `build` statement.3
 
+- `actions`: A secondary list of build targets. Any target placed here is
+  treated as `{ phony: true, always: false }` by default.
+
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.3
@@ -178,8 +181,8 @@ Each entry in the `rules` list is a mapping that defines a command template.
 
 ### 2.4 Defining `targets`
 
-Each entry in the `targets` list is a mapping that defines a build edge in the
-dependency graph.
+Each entry in `targets` defines a build edge; placing a target in the optional
+`actions` list instead marks it as `phony: true` with `always` left `false`.
 
 - `name`: The primary output file or files for this build step. This can be a
   single string or a list of strings.
@@ -209,6 +212,12 @@ dependency graph.
   `signature` string using standard Jinja syntax and a `body` declared with the
   YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
+
+- `phony`: When set to `true`, the target runs when explicitly requested even if
+  a file with the same name exists. The default value is `false`.
+
+- `always`: When set to `true`, the target runs on every invocation regardless
+  of timestamps or dependencies. The default value is `false`.
 
 ### 2.5 Generated Targets with `foreach`
 
@@ -302,6 +311,9 @@ pub struct NetsukeManifest {
     #[serde(default)]
     pub rules: Vec<Rule>,
 
+    #[serde(default)]
+    pub actions: Vec<Target>,
+
     pub targets: Vec<Target>,
 
     #[serde(default)]
@@ -336,6 +348,14 @@ pub struct Target {
 
     #[serde(default)]
     pub vars: HashMap<String, String>,
+
+    /// Run this target when requested even if a file with the same name exists.
+    #[serde(default)]
+    pub phony: bool,
+
+    /// Run this target on every invocation regardless of timestamps.
+    #[serde(default)]
+    pub always: bool,
 }
 
 /// An enum to handle fields that can be either a single string or a list of strings.
@@ -615,7 +635,9 @@ pub struct Action {
 }
 
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
-/// It connects a set of inputs to a set of outputs via an Action.
+/// It connects a set of inputs to a set of outputs via an Action. The `phony`
+/// and `always` flags control execution when outputs already exist or when
+/// timestamps would normally skip the step.
 pub struct BuildEdge {
     /// The unique identifier of the Action used for this edge.
     pub action_id: String,
@@ -632,6 +654,12 @@ pub struct BuildEdge {
     /// Dependencies that must be built first but do not trigger a rebuild on change.
     /// Maps to Ninja's '||' syntax.
     pub order_only_deps: Vec<PathBuf>,
+
+    /// Run this edge when requested even if the output file already exists.
+    pub phony: bool,
+
+    /// Run this edge on every invocation regardless of timestamps.
+    pub always: bool,
 }
 ```
 
@@ -646,13 +674,15 @@ This transformation involves several steps:
    stored in the `BuildGraph`'s `actions` map, keyed by a hash of their contents
    to automatically deduplicate identical rules.
 
-2. **Target Expansion:** Iterate through the `manifest.targets`. For each target
-   in the AST, resolve all strings into `PathBuf`s and resolve all dependency
-   names against other targets.
+2. **Target Expansion:** Iterate through the `manifest.targets` and the optional
+   `manifest.actions`. Entries in `actions` are treated identically to targets
+   but with `phony` defaulting to `true`. For each item, resolve all strings
+   into `PathBuf`s and resolve all dependency names against other targets.
 
 3. **Edge Creation:** For each AST target, create an `ir::BuildEdge` object.
-   This involves linking it to the appropriate `ir::Action` (by its ID), and
-   populating its input and output vectors.
+   This involves linking it to the appropriate `ir::Action` (by its ID),
+   transferring the `phony` and `always` flags, and populating its input and
+   output vectors.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
@@ -693,6 +723,10 @@ structures to the Ninja file syntax.
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This involves
    formatting the lists of explicit outputs, implicit outputs, inputs, and
    order-only dependencies using the correct Ninja syntax (`:`, `|`, and `||`).7
+   Use Ninja's built-in `phony` rule when `phony` is `true`. For an `always`
+   edge, either generate a `phony` build with no outputs or emit a dummy output
+   marked `restat = 1` and depend on a permanently dirty target so the command
+   runs on each invocation.
 
    Code snippet
 
