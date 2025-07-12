@@ -146,12 +146,6 @@ top-level keys.
   YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
 
-- `phony`: When set to `true`, the target runs when explicitly requested even if
-  a file with the same name exists. The default value is `false`.
-
-- `always`: When set to `true`, the target runs on every invocation regardless
-  of timestamps or dependencies. The default value is `false`.
-
 - `rules`: A list of rule definitions. Each rule is a reusable template for a
   command, analogous to a Ninja `rule` block.2
 
@@ -220,6 +214,12 @@ and `always` left at its default `false`.
   `signature` string using standard Jinja syntax and a `body` declared with the
   YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
+
+- `phony`: When set to `true`, the target runs when explicitly requested even if
+  a file with the same name exists. The default value is `false`.
+
+- `always`: When set to `true`, the target runs on every invocation regardless
+  of timestamps or dependencies. The default value is `false`.
 
 ### 2.5 Generated Targets with `foreach`
 
