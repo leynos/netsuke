@@ -292,7 +292,6 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 /// Represents the top-level structure of a Netsukefile file.
-#
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
     pub Netsuke_version: String,
@@ -310,7 +309,6 @@ pub struct NetsukeManifest {
 }
 
 /// Represents a reusable command template.
-#
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub name: String,
@@ -322,7 +320,6 @@ pub struct Rule {
 }
 
 /// Represents a single build target or edge in the dependency graph.
-#
 #[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
@@ -342,7 +339,6 @@ pub struct Target {
 }
 
 /// An enum to handle fields that can be either a single string or a list of strings.
-#
 #[serde(untagged)]
 pub enum StringOrList {
     #[default]
@@ -596,7 +592,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The complete, static build graph.
-#
 pub struct BuildGraph {
     /// A map of all unique actions (rules) in the build.
     /// The key is a hash of the action's properties to enable deduplication.
@@ -610,7 +605,6 @@ pub struct BuildGraph {
 }
 
 /// Represents a reusable command, analogous to a Ninja 'rule'.
-#
 pub struct Action {
     pub command: String,
     pub description: Option<String>,
@@ -622,7 +616,6 @@ pub struct Action {
 
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
 /// It connects a set of inputs to a set of outputs via an Action.
-#
 pub struct BuildEdge {
     /// The unique identifier of the Action used for this edge.
     pub action_id: String,
@@ -955,15 +948,13 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
-#
-# [command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None)]
 struct Cli {
     /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
     file: PathBuf,
 
     /// Change to this directory before doing anything.
-    #
     directory: Option<PathBuf>,
 
     /// Set the number of parallel build jobs.
@@ -974,7 +965,6 @@ struct Cli {
     command: Option<Commands>,
 }
 
-#
 enum Commands {
     /// Build specified targets (or default targets if none are given) [default].
     Build {
