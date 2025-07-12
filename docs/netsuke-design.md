@@ -162,13 +162,18 @@ top-level keys.
 
 ### 2.3 Defining `rules`
 
-Each entry in the `rules` list is a mapping that defines a command template.
+Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `name`: A unique string identifier for the rule.
 
-- `command`: The command string to be executed. This string uses placeholders
-  like `{ins}` and `{outs}` for input and output files. Netsuke's IR-to-Ninja
-  generator will translate these into Ninja's native `$in` and `$out` variables.
+- `command`: A single command string to be executed. This string uses
+  placeholders like `{ins}` and `{outs}` for input and output files. Netsuke's
+  IR-to-Ninja generator will translate these into Ninja's native `$in` and
+  `$out` variables.
+
+- `script`: A multi-line script declared with the YAML `|` block style. The
+  entire block is passed to an interpreter (currently `/bin/sh`). Exactly one of
+  `command` or `script` must be provided.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -189,6 +194,13 @@ Each entry in `targets` defines a build edge; placing a target in the optional
 
 - `rule`: The name of the rule (from the `rules` section) to use for building
   this target.
+
+- `command`: A single command string to run directly for this target.
+
+- `script`: A multi-line script passed to the interpreter. When present, it is
+  defined using the YAML `|` block style.
+
+  Only one of `rule`, `command`, or `script` may be specified.
 
 - `sources`: The input files required by the command. This can be a single
   string or a list of strings.
@@ -324,7 +336,8 @@ pub struct NetsukeManifest {
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub name: String,
-    pub command: String,
+    pub command: Option<String>,
+    pub script: Option<String>,
     pub description: Option<String>,
     pub deps: Option<String>,
     // Additional fields like 'pool' or 'restat' can be added here
@@ -335,7 +348,9 @@ pub struct Rule {
 #[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
-    pub rule: String,
+    pub rule: Option<String>,
+    pub command: Option<String>,
+    pub script: Option<String>,
 
     #[serde(default)]
     pub sources: StringOrList,
@@ -626,7 +641,8 @@ pub struct BuildGraph {
 
 /// Represents a reusable command, analogous to a Ninja 'rule'.
 pub struct Action {
-    pub command: String,
+    pub command: Option<String>,
+    pub script: Option<String>,
     pub description: Option<String>,
     pub depfile: Option<String>, // Template for the.d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
