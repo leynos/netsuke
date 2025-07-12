@@ -2,15 +2,15 @@ netsuke_version: "1.0"
 
 vars:
   style: "{{ env('DT_STYLE') | default('natural') }}"
-  outdir: build/jpg
+  outdir: "build/jpg/{{ style }}"
 
 rules:
   - name: develop
-    command: "darktable-cli {ins} {outs} --style {{ style }}"
+    command: "mkdir -p $(dirname {outs}) && darktable-cli {ins} {outs} --style {{ style }}"
     description: Develop RAW image
 
   - name: thumb
-    command: "convert {ins} -resize 200x200 {outs}"
+    command: "mkdir -p $(dirname {outs}) && convert {ins} -resize 200x200^ -gravity center -extent 200x200 {outs}"
     description: Create thumbnail
 
 targets:

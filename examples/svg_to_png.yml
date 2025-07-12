@@ -5,17 +5,17 @@ vars:
 
 rules:
   - name: rasterise
-    command: "inkscape {ins} --export-type=png --export-filename={outs}"
+    command: "mkdir -p $(dirname {outs}) && inkscape {ins} --export-type=png --export-filename={outs}"
     description: Convert SVG to PNG
 
 targets:
 {% for svg in glob('assets/svg/*.svg') %}
-  - name: "{{ outdir }}/{{ svg | replace('.svg', '.png') }}"
+  - name: "{{ outdir }}/{{ svg | basename | replace('.svg', '.png') }}"
     rule: rasterise
     sources: "{{ svg }}"
 {% endfor %}
 
 defaults:
 {% for svg in glob('assets/svg/*.svg') %}
-  - "{{ outdir }}/{{ svg | replace('.svg', '.png') }}"
+  - "{{ outdir }}/{{ svg | basename | replace('.svg', '.png') }}"
 {% endfor %}

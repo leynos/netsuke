@@ -3,29 +3,30 @@ netsuke_version: "1.0"
 vars:
   cc: gcc
   cflags: -Wall
+  objdir: build/obj
 
 rules:
   - name: compile
-    command: "{{ cc }} {{ cflags }} -c {ins} -o {outs}"
+    command: "mkdir -p $(dirname {outs}) && {{ cc }} {{ cflags }} -c {ins} -o {outs}"
     description: Compile C source
   - name: link
-    command: "{{ cc }} {ins} -o {outs}"
+    command: "{{ cc }} {{ cflags }} {ins} -o {outs}"
     description: Link objects
 
 # Target list generated from source files
 
-targets:
-{% for src in glob('src/*.c') %}
-  - name: "{{ src | replace('.c', '.o') }}"
+targets: |
+  {% for src in glob('src/*.c') %}
+  - name: "{{ objdir }}/{{ src | basename | replace('.c', '.o') }}"
     rule: compile
     sources: "{{ src }}"
-{% endfor %}
+  {% endfor %}
   - name: app
     rule: link
     sources:
-{% for src in glob('src/*.c') %}
-      - "{{ src | replace('.c', '.o') }}"
-{% endfor %}
+  {% for src in glob('src/*.c') %}
+      - "{{ objdir }}/{{ src | basename | replace('.c', '.o') }}"
+  {% endfor %}
 
 defaults:
   - app

@@ -5,16 +5,13 @@ vars:
 
 rules:
   - name: build
-    command: "pandoc {ins} -o {outs}"
+    command: "mkdir -p $(dirname {outs}) && pandoc {ins} -o {outs}"
     description: Compile document
 
 targets:
   - name: "{{ outdir }}/manuscript.pdf"
     rule: build
-    sources:
-      - chapters/intro.md
-      - chapters/body.md
-      - chapters/outro.md
+    sources: "{{ glob('chapters/*.md') }}"
 
 defaults:
   - "{{ outdir }}/manuscript.pdf"
