@@ -54,6 +54,7 @@ before execution, a critical requirement for compatibility with Ninja.
 
    The static YAML string generated in the previous stage is passed to a YAML
    parser. This parser validates the YAML syntax and deserializes the content
+   into a set of strongly typed Rust data structures.
    into a set of strongly-typed Rust data structures. This collection of
    structs, which directly mirrors the YAML schema, can be considered an
    "unprocessed" Abstract Syntax Tree (AST) of the build plan.
