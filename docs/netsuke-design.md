@@ -54,10 +54,9 @@ before execution, a critical requirement for compatibility with Ninja.
 
    The static YAML string generated in the previous stage is passed to a YAML
    parser. This parser validates the YAML syntax and deserializes the content
-   into a set of strongly typed Rust data structures. into a set of
-   strongly-typed Rust data structures. This collection of structs, which
-   directly mirrors the YAML schema, can be considered an "unprocessed" Abstract
-   Syntax Tree (AST) of the build plan.
+   into a set of strongly typed Rust data structures. This collection of
+   structs, which directly mirrors the YAML schema, can be considered an
+   "unprocessed" Abstract Syntax Tree (AST) of the build plan.
 
 4. Stage 4: IR Generation & Validation
 
@@ -216,7 +215,7 @@ dependency graph.
 Large sets of similar outputs can clutter a manifest when written individually.
 Netsuke supports a `foreach` entry within `targets` to generate multiple outputs
 succinctly. The expression assigned to `foreach` is evaluated during the Jinja
-render phase and each value becomes `item` in the target context.
+render phase, and each value becomes `item` in the target context.
 
 ```yaml
 - foreach: "{{ glob('assets/svg/*.svg') }}"
@@ -238,15 +237,13 @@ explicit, structured, and self-documenting nature.
 
 <!-- markdownlint-disable MD013 MD033 -->
 
-| Feature | Makefile Example | Netsukefile Example | | --- | --- | --- | |
-Variables | CC=gcc | vars: { cc: gcc } | | Macros | define greet\\t@echo Hello
-$$1endef | macros: - signature: "greet(name)" body: | Hello {{ name }} | | Rule
-Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@ | rules: - name: compile command:
-"{cc} -c {ins} -o {outs}" description: "Compiling {outs}" | | Target Build |
-my_program: main.o utils.o\\t$(CC) $^ -o $@ | targets: - name: my_program rule:
-link sources: [main.o, utils.o] | | Readability | Relies on cryptic automatic
-variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit,
-descriptive keys (name, rule, sources) and standard YAML list/map syntax. |
+| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                       |
+| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Variables       | CC=gcc                                                                             | vars: { cc: gcc }                                                                         |
+| Macros          | define greet\\t@echo Hello $$1endef                                                | macros: - signature: "greet(name)" body: Hello {{ name }}                                 |
+| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | rules: - name: compile command: "{cc} -c {ins} -o {outs}" description: "Compiling {outs}" |
+| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | targets: - name: my_program rule: link sources: [main.o, utils.o]                         |
+| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.  |
 
 <!-- markdownlint-enable MD013 MD033 -->
 
@@ -296,7 +293,7 @@ use std::collections::HashMap;
 
 /// Represents the top-level structure of a Netsukefile file.
 #
-# [serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
     pub Netsuke_version: String,
 
@@ -314,7 +311,7 @@ pub struct NetsukeManifest {
 
 /// Represents a reusable command template.
 #
-# [serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Rule {
     pub name: String,
     pub command: String,
@@ -326,7 +323,7 @@ pub struct Rule {
 
 /// Represents a single build target or edge in the dependency graph.
 #
-# [serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
     pub rule: String,
@@ -346,7 +343,7 @@ pub struct Target {
 
 /// An enum to handle fields that can be either a single string or a list of strings.
 #
-# [serde(untagged)]
+#[serde(untagged)]
 pub enum StringOrList {
     #[default]
     Empty,

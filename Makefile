@@ -33,10 +33,10 @@ check-fmt: ## Verify formatting
 	mdformat-all --check
 
 markdownlint: ## Lint Markdown files
-	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 $(MDLINT)
+	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 '$(MDLINT)'
 
 nixie: ## Validate Mermaid diagrams
-	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 $(NIXIE)
+	find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 '$(NIXIE)'
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \
