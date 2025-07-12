@@ -181,10 +181,8 @@ Each entry in the `rules` list is a mapping that defines a command template.
 
 ### 2.4 Defining `targets`
 
-Each entry in the `targets` list is a mapping that defines a build edge in the
-dependency graph. Targets may also be placed in an optional `actions` list.
-Doing so is a shorthand for adding them to `targets` with `phony` set to `true`
-and `always` left at its default `false`.
+Each entry in `targets` defines a build edge; placing a target in the optional
+`actions` list instead marks it as `phony: true` with `always` left `false`.
 
 - `name`: The primary output file or files for this build step. This can be a
   single string or a list of strings.
@@ -351,9 +349,11 @@ pub struct Target {
     #[serde(default)]
     pub vars: HashMap<String, String>,
 
+    /// Run this target when requested even if a file with the same name exists.
     #[serde(default)]
     pub phony: bool,
 
+    /// Run this target on every invocation regardless of timestamps.
     #[serde(default)]
     pub always: bool,
 }
@@ -635,7 +635,9 @@ pub struct Action {
 }
 
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
-/// It connects a set of inputs to a set of outputs via an Action.
+/// It connects a set of inputs to a set of outputs via an Action. The `phony`
+/// and `always` flags control execution when outputs already exist or when
+/// timestamps would normally skip the step.
 pub struct BuildEdge {
     /// The unique identifier of the Action used for this edge.
     pub action_id: String,
@@ -721,8 +723,10 @@ structures to the Ninja file syntax.
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This involves
    formatting the lists of explicit outputs, implicit outputs, inputs, and
    order-only dependencies using the correct Ninja syntax (`:`, `|`, and `||`).7
-   If `phony` is `true`, use Ninja's built-in `phony` rule. If `always` is
-   `true`, append the `-t run` invocation so the command executes every time.
+   Use Ninja's built-in `phony` rule when `phony` is `true`. For an `always`
+   edge, either generate a `phony` build with no outputs or emit a dummy output
+   marked `restat = 1` and depend on a permanently dirty target so the command
+   runs on each invocation.
 
    Code snippet
 
