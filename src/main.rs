@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello from Netsuke!");
+    // Placeholder entry point for future CLI implementation.
 }

@@ -42,7 +42,7 @@ before execution, a critical requirement for compatibility with Ninja.
    The process begins by locating and reading the user's project manifest file
    (e.g., Netsukefile) from the filesystem into memory as a raw string.
 
-1. Stage 2: Jinja Evaluation
+2. Stage 2: Jinja Evaluation
 
    The raw manifest string is treated as a Jinja template. Netsuke's templating
    engine processes this string, evaluating all expressions, executing control
@@ -50,16 +50,15 @@ before execution, a critical requirement for compatibility with Ninja.
    all dynamic aspects of the build, producing a static, pure YAML string as its
    output.
 
-1. Stage 3: YAML Parsing & Deserialization
+3. Stage 3: YAML Parsing & Deserialization
 
    The static YAML string generated in the previous stage is passed to a YAML
    parser. This parser validates the YAML syntax and deserializes the content
-   into a set of strongly typed Rust data structures.
-   into a set of strongly-typed Rust data structures. This collection of
+   into a set of strongly typed Rust data structures. This collection of
    structs, which directly mirrors the YAML schema, can be considered an
    "unprocessed" Abstract Syntax Tree (AST) of the build plan.
 
-1. Stage 4: IR Generation & Validation
+4. Stage 4: IR Generation & Validation
 
    The AST is traversed to construct a canonical, fully resolved Intermediate
    Representation (IR) of the build. This IR represents the build as a static
@@ -68,7 +67,7 @@ before execution, a critical requirement for compatibility with Ninja.
    checks, such as verifying the existence of defined rules, detecting circular
    dependencies, and ensuring all required inputs are accounted for.
 
-1. Stage 5: Ninja Synthesis & Execution
+5. Stage 5: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
    synthesizes the content of a build.ninja file, translating the IR's nodes and
@@ -211,7 +210,25 @@ dependency graph.
   YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
 
-### 2.5 Table: Netsuke Manifest vs. Makefile
+### 2.5 Generated Targets with `foreach`
+
+Large sets of similar outputs can clutter a manifest when written individually.
+Netsuke supports a `foreach` entry within `targets` to generate multiple outputs
+succinctly. The expression assigned to `foreach` is evaluated during the Jinja
+render phase, and each value becomes `item` in the target context.
+
+```yaml
+- foreach: "{{ glob('assets/svg/*.svg') }}"
+  name: "{{ outdir }}/{{ item | basename | replace('.svg', '.png') }}"
+  rule: rasterise
+  sources: "{{ item }}"
+```
+
+Each element in the sequence produces a separate target. The resulting build
+graph is still fully static and behaves the same as if every target were
+declared explicitly.
+
+### 2.6 Table: Netsuke Manifest vs. Makefile
 
 To illustrate the ergonomic advantages of the Netsuke schema, the following
 table compares a simple C compilation project defined in both a traditional
@@ -220,18 +237,16 @@ explicit, structured, and self-documenting nature.
 
 <!-- markdownlint-disable MD013 MD033 -->
 
-<table class="not-prose border-collapse table-auto w-full" style="min-width: 75px">
-<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup>
-<tbody>
-<tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p>Feature</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">Makefile</code> Example</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">Netsukefile</code> Example</p></td></tr>
-<tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><strong>Variables</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">CC=gcc</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">vars: { cc: gcc }</code></p></td></tr>
-<tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><strong>Macros</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">define greet<br>\t@echo Hello $$1<br>endef</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">macros:<br>  - signature: "greet(name)"<br>    body: |<br>      Hello {{ name }}</code></p></td></tr>
-<tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><strong>Rule Definition</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">%.o: %.c\n\t$(CC) -c $&lt; -o $@</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">rules:<br>  - name: compile<br>    command: "{cc} -c {ins} -o {outs}"<br>    description: "Compiling {outs}"</code></p></td></tr>
-<tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><strong>Target Build</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">my_program: main.o utils.o<br>\t$(CC) $^ -o $@</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><code class="code-inline">targets:<br>  - name: my_program<br>    rule: link<br>    sources: [main.o, utils.o]</code></p></td></tr>
-<tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p><strong>Readability</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p>Relies on cryptic automatic variables (<code class="code-inline">$@</code>, <code class="code-inline">$&lt;</code>, <code class="code-inline">$^</code>) and implicit pattern matching.</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5"><p>Uses explicit, descriptive keys (<code class="code-inline">name</code>, <code class="code-inline">rule</code>, <code class="code-inline">sources</code>) and standard YAML list/map syntax.</p></td></tr>
-</tbody>
-</table>
+| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                       |
+| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Variables       | CC=gcc                                                                             | vars: { cc: gcc }                                                                         |
+| Macros          | define greet\\t@echo Hello $$1endef                                                | macros: - signature: "greet(name)" body: Hello {{ name }}                                 |
+| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | rules: - name: compile command: "{cc} -c {ins} -o {outs}" description: "Compiling {outs}" |
+| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | targets: - name: my_program rule: link sources: [main.o, utils.o]                         |
+| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.  |
+
 <!-- markdownlint-enable MD013 MD033 -->
+
 ## Section 3: Parsing and Deserialization Strategy
 
 Once the Jinja evaluation stage has produced a pure YAML string, the next
@@ -277,7 +292,6 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 /// Represents the top-level structure of a Netsukefile file.
-#
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
     pub Netsuke_version: String,
@@ -295,7 +309,6 @@ pub struct NetsukeManifest {
 }
 
 /// Represents a reusable command template.
-#
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub name: String,
@@ -307,12 +320,11 @@ pub struct Rule {
 }
 
 /// Represents a single build target or edge in the dependency graph.
-#
 #[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
     pub rule: String,
-    
+
     #[serde(default)]
     pub sources: StringOrList,
 
@@ -327,7 +339,6 @@ pub struct Target {
 }
 
 /// An enum to handle fields that can be either a single string or a list of strings.
-#
 #[serde(untagged)]
 pub enum StringOrList {
     #[default]
@@ -581,12 +592,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The complete, static build graph.
-#
 pub struct BuildGraph {
     /// A map of all unique actions (rules) in the build.
     /// The key is a hash of the action's properties to enable deduplication.
     pub actions: HashMap<String, Action>,
-    
+
     /// A map of all target files to be built. The key is the output path.
     pub targets: HashMap<PathBuf, BuildEdge>,
 
@@ -595,7 +605,6 @@ pub struct BuildGraph {
 }
 
 /// Represents a reusable command, analogous to a Ninja 'rule'.
-#
 pub struct Action {
     pub command: String,
     pub description: Option<String>,
@@ -607,17 +616,16 @@ pub struct Action {
 
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
 /// It connects a set of inputs to a set of outputs via an Action.
-#
 pub struct BuildEdge {
     /// The unique identifier of the Action used for this edge.
     pub action_id: String,
 
     /// Explicit inputs that, when changed, trigger a rebuild.
     pub inputs: Vec<PathBuf>,
-    
+
     /// Outputs explicitly generated by the command.
     pub explicit_outputs: Vec<PathBuf>,
-    
+
     /// Outputs implicitly generated by the command. Maps to Ninja's '|' syntax.
     pub implicit_outputs: Vec<PathBuf>,
 
@@ -638,15 +646,15 @@ This transformation involves several steps:
    stored in the `BuildGraph`'s `actions` map, keyed by a hash of their contents
    to automatically deduplicate identical rules.
 
-1. **Target Expansion:** Iterate through the `manifest.targets`. For each target
+2. **Target Expansion:** Iterate through the `manifest.targets`. For each target
    in the AST, resolve all strings into `PathBuf`s and resolve all dependency
    names against other targets.
 
-1. **Edge Creation:** For each AST target, create an `ir::BuildEdge` object.
+3. **Edge Creation:** For each AST target, create an `ir::BuildEdge` object.
    This involves linking it to the appropriate `ir::Action` (by its ID), and
    populating its input and output vectors.
 
-1. **Graph Validation:** As the graph is constructed, perform validation checks.
+4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
    `actions` map and running a cycle detection algorithm (e.g., a depth-first
    search maintaining a visitation state) on the dependency graph to fail
@@ -662,7 +670,7 @@ structures to the Ninja file syntax.
    be written at the top of the file (e.g., `msvc_deps_prefix` for Windows
    builds).8
 
-1. **Write Rules:** Iterate through the `graph.actions` map. For each
+2. **Write Rules:** Iterate through the `graph.actions` map. For each
    `ir::Action`, write a corresponding Ninja `rule` statement to the output
    file. The command placeholders (`{ins}`, `{outs}`) are replaced with Ninja's
    variables (`$in`, `$out`).
@@ -681,7 +689,7 @@ structures to the Ninja file syntax.
 
    ````
 
-1. **Write Build Edges:** Iterate through the `graph.targets` map. For each
+3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This involves
    formatting the lists of explicit outputs, implicit outputs, inputs, and
    order-only dependencies using the correct Ninja syntax (`:`, `|`, and `||`).7
@@ -694,10 +702,9 @@ structures to the Ninja file syntax.
    build bar.o: cc bar.c
    build my_app: link foo.o bar.o |
 
-
    ```
 
-| lib_dependency.a
+| lib_dependency.a |
 
 4\. **Write Defaults:** Finally, write the `default` statement, listing all paths
 from `graph.default_targets`.ninja
@@ -724,15 +731,15 @@ The command construction will follow this pattern:
 1. A new `Command` is created via `Command::new("ninja")`. Netsuke will assume
    `ninja` is available in the system's `PATH`.
 
-1. Arguments passed to Netsuke's own CLI will be translated and forwarded to
+2. Arguments passed to Netsuke's own CLI will be translated and forwarded to
    Ninja. For example, a `Netsuke build -C build/ my_target` command would
    result in `Command::new("ninja").arg("-C").arg("build/").arg("my_target")`.
    Flags like `-j` for parallelism will also be passed through.8
 
-1. The working directory for the Ninja process will be set using
+3. The working directory for the Ninja process will be set using
    `.current_dir()` if the user provides a `-C` flag.
 
-1. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
+4. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
    `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.24 This allows
    Netsuke to capture the real-time output from Ninja, which can then be
    streamed to the user's console, potentially with additional formatting or
@@ -809,11 +816,11 @@ three fundamental questions:
 1. **What** went wrong? A concise summary of the failure (e.g., "YAML parsing
    failed," "Build configuration is invalid").
 
-1. **Where** did it go wrong? Precise location information, including the file,
+2. **Where** did it go wrong? Precise location information, including the file,
    line number, and column where applicable (e.g., "in `Netsukefile` at line 15,
    column 3").
 
-1. **Why** did it go wrong, and what can be done about it? The underlying cause
+3. **Why** did it go wrong, and what can be done about it? The underlying cause
    of the error and a concrete suggestion for how to fix it (e.g., "Cause: Found
    a tab character, which is not allowed. Hint: Use spaces for indentation
    instead.").
@@ -876,21 +883,21 @@ enrichment:
 1. A specific, low-level error occurs within a module. For instance, the IR
    generator detects a missing rule and creates an `IrGenError::RuleNotFound`.
 
-1. The function where the error occurred returns
+2. The function where the error occurred returns
    `Err(IrGenError::RuleNotFound {... }.into())`. The `.into()` call converts
    the specific `thiserror` enum variant into a generic `anyhow::Error` object,
    preserving the original error as its source.
 
-1. A higher-level function in the call stack, which called the failing function,
+3. A higher-level function in the call stack, which called the failing function,
    receives this `Err` value. It uses the `.with_context()` method to wrap the
    error with more application-level context. For example:
    `ir::from_manifest(ast)`
    `.with_context(|| "Failed to build the internal build graph from the manifest")?`.
 
-1. This process of propagation and contextualization repeats as the error
+4. This process of propagation and contextualization repeats as the error
    bubbles up towards `main`.
 
-1. Finally, the `main` function receives the `Err` result. It prints the entire
+5. Finally, the `main` function receives the `Err` result. It prints the entire
    error chain provided by `anyhow`, which displays the highest-level context
    first, followed by a list of underlying "Caused by:" messages. This provides
    the user with a rich, layered explanation of the failure, from the general to
@@ -904,10 +911,11 @@ actionable output that the implementation should produce.
 
 <!-- markdownlint-disable MD013 MD033 -->
 
-<table class="not-prose border-collapse table-auto w-full" style="min-width: 75px">
-<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Error Type</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Poor Message (Default)</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Netsuke's Friendly Message (Goal)</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>YAML Parse</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">(line 15, column 3): Found a tab character where indentation is expected</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Failed to parse 'Netsukefile'.\n\n --&gt; Netsukefile:15:3\n\nCaused by:\n Found a tab character, which is not allowed in YAML.\n Hint: Use spaces for indentation instead of tabs.</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Validation</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">thread 'main' panicked at 'Rule not found'</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Build configuration is invalid.\n\nCaused by:\n Target 'my_program' uses a rule named 'link-program' which is not defined in the 'rules' section.</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Execution</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">ninja: error: 'main.o', needed by 'my_program', missing and no known rule to make it</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Build failed during execution.\n\nCaused by:\n Ninja could not build target 'my_program' because its dependency 'main.o' is missing.\n Hint: Make sure there is a target defined that produces 'main.o'.</code></p></td></tr></tbody>
-<!-- markdownlint-enable MD013 MD033 -->
-</table>
+| Error Type | Poor Message (Default)                                                               | Netsuke's Friendly Message (Goal)                                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| YAML Parse | (line 15, column 3): Found a tab character where indentation is expected             | Error: Failed to parse 'Netsukefile'. Caused by: Found a tab character. Hint: Use spaces for indentation instead of tabs.                                                       |
+| Validation | thread 'main' panicked at 'Rule not found'                                           | Error: Build configuration is invalid. Caused by: Target 'my_program' uses a rule named 'link-program' which is not defined in the 'rules' section.                             |
+| Execution  | ninja: error: 'main.o', needed by 'my_program', missing and no known rule to make it | Error: Build failed during execution. Caused by: Ninja could not build target 'my_program' because its dependency 'main.o' is missing. Hint: Ensure a target produces 'main.o'. |
 
 ## Section 8: Command-Line Interface (CLI) Design
 
@@ -940,7 +948,6 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
-#
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Path to the Netsuke manifest file to use.
@@ -948,9 +955,8 @@ struct Cli {
     file: PathBuf,
 
     /// Change to this directory before doing anything.
-    #
     directory: Option<PathBuf>,
-    
+
     /// Set the number of parallel build jobs.
     #[arg(short, long, value_name = "N")]
     jobs: Option<usize>,
@@ -959,17 +965,16 @@ struct Cli {
     command: Option<Commands>,
 }
 
-#
 enum Commands {
     /// Build specified targets (or default targets if none are given) [default].
     Build {
         /// A list of specific targets to build.
         targets: Vec<String>,
     },
-    
+
     /// Remove build artifacts and intermediate files.
     Clean {},
-    
+
     /// Display the build dependency graph in DOT format for visualization.
     Graph {},
 }
@@ -1024,15 +1029,15 @@ goal.
 
     1. Implement the initial `clap` CLI structure for the `build` command.
 
-    1. Implement the YAML parser using `serde_yaml` and the AST data structures
+    2. Implement the YAML parser using `serde_yaml` and the AST data structures
        (`ast.rs`).
 
-    1. Implement the AST-to-IR transformation logic, including basic validation
+    3. Implement the AST-to-IR transformation logic, including basic validation
        like checking for rule existence.
 
-    1. Implement the IR-to-Ninja file generator (`ninja_gen.rs`).
+    4. Implement the IR-to-Ninja file generator (`ninja_gen.rs`).
 
-    1. Implement the `std::process::Command` logic to invoke `ninja`.
+    5. Implement the `std::process::Command` logic to invoke `ninja`.
 
   - **Success Criterion:** Netsuke can successfully take a `Netsukefile` file
     *without any Jinja syntax* and compile it to a `build.ninja` file, then
@@ -1048,13 +1053,13 @@ goal.
 
     1. Integrate the `minijinja` crate into the build pipeline.
 
-    1. Implement the two-pass parsing mechanism: first render the manifest with
+    2. Implement the two-pass parsing mechanism: first render the manifest with
        `minijinja`, then parse the result with `serde_yaml`.
 
-    1. Populate the initial Jinja context with the global `vars` from the
+    3. Populate the initial Jinja context with the global `vars` from the
        manifest.
 
-    1. Implement basic Jinja control flow (`{% if... %}`, `{% for... %}`) and
+    4. Implement basic Jinja control flow (`{% if... %}`, `{% for... %}`) and
        variable substitution.
 
   - **Success Criterion:** Netsuke can successfully build a manifest that uses
@@ -1071,15 +1076,15 @@ goal.
     1. Implement the full suite of custom Jinja functions (`glob`, `env`, etc.)
        and filters (`shell_escape`).
 
-    1. Mandate the use of `shell-quote` for all command variable substitutions.
+    2. Mandate the use of `shell-quote` for all command variable substitutions.
 
-    1. Refactor the error handling to fully adopt the `anyhow`/`thiserror`
+    3. Refactor the error handling to fully adopt the `anyhow`/`thiserror`
        strategy, ensuring all user-facing errors are contextual and actionable
        as specified in Section 7.
 
-    1. Implement the `clean` and `graph` subcommands.
+    4. Implement the `clean` and `graph` subcommands.
 
-    1. Refine the CLI output for clarity and readability.
+    5. Refine the CLI output for clarity and readability.
 
   - **Success Criterion:** Netsuke is a feature-complete, secure, and
     user-friendly build tool that meets all the initial design goals.
@@ -1092,10 +1097,14 @@ This table serves as a quick-reference guide to the core third-party crates
 
 selected for this project and the rationale for their inclusion.
 
-<table class="not-prose border-collapse table-auto w-full" style="min-width: 75px">
-<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Component</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Recommended Crate</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Rationale</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>CLI Parsing</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">clap</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>The Rust standard for powerful, derive-based CLI development.</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>YAML Parsing</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">serde_yaml</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Mature, stable, and provides seamless integration with the <code class="code-inline">serde</code> framework.</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Templating</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">minijinja</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Shell Quoting</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">shell-quote</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>A critical security component; provides robust, shell-specific escaping for command arguments.</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Error Handling</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">anyhow</code> + <code class="code-inline">thiserror</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports.</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Versioning</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">semver</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>The standard library for parsing and evaluating Semantic Versioning strings, essential for the <code class="code-inline">Netsuke_version</code> field.</p></td></tr></tbody>
-<!-- markdownlint-enable MD013 MD033 -->
-</table>
+| Component      | Recommended Crate  | Rationale                                                                                                             |
+| -------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| CLI Parsing    | clap               | The Rust standard for powerful, derive-based CLI development.                                                         |
+| YAML Parsing   | serde_yaml         | Mature, stable, and provides seamless integration with the serde framework.                                           |
+| Templating     | minijinja          | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                          |
+| Shell Quoting  | shell-quote        | A critical security component; provides robust, shell-specific escaping for command arguments.                        |
+| Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports.                 |
+| Versioning     | semver             | The standard library for parsing and evaluating Semantic Versioning strings, essential for the Netsuke_version field. |
 
 ### 9.3 Future Enhancements
 
@@ -1126,102 +1135,102 @@ possibilities for future enhancements beyond the initial scope.
 
 ### **Works cited**
 
-1. Ninja, a small build system with a focus on speed, accessed on July 12, 2025,
-   <https://ninja-build.org/>
+01. Ninja, a small build system with a focus on speed, accessed on July 12,
+    2025, <https://ninja-build.org/>
 
-1. Ninja (build system) - Wikipedia, accessed on July 12, 2025,
-   <https://en.wikipedia.org/wiki/Ninja%5C_(build_system)>
+02. Ninja (build system) - Wikipedia, accessed on July 12, 2025,
+    <https://en.wikipedia.org/wiki/Ninja%5C_(build_system)>
 
-1. A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed on
-   July 12, 2025,
-   <https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
+03. A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed on
+    July 12, 2025,
+    <https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
 
-1. semver - Rust, accessed on July 12, 2025,
-   <https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
+04. semver - Rust, accessed on July 12, 2025,
+    <https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
 
-1. dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
-   Versioning - GitHub, accessed on July 12, 2025,
-   <https://github.com/dtolnay/semver>
+05. dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
+    Versioning - GitHub, accessed on July 12, 2025,
+    <https://github.com/dtolnay/semver>
 
-1. semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-   <https://docs.rs/semver/latest/semver/>
+06. semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+    <https://docs.rs/semver/latest/semver/>
 
-1. How Ninja works - Fuchsia, accessed on July 12, 2025,
-   <https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
+07. How Ninja works - Fuchsia, accessed on July 12, 2025,
+    <https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
 
-1. The Ninja build system, accessed on July 12, 2025,
-   <https://ninja-build.org/manual.html>
+08. The Ninja build system, accessed on July 12, 2025,
+    <https://ninja-build.org/manual.html>
 
-1. Interest in new deps format - Google Groups, accessed on July 12, 2025,
-   <https://groups.google.com/g/ninja-build/c/34ebqOUxnXg>
+09. Interest in new deps format - Google Groups, accessed on July 12, 2025,
+    <https://groups.google.com/g/ninja-build/c/34ebqOUxnXg>
 
-1. Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
+10. Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
 
-1. Saphyr libraries - [crates.io](http://crates.io): Rust Package Registry,
-   accessed on July 12, 2025, <https://crates.io/crates/saphyr>
+11. Saphyr libraries - [crates.io](http://crates.io): Rust Package Registry,
+    accessed on July 12, 2025, <https://crates.io/crates/saphyr>
 
-1. Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
-   accessed on July 12, 2025, <https://github.com/saphyr-rs/saphyr>
+12. Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
+    accessed on July 12, 2025, <https://github.com/saphyr-rs/saphyr>
 
-1. saphyr-serde - [crates.io](http://crates.io): Rust Package Registry, accessed
-   on July 12, 2025, <https://crates.io/crates/saphyr-serde>
+13. saphyr-serde - [crates.io](http://crates.io): Rust Package Registry,
+    accessed on July 12, 2025, <https://crates.io/crates/saphyr-serde>
 
-1. saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-   <https://docs.rs/saphyr>
+14. saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+    <https://docs.rs/saphyr>
 
-1. minijinja - [crates.io](http://crates.io): Rust Package Registry, accessed on
-   July 12, 2025, <https://crates.io/crates/minijinja>
+15. minijinja - [crates.io](http://crates.io): Rust Package Registry, accessed
+    on July 12, 2025, <https://crates.io/crates/minijinja>
 
-1. minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-   <https://docs.rs/minijinja/>
+16. minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+    <https://docs.rs/minijinja/>
 
-1. minijinja - Rust, accessed on July 12, 2025,
-   <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
+17. minijinja - Rust, accessed on July 12, 2025,
+    <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
-1. Template engine — list of Rust libraries/crates // [Lib.rs](http://Lib.rs),
-   accessed on July 12, 2025, <https://lib.rs/template-engine>
+18. Template engine — list of Rust libraries/crates // [Lib.rs](http://Lib.rs),
+    accessed on July 12, 2025, <https://lib.rs/template-engine>
 
-1. std::process::Command - Rust - MIT, accessed on July 12, 2025,
-   <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/struct.Command.html>
+19. std::process::Command - Rust - MIT, accessed on July 12, 2025,
+    <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/struct.Command.html>
 
-1. How to Check Python Version | Syncro, accessed on July 12, 2025,
-   <https://syncromsp.com/blog/how-to-check-python-version/>
+20. How to Check Python Version | Syncro, accessed on July 12, 2025,
+    <https://syncromsp.com/blog/how-to-check-python-version/>
 
-1. How to check python version? - 4Geeks, accessed on July 12, 2025,
-   <https://4geeks.com/how-to/how-to-check-python-version>
+21. How to check python version? - 4Geeks, accessed on July 12, 2025,
+    <https://4geeks.com/how-to/how-to-check-python-version>
 
-1. shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-   <https://docs.rs/shell-quote/latest/shell_quote/>
+22. shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+    <https://docs.rs/shell-quote/latest/shell_quote/>
 
-1. std::process - Rust - MIT, accessed on July 12, 2025,
-   <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html>
+23. std::process - Rust - MIT, accessed on July 12, 2025,
+    <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html>
 
-1. std::process - Rust, accessed on July 12, 2025,
-   <https://doc.rust-lang.org/std/process/index.html>
+24. std::process - Rust, accessed on July 12, 2025,
+    <https://doc.rust-lang.org/std/process/index.html>
 
-1. Command in std::process - Rust, accessed on July 12, 2025,
-   <https://doc.rust-lang.org/std/process/struct.Command.html>
+25. Command in std::process - Rust, accessed on July 12, 2025,
+    <https://doc.rust-lang.org/std/process/struct.Command.html>
 
-1. shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-   <https://docs.rs/shlex/latest/shlex/>
+26. shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+    <https://docs.rs/shlex/latest/shlex/>
 
-1. Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on July
-   12, 2025,
-   <https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
+27. Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on July
+    12, 2025,
+    <https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
 
-1. Effective Error Handling in Rust CLI Apps: Best Practices, Examples, and
-   Advanced Techniques - Technorely, accessed on July 12, 2025,
-   <https://technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-practices-examples-and-advanced-techniques>
+28. Effective Error Handling in Rust CLI Apps: Best Practices, Examples, and
+    Advanced Techniques - Technorely, accessed on July 12, 2025,
+    <https://technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-practices-examples-and-advanced-techniques>
 
-1. Practical guide to Error Handling in Rust - Dev State, accessed on July 12,
-   2025, <https://dev-state.com/posts/error_handling/>
+29. Practical guide to Error Handling in Rust - Dev State, accessed on July 12,
+    2025, <https://dev-state.com/posts/error_handling/>
 
-1. thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
-   <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
+30. thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
+    <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
 
-1. Simple error handling for precondition/argument checking in Rust - Stack
-   Overflow, accessed on July 12, 2025,
-   <https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
+31. Simple error handling for precondition/argument checking in Rust - Stack
+    Overflow, accessed on July 12, 2025,
+    <https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
 
 Nicer error reporting - Command Line Applications in Rust, accessed on July 12,
 2025, <https://rust-cli.github.io/book/tutorial/errors.html>
