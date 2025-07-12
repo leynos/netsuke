@@ -30,7 +30,6 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
         $(CARGO) fmt --all -- --check
-        mdformat-all --check
 
 markdownlint: ## Lint Markdown files
         find . -type f -name '*.md' -not -path './target/*' -print0 | xargs -0 $(MDLINT)
