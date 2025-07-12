@@ -1,0 +1,21 @@
+netsuke_version: "1.0"
+
+vars:
+  outdir: build/png
+
+rules:
+  - name: rasterise
+    command: "inkscape {ins} --export-type=png --export-filename={outs}"
+    description: Convert SVG to PNG
+
+targets:
+{% for svg in glob('assets/svg/*.svg') %}
+  - name: "{{ outdir }}/{{ svg | replace('.svg', '.png') }}"
+    rule: rasterise
+    sources: "{{ svg }}"
+{% endfor %}
+
+defaults:
+{% for svg in glob('assets/svg/*.svg') %}
+  - "{{ outdir }}/{{ svg | replace('.svg', '.png') }}"
+{% endfor %}

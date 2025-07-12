@@ -1,0 +1,29 @@
+netsuke_version: "1.0"
+
+vars:
+  style: "{{ env('DT_STYLE') | default('natural') }}"
+  outdir: build/jpg
+
+rules:
+  - name: develop
+    command: "darktable-cli {ins} {outs} --style {{ style }}"
+    description: Develop RAW image
+
+  - name: thumb
+    command: "convert {ins} -resize 200x200 {outs}"
+    description: Create thumbnail
+
+targets:
+{% for raw in glob('photos/*.nef') %}
+  - name: "{{ outdir }}/{{ raw | basename | replace('.nef', '.jpg') }}"
+    rule: develop
+    sources: "{{ raw }}"
+  - name: "{{ outdir }}/thumbs/{{ raw | basename | replace('.nef', '.jpg') }}"
+    rule: thumb
+    sources: "{{ outdir }}/{{ raw | basename | replace('.nef', '.jpg') }}"
+{% endfor %}
+
+defaults:
+{% for raw in glob('photos/*.nef') %}
+  - "{{ outdir }}/thumbs/{{ raw | basename | replace('.nef', '.jpg') }}"
+{% endfor %}

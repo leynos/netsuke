@@ -1,0 +1,20 @@
+netsuke_version: "1.0"
+
+vars:
+  outdir: build/book
+
+rules:
+  - name: build
+    command: "pandoc {ins} -o {outs}"
+    description: Compile document
+
+targets:
+  - name: "{{ outdir }}/manuscript.pdf"
+    rule: build
+    sources:
+      - chapters/intro.md
+      - chapters/body.md
+      - chapters/outro.md
+
+defaults:
+  - "{{ outdir }}/manuscript.pdf"

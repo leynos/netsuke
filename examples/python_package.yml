@@ -1,0 +1,25 @@
+netsuke_version: "1.0"
+
+vars:
+  python: python3
+
+rules:
+  - name: install
+    command: "{{ python }} -m pip install -e ."
+    description: Install package
+  - name: test
+    command: "{{ python }} -m pytest {ins}"
+    description: Run tests
+
+targets:
+  - name: venv
+    rule: install
+    sources: requirements.txt
+  - name: test-results
+    rule: test
+    sources: tests
+    deps:
+      - venv
+
+defaults:
+  - test-results

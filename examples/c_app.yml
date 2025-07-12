@@ -1,0 +1,31 @@
+netsuke_version: "1.0"
+
+vars:
+  cc: gcc
+  cflags: -Wall
+
+rules:
+  - name: compile
+    command: "{{ cc }} {{ cflags }} -c {ins} -o {outs}"
+    description: Compile C source
+  - name: link
+    command: "{{ cc }} {ins} -o {outs}"
+    description: Link objects
+
+# Target list generated from source files
+
+targets:
+{% for src in glob('src/*.c') %}
+  - name: "{{ src | replace('.c', '.o') }}"
+    rule: compile
+    sources: "{{ src }}"
+{% endfor %}
+  - name: app
+    rule: link
+    sources:
+{% for src in glob('src/*.c') %}
+      - "{{ src | replace('.c', '.o') }}"
+{% endfor %}
+
+defaults:
+  - app
