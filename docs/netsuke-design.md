@@ -12,11 +12,11 @@ This design choice by Ninja's authors necessitates the existence of a higher-lev
 
 ### 1.2 The Five Stages of a Netsuke Build
 
-The process of transforming a user's `Netsuke.yml` manifest into a completed build artifact follows a distinct, five-stage pipeline. This multi-stage data flow ensures that dynamic configurations are fully resolved into a static plan before execution, a critical requirement for compatibility with Ninja.
+The process of transforming a user's `Netsukefile` manifest into a completed build artifact follows a distinct, five-stage pipeline. This multi-stage data flow ensures that dynamic configurations are fully resolved into a static plan before execution, a critical requirement for compatibility with Ninja.
 
 1. Stage 1: Manifest Ingestion
 
-   The process begins by locating and reading the user's project manifest file (e.g., Netsuke.yml) from the filesystem into memory as a raw string.
+   The process begins by locating and reading the user's project manifest file (e.g., Netsukefile) from the filesystem into memory as a raw string.
 
 2. Stage 2: Jinja Evaluation
 
@@ -44,7 +44,7 @@ This creates a necessary architectural division. All the dynamic logic, templati
 
 ## Section 2: The Netsuke Manifest: A User-Centric YAML Schema
 
-The primary interface for the user is the Netsuke manifest file, `Netsuke.yml`. The design of its YAML schema is paramount to achieving the goal of being "friendlier" than `make`. The schema is guided by a set of core principles aimed at maximizing readability, reducing cognitive overhead, and promoting best practices.
+The primary interface for the user is the Netsuke manifest file, `Netsukefile`. The design of its YAML schema is paramount to achieving the goal of being "friendlier" than `make`. The schema is guided by a set of core principles aimed at maximizing readability, reducing cognitive overhead, and promoting best practices.
 
 ### 2.1 Schema Design Principles
 
@@ -54,7 +54,7 @@ The primary interface for the user is the Netsuke manifest file, `Netsuke.yml`. 
 
 - **Reusability:** The schema is designed to encourage the creation of reusable components. Variables and rules are defined once and can be referenced throughout the manifest, reducing duplication and improving maintainability.
 
-- **Discoverability:** The structure is intended to be intuitive. A developer familiar with YAML should be able to understand the intent of a simple `Netsuke.yml` file with minimal reference to documentation.
+- **Discoverability:** The structure is intended to be intuitive. A developer familiar with YAML should be able to understand the intent of a simple `Netsukefile` file with minimal reference to documentation.
 
 ### 2.2 Top-Level Schema Structure
 
@@ -100,10 +100,10 @@ Each entry in the `targets` list is a mapping that defines a build edge in the d
 
 ### 2.5 Table: Netsuke Manifest vs. Makefile
 
-To illustrate the ergonomic advantages of the Netsuke schema, the following table compares a simple C compilation project defined in both a traditional `Makefile` and a `Netsuke.yml` file. The comparison highlights Netsuke's explicit, structured, and self-documenting nature.
+To illustrate the ergonomic advantages of the Netsuke schema, the following table compares a simple C compilation project defined in both a traditional `Makefile` and a `Netsukefile` file. The comparison highlights Netsuke's explicit, structured, and self-documenting nature.
 
 <table class="not-prose border-collapse table-auto w-full" style="min-width: 75px">
-<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Feature</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Makefile</code> Example</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Netsuke.yml</code> Example</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Variables</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">CC=gcc</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">vars: { cc: gcc }</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Rule Definition</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">%.o: %.c\n\t$(CC) -c $&lt; -o $@</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">rules:\n - name: compile\n command: "{cc} -c {ins} -o {outs}"\n description: "Compiling {outs}"</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Target Build</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">my_program: main.o utils.o\n\t$(CC) $^ -o $@</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">targets:\n - name: my_program\n rule: link\n sources: [main.o, utils.o]</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Readability</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Relies on cryptic automatic variables (<code class="code-inline">$@</code>, <code class="code-inline">$&lt;</code>, <code class="code-inline">$^</code>) and implicit pattern matching.</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Uses explicit, descriptive keys (<code class="code-inline">name</code>, <code class="code-inline">rule</code>, <code class="code-inline">sources</code>) and standard YAML list/map syntax.</p></td></tr></tbody>
+<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Feature</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Makefile</code> Example</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Netsukefile</code> Example</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Variables</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">CC=gcc</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">vars: { cc: gcc }</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Rule Definition</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">%.o: %.c\n\t$(CC) -c $&lt; -o $@</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">rules:\n - name: compile\n command: "{cc} -c {ins} -o {outs}"\n description: "Compiling {outs}"</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Target Build</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">my_program: main.o utils.o\n\t$(CC) $^ -o $@</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">targets:\n - name: my_program\n rule: link\n sources: [main.o, utils.o]</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Readability</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Relies on cryptic automatic variables (<code class="code-inline">$@</code>, <code class="code-inline">$&lt;</code>, <code class="code-inline">$^</code>) and implicit pattern matching.</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Uses explicit, descriptive keys (<code class="code-inline">name</code>, <code class="code-inline">rule</code>, <code class="code-inline">sources</code>) and standard YAML list/map syntax.</p></td></tr></tbody>
 </table>
 
 ## Section 3: Parsing and Deserialization Strategy
@@ -134,7 +134,7 @@ Rust
 use serde::Deserialize;
 use std::collections::HashMap;
 
-/// Represents the top-level structure of a Netsuke.yml file.
+/// Represents the top-level structure of a Netsukefile file.
 #
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
@@ -199,7 +199,7 @@ pub enum StringOrList {
 
 ### 3.3 The Two-Pass Parsing Requirement
 
-The integration of a templating engine like Jinja fundamentally shapes the parsing pipeline, mandating a two-pass approach. It is impossible to parse the user's `Netsuke.yml` file with `serde_yaml` in a single step.
+The integration of a templating engine like Jinja fundamentally shapes the parsing pipeline, mandating a two-pass approach. It is impossible to parse the user's `Netsukefile` file with `serde_yaml` in a single step.
 
 Consider a manifest containing Jinja syntax:
 
@@ -216,7 +216,7 @@ The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string from
 
 Therefore, the process must be sequential:
 
-1. **First Pass (Jinja Rendering):** The entire `Netsuke.yml` file is read as a raw text template. The `minijinja` engine renders this template, executing the `glob('src/*.c')` function and substituting its result. The output of this pass is a new string.
+1. **First Pass (Jinja Rendering):** The entire `Netsukefile` file is read as a raw text template. The `minijinja` engine renders this template, executing the `glob('src/*.c')` function and substituting its result. The output of this pass is a new string.
 
    YAML
 
@@ -252,7 +252,7 @@ Alternative template engines like Askama are less suitable for this use case. As
 
 Netsuke will construct a single `minijinja::Environment` instance at startup. This environment will be configured with a set of custom functions and filters that provide build-specific functionality.
 
-When rendering a user's `Netsuke.yml` file, the initial context provided to the template will be constructed from the `vars` section of the manifest. This allows users to define variables in their YAML and immediately reference them within Jinja expressions. For example:
+When rendering a user's `Netsukefile` file, the initial context provided to the template will be constructed from the `vars` section of the manifest. This allows users to define variables in their YAML and immediately reference them within Jinja expressions. For example:
 
 YAML
 
@@ -441,7 +441,7 @@ The command construction will follow this pattern:
 
 ### 6.2 The Criticality of Shell Escaping
 
-A primary security responsibility for Netsuke is the prevention of command injection attacks. The `command` strings defined in a user's `Netsuke.yml` are templates. When Netsuke substitutes variables like file paths into these templates, it is imperative that these substituted values are treated as single, literal arguments by the shell that Ninja ultimately uses to execute the command.
+A primary security responsibility for Netsuke is the prevention of command injection attacks. The `command` strings defined in a user's `Netsukefile` are templates. When Netsuke substitutes variables like file paths into these templates, it is imperative that these substituted values are treated as single, literal arguments by the shell that Ninja ultimately uses to execute the command.
 
 Without proper escaping, a malicious or even accidental filename like `"my file; rm -rf /;.c"` could be interpreted as multiple commands, leading to catastrophic consequences.
 
@@ -473,7 +473,7 @@ Errors are not exceptional events; they are an expected part of the development 
 
 1. **What** went wrong? A concise summary of the failure (e.g., "YAML parsing failed," "Build configuration is invalid").
 
-2. **Where** did it go wrong? Precise location information, including the file, line number, and column where applicable (e.g., "in `Netsuke.yml` at line 15, column 3").
+2. **Where** did it go wrong? Precise location information, including the file, line number, and column where applicable (e.g., "in `Netsukefile` at line 15, column 3").
 
 3. **Why** did it go wrong, and what can be done about it? The underlying cause of the error and a concrete suggestion for how to fix it (e.g., "Cause: Found a tab character, which is not allowed. Hint: Use spaces for indentation instead.").
 
@@ -535,7 +535,7 @@ The flow of an error from its origin to the user follows a clear path of enrichm
 This table provides a specification for the desired output of Netsuke's error reporting system, contrasting raw, unhelpful messages with the friendly, actionable output that the implementation should produce.
 
 <table class="not-prose border-collapse table-auto w-full" style="min-width: 75px">
-<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Error Type</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Poor Message (Default)</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Netsuke's Friendly Message (Goal)</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>YAML Parse</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">(line 15, column 3): Found a tab character where indentation is expected</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Failed to parse 'Netsuke.yml'.\n\n --&gt; Netsuke.yml:15:3\n\nCaused by:\n Found a tab character, which is not allowed in YAML.\n Hint: Use spaces for indentation instead of tabs.</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Validation</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">thread 'main' panicked at 'Rule not found'</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Build configuration is invalid.\n\nCaused by:\n Target 'my_program' uses a rule named 'link-program' which is not defined in the 'rules' section.</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Execution</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">ninja: error: 'main.o', needed by 'my_program', missing and no known rule to make it</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Build failed during execution.\n\nCaused by:\n Ninja could not build target 'my_program' because its dependency 'main.o' is missing.\n Hint: Make sure there is a target defined that produces 'main.o'.</code></p></td></tr></tbody>
+<colgroup><col style="min-width: 25px"><col style="min-width: 25px"><col style="min-width: 25px"></colgroup><tbody><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Error Type</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Poor Message (Default)</p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p>Netsuke's Friendly Message (Goal)</p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>YAML Parse</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">(line 15, column 3): Found a tab character where indentation is expected</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Failed to parse 'Netsukefile'.\n\n --&gt; Netsukefile:15:3\n\nCaused by:\n Found a tab character, which is not allowed in YAML.\n Hint: Use spaces for indentation instead of tabs.</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Validation</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">thread 'main' panicked at 'Rule not found'</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Build configuration is invalid.\n\nCaused by:\n Target 'my_program' uses a rule named 'link-program' which is not defined in the 'rules' section.</code></p></td></tr><tr><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><strong>Execution</strong></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">ninja: error: 'main.o', needed by 'my_program', missing and no known rule to make it</code></p></td><td class="border border-neutral-300 dark:border-neutral-600 p-1.5" colspan="1" rowspan="1"><p><code class="code-inline">Error: Build failed during execution.\n\nCaused by:\n Ninja could not build target 'my_program' because its dependency 'main.o' is missing.\n Hint: Make sure there is a target defined that produces 'main.o'.</code></p></td></tr></tbody>
 </table>
 
 ## Section 8: Command-Line Interface (CLI) Design
@@ -563,7 +563,7 @@ use std::path::PathBuf;
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// Path to the Netsuke manifest file to use.
-    #[arg(short, long, value_name = "FILE", default_value = "Netsuke.yml")]
+    #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
     file: PathBuf,
 
     /// Change to this directory before doing anything.
@@ -630,7 +630,7 @@ A phased implementation approach is recommended to tackle the project in managea
 
     5. Implement the `std::process::Command` logic to invoke `ninja`.
 
-  - **Success Criterion:** Netsuke can successfully take a `Netsuke.yml` file *without any Jinja syntax* and compile it to a `build.ninja` file, then execute it to produce the correct artifacts. This phase validates the entire static compilation pipeline.
+  - **Success Criterion:** Netsuke can successfully take a `Netsukefile` file *without any Jinja syntax* and compile it to a `build.ninja` file, then execute it to produce the correct artifacts. This phase validates the entire static compilation pipeline.
 
 - **Phase 2: The Dynamic Engine**
 
@@ -684,7 +684,7 @@ The architecture described in this document provides a solid foundation for a po
 
 - **Language-Specific Toolchains:** Netsuke could offer pre-packaged "toolchain" modules. For example, a `Netsuke-rust-toolchain` could provide a standard set of rules and variables for compiling Rust projects, abstracting away the details of invoking `cargo`.
 
-- **Distributed Builds:** The IR is backend-agnostic. A future version of Netsuke could include an alternative generator that targets a distributed build system, allowing for massively parallel builds across a cluster of machines. The user's `Netsuke.yml` manifest would remain unchanged.
+- **Distributed Builds:** The IR is backend-agnostic. A future version of Netsuke could include an alternative generator that targets a distributed build system, allowing for massively parallel builds across a cluster of machines. The user's `Netsukefile` manifest would remain unchanged.
 
 ### **Works cited**
 
