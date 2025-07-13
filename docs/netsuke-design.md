@@ -203,7 +203,8 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
   is automatically passed through the `shell_escape` filter unless a `| raw`
   filter is applied. Future versions will allow configurable script languages
-  with their own escaping rules.
+  with their own escaping rules. On Windows, scripts default to `powershell
+  -Command` unless the manifest's `interpreter` field overrides the setting.
 
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
@@ -244,8 +245,8 @@ rule:
   defined using the YAML `|` block style.
 
 Only one of `rule`, `command`, or `script` may be specified. The parser
-validates this exclusivity during deserialization. If multiple fields are
-provided, Netsuke emits a `RecipeConflict` error with the message "rule, command
+validates this exclusivity during deserialization. When multiple fields are
+present, Netsuke emits a `RecipeConflict` error with the message "rule, command
 and script are mutually exclusive".
 
   This union deserializes into the same `Recipe` enum used for rules. The parser
@@ -951,10 +952,6 @@ The command construction will follow this pattern:
    streamed to the user's console, potentially with additional formatting or
    status updates from Netsuke itself.
 
-On Windows, Netsuke defaults to executing scripts via `powershell -Command`
-unless an `interpreter` field is set at the manifest root. This early
-acknowledgement aims to minimise surprises on CI systems.
-
 ### 6.2 The Criticality of Shell Escaping
 
 A primary security responsibility for Netsuke is the prevention of command
@@ -985,14 +982,15 @@ for building command strings by pushing quoted components into a buffer:
 
 The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command strings
-Instead, parse the Netsuke command template (e.g., `{cc} -c {ins} -o {outs}`)
-and build the final command string step by step. The placeholders `{{ ins }}
-` and `{{ outs }}` are expanded to space-separated lists of file paths within
-Netsuke itself, each path being shell-escaped using the `shell-quote` API.
-When the command is written to `build.ninja`, these lists replace Ninja's `$in`
-and `$out` macros. After substitution, the command is validated with [`shlex`]
-(<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly. This
-approach guarantees that every dynamic part of the command is securely quoted.
+Instead, parse the Netsuke command template (e.g., `{{ cc }} -c {{ ins }} -o`
+`{{ outs }}`) and build the final command string step by step. The placeholders
+`{{ ins }}` and `{{ outs }}` are expanded to space-separated lists of file
+paths within Netsuke itself, each path being shell-escaped using the `shell-
+quote` API. When the command is written to `build.ninja`, these lists replace
+Ninja's `$in` and `$out` macros. After substitution, the command is validated
+with [`shlex`] (<https://docs.rs/shlex/latest/shlex/>) to ensure it parses
+correctly. This approach guarantees that every dynamic part of the command is
+securely quoted.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
