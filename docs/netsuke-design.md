@@ -72,7 +72,7 @@ before execution, a critical requirement for compatibility with Ninja.
 5. Stage 5: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
-   synthesises the content of a `build.ninja` file, translating the IR's nodes
+   synthesizes the content of a `build.ninja` file, translating the IR's nodes
    and edges into corresponding Ninja rule and build statements. Once the file
    is written, Netsuke invokes the `ninja` executable as a subprocess, passing
    control to it for the final dependency checking and command-execution phase.
@@ -81,6 +81,21 @@ before execution, a critical requirement for compatibility with Ninja.
    environment variables, the generated `build.ninja` will be byte-for-byte
    identical. This property is essential for reproducible builds and makes the
    output suitable for caching or source control.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Netsuke
+    participant IR_Generator
+    participant Ninja
+
+    User->>Netsuke: Provide Netsukefile and environment
+    Netsuke->>IR_Generator: Parse and validate manifest
+    IR_Generator->>IR_Generator: Generate deterministic BuildGraph (IR)
+    IR_Generator->>Netsuke: Return BuildGraph (byte-for-byte deterministic)
+    Netsuke->>Ninja: Synthesize build.ninja and invoke Ninja
+    Ninja-->>User: Execute build and report results
+```
 
 ### 1.3 The Static Graph Mandate
 
@@ -193,7 +208,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
 
-  Internally, these options deserialise into a shared `Recipe` enum tagged with
+  Internally, these options deserialize into a shared `Recipe` enum tagged with
   a `kind` field. Serde aliases ensure manifests that omit the tag continue to
   load correctly.
 
@@ -229,11 +244,11 @@ rule:
   defined using the YAML `|` block style.
 
 Only one of `rule`, `command`, or `script` may be specified. The parser
-validates this exclusivity during deserialisation. If multiple fields are
+validates this exclusivity during deserialization. If multiple fields are
 provided, Netsuke emits a `RecipeConflict` error with the message "rule, command
 and script are mutually exclusive".
 
-  This union deserialises into the same `Recipe` enum used for rules. The parser
+  This union deserializes into the same `Recipe` enum used for rules. The parser
   enforces that only one variant is present, maintaining backward compatibility
   through serde aliases when `kind` is omitted.
 
@@ -1087,7 +1102,7 @@ enrichment:
    the specific.
 
 For automation use cases, Netsuke will support a `--diag-json` flag. When
-enabled, the entire error chain is serialised to JSON, allowing editors and CI
+enabled, the entire error chain is serialized to JSON, allowing editors and CI
 tools to annotate failures inline.
 
 ### 7.4 Table: Transforming Errors into User-Friendly Messages
