@@ -262,9 +262,9 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
   is automatically passed through the `shell_escape` filter unless a `| raw`
   filter is applied. Future versions will allow configurable script languages
-  with their own escaping rules. On Windows, scripts default to `powershell
-  -Command` unless the manifest's `interpreter` field overrides the setting.
-
+  with their own escaping rules.  
+  On Windows, scripts default to `powershell -Command` unless the manifest's
+  `interpreter` field overrides the setting.
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
 
