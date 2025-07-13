@@ -7,20 +7,27 @@ vars:
 
 rules:
   - name: tex
-    command: "pandoc {{ pandoc_flags }} {ins} -o {outs}"
+    command: "pandoc {{ pandoc_flags }} {{ ins }} -o {{ outs }}"
 
   - name: combine
-    command: "latexmk -pdf -outdir={{ build_dir }} {ins}"
+    command: "latexmk -pdf -outdir={{ build_dir }} {{ ins }}"
+
+  - name: mkdir
+    command: "mkdir -p {{ outs }}"
 
 targets:
   - foreach: "{{ glob(chapters_dir ~ '/*.md') }}"
     name: "{{ build_dir }}/{{ item | basename | replace('.md', '.tex') }}"
     rule: tex
     sources: "{{ item }}"
+    deps: "{{ build_dir }}"
 
   - name: "{{ build_dir }}/book.pdf"
     rule: combine
-    sources: "{{ glob(build_dir ~ '/*.tex') }}"
+    sources: "{{ glob(build_dir ~ '/*.tex') | sort }}"
+
+  - name: "{{ build_dir }}"
+    rule: mkdir
 
 defaults:
   - "{{ build_dir }}/book.pdf"
