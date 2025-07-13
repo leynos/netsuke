@@ -179,8 +179,9 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
 
-  Internally, these options deserialise into a tagged enum `Recipe` using a
-  `kind` field to encode the exclusivity at the type level.
+  Internally, these options deserialise into a shared `Recipe` enum tagged with
+  a `kind` field. Serde aliases ensure manifests that omit the tag continue to
+  load correctly.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -210,8 +211,9 @@ Each entry in `targets` defines a build edge; placing a target in the optional
   Only one of `rule`, `command`, or `script` may be specified. The parser
   validates this exclusivity during deserialisation.
 
-  This union deserialises into a tagged enum `TargetRecipe` so that the chosen
-  execution method is explicit in the AST.
+  This union deserialises into the same `Recipe` enum used for rules. The parser
+  enforces that only one variant is present, maintaining backward compatibility
+  through serde aliases when `kind` is omitted.
 
 - `sources`: The input files required by the command. This can be a single
   string or a list of strings.
@@ -354,18 +356,22 @@ pub struct Rule {
     // to map to more advanced Ninja features.
 }
 
-/// A union of execution styles for a rule.
+/// A union of execution styles for both rules and targets.
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Recipe {
+    #[serde(alias = "command")]
     Command { command: String },
+    #[serde(alias = "script")]
     Script { script: String },
+    #[serde(alias = "rule")]
+    Rule { rule: String },
 }
 
 /// Represents a single build target or edge in the dependency graph.
 #[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
-    pub recipe: TargetRecipe,
+    pub recipe: Recipe,
 
     #[serde(default)]
     pub sources: StringOrList,
@@ -388,13 +394,6 @@ pub struct Target {
     pub always: bool,
 }
 
-/// Specifies how a target is built.
-#[serde(tag = "kind", rename_all = "lowercase")]
-pub enum TargetRecipe {
-    Rule { rule: String },
-    Command { command: String },
-    Script { script: String },
-}
 
 /// An enum to handle fields that can be either a single string or a list of strings.
 #[serde(untagged)]
