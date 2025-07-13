@@ -271,10 +271,10 @@ explicit, structured, and self-documenting nature.
 
 | Feature         | Makefile Example                                                                   | Netsukefile Example                                                                       |
 | --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Variables       | CC=gcc                                                                             | vars: { cc: gcc }                                                                         |
-| Macros          | define greet\\t@echo Hello $$1endef                                                | macros: - signature: "greet(name)" body: Hello {{ name }}                                 |
-| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | rules: - name: compile command: "{cc} -c {ins} -o {outs}" description: "Compiling {outs}" |
-| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | targets: - name: my_program rule: link sources: [main.o, utils.o]                         |
+| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                         |
+| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                |
+| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ out }}", description: "Compiling {{ outs }}" } } |
+| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                         |
 | Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.  |
 
 ## Section 3: Parsing and Deserialization Strategy
