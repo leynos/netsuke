@@ -10,7 +10,7 @@ rules:
     description: "Compiling {outs}"
 
   - name: link
-    command: "{{ cc }} {ins} -o {outs}"
+    command: "{{ cc }} {{ ldflags | default(cflags) }} {ins} -o {outs}"
 
 targets:
   - name: main.o
