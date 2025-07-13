@@ -244,8 +244,6 @@ table compares a simple C compilation project defined in both a traditional
 `Makefile` and a `Netsukefile` file. The comparison highlights Netsuke's
 explicit, structured, and self-documenting nature.
 
-<!-- markdownlint-disable MD013 MD033 -->
-
 | Feature         | Makefile Example                                                                   | Netsukefile Example                                                                       |
 | --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Variables       | CC=gcc                                                                             | vars: { cc: gcc }                                                                         |
@@ -253,8 +251,6 @@ explicit, structured, and self-documenting nature.
 | Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | rules: - name: compile command: "{cc} -c {ins} -o {outs}" description: "Compiling {outs}" |
 | Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | targets: - name: my_program rule: link sources: [main.o, utils.o]                         |
 | Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.  |
-
-<!-- markdownlint-enable MD013 MD033 -->
 
 ## Section 3: Parsing and Deserialization Strategy
 
@@ -943,8 +939,6 @@ This table provides a specification for the desired output of Netsuke's error
 reporting system, contrasting raw, unhelpful messages with the friendly,
 actionable output that the implementation should produce.
 
-<!-- markdownlint-disable MD013 MD033 -->
-
 | Error Type | Poor Message (Default)                                                               | Netsuke's Friendly Message (Goal)                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | YAML Parse | (line 15, column 3): Found a tab character where indentation is expected             | Error: Failed to parse 'Netsukefile'. Caused by: Found a tab character. Hint: Use spaces for indentation instead of tabs.                                                       |
@@ -1125,10 +1119,7 @@ goal.
 
 ### 9.2 Key Technology Summary
 
-This table serves as a quick-reference guide to the core third-party crates
-
-<!-- markdownlint-disable MD013 MD033 -->
-
+This table serves as a quick-reference guide to the core third-party crates 
 selected for this project and the rationale for their inclusion.
 
 | Component      | Recommended Crate  | Rationale                                                                                                             |

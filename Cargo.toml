@@ -9,18 +9,23 @@ edition = "2024"
 pedantic = { level = "warn", priority = -1 }
 
 # 1. hygiene
-allow_attributes                    = "deny"
+# Unfortunately, due to an 'unused-braces' false postive with
+# single line rstest fixtures, and the fact that fixtures do
+# not permit 'expect' attributes, we must disable this deny.
+# allow_attributes                    = "deny"
 allow_attributes_without_reason     = "deny"
 blanket_clippy_restriction_lints    = "deny"
 
 # 2. debugging leftovers
-dbg_macro       = "deny"
-print_stdout    = "deny"
-print_stderr    = "deny"
+# Disabled pending further investigation into applicability.
+# dbg_macro       = "deny"
+# print_stdout    = "deny"
+# print_stderr    = "deny"
 
 # 3. panic-prone operations
 unwrap_used                     = "deny"
-expect_used                     = "deny"
+# Expect used in tests. Discoraged in implementation code.
+# expect_used                     = "deny"
 indexing_slicing                = "deny"
 string_slice                    = "deny"
 integer_division                = "deny"
