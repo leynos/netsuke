@@ -170,11 +170,16 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `command`: A single command string to be executed. This string uses
   placeholders like `{{ ins }}` and `{{ outs }}` for input and output files.
-  Netsuke's IR-to-Ninja generator will translate these into Ninja's native `$in`
-  and `$out` variables.
+  Netsuke's IR-to-Ninja generator will translate these into Ninja's native $in
+  and $out variables. After interpolation, the value must be parsable by the
+  [`shlex`](https://docs.rs/shlex/latest/shlex/) crate. Any interpolation other
+  than `ins` or `outs` is automatically shell escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
-  entire block is passed to an interpreter (currently `/bin/sh`).
+  entire block is passed to an interpreter (currently `/bin/sh`). For `/bin/sh`
+  scripts, each interpolation is automatically passed through the `shell_escape`
+  filter unless a `| raw` filter is applied. Future versions will allow
+  configurable script languages with their own escaping rules.
 
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
@@ -848,12 +853,15 @@ The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command strings
 for the `build.ninja` file. Doing so would be inherently insecure.
 
-Instead, the implementation must parse the Netsuke command template (e.g., `{cc}
--c {ins} -o {outs}`) and build the final command string piece by piece. For
-each segment of the command, if it is a variable substitution (like `{ins}`),
-the value of that variable must be passed through the `shell-quote` API before
-being appended to the output string. This ensures that every dynamic part of the
-command is correctly and safely quoted for the target shell.
+Instead, the implementation must parse the Netsuke command template (e.g.,
+`{cc} -c {ins} -o {outs}`) and build the final command string piece by piece.
+The placeholders `{{ ins }}` and `{{ outs }}` remain as Ninja's $in and $out
+variables. After substitution, Netsuke verifies that the resulting command
+string can be parsed by the `shlex` crate. For each segment of the command, if
+it is a variable substitution (like `{ins}`), the value of that variable must be
+passed through the `shell-quote` API before being appended to the output string.
+This ensures that every dynamic part of the command is correctly and safely
+quoted for the target shell.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
