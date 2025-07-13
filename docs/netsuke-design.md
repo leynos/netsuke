@@ -1160,103 +1160,103 @@ possibilities for future enhancements beyond the initial scope.
 
 ### **Works cited**
 
-\[^1\]: Ninja, a small build system with a focus on speed, accessed on July 12,
+[^1]: Ninja, a small build system with a focus on speed, accessed on July 12,
 2025, <https://ninja-build.org/>
 
-\[^2\]: Ninja (build system) - Wikipedia, accessed on July 12, 2025,
+[^2]: Ninja (build system) - Wikipedia, accessed on July 12, 2025,
 <https://en.wikipedia.org/wiki/Ninja%5C_(build_system)>
 
-\[^3\]: A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed
+[^3]: A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed
 on July 12, 2025,
 <https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
 
-\[^4\]: semver - Rust, accessed on July 12, 2025,
+[^4]: semver - Rust, accessed on July 12, 2025,
 <https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
 
-\[^5\]: dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
+[^5]: dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
 Versioning - GitHub, accessed on July 12, 2025,
 <https://github.com/dtolnay/semver>
 
-\[^6\]: semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+[^6]: semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
 <https://docs.rs/semver/latest/semver/>
 
-\[^7\]: How Ninja works - Fuchsia, accessed on July 12, 2025,
+[^7]: How Ninja works - Fuchsia, accessed on July 12, 2025,
 <https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
 
-\[^8\]: The Ninja build system, accessed on July 12, 2025,
+[^8]: The Ninja build system, accessed on July 12, 2025,
 <https://ninja-build.org/manual.html>
 
-\[^9\]: Interest in new deps format - Google Groups, accessed on July 12, 2025,
+[^9]: Interest in new deps format - Google Groups, accessed on July 12, 2025,
 <https://groups.google.com/g/ninja-build/c/34ebqOUxnXg>
 
-\[^10\]: Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
+[^10]: Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
 
-\[^11\]: Saphyr libraries - [crates.io](http://crates.io): Rust Package
+[^11]: Saphyr libraries - [crates.io](http://crates.io): Rust Package
 Registry, accessed on July 12, 2025, <https://crates.io/crates/saphyr>
 
-\[^12\]: Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
+[^12]: Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
 accessed on July 12, 2025, <https://github.com/saphyr-rs/saphyr>
 
-\[^13\]: saphyr-serde - [crates.io](http://crates.io): Rust Package Registry,
+[^13]: saphyr-serde - [crates.io](http://crates.io): Rust Package Registry,
 accessed on July 12, 2025, <https://crates.io/crates/saphyr-serde>
 
-\[^14\]: saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+[^14]: saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
 <https://docs.rs/saphyr>
 
-\[^15\]: minijinja - [crates.io](http://crates.io): Rust Package Registry,
+[^15]: minijinja - [crates.io](http://crates.io): Rust Package Registry,
 accessed on July 12, 2025, <https://crates.io/crates/minijinja>
 
-\[^16\]: minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
+[^16]: minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
 2025, <https://docs.rs/minijinja/>
 
-\[^17\]: minijinja - Rust, accessed on July 12, 2025,
+[^17]: minijinja - Rust, accessed on July 12, 2025,
 <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
-\[^18\]: Template engine — list of Rust libraries/crates //
+[^18]: Template engine — list of Rust libraries/crates //
 [Lib.rs](http://Lib.rs), accessed on July 12, 2025,
 <https://lib.rs/template-engine>
 
-\[^19\]: std::process::Command - Rust - MIT, accessed on July 12, 2025,
+[^19]: std::process::Command - Rust - MIT, accessed on July 12, 2025,
 <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/struct.Command.html>
 
-\[^20\]: How to Check Python Version | Syncro, accessed on July 12, 2025,
+[^20]: How to Check Python Version | Syncro, accessed on July 12, 2025,
 <https://syncromsp.com/blog/how-to-check-python-version/>
 
-\[^21\]: How to check python version? - 4Geeks, accessed on July 12, 2025,
+[^21]: How to check python version? - 4Geeks, accessed on July 12, 2025,
 <https://4geeks.com/how-to/how-to-check-python-version>
 
-\[^22\]: shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
+[^22]: shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
 2025, <https://docs.rs/shell-quote/latest/shell_quote/>
 
-\[^23\]: std::process - Rust - MIT, accessed on July 12, 2025,
+[^23]: std::process - Rust - MIT, accessed on July 12, 2025,
 <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html>
 
-\[^24\]: std::process - Rust, accessed on July 12, 2025,
+[^24]: std::process - Rust, accessed on July 12, 2025,
 <https://doc.rust-lang.org/std/process/index.html>
 
-\[^25\]: Command in std::process - Rust, accessed on July 12, 2025,
+[^25]: Command in std::process - Rust, accessed on July 12, 2025,
 <https://doc.rust-lang.org/std/process/struct.Command.html>
 
-\[^26\]: shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+[^26]: shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
 <https://docs.rs/shlex/latest/shlex/>
 
-\[^27\]: Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on
+[^27]: Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on
 July 12, 2025,
 <https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
 
-\[^28\]: Effective Error Handling in Rust CLI Apps: Best Practices, Examples,
+[^28]: Effective Error Handling in Rust CLI Apps: Best Practices, Examples,
 and Advanced Techniques - Technorely, accessed on July 12, 2025,
 <https://technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-practices-examples-and-advanced-techniques>
 
-\[^29\]: Practical guide to Error Handling in Rust - Dev State, accessed on July
+[^29]: Practical guide to Error Handling in Rust - Dev State, accessed on July
 12, 2025, <https://dev-state.com/posts/error_handling/>
 
-\[^30\]: thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
+[^30]: thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
 <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
 
-\[^31\]: Simple error handling for precondition/argument checking in Rust -
+[^31]: Simple error handling for precondition/argument checking in Rust -
 Stack Overflow, accessed on July 12, 2025,
 <https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
 
-\[^32\]: Nicer error reporting - Command Line Applications in Rust, accessed on
+[^32]: Nicer error reporting - Command Line Applications in Rust, accessed on
 July 12, 2025, <https://rust-cli.github.io/book/tutorial/errors.html>
