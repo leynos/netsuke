@@ -1,0 +1,37 @@
+netsuke_version: "1.0"
+
+vars:
+  raw_dir: raw_photos
+  out_dir: processed
+
+macros:
+  - signature: "photo(path)"
+    body: |
+      - name: "{{ out_dir }}/{{ path | basename | replace('.CR2', '.jpg') }}"
+        rule: convert_raw
+        sources: "{{ path }}"
+
+rules:
+  - name: convert_raw
+    command: "darktable-cli {ins} {outs}"
+    description: "Converting RAW photo"
+
+  - name: make_gallery
+    command: "make-gallery {{ out_dir }} > {outs}"
+
+targets:
+  - foreach: "{{ glob(raw_dir ~ '/*.CR2') }}"
+    {{ photo(item) }}
+
+  - name: "{{ out_dir }}/gallery.html"
+    rule: make_gallery
+    sources: "{{ glob(out_dir ~ '/*.jpg') }}"
+    always: true
+
+actions:
+  - name: preview
+    script: |
+      feh {{ out_dir }} &
+
+defaults:
+  - "{{ out_dir }}/gallery.html"
