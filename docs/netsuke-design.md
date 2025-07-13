@@ -72,10 +72,10 @@ before execution, a critical requirement for compatibility with Ninja.
 5. Stage 5: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
-   synthesizes the content of a `build.ninja` file, translating the IR's nodes
+   synthesises the content of a `build.ninja` file, translating the IR's nodes
    and edges into corresponding Ninja rule and build statements. Once the file
    is written, Netsuke invokes the `ninja` executable as a subprocess, passing
-   control to it for the final dependency checking and command execution phase.
+   control to it for the final dependency checking and command-execution phase.
 
    Netsuke's pipeline is **deterministic**. Given the same `Netsukefile` and
    environment variables, the generated `build.ninja` will be byte-for-byte
@@ -178,13 +178,12 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Netsuke expands these placeholders to space-separated, shell-escaped lists
   of file paths before hashing the action. When generating the Ninja rule, the
   lists are replaced with Ninja's `$in` and `$out` macros. After interpolation
-  the command must be parsable by [`shlex`](<https://docs.rs/shlex/latest/>
-  shlex/). Any interpolation other than `ins` or `outs` is automatically shell
-  escaped.
+  the command must be parsable by [shlex](https://docs.rs/shlex/latest/shlex/).
+  Any interpolation other than `ins` or `outs` is automatically shell-escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
-  entire block is passed to an interpreter. If the first line begins with `#!
-  ` Netsuke executes the script verbatim, respecting the shebang. Otherwise the
+  entire block is passed to an interpreter. If the first line begins with `#!`
+  Netsuke executes the script verbatim, respecting the shebang. Otherwise, the
   block is wrapped in the interpreter specified by the optional `interpreter`
   field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
   is automatically passed through the `shell_escape` filter unless a `| raw`
@@ -862,7 +861,7 @@ structures to the Ninja file syntax.
 2. **Write Rules:** Iterate through the `graph.actions` map. For each
    `ir::Action`, write a corresponding Ninja `rule` statement. The input and
    output lists stored in the action replace the `ins` and `outs` placeholders.
-   These lists are then rewritten as Ninja's `$in` and `$out`
+   These lists are then rewritten as Ninja's `$in` and `$out`.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
@@ -974,9 +973,9 @@ simple string formatting (like `format!`) to construct the final command strings
 Instead, parse the Netsuke command template (e.g., `{cc} -c {ins} -o {outs}`)
 and build the final command string step by step. The placeholders `{{ ins }}
 ` and `{{ outs }}` are expanded to space-separated lists of file paths within
-Netsuke itself. Each path is shell escaped using the `shell-quote` API. When the
-command is written to `build.ninja`, these lists are replaced with Ninja's `$in`
-and `$out` macros. After substitution the command is validated with [`shlex`]
+Netsuke itself, each path being shell-escaped using the `shell-quote` API.
+When the command is written to `build.ninja`, these lists replace Ninja's `$in`
+and `$out` macros. After substitution, the command is validated with [`shlex`]
 (<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly. This
 approach guarantees that every dynamic part of the command is securely quoted.
 
@@ -1087,7 +1086,7 @@ enrichment:
    the user with a rich, layered explanation of the failure, from the general to
    the specific.
 
-For automation use cases Netsuke will support a `--diag-json` flag. When
+For automation use cases, Netsuke will support a `--diag-json` flag. When
 enabled, the entire error chain is serialised to JSON, allowing editors and CI
 tools to annotate failures inline.
 
@@ -1185,8 +1184,8 @@ The behaviour of each subcommand is clearly defined:
   as `ninja -t clean`, to remove the outputs of the build rules.
 
 - `Netsuke graph`: This command is an introspection and debugging tool. It will
-  run the Netsuke pipeline up to Stage 4 (IR Generation) and then invoke Ninja
-  with the graph tool, `ninja -t graph`.3 This outputs the complete build
+  run the Netsuke pipeline up to Stage 4 (IR Generation) and then invoke
+  Ninja with the graph tool, `ninja -t graph`. This outputs the complete build
   dependency graph in the DOT language. The result can be piped through `dot
   -Tsvg` or displayed via `netsuke graph --html` using an embedded Dagre.js
   viewer. Visualising the graph is invaluable for understanding and debugging
