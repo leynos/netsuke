@@ -115,6 +115,8 @@ CLI ergonomics.
   - [ ] **Mandate** its use for all variable substitutions within the `command`
     strings during Ninja file synthesis to prevent command injection
     vulnerabilities. This is a critical security feature.
+  - [ ] Ensure the interpolated `command` value parses successfully with
+    `shlex`.
 
   - [ ] Implement custom Jinja filters for shell safety and path manipulation,
     such as `| shell_escape`, `| to_path`, and `| parent`.

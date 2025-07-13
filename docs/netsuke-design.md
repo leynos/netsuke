@@ -170,11 +170,16 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `command`: A single command string to be executed. This string uses
   placeholders like `{{ ins }}` and `{{ outs }}` for input and output files.
-  Netsuke's IR-to-Ninja generator will translate these into Ninja's native
-  `$in` and `$out` variables.
+  Netsuke's IR-to-Ninja generator will translate these into Ninja's native $in
+  and $out variables. After interpolation, the value must be parsable by the
+  [`shlex`](https://docs.rs/shlex/latest/shlex/) crate. Any interpolation other
+  than `ins` or `outs` is automatically shell escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
-  entire block is passed to an interpreter (currently `/bin/sh`).
+  entire block is passed to an interpreter (currently `/bin/sh`). For `/bin/sh`
+  scripts, each interpolation is automatically passed through the `shell_escape`
+  filter unless a `| raw` filter is applied. Future versions will allow
+  configurable script languages with their own escaping rules.
 
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
@@ -275,13 +280,13 @@ table compares a simple C compilation project defined in both a traditional
 `Makefile` and a `Netsukefile` file. The comparison highlights Netsuke's
 explicit, structured, and self-documenting nature.
 
-| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                       |
-| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                         |
-| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                |
+| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                                            |
+| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                               |
 | Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ out }}", description: "Compiling {{ outs }}" } } |
-| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                         |
-| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.  |
+| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                                        |
+| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                         |
 
 ## Section 3: Parsing and Deserialization Strategy
 
@@ -573,12 +578,10 @@ providing a secure bridge to the underlying system.
 In addition to functions, custom filters provide a concise, pipe-based syntax
 for transforming data within templates.
 
-- `| shell_escape`: A filter that takes a string or list and escapes it for
-  safe inclusion as a single argument in a shell command. This is a
-  non-negotiable security feature to prevent command injection vulnerabilities.
-  The implementation will use the `shell-quote` crate for robust, shell-aware
-  quoting.[^22]
-
+- `| shell_escape`: A filter that operates on both scalar strings and lists,
+  escaping each value for safe inclusion as a single shell argument. This non-
+  negotiable security feature uses the `shell-quote` crate for robust quoting.
+  [^22]
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.
 
@@ -738,8 +741,8 @@ structures to the Ninja file syntax.
 
 2. **Write Rules:** Iterate through the `graph.actions` map. For each
    `ir::Action`, write a corresponding Ninja `rule` statement to the output
-   file. The command placeholders (`{{ ins }}`, `{{ outs }}`) are replaced with Ninja's
-   variables (`$in`, `$out`).
+   file. The command placeholders (`{{ ins }}`, `{{ outs }}`) are replaced with
+   Ninja's variables (`$in`, `$out`).
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
@@ -846,12 +849,15 @@ The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command strings
 for the `build.ninja` file. Doing so would be inherently insecure.
 
-Instead, the implementation must parse the Netsuke command template (e.g., `{cc}
--c {ins} -o {outs}`) and build the final command string piece by piece. For
-each segment of the command, if it is a variable substitution (like `{ins}`),
-the value of that variable must be passed through the `shell-quote` API before
-being appended to the output string. This ensures that every dynamic part of the
-command is correctly and safely quoted for the target shell.
+Instead, the implementation must parse the Netsuke command template (e.g.,
+`{cc} -c {ins} -o {outs}`) and build the final command string piece by piece.
+The placeholders `{{ ins }}` and `{{ outs }}` remain as Ninja's $in and $out
+variables. After substitution, Netsuke verifies that the resulting command
+string can be parsed by the `shlex` crate. For each segment of the command, if
+it is a variable substitution (like `{ins}`), the value of that variable must be
+passed through the `shell-quote` API before being appended to the output string.
+This ensures that every dynamic part of the command is correctly and safely
+quoted for the target shell.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
