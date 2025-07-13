@@ -12,16 +12,11 @@ rules:
   - name: combine
     command: "latexmk -pdf -outdir={{ build_dir }} {ins}"
 
-macros:
-  - signature: "chapter(path)"
-    body: |
-      - name: "{{ build_dir }}/{{ path | basename | replace('.md', '.tex') }}"
-        rule: tex
-        sources: "{{ path }}"
-
 targets:
   - foreach: "{{ glob(chapters_dir ~ '/*.md') }}"
-    {{ chapter(item) }}
+    name: "{{ build_dir }}/{{ item | basename | replace('.md', '.tex') }}"
+    rule: tex
+    sources: "{{ item }}"
 
   - name: "{{ build_dir }}/book.pdf"
     rule: combine
