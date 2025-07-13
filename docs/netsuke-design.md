@@ -64,8 +64,10 @@ before execution, a critical requirement for compatibility with Ninja.
    Representation (IR) of the build. This IR represents the build as a static
    dependency graph, with all file paths, commands, and dependencies explicitly
    defined. During this transformation, Netsuke performs critical validation
-   checks, such as verifying the existence of defined rules, detecting circular
-   dependencies, and ensuring all required inputs are accounted for.
+   checks. It verifies the existence of referenced rules, ensures each rule has
+   exactly one of `command` or `script`, and that every target specifies exactly
+   one of `rule`, `command`, or `script`. Circular dependencies and missing
+   inputs are also detected at this stage.
 
 5. Stage 5: Ninja Synthesis & Execution
 
@@ -172,8 +174,13 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   `$out` variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
-  entire block is passed to an interpreter (currently `/bin/sh`). Exactly one of
-  `command` or `script` must be provided.
+  entire block is passed to an interpreter (currently `/bin/sh`).
+
+  Exactly one of `command` or `script` must be provided. The manifest parser
+  enforces this rule to prevent invalid states.
+
+  Internally, these options deserialise into an enum `Recipe` to ensure the
+  exclusivity is encoded at the type level.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -200,7 +207,11 @@ Each entry in `targets` defines a build edge; placing a target in the optional
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
 
-  Only one of `rule`, `command`, or `script` may be specified.
+  Only one of `rule`, `command`, or `script` may be specified. The parser
+  validates this exclusivity during deserialisation.
+
+  This union deserialises into an enum `TargetRecipe` so that the chosen
+  execution method is explicit in the AST.
 
 - `sources`: The input files required by the command. This can be a single
   string or a list of strings.
@@ -336,21 +347,25 @@ pub struct NetsukeManifest {
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub name: String,
-    pub command: Option<String>,
-    pub script: Option<String>,
+    pub recipe: Recipe,
     pub description: Option<String>,
     pub deps: Option<String>,
     // Additional fields like 'pool' or 'restat' can be added here
     // to map to more advanced Ninja features.
 }
 
+/// A union of execution styles for a rule.
+#[serde(untagged)]
+pub enum Recipe {
+    Command { command: String },
+    Script { script: String },
+}
+
 /// Represents a single build target or edge in the dependency graph.
 #[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
-    pub rule: Option<String>,
-    pub command: Option<String>,
-    pub script: Option<String>,
+    pub recipe: TargetRecipe,
 
     #[serde(default)]
     pub sources: StringOrList,
@@ -371,6 +386,14 @@ pub struct Target {
     /// Run this target on every invocation regardless of timestamps.
     #[serde(default)]
     pub always: bool,
+}
+
+/// Specifies how a target is built.
+#[serde(untagged)]
+pub enum TargetRecipe {
+    Rule { rule: String },
+    Command { command: String },
+    Script { script: String },
 }
 
 /// An enum to handle fields that can be either a single string or a list of strings.
@@ -641,8 +664,7 @@ pub struct BuildGraph {
 
 /// Represents a reusable command, analogous to a Ninja 'rule'.
 pub struct Action {
-    pub command: Option<String>,
-    pub script: Option<String>,
+    pub recipe: Recipe,
     pub description: Option<String>,
     pub depfile: Option<String>, // Template for the.d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
@@ -720,6 +742,10 @@ structures to the Ninja file syntax.
    `ir::Action`, write a corresponding Ninja `rule` statement to the output
    file. The command placeholders (`{ins}`, `{outs}`) are replaced with Ninja's
    variables (`$in`, `$out`).
+
+   When an action's `recipe` is a script, the generated rule wraps the script in
+   an invocation of `/bin/sh -e -c` so that multi-line scripts execute
+   consistently across platforms.
 
    Code snippet
 
