@@ -610,6 +610,96 @@ This design pattern is the key to providing both power and safety, fulfilling
 the core requirement of a system that is friendlier and more robust than its
 predecessors.
 
+### 4.7 Template Standard Library
+
+Netsuke bundles a small "standard library" of Jinja helpers. These tests,
+filters and functions are available to every template and give concise access to
+common filesystem queries, path manipulations, collection utilities and network
+operations.
+
+#### File-system tests
+
+| Test                                           | True when the operand…                                           |
+| ---------------------------------------------- | ---------------------------------------------------------------- |
+| `dir` / `file` / `symlink` / `pipe` / `device` | …is that object type                                             |
+| `present`                                      | …exists (any type)                                               |
+| `owned`                                        | …is owned by the current UID                                     |
+| `readable` / `writable` / `executable`         | …has the corresponding permission bit for current user           |
+| `empty`                                        | …has size 0 bytes                                                |
+| `older_than(value)`                            | …has `mtime` < given value (seconds, `timedelta`, or file)       |
+| `newer_than(value)`                            | …has `mtime` > given value                                       |
+| `contains(substr)`                             | …file’s text contains **substr**                                 |
+| `matches(regex)`                               | …file’s text matches **regex**                                   |
+| `type(kind)`                                   | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+
+#### Path & file filters
+
+| Filter                                     | Purpose                                                              |
+| ------------------------------------------ | -------------------------------------------------------------------- |
+| `basename`                                 | Return last path component                                           |
+| `dirname`                                  | Return parent directory                                              |
+| `with_suffix(suffix, n=1, sep='.')`        | Replace last `n` dotted suffix components (`foo.tar.gz → foo.zip`)   |
+| `relative_to(root)`                        | Make path relative to **root**                                       |
+| `realpath`                                 | Resolve symlinks to canonical path                                   |
+| `commonpath(other)`                        | Longest common prefix with **other**                                 |
+| `expanduser`                               | Expand leading `~`                                                   |
+| `size`                                     | File size in bytes                                                   |
+| `contents(encoding='utf-8')`               | File content as text                                                 |
+| `linecount`                                | Number of text lines                                                 |
+| `head(n=10)` / `tail(n=10)`                | First / last *n* lines                                               |
+| `mtime` / `ctime`                          | Return timestamp (`datetime`)                                        |
+| `age(unit='s')`                            | Seconds (or `m`, `h`, `d`) since `mtime`                             |
+| `date(fmt='%Y-%m-%d')`                     | Format `mtime`/`ctime`                                               |
+| `owner` / `group`                          | User / group name                                                    |
+| `stat`                                     | Full `os.stat()` result as dict                                      |
+| `hash(alg='sha256')`                       | Hex digest of file (`md5`, `sha1`, …)                                |
+| `digest(n=8, alg='sha256')`                | Truncated digest (e.g. build ID)                                     |
+| `base64` / `hex`                           | Encode bytes or string                                               |
+| `slugify`                                  | Make filename-safe slug                                              |
+| `snake_case` / `camel_case` / `kebab-case` | Rename helpers                                                       |
+| `shell_escape`                             | POSIX-quote for safe `$()` usage                                     |
+
+#### Generic collection filters
+
+| Filter                            | Purpose                                      |
+| --------------------------------- | -------------------------------------------- |
+| `uniq`                            | De-duplicate list (preserve order)           |
+| `flatten`                         | One-level flatten of nested lists            |
+| `group_by(attr)`                  | Dict keyed on `attr` of list items           |
+| `zip(other)`                      | Pairwise tuples of two lists                 |
+| `version_compare(other, op='=>')` | SemVer comparison (`'<'`, `'<=', '==', …`)   |
+
+#### Network & command functions / filters
+
+| Name                                                  | Kind         | Purpose                                                          |
+| ----------------------------------------------------- | ------------ | ---------------------------------------------------------------- |
+| `fetch(url, cache=False, cache_dir='.netsuke/fetch')` | **function** | Retrieve URL, return content (str/bytes)                         |
+| `http_head(url)`                                      | function     | Return headers dict                                              |
+| `download(url, dest)`                                 | function     | Idempotent file download (returns **dest**)                      |
+| `shell(cmd)`                                          | **filter**   | Pipe value to arbitrary shell command; marks template **impure** |
+| `grep`, `sed`, `awk`, `cut`, `wc`, `tr`               | filters      | Canonical wrappers implemented via `shell()` for convenience     |
+
+Custom external commands can be registered as additional filters. Those should
+be marked `pure` if safe for caching or `impure` otherwise.
+
+#### Time helpers
+
+| Name                  | Kind     | Purpose                                   |
+| --------------------- | -------- | ----------------------------------------- |
+| `now()`               | function | Current `datetime` (UTC by default)       |
+| `timedelta(**kwargs)` | function | Convenience creator for `age` comparisons |
+
+##### Example usage
+
+```jinja
+{% if "config.yaml" is file and "config.yaml" is readable %}
+  {{ "config.yaml" | contents | grep("version") }}
+{% endif %}
+
+{{ "src/app.c" | basename | with_suffix(".o") }}
+{{ fetch('https://example.com/data.csv', cache=True) | head(5) }}
+```
+
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 
 After the user's manifest has been fully rendered by Jinja and deserialized
