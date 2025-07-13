@@ -31,5 +31,8 @@ actions:
   - name: run
     command: "./app"
 
+  - name: clean
+    command: "rm -f *.o app"
+
 defaults:
   - app
