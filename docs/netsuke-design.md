@@ -72,10 +72,30 @@ before execution, a critical requirement for compatibility with Ninja.
 5. Stage 5: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
-   synthesizes the content of a build.ninja file, translating the IR's nodes
+   synthesizes the content of a `build.ninja` file, translating the IR's nodes
    and edges into corresponding Ninja rule and build statements. Once the file
-   is written, Netsuke invokes the ninja executable as a subprocess, passing
-   control to it for the final dependency checking and command execution phase.
+   is written, Netsuke invokes the `ninja` executable as a subprocess, passing
+   control to it for the final dependency checking and command-execution phase.
+
+   Netsuke's pipeline is **deterministic**. Given the same `Netsukefile` and
+   environment variables, the generated `build.ninja` will be byte-for-byte
+   identical. This property is essential for reproducible builds and makes the
+   output suitable for caching or source control.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Netsuke
+    participant IR_Generator
+    participant Ninja
+
+    User->>Netsuke: Provide Netsukefile and environment
+    Netsuke->>IR_Generator: Parse and validate manifest
+    IR_Generator->>IR_Generator: Generate deterministic BuildGraph (IR)
+    IR_Generator->>Netsuke: Return BuildGraph (byte-for-byte deterministic)
+    Netsuke->>Ninja: Synthesize build.ninja and invoke Ninja
+    Ninja-->>User: Execute build and report results
+```
 
 ### 1.3 The Static Graph Mandate
 
@@ -162,29 +182,93 @@ level keys.
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
 
+The class diagram below summarizes the structure of a `Netsukefile` and the
+relationships between its components.
+
+```mermaid
+classDiagram
+    class NetsukeManifest {
+        +String netsuke_version
+        +HashMap vars
+        +Vec rules
+        +Vec actions
+        +Vec targets
+        +Vec defaults
+    }
+    class Target {
+        +StringOrList name
+        +Recipe recipe
+        +StringOrList sources
+        +StringOrList deps
+        +StringOrList order_only_deps
+        +HashMap vars
+        +bool phony
+        +bool always
+    }
+    class Rule {
+        +String name
+        +Recipe recipe
+        +String description
+        +String deps
+    }
+    class Recipe {
+        <<enumeration>>
+        Command
+        Script
+        Rule
+    }
+    class StringOrList {
+        <<enumeration>>
+        Empty
+        String
+        List
+    }
+    class Value {
+        <<serde_yaml>>
+        Null
+        Bool
+        Number
+        String
+        Sequence
+        Mapping
+        Tagged
+    }
+    NetsukeManifest "1" o-- "*" Target
+    NetsukeManifest "1" o-- "*" Rule
+    NetsukeManifest "1" o-- "*" Value
+    Target "1" -- "1" Recipe
+    Target "1" -- "1" StringOrList
+    Rule "1" -- "1" Recipe
+```
+
 ### 2.3 Defining `rules`
 
 Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `name`: A unique string identifier for the rule.
 
-- `command`: A single command string to be executed. This string uses
-  placeholders like `{{ ins }}` and `{{ outs }}` for input and output files.
-  Netsuke's IR-to-Ninja generator will translate these into Ninja's native $in
-  and $out variables. After interpolation, the value must be parsable by the
-  [`shlex`](https://docs.rs/shlex/latest/shlex/) crate. Any interpolation other
-  than `ins` or `outs` is automatically shell escaped.
+- `command`: A single command string to be executed. It may include the
+  placeholders `{{ ins }}` and `{{ outs }}` to represent input and output files.
+  Netsuke expands these placeholders to space-separated, shell-escaped lists
+  of file paths before hashing the action. When generating the Ninja rule, the
+  lists are replaced with Ninja's `$in` and `$out` macros. After interpolation
+  the command must be parsable by [shlex](https://docs.rs/shlex/latest/shlex/).
+  Any interpolation other than `ins` or `outs` is automatically shell-escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
-  entire block is passed to an interpreter (currently `/bin/sh`). For `/bin/sh`
-  scripts, each interpolation is automatically passed through the `shell_escape`
-  filter unless a `| raw` filter is applied. Future versions will allow
-  configurable script languages with their own escaping rules.
-
+  entire block is passed to an interpreter. If the first line begins with `#!`
+  Netsuke executes the script verbatim, respecting the shebang. Otherwise, the
+  block is wrapped in the interpreter specified by the optional `interpreter`
+  field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
+  is automatically passed through the `shell_escape` filter unless a `| raw`
+  filter is applied. Future versions will allow configurable script languages
+  with their own escaping rules.  
+  On Windows, scripts default to `powershell -Command` unless the manifest's
+  `interpreter` field overrides the setting.
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
 
-  Internally, these options deserialise into a shared `Recipe` enum tagged with
+  Internally, these options deserialize into a shared `Recipe` enum tagged with
   a `kind` field. Serde aliases ensure manifests that omit the tag continue to
   load correctly.
 
@@ -219,10 +303,12 @@ rule:
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
 
-  Only one of `rule`, `command`, or `script` may be specified. The parser
-  validates this exclusivity during deserialisation.
+Only one of `rule`, `command`, or `script` may be specified. The parser
+validates this exclusivity during deserialization. When multiple fields are
+present, Netsuke emits a `RecipeConflict` error with the message "rule, command
+and script are mutually exclusive".
 
-  This union deserialises into the same `Recipe` enum used for rules. The parser
+  This union deserializes into the same `Recipe` enum used for rules. The parser
   enforces that only one variant is present, maintaining backward compatibility
   through serde aliases when `kind` is omitted.
 
@@ -282,13 +368,13 @@ table compares a simple C compilation project defined in both a traditional
 `Makefile` and a `Netsukefile` file. The comparison highlights Netsuke's
 explicit, structured, and self-documenting nature.
 
-| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                                              |
-| --------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                                            |
-| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                               |
-| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ out }}", description: "Compiling {{ outs }}" } } |
-| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                                        |
-| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                         |
+| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                                               |
+| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                                             |
+| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                                |
+| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ outs }}", description: "Compiling {{ outs }}" } } |
+| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                                         |
+| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
 
 ## Section 3: Parsing and Deserialization Strategy
 
@@ -336,7 +422,7 @@ use std::collections::HashMap;
 /// Represents the top-level structure of a Netsukefile file.
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
-    pub Netsuke_version: String,
+    pub netsuke_version: String,
 
     #[serde(default)]
     pub vars: HashMap<String, serde_yaml::Value>,
@@ -561,8 +647,9 @@ providing a secure bridge to the underlying system.
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: A function that performs
   file path globbing. This is a critical feature for any modern build tool,
   allowing users to easily specify sets of source files (e.g., `src/**/*.c`).
-  This function bridges a key feature gap, as Ninja itself does not support
-  globbing.[^3]
+  The results are returned sorted lexicographically and symlinks are followed to
+  keep builds deterministic. This function bridges a key feature gap, as Ninja
+  itself does not support globbing.[^3]
 
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
@@ -657,7 +744,10 @@ operations.
 | `base64` / `hex`                           | Encode bytes or string                                               |
 | `slugify`                                  | Make filename-safe slug                                              |
 | `snake_case` / `camel_case` / `kebab-case` | Rename helpers                                                       |
-| `shell_escape`                             | POSIX-quote for safe `$()` usage                                     |
+
+All built-in filters use `snake_case`. The `camel_case` helper is provided in
+place of `camelCase` so naming remains consistent with `snake_case` and `kebab-
+case`.
 
 #### Generic collection filters
 
@@ -667,7 +757,7 @@ operations.
 | `flatten`                         | One-level flatten of nested lists            |
 | `group_by(attr)`                  | Dict keyed on `attr` of list items           |
 | `zip(other)`                      | Pairwise tuples of two lists                 |
-| `version_compare(other, op='=>')` | SemVer comparison (`'<'`, `'<=', '==', …`)   |
+| `version_compare(other, op='>=')` | SemVer comparison (`'<'`, `'<=', '==', …`)   |
 
 #### Network & command functions / filters
 
@@ -678,6 +768,10 @@ operations.
 | `download(url, dest)`                                 | function     | Idempotent file download (returns **dest**)                      |
 | `shell(cmd)`                                          | **filter**   | Pipe value to arbitrary shell command; marks template **impure** |
 | `grep`, `sed`, `awk`, `cut`, `wc`, `tr`               | filters      | Canonical wrappers implemented via `shell()` for convenience     |
+
+Using `shell()` marks the template as *impure* and disables caching of the
+rendered YAML between Stage&nbsp;2 and Stage&nbsp;3. This avoids accidental
+reuse of results that depend on external commands.
 
 Custom external commands can be registered as additional filters. Those should
 be marked `pure` if safe for caching or `impure` otherwise.
@@ -725,6 +819,12 @@ if the decision were made to support an alternative execution back-end (e.g.,
 a distributed build system), only a new generator module (`IR -> NewBackend`)
 would need to be written, leaving the entire front-end parsing and validation
 logic untouched.
+
+Importantly, the IR contains **no Ninja-isms**. Placeholders such as `$in`
+and `$out` are resolved to plain lists of file paths, and command strings are
+expanded before hashing. This deliberate absence of Ninja-specific syntax makes
+the IR a stable contract that future back-ends—distributed builders, remote
+executors, or otherwise—can consume without modification.
 
 Furthermore, the IR is the ideal stage at which to perform graph-level analysis
 and optimizations, such as detecting circular dependencies, pruning unused build
@@ -803,9 +903,11 @@ consumes a `NetsukeManifest` (the AST) and produces a `BuildGraph` (the IR).
 This transformation involves several steps:
 
 1. **Action Consolidation:** Iterate through the `manifest.rules` from the AST.
-   For each rule, create a corresponding `ir::Action` struct. These actions are
-   stored in the `BuildGraph`'s `actions` map, keyed by a hash of their contents
-   to automatically deduplicate identical rules.
+   For each rule, create a corresponding `ir::Action` struct. These actions
+   are stored in the `BuildGraph`'s `actions` map, keyed by a hash of their
+   fully resolved command text, interpreter, local variables, and depfile
+   options. This ensures deduplication only occurs when two actions are truly
+   interchangeable.
 
 2. **Target Expansion:** Iterate through the `manifest.targets` and the optional
    `manifest.actions`. Entries in `actions` are treated identically to targets
@@ -831,12 +933,10 @@ structures to the Ninja file syntax.
 
 1. **Write Variables:** Any global variables that need to be passed to Ninja can
    be written at the top of the file (e.g., `msvc_deps_prefix` for Windows
-   builds.[^8]
-
 2. **Write Rules:** Iterate through the `graph.actions` map. For each
-   `ir::Action`, write a corresponding Ninja `rule` statement to the output
-   file. The command placeholders (`{{ ins }}`, `{{ outs }}`) are replaced with
-   Ninja's variables (`$in`, `$out`).
+   `ir::Action`, write a corresponding Ninja `rule` statement. The input and
+   output lists stored in the action replace the `ins` and `outs` placeholders.
+   These lists are then rewritten as Ninja's `$in` and `$out`.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
@@ -941,17 +1041,15 @@ for building command strings by pushing quoted components into a buffer:
 
 The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command strings
-for the `build.ninja` file. Doing so would be inherently insecure.
-
-Instead, the implementation must parse the Netsuke command template (e.g.,
-`{cc} -c {ins} -o {outs}`) and build the final command string piece by piece.
-The placeholders `{{ ins }}` and `{{ outs }}` remain as Ninja's $in and $out
-variables. After substitution, Netsuke verifies that the resulting command
-string can be parsed by the `shlex` crate. For each segment of the command, if
-it is a variable substitution (like `{ins}`), the value of that variable must be
-passed through the `shell-quote` API before being appended to the output string.
-This ensures that every dynamic part of the command is correctly and safely
-quoted for the target shell.
+Instead, parse the Netsuke command template (e.g., `{{ cc }} -c {{ ins }} -o`
+`{{ outs }}`) and build the final command string step by step. The placeholders
+`{{ ins }}` and `{{ outs }}` are expanded to space-separated lists of file paths
+within Netsuke itself, each path being shell-escaped using the `shell- quote`
+API. When the command is written to `build.ninja`, these lists replace Ninja's
+`$in` and `$out` macros. After substitution, the command is validated with
+[`shlex`] (<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly.
+This approach guarantees that every dynamic part of the command is securely
+quoted.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -1060,6 +1158,10 @@ enrichment:
    the user with a rich, layered explanation of the failure, from the general to
    the specific.
 
+For automation use cases, Netsuke will support a `--diag-json` flag. When
+enabled, the entire error chain is serialized to JSON, allowing editors and CI
+tools to annotate failures inline.
+
 ### 7.4 Table: Transforming Errors into User-Friendly Messages
 
 This table provides a specification for the desired output of Netsuke's error
@@ -1154,12 +1256,12 @@ The behaviour of each subcommand is clearly defined:
   as `ninja -t clean`, to remove the outputs of the build rules.
 
 - `Netsuke graph`: This command is an introspection and debugging tool. It will
-  run the Netsuke pipeline up to Stage 4 (IR Generation) and then invoke Ninja
-  with the graph tool, `ninja -t graph`.3 This will output the complete build
-  dependency graph in the DOT language, which can be rendered into an image
-  using tools like Graphviz. This allows users to visually inspect their build
-  dependencies, which is invaluable for understanding and debugging complex
-  projects.
+  run the Netsuke pipeline up to Stage 4 (IR Generation) and then invoke
+  Ninja with the graph tool, `ninja -t graph`. This outputs the complete build
+  dependency graph in the DOT language. The result can be piped through `dot
+  -Tsvg` or displayed via `netsuke graph --html` using an embedded Dagre.js
+  viewer. Visualising the graph is invaluable for understanding and debugging
+  complex projects.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
@@ -1248,14 +1350,14 @@ goal.
 This table serves as a quick-reference guide to the core third-party crates
 selected for this project and the rationale for their inclusion.
 
-| Component      | Recommended Crate  | Rationale                                                                                                             |
-| -------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| CLI Parsing    | clap               | The Rust standard for powerful, derive-based CLI development.                                                         |
-| YAML Parsing   | serde_yaml         | Mature, stable, and provides seamless integration with the serde framework.                                           |
-| Templating     | minijinja          | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                          |
-| Shell Quoting  | shell-quote        | A critical security component; provides robust, shell-specific escaping for command arguments.                        |
-| Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports.                 |
-| Versioning     | semver             | The standard library for parsing and evaluating Semantic Versioning strings, essential for the Netsuke_version field. |
+| Component      | Recommended Crate  | Rationale                                                                                                               |
+| -------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| CLI Parsing    | clap               | The Rust standard for powerful, derive-based CLI development.                                                           |
+| YAML Parsing   | serde_yaml         | Mature, stable, and provides seamless integration with the serde framework.                                             |
+| Templating     | minijinja          | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                            |
+| Shell Quoting  | shell-quote        | A critical security component; provides robust, shell-specific escaping for command arguments.                          |
+| Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports.                   |
+| Versioning     | semver             | The standard library for parsing and evaluating Semantic Versioning strings, essential for the `netsuke_version` field. |
 
 ### 9.3 Future Enhancements
 
