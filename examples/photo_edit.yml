@@ -4,12 +4,6 @@ vars:
   raw_dir: raw_photos
   out_dir: processed
 
-macros:
-  - signature: "photo(path)"
-    body: |
-      - name: "{{ out_dir }}/{{ path | basename | replace('.CR2', '.jpg') }}"
-        rule: convert_raw
-        sources: "{{ path }}"
 
 rules:
   - name: convert_raw
@@ -21,7 +15,9 @@ rules:
 
 targets:
   - foreach: "{{ glob(raw_dir ~ '/*.CR2') }}"
-    {{ photo(item) }}
+    name: "{{ out_dir }}/{{ item | basename | replace('.CR2', '.jpg') }}"
+    rule: convert_raw
+    sources: "{{ item }}"
 
   - name: "{{ out_dir }}/gallery.html"
     rule: make_gallery

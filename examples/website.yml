@@ -4,12 +4,6 @@ vars:
   pages_dir: pages
   site_dir: site
 
-macros:
-  - signature: "page(path)"
-    body: |
-      - name: "{{ site_dir }}/{{ path | basename | replace('.md', '.html') }}"
-        rule: page
-        sources: "{{ path }}"
 
 rules:
   - name: page
@@ -21,7 +15,9 @@ rules:
 
 targets:
   - foreach: "{{ glob(pages_dir ~ '/*.md') }}"
-    {{ page(item) }}
+    name: "{{ site_dir }}/{{ item | basename | replace('.md', '.html') }}"
+    rule: page
+    sources: "{{ item }}"
 
   - name: "{{ site_dir }}/index.html"
     rule: index
