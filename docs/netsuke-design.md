@@ -16,9 +16,9 @@ At its core, Netsuke should not be conceptualized as a direct, imperative
 replacement for `make`. Instead, it is architected as a high-level **build
 system compiler**. This architectural paradigm is central to its design. Ninja,
 the chosen execution backend, describes itself as a low-level "assembler" for
-build systems.1 It is intentionally constrained, lacking features like string
+build systems.[^1] It is intentionally constrained, lacking features like string
 manipulation or conditional logic, to ensure its primary goal: running builds as
-fast as possible.2
+fast as possible.[^2]
 
 This design choice by Ninja's authors necessitates the existence of a
 higher-level generator tool. Netsuke fulfills this role. It provides a rich,
@@ -83,7 +83,7 @@ The architecture's multi-stage pipeline is a direct consequence of a fundamental
 design constraint imposed by the choice of Ninja as the backend. Ninja's
 remarkable speed in incremental builds stems from its simplicity; it operates on
 a pre-computed, static dependency graph and avoids costly runtime operations
-like filesystem queries (e.g., glob expansion) or string manipulation.2
+like filesystem queries (e.g., glob expansion) or string manipulation.[^2]
 
 At the same time, a "friendlier" build system must offer dynamic capabilities.
 Users will expect to define builds that can adapt to their environment, such as
@@ -137,7 +137,7 @@ top-level keys.
 - `netsuke_version`: A mandatory string that specifies the version of the
   Netsuke schema the manifest conforms to (e.g., `"1.0"`). This allows for
   future evolution of the schema while maintaining backward compatibility. This
-  version string should be parsed and validated using the `semver` crate.4
+  version string should be parsed and validated using the `semver` crate.[^4]
 
 - `vars`: A mapping of global key-value string pairs. These variables are
   available for substitution in rule commands and target definitions and are
@@ -149,18 +149,18 @@ top-level keys.
   environment before rendering other sections.
 
 - `rules`: A list of rule definitions. Each rule is a reusable template for a
-  command, analogous to a Ninja `rule` block.2
+  command, analogous to a Ninja `rule` block.[^2]
 
 - `targets`: The primary list of build targets. Each target defines an output,
   the sources it depends on, and the rule used to produce it. This corresponds
-  to a Ninja `build` statement.3
+  to a Ninja `build` statement.[^3]
 
 - `actions`: A secondary list of build targets. Any target placed here is
   treated as `{ phony: true, always: false }` by default.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
-  to Ninja's `default` target statement.3
+  to Ninja's `default` target statement.[^3]
 
 ### 2.3 Defining `rules`
 
@@ -185,12 +185,12 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
-  and improves the user's visibility into the build process.2
+  and improves the user's visibility into the build process.[^2]
 
 - `deps`: An optional field to configure support for C/C++-style header
   dependency generation. Its value specifies the format (e.g., `gcc` or `msvc`),
   which instructs Netsuke to generate the appropriate `depfile` or `deps`
-  attribute in the corresponding Ninja rule.3
+  attribute in the corresponding Ninja rule.[^3]
 
 ### 2.4 Defining `targets`
 
@@ -226,12 +226,12 @@ Each entry in `targets` defines a build edge; placing a target in the optional
 - `order_only_deps`: An optional list of other target names that must be built
   before this target, but whose modification does not trigger a rebuild of this
   target. This maps directly to Ninja's order-only dependencies, specified with
-  the `||` operator.7
+  the `||` operator.[^7]
 
 - `vars`: An optional mapping of local variables. These variables override any
   global variables defined in the top-level `vars` section for the scope of this
   target only. This provides the same functionality as Ninja's build-local
-  variables.3
+  variables.[^3]
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
   `signature` string using standard Jinja syntax and a `body` declared with the
@@ -298,7 +298,7 @@ annotation on a struct is sufficient to make it a deserialization target.
 
 While other promising YAML libraries like `saphyr` exist, their `serde`
 integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
-highly experimental stage (version 0.0.0).11 Building a core component of
+highly experimental stage (version 0.0.0)[^11] Building a core component of
 Netsuke on a nascent or unreleased library would introduce significant and
 unnecessary project risk.
 
@@ -464,20 +464,20 @@ The recommended templating engine is `minijinja`.
 
 This crate is the ideal choice for several reasons. It is explicitly designed as
 a Rust implementation of the Jinja2 template engine, aiming for close
-compatibility with its syntax and behaviour.15 This is advantageous as Jinja2 is
-a mature, well-documented, and widely understood language, reducing the learning
-curve for new Netsuke users. Furthermore,
+compatibility with its syntax and behaviour.[^15] This is advantageous as Jinja2
+is a mature, well-documented, and widely understood language, reducing the
+learning curve for new Netsuke users. Furthermore,
 
 `minijinja` is designed with minimal dependencies, which is beneficial for
-keeping Netsuke's compile times and binary size reasonable.17 Its API is
+keeping Netsuke's compile times and binary size reasonable.[^17] Its API is
 well-documented and provides first-class support for adding custom functions and
 filters, which is essential for extending its capabilities to suit the needs of
-a build system.16
+a build system.[^16]
 
 Alternative template engines like Askama are less suitable for this use case.
 Askama is a type-safe engine that compiles templates into Rust code at build
-time.18 This model is incompatible with Netsuke's requirement to load and parse
-user-defined manifest files at runtime.
+time.[^18] This model is incompatible with Netsuke's requirement to load and
+parse user-defined manifest files at runtime.
 
 `minijinja`, with its dynamic environment and runtime rendering, is perfectly
 aligned with Netsuke's architecture.
@@ -551,7 +551,7 @@ providing a secure bridge to the underlying system.
   file path globbing. This is a critical feature for any modern build tool,
   allowing users to easily specify sets of source files (e.g., `src/**/*.c`).
   This function bridges a key feature gap, as Ninja itself does not support
-  globbing.3
+  globbing.[^3]
 
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
@@ -574,7 +574,7 @@ for transforming data within templates.
   inclusion as a single argument in a shell command. This is a non-negotiable
   security feature to prevent command injection vulnerabilities. The
   implementation will use the `shell-quote` crate for robust, shell-aware
-  quoting.22
+  quoting.[^22]
 
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.
@@ -634,7 +634,7 @@ targets, or identifying duplicate build actions.
 
 The IR data structures are designed to closely mirror the conceptual model of
 the Ninja build system, which consists of "Action" nodes (commands) and "Target"
-nodes (files).7 This close mapping simplifies the final code generation step.
+nodes (files).[^7] This close mapping simplifies the final code generation step.
 
 Rust
 
@@ -731,7 +731,7 @@ structures to the Ninja file syntax.
 
 1. **Write Variables:** Any global variables that need to be passed to Ninja can
    be written at the top of the file (e.g., `msvc_deps_prefix` for Windows
-   builds).8
+   builds.[^8]
 
 2. **Write Rules:** Iterate through the `graph.actions` map. For each
    `ir::Action`, write a corresponding Ninja `rule` statement to the output
@@ -759,11 +759,11 @@ structures to the Ninja file syntax.
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This involves
    formatting the lists of explicit outputs, implicit outputs, inputs, and
-   order-only dependencies using the correct Ninja syntax (`:`, `|`, and `||`).7
-   Use Ninja's built-in `phony` rule when `phony` is `true`. For an `always`
-   edge, either generate a `phony` build with no outputs or emit a dummy output
-   marked `restat = 1` and depend on a permanently dirty target so the command
-   runs on each invocation.
+   order-only dependencies using the correct Ninja syntax (`:`, `|`, and
+   `||`).[^7] Use Ninja's built-in `phony` rule when `phony` is `true`. For an
+   `always` edge, either generate a `phony` build with no outputs or emit a
+   dummy output marked `restat = 1` and depend on a permanently dirty target so
+   the command runs on each invocation.
 
    Code snippet
 
@@ -805,13 +805,13 @@ The command construction will follow this pattern:
 2. Arguments passed to Netsuke's own CLI will be translated and forwarded to
    Ninja. For example, a `Netsuke build -C build/ my_target` command would
    result in `Command::new("ninja").arg("-C").arg("build/").arg("my_target")`.
-   Flags like `-j` for parallelism will also be passed through.8
+   Flags like `-j` for parallelism will also be passed through.[^8]
 
 3. The working directory for the Ninja process will be set using
    `.current_dir()` if the user provides a `-C` flag.
 
 4. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
-   `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.24 This allows
+   `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.[^24] This allows
    Netsuke to capture the real-time output from Ninja, which can then be
    streamed to the user's console, potentially with additional formatting or
    status updates from Netsuke itself.
@@ -832,8 +832,8 @@ catastrophic consequences.
 For this critical task, the recommended crate is `shell-quote`.
 
 While other crates like `shlex` exist, `shell-quote` offers a more robust and
-flexible API specifically designed for this purpose.22 It supports quoting for
-multiple shell flavors (e.g., Bash, sh, Fish), which is vital for a
+flexible API specifically designed for this purpose.[^22] It supports quoting
+for multiple shell flavors (e.g., Bash, sh, Fish), which is vital for a
 cross-platform build tool. It also correctly handles a wide variety of input
 types, including byte strings and OS-native strings, which is essential for
 dealing with non-UTF8 file paths. The
@@ -901,12 +901,12 @@ three fundamental questions:
 To implement this philosophy, Netsuke will adopt a hybrid error handling
 strategy using the `anyhow` and `thiserror` crates. This is a common and highly
 effective pattern in the Rust ecosystem for creating robust applications and
-libraries.27
+libraries.[^27]
 
 - `thiserror`: This crate will be used *within* Netsuke's internal library
   modules (e.g., `parser`, `ir`, `ninja_gen`) to define specific, structured
   error types. The `#[derive(Error)]` macro reduces boilerplate and allows for
-  the creation of rich, semantic errors.29
+  the creation of rich, semantic errors.[^29]
 
   Rust
 
@@ -940,11 +940,11 @@ libraries.27
 - `anyhow`: This crate will be used in the main application logic (`main.rs`)
   and at the boundaries between modules. `anyhow::Result` serves as a
   convenient, dynamic error type that can wrap any underlying error that
-  implements `std::error::Error`.30 The primary tools used will be the
+  implements `std::error::Error`.[^30] The primary tools used will be the
 
   `?` operator for clean error propagation and the `.context()` and
   `.with_context()` methods for adding high-level, human-readable context to
-  errors as they bubble up the call stack.31
+  errors as they bubble up the call stack.[^31]
 
 ### 7.3 Error Handling Flow
 
@@ -1000,7 +1000,7 @@ Parser) crate, specifically leveraging its `derive` feature. `clap` is the
 de-facto standard for building rich, professional CLIs in Rust. It automatically
 generates parsing logic, help messages, version information, and shell
 completions from simple struct definitions. Its integration with error handling
-frameworks like `anyhow` is seamless, making it the ideal choice.32
+frameworks like `anyhow` is seamless, making it the ideal choice.[^32]
 
 ### 8.2 CLI Structure and Commands
 
@@ -1160,7 +1160,7 @@ goal.
 
 ### 9.2 Key Technology Summary
 
-This table serves as a quick-reference guide to the core third-party crates 
+This table serves as a quick-reference guide to the core third-party crates
 selected for this project and the rationale for their inclusion.
 
 | Component      | Recommended Crate  | Rationale                                                                                                             |
@@ -1201,102 +1201,103 @@ possibilities for future enhancements beyond the initial scope.
 
 ### **Works cited**
 
-01. Ninja, a small build system with a focus on speed, accessed on July 12,
-    2025, <https://ninja-build.org/>
+[^1]: Ninja, a small build system with a focus on speed, accessed on July 12,
+2025, <https://ninja-build.org/>
 
-02. Ninja (build system) - Wikipedia, accessed on July 12, 2025,
-    <https://en.wikipedia.org/wiki/Ninja%5C_(build_system)>
+[^2]: Ninja (build system) - Wikipedia, accessed on July 12, 2025,
+<https://en.wikipedia.org/wiki/Ninja%5C_(build_system)>
 
-03. A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed on
-    July 12, 2025,
-    <https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
+[^3]: A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed
+on July 12, 2025,
+<https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
 
-04. semver - Rust, accessed on July 12, 2025,
-    <https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
+[^4]: semver - Rust, accessed on July 12, 2025,
+<https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
 
-05. dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
-    Versioning - GitHub, accessed on July 12, 2025,
-    <https://github.com/dtolnay/semver>
+[^5]: dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
+Versioning - GitHub, accessed on July 12, 2025,
+<https://github.com/dtolnay/semver>
 
-06. semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-    <https://docs.rs/semver/latest/semver/>
+[^6]: semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+<https://docs.rs/semver/latest/semver/>
 
-07. How Ninja works - Fuchsia, accessed on July 12, 2025,
-    <https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
+[^7]: How Ninja works - Fuchsia, accessed on July 12, 2025,
+<https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
 
-08. The Ninja build system, accessed on July 12, 2025,
-    <https://ninja-build.org/manual.html>
+[^8]: The Ninja build system, accessed on July 12, 2025,
+<https://ninja-build.org/manual.html>
 
-09. Interest in new deps format - Google Groups, accessed on July 12, 2025,
-    <https://groups.google.com/g/ninja-build/c/34ebqOUxnXg>
+[^9]: Interest in new deps format - Google Groups, accessed on July 12, 2025,
+<https://groups.google.com/g/ninja-build/c/34ebqOUxnXg>
 
-10. Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
+[^10]: Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
 
-11. Saphyr libraries - [crates.io](http://crates.io): Rust Package Registry,
-    accessed on July 12, 2025, <https://crates.io/crates/saphyr>
+[^11]: Saphyr libraries - [crates.io](http://crates.io): Rust Package
+Registry, accessed on July 12, 2025, <https://crates.io/crates/saphyr>
 
-12. Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
-    accessed on July 12, 2025, <https://github.com/saphyr-rs/saphyr>
+[^12]: Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
+accessed on July 12, 2025, <https://github.com/saphyr-rs/saphyr>
 
-13. saphyr-serde - [crates.io](http://crates.io): Rust Package Registry,
-    accessed on July 12, 2025, <https://crates.io/crates/saphyr-serde>
+[^13]: saphyr-serde - [crates.io](http://crates.io): Rust Package Registry,
+accessed on July 12, 2025, <https://crates.io/crates/saphyr-serde>
 
-14. saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-    <https://docs.rs/saphyr>
+[^14]: saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+<https://docs.rs/saphyr>
 
-15. minijinja - [crates.io](http://crates.io): Rust Package Registry, accessed
-    on July 12, 2025, <https://crates.io/crates/minijinja>
+[^15]: minijinja - [crates.io](http://crates.io): Rust Package Registry,
+accessed on July 12, 2025, <https://crates.io/crates/minijinja>
 
-16. minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-    <https://docs.rs/minijinja/>
+[^16]: minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
+2025, <https://docs.rs/minijinja/>
 
-17. minijinja - Rust, accessed on July 12, 2025,
-    <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
+[^17]: minijinja - Rust, accessed on July 12, 2025,
+<https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
-18. Template engine — list of Rust libraries/crates // [Lib.rs](http://Lib.rs),
-    accessed on July 12, 2025, <https://lib.rs/template-engine>
+[^18]: Template engine — list of Rust libraries/crates //
+[Lib.rs](http://Lib.rs), accessed on July 12, 2025,
+<https://lib.rs/template-engine>
 
-19. std::process::Command - Rust - MIT, accessed on July 12, 2025,
-    <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/struct.Command.html>
+[^19]: std::process::Command - Rust - MIT, accessed on July 12, 2025,
+<https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/struct.Command.html>
 
-20. How to Check Python Version | Syncro, accessed on July 12, 2025,
-    <https://syncromsp.com/blog/how-to-check-python-version/>
+[^20]: How to Check Python Version | Syncro, accessed on July 12, 2025,
+<https://syncromsp.com/blog/how-to-check-python-version/>
 
-21. How to check python version? - 4Geeks, accessed on July 12, 2025,
-    <https://4geeks.com/how-to/how-to-check-python-version>
+[^21]: How to check python version? - 4Geeks, accessed on July 12, 2025,
+<https://4geeks.com/how-to/how-to-check-python-version>
 
-22. shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-    <https://docs.rs/shell-quote/latest/shell_quote/>
+[^22]: shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
+2025, <https://docs.rs/shell-quote/latest/shell_quote/>
 
-23. std::process - Rust - MIT, accessed on July 12, 2025,
-    <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html>
+[^23]: std::process - Rust - MIT, accessed on July 12, 2025,
+<https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html>
 
-24. std::process - Rust, accessed on July 12, 2025,
-    <https://doc.rust-lang.org/std/process/index.html>
+[^24]: std::process - Rust, accessed on July 12, 2025,
+<https://doc.rust-lang.org/std/process/index.html>
 
-25. Command in std::process - Rust, accessed on July 12, 2025,
-    <https://doc.rust-lang.org/std/process/struct.Command.html>
+[^25]: Command in std::process - Rust, accessed on July 12, 2025,
+<https://doc.rust-lang.org/std/process/struct.Command.html>
 
-26. shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
-    <https://docs.rs/shlex/latest/shlex/>
+[^26]: shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+<https://docs.rs/shlex/latest/shlex/>
 
-27. Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on July
-    12, 2025,
-    <https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
+[^27]: Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on
+July 12, 2025,
+<https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
 
-28. Effective Error Handling in Rust CLI Apps: Best Practices, Examples, and
-    Advanced Techniques - Technorely, accessed on July 12, 2025,
-    <https://technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-practices-examples-and-advanced-techniques>
+[^28]: Effective Error Handling in Rust CLI Apps: Best Practices, Examples,
+and Advanced Techniques - Technorely, accessed on July 12, 2025,
+<https://technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-practices-examples-and-advanced-techniques>
 
-29. Practical guide to Error Handling in Rust - Dev State, accessed on July 12,
-    2025, <https://dev-state.com/posts/error_handling/>
+[^29]: Practical guide to Error Handling in Rust - Dev State, accessed on July
+12, 2025, <https://dev-state.com/posts/error_handling/>
 
-30. thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
-    <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
+[^30]: thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
+<https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
 
-31. Simple error handling for precondition/argument checking in Rust - Stack
-    Overflow, accessed on July 12, 2025,
-    <https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
+[^31]: Simple error handling for precondition/argument checking in Rust -
+Stack Overflow, accessed on July 12, 2025,
+<https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
 
-Nicer error reporting - Command Line Applications in Rust, accessed on July 12,
-2025, <https://rust-cli.github.io/book/tutorial/errors.html>
+[^32]: Nicer error reporting - Command Line Applications in Rust, accessed on
+July 12, 2025, <https://rust-cli.github.io/book/tutorial/errors.html>
