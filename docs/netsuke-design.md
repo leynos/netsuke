@@ -182,7 +182,7 @@ level keys.
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
 
-The class diagram below summarises the structure of a `Netsukefile` and the
+The class diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.
 
 ```mermaid
