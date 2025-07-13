@@ -182,6 +182,65 @@ level keys.
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
 
+The class diagram below summarises the structure of a `Netsukefile` and the
+relationships between its components.
+
+```mermaid
+classDiagram
+    class NetsukeManifest {
+        +String netsuke_version
+        +HashMap vars
+        +Vec rules
+        +Vec actions
+        +Vec targets
+        +Vec defaults
+    }
+    class Target {
+        +StringOrList name
+        +Recipe recipe
+        +StringOrList sources
+        +StringOrList deps
+        +StringOrList order_only_deps
+        +HashMap vars
+        +bool phony
+        +bool always
+    }
+    class Rule {
+        +String name
+        +Recipe recipe
+        +String description
+        +String deps
+    }
+    class Recipe {
+        <<enumeration>>
+        Command
+        Script
+        Rule
+    }
+    class StringOrList {
+        <<enumeration>>
+        Empty
+        String
+        List
+    }
+    class Value {
+        <<serde_yaml>>
+        Null
+        Bool
+        Number
+        String
+        Sequence
+        Mapping
+        Tagged
+    }
+    NetsukeManifest "1" o-- "*" Target
+    NetsukeManifest "1" o-- "*" Rule
+    NetsukeManifest "1" o-- "*" Value
+    Target "1" -- "1" Recipe
+    Target "1" -- "1" StringOrList
+    Rule "1" -- "1" Recipe
+```
+
 ### 2.3 Defining `rules`
 
 Each entry in the `rules` list is a mapping that defines a reusable action.
@@ -309,13 +368,13 @@ table compares a simple C compilation project defined in both a traditional
 `Makefile` and a `Netsukefile` file. The comparison highlights Netsuke's
 explicit, structured, and self-documenting nature.
 
-| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                                              |
-| --------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                                            |
-| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                               |
-| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ out }}", description: "Compiling {{ outs }}" } } |
-| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                                        |
-| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                         |
+| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                                               |
+| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                                             |
+| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                                |
+| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ outs }}", description: "Compiling {{ outs }}" } } |
+| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: \[main.o, utils.o\] }                                         |
+| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
 
 ## Section 3: Parsing and Deserialization Strategy
 
@@ -984,13 +1043,13 @@ The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command strings
 Instead, parse the Netsuke command template (e.g., `{{ cc }} -c {{ ins }} -o`
 `{{ outs }}`) and build the final command string step by step. The placeholders
-`{{ ins }}` and `{{ outs }}` are expanded to space-separated lists of file
-paths within Netsuke itself, each path being shell-escaped using the `shell-
-quote` API. When the command is written to `build.ninja`, these lists replace
-Ninja's `$in` and `$out` macros. After substitution, the command is validated
-with [`shlex`] (<https://docs.rs/shlex/latest/shlex/>) to ensure it parses
-correctly. This approach guarantees that every dynamic part of the command is
-securely quoted.
+`{{ ins }}` and `{{ outs }}` are expanded to space-separated lists of file paths
+within Netsuke itself, each path being shell-escaped using the `shell- quote`
+API. When the command is written to `build.ninja`, these lists replace Ninja's
+`$in` and `$out` macros. After substitution, the command is validated with
+[`shlex`] (<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly.
+This approach guarantees that every dynamic part of the command is securely
+quoted.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
