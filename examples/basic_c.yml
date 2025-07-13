@@ -1,0 +1,38 @@
+netsuke_version: "1.0"
+
+vars:
+  cc: "{{ env('CC') | default('gcc') }}"
+  cflags: "-Wall -O2"
+
+rules:
+  - name: compile
+    command: "{{ cc }} {{ cflags }} -c {ins} -o {outs}"
+    description: "Compiling {outs}"
+
+  - name: link
+    command: "{{ cc }} {{ ldflags | default(cflags) }} {ins} -o {outs}"
+
+targets:
+  - name: main.o
+    rule: compile
+    sources: src/main.c
+
+  - name: utils.o
+    rule: compile
+    sources: src/utils.c
+
+  - name: app
+    rule: link
+    sources:
+      - main.o
+      - utils.o
+
+actions:
+  - name: run
+    command: "./app"
+
+  - name: clean
+    command: "rm -f *.o app"
+
+defaults:
+  - app

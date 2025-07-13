@@ -1,0 +1,33 @@
+netsuke_version: "1.0"
+
+vars:
+  chapters_dir: chapters
+  build_dir: build
+  pandoc_flags: "-N --pdf-engine=xelatex"
+
+rules:
+  - name: tex
+    command: "pandoc {{ pandoc_flags }} {{ ins }} -o {{ outs }}"
+
+  - name: combine
+    command: "latexmk -pdf -outdir={{ build_dir }} {{ ins }}"
+
+  - name: mkdir
+    command: "mkdir -p {{ outs }}"
+
+targets:
+  - foreach: "{{ glob(chapters_dir ~ '/*.md') }}"
+    name: "{{ build_dir }}/{{ item | basename | replace('.md', '.tex') }}"
+    rule: tex
+    sources: "{{ item }}"
+    deps: "{{ build_dir }}"
+
+  - name: "{{ build_dir }}/book.pdf"
+    rule: combine
+    sources: "{{ glob(build_dir ~ '/*.tex') | sort }}"
+
+  - name: "{{ build_dir }}"
+    rule: mkdir
+
+defaults:
+  - "{{ build_dir }}/book.pdf"

@@ -1,0 +1,27 @@
+netsuke_version: "1.0"
+
+vars:
+  pages_dir: pages
+  site_dir: site
+
+
+rules:
+  - name: page
+    command: "pandoc {ins} -o {outs}"
+
+  - name: index
+    script: |
+      cat {{ ins }} > {{ site_dir }}/index.html
+
+targets:
+  - foreach: "{{ glob(pages_dir ~ '/*.md') }}"
+    name: "{{ site_dir }}/{{ item | basename | replace('.md', '.html') }}"
+    rule: page
+    sources: "{{ item }}"
+
+  - name: "{{ site_dir }}/index.html"
+    rule: index
+    sources: "{{ glob(site_dir ~ '/*.html') | exclude(site_dir ~ '/index.html') | sorted }}"
+
+defaults:
+  - "{{ site_dir }}/index.html"
