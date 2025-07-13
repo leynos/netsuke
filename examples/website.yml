@@ -11,7 +11,7 @@ rules:
 
   - name: index
     script: |
-      cat {{ site_dir }}/*.html > {{ site_dir }}/index.html
+      ls {{ site_dir }}/*.html | sort | xargs cat > {{ site_dir }}/index.html
 
 targets:
   - foreach: "{{ glob(pages_dir ~ '/*.md') }}"
