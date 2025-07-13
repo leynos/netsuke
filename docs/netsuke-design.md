@@ -3,8 +3,8 @@
 ## Section 1: Core Architecture and Data Flow
 
 This document presents a mid-level engineering design for Netsuke, a modern
-build automation tool implemented in Rust. Netsuke is designed to provide the
-power and dependency resolution capabilities of traditional `make` while
+build automation tool implemented in Rust. Netsuke is designed to provide
+the power and dependency resolution capabilities of traditional `make` while
 offering a significantly more intuitive, readable, and secure user experience.
 This is achieved by leveraging a user-friendly YAML-based manifest, a powerful
 Jinja templating engine for dynamic configuration, and the high-performance
@@ -20,14 +20,14 @@ build systems.[^1] It is intentionally constrained, lacking features like string
 manipulation or conditional logic, to ensure its primary goal: running builds as
 fast as possible.[^2]
 
-This design choice by Ninja's authors necessitates the existence of a
-higher-level generator tool. Netsuke fulfills this role. It provides a rich,
-user-friendly language (YAML with Jinja) for describing the *what* and *why* of
+This design choice by Ninja's authors necessitates the existence of a higher-
+level generator tool. Netsuke fulfills this role. It provides a rich, user-
+friendly language (YAML with Jinja) for describing the *what* and *why* of
 a build—the project's structure, its logical rules, and its configurable
 parameters. Netsuke's primary responsibility is to compile this high-level
 description into a low-level, highly optimized execution plan that Ninja can
-understand and execute. This separation of concerns—Netsuke managing build logic
-and Ninja managing execution—is the foundational principle of the entire
+understand and execute. This separation of concerns—Netsuke managing build
+logic and Ninja managing execution—is the foundational principle of the entire
 architecture.
 
 ### 1.2 The Five Stages of a Netsuke Build
@@ -47,15 +47,15 @@ before execution, a critical requirement for compatibility with Ninja.
    The raw manifest string is treated as a Jinja template. Netsuke's templating
    engine processes this string, evaluating all expressions, executing control
    structures (loops, conditionals), and applying filters. This stage resolves
-   all dynamic aspects of the build, producing a static, pure YAML string as its
-   output.
+   all dynamic aspects of the build, producing a static, pure YAML string as
+   its output.
 
 3. Stage 3: YAML Parsing & Deserialization
 
-   The static YAML string generated in the previous stage is passed to a YAML
-   parser. This parser validates the YAML syntax and deserializes the content
-   into a set of strongly typed Rust data structures. This collection of
-   structs, which directly mirrors the YAML schema, can be considered an
+   The static YAML string generated in the previous stage is passed to a
+   YAML parser. This parser validates the YAML syntax and deserializes the
+   content into a set of strongly typed Rust data structures. This collection
+   of structs, which directly mirrors the YAML schema, can be considered an
    "unprocessed" Abstract Syntax Tree (AST) of the build plan.
 
 4. Stage 4: IR Generation & Validation
@@ -64,39 +64,39 @@ before execution, a critical requirement for compatibility with Ninja.
    Representation (IR) of the build. This IR represents the build as a static
    dependency graph with all file paths, commands, and dependencies explicitly
    defined. During this transformation, Netsuke performs critical validation
-   checks. It verifies the existence of referenced rules, ensures each rule has
-   exactly one of `command` or `script`, and ensures every target specifies
+   checks. It verifies the existence of referenced rules, ensures each rule
+   has exactly one of `command` or `script`, and ensures every target specifies
    exactly one of `rule`, `command`, or `script`. Circular dependencies and
    missing inputs are also detected at this stage.
 
 5. Stage 5: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
-   synthesizes the content of a build.ninja file, translating the IR's nodes and
-   edges into corresponding Ninja rule and build statements. Once the file is
-   written, Netsuke invokes the ninja executable as a subprocess, passing
+   synthesizes the content of a build.ninja file, translating the IR's nodes
+   and edges into corresponding Ninja rule and build statements. Once the file
+   is written, Netsuke invokes the ninja executable as a subprocess, passing
    control to it for the final dependency checking and command execution phase.
 
 ### 1.3 The Static Graph Mandate
 
 The architecture's multi-stage pipeline is a direct consequence of a fundamental
 design constraint imposed by the choice of Ninja as the backend. Ninja's
-remarkable speed in incremental builds stems from its simplicity; it operates on
-a pre-computed, static dependency graph and avoids costly runtime operations
+remarkable speed in incremental builds stems from its simplicity; it operates
+on a pre-computed, static dependency graph and avoids costly runtime operations
 like filesystem queries (e.g., glob expansion) or string manipulation.[^2]
 
 At the same time, a "friendlier" build system must offer dynamic capabilities.
-Users will expect to define builds that can adapt to their environment, such as
-using different compiler flags on Linux versus Windows, or automatically
+Users will expect to define builds that can adapt to their environment, such
+as using different compiler flags on Linux versus Windows, or automatically
 discovering source files in a directory. These features are provided in Netsuke
 by the Jinja templating engine.
 
 This creates a necessary architectural division. All the dynamic logic,
 templating, and configuration must be fully evaluated by Netsuke *before* Ninja
 is ever invoked. The point of this transition is the Intermediate Representation
-(IR) generated in Stage 4. The IR serves as a static snapshot of the build plan
-after all Jinja logic has been resolved. It is the "object code" that the
-Netsuke "compiler" produces, which can then be handed off to the Ninja
+(IR) generated in Stage 4. The IR serves as a static snapshot of the build
+plan after all Jinja logic has been resolved. It is the "object code" that
+the Netsuke "compiler" produces, which can then be handed off to the Ninja
 "assembler" for execution. This mandate for a pre-computed static graph dictates
 the entire five-stage pipeline and establishes a clean boundary between the
 user-facing logic layer and the machine-facing execution layer.
@@ -105,20 +105,20 @@ user-facing logic layer and the machine-facing execution layer.
 
 The primary interface for the user is the Netsuke manifest file, `Netsukefile`.
 The design of its YAML schema is paramount to achieving the goal of being
-"friendlier" than `make`. The schema is guided by a set of core principles aimed
-at maximizing readability, reducing cognitive overhead, and promoting best
-practices.
+"friendlier" than `make`. The schema is guided by a set of core principles
+aimed at maximizing readability, reducing cognitive overhead, and promoting
+best practices.
 
 ### 2.1 Schema Design Principles
 
 - **Readability:** The schema prioritizes human-readability. It uses clear,
-  descriptive keys and a structured format to make build configurations
-  self-documenting. This stands in contrast to the often-cryptic special
-  variables and implicit rules of Makefiles.
+  descriptive keys and a structured format to make build configurations self-
+  documenting. This stands in contrast to the often-cryptic special variables
+  and implicit rules of Makefiles.
 
 - **Declarative Style:** Users should declare the desired state of their
-  project—the targets they want to build and the rules to build them—rather than
-  writing imperative scripts. Netsuke is responsible for determining the
+  project—the targets they want to build and the rules to build them—rather
+  than writing imperative scripts. Netsuke is responsible for determining the
   necessary steps to achieve that state.
 
 - **Reusability:** The schema is designed to encourage the creation of reusable
@@ -131,8 +131,8 @@ practices.
 
 ### 2.2 Top-Level Schema Structure
 
-A `Netsukefile` file is a YAML mapping containing a set of well-defined
-top-level keys.
+A `Netsukefile` file is a YAML mapping containing a set of well-defined top-
+level keys.
 
 - `netsuke_version`: A mandatory string that specifies the version of the
   Netsuke schema the manifest conforms to (e.g., `"1.0"`). This allows for
@@ -144,8 +144,8 @@ top-level keys.
   exposed to the Jinja templating context.
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
-  `signature` string using standard Jinja syntax and a `body` declared with the
-  YAML `|` block style. Netsuke registers these macros in the template
+  `signature` string using standard Jinja syntax and a `body` declared with
+  the YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
 
 - `rules`: A list of rule definitions. Each rule is a reusable template for a
@@ -201,7 +201,13 @@ Each entry in `targets` defines a build edge; placing a target in the optional
   single string or a list of strings.
 
 - `rule`: The name of the rule (from the `rules` section) to use for building
-  this target.
+  this target. A YAML list may be supplied to run multiple rules sequentially.
+
+```yaml
+rule:
+  - build
+  - clean-up
+```
 
 - `command`: A single command string to run directly for this target.
 
@@ -229,13 +235,13 @@ Each entry in `targets` defines a build edge; placing a target in the optional
   the `||` operator.[^7]
 
 - `vars`: An optional mapping of local variables. These variables override any
-  global variables defined in the top-level `vars` section for the scope of this
-  target only. This provides the same functionality as Ninja's build-local
+  global variables defined in the top-level `vars` section for the scope of
+  this target only. This provides the same functionality as Ninja's build-local
   variables.[^3]
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
-  `signature` string using standard Jinja syntax and a `body` declared with the
-  YAML `|` block style. Netsuke registers these macros in the template
+  `signature` string using standard Jinja syntax and a `body` declared with
+  the YAML `|` block style. Netsuke registers these macros in the template
   environment before rendering other sections.
 
 - `phony`: When set to `true`, the target runs when explicitly requested even if
@@ -280,26 +286,25 @@ explicit, structured, and self-documenting nature.
 ## Section 3: Parsing and Deserialization Strategy
 
 Once the Jinja evaluation stage has produced a pure YAML string, the next
-critical step is to parse this string and deserialize it into a structured,
-in-memory representation. The choice of libraries and the definition of the
-target data structures are crucial for the robustness and maintainability of
-Netsuke.
+critical step is to parse this string and deserialize it into a structured, in-
+memory representation. The choice of libraries and the definition of the target
+data structures are crucial for the robustness and maintainability of Netsuke.
 
 ### 3.1 Crate Selection: `serde_yaml`
 
 For YAML parsing and deserialization, the recommended crate is `serde_yaml`.
 This choice is based on its deep and direct integration with the `serde`
 framework, the de-facto standard for serialization and deserialization in the
-Rust ecosystem. Using `serde_yaml` allows `serde`'s powerful derive macros to
-automatically generate the deserialization logic for Rust structs. This approach
-is idiomatic, highly efficient, and significantly reduces the amount of
-boilerplate code that needs to be written and maintained. A simple `#`
+Rust ecosystem. Using `serde_yaml` allows `serde`'s powerful derive macros
+to automatically generate the deserialization logic for Rust structs. This
+approach is idiomatic, highly efficient, and significantly reduces the amount
+of boilerplate code that needs to be written and maintained. A simple `#`
 annotation on a struct is sufficient to make it a deserialization target.
 
 While other promising YAML libraries like `saphyr` exist, their `serde`
-integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
-highly experimental stage (version 0.0.0)[^11] Building a core component of
-Netsuke on a nascent or unreleased library would introduce significant and
+integration (`saphyr-serde`) is currently described as "soon-to-be" or is at
+a highly experimental stage (version 0.0.0)[^11] Building a core component
+of Netsuke on a nascent or unreleased library would introduce significant and
 unnecessary project risk.
 
 `serde_yaml` is mature, widely adopted, and battle-tested, making it the prudent
@@ -360,7 +365,7 @@ pub enum Recipe {
     #[serde(alias = "script")]
     Script { script: String },
     #[serde(alias = "rule")]
-    Rule { rule: String },
+    Rule { rule: StringOrList },
 }
 
 /// Represents a single build target or edge in the dependency graph.
@@ -390,7 +395,6 @@ pub struct Target {
     pub always: bool,
 }
 
-
 /// An enum to handle fields that can be either a single string or a list of strings.
 #[serde(untagged)]
 pub enum StringOrList {
@@ -402,8 +406,8 @@ pub enum StringOrList {
 ```rust
 
 *Note: The* `StringOrList` *enum with* `#[serde(untagged)]` *provides the
-flexibility for users to specify single sources/dependencies as a simple string
-and multiple as a list, enhancing user-friendliness.*
+flexibility for users to specify single sources, dependencies, and rule names as
+a simple string and multiple as a list, enhancing user-friendliness.*
 
 ### 3.3 The Two-Pass Parsing Requirement
 
@@ -453,8 +457,8 @@ interference, ensuring a robust and predictable ingestion pipeline.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
-To provide the dynamic capabilities and logical expressiveness that make a build
-system powerful and "friendly," Netsuke will integrate a Jinja templating
+To provide the dynamic capabilities and logical expressiveness that make a
+build system powerful and "friendly," Netsuke will integrate a Jinja templating
 engine. This engine acts as the user's primary tool for scripting and
 configuration within the YAML manifest.
 
@@ -462,8 +466,8 @@ configuration within the YAML manifest.
 
 The recommended templating engine is `minijinja`.
 
-This crate is the ideal choice for several reasons. It is explicitly designed as
-a Rust implementation of the Jinja2 template engine, aiming for close
+This crate is the ideal choice for several reasons. It is explicitly designed
+as a Rust implementation of the Jinja2 template engine, aiming for close
 compatibility with its syntax and behaviour.[^15] This is advantageous as Jinja2
 is a mature, well-documented, and widely understood language, reducing the
 learning curve for new Netsuke users. Furthermore,
@@ -488,8 +492,8 @@ Netsuke will construct a single `minijinja::Environment` instance at startup.
 This environment will be configured with a set of custom functions and filters
 that provide build-specific functionality.
 
-When rendering a user's `Netsukefile` file, the initial context provided to the
-template will be constructed from the `vars` section of the manifest. This
+When rendering a user's `Netsukefile` file, the initial context provided to
+the template will be constructed from the `vars` section of the manifest. This
 allows users to define variables in their YAML and immediately reference them
 within Jinja expressions. For example:
 
@@ -523,8 +527,8 @@ macros:
       Hello {{ name }}
 ```
 
-Macros can be invoked in any templated field using normal Jinja call syntax. For
-example:
+Macros can be invoked in any templated field using normal Jinja call syntax.
+For example:
 
 ```yaml
 rules:
@@ -555,9 +559,8 @@ providing a secure bridge to the underlying system.
 
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
-  architecture. This function would execute `python --version` or
-  `python3 --version` using `std::process::Command` 19, parse the output using
-  the
+  architecture. This function would execute `python --version` or `python3
+  --version` using `std::process::Command` 19, parse the output using the
 
   `semver` crate 4, and compare it against a user-provided SemVer requirement
   string (e.g.,
@@ -585,26 +588,26 @@ for transforming data within templates.
 ### 4.6 Jinja as the "Logic Layer"
 
 The integration of Jinja is more than a simple convenience for string
-substitution. It effectively serves as the **logic layer** for the entire build
-system. Traditional `make` provides powerful but often opaque functions like
-`$(shell...)` and `$(wildcard...)`. Netsuke achieves and surpasses this
+substitution. It effectively serves as the **logic layer** for the entire
+build system. Traditional `make` provides powerful but often opaque functions
+like `$(shell...)` and `$(wildcard...)`. Netsuke achieves and surpasses this
 functionality in a much friendlier and safer way.
 
 By implementing complex or potentially unsafe operations (like filesystem access
 or command execution) as custom functions in Rust and exposing them as simple,
-declarative primitives in the Jinja environment, Netsuke provides a powerful yet
-controlled scripting environment. The user can write a clean, readable template
-like `sources: {{ glob("src/*.c") }}`, and the complex, error-prone logic of
-traversing the filesystem is handled by secure, well-tested Rust code. This
-design pattern is the key to providing both power and safety, fulfilling the
-core requirement of a system that is friendlier and more robust than its
+declarative primitives in the Jinja environment, Netsuke provides a powerful
+yet controlled scripting environment. The user can write a clean, readable
+template like `sources: {{ glob("src/*.c") }}`, and the complex, error-prone
+logic of traversing the filesystem is handled by secure, well-tested Rust code.
+This design pattern is the key to providing both power and safety, fulfilling
+the core requirement of a system that is friendlier and more robust than its
 predecessors.
 
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 
-After the user's manifest has been fully rendered by Jinja and deserialized into
-the AST, the next phase is to transform this high-level representation into a
-format suitable for the Ninja backend. This is accomplished via a two-step
+After the user's manifest has been fully rendered by Jinja and deserialized
+into the AST, the next phase is to transform this high-level representation into
+a format suitable for the Ninja backend. This is accomplished via a two-step
 process: converting the AST into a canonical Intermediate Representation (IR),
 and then synthesizing the final `build.ninja` file from that IR.
 
@@ -621,8 +624,8 @@ barrier allows the front-end and back-end to evolve independently. For example,
 the YAML schema could be significantly redesigned in a future version of
 Netsuke, but as long as the transformation logic is updated to produce the same
 stable IR, the Ninja generation back-end would require no changes. Conversely,
-if the decision were made to support an alternative execution back-end (e.g., a
-distributed build system), only a new generator module (`IR -> NewBackend`)
+if the decision were made to support an alternative execution back-end (e.g.,
+a distributed build system), only a new generator module (`IR -> NewBackend`)
 would need to be written, leaving the entire front-end parsing and validation
 logic untouched.
 
@@ -718,15 +721,15 @@ This transformation involves several steps:
    output vectors.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
-   This includes ensuring that every rule referenced by a target exists in the
-   `actions` map and running a cycle detection algorithm (e.g., a depth-first
-   search maintaining a visitation state) on the dependency graph to fail
+   This includes ensuring that every rule referenced by a target exists in
+   the `actions` map and running a cycle detection algorithm (e.g., a depth-
+   first search maintaining a visitation state) on the dependency graph to fail
    compilation if a circular dependency is found.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
-The final step is to synthesize the `build.ninja` file from the `BuildGraph` IR.
-This process is a straightforward, mechanical translation from the IR data
+The final step is to synthesize the `build.ninja` file from the `BuildGraph`
+IR. This process is a straightforward, mechanical translation from the IR data
 structures to the Ninja file syntax.
 
 1. **Write Variables:** Any global variables that need to be passed to Ninja can
@@ -738,19 +741,16 @@ structures to the Ninja file syntax.
    file. The command placeholders (`{ins}`, `{outs}`) are replaced with Ninja's
    variables (`$in`, `$out`).
 
-   When an action's `recipe` is a script, the generated rule wraps the script in
-   an invocation of `/bin/sh -e -c` so that multi-line scripts execute
+   When an action's `recipe` is a script, the generated rule wraps the script
+   in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
    consistently across platforms.
 
    Code snippet
 
    ````ninja
    # Generated from an ir::Action
-   rule cc
-     command = gcc -c -o $out $in
-     description = CC $out
-     depfile = $out.d
-     deps = gcc
+   rule cc command = gcc -c -o $out $in description = CC $out depfile = $out.d
+   deps = gcc
 
    ```ninja
 
@@ -759,8 +759,8 @@ structures to the Ninja file syntax.
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This involves
    formatting the lists of explicit outputs, implicit outputs, inputs, and
-   order-only dependencies using the correct Ninja syntax (`:`, `|`, and
-   `||`).[^7] Use Ninja's built-in `phony` rule when `phony` is `true`. For an
+   order-only dependencies using the correct Ninja syntax (`:`, `|`, and `||
+   `).[^7] Use Ninja's built-in `phony` rule when `phony` is `true`. For an
    `always` edge, either generate a `phony` build with no outputs or emit a
    dummy output marked `restat = 1` and depend on a permanently dirty target so
    the command runs on each invocation.
@@ -769,16 +769,14 @@ structures to the Ninja file syntax.
 
    ```ninja
    # Generated from an ir::BuildEdge
-   build foo.o: cc foo.c
-   build bar.o: cc bar.c
-   build my_app: link foo.o bar.o |
+   build foo.o: cc foo.c build bar.o: cc bar.c build my_app: link foo.o bar.o |
 
    ```
 
 | lib_dependency.a |
 
-4\. **Write Defaults:** Finally, write the `default` statement, listing all paths
-from `graph.default_targets`.ninja
+4\. **Write Defaults:** Finally, write the `default` statement, listing all
+paths from `graph.default_targets`.ninja
 
 default my_app
 
@@ -819,27 +817,27 @@ The command construction will follow this pattern:
 ### 6.2 The Criticality of Shell Escaping
 
 A primary security responsibility for Netsuke is the prevention of command
-injection attacks. The `command` strings defined in a user's `Netsukefile` are
-templates. When Netsuke substitutes variables like file paths into these
-templates, it is imperative that these substituted values are treated as single,
-literal arguments by the shell that Ninja ultimately uses to execute the
-command.
+injection attacks. The `command` strings defined in a user's `Netsukefile`
+are templates. When Netsuke substitutes variables like file paths into these
+templates, it is imperative that these substituted values are treated as
+single, literal arguments by the shell that Ninja ultimately uses to execute
+the command.
 
-Without proper escaping, a malicious or even accidental filename like
-`"my file; rm -rf /;.c"` could be interpreted as multiple commands, leading to
-catastrophic consequences.
+Without proper escaping, a malicious or even accidental filename like `"my file;
+rm -rf /;.c"` could be interpreted as multiple commands, leading to catastrophic
+consequences.
 
 For this critical task, the recommended crate is `shell-quote`.
 
 While other crates like `shlex` exist, `shell-quote` offers a more robust and
 flexible API specifically designed for this purpose.[^22] It supports quoting
-for multiple shell flavors (e.g., Bash, sh, Fish), which is vital for a
-cross-platform build tool. It also correctly handles a wide variety of input
-types, including byte strings and OS-native strings, which is essential for
-dealing with non-UTF8 file paths. The
+for multiple shell flavors (e.g., Bash, sh, Fish), which is vital for a cross-
+platform build tool. It also correctly handles a wide variety of input types,
+including byte strings and OS-native strings, which is essential for dealing
+with non-UTF8 file paths. The
 
-`QuoteExt` trait provided by the crate offers an ergonomic and safe method for
-building command strings by pushing quoted components into a buffer:
+`QuoteExt` trait provided by the crate offers an ergonomic and safe method
+for building command strings by pushing quoted components into a buffer:
 `script.push_quoted(Bash, "foo bar")`.
 
 ### 6.3 Implementation Strategy
@@ -848,20 +846,20 @@ The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command strings
 for the `build.ninja` file. Doing so would be inherently insecure.
 
-Instead, the implementation must parse the Netsuke command template (e.g.,
-`{cc} -c {ins} -o {outs}`) and build the final command string piece by piece.
-For each segment of the command, if it is a variable substitution (like
-`{ins}`), the value of that variable must be passed through the `shell-quote`
-API before being appended to the output string. This ensures that every dynamic
-part of the command is correctly and safely quoted for the target shell.
+Instead, the implementation must parse the Netsuke command template (e.g., `{cc}
+-c {ins} -o {outs}`) and build the final command string piece by piece. For
+each segment of the command, if it is a variable substitution (like `{ins}`),
+the value of that variable must be passed through the `shell-quote` API before
+being appended to the output string. This ensures that every dynamic part of the
+command is correctly and safely quoted for the target shell.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
-The concept of being "friendlier" than `make` extends beyond syntactic sugar to
-encompass safety and reliability. A tool that is easy to use but exposes the
+The concept of being "friendlier" than `make` extends beyond syntactic sugar
+to encompass safety and reliability. A tool that is easy to use but exposes the
 user to trivial security vulnerabilities is fundamentally unfriendly. In many
-build systems, the burden of correct shell quoting falls on the user, an
-error-prone task that requires specialized knowledge.
+build systems, the burden of correct shell quoting falls on the user, an error-
+prone task that requires specialized knowledge.
 
 Netsuke's design elevates security to a core feature by making it automatic and
 transparent. The user writes a simple, unquoted command template, and Netsuke
@@ -892,8 +890,8 @@ three fundamental questions:
    column 3").
 
 3. **Why** did it go wrong, and what can be done about it? The underlying cause
-   of the error and a concrete suggestion for how to fix it (e.g., "Cause: Found
-   a tab character, which is not allowed. Hint: Use spaces for indentation
+   of the error and a concrete suggestion for how to fix it (e.g., "Cause:
+   Found a tab character, which is not allowed. Hint: Use spaces for indentation
    instead.").
 
 ### 7.2 Crate Selection and Strategy: `anyhow` and `thiserror`
@@ -910,30 +908,18 @@ libraries.[^27]
 
   Rust
 
-  ```rust
-  // In src/ir.rs
-  use thiserror::Error;
-  use std::path::PathBuf;
+  ```rust // In src/ir.rs use thiserror::Error; use std::path::PathBuf;
 
   #
   pub enum IrGenError {
       #
-      RuleNotFound {
-          target_name: String,
-          rule_name: String,
-      },
+      RuleNotFound { target_name: String, rule_name: String, },
 
       #[error("A circular dependency was detected involving target '{path}'.")]
-      CircularDependency {
-          path: PathBuf,
-      },
+      CircularDependency { path: PathBuf, },
 
       #
-      DependencyNotFound {
-          target_name: String,
-          dependency_name: String,
-      },
-  }
+      DependencyNotFound { target_name: String, dependency_name: String, }, }
 
   ```
 
@@ -960,10 +946,10 @@ enrichment:
    preserving the original error as its source.
 
 3. A higher-level function in the call stack, which called the failing function,
-   receives this `Err` value. It uses the `.with_context()` method to wrap the
-   error with more application-level context. For example:
-   `ir::from_manifest(ast)`
-   `.with_context(|| "Failed to build the internal build graph from the manifest")?`.
+   receives this `Err` value. It uses the `.with_context()` method to
+   wrap the error with more application-level context. For example:
+   `ir::from_manifest(ast)` `.with_context(|| "Failed to build the internal
+   build graph from the manifest")?`.
 
 4. This process of propagation and contextualization repeats as the error
    bubbles up towards `main`.
@@ -989,15 +975,14 @@ actionable output that the implementation should produce.
 ## Section 8: Command-Line Interface (CLI) Design
 
 The command-line interface is the user's entry point to Netsuke. A well-designed
-CLI is essential for a good user experience. It should be intuitive,
-self-documenting, and consistent with the conventions of modern command-line
-tools.
+CLI is essential for a good user experience. It should be intuitive, self-
+documenting, and consistent with the conventions of modern command-line tools.
 
 ### 8.1 Crate Selection: `clap`
 
 The CLI for Netsuke will be built using the `clap` (Command Line Argument
-Parser) crate, specifically leveraging its `derive` feature. `clap` is the
-de-facto standard for building rich, professional CLIs in Rust. It automatically
+Parser) crate, specifically leveraging its `derive` feature. `clap` is the de-
+facto standard for building rich, professional CLIs in Rust. It automatically
 generates parsing logic, help messages, version information, and shell
 completions from simple struct definitions. Its integration with error handling
 frameworks like `anyhow` is seamless, making it the ideal choice.[^32]
@@ -1132,8 +1117,8 @@ goal.
        variable substitution.
 
   - **Success Criterion:** Netsuke can successfully build a manifest that uses
-    variables and conditional logic (e.g., different compiler flags based on a
-    variable).
+    variables and conditional logic (e.g., different compiler flags based on
+    a variable).
 
 - **Phase 3: The "Friendly" Polish**
 
@@ -1179,9 +1164,9 @@ powerful build tool. The use of a decoupled IR, in particular, opens up many
 possibilities for future enhancements beyond the initial scope.
 
 - **Advanced Caching:** While Ninja provides excellent file-based incremental
-  build caching, Netsuke could implement a higher-level artifact caching layer.
-  This could involve caching build outputs in a shared network location (e.g.,
-  S3) or a local content-addressed store, allowing for cache hits across
+  build caching, Netsuke could implement a higher-level artifact caching
+  layer. This could involve caching build outputs in a shared network location
+  (e.g., S3) or a local content-addressed store, allowing for cache hits across
   different machines or clean checkouts.
 
 - **Plugin Architecture:** A system could be designed to allow users to load
@@ -1190,8 +1175,8 @@ possibilities for future enhancements beyond the initial scope.
   changes to the core application.
 
 - **Language-Specific Toolchains:** Netsuke could offer pre-packaged "toolchain"
-  modules. For example, a `Netsuke-rust-toolchain` could provide a standard set
-  of rules and variables for compiling Rust projects, abstracting away the
+  modules. For example, a `Netsuke-rust-toolchain` could provide a standard
+  set of rules and variables for compiling Rust projects, abstracting away the
   details of invoking `cargo`.
 
 - **Distributed Builds:** The IR is backend-agnostic. A future version of
@@ -1204,90 +1189,77 @@ possibilities for future enhancements beyond the initial scope.
 [^1]: Ninja, a small build system with a focus on speed, accessed on July 12,
 2025, <https://ninja-build.org/>
 
-[^2]: Ninja (build system) - Wikipedia, accessed on July 12, 2025,
-<https://en.wikipedia.org/wiki/Ninja%5C_(build_system)>
+[^2]: Ninja (build system) - Wikipedia, accessed on July 12, 2025, <https://
+en.wikipedia.org/wiki/Ninja%5C_(build_system)>
 
 [^3]: A Complete Guide To The Ninja Build System - Spectra - Mathpix, accessed
-on July 12, 2025,
-<https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
+on July 12, 2025, <<<https://spectra.mathpix.com/article/2024.01.00364/a->
+complete-> guide-to-the-ninja-build-system>
 
-[^4]: semver - Rust, accessed on July 12, 2025,
-<https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
+[^4]: semver - Rust, accessed on July 12, 2025, <<https://creative-coding-the->
+hard-way.github.io/Agents/semver/index.html>
 
-[^5]: dtolnay/semver: Parser and evaluator for Cargo's flavor of Semantic
-Versioning - GitHub, accessed on July 12, 2025,
-<https://github.com/dtolnay/semver>
+Versioning - GitHub, accessed on July 12, 2025, <<<https://github.com/dtolnay/>
+> semver>
 
-[^6]: semver - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
 <https://docs.rs/semver/latest/semver/>
 
-[^7]: How Ninja works - Fuchsia, accessed on July 12, 2025,
-<https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
+[^7]: How Ninja works - Fuchsia, accessed on July 12, 2025, <https://
+fuchsia.dev/fuchsia-src/development/build/ninja_how>
 
-[^8]: The Ninja build system, accessed on July 12, 2025,
-<https://ninja-build.org/manual.html>
+[^8]: The Ninja build system, accessed on July 12, 2025, <<https://ninja->
+build.org/manual.html>
 
-[^9]: Interest in new deps format - Google Groups, accessed on July 12, 2025,
 <https://groups.google.com/g/ninja-build/c/34ebqOUxnXg>
 
-[^10]: Overview · Serde, accessed on July 12, 2025, <https://serde.rs/>
+[^11]: Saphyr libraries - [crates.io](http://crates.io): Rust Package Registry,
+accessed on July 12, 2025, <https://crates.io/crates/saphyr>
 
-[^11]: Saphyr libraries - [crates.io](http://crates.io): Rust Package
-Registry, accessed on July 12, 2025, <https://crates.io/crates/saphyr>
-
-[^12]: Saphyr libraries - A set of crates dedicated to parsing YAML. - GitHub,
 accessed on July 12, 2025, <https://github.com/saphyr-rs/saphyr>
 
-[^13]: saphyr-serde - [crates.io](http://crates.io): Rust Package Registry,
 accessed on July 12, 2025, <https://crates.io/crates/saphyr-serde>
 
-[^14]: saphyr - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
 <https://docs.rs/saphyr>
 
 [^15]: minijinja - [crates.io](http://crates.io): Rust Package Registry,
 accessed on July 12, 2025, <https://crates.io/crates/minijinja>
 
-[^16]: minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
-2025, <https://docs.rs/minijinja/>
+[^16]: minijinja - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
+<https://docs.rs/minijinja/>
 
-[^17]: minijinja - Rust, accessed on July 12, 2025,
-<https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
+[^17]: minijinja - Rust, accessed on July 12, 2025, <<https://
+wasmerio.github.io/> wasmer-pack/api-docs/minijinja/index.html>
 
-[^18]: Template engine — list of Rust libraries/crates //
-[Lib.rs](http://Lib.rs), accessed on July 12, 2025,
-<https://lib.rs/template-engine>
+[^18]: Template engine — list of Rust libraries/crates // [Lib.rs](http://
+Lib.rs), accessed on July 12, 2025, <https://lib.rs/template-engine>
 
-[^19]: std::process::Command - Rust - MIT, accessed on July 12, 2025,
-<https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/struct.Command.html>
+web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/
+process/struct.Command.html>
 
-[^20]: How to Check Python Version | Syncro, accessed on July 12, 2025,
 <https://syncromsp.com/blog/how-to-check-python-version/>
 
-[^21]: How to check python version? - 4Geeks, accessed on July 12, 2025,
 <https://4geeks.com/how-to/how-to-check-python-version>
 
 [^22]: shell_quote - Rust - [Docs.rs](http://Docs.rs), accessed on July 12,
 2025, <https://docs.rs/shell-quote/latest/shell_quote/>
 
-[^23]: std::process - Rust - MIT, accessed on July 12, 2025,
-<https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/process/index.html>
+web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/std/
+process/index.html>
 
-[^24]: std::process - Rust, accessed on July 12, 2025,
-<https://doc.rust-lang.org/std/process/index.html>
+[^24]: std::process - Rust, accessed on July 12, 2025, <<https://doc.rust->
+lang.org/std/process/index.html>
 
-[^25]: Command in std::process - Rust, accessed on July 12, 2025,
-<https://doc.rust-lang.org/std/process/struct.Command.html>
+doc.rust-lang.org/std/process/struct.Command.html>
 
-[^26]: shlex - Rust - [Docs.rs](http://Docs.rs), accessed on July 12, 2025,
 <https://docs.rs/shlex/latest/shlex/>
 
 [^27]: Rust Error Handling Compared: anyhow vs thiserror vs snafu, accessed on
-July 12, 2025,
-<https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
+July 12, 2025, <<<https://dev.to/leapcell/rust-error-handling-compared-anyhow->
+vs-> thiserror-vs-snafu-2003>
 
-[^28]: Effective Error Handling in Rust CLI Apps: Best Practices, Examples,
-and Advanced Techniques - Technorely, accessed on July 12, 2025,
-<https://technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-practices-examples-and-advanced-techniques>
+and Advanced Techniques - Technorely, accessed on July 12, 2025, <https://
+technorely.com/insights/effective-error-handling-in-rust-cli-apps-best-
+practices-examples-and-advanced-techniques>
 
 [^29]: Practical guide to Error Handling in Rust - Dev State, accessed on July
 12, 2025, <https://dev-state.com/posts/error_handling/>
@@ -1295,9 +1267,11 @@ and Advanced Techniques - Technorely, accessed on July 12, 2025,
 [^30]: thiserror and anyhow - Comprehensive Rust, accessed on July 12, 2025,
 <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
 
-[^31]: Simple error handling for precondition/argument checking in Rust -
-Stack Overflow, accessed on July 12, 2025,
-<https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
+[^31]: Simple error handling for precondition/argument checking in Rust
+
+- Stack Overflow, accessed on July 12, 2025, <<https://stackoverflow.com/>
+questions/78217448/simple-error-handling-for-precondition-argument-checking-
+in-rust>
 
 [^32]: Nicer error reporting - Command Line Applications in Rust, accessed on
 July 12, 2025, <https://rust-cli.github.io/book/tutorial/errors.html>
