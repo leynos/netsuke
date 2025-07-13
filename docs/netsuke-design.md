@@ -62,12 +62,12 @@ before execution, a critical requirement for compatibility with Ninja.
 
    The AST is traversed to construct a canonical, fully resolved Intermediate
    Representation (IR) of the build. This IR represents the build as a static
-   dependency graph, with all file paths, commands, and dependencies explicitly
+   dependency graph with all file paths, commands, and dependencies explicitly
    defined. During this transformation, Netsuke performs critical validation
    checks. It verifies the existence of referenced rules, ensures each rule has
-   exactly one of `command` or `script`, and that every target specifies exactly
-   one of `rule`, `command`, or `script`. Circular dependencies and missing
-   inputs are also detected at this stage.
+   exactly one of `command` or `script`, and ensures every target specifies
+   exactly one of `rule`, `command`, or `script`. Circular dependencies and
+   missing inputs are also detected at this stage.
 
 5. Stage 5: Ninja Synthesis & Execution
 
@@ -179,8 +179,8 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Exactly one of `command` or `script` must be provided. The manifest parser
   enforces this rule to prevent invalid states.
 
-  Internally, these options deserialise into an enum `Recipe` to ensure the
-  exclusivity is encoded at the type level.
+  Internally, these options deserialise into a tagged enum `Recipe` using a
+  `kind` field to encode the exclusivity at the type level.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -210,7 +210,7 @@ Each entry in `targets` defines a build edge; placing a target in the optional
   Only one of `rule`, `command`, or `script` may be specified. The parser
   validates this exclusivity during deserialisation.
 
-  This union deserialises into an enum `TargetRecipe` so that the chosen
+  This union deserialises into a tagged enum `TargetRecipe` so that the chosen
   execution method is explicit in the AST.
 
 - `sources`: The input files required by the command. This can be a single
@@ -355,7 +355,7 @@ pub struct Rule {
 }
 
 /// A union of execution styles for a rule.
-#[serde(untagged)]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Recipe {
     Command { command: String },
     Script { script: String },
@@ -389,7 +389,7 @@ pub struct Target {
 }
 
 /// Specifies how a target is built.
-#[serde(untagged)]
+#[serde(tag = "kind", rename_all = "lowercase")]
 pub enum TargetRecipe {
     Rule { rule: String },
     Command { command: String },
