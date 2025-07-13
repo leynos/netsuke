@@ -7,7 +7,7 @@ vars:
 
 rules:
   - name: convert_raw
-    command: "darktable-cli {ins} {outs}"
+    command: "darktable-cli {ins} {outs} --core --width 100% --height 100% --quality 92"
     description: "Converting RAW photo"
 
   - name: make_gallery
