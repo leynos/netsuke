@@ -227,7 +227,9 @@ rule:
   through serde aliases when `kind` is omitted.
 
 - `sources`: The input files required by the command. This can be a single
-  string or a list of strings.
+  string or a list of strings. If any source entry matches the `name` of another
+  target, that target is built first, before the current target's explicit
+  `deps`.
 
 - `deps`: An optional list of other target names. These targets are explicit
   dependencies and must be successfully built before this target can be. A
@@ -578,10 +580,12 @@ providing a secure bridge to the underlying system.
 In addition to functions, custom filters provide a concise, pipe-based syntax
 for transforming data within templates.
 
-- `| shell_escape`: A filter that operates on both scalar strings and lists,
-  escaping each value for safe inclusion as a single shell argument. This non-
-  negotiable security feature uses the `shell-quote` crate for robust quoting.
-  [^22]
+- `| shell_escape`: A filter that takes a string or list and escapes it for
+  safe inclusion as a single argument in a shell command. This is a non-
+  negotiable security feature to prevent command injection vulnerabilities.
+  The implementation will use the `shell-quote` crate for robust, shell-aware
+  quoting.[^22]
+
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.
 
