@@ -7,9 +7,8 @@ vars:
 
 rules:
   - name: rasterise
-    command: "{{ inkscape }} {ins} --export-filename={outs}"
+    command: "{{ inkscape }} --export-type=png --export-filename={outs} {ins}"
     description: "Rasterising {ins}"
-
   - name: clean
     command: "rm -rf {{ out_dir }}"
 
