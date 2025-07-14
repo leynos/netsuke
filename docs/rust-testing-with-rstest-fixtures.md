@@ -1007,9 +1007,9 @@ the `#[files("glob_pattern")]` attribute. This attribute can be used on a test
 function argument to inject file paths that match a given glob pattern. The
 argument type is typically `PathBuf`. It can also inject file contents directly
 as `&str` or `&[u8]` by specifying a mode, e.g., `#[files("glob_pattern", mode
-= "str")]`, additional attributes such as `#[base_dir = "…"]` can specify a base
-directory for the glob, and `#[exclude("regex")]` can filter out paths matching
-a regular expression.
+= "str")]`, and additional attributes such as `#[base_dir = "…"]` can specify
+a base directory for the glob, and `#[exclude("regex")]` can filter out paths
+matching a regular expression.
 
 ```rust
 use rstest::*;

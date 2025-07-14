@@ -198,8 +198,8 @@ function using the `#[world(init =...)]` attribute.20
 
 ### 2.4 Your First `main` Test Runner
 
-With the `harness = false` setting in `Cargo.toml`, you must provide your
-own `main` function in the test target file (e.g., `tests/cucumber.rs`). This
+With the `harness = false` setting in `Cargo.toml`, a custom `main` function
+must be supplied in the test target file (e.g., `tests/cucumber.rs`). This
 function serves as the entry point for the test suite.
 
 Since `cucumber-rs` is async, the `main` function must be an `async fn` and
@@ -313,9 +313,9 @@ fn check_result(world: &mut CalculatorWorld, expected: i32) {
 
 ### 3.2 Capturing Arguments: Regex vs. Cucumber Expressions
 
-To make steps dynamic, you need to capture parts of the Gherkin text and pass
-them as arguments to your Rust functions. `cucumber-rs` supports two mechanisms
-for this: regular expressions and Cucumber Expressions.16
+To make steps dynamic, captured fragments of the Gherkin text must be passed
+as arguments to the corresponding Rust functions. `cucumber-rs` supports two
+mechanisms for this: regular expressions and Cucumber Expressions.16
 
 - **Cucumber Expressions (**`expr = "..."`**)**: This is the recommended
   default. They are less powerful than regex but are more readable and
@@ -543,11 +543,9 @@ this in mind, making it an excellent choice for integration and end-to-end (E2E)
 testing.
 
 Step definition functions can be declared as `async fn`.12 Inside these
-functions, you can
-
-`.await` any `Future`, such as a database query or an HTTP request. This
-requires that your test runner's `main` function is powered by an async runtime
-like `tokio`.13
+functions, any `Future` – such as a database query or HTTP request – can be
+`.await`-ed. This requires that your test runner’s `main` function is powered by
+an async runtime like `tokio`.13
 
 The async-first design of `cucumber-rs` is one of its most powerful features.
 It allows for writing tests that accurately reflect the asynchronous nature of
@@ -801,8 +799,8 @@ The most maintainable test suites favor a **declarative** style over an
 - **Declarative steps** describe *what* the user is trying to achieve, focusing
   on intent and behaviour (e.g., "When I submit my registration").
 
-The collection of your step definitions should evolve into a Domain-Specific
-Language (DSL) for your application.3 A step like
+The collective set of step definitions should evolve into a project-specific
+Domain-Specific Language (DSL).3 A step like
 
 `When I register my account` is declarative. Internally, its Rust implementation
 might perform several imperative actions (fill form fields, click a button, wait
@@ -828,7 +826,7 @@ pub struct MonolithicWorld {
     api_client: ApiClient,
     db_connection: DbPool,
     last_api_response: Option<ApiResponse>,
-    //... and 20 more fields
+    //… and 20 more fields
 }
 
 // More maintainable

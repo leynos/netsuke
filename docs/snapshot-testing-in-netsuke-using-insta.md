@@ -145,11 +145,12 @@ added), the snapshot will change in a predictable way, prompting a review.
 
 ## Writing Snapshot Tests for Ninja File Output
 
-Next, we create **tests/ninja_snapshot_tests.rs** to verify Ninja build file
+Next, create **tests/ninja_snapshot_tests.rs** to verify Ninja build file
 generation separately. This stage takes the IR (BuildGraph) and produces a Ninja
 build script (usually the contents of a `build.ninja` file). Because Netsuke’s
-design cleanly separates IR building from code generation, we can use the same
-manifest (or multiple manifest scenarios) to test the Ninja output specifically.
+design cleanly separates IR building from code generation, it is possible to
+use the same manifest (or multiple manifest scenarios) to test the Ninja output
+specifically.
 
 **Example Ninja Snapshot Test:**
 
@@ -206,7 +207,7 @@ Key points for Ninja snapshot tests:
   deduplication must avoid randomness. The design’s approach of consolidating
   rules by a hash of their properties should still produce the same ordering
   given the same input, as long as iteration over hashmaps is avoided or
-  stabilised.
+  stabilized.
 
 - We again use `Settings::set_snapshot_path` to store these snapshots
   in a separate `tests/snapshots/ninja` directory. The snapshot name
@@ -283,8 +284,8 @@ legitimate update:
 ## Integrating Snapshot Tests into GitHub Actions CI
 
 Automating snapshot tests in CI ensures that changes to Netsuke don’t introduce
-regressions without notice. We can use GitHub Actions to run `cargo test` (which
-includes our snapshot tests) on every push or pull request. Here’s how to set
+regressions without notice. Use GitHub Actions to run `cargo test` (which
+includes the snapshot tests) on every push or pull request. Here’s how to set
 it up:
 
 **1. CI Workflow Setup:** In your repository (e.g., `.github/workflows/
@@ -334,10 +335,10 @@ jobs:
   `auto` mode already treats CI specially (it will not auto-accept in CI), but
   setting `no` is an explicit safeguard.
 
-- We install `cargo-insta` mainly for completeness – running `cargo test` does
-  not strictly require the CLI tool, but having it available can allow using
-  `cargo insta` subcommands in CI if needed (for example, to print a summary or
-  ensure no unused snapshots with `cargo insta test --unreferenced=reject`).
+- Install `cargo-insta` mainly for completeness – running `cargo test` does not
+  strictly require the CLI tool, but its presence enables `cargo insta`
+  subcommands in CI if needed (for example, to print a summary or ensure no
+  unused snapshots with `cargo insta test --unreferenced=reject`).
 
 - The caches for Cargo help speed up CI. Ensure you include the snapshot files
   in the repository so that tests can find the expected outputs.
@@ -367,8 +368,8 @@ those as a signal to update snapshots locally.
 
 ## Conclusion
 
-By introducing snapshot tests for both the IR and the Ninja output, we adhere
-to Netsuke’s design principles and gain confidence in each stage of the build
+Introducing snapshot tests for both the IR and the Ninja output adheres to
+Netsuke’s design principles and increases confidence in each stage of the build
 process. The IR tests verify that the manifest-to-IR transformation produces
 the expected build graph structure independently of any output format. The
 Ninja snapshot tests then verify that the IR-to-Ninja translation is correct.
@@ -383,7 +384,7 @@ Actions, this testing framework will catch regressions early: any change in
 Netsuke’s IR logic or code generation will surface as a snapshot diff, prompting
 careful review.
 
-Using this structured snapshot testing approach, you can confidently evolve
+This structured snapshot testing approach enables confident evolution of
 the Netsuke project while preserving the correctness of its core compilation
 pipeline. Happy testing!
 
