@@ -4,11 +4,11 @@ Snapshot testing with the `insta` crate provides a powerful way to ensure
 Netsuke’s intermediate representations and generated Ninja build files
 remain correct over time. According to the Netsuke design, the Intermediate
 Representation (IR) is a backend-agnostic build graph, and the Ninja file
-generation is a separate stage built on that IR. We will leverage this
-separation by writing **separate snapshot tests** for IR and for Ninja output.
-This guide covers setting up `insta`, organizing test modules and snapshot
-files, ensuring deterministic outputs, running the tests, and integrating them
-into a GitHub Actions CI workflow.
+generation is a separate stage built on that IR. Leverage this separation by
+writing **separate snapshot tests** for IR and for Ninja output. This guide
+covers setting up `insta`, organizing test modules and snapshot files, ensuring
+deterministic outputs, running the tests, and integrating them into a GitHub
+Actions CI workflow.
 
 ## Setting Up Insta for Snapshot Testing
 
@@ -21,13 +21,13 @@ insta = "1"
 
 The `insta` crate provides macros like `assert_snapshot!` (for plain text or
 `Debug` snapshots) and `assert_yaml_snapshot!`/`assert_json_snapshot!` (for
-structured snapshots). We will use these macros in our tests. We also install
-the companion CLI tool `cargo-insta` for reviewing/updating snapshots (useful in
-CI and local development).
+structured snapshots). Use these macros in tests and install the companion CLI
+tool `cargo-insta` for reviewing or updating snapshots (useful in CI and local
+development).
 
-**Project Structure:** We organize the tests in the `tests/` directory, using
-one module for IR snapshots and another for Ninja snapshots. Each will have its
-own snapshot output directory for clarity. A possible layout:
+**Project Structure:** Organise the tests in the `tests/` directory using one
+module for IR snapshots and another for Ninja snapshots. Each module has its own
+snapshot output directory for clarity. A possible layout:
 
 ```text
 netsuke/
@@ -52,12 +52,12 @@ organized and aligns with Netsuke’s design separation of IR vs. code generatio
 
 ## Writing Snapshot Tests for IR Outputs
 
-We create a test module (e.g. **tests/ir_snapshot_tests.rs**) dedicated to
-IR snapshot tests. Each test will feed a Netsuke manifest (the input build
-specification) into the compiler’s IR generation stage, then capture the
-resulting IR in a stable, human-readable form. According to the design, the
-IR (BuildGraph) is intended to be independent of any particular backend, so we
-verify it in isolation here.
+A dedicated test module (e.g. **tests/ir_snapshot_tests.rs**) contains
+IR snapshot tests. Each test feeds a Netsuke manifest (the input build
+specification) into the compiler’s IR generation stage and captures the
+resulting IR in a stable, human-readable form. According to the design, the IR
+(BuildGraph) is intended to be independent of any particular backend, so it is
+verified in isolation here.
 
 **Example IR Snapshot Test:**
 

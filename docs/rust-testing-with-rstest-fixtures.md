@@ -644,14 +644,14 @@ fn check_socket_port(#[case] addr: SocketAddr, #[case] expected_port: u16) {
 In this test, `rstest` sees the argument `addr: SocketAddr`
 and the string literal `"127.0.0.1:8080"`. It implicitly calls
 `SocketAddr::from_str("127.0.0.1:8080")` to create the `SocketAddr` instance.
-This "magic" conversion makes test definitions more concise and readable by
-allowing the direct use of string representations for types that support it.
-However, if the `FromStr` conversion fails (e.g., due to a malformed string),
-the error will typically occur at test runtime, potentially leading to a panic.
-For types with complex parsing logic or many failure modes, it might be clearer
-to perform the conversion explicitly within a fixture or at the beginning of
-the test to handle errors more gracefully or provide more specific diagnostic
-messages.
+This "magic" conversion makes test definitions more concise and readable
+by allowing the direct use of string representations for types that support
+it. However, if the `FromStr` conversion fails (e.g., because of a malformed
+string), the error will typically occur at test runtime, potentially leading to
+a panic. For types with complex parsing logic or many failure modes, it might
+be clearer to perform the conversion explicitly within a fixture or at the
+beginning of the test to handle errors more gracefully or provide more specific
+diagnostic messages.
 
 ## VI. Asynchronous Testing with `rstest`
 
@@ -978,7 +978,7 @@ the `#[files("glob_pattern")]` attribute. This attribute can be used on a test
 function argument to inject file paths that match a given glob pattern. The
 argument type is typically `PathBuf`. It can also inject file contents directly
 as `&str` or `&[u8]` by specifying a mode, e.g., `#[files("glob_pattern", mode
-= "str")]`. Additional attributes like `#[base_dir = "…"]` can specify a base
+= "str")]`, additional attributes such as `#[base_dir = "…"]` can specify a base
 directory for the glob, and `#[exclude("regex")]` can filter out paths matching
 a regular expression.
 

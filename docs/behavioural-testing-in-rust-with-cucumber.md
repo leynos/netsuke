@@ -415,9 +415,9 @@ operations.
 
 ### 4.1 Data-Driven Testing: `Scenario Outline` and `Examples`
 
-Often, you want to test the same behaviour with a variety of different inputs
-and expected outputs. Writing a separate `Scenario` for each case would be
-highly repetitive. Gherkin solves this with the `Scenario Outline` keyword.3
+Often, you want to test the same behaviour with various inputs and expected
+outputs. Writing a separate `Scenario` for each case would be highly repetitive.
+Gherkin solves this with the `Scenario Outline` keyword.3
 
 A `Scenario Outline` acts as a template. You write the steps using placeholders
 enclosed in angle brackets, like `<input>` or `<output>`. Below the outline, you

@@ -55,14 +55,14 @@ compilation pipeline from parsing to execution.
 
 - [ ] **Code Generation and Execution:**
 
-  - [ ] Implement the Ninja file synthesizer in src/ninja_[gen.rs](http://
-    gen.rs) to traverse the BuildGraph IR.
+  - [ ] Implement the Ninja file synthesizer in
+    [src/ninja_gen.rs](src/ninja_gen.rs) to traverse the BuildGraph IR.
 
   - [ ] Write logic to generate Ninja rule statements from ir::Action structs
     and build statements from ir::BuildEdge structs.
 
-  - [ ] Implement the process management logic in [main.rs](http://main.rs) to
-    invoke the ninja executable as a subprocess using std::process::Command.
+  - [ ] Implement the process management logic in [main.rs](main.rs) to invoke
+    the ninja executable as a subprocess using `std::process::Command`.
 
 - **Success Criterion:**
 
