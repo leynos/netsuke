@@ -209,58 +209,87 @@ Here are a few examples illustrating different kinds of fixtures:
 
 - **Fixture returning a primitive data type:**
 
-  ```rust use rstest::*;
+```rust
+use rstest::*;
 
-  #[fixture]
-  fn default_username() -> String { "test_user".to_string() }
+#[fixture]
+fn default_username() -> String {
+    "test_user".to_string()
+}
 
-  #[rstest]
-  fn test_username_length(default_username: String) { assert!
-  (default_username.len() > 0); }
+#[rstest]
+fn test_username_length(default_username: String) {
+    assert!(default_username.len() > 0);
+}
 
-  ```
+```
 
 - **Fixture returning a struct:**
 
-  ```rust use rstest::*;
+```rust
+use rstest::*;
 
-  struct User { id: u32, name: String, }
+struct User {
+    id: u32,
+    name: String,
+}
 
-  #[fixture]
-  fn sample_user() -> User { User { id: 1, name: "Alice".to_string(), } }
+#[fixture]
+fn sample_user() -> User {
+    User {
+        id: 1,
+        name: "Alice".to_string(),
+    }
+}
 
-  #[rstest]
-  fn test_sample_user_id(sample_user: User) { assert_eq!(sample_user.id, 1); }
+#[rstest]
+fn test_sample_user_id(sample_user: User) {
+    assert_eq!(sample_user.id, 1);
+}
 
-  ```
+```
 
 - **Fixture performing setup and returning a resource (e.g., a mock
   repository):**
 
-  ```rust use rstest::*; use std::collections::HashMap;
+```rust
+use rstest::*;
+use std::collections::HashMap;
 
-  // A simple trait for a repository trait Repository { fn add_item(&mut self,
-  id: &str, name: &str); fn get_item_name(&self, id: &str) -> Option<String>; }
+trait Repository {
+    fn add_item(&mut self, id: &str, name: &str);
+    fn get_item_name(&self, id: &str) -> Option<String>;
+}
 
-  // A mock implementation
-  #
-  struct MockRepository { data: HashMap<String, String>, }
+struct MockRepository {
+    data: HashMap<String, String>,
+}
 
-  impl Repository for MockRepository { fn add_item(&mut self, id: &str, name:
-  &str) { self.data.insert(id.to_string(), name.to_string()); }
+impl Repository for MockRepository {
+    fn add_item(&mut self, id: &str, name: &str) {
+        self.data.insert(id.to_string(), name.to_string());
+    }
 
-      fn get_item_name(&self, id: &str) -> Option<String>
-      { self.data.get(id).cloned() } }
+    fn get_item_name(&self, id: &str) -> Option<String> {
+        self.data.get(id).cloned()
+    }
+}
 
-  #[fixture]
-  fn empty_repository() -> impl Repository { MockRepository::default() }
+#[fixture]
+fn empty_repository() -> impl Repository {
+    MockRepository::default()
+}
 
-  #[rstest]
-  fn test_add_to_repository(mut empty_repository: impl Repository)
-  { empty_repository.add_item("item1", "Test Item"); assert_eq!
-  (empty_repository.get_item_name("item1"), Some("Test Item".to_string())); }
+#[rstest]
+fn test_add_to_repository(mut empty_repository: impl Repository) {
+    empty_repository.add_item("item1", "Test Item");
+    assert_eq!(
+        empty_repository.get_item_name("item1"),
+        Some("Test Item".to_string())
+    );
+}
 
-  ```
+```
 
 This example demonstrates a fixture providing a mutable `Repository`
 implementation.
@@ -1142,8 +1171,8 @@ and Parameterization**
 | Feature                                  | Standard #[test] Approach                                     | rstest Approach                                                                  |
 | ---------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Fixture Injection                        | Manual calls to setup functions within each test.             | Fixture name as argument in #[rstest] function; fixture defined with #[fixture]. |
-| Parameterized Tests (Specific Cases)     | Loop inside one test, or multiple distinct #[test] functions. | #[case(...)] attributes on #[rstest] function.                                   |
-| Parameterized Tests (Value Combinations) | Nested loops inside one test, or complex manual generation.   | #[values(...)] attributes on arguments of #[rstest] function.                    |
+| Parameterized Tests (Specific Cases)     | Loop inside one test, or multiple distinct #[test] functions. | #[case(…)] attributes on #[rstest] function.                                     |
+| Parameterized Tests (Value Combinations) | Nested loops inside one test, or complex manual generation.   | #[values(…)] attributes on arguments of #[rstest] function.                      |
 | Async Fixture Setup                      | Manual async block and .await calls inside test.              | async fn fixtures, with #[future] and #[awt] for ergonomic `.await`ing.          |
 | Reusing Parameter Sets                   | Manual duplication of cases or custom helper macros.          | rstest_reuse crate with #[template] and #[apply] attributes.                     |
 

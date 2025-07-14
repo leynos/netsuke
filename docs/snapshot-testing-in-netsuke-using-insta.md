@@ -45,10 +45,10 @@ netsuke/
         └─ ninja/        (snapshot files for Ninja tests)
 ```
 
-By default, `insta` will create a `tests/snapshots` directory and store snapshot
-data in files named after the test modules. We override this to separate IR and
-Ninja snapshots into subfolders. This keeps the IR and Ninja expected outputs
-organized and aligns with Netsuke’s design separation of IR vs. code generation.
+By default, `insta` creates a `tests/snapshots` directory and stores snapshot
+data in files named after the test modules. This configuration separates IR
+and Ninja snapshots into subfolders, keeping the expected outputs organized and
+aligning with Netsuke’s design separation of IR from code generation.
 
 ## Writing Snapshot Tests for IR Outputs
 
@@ -192,21 +192,21 @@ fn simple_manifest_ninja_snapshot() {
 
 Key points for Ninja snapshot tests:
 
-- We still use a known manifest input and first derive the IR (you could also
-  construct an IR directly for tests, but using the manifest-&gt;IR pipeline
-  ensures we’re testing realistic usage).
+- Use a known manifest input and first derive the IR. An IR can also be
+  constructed directly for tests, but using the manifest-&gt;IR pipeline ensures
+  realistic coverage.
 
-- Call the Ninja generation function (e.g. `ninja_gen::generate_ninja`) which
-  produces the Ninja file contents as a `String`. This function should traverse
-  the IR and output rules and build statements in Ninja syntax.
+- Call the Ninja generation function (e.g. `ninja_gen::generate_ninja`), which
+  produces the Ninja file contents as a `String`. This function traverses the IR
+  and outputs rules and build statements in Ninja syntax.
 
 - As with IR, **determinism is crucial**. The Ninja output should list rules,
-  targets, and dependencies in a consistent order. For example, if the IR
-  doesn’t already preserve order, you may need to sort targets by name or ensure
-  that hashing/deduplication doesn’t cause random order. The design’s approach
-  of consolidating rules by a hash of their properties should still produce
-  the same ordering given the same input, as long as iteration over hashmaps is
-  avoided or stabilized.
+  targets, and dependencies in a consistent order. For example, if the IR does
+  not preserve order, targets may need to be sorted by name or hashing and
+  deduplication must avoid randomness. The design’s approach of consolidating
+  rules by a hash of their properties should still produce the same ordering
+  given the same input, as long as iteration over hashmaps is avoided or
+  stabilised.
 
 - We again use `Settings::set_snapshot_path` to store these snapshots
   in a separate `tests/snapshots/ninja` directory. The snapshot name
@@ -245,10 +245,9 @@ snapshot assertion for `simple_manifest_ninja` failed in "tests/ninja_snapshot_t
 …
 ```
 
-On first run, `insta` (with default `INSTA_UPDATE=auto`) will write new snapshot
-files for you and mark the tests as failed so you can review them. You’ll find
-`.snap` files (or `.snap.new` if not auto-approved) in the `tests/snapshots/
-` subdirectories.
+On the first run, `insta` (with default `INSTA_UPDATE=auto`) writes new snapshot
+files and marks the tests as failed for review. `.snap` files (or `.snap.new` if
+not auto-approved) appear in the `tests/snapshots/` subdirectories.
 
 **Reviewing and Accepting Snapshots:** Use the `cargo-insta` CLI to review and
 accept these new snapshots:
@@ -330,11 +329,10 @@ jobs:
 
 **Notes:**
 
-- We set `INSTA_UPDATE: no` in CI to disable automatic snapshot creation or
-  updating. This means if a snapshot is missing or differs, the tests will
-  **fail** (as they should in CI). The default `auto` mode already treats
-  CI specially (it won’t auto-accept in CI), but setting `no` is an explicit
-  safeguard.
+- Setting `INSTA_UPDATE: no` in CI disables automatic snapshot creation or
+  updating. If a snapshot is missing or differs, the tests **fail**. The default
+  `auto` mode already treats CI specially (it will not auto-accept in CI), but
+  setting `no` is an explicit safeguard.
 
 - We install `cargo-insta` mainly for completeness – running `cargo test` does
   not strictly require the CLI tool, but having it available can allow using

@@ -2,13 +2,12 @@
 
 ## Part 1: The Philosophy and Practice of Behaviour-Driven Development (BDD)
 
-Behaviour-Driven Development (BDD) is a software development process that has
-evolved from Test-Driven Development (TDD). While it incorporates testing, its
-primary focus is on fostering collaboration and communication among developers,
-quality assurance (QA) teams, business analysts, and product owners. This guide
-provides a comprehensive walkthrough of implementing BDD in Rust using the
-modern `cucumber` testing framework, focusing on practical application, best
-practices, and lessons learned from real-world use.
+Behaviour-Driven Development (BDD) is a software development process that
+evolved from Test-Driven Development (TDD). Although testing remains integral,
+the primary focus is on collaboration and communication among developers,
+QA teams, business analysts, and product owners. This guide walks through
+implementing BDD in Rust with the modern `cucumber` testing framework, covering
+practical techniques, best practices, and lessons from real-world projects.
 
 ### 1.1 Beyond Testing: BDD as a Collaborative Process
 
@@ -60,8 +59,8 @@ keyword. The primary keywords give structure and meaning to the specifications.7
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
 For developers, the `Given-When-Then` structure is not an entirely new concept.
-It is a highly effective reformulation of well-established testing patterns
-that many are already familiar with from unit testing.5 The most common parallel
+It is a highly effective reformulation of well-established testing patterns that
+many are already familiar with from unit testing.5. The most common parallel
 is the
 
 **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill Wake.
@@ -328,11 +327,9 @@ for this: regular expressions and Cucumber Expressions.16
 - **Regular Expressions (**`regex = "..."`**)**: For more complex matching
   needs, you can use full regex syntax. Capture groups `(...)` in the regex
   correspond to function arguments.18 The framework will still attempt to parse
-  the captured
-
-  `&str` into the function's argument type. It's a best practice to anchor your
-  regex with `^` and `$` to ensure the entire step text is matched, preventing
-  partial or ambiguous matches.18
+  the captured `&str` into the function's argument type. It's a best practice to
+  anchor your regex with `^` and `$` to ensure the entire step text is matched,
+  preventing partial or ambiguous matches.18
 
 | Feature         | Cucumber Expression Example                                          | Regex Example                                                          | Recommendation                                               |
 | --------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -463,7 +460,9 @@ accessed via `step.table` (which is an `Option<Table>`).23
 Data tables encourage a more declarative style of testing. Instead of writing
 a series of imperative steps to build up a state (e.g., "Given I add a user
 'Alice'", "And I set her role to 'Admin'"), you can describe the entire state in
-a single, readable table.25 This makes the
+a single, readable table.25.
+
+This makes the
 
 `Given` steps more concise and focused on the initial context.
 
