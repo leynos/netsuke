@@ -262,11 +262,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
   is automatically passed through the `shell_escape` filter unless a `| raw`
   filter is applied. Future versions will allow configurable script languages
-  with their own escaping rules.
-  On Windows, scripts default to `powershell -Command` unless the manifest's
-  `interpreter` field overrides the setting. Exactly one of `command` or
-  `script` must be provided. The manifest parser enforces this rule to prevent
-  invalid states.
+  with their own escaping rules. On Windows, scripts default to `powershell
+  -Command` unless the manifest's `interpreter` field overrides the setting.
+  Exactly one of `command` or `script` must be provided. The manifest parser
+  enforces this rule to prevent invalid states.
 
   Internally, these options deserialize into a shared `Recipe` enum tagged with
   a `kind` field. Serde aliases ensure manifests that omit the tag continue to
@@ -1388,9 +1387,9 @@ possibilities for future enhancements beyond the initial scope.
 
 ## Section 10: Example Manifests
 
-The repository includes several complete Netsuke manifests in the
-`examples/` directory. They demonstrate how the YAML schema can be applied
-to real-world projects.
+The repository includes several complete Netsuke manifests in the `examples/
+` directory. They demonstrate how the YAML schema can be applied to real-world
+projects.
 
 - [`basic_c.yml`](../examples/basic_c.yml): a minimal C project compiling two
   object files and linking them into a small application.
