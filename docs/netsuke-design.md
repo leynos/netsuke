@@ -1240,6 +1240,8 @@ enum Commands {
 treated as the default subcommand if none is provided, allowing for the common*
 `Netsuke [targets...]` *invocation.*
 
+The initial CLI implementation follows this design exactly. `clap` derives the `Cli` struct and parses subcommands, defaulting to `build` when none is given. Global options `--file`, `--directory`, and `--jobs` are implemented and validated by unit and behavioural tests.
+
 ### 8.3 Command Behaviour
 
 The behaviour of each subcommand is clearly defined:

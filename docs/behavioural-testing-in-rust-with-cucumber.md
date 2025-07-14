@@ -1,4 +1,5 @@
 # A Developer's Guide to Behavioural Testing in Rust with Cucumber
+<!-- markdownlint-disable MD013 MD033 MD040 -->
 
 ## Part 1: The Philosophy and Practice of Behaviour-Driven Development (BDD)
 

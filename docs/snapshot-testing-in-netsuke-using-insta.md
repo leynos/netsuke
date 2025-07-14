@@ -15,7 +15,7 @@ The `insta` crate provides macros like `assert_snapshot!` (for plain text or `De
 
 **Project Structure:** We organize the tests in the `tests/` directory, using one module for IR snapshots and another for Ninja snapshots. Each will have its own snapshot output directory for clarity. A possible layout:
 
-```
+```text
 netsuke/
 ├─ Cargo.toml
 ├─ src/

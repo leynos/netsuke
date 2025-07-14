@@ -7,5 +7,12 @@
       "code_block_line_length": 120,
       "tables": false
     }
+  },
+  "files": {
+    "docs/behavioural-testing-in-rust-with-cucumber.md": {
+      "MD013": false,
+      "MD033": false,
+      "MD040": false
+    }
   }
 }
