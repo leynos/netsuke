@@ -1,9 +1,8 @@
 # Netsuke Implementation Roadmap
 
-This roadmap translates the [netsuke-design.md](http://netsuke-design.md)
-document into a phased, actionable implementation plan. Each phase has a clear
-objective and a checklist of tasks that must be completed to meet the success
-criteria.
+This roadmap translates the [netsuke-design.md](netsuke-design.md) document into
+a phased, actionable implementation plan. Each phase has a clear objective and a
+checklist of tasks that must be completed to meet the success criteria.
 
 ## Phase 1: The Static Core 🏗️
 
@@ -18,8 +17,7 @@ compilation pipeline from parsing to execution.
     document.
 
   - [ ] Define the core Abstract Syntax Tree (AST) data structures
-    (NetsukeManifest, Rule, Target, StringOrList, Recipe) in src/[ast.rs]
-    (<http://ast.rs>).
+    (NetsukeManifest, Rule, Target, StringOrList, Recipe) in `src/ast.rs`.
 
   - [ ] Annotate AST structs with #[derive(Deserialize)] and
     #[serde(deny_unknown_fields)]
@@ -39,7 +37,7 @@ compilation pipeline from parsing to execution.
 - [ ] **Intermediate Representation (IR) and Validation:**
 
   - [ ] Define the IR data structures (BuildGraph, Action, BuildEdge) in
-    src/[ir.rs](http://ir.rs), keeping it backend-agnostic as per the design.
+    `src/ir.rs`, keeping it backend-agnostic as per the design.
 
   - [ ] Implement the ir::from_manifest transformation logic to convert the
     AST into the BuildGraph IR.
@@ -61,14 +59,14 @@ compilation pipeline from parsing to execution.
   - [ ] Write logic to generate Ninja rule statements from ir::Action structs
     and build statements from ir::BuildEdge structs.
 
-  - [ ] Implement the process management logic in [main.rs](main.rs) to invoke
-    the ninja executable as a subprocess using `std::process::Command`.
+  - [ ] Implement the process management logic in `main.rs` to invoke the ninja
+    executable as a subprocess using `std::process::Command`.
 
 - **Success Criterion:**
 
-  - [ ] Netsuke can successfully take a Netsukefile without any Jinja
-    syntax, compile it to a [build.ninja](http://build.ninja) file, and execute
-    it via the ninja subprocess to produce the correct build artifacts.
+  - [ ] Netsuke can successfully take a Netsukefile without any Jinja syntax,
+    compile it to a `build.ninja` file, and execute it via the ninja subprocess
+    to produce the correct build artifacts.
 
 ## Phase 2: The Dynamic Engine ✨
 
