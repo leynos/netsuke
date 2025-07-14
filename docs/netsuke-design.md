@@ -262,11 +262,11 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   field (defaulting to `/bin/sh -e`). For `/bin/sh` scripts, each interpolation
   is automatically passed through the `shell_escape` filter unless a `| raw`
   filter is applied. Future versions will allow configurable script languages
-  with their own escaping rules.  
+  with their own escaping rules.
   On Windows, scripts default to `powershell -Command` unless the manifest's
-  `interpreter` field overrides the setting.
-  Exactly one of `command` or `script` must be provided. The manifest parser
-  enforces this rule to prevent invalid states.
+  `interpreter` field overrides the setting. Exactly one of `command` or
+  `script` must be provided. The manifest parser enforces this rule to prevent
+  invalid states.
 
   Internally, these options deserialize into a shared `Recipe` enum tagged with
   a `kind` field. Serde aliases ensure manifests that omit the tag continue to
@@ -1240,7 +1240,10 @@ enum Commands {
 treated as the default subcommand if none is provided, allowing for the common*
 `Netsuke [targets...]` *invocation.*
 
-The initial CLI implementation follows this design exactly. `clap` derives the `Cli` struct and parses subcommands, defaulting to `build` when none is given. Global options `--file`, `--directory`, and `--jobs` are implemented and validated by unit and behavioural tests.
+The initial CLI implementation follows this design exactly. `clap` derives
+the `Cli` struct and parses subcommands, defaulting to `build` when none is
+given. Global options `--file`, `--directory`, and `--jobs` are implemented and
+validated by unit and behavioural tests.
 
 ### 8.3 Command Behaviour
 

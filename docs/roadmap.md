@@ -1,8 +1,9 @@
 # Netsuke Implementation Roadmap
 
-This roadmap translates the [netsuke-design.md](http://netsuke-design.md) document into a phased,
-actionable implementation plan. Each phase has a clear objective and a checklist
-of tasks that must be completed to meet the success criteria.
+This roadmap translates the [netsuke-design.md](http://netsuke-design.md)
+document into a phased, actionable implementation plan. Each phase has a clear
+objective and a checklist of tasks that must be completed to meet the success
+criteria.
 
 ## Phase 1: The Static Core 🏗️
 
@@ -17,10 +18,11 @@ compilation pipeline from parsing to execution.
     document.
 
   - [ ] Define the core Abstract Syntax Tree (AST) data structures
-    (NetsukeManifest, Rule, Target, StringOrList, Recipe) in
-    src/[ast.rs](http://ast.rs).
+    (NetsukeManifest, Rule, Target, StringOrList, Recipe) in src/[ast.rs]
+    (<http://ast.rs>).
 
-  - [ ] Annotate AST structs with #[derive(Deserialize)] and #[serde(deny_unknown_fields)]
+  - [ ] Annotate AST structs with #[derive(Deserialize)] and
+    #[serde(deny_unknown_fields)]
     to enable serde_yaml parsing.
 
   - [ ] Implement parsing for the netsuke_version field and validate it using
@@ -53,25 +55,27 @@ compilation pipeline from parsing to execution.
 
 - [ ] **Code Generation and Execution:**
 
-  - [ ] Implement the Ninja file synthesizer in src/ninja_[gen.rs](http://gen.rs) to traverse
+  - [ ] Implement the Ninja file synthesizer in src/ninja_[gen.rs](http://
+    gen.rs) to traverse
     the BuildGraph IR.
 
   - [ ] Write logic to generate Ninja rule statements from ir::Action structs
     and build statements from ir::BuildEdge structs.
 
-  - [ ] Implement the process management logic in [main.rs](http://main.rs) to invoke the ninja
+  - [ ] Implement the process management logic in [main.rs](http://main.rs) to
+    invoke the ninja
     executable as a subprocess using std::process::Command.
 
 - **Success Criterion:**
 
   - [ ] Netsuke can successfully take a Netsukefile without any Jinja
-    syntax, compile it to a [build.ninja](http://build.ninja) file, and execute it via the ninja
-    subprocess to produce the correct build artifacts.
+    syntax, compile it to a [build.ninja](http://build.ninja) file, and execute
+    it via the ninja subprocess to produce the correct build artifacts.
 
 ## Phase 2: The Dynamic Engine ✨
 
-Objective: To integrate the minijinja templating engine, enabling dynamic
-build configurations with variables, control flow, and custom functions.
+Objective: To integrate the minijinja templating engine, enabling dynamic build
+configurations with variables, control flow, and custom functions.
 
 - [ ] **Jinja Integration:**
 
@@ -86,7 +90,8 @@ build configurations with variables, control flow, and custom functions.
 
 - [ ] **Dynamic Features and Custom Functions:**
 
-  - [ ] Implement support for basic Jinja control structures ({% if %}, {% for %})
+  - [ ] Implement support for basic Jinja control structures ({% if %}, {% for
+    %})
     and the foreach key for target generation.
 
   - [ ] Implement the essential custom Jinja function env(var_name) to read
@@ -101,14 +106,14 @@ build configurations with variables, control flow, and custom functions.
 - **Success Criterion:**
 
   - [ ] Netsuke can successfully build a manifest that uses variables,
-    conditional logic, the foreach loop, custom macros, and the glob()
-    function to discover and operate on source files.
+    conditional logic, the foreach loop, custom macros, and the glob() function
+    to discover and operate on source files.
 
 ## Phase 3: The "Friendly" Polish 🛡️
 
-Objective: To implement the advanced features that deliver a superior,
-secure, and robust user experience, focusing on security, error reporting, the
-standard library, and CLI ergonomics.
+Objective: To implement the advanced features that deliver a superior, secure,
+and robust user experience, focusing on security, error reporting, the standard
+library, and CLI ergonomics.
 
 - [ ] **Security and Shell Escaping:**
 
@@ -142,7 +147,8 @@ standard library, and CLI ergonomics.
   - [ ] Implement the path and file filters (basename, dirname, with_suffix,
     realpath, contents, hash, etc.).
 
-  - [ ] Implement the generic collection filters (`uniq`, `flatten`, `group_by`).
+  - [ ] Implement the generic collection filters (`uniq`, `flatten`,
+    `group_by`).
 
   - [ ] Implement the network and command functions/filters (fetch, shell,
     grep), ensuring shell marks templates as impure to disable caching.
