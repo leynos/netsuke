@@ -1388,9 +1388,9 @@ possibilities for future enhancements beyond the initial scope.
 
 ## Section 10: Example Manifests
 
-The repository includes several complete Netsuke manifests in the `examples/
-` directory. They demonstrate how the YAML schema can be applied to real-world
-projects.
+The repository includes several complete Netsuke manifests in the
+`examples/` directory. They demonstrate how the YAML schema can be applied
+to real-world projects.
 
 - [`basic_c.yml`](../examples/basic_c.yml): a minimal C project compiling two
   object files and linking them into a small application.
