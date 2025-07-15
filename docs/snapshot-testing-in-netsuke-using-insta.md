@@ -21,11 +21,11 @@ insta = "1"
 
 The `insta` crate provides macros like `assert_snapshot!` (for plain text or
 `Debug` snapshots) and `assert_yaml_snapshot!`/`assert_json_snapshot!` (for
-structured snapshots). Use these macros in tests and install the companion CLI
+structured snapshots). Use these macros in tests, and install the companion CLI
 tool `cargo-insta` for reviewing or updating snapshots (useful in CI and local
 development).
 
-**Project Structure:** Organize the tests in the `tests/` directory using one
+**Project Structure:** Organize the tests in the `tests/` directory, using one
 module for IR snapshots and another for Ninja snapshots. Each module has its own
 snapshot output directory for clarity. A possible layout:
 
@@ -110,7 +110,7 @@ This test involves:
 - Run the IR generation (`BuildGraph::from_manifest`). This function should
   produce the intermediate build graph.
 
-- Format the IR in a consistent way for comparison. Pretty-printed debug output
+- Format the IR consistently for comparison. Pretty-printed debug output
   (`{:#?}`) can be used, but for more complex structures implement `Display` or
   use `assert_yaml_snapshot!` to serialize the IR to YAML/JSON for clarity.
 
@@ -139,7 +139,7 @@ This test involves:
 
 By making the IR snapshot output stable, the snapshot tests will reliably catch
 regressions. If the IR generation logic changes intentionally (e.g., new fields
-added), the snapshot will change in a predictable way, prompting a review.
+added), the snapshot will change predictably, prompting a review.
 
 ## Writing Snapshot Tests for Ninja File Output
 
@@ -262,7 +262,7 @@ accept these new snapshots:
 - As an alternative, when confident in the outputs, run `cargo insta accept
   --all` to accept all changes in one go.
 
-Once accepted, re-run `cargo test` – it should pass, because the recorded
+Once accepted, re-run `cargo test` – it should pass because the recorded
 snapshots now match the output. Commit the new/updated `.snap` files to version
 control. **Always include the snapshot files** so that CI can validate against
 them.
@@ -281,7 +281,7 @@ legitimate update:
 
 ## Integrating Snapshot Tests into GitHub Actions CI
 
-Automating snapshot tests in CI ensures that changes to Netsuke don’t introduce
+Automating snapshot tests in CI ensures that changes to Netsuke do not introduce
 regressions without notice. Use GitHub Actions to run `cargo test` (which
 includes the snapshot tests) on every push or pull request. Here’s how to set
 it up:
@@ -384,7 +384,7 @@ careful review.
 
 This structured snapshot testing approach enables confident evolution of
 the Netsuke project while preserving the correctness of its core compilation
-pipeline. Happy testing!
+pipeline.
 
 **Sources:**
 

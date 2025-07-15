@@ -109,7 +109,7 @@ the console.13
 | [dependencies]     | tokio    | The async runtime. Required with features like macros and rt-multi-thread.13                       |
 | [dev-dependencies] | cucumber | The main testing framework crate.16                                                                |
 | [dev-dependencies] | futures  | Often needed for async operations, particularly with older examples or for specific combinators.18 |
-| [[test]]           | name     | The name of your test runner file (e.g., "cucumber"). This must match the filename in tests/.      |
+| [[test]]           | name     | The name of the test-runner file (e.g., "cucumber"). This must match the filename in tests/.       |
 | [[test]]           | harness  | Must be set to `false` so cucumber can manage test execution and output.14                         |
 
 Here is a complete `Cargo.toml` configuration snippet:
@@ -883,6 +883,7 @@ other. If you must interact with a shared, singular resource (like a physical
 hardware device), you must tag the relevant scenarios with `@serial`. This
 forces them to run one at a time.20 However, overuse of `@serial` is often a
 sign of a poor test design and negates the performance benefits of concurrency.
+This tag should be used sparingly.
 
 ### 7.2 Flaky Tests from Asynchronous Code
 
@@ -916,7 +917,7 @@ conditions in asynchronous code.30 A common mistake is using fixed delays (
 these panic, the resulting error message is often generic and lacks the context
 needed to quickly diagnose the problem.22 For example, a panic on
 
-`world.last_response.as_ref().unwrap()` doesn't tell you which API call failed
+`world.last_response.as_ref().unwrap()` does not indicate which API call failed
 to produce a response.
 
 **Solution:** As discussed in section 3.3, step functions should return a
