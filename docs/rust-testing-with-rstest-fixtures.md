@@ -265,6 +265,14 @@ struct MockRepository {
     data: HashMap<String, String>,
 }
 
+impl Default for MockRepository {
+    fn default() -> Self {
+        Self {
+            data: HashMap::new(),
+        }
+    }
+}
+
 impl Repository for MockRepository {
     fn add_item(&mut self, id: &str, name: &str) {
         self.data.insert(id.to_string(), name.to_string());
