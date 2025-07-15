@@ -192,7 +192,7 @@ fn simple_manifest_ninja_snapshot() {
 Key points for Ninja snapshot tests:
 
 - Use a known manifest input and first derive the IR. An IR can also be
-  constructed directly for tests, but using the manifest-&gt;IR pipeline ensures
+  constructed directly for tests, but using the manifest→IR pipeline ensures
   realistic coverage.
 
 - Call the Ninja generation function (e.g. `ninja_gen::generate_ninja`), which
@@ -286,7 +286,7 @@ regressions without notice. Use GitHub Actions to run `cargo test` (which
 includes the snapshot tests) on every push or pull request. Here’s how to set
 it up:
 
-**1. CI Workflow Setup:** In your repository (e.g., `.github/workflows/
+**1. CI Workflow Setup:** In the repository (e.g., `.github/workflows/
 test.yml`), use a Rust toolchain action and run tests. For example:
 
 ```yaml
@@ -355,7 +355,7 @@ and either pass or fail:
 The CI process can be enhanced to make snapshot reviews easier:
 
 - Use `actions/upload-artifact` to upload the `.snap.new` files or diff results
-  when tests fail, so they can be downloaded from the CI logs for inspection.
+  when tests fail so they can be downloaded from the CI logs for inspection.
 
 - Or run `cargo insta test --diff` in CI to print diffs to the log for quick
   viewing of what changed (the `INSTA_OUTPUT` env var can control diff vs

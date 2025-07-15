@@ -259,7 +259,7 @@ as undefined.
 ## Part 3: Writing Step Definitions: Connecting Gherkin to Rust
 
 Step definitions are the "glue" that connects the human-readable Gherkin steps
-in your `.feature` files to executable Rust code. The `cucumber` crate provides
+in `.feature` files to executable Rust code. The `cucumber` crate provides
 procedural macros to make this connection seamless and type-safe.
 
 ### 3.1 The `#[given]`, `#[when]`, and `#[then]` Macros
@@ -270,8 +270,9 @@ runner encounters a Gherkin step, it looks for a function annotated with the
 corresponding macro and a matching text pattern.
 
 Each step definition function must accept a mutable reference to the `World`
-struct as its first argument (e.g., `world: &mut CalculatorWorld`).18 This
-allows the function to modify the shared state for the current scenario.
+struct as its first argument (for example, `world: &mut CalculatorWorld`).18
+This affords the function the ability to modify the shared state for the current
+scenario.
 
 A key design choice in `cucumber-rs` is the strict separation of these step
 types. A function marked with `#[then]` cannot be used to satisfy a `Given`
