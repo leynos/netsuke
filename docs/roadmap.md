@@ -12,7 +12,7 @@ compilation pipeline from parsing to execution.
 
 - [ ] **CLI and Manifest Parsing:**
 
-  - [ ] Implement the initial clap CLI structure for the build command and
+  - [x] Implement the initial clap CLI structure for the build command and
     global options (--file, --directory, --jobs), as defined in the design
     document.
 
