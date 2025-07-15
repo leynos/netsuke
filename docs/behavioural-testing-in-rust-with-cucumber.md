@@ -59,8 +59,8 @@ keyword. The primary keywords give structure and meaning to the specifications.7
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
 For developers, the `Given-When-Then` structure is not an entirely new concept.
-It is a highly effective reformulation of well-established testing patterns
-that many are already familiar with from unit testing.5 The most common parallel
+It is a highly effective reformulation of well-established testing patterns that
+many are already familiar with from unit testing.5. The most common parallel
 is the
 
 **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill Wake.
@@ -173,7 +173,7 @@ from one test to another, even when tests are run concurrently.20 This is a
 significant advantage of the Rust implementation, leveraging the language's
 ownership model to solve a common and difficult problem in test automation.21
 
-To create a `World`, you define a struct and derive `cucumber::World`. It's also
+To create a `World`, define a struct and derive `cucumber::World`. It is also
 conventional to derive `Debug` and `Default`.12
 
 **Worked Example:** For a simple calculator application, the `World` might look
@@ -192,17 +192,17 @@ pub struct CalculatorWorld {
 ```
 
 By default, `cucumber` will instantiate the `World` using `Default::default()`.
-If your `World` requires more complex initialization (e.g., starting a mock
-server or connecting to a test database), you can provide a custom constructor
-function using the `#[world(init =...)]` attribute.20
+If a `World` requires more complex initialisation (for example, starting a mock
+server or connecting to a test database), provide a custom constructor function
+using the `#[world(init = ...)]` attribute.20
 
 ### 2.4 Your First `main` Test Runner
 
-With the `harness = false` setting in `Cargo.toml`, a custom `main` function
-must be supplied in the test target file (e.g., `tests/cucumber.rs`). This
-function serves as the entry point for the test suite.
+With the `harness = false` setting in `Cargo.toml`, supply a custom `main`
+function in the test target file (for example, `tests/cucumber.rs`). This
+function acts as the entry point for the test suite.
 
-Since `cucumber-rs` is async, the `main` function must be an `async fn` and
+Because `cucumber-rs` is async, the `main` function must be an `async fn` and
 is typically annotated with `#[tokio::main]`.13 The core of the function is a
 single line that invokes the test runner:
 
@@ -251,7 +251,7 @@ async fn main() {
 }
 ```
 
-At this point, you have a complete, albeit empty, test suite. Running `cargo
+At this point, there is a complete, albeit empty, test suite. Running `cargo
 test --test cucumber` will compile the runner, which will then discover
 `.feature` files in `tests/features`, find no matching steps, and report them
 as undefined.
@@ -269,7 +269,7 @@ and `#[then]`.12 You apply these macros to Rust functions. When the test
 runner encounters a Gherkin step, it looks for a function annotated with the
 corresponding macro and a matching text pattern.
 
-Each step definition function must accept a mutable reference to your `World`
+Each step definition function must accept a mutable reference to the `World`
 struct as its first argument (e.g., `world: &mut CalculatorWorld`).18 This
 allows the function to modify the shared state for the current scenario.
 
@@ -325,11 +325,11 @@ mechanisms for this: regular expressions and Cucumber Expressions.16
   corresponding Rust type in your function signature.
 
 - **Regular Expressions (**`regex = "..."`**)**: For more complex matching
-  needs, you can use full regex syntax. Capture groups `(...)` in the regex
+  needs, full regex syntax can be used. Capture groups `(...)` in the regex
   correspond to function arguments.18 The framework will still attempt to parse
-  the captured `&str` into the function's argument type. It's a best practice to
-  anchor your regex with `^` and `$` to ensure the entire step text is matched,
-  preventing partial or ambiguous matches.18
+  the captured `&str` into the function's argument type. It is a best practice
+  to anchor your regex with `^` and `$` to ensure the entire step text is
+  matched, preventing partial or ambiguous matches.18.
 
 | Feature         | Cucumber Expression Example                                          | Regex Example                                                          | Recommendation                                               |
 | --------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -343,7 +343,6 @@ mechanisms for this: regular expressions and Cucumber Expressions.16
 The `Then` steps are where you verify the system's state. The most
 straightforward way to do this is with Rust's standard assertion macros, like
 `assert_eq!` or `assert!`.16 If an assertion fails, the thread will panic, and
-
 `cucumber` will mark the step as failed.
 
 However, a more idiomatic and powerful approach is to have your step functions
@@ -352,14 +351,14 @@ return a `Result`.20 A step that returns
 `Ok(())` passes, while one that returns an `Err(...)` fails. This has two major
 benefits:
 
-1. **Cleaner Code:** It allows you to use the `?` operator to propagate errors
-   from your application logic or from parsing steps, leading to more concise
-   and readable code.
+1. **Cleaner Code:** Using the `?` operator propagates errors from the
+   application logic or from parsing steps, leading to more concise and readable
+   code.
 
-2. **Richer Failure Messages:** A panic from an `assert!` often gives a
-   limited error message. By returning a custom error type that implements
-   `std::error::Error`, you can provide detailed, contextual information about
-   *why* the test failed. This is invaluable for debugging.
+2. **Richer Failure Messages:** A panic from an `assert!` often gives a limited
+   error message. Returning a custom error type that implements
+   `std::error::Error` provides detailed, contextual information about *why* the
+   test failed. This is invaluable for debugging.
 
 Rust's error handling philosophy is built around the `Result` enum for
 recoverable errors, and a test failure is a recoverable error from the test
@@ -402,10 +401,10 @@ than a simple assertion failure.
 
 ## Part 4: Advanced Gherkin & Step Definition Techniques
 
-As test suites grow in complexity, you will need more advanced Gherkin features
-to keep them maintainable and expressive. This section covers techniques
-for data-driven testing, handling complex inputs, and managing asynchronous
-operations.
+As test suites grow in complexity, more advanced Gherkin features become
+necessary to keep them maintainable and expressive. This section covers
+techniques for data-driven testing, handling complex inputs, and managing
+asynchronous operations.
 
 ### 4.1 Data-Driven Testing: `Scenario Outline` and `Examples`
 
@@ -452,14 +451,14 @@ Sometimes, a step requires a more complex data structure than can be passed with
 simple arguments. For example, setting up an initial inventory or providing a
 list of users. For this, Gherkin provides **Data Tables**.23
 
-A Data Table is a pipe-delimited table placed directly after a Gherkin step.
-To access this table in your Rust step definition, you must add a `step:
-&cucumber::gherkin::Step` argument to your function. The table can then be
+A Data Table is a pipe-delimited table placed directly after a Gherkin
+step. To access this table in a Rust step definition, add a `step:
+&cucumber::gherkin::Step` argument to the function. The table can then be
 accessed via `step.table` (which is an `Option<Table>`).23
 
 Data tables encourage a more declarative style of testing. Instead of writing
 a series of imperative steps to build up a state (e.g., "Given I add a user
-'Alice'", "And I set her role to 'Admin'"), you can describe the entire state in
+'Alice'", "And I set her role to 'Admin'"), the entire state can be described in
 a single, readable table.25.
 
 This makes the
@@ -852,7 +851,7 @@ about. For complex setup, always prefer a custom constructor with `#[world(init
 
 ### 6.4 Organizing Features and Steps
 
-Just as you organize your application code, you must organize your test code.
+Test code should be organized in the same way as application code.
 
 - **Feature Files:** Group `.feature` files by application capability or user
   story.26 For example,

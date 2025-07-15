@@ -212,9 +212,9 @@ Key points for Ninja snapshot tests:
   identifies this particular scenario.
 
 With this setup, IR tests and Ninja tests have distinct snapshot files. For
-example, after running tests the first time (see next section), you might
-have `tests/snapshots/ir/simple_manifest_ir.snap` and `tests/snapshots/ninja/
-simple_manifest_ninja.snap` (or combined snapshot files per test module).
+example, after the first test run (see next section), expected snapshot files
+include `tests/snapshots/ir/simple_manifest_ir.snap` and `tests/snapshots/
+ninja/simple_manifest_ninja.snap` (or combined snapshot files per test module).
 These snapshot files contain the expected IR debug output and Ninja file text
 respectively.
 

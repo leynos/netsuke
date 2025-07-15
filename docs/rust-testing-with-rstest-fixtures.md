@@ -324,7 +324,7 @@ the `#[case]` and `#[values]` attributes.
 
 ### A. Table-Driven Tests with `#[case]`: Defining Specific Scenarios
 
-The `#[case(...)]` attribute enables table-driven testing, where each `#[case]`
+The `#[case(…)]` attribute enables table-driven testing, where each `#[case]`
 defines a specific scenario with a distinct set of input arguments for the test
 function. Arguments within the test function that are intended to receive these
 values must also be annotated with `#[case]`.
@@ -365,7 +365,7 @@ obscure subsequent ones.
 
 ### B. Combinatorial Testing with `#[values]`: Generating Test Matrices
 
-The `#[values(...)]` attribute is used on test function arguments to generate
+The `#[values(…)]` attribute is used on test function arguments to generate
 tests for every possible combination of the provided values (the Cartesian
 product). This is particularly useful for testing interactions between different
 parameters or ensuring comprehensive coverage across various input states.
@@ -588,12 +588,12 @@ argument pattern to the correct source fixture.
 ### D. Partial Fixture Injection & Default Arguments
 
 `rstest` provides mechanisms for creating highly configurable "template"
-fixtures using `#[default(...)]` for fixture arguments and `#[with(...)]` to
+fixtures using `#[default(…)]` for fixture arguments and `#[with(…)]` to
 override these defaults on a per-test basis.
 
-- `#[default(...)]`: Used within a fixture function's signature to provide
+- `#[default(…)]`: Used within a fixture function's signature to provide
   default values for its own arguments.
-- `#[with(...)]`: Used on a test function's fixture argument (or a fixture
+- `#[with(…)]`: Used on a test function's fixture argument (or a fixture
   argument within another fixture) to supply specific values to the parameters
   of the invoked fixture, overriding any defaults.
 
@@ -811,7 +811,7 @@ away some of the explicit `async`/`.await` mechanics.
 ### D. Test Timeouts for Async Tests (`#[timeout]`)
 
 Long-running or stalled asynchronous operations can cause tests to hang
-indefinitely. `rstest` provides a `#[timeout(...)]` attribute to set a maximum
+indefinitely. `rstest` provides a `#[timeout(…)]` attribute to set a maximum
 execution time for async tests. This feature typically relies on the `async-
 timeout` feature of `rstest`, which is enabled by default.
 
@@ -996,11 +996,11 @@ verbose, involving defining expectations, return values, and call counts) from
 the actual test function. Tests then simply request the configured mock as an
 argument. If different tests require the mock to behave differently, multiple
 specialized mock fixtures can be created, or fixture arguments combined with
-`#[with(...)]` can be used to dynamically configure the mock's behaviour within
+`#[with(…)]` can be used to dynamically configure the mock's behaviour within
 the fixture itself. This makes tests that depend on external services more
 readable and maintainable.
 
-### C. Using `#[files(...)]` for Test Input from Filesystem Paths
+### C. Using `#[files(…)]` for Test Input from Filesystem Paths
 
 For tests that need to process data from multiple input files, `rstest` provides
 the `#[files("glob_pattern")]` attribute. This attribute can be used on a test
@@ -1338,16 +1338,16 @@ provided by `rstest`:
 | ---------------------------- | -------------------------------------------------------------------------------------------- |
 | #[rstest]                    | Marks a function as an rstest test; enables fixture injection and parameterization.          |
 | #[fixture]                   | Defines a function that provides a test fixture (setup data or services).                    |
-| #[case(...)]                 | Defines a single parameterized test case with specific input values.                         |
-| #[values(...)]               | Defines a list of values for an argument, generating tests for each value or combination.    |
+| #[case(…)]                   | Defines a single parameterized test case with specific input values.                         |
+| #[values(…)]                 | Defines a list of values for an argument, generating tests for each value or combination.    |
 | #[once]                      | Marks a fixture to be initialized only once and shared (as a static reference) across tests. |
 | #[future]                    | Simplifies async argument types by removing impl Future boilerplate.                         |
 | #[awt]                       | (Function or argument level) Automatically .awaits future arguments in async tests.          |
 | #[from(original_name)]       | Allows renaming an injected fixture argument in the test function.                           |
-| #[with(...)]                 | Overrides default arguments of a fixture for a specific test.                                |
-| #[default(...)]              | Provides default values for arguments within a fixture function.                             |
-| #[timeout(...)]              | Sets a timeout for an asynchronous test.                                                     |
-| #[files("glob_pattern",...)] | Injects file paths (or contents, with mode=) matching a glob pattern as test arguments.      |
+| #[with(…)]                   | Overrides default arguments of a fixture for a specific test.                                |
+| #[default(…)]                | Provides default values for arguments within a fixture function.                             |
+| #[timeout(…)]                | Sets a timeout for an asynchronous test.                                                     |
+| #[files("glob_pattern",…)]   | Injects file paths (or contents, with mode=) matching a glob pattern as test arguments.      |
 
 By mastering `rstest`, Rust developers can significantly elevate the quality and
 efficiency of their testing practices, leading to more reliable and maintainable
