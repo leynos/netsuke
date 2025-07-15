@@ -15,8 +15,8 @@ At its core, BDD is not merely a testing technique but a methodology for
 building a shared understanding of a system's behaviour.1 The central goal is to
 create a ubiquitous language that both technical and non-technical stakeholders
 can use to describe and agree upon software requirements.3 This process is
-centered around conversation; the discussions about how a feature should behave
-are the most valuable output of BDD.2
+centred on conversation; the discussions about how a feature should behave are
+the most valuable output of BDD.2
 
 The tangible artifact of these conversations is a set of specifications written
 in a structured, natural language format. These specifications serve a dual
@@ -59,8 +59,8 @@ keyword. The primary keywords give structure and meaning to the specifications.7
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
 For developers, the `Given-When-Then` structure is not an entirely new concept.
-It is a highly effective reformulation of well-established testing patterns that
-many are already familiar with from unit testing.5. The most common parallel
+It is a highly effective reformulation of well-established testing patterns
+that many are already familiar with from unit testing.5 The most common parallel
 is the
 
 **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill Wake.
@@ -551,7 +551,7 @@ The async-first design of `cucumber-rs` is one of its most powerful features.
 It allows for writing tests that accurately reflect the asynchronous nature of
 the application under test. Furthermore, because `cucumber` can run scenarios
 concurrently by default, I/O-bound tests can execute in parallel, dramatically
-reducing the total runtime of your test suite compared to traditional
+reducing the total runtime of the test suite compared with traditional
 synchronous, serial test runners.20 This makes it feasible to run comprehensive
 integration test suites as part of your regular development workflow.
 
@@ -659,11 +659,10 @@ because starting the `MockServer` is an async operation and cannot be done in a
 
 ### 5.3 Mocking Dependencies with `wiremock-rs`
 
-`wiremock-rs` is a pure-Rust library for mocking HTTP-based APIs.27 It allows
-you to define expectations (e.g., "expect a GET request to
-
-`/foo`") and specify responses. This is done in the `Given` steps to set up the
-state of the external world before the `When` action occurs.
+`wiremock-rs` is a pure-Rust library for mocking HTTP-based APIs.27 Expectations
+can be defined (for example, "expect a GET request to `/foo`") and specify
+responses. This is done in the `Given` steps to set up the state of the external
+world before the `When` action occurs.
 
 Using an in-process mock server like `wiremock-rs` is a superior pattern for
 integration testing. It avoids the complexity and slowness of managing external

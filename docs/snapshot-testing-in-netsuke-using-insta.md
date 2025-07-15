@@ -129,8 +129,8 @@ This test involves:
   nondeterministic ordering from hash maps.
 
 - **Stable Identifiers:** If IR includes IDs or memory addresses, prefer stable
-  identifiers. For example, if you generate rule IDs, assign them in insertion
-  order so they’re consistent, or omit details that can change.
+  identifiers. For example, when generating rule IDs, assign them in insertion
+  order so they are consistent, or omit details that can change.
 
 - **No timestamps or environment-specific data:** The IR should not include
   timestamps, random values, or absolute file system paths. If such data is
@@ -180,7 +180,8 @@ fn simple_manifest_ninja_snapshot() {
         .expect("Ninja file generation succeeded");
 
     // The output is a multi-line Ninja build script (as a String)
-    // Ensure it's deterministic (e.g., consistent ordering of rules/targets)
+    // Ensure the output is deterministic
+    // (e.g., consistent ordering of rules/targets)
     Settings::new()
         .set_snapshot_path("tests/snapshots/ninja")
         .bind(|| {
@@ -275,8 +276,8 @@ legitimate update:
   updated as part of a feature), review and accept the new snapshots, then
   include the updated `.snap` files in the commit.
 
-- If it’s unintended, investigate the differences. Snapshot diffs make it clear
-  what changed (e.g., a rule name, dependency order, etc.), helping pinpoint
+- If it is unintended, investigate the differences. Snapshot diffs make the
+  change clear (e.g., a rule name, dependency order, etc.) and help pinpoint
   the issue.
 
 ## Integrating Snapshot Tests into GitHub Actions CI
@@ -346,11 +347,11 @@ and either pass or fail:
 
 - If all snapshots match, CI passes. No action needed.
 
-- If a snapshot test fails (meaning the IR or Ninja output changed), the CI
-  job fails. Developers should then pull those changes locally, run `cargo
-  insta review`, accept the new snapshot if it’s intended, and commit the
-  updated snapshot file. **Do not automatically accept snapshots in CI** – it’s
-  important to review changes to catch unintended alterations.
+- If a snapshot test does not pass (indicating changes in the IR or Ninja
+  output), the CI job will not succeed. Developers should pull the changes
+  locally, run `cargo insta review`, accept the new snapshot if it is intended,
+  and commit the updated snapshot file. **Do not automatically accept snapshots
+  in CI** – reviewing changes is essential to catch unintended alterations.
 
 The CI process can be enhanced to make snapshot reviews easier:
 

@@ -592,10 +592,9 @@ fixtures using `#[default(…)]` for fixture arguments and `#[with(…)]` to
 override these defaults on a per-test basis.
 
 - `#[default(…)]`: Used within a fixture function's signature to provide
-  default values for its own arguments.
-- `#[with(…)]`: Used on a test function's fixture argument (or a fixture
-  argument within another fixture) to supply specific values to the parameters
-  of the invoked fixture, overriding any defaults.
+  default values for its arguments.
+- `#[with(…)]`: Applied to a fixture argument in a test (or in another
+  fixture) to supply explicit values and override any defaults.
 
 ```rust
 use rstest::*;
