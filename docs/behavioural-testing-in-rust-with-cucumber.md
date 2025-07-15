@@ -329,7 +329,7 @@ mechanisms for this: regular expressions and Cucumber Expressions.16
   needs, full regex syntax can be used. Capture groups `(...)` in the regex
   correspond to function arguments.18 The framework will still attempt to parse
   the captured `&str` into the function's argument type. It is a best practice
-  to anchor your regex with `^` and `$` to ensure the entire step text is
+  to anchor the regex with `^` and `$` to ensure the entire step text is
   matched, preventing partial or ambiguous matches.18.
 
 | Feature         | Cucumber Expression Example                                          | Regex Example                                                          | Recommendation                                               |
