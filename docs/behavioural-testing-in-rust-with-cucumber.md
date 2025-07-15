@@ -12,11 +12,11 @@ practical techniques, best practices, and lessons from real-world projects.
 ### 1.1 Beyond Testing: BDD as a Collaborative Process
 
 At its core, BDD is not merely a testing technique but a methodology for
-building a shared understanding of a system's behaviour.1 The central goal is to
-create a ubiquitous language that both technical and non-technical stakeholders
-can use to describe and agree upon software requirements.3 This process is
-centred on conversation; the discussions about how a feature should behave are
-the most valuable output of BDD.2
+building a shared understanding of a system's behaviour.[^1] The central
+goal is to create a ubiquitous language that both technical and non-technical
+stakeholders can use to describe and agree upon software requirements.[^3] This
+process is centred on conversation; the discussions about how a feature should
+behave are the most valuable output of BDD.[^2]
 
 The tangible artifact of these conversations is a set of specifications written
 in a structured, natural language format. These specifications serve a dual
@@ -59,9 +59,9 @@ keyword. The primary keywords give structure and meaning to the specifications.7
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
 For developers, the `Given-When-Then` structure is not an entirely new concept.
-It is a highly effective reformulation of well-established testing patterns
-that many are already familiar with from unit testing.5 The most common parallel
-is the **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill Wake.
+It is a highly effective reformulation of well-established testing patterns that
+many are already familiar with from unit testing.5 The most common parallel is
+the **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill Wake.
 
 - **Given** corresponds to **Arrange**: This phase sets up the world. It
   establishes all preconditions, initializes objects, and brings the system
@@ -1055,18 +1055,20 @@ aligned with what is needed.
 
 #### **Works cited**
 
- 1. "Given When Then" Framework: a step-by-step guide with examples — Miro,
-    accessed on July 14, 2025, <https://miro.com/agile/given-when-then->
-    framework/>
+[^1]: "Given When Then" Framework: a step-by-step guide with examples — Miro,
+accessed on July 14, 2025, <https://miro.com/agile/given-when-then-framework/>
 
- 2. Is it acceptable to write a "Given When Then When Then" test in Gherkin?
-    - Stack Overflow, accessed on July 14, 2025, <https://stackoverflow.com/>
-    questions/12060011/is-it-acceptable-to-write-a-given-when-then-when-then-
-    test-in-gherkin>
+[^2]: Is it acceptable to write a "Given When Then When Then" test in Gherkin?
 
- 3. Gherkin in Testing: A Beginner's Guide | by Rafał Buczyński | Medium,
-    accessed on July 14, 2025, <https://medium.com/@buczynski.rafal/gherkin->
-    in-> testing-a-beginners-guide-f2e179d5e2df>
+- Stack Overflow, accessed on July 14, 2025,
+      <<<https://stackoverflow.com/questions/12060011/is-it-acceptable-to-write->
+      a-> given-when-then-when-then-test-in-gherkin>
+
+[^3]: Gherkin in Testing: A Beginner's Guide | by Rafał Buczyński | Medium,
+accessed on July 14, 2025, <<https://medium.com/@buczynski.rafal/gherkin-in->
+testing-a-beginners-guide-f2e179d5e2df>
+
+<!-- markdownlint-disable MD029 -->
 
  4. Gherkin Syntax in Cucumber - Tutorialspoint, accessed on July 14, 2025,
     <https://www.tutorialspoint.com/cucumber/cucumber_gherkins.htm>
@@ -1178,3 +1180,5 @@ aligned with what is needed.
 35. Setting up effective CI/CD for Rust projects - a short primer -
     [shuttle.dev](http://shuttle.dev), accessed on July 14, 2025, <https://
     <www.shuttle.dev/blog/2025/01/23/setup-rust-ci-cd>>
+
+<!-- markdownlint-enable MD029 -->
