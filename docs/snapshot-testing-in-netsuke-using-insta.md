@@ -102,7 +102,7 @@ fn simple_manifest_ir_snapshot() {
 }
 ```
 
-In this test, we:
+This test involves:
 
 - Construct a **deterministic** input (a small manifest with a known rule and
   target).
@@ -110,18 +110,18 @@ In this test, we:
 - Run the IR generation (`BuildGraph::from_manifest`). This function should
   produce the intermediate build graph.
 
-- Format the IR in a consistent way for comparison. Here we use pretty-printed
-  debug output (`{:#?}`), but for more complex structures implement `Display` or
+- Format the IR in a consistent way for comparison. Pretty-printed debug output
+  (`{:#?}`) can be used, but for more complex structures implement `Display` or
   use `assert_yaml_snapshot!` to serialize the IR to YAML/JSON for clarity.
 
 - Use `Settings::new().set_snapshot_path("tests/snapshots/ir")` to direct the
   snapshot file to the IR snapshot directory. Call `assert_snapshot!` with a
-  snapshot name (`"simple_manifest_ir"`) and the IR output string. On first run,
-  `insta` will record this output as the reference snapshot.
-**Determinism in IR Output:** To ensure consistent snapshots, the IR output must
-be **deterministic**. This means that given the same manifest input, the IR’s
-printed form should not vary between test runs or across machines. Pay attention
-to ordering and ephemeral data:
+  snapshot name (`"simple_manifest_ir"`) and the IR output string. On first
+  run, `insta` will record this output as the reference snapshot. **Determinism
+  in IR Output:** To ensure consistent snapshots, the IR output must be
+  **deterministic**. This means that given the same manifest input, the IR’s
+  printed form should not vary between test runs or across machines. Pay
+  attention to ordering and ephemeral data:
 
 - **Ordering:** If `BuildGraph` contains collections (e.g. sets of targets
   or rules), iterate or sort them in a fixed order before printing. Using
@@ -251,13 +251,13 @@ not auto-approved) appear in the `tests/snapshots/` subdirectories.
 **Reviewing and Accepting Snapshots:** Use the `cargo-insta` CLI to review and
 accept these new snapshots:
 
-- Run `cargo insta review` to interactively inspect differences. This will show
+- Run `cargo insta review` to interactively inspect differences. This displays
   a diff between old and new snapshot contents for each test. Since this is the
-  first run, it will just show the new content.
+  first run, it only shows the new content.
 
-- In the review UI, accept the new snapshots (press `A` for all or accept
-  individually). `cargo-insta` then moves the `.snap.new` files to replace the
-  old snapshots (or create the `.snap` files if they didn't exist).
+- Accept the new snapshots using the review interface. `cargo-insta` then moves
+  the `.snap.new` files to replace the old snapshots or create the `.snap` files
+  if they did not exist.
 
 - As an alternative, when confident in the outputs, run `cargo insta accept
   --all` to accept all changes in one go.
@@ -352,7 +352,7 @@ and either pass or fail:
   updated snapshot file. **Do not automatically accept snapshots in CI** – it’s
   important to review changes to catch unintended alterations.
 
-You can enhance the CI process by making snapshot reviews easier:
+The CI process can be enhanced to make snapshot reviews easier:
 
 - Use `actions/upload-artifact` to upload the `.snap.new` files or diff results
   when tests fail, so they can be downloaded from the CI logs for inspection.

@@ -586,8 +586,8 @@ isolated, in-process mock server.
 
 ### 5.1 Defining the Feature (`kv_store.feature`)
 
-First, we define the desired behaviour in a Gherkin `.feature` file. This file
-serves as the executable specification for our API.
+First, the desired behaviour is defined in a Gherkin `.feature` file. This file
+serves as the executable specification for the API.
 
 ```gherkin
 # In tests/features/kv_store.feature
@@ -1057,7 +1057,7 @@ aligned with what is needed.
 
 #### **Works cited**
 
- 1. "Given When Then" Framework: a step-by-step guide with examples - Miro,
+ 1. "Given When Then" Framework: a step-by-step guide with examples — Miro,
     accessed on July 14, 2025, <https://miro.com/agile/given-when-then->
     framework/>
 
