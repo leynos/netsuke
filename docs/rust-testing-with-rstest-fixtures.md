@@ -302,7 +302,7 @@ will be executed five times, and each test will receive a fresh, independent
 instance of the fixture's result. This behaviour is crucial for test isolation.
 The `rstest` macro effectively desugars a test like `fn the_test(injected: i32)`
 into something conceptually similar to `#[test] fn the_test() { let injected =
-injected_fixture_func(); /*... */ }` within the test body, implying a new call
+injected_fixture_func(); /* … */ }` within the test body, implying a new call
 each time.
 
 Test isolation prevents the state from one test from inadvertently affecting
@@ -514,7 +514,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 #[once]
 fn expensive_setup() -> &'static AtomicUsize {
     // Simulate expensive setup
-    println!("Performing expensive_setup once...");
+    println!("Performing expensive_setup once…");
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     COUNTER.fetch_add(1, Ordering::Relaxed); // To demonstrate it's called once
     &COUNTER

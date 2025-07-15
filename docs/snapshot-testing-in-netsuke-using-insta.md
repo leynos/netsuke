@@ -25,7 +25,7 @@ structured snapshots). Use these macros in tests and install the companion CLI
 tool `cargo-insta` for reviewing or updating snapshots (useful in CI and local
 development).
 
-**Project Structure:** Organise the tests in the `tests/` directory using one
+**Project Structure:** Organize the tests in the `tests/` directory using one
 module for IR snapshots and another for Ninja snapshots. Each module has its own
 snapshot output directory for clarity. A possible layout:
 
@@ -111,15 +111,13 @@ In this test, we:
   produce the intermediate build graph.
 
 - Format the IR in a consistent way for comparison. Here we use pretty-printed
-  debug output (`{:#?}`), but for more complex structures you might implement
-  `Display` or use `assert_yaml_snapshot!` to serialize the IR to YAML/JSON
-  for clarity.
+  debug output (`{:#?}`), but for more complex structures implement `Display` or
+  use `assert_yaml_snapshot!` to serialize the IR to YAML/JSON for clarity.
 
 - Use `Settings::new().set_snapshot_path("tests/snapshots/ir")` to direct the
-  snapshot file to our IR snapshot directory. We then call `assert_snapshot!
-  ` with a snapshot name (`"simple_manifest_ir"`) and the IR output string. On
-  first run, `insta` will record this output as the reference snapshot.
-
+  snapshot file to the IR snapshot directory. Call `assert_snapshot!` with a
+  snapshot name (`"simple_manifest_ir"`) and the IR output string. On first run,
+  `insta` will record this output as the reference snapshot.
 **Determinism in IR Output:** To ensure consistent snapshots, the IR output must
 be **deterministic**. This means that given the same manifest input, the IR’s
 printed form should not vary between test runs or across machines. Pay attention
@@ -209,9 +207,9 @@ Key points for Ninja snapshot tests:
   given the same input, as long as iteration over hashmaps is avoided or
   stabilized.
 
-- We again use `Settings::set_snapshot_path` to store these snapshots
-  in a separate `tests/snapshots/ninja` directory. The snapshot name
-  `"simple_manifest_ninja"` identifies this particular scenario.
+- Use `Settings::set_snapshot_path` to store these snapshots in a separate
+  `tests/snapshots/ninja` directory. The snapshot name `"simple_manifest_ninja"`
+  identifies this particular scenario.
 
 With this setup, IR tests and Ninja tests have distinct snapshot files. For
 example, after running tests the first time (see next section), you might
@@ -224,7 +222,7 @@ respectively.
 
 To execute the snapshot tests, run `cargo test`. All tests (including our new
 snapshot tests) will run. On the first run (or whenever a snapshot differs from
-expectations), you will see test failures indicating snapshot changes.
+expectations), test failures will indicate snapshot changes.
 
 **Example:**
 
@@ -257,12 +255,12 @@ accept these new snapshots:
   a diff between old and new snapshot contents for each test. Since this is the
   first run, it will just show the new content.
 
-- In the review UI, you can accept the new snapshots (press `A` for all or
-  accept individually). `cargo-insta` will then move the `.snap.new` files to
-  replace the old snapshots (or create the `.snap` files if they didn’t exist).
+- In the review UI, accept the new snapshots (press `A` for all or accept
+  individually). `cargo-insta` then moves the `.snap.new` files to replace the
+  old snapshots (or create the `.snap` files if they didn't exist).
 
-- As an alternative, if you are confident in the outputs, you can run `cargo
-  insta accept --all` to accept all changes in one go.
+- As an alternative, when confident in the outputs, run `cargo insta accept
+  --all` to accept all changes in one go.
 
 Once accepted, re-run `cargo test` – it should pass, because the recorded
 snapshots now match the output. Commit the new/updated `.snap` files to version
@@ -273,9 +271,9 @@ them.
 it means the IR or Ninja output changed. This could reveal a regression or a
 legitimate update:
 
-- If it’s an intended change (e.g., you modified the IR structure or Ninja
-  output format as part of a feature), update the snapshots by reviewing and
-  accepting the changes, and include the updated `.snap` files in your commit.
+- For an intended change (e.g., the IR structure or Ninja output format was
+  updated as part of a feature), review and accept the new snapshots, then
+  include the updated `.snap` files in the commit.
 
 - If it’s unintended, investigate the differences. Snapshot diffs make it clear
   what changed (e.g., a rule name, dependency order, etc.), helping pinpoint

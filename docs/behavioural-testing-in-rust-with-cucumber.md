@@ -59,8 +59,8 @@ keyword. The primary keywords give structure and meaning to the specifications.7
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
 For developers, the `Given-When-Then` structure is not an entirely new concept.
-It is a highly effective reformulation of well-established testing patterns that
-many are already familiar with from unit testing.5. The most common parallel
+It is a highly effective reformulation of well-established testing patterns
+that many are already familiar with from unit testing.5 The most common parallel
 is the
 
 **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill Wake.
@@ -409,7 +409,7 @@ operations.
 
 ### 4.1 Data-Driven Testing: `Scenario Outline` and `Examples`
 
-Often, you want to test the same behaviour with various inputs and expected
+Often, the same behaviour must be tested with various inputs and expected
 outputs. Writing a separate `Scenario` for each case would be highly repetitive.
 Gherkin solves this with the `Scenario Outline` keyword.3
 
@@ -881,10 +881,8 @@ default.20
 state. Treat each scenario as if it could be running at the same time as any
 other. If you must interact with a shared, singular resource (like a physical
 hardware device), you must tag the relevant scenarios with `@serial`. This
-forces them to run one at a time.20 However, overuse of
-
-`@serial` is often a sign of a poor test design and negates the performance
-benefits of concurrency.
+forces them to run one at a time.20 However, overuse of `@serial` is often a
+sign of a poor test design and negates the performance benefits of concurrency.
 
 ### 7.2 Flaky Tests from Asynchronous Code
 
@@ -994,7 +992,7 @@ specification.
 YAML
 
 ```yaml
-# In.github/workflows/ci.yml
+# .github/workflows/ci.yml
 name: Rust CI
 
 on:
