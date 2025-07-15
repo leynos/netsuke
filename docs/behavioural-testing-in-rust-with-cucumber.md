@@ -192,7 +192,7 @@ pub struct CalculatorWorld {
 ```
 
 By default, `cucumber` will instantiate the `World` using `Default::default()`.
-If a `World` requires more complex initialisation (for example, starting a mock
+If a `World` requires more complex initialization (for example, starting a mock
 server or connecting to a test database), provide a custom constructor function
 using the `#[world(init = ...)]` attribute.20
 
