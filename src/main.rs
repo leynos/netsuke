@@ -1,3 +1,6 @@
+use netsuke::{cli::Cli, runner};
+
 fn main() {
-    // Placeholder entry point for future CLI implementation.
+    let cli = Cli::parse_with_default();
+    runner::run(cli);
 }

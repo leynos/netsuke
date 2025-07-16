@@ -1262,6 +1262,17 @@ The behaviour of each subcommand is clearly defined:
   viewer. Visualising the graph is invaluable for understanding and debugging
   complex projects.
 
+### 8.4 Design Decisions
+
+The CLI is implemented using clap's derive API in `src/cli.rs`. Clap's
+`default_value_t` attribute marks `Build` as the default subcommand, so invoking
+`netsuke` with no explicit command still triggers a build. CLI execution and
+dispatch live in `src/runner.rs`, keeping `main.rs` focused on parsing. The
+working directory flag uses `-C` to mirror Ninja's convention, ensuring command
+line arguments map directly onto the underlying build tool. Error scenarios are
+validated using clap's `ErrorKind` enumeration in unit tests and via Cucumber
+steps for behavioural coverage.
+
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
 This final section outlines a strategic plan for implementing Netsuke, along
