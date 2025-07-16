@@ -13,9 +13,14 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
     let tokens: Vec<String> = std::iter::once("netsuke".to_string())
         .chain(args.split_whitespace().map(str::to_string))
         .collect();
-    match Cli::try_parse_from(tokens.clone()) {
-        Ok(_) => {
-            world.cli = Some(Cli::parse_from_with_default(tokens));
+    match Cli::try_parse_from(tokens) {
+        Ok(mut cli) => {
+            if cli.command.is_none() {
+                cli.command = Some(Commands::Build {
+                    targets: Vec::new(),
+                });
+            }
+            world.cli = Some(cli);
             world.cli_error = None;
         }
         Err(e) => {
