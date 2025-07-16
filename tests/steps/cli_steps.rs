@@ -66,6 +66,24 @@ fn command_is_build(world: &mut CliWorld) {
     let _ = extract_build(world);
 }
 
+#[then("the command is clean")]
+fn command_is_clean(world: &mut CliWorld) {
+    let cli = world.cli.as_ref().expect("cli");
+    assert!(matches!(
+        cli.command.as_ref().expect("command"),
+        Commands::Clean {}
+    ));
+}
+
+#[then("the command is graph")]
+fn command_is_graph(world: &mut CliWorld) {
+    let cli = world.cli.as_ref().expect("cli");
+    assert!(matches!(
+        cli.command.as_ref().expect("command"),
+        Commands::Graph {}
+    ));
+}
+
 #[allow(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
