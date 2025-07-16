@@ -261,6 +261,7 @@ trait Repository {
     fn get_item_name(&self, id: &str) -> Option<String>;
 }
 
+#[derive(Default)]
 struct MockRepository {
     data: HashMap<String, String>,
 }
