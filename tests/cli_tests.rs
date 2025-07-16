@@ -1,4 +1,5 @@
 use clap::Parser;
+use clap::error::ErrorKind;
 use netsuke::cli::{Cli, Commands};
 use rstest::rstest;
 use std::path::PathBuf;
@@ -27,4 +28,14 @@ fn parse_cli(
         targets: Vec::new(),
     });
     assert_eq!(command, expected_cmd);
+}
+
+#[rstest]
+#[case(vec!["netsuke", "unknowncmd"], ErrorKind::InvalidSubcommand)]
+#[case(vec!["netsuke", "--file"], ErrorKind::InvalidValue)]
+#[case(vec!["netsuke", "-j", "notanumber"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
+fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) {
+    let err = Cli::try_parse_from(argv).expect_err("unexpected success");
+    assert_eq!(err.kind(), expected_error);
 }

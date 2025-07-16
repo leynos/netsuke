@@ -1266,9 +1266,11 @@ The behaviour of each subcommand is clearly defined:
 
 The CLI is implemented using clap's derive API in `src/cli.rs`. The `Build`
 subcommand is optional so that invoking `netsuke` without a subcommand defaults
-to building the manifest's default targets. The working directory flag uses `-C`
-to mirror Ninja's convention, ensuring command line arguments map directly onto
-the underlying build tool.
+to building the manifest's default targets. The working directory flag uses
+`-C` to mirror Ninja's convention, ensuring command line arguments map directly
+onto the underlying build tool. Error scenarios are validated using clap's
+`ErrorKind` enumeration in unit tests and via Cucumber steps for behavioural
+coverage.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 

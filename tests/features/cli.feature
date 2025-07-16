@@ -10,3 +10,13 @@ Feature: CLI parsing
     Then parsing succeeds
     And the manifest path is "alt.yml"
     And the first target is "target"
+
+  Scenario: Unknown command fails
+    When the CLI is parsed with invalid arguments "unknown"
+    Then an error should be returned
+    And the error message should contain "unknown"
+
+  Scenario: Missing file argument value
+    When the CLI is parsed with invalid arguments "--file"
+    Then an error should be returned
+    And the error message should contain "--file"
