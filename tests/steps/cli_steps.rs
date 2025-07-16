@@ -84,17 +84,17 @@ fn command_is_graph(world: &mut CliWorld) {
     ));
 }
 
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the manifest path is {string}")]
 fn manifest_path(world: &mut CliWorld, path: String) {
     let cli = world.cli.as_ref().expect("cli");
-    assert_eq!(cli.file, PathBuf::from(path));
+    assert_eq!(cli.file, PathBuf::from(&path));
 }
 
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
@@ -104,14 +104,14 @@ fn first_target(world: &mut CliWorld, target: String) {
     assert_eq!(targets.first(), Some(&target));
 }
 
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the working directory is {string}")]
 fn working_directory(world: &mut CliWorld, dir: String) {
     let cli = world.cli.as_ref().expect("cli");
-    assert_eq!(cli.directory.as_ref(), Some(&PathBuf::from(dir)));
+    assert_eq!(cli.directory.as_ref(), Some(&PathBuf::from(&dir)));
 }
 
 #[then(expr = "the job count is {int}")]
