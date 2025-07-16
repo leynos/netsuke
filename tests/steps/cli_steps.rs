@@ -9,21 +9,17 @@ use cucumber::{then, when};
 use netsuke::cli::{Cli, Commands};
 use std::path::PathBuf;
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
-#[when(expr = "the CLI is parsed with {string}")]
-fn parse_cli(world: &mut CliWorld, args: String) {
-    let tokens: Vec<String> = if args.is_empty() {
-        vec!["netsuke".to_string()]
-    } else {
-        std::iter::once("netsuke".to_string())
-            .chain(args.split_whitespace().map(str::to_string))
-            .collect()
-    };
+fn apply_cli(world: &mut CliWorld, args: &str) {
+    let tokens: Vec<String> = std::iter::once("netsuke".to_string())
+        .chain(args.split_whitespace().map(str::to_string))
+        .collect();
     match Cli::try_parse_from(tokens) {
-        Ok(cli) => {
+        Ok(mut cli) => {
+            if cli.command.is_none() {
+                cli.command = Some(Commands::Build {
+                    targets: Vec::new(),
+                });
+            }
             world.cli = Some(cli);
             world.cli_error = None;
         }
@@ -34,25 +30,30 @@ fn parse_cli(world: &mut CliWorld, args: String) {
     }
 }
 
+fn extract_build(world: &CliWorld) -> &Vec<String> {
+    let cli = world.cli.as_ref().expect("cli");
+    match cli.command.as_ref().expect("command") {
+        Commands::Build { targets } => targets,
+        other => panic!("Expected build command, got {other:?}"),
+    }
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[when(expr = "the CLI is parsed with {string}")]
+fn parse_cli(world: &mut CliWorld, args: String) {
+    apply_cli(world, &args);
+}
+
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
 #[when(expr = "the CLI is parsed with invalid arguments {string}")]
 fn parse_cli_invalid(world: &mut CliWorld, args: String) {
-    let tokens: Vec<String> = std::iter::once("netsuke".to_string())
-        .chain(args.split_whitespace().map(str::to_string))
-        .collect();
-    match Cli::try_parse_from(tokens) {
-        Ok(cli) => {
-            world.cli = Some(cli);
-            world.cli_error = None;
-        }
-        Err(e) => {
-            world.cli = None;
-            world.cli_error = Some(e.to_string());
-        }
-    }
+    apply_cli(world, &args);
 }
 
 #[then("parsing succeeds")]
@@ -62,15 +63,7 @@ fn parsing_succeeds(world: &mut CliWorld) {
 
 #[then("the command is build")]
 fn command_is_build(world: &mut CliWorld) {
-    let cli = world.cli.as_ref().expect("cli");
-    match cli
-        .command
-        .as_ref()
-        .unwrap_or(&Commands::Build { targets: vec![] })
-    {
-        Commands::Build { .. } => (),
-        other => panic!("Expected build command, got {other:?}"),
-    }
+    let _ = extract_build(world);
 }
 
 #[allow(
@@ -89,15 +82,23 @@ fn manifest_path(world: &mut CliWorld, path: String) {
 )]
 #[then(expr = "the first target is {string}")]
 fn first_target(world: &mut CliWorld, target: String) {
+    assert_eq!(extract_build(world).first(), Some(&target));
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the working directory is {string}")]
+fn working_directory(world: &mut CliWorld, dir: String) {
     let cli = world.cli.as_ref().expect("cli");
-    match cli
-        .command
-        .as_ref()
-        .unwrap_or(&Commands::Build { targets: vec![] })
-    {
-        Commands::Build { targets } => assert_eq!(targets.first(), Some(&target)),
-        other => panic!("Expected build command, got {other:?}"),
-    }
+    assert_eq!(cli.directory.as_ref(), Some(&PathBuf::from(dir)));
+}
+
+#[then(expr = "the job count is {int}")]
+fn job_count(world: &mut CliWorld, jobs: usize) {
+    let cli = world.cli.as_ref().expect("cli");
+    assert_eq!(cli.jobs, Some(jobs));
 }
 
 #[then("an error should be returned")]

@@ -20,14 +20,21 @@ fn parse_cli(
     #[case] jobs: Option<usize>,
     #[case] expected_cmd: Commands,
 ) {
-    let cli = Cli::try_parse_from(argv).expect("parse");
+    let mut cli = Cli::try_parse_from(argv).expect("parse");
+    if cli.command.is_none() {
+        cli.command = Some(Commands::Build {
+            targets: Vec::new(),
+        });
+    }
     assert_eq!(cli.file, file);
     assert_eq!(cli.directory, directory);
     assert_eq!(cli.jobs, jobs);
-    let command = cli.command.unwrap_or(Commands::Build {
-        targets: Vec::new(),
-    });
-    assert_eq!(command, expected_cmd);
+    assert_eq!(
+        cli.command.unwrap_or(Commands::Build {
+            targets: Vec::new()
+        }),
+        expected_cmd
+    );
 }
 
 #[rstest]

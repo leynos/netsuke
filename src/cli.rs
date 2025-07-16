@@ -26,6 +26,20 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
+impl Cli {
+    /// Parse command-line arguments, providing `build` as the default command.
+    #[must_use]
+    pub fn parse_with_default() -> Self {
+        let mut cli = Self::parse();
+        if cli.command.is_none() {
+            cli.command = Some(Commands::Build {
+                targets: Vec::new(),
+            });
+        }
+        cli
+    }
+}
+
 /// Available top-level commands for Netsuke.
 #[derive(Debug, Subcommand, PartialEq, Eq, Clone)]
 pub enum Commands {

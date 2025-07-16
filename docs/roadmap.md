@@ -14,7 +14,7 @@ compilation pipeline from parsing to execution.
 
   - [x] Implement the initial clap CLI structure for the build command and
     global options (--file, --directory, --jobs), as defined in the design
-    document.
+    document. *(done)*
 
   - [ ] Define the core Abstract Syntax Tree (AST) data structures
     (NetsukeManifest, Rule, Target, StringOrList, Recipe) in `src/ast.rs`.

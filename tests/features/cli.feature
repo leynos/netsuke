@@ -20,3 +20,13 @@ Feature: CLI parsing
     When the CLI is parsed with invalid arguments "--file"
     Then an error should be returned
     And the error message should contain "--file"
+
+  Scenario: Directory flag sets working directory
+    When the CLI is parsed with "-C work build"
+    Then parsing succeeds
+    And the working directory is "work"
+
+  Scenario: Jobs flag sets parallelism
+    When the CLI is parsed with "-j 4"
+    Then parsing succeeds
+    And the job count is 4

@@ -1,18 +1,6 @@
-use clap::Parser;
-use netsuke::cli::{Cli, Commands};
+use netsuke::{cli::Cli, runner};
 
 fn main() {
-    let cli = Cli::parse();
-
-    match cli.command.unwrap_or(Commands::Build { targets: vec![] }) {
-        Commands::Build { targets } => {
-            println!("Building targets: {targets:?}");
-        }
-        Commands::Clean {} => {
-            println!("Clean requested");
-        }
-        Commands::Graph {} => {
-            println!("Graph requested");
-        }
-    }
+    let cli = Cli::parse_with_default();
+    runner::run(cli);
 }
