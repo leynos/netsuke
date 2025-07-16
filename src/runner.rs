@@ -13,10 +13,10 @@ pub fn run(cli: Cli) {
         Commands::Build { targets } => {
             println!("Building targets: {targets:?}");
         }
-        Commands::Clean {} => {
+        Commands::Clean => {
             println!("Clean requested");
         }
-        Commands::Graph {} => {
+        Commands::Graph => {
             println!("Graph requested");
         }
     }

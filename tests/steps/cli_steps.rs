@@ -13,14 +13,9 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
     let tokens: Vec<String> = std::iter::once("netsuke".to_string())
         .chain(args.split_whitespace().map(str::to_string))
         .collect();
-    match Cli::try_parse_from(tokens) {
-        Ok(mut cli) => {
-            if cli.command.is_none() {
-                cli.command = Some(Commands::Build {
-                    targets: Vec::new(),
-                });
-            }
-            world.cli = Some(cli);
+    match Cli::try_parse_from(tokens.clone()) {
+        Ok(_) => {
+            world.cli = Some(Cli::parse_from_with_default(tokens));
             world.cli_error = None;
         }
         Err(e) => {
@@ -30,11 +25,11 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
     }
 }
 
-fn extract_build(world: &CliWorld) -> &Vec<String> {
-    let cli = world.cli.as_ref().expect("cli");
-    match cli.command.as_ref().expect("command") {
-        Commands::Build { targets } => targets,
-        other => panic!("Expected build command, got {other:?}"),
+fn extract_build(world: &CliWorld) -> Option<&Vec<String>> {
+    let cli = world.cli.as_ref()?;
+    match cli.command.as_ref()? {
+        Commands::Build { targets } => Some(targets),
+        _ => None,
     }
 }
 
@@ -63,7 +58,7 @@ fn parsing_succeeds(world: &mut CliWorld) {
 
 #[then("the command is build")]
 fn command_is_build(world: &mut CliWorld) {
-    let _ = extract_build(world);
+    assert!(extract_build(world).is_some(), "command should be build");
 }
 
 #[then("the command is clean")]
@@ -71,7 +66,7 @@ fn command_is_clean(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");
     assert!(matches!(
         cli.command.as_ref().expect("command"),
-        Commands::Clean {}
+        Commands::Clean
     ));
 }
 
@@ -80,7 +75,7 @@ fn command_is_graph(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");
     assert!(matches!(
         cli.command.as_ref().expect("command"),
-        Commands::Graph {}
+        Commands::Graph
     ));
 }
 
@@ -100,7 +95,8 @@ fn manifest_path(world: &mut CliWorld, path: String) {
 )]
 #[then(expr = "the first target is {string}")]
 fn first_target(world: &mut CliWorld, target: String) {
-    assert_eq!(extract_build(world).first(), Some(&target));
+    let targets = extract_build(world).expect("command should be build");
+    assert_eq!(targets.first(), Some(&target));
 }
 
 #[allow(

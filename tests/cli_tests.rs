@@ -1,3 +1,7 @@
+//! Unit tests for CLI argument parsing and validation.
+//!
+//! This module exercises the command-line interface defined in [`netsuke::cli`]
+//! using `rstest` for parameterised coverage of success and error scenarios.
 use clap::Parser;
 use clap::error::ErrorKind;
 use netsuke::cli::{Cli, Commands};
@@ -20,21 +24,11 @@ fn parse_cli(
     #[case] jobs: Option<usize>,
     #[case] expected_cmd: Commands,
 ) {
-    let mut cli = Cli::try_parse_from(argv).expect("parse");
-    if cli.command.is_none() {
-        cli.command = Some(Commands::Build {
-            targets: Vec::new(),
-        });
-    }
+    let cli = Cli::parse_from_with_default(argv.clone());
     assert_eq!(cli.file, file);
     assert_eq!(cli.directory, directory);
     assert_eq!(cli.jobs, jobs);
-    assert_eq!(
-        cli.command.unwrap_or(Commands::Build {
-            targets: Vec::new()
-        }),
-        expected_cmd
-    );
+    assert_eq!(cli.command.expect("command should be set"), expected_cmd);
 }
 
 #[rstest]
