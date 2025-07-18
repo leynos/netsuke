@@ -916,7 +916,7 @@ dropped), works effectively with `rstest`'s fixture model. When a regular
 the resource is typically cleaned up after the test finishes, as the fixture's
 return value goes out of scope. This localizes resource management logic to the
 fixture, keeping the test focused on its assertions. For temporary resources,
-regular (per- test) fixtures are generally preferred over `#[once]` fixtures to
+regular (per-test) fixtures are generally preferred over `#[once]` fixtures to
 ensure proper cleanup, as `#[once]` fixtures are never dropped.
 
 ### B. Mocking External Services (e.g., Database Connections, HTTP APIs)

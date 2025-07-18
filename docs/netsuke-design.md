@@ -1185,7 +1185,7 @@ actionable output that the implementation should produce.
 
 The command-line interface is the user's entry point to Netsuke. A
 well-designed CLI is essential for a good user experience. It should be
-intuitive, self- documenting, and consistent with the conventions of modern
+intuitive, self-documenting, and consistent with the conventions of modern
 command-line tools.
 
 ### 8.1 Crate Selection: `clap`
