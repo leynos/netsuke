@@ -38,23 +38,24 @@ ambiguity and rework.
 To facilitate this process, BDD frameworks like Cucumber use a specific Domain-
 Specific Language (DSL) called Gherkin.[^5] Gherkin provides a simple,
 structured grammar for writing executable specifications in plain text files
-with a `.feature` extension.6 Its syntax is designed to be intuitive and
-accessible, enabling clear communication across different project roles.3
+with a `.feature` extension.[^6] Its syntax is designed to be intuitive and
+accessible, enabling clear communication across different project roles.[^3]
 
 A Gherkin document is line-oriented, with most lines beginning with a specific
-keyword. The primary keywords give structure and meaning to the specifications.7
+keyword. The primary keywords give structure and meaning to the
+specifications.[^7]
 
-| Keyword          | Purpose                                                                                             | Simple Example                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Feature          | Provides a high-level description of a software feature and groups related scenarios.3              | Feature: User Authentication                        |
-| Scenario         | Describes a single, concrete example of the feature's behaviour.3                                   | Scenario: Successful login with valid credentials   |
-| Given            | Sets the initial context or preconditions for a scenario.5                                          | Given the user is on the login page                 |
-| When             | Describes the key action or event that triggers the behaviour being tested.1                        | When the user enters their username and password    |
-| Then             | Specifies the expected outcome or result of the action.9                                            | Then the user should be redirected to the dashboard |
-| And, But         | Used to add more steps to a Given, When, or Then clause without repetition, improving readability.3 | And the user's name should be displayed             |
-| Background       | Defines a set of steps that run before every Scenario in a Feature, used for common setup.6         | Background: Given a registered user "Alice" exists  |
-| Scenario Outline | A template for running the same Scenario multiple times with different data sets.3                  | Scenario Outline: Login with various credentials    |
-| Examples         | A data table that provides the values for a Scenario Outline.3                                      | username &#124; password &#124; outcome             |
+| Keyword          | Purpose                                                                                                | Simple Example                                      |
+| ---------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| Feature          | Provides a high-level description of a software feature and groups related scenarios.[^3]              | Feature: User Authentication                        |
+| Scenario         | Describes a single, concrete example of the feature's behaviour.[^3]                                   | Scenario: Successful login with valid credentials   |
+| Given            | Sets the initial context or preconditions for a scenario.[^5]                                          | Given the user is on the login page                 |
+| When             | Describes the key action or event that triggers the behaviour being tested.[^1]                        | When the user enters their username and password    |
+| Then             | Specifies the expected outcome or result of the action.[^9]                                            | Then the user should be redirected to the dashboard |
+| And, But         | Used to add more steps to a Given, When, or Then clause without repetition, improving readability.[^3] | And the user's name should be displayed             |
+| Background       | Defines a set of steps that run before every Scenario in a Feature, used for common setup.[^6]         | Background: Given a registered user "Alice" exists  |
+| Scenario Outline | A template for running the same Scenario multiple times with different data sets.[^3]                  | Scenario Outline: Login with various credentials    |
+| Examples         | A data table that provides the values for a Scenario Outline.[^3]                                      | username &#124; password &#124; outcome             |
 
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
@@ -95,21 +96,21 @@ section walks through creating a minimal, runnable test suite from scratch.
 To begin, the necessary dependencies must be added and a custom test runner
 configured. The `cucumber` crate is async-native and requires an async runtime
 to execute tests; `tokio` is the most common choice and is used throughout the
-official documentation.12
+official documentation.[^12]
 
 The key configuration step is defining a `[[test]]` target in `Cargo.toml`.
 This tells Cargo to build a specific test executable. Setting `harness = false`
 is crucial; it disables Rust's default test harness, allowing the `cucumber`
 runner to take control of the process and print its own formatted output to the
-console.13
+console.[^13]
 
-| Section            | Key      | Value / Description                                                                                |
-| ------------------ | -------- | -------------------------------------------------------------------------------------------------- |
-| [dependencies]     | tokio    | The async runtime. Required with features like macros and rt-multi-thread.13                       |
-| [dev-dependencies] | cucumber | The main testing framework crate.16                                                                |
-| [dev-dependencies] | futures  | Often needed for async operations, particularly with older examples or for specific combinators.18 |
-| [[test]]           | name     | The name of the test-runner file (e.g., "cucumber"). This must match the filename in tests/.       |
-| [[test]]           | harness  | Must be set to `false` so cucumber can manage test execution and output.14                         |
+| Section            | Key      | Value / Description                                                                                   |
+| ------------------ | -------- | ----------------------------------------------------------------------------------------------------- |
+| [dependencies]     | tokio    | The async runtime. Required with features like macros and rt-multi-thread.[^13]                       |
+| [dev-dependencies] | cucumber | The main testing framework crate.[^16]                                                                |
+| [dev-dependencies] | futures  | Often needed for async operations, particularly with older examples or for specific combinators.[^18] |
+| [[test]]           | name     | The name of the test-runner file (e.g., "cucumber"). This must match the filename in tests/.          |
+| [[test]]           | harness  | Must be set to `false` so cucumber can manage test execution and output.[^14]                         |
 
 Here is a complete `Cargo.toml` configuration snippet:
 
@@ -135,7 +136,7 @@ harness = false
 
 A well-organized project structure is vital for maintainable BDD tests. The
 standard convention separates the human-readable feature specifications from
-the Rust implementation code.18
+the Rust implementation code.[^18]
 
 ```plaintext
 .
@@ -156,24 +157,24 @@ The `.feature` files in `tests/features/` define *what* the system should do.
 These can be read, written, and reviewed by non-technical stakeholders. The
 Rust files in `tests/steps/` define *how* those behaviours are tested. This
 clear boundary is a cornerstone of effective BDD practice and is strongly
-recommended.14
+recommended.[^14]
 
 ### 2.3 The `World` Object: Managing Scenario State
 
 The `World` is the most critical concept in `cucumber-rs`. It is a user-defined
-struct that encapsulates all the shared state for a single test scenario.16
+struct that encapsulates all the shared state for a single test scenario.[^16]
 Each time a scenario begins, a new instance of the `World` is created. This
 instance is then passed mutably to each step (`Given`, `When`, `Then`) within
-that scenario.18
+that scenario.[^18]
 
 This design provides a powerful mechanism for test isolation. Because each
 scenario gets its private `World` instance, there is no risk of state leaking
-from one test to another, even when tests are run concurrently.20 This is a
+from one test to another, even when tests are run concurrently.[^20] This is a
 significant advantage of the Rust implementation, leveraging the language's
-ownership model to solve a common and difficult problem in test automation.21
+ownership model to solve a common and difficult problem in test automation.[^21]
 
 To create a `World`, define a struct and derive `cucumber::World`. It is also
-conventional to derive `Debug` and `Default`.12
+conventional to derive `Debug` and `Default`.[^12]
 
 **Worked Example:** For a simple calculator application, the `World` might look
 like this:
@@ -193,7 +194,7 @@ pub struct CalculatorWorld {
 By default, `cucumber` will instantiate the `World` using `Default::default()`.
 If a `World` requires more complex initialization (for example, starting a mock
 server or connecting to a test database), provide a custom constructor function
-using the `#[world(init = ...)]` attribute.20
+using the `#[world(init = ...)]` attribute.[^20]
 
 ### 2.4 Your First `main` Test Runner
 
@@ -202,10 +203,10 @@ function in the test target file (for example, `tests/cucumber.rs`). This
 function acts as the entry point for the test suite.
 
 Because `cucumber-rs` is async, the `main` function must be an `async fn` and
-is typically annotated with `#[tokio::main]`.13 The core of the function is a
-single line that invokes the test runner:
+is typically annotated with `#[tokio::main]`.[^13] The core of the function is
+a single line that invokes the test runner:
 
-`YourWorld::run("path/to/features").await`.16
+`YourWorld::run("path/to/features").await`.[^16]
 
 **Worked Example:**
 
@@ -264,18 +265,18 @@ procedural macros to make this connection seamless and type-safe.
 ### 3.1 The `#[given]`, `#[when]`, and `#[then]` Macros
 
 The core of step definition is a set of attribute macros: `#[given]`,
-`#[when]`, and `#[then]`.12 You apply these macros to Rust functions. When the
-test runner encounters a Gherkin step, it looks for a function annotated with
-the corresponding macro and a matching text pattern.
+`#[when]`, and `#[then]`.[^12] You apply these macros to Rust functions. When
+the test runner encounters a Gherkin step, it looks for a function annotated
+with the corresponding macro and a matching text pattern.
 
 Each step definition function must accept a mutable reference to the `World`
-struct as its first argument (for example, `world: &mut CalculatorWorld`).18
+struct as its first argument (for example, `world: &mut CalculatorWorld`).[^18]
 This affords the function the ability to modify the shared state for the
 current scenario.
 
 A key design choice in `cucumber-rs` is the strict separation of these step
 types. A function marked with `#[then]` cannot be used to satisfy a `Given`
-step in a feature file.20 This is a deliberate feature, not a limitation. It
+step in a feature file.[^20] This is a deliberate feature, not a limitation. It
 encourages developers to maintain the clean Arrange-Act-Assert structure by
 preventing them from accidentally using assertion logic during setup, or
 performing actions during verification. This discipline leads to more readable,
@@ -315,21 +316,21 @@ fn check_result(world: &mut CalculatorWorld, expected: i32) {
 
 To make steps dynamic, captured fragments of the Gherkin text must be passed as
 arguments to the corresponding Rust functions. `cucumber-rs` supports two
-mechanisms for this: regular expressions and Cucumber Expressions.16
+mechanisms for this: regular expressions and Cucumber Expressions.[^16]
 
 - **Cucumber Expressions (**`expr = "..."`**)**: This is the recommended
   default. They are less powerful than regex but are more readable and
   explicitly designed for this purpose. They provide built-in parsing for
-  common types like `{int}`, `{float}`, `{word}`, and `{string}` (in quotes).16
-  The framework automatically handles parsing the captured string into the
-  corresponding Rust type in your function signature.
+  common types like `{int}`, `{float}`, `{word}`, and `{string}` (in
+  quotes).[^16] The framework automatically handles parsing the captured string
+  into the corresponding Rust type in your function signature.
 
 - **Regular Expressions (**`regex = "..."`**)**: For more complex matching
   needs, full regex syntax can be used. Capture groups `(...)` in the regex
-  correspond to function arguments.18 The framework will still attempt to parse
-  the captured `&str` into the function's argument type. It is a best practice
-  to anchor the regex with `^` and `$` to ensure the entire step text is
-  matched, preventing partial or ambiguous matches.18.
+  correspond to function arguments.[^18] The framework will still attempt to
+  parse the captured `&str` into the function's argument type. It is a best
+  practice to anchor the regex with `^` and `$` to ensure the entire step text
+  is matched, preventing partial or ambiguous matches.[^18].
 
 | Feature         | Cucumber Expression Example                                          | Regex Example                                                          | Recommendation                                               |
 | --------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -342,11 +343,11 @@ mechanisms for this: regular expressions and Cucumber Expressions.16
 
 The `Then` steps are where you verify the system's state. The most
 straightforward way to do this is with Rust's standard assertion macros, like
-`assert_eq!` or `assert!`.16 If an assertion fails, the thread will panic, and
-`cucumber` will mark the step as failed.
+`assert_eq!` or `assert!`.[^16] If an assertion fails, the thread will panic,
+and `cucumber` will mark the step as failed.
 
 However, a more idiomatic and powerful approach is to have your step functions
-return a `Result`.20 A step that returns
+return a `Result`.[^20] A step that returns
 
 `Ok(())` passes, while one that returns an `Err(...)` fails. This has two major
 benefits:
@@ -362,7 +363,7 @@ benefits:
 
 Rust's error handling philosophy is built around the `Result` enum for
 recoverable errors, and a test failure is a recoverable error from the test
-runner's perspective.22 Embracing this pattern in your step definitions is a
+runner's perspective.[^22] Embracing this pattern in your step definitions is a
 significant best practice.
 
 **Worked Example (using** `Result`**):**
@@ -410,13 +411,13 @@ asynchronous operations.
 
 Often, the same behaviour must be tested with various inputs and expected
 outputs. Writing a separate `Scenario` for each case would be highly
-repetitive. Gherkin solves this with the `Scenario Outline` keyword.3
+repetitive. Gherkin solves this with the `Scenario Outline` keyword.[^3]
 
 A `Scenario Outline` acts as a template. You write the steps using placeholders
 enclosed in angle brackets, like `<input>` or `<output>`. Below the outline,
 you provide an `Examples` table. Each row in this table represents a concrete
 run of the scenario, with the column headers matching the placeholders in the
-steps.11
+steps.[^11]
 
 **Worked Example:**
 
@@ -450,17 +451,17 @@ boilerplate.
 
 Sometimes, a step requires a more complex data structure than can be passed
 with simple arguments. For example, setting up an initial inventory or
-providing a list of users. For this, Gherkin provides **Data Tables**.23
+providing a list of users. For this, Gherkin provides **Data Tables**.[^23]
 
 A Data Table is a pipe-delimited table placed directly after a Gherkin step. To
 access this table in a Rust step definition, add a
 `step: &cucumber::gherkin::Step` argument to the function. The table can then
-be accessed via `step.table` (which is an `Option<Table>`).23
+be accessed via `step.table` (which is an `Option<Table>`).[^23]
 
 Data tables encourage a more declarative style of testing. Instead of writing a
 series of imperative steps to build up a state (e.g., "Given I add a user
 'Alice'", "And I set her role to 'Admin'"), the entire state can be described
-in a single, readable table.25.
+in a single, readable table.[^25].
 
 This makes the
 
@@ -507,10 +508,11 @@ fn given_items_in_warehouse(world: &mut InventoryWorld, step: &Step) {
 ### 4.3 Managing Common Preconditions with `Background`
 
 If every scenario in a `.feature` file shares the same set of initial `Given`
-steps, you can use the `Background` keyword to reduce duplication.6 The steps
-listed under
+steps, you can use the `Background` keyword to reduce duplication.[^6] The
+steps listed under
 
-`Background` will be executed before *each* `Scenario` in that feature file.26
+`Background` will be executed before *each* `Scenario` in that feature
+file.[^26]
 
 **Worked Example:**
 
@@ -533,7 +535,7 @@ Feature: User account management
 **Pitfall Warning:** Use `Background` with caution. If it becomes too long or
 is not relevant to every single scenario, it can make the tests harder to
 understand by hiding essential context. If only some scenarios share setup, it
-is better to create a dedicated `Given` step and repeat it.21
+is better to create a dedicated `Given` step and repeat it.[^21]
 
 ### 4.4 Asynchronous Operations: Testing in the Real World
 
@@ -542,18 +544,19 @@ file I/O, are heavily asynchronous. The `cucumber-rs` crate is designed with
 this in mind, making it an excellent choice for integration and end-to-end
 (E2E) testing.
 
-Step definition functions can be declared as `async fn`.12 Inside these
+Step definition functions can be declared as `async fn`.[^12] Inside these
 functions, any `Future` – such as a database query or HTTP request – can be
 `.await`-ed. This requires that your test runner’s `main` function is powered
-by an async runtime like `tokio`.13
+by an async runtime like `tokio`.[^13]
 
 The async-first design of `cucumber-rs` is one of its most powerful features.
 It allows for writing tests that accurately reflect the asynchronous nature of
 the application under test. Furthermore, because `cucumber` can run scenarios
 concurrently by default, I/O-bound tests can execute in parallel, dramatically
 reducing the total runtime of the test suite compared with traditional
-synchronous, serial test runners.20 This makes it feasible to run comprehensive
-integration test suites as part of your regular development workflow.
+synchronous, serial test runners.[^20] This makes it feasible to run
+comprehensive integration test suites as part of your regular development
+workflow.
 
 **Worked Example (Async Step):**
 
@@ -619,7 +622,7 @@ steps can perform assertions on it.
 A crucial aspect of this design is that the mock server is part of the `World`.
 This means each scenario gets its own, completely isolated mock server instance
 running on a random port. This is the key to enabling fast, reliable, and
-parallelizable integration tests.20
+parallelizable integration tests.[^20]
 
 ```rust
 // In tests/cucumber.rs
@@ -655,11 +658,11 @@ async fn main() {
 
 Note the use of `#` and the `async fn new()` implementation. This is necessary
 because starting the `MockServer` is an async operation and cannot be done in a
-`Default::default()` implementation.20
+`Default::default()` implementation.[^20]
 
 ### 5.3 Mocking Dependencies with `wiremock-rs`
 
-`wiremock-rs` is a pure-Rust library for mocking HTTP-based APIs.27
+`wiremock-rs` is a pure-Rust library for mocking HTTP-based APIs.[^27]
 Expectations can be defined (for example, "expect a GET request to `/foo`") and
 specify responses. This is done in the `Given` steps to set up the state of the
 external world before the `When` action occurs.
@@ -667,7 +670,7 @@ external world before the `When` action occurs.
 Using an in-process mock server like `wiremock-rs` is a superior pattern for
 integration testing. It avoids the complexity and slowness of managing external
 services or Docker containers, leading to faster and more reliable test
-execution.27
+execution.[^27]
 
 ### 5.4 Implementing the API Step Definitions
 
@@ -748,7 +751,7 @@ than a maintenance burden.
 ### 6.1 The "One-to-One" Rule: One Scenario, One Behaviour
 
 A fundamental principle for writing clean Gherkin is that **each scenario
-should test exactly one behaviour**.6 A common anti-pattern is to chain
+should test exactly one behaviour**.[^6] A common anti-pattern is to chain
 multiple actions and outcomes within a single scenario, often indicated by
 multiple
 
@@ -784,7 +787,7 @@ Scenario: Applying a valid discount code reduces the final price
 ```
 
 This approach isolates failures, improves clarity, and makes each scenario an
-independent specification of a single rule.6
+independent specification of a single rule.[^6]
 
 ### 6.2 Declarative vs. Imperative Steps: Finding the Balance
 
@@ -794,13 +797,13 @@ The most maintainable test suites favor a **declarative** style over an
 - **Imperative steps** describe *how* an action is performed, often coupling the
   test to specific UI elements or implementation details (e.g., "When I click
   the 'submit-button'"). This makes tests brittle; a small UI change can break
-  many tests.25
+  many tests.[^25]
 
 - **Declarative steps** describe *what* the user is trying to achieve, focusing
   on intent and behaviour (e.g., "When I submit my registration").
 
 The collective set of step definitions should evolve into a project-specific
-Domain-Specific Language (DSL).3 A step like
+Domain-Specific Language (DSL).[^3] A step like
 
 `When I register my account` is declarative. Internally, its Rust
 implementation might perform several imperative actions (fill form fields,
@@ -848,14 +851,14 @@ pub struct ComposedWorld {
 
 This approach organizes state logically and makes the `World` easier to reason
 about. For complex setup, always prefer a custom constructor with
-`#[world(init =...)]` over trying to force everything into `Default`.20
+`#[world(init =...)]` over trying to force everything into `Default`.[^20]
 
 ### 6.4 Organizing Features and Steps
 
 Test code should be organized in the same way as application code.
 
 - **Feature Files:** Group `.feature` files by application capability or user
-  story.26 For example,
+  story.[^26] For example,
 
   `tests/features/authentication/`, `tests/features/product_catalog/`, etc.
 
@@ -875,20 +878,20 @@ implementing BDD. Recognizing these pitfalls is the first step to avoiding them.
 **Pitfall:** Sharing state between scenarios using `static` variables, global
 state, or external files. This is a primary cause of flaky, non-deterministic
 tests, especially because `cucumber-rs` runs scenarios concurrently by
-default.20
+default.[^20]
 
 **Solution:** The `World` object is the *only* sanctioned place for scenario
 state. Treat each scenario as if it could be running at the same time as any
 other. If you must interact with a shared, singular resource (like a physical
 hardware device), you must tag the relevant scenarios with `@serial`. This
-forces them to run one at a time.20 However, overuse of `@serial` is often a
+forces them to run one at a time.[^20] However, overuse of `@serial` is often a
 sign of a poor test design and negates the performance benefits of concurrency.
 This tag should be used sparingly.
 
 ### 7.2 Flaky Tests from Asynchronous Code
 
 **Pitfall:** Tests that fail intermittently, often due to timing issues or race
-conditions in asynchronous code.30 A common mistake is using fixed delays (
+conditions in asynchronous code.[^30] A common mistake is using fixed delays (
 
 `tokio::time::sleep`) to "wait" for an operation to complete.
 
@@ -900,7 +903,7 @@ conditions in asynchronous code.30 A common mistake is using fixed delays (
 
 2. **Use Deterministic Mocks:** When possible, use tools like `wiremock-rs`.
    The interactions are deterministic and immediate, eliminating timing issues
-   related to network latency.27
+   related to network latency.[^27]
 
 3. **Implement Explicit Synchronization:** When testing against real systems,
    use mechanisms like polling with a timeout, waiting for a specific log
@@ -909,13 +912,13 @@ conditions in asynchronous code.30 A common mistake is using fixed delays (
 4. **Use Built-in Retries:** For tests that are inherently prone to transient
    failures (e.g., E2E tests over a real network), use the `cucumber` runner's
    retry mechanism (`--retry <count>`) to automatically re-run failed
-   scenarios.31
+   scenarios.[^31]
 
 ### 7.3 The `unwrap()` Trap and Poor Error Handling
 
 **Pitfall:** Littering step definitions with `.unwrap()` and `.expect()`. When
 these panic, the resulting error message is often generic and lacks the context
-needed to quickly diagnose the problem.22 For example, a panic on
+needed to quickly diagnose the problem.[^22] For example, a panic on
 
 `world.last_response.as_ref().unwrap()` does not indicate which API call failed
 to produce a response.
@@ -923,12 +926,12 @@ to produce a response.
 **Solution:** As discussed in section 3.3, step functions should return a
 `Result`. Define custom, descriptive error types using crates like `thiserror`
 or `anyhow` to wrap underlying errors and add context. A well-defined `Err`
-variant is far more valuable for debugging than a stack trace from a panic.20
+variant is far more valuable for debugging than a stack trace from a panic.[^20]
 
 ### 7.4 Ambiguous Step Definitions
 
 **Pitfall:** The test run fails with an "ambiguous step" error. This means a
-single Gherkin step matches the patterns of two or more Rust functions.21
+single Gherkin step matches the patterns of two or more Rust functions.[^21]
 
 **Solution:** <!-- markdownlint-disable MD029 -->
 
@@ -939,7 +942,7 @@ single Gherkin step matches the patterns of two or more Rust functions.21
    at the start and `$` at the end (e.g., <!-- markdownlint-enable MD029 -->
    `regex = r"^the user is logged in$"`). This prevents a step like
    `"the admin user is logged in"` from accidentally matching a less specific
-   pattern like `regex = r"user is logged in"`.18
+   pattern like `regex = r"user is logged in"`.[^18]
 
 ## Part 8: Integrating into the Development Lifecycle
 
@@ -951,7 +954,7 @@ workflow and the automated CI/CD pipeline.
 Running the entire test suite can be slow. The `cucumber` test runner supports
 a rich set of command-line arguments that allow you to run a targeted subset of
 scenarios. These arguments are passed to your test executable after a `--`
-separator: `cargo test --test cucumber --`.32
+separator: `cargo test --test cucumber --`.[^32]
 
 | Flag                    | Purpose                                                          | Example Usage                                             |
 | ----------------------- | ---------------------------------------------------------------- | --------------------------------------------------------- |
@@ -968,19 +971,19 @@ by running only the tests relevant to the current work.
 
 The ultimate goal of BDD is to have a suite of executable specifications that
 continuously validate the system's behaviour. Integrating Cucumber tests into a
-CI/CD pipeline is what brings this "living documentation" to life.33
+CI/CD pipeline is what brings this "living documentation" to life.[^33]
 
 The process involves two main steps:
 
 1. **Run the tests:** The CI job executes `cargo test --test cucumber`. The
    `cucumber` runner will exit with a non-zero status code if any scenario
-   fails, which automatically fails the CI build.33
+   fails, which automatically fails the CI build.[^33]
 
 2. **Publish reports:** Many CI platforms can parse and display test results
    in a structured format. The `cucumber` crate supports generating JUnit XML
-   reports via the `output-junit` feature flag.16 These XML files can then be
-   published as test artifacts for platforms like GitHub Actions, GitLab CI, or
-   Jenkins to consume.33
+   reports via the `output-junit` feature flag.[^16] These XML files can then
+   be published as test artifacts for platforms like GitHub Actions, GitLab CI,
+   or Jenkins to consume.[^33]
 
 This CI integration closes the BDD loop. The `.feature` files, once checked
 into version control, are no longer static documents. They become active
@@ -1037,7 +1040,7 @@ jobs:
 This workflow demonstrates a standard CI setup for a Rust project, including
 linting, formatting, and running the Cucumber tests. The final step ensures
 that the test results are always available for inspection, providing a clear
-and continuous record of the application's behavioural health.35
+and continuous record of the application's behavioural health.[^35]
 
 ### Conclusion
 
@@ -1071,117 +1074,107 @@ aligned with what is needed.
     accessed on 14 July 2025,
     <https://medium.com/@buczynski.rafal/gherkin-in-testing-a-beginners-guide-f2e179d5e2df>
 
-<!-- markdownlint-disable MD029 -->
-
- 1. Gherkin Syntax in Cucumber - Tutorialspoint, accessed on July 14, 2025,
     <https://www.tutorialspoint.com/cucumber/cucumber_gherkins.htm>
 
- 1. Given When Then - Martin Fowler, accessed on July 14, 2025, <https://
+[^5]: Given When Then - Martin Fowler, accessed on July 14, 2025, <https://
     martinfowler.com/bliki/GivenWhenThen.html>
 
- 1. How To Start Writing Gherkin Test Scenarios? - [Selleo.com](http://
+[^6]: How To Start Writing Gherkin Test Scenarios? - [Selleo.com](http://
     Selleo.com), accessed on July 14, 2025, <https://selleo.com/blog/how-to->
     start-writing-gherkin-test-scenarios>
 
- 1. Reference - Cucumber, accessed on July 14, 2025, <https://cucumber.io/>
+[^7]: Reference - Cucumber, accessed on July 14, 2025, <https://cucumber.io/>
     docs/> gherkin/reference/>
 
- 1. BDD (Behaviour-Driven Development) - ROBOT FRAMEWORK, accessed on July 14,
     2025, <https://docs.robotframework.org/docs/testcase_styles/bdd>
 
- 1. Given-When-Then - Wikipedia, accessed on July 14, 2025, <https://
+[^9]: Given-When-Then - Wikipedia, accessed on July 14, 2025, <https://
     en.wikipedia.org/wiki/Given-When-Then>
 
- 1. When to Use "Given-When-Then" Acceptance Criteria - Ranorex, accessed on
     July 14, 2025, <https://www.ranorex.com/blog/given-when-then-tests/>
 
- 1. Writing scenarios with Gherkin syntax | CucumberStudio Documentation,
+[^11]: Writing scenarios with Gherkin syntax | CucumberStudio Documentation,
     accessed on July 14, 2025, <https://support.smartbear.com/cucumberstudio/>
     docs/bdd/write-gherkin-scenarios.html>
 
- 1. Introduction - Cucumber Rust Book, accessed on July 14, 2025, <https://
+[^12]: Introduction - Cucumber Rust Book, accessed on July 14, 2025, <https://
     cucumber-rs.github.io/cucumber/main/>
 
- 1. Rust BDD tests with Cucumber - DEV Community, accessed on July 14, 2025,
+[^13]: Rust BDD tests with Cucumber - DEV Community, accessed on July 14, 2025,
     <https://dev.to/rogertorres/rust-bdd-with-cucumber-4p68>
 
- 1. Cucumber testing framework for Rust. Fully native, no external test runners
+[^14]: Cucumber testing framework for Rust. Fully native, no external test
+       runners
     or dependencies. - GitHub, accessed on July 14, 2025, <https://github.com/>
     AidaPaul/cucumber-rust>
 
- 1. Cucumber testing framework for Rust. Fully native, no external test runners
+       runners
     or dependencies. - GitHub, accessed on July 14, 2025, <https://github.com/>
     cucumber-rs/cucumber>
 
- 1. cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July 14, 2025,
+[^16]: cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July 14, 2025,
     <https://docs.rs/cucumber>
 
- 1. Cucumber testing framework for Rust - [Crates.io](http://Crates.io),
     accessed on July 14, 2025, <https://crates.io/crates/cucumber>
 
- 1. Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
+[^18]: Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
     cucumber-rs.github.io/cucumber/current/quickstart.html>
 
- 1. Cucumber in Rust - Beginner's Tutorial - Florianrein's Blog, accessed on
     July 14, 2025, <https://www.florianreinhard.de/cucumber-in-rust-beginners->
     tutorial/>
 
- 1. Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
+[^20]: Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
     cucumber-rs.github.io/cucumber/main/quickstart.html>
 
- 1. Common Pitfalls and Troubleshooting in Cucumber - GeeksforGeeks, accessed
+[^21]: Common Pitfalls and Troubleshooting in Cucumber - GeeksforGeeks, accessed
     on July 14, 2025, <https://www.geeksforgeeks.org/software-testing/common->
     pitfalls-and-troubleshooting-in-cucumber/>
 
- 1. How to do error handling in Rust and what are the common pitfalls? -
+[^22]: How to do error handling in Rust and what are the common pitfalls? -
     Stack Overflow, accessed on July 14, 2025, <https://stackoverflow.com/>
     questions/30505639/how-to-do-error-handling-in-rust-and-what-are-the-common-
     pitfalls>
 
- 1. Data tables - Cucumber Rust Book, accessed on July 14, 2025, <https://
+[^23]: Data tables - Cucumber Rust Book, accessed on July 14, 2025, <https://
     cucumber-rs.github.io/cucumber/main/writing/data_tables.html>
 
- 1. Cucumber Data Tables - Tutorialspoint, accessed on July 14, 2025,
     <https://www.tutorialspoint.com/cucumber/cucumber_data_tables.htm>
 
- 1. Best practices for scenario writing | CucumberStudio Documentation
-    - SmartBear Support, accessed on July 14, 2025, <https://
+[^25]: Best practices for scenario writing | CucumberStudio Documentation
+
+- SmartBear Support, accessed on July 14, 2025, <https://
     support.smartbear.com/cucumberstudio/docs/tests/best-practices.html>
 
- 1. Cucumber Best Practices to follow for efficient BDD Testing | by
+[^26]: Cucumber Best Practices to follow for efficient BDD Testing | by
     KailashPathak - Medium, accessed on July 14, 2025, <https://kailash->
     pathak.medium.com/cucumber-best-practices-to-follow-for-efficient-bdd-
     testing-b3eb1c7e9757>
 
- 1. Rust Solutions - WireMock, accessed on July 14, 2025, <https://
+[^27]: Rust Solutions - WireMock, accessed on July 14, 2025, <https://
     wiremock.org/> docs/solutions/rust/>
 
- 1. Unit-testing a web service in Rust - Julio Merino ([jmmv.dev](http://
     jmmv.dev)), accessed on July 14, 2025, <https://jmmv.dev/2023/07/unit->
     testing-a-web-service.html>
 
- 1. Cucumber Best Practices for Effective BDD Testing - BrowserStack, accessed
+       accessed
     on July 14, 2025, <https://www.browserstack.com/guide/cucumber-best->
     practices-for-testing>
 
- 1. Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
+[^30]: Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
     accessed on July 14, 2025, <https://medium.com/@realtalkdev/common->
     challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
 
- 1. Cucumber in cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July
+[^31]: Cucumber in cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July
     14, 2025, <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
- 1. CLI (command-line interface) - Cucumber Rust Book, accessed on July 14,
+[^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on July 14,
     2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
 
- 1. Continuous Integration - Cucumber, accessed on July 14, 2025, <https://
+[^33]: Continuous Integration - Cucumber, accessed on July 14, 2025, <https://
     cucumber.io/docs/guides/continuous-integration>
 
- 1. GitLab CI/CD examples, accessed on July 14, 2025, <https://
     docs.gitlab.com/ci/examples/>
 
- 1. Setting up effective CI/CD for Rust projects - a short primer -
+[^35]: Setting up effective CI/CD for Rust projects - a short primer -
     [shuttle.dev](http://shuttle.dev), accessed on July 14, 2025,
     <https://www.shuttle.dev/blog/2025/01/23/setup-rust-ci-cd>
-
-<!-- markdownlint-enable MD029 -->
