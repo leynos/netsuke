@@ -3,8 +3,6 @@
 A modern, declarative build system compiler.  
 YAML + Jinja in, Ninja out. Nothing more. Nothing less.
 
----
-
 ## What is Netsuke?
 
 **Netsuke** is a friendly build system that compiles structured manifests into a Ninja build graph.  
@@ -18,8 +16,6 @@ It’s not a shell-script runner, a meta-task framework, or a domain-specific CI
 - **Unopinionated**: No magic for C, Rust, Python, JavaScript, or any other blessed language.
 - **Safe**: All variable interpolation is securely shell-escaped by default.
 - **Fast**: Builds executed by [Ninja](https://ninja-build.org/), the fastest graph executor we know of.
-
----
 
 ## Quick Example
 
@@ -52,8 +48,6 @@ Yes, it’s just YAML.
 Yes, that’s a Jinja `foreach`.
 No, you don’t need to define `.PHONY` or remember what `$@` means.
 This is 2025. You deserve better.
-
----
 
 ## Key Concepts
 
@@ -90,8 +84,6 @@ Targets can also define:
 
 You may also use `command:` or `script:` instead of referencing a `rule`.
 
----
-
 ## 🧪 Phony Targets and Actions
 
 Phony targets behave like Make’s `.PHONY`:
@@ -113,8 +105,6 @@ actions:
 
 All `actions` are treated as `{ phony: true, always: false }` by default.
 
----
-
 ## 🧠 Templating
 
 Netsuke uses [MiniJinja](https://docs.rs/minijinja) to render your manifest before parsing.
@@ -135,8 +125,6 @@ You can:
 
 Templating happens **before** parsing, so any valid output must be valid YAML.
 
----
-
 ## 🔐 Safety
 
 Shell commands are automatically escaped.
@@ -146,8 +134,6 @@ Interpolation into `command:` or `script:` will never yield a command injection 
 command: "echo {{ dangerous_value }}"      # Safe
 command: "echo {{ dangerous_value | raw }}" # Unsafe (your problem now)
 ```
-
----
 
 ## 🔧 CLI
 
@@ -167,8 +153,6 @@ You can also pass:
 * `--directory` to run in a different working dir
 * `-j N` to control parallelism (passed through to Ninja)
 
----
-
 ## 🚧 Status
 
 Netsuke is **under active development**.
@@ -180,16 +164,12 @@ Coming soon:
 * Extensible plugin system for filters/functions
 * Toolchain presets (`cargo`, `node`, etc.)
 
----
-
 ## Why “Netsuke”?
 
 A **netsuke** is a small carved object used to fasten things securely to a belt.
 It’s not the sword. It’s not the pouch. It’s the thing that connects them.
 
 That’s what this is: a tidy connector between your intent and the tool that gets it done.
-
----
 
 ## License
 
