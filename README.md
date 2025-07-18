@@ -6,7 +6,7 @@ YAML + Jinja in, Ninja out. Nothing more. Nothing less.
 ## What is Netsuke?
 
 **Netsuke** is a friendly build system that compiles structured manifests into a Ninja build graph.  
-It’s not a shell-script runner, a meta-task framework, or a domain-specific CI layer. It’s `make`—if `make` hadn’t been invented in 1977 by people allergic to quoting rules and joy.
+It’s not a shell-script runner, a meta-task framework, or a domain-specific CI layer. It’s `make`, if `make` hadn’t been invented in 1977.
 
 ### Key properties
 
