@@ -73,8 +73,8 @@ quality and developer productivity:
 - **Readability:** By injecting dependencies as function arguments, `rstest`
   makes the requirements of a test explicit and easy to understand. The test
   function's signature clearly documents what it needs to run. This allows
-  developers to "focus on the important stuff in your tests" by abstracting
-  away the setup details.
+  developers to focus on the important parts of tests by abstracting away the
+  setup details.
 - **Reusability:** Fixtures defined with `rstest` are reusable components. A
   single fixture, such as one setting up a database connection or creating a
   complex data structure, can be used across multiple tests, eliminating
@@ -402,7 +402,7 @@ impl State {
 
 #[rstest]
 fn test_state_transitions(
-    # initial_state: State,
+    initial_state: State,
     #[values(Event::Process, Event::Error, Event::Fatal)] event: Event
 ) {
     // In a real test, you'd have more specific assertions based on expected_next_state
@@ -617,7 +617,7 @@ impl User {
 
 #[fixture]
 fn user_fixture(
-    # name: &str,
+    name: &str,
     #[default(30)] age: u8,
     #[default("Viewer")] role: &str,
 ) -> User {
@@ -643,7 +643,7 @@ fn test_admin_user(#[with("AdminUser", 42, "Admin")] user_fixture: User) {
 // For named overrides, one might need to define intermediate fixtures or check specific rstest version capabilities.
 // Assuming positional override for the first argument (name):
 #[rstest]
-fn test_custom_name_user(# user_fixture: User) {
+fn test_custom_name_user(user_fixture: User) {
     assert_eq!(user_fixture.name, "SpecificName");
     assert_eq!(user_fixture.age, 30); // Age uses default
     assert_eq!(user_fixture.role, "Viewer"); // Role uses default

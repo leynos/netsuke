@@ -23,8 +23,8 @@ builds as fast as possible.[^2]
 This design choice by Ninja's authors necessitates the existence of a higher-
 
 level generator tool. Netsuke fulfills this role. It provides a rich,
-user-friendly language (YAML with Jinja) for describing the *what* and *why*
-of a build—the project's structure, its logical rules, and its configurable
+user-friendly language (YAML with Jinja) for describing the *what* and *why* of
+a build—the project's structure, its logical rules, and its configurable
 parameters. Netsuke's primary responsibility is to compile this high-level
 description into a low-level, highly optimized execution plan that Ninja can
 understand and execute. This separation of concerns—Netsuke managing build
@@ -254,7 +254,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   files. Netsuke expands these placeholders to space-separated, shell-escaped
   lists of file paths before hashing the action. When generating the Ninja
   rule, the lists are replaced with Ninja's `$in` and `$out` macros. After
-  interpolation the command must be parsable by
+  interpolation, the command must be parsable by
   [shlex](https://docs.rs/shlex/latest/shlex/). Any interpolation other than
   `ins` or `outs` is automatically shell-escaped.
 
@@ -398,7 +398,7 @@ annotation on a struct is sufficient to make it a deserialization target.
 
 While other promising YAML libraries like `saphyr` exist, their `serde`
 integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
-highly experimental stage (version 0.0.0)[^11] Building a core component of
+highly experimental stage (version 0.0.0)[^11]. Building a core component of
 Netsuke on a nascent or unreleased library would introduce significant and
 unnecessary project risk.
 
@@ -703,8 +703,8 @@ more robust than its predecessors.
 ### 4.7 Template Standard Library
 
 Netsuke bundles a small "standard library" of Jinja helpers. These tests,
-filters and functions are available to every template and give concise access
-to common filesystem queries, path manipulations, collection utilities and
+filters, and functions are available to every template and give concise access
+to common filesystem queries, path manipulations, collection utilities, and
 network operations.
 
 #### File-system tests
@@ -1047,7 +1047,7 @@ building command strings by pushing quoted components into a buffer:
 
 The command generation logic within the `ninja_gen.rs` module must not use
 simple string formatting (like `format!`) to construct the final command
-strings Instead, parse the Netsuke command template (e.g.,
+strings. Instead, parse the Netsuke command template (e.g.,
 `{{ cc }} -c {{ ins }} -o` `{{ outs }}`) and build the final command string
 step by step. The placeholders `{{ ins }}` and `{{ outs }}` are expanded to
 space-separated lists of file paths within Netsuke itself, each path being
@@ -1208,40 +1208,32 @@ Rust
 ```rust
 // In src/main.rs
 
-use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use clap::{Parser, Subcommand}; use std::path::PathBuf;
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[command(author, version, about, long_about = None)]
-struct Cli {
-    /// Path to the Netsuke manifest file to use.
+struct Cli { /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
     file: PathBuf,
 
-    /// Change to this directory before doing anything.
-    directory: Option<PathBuf>,
+    /// Change to this directory before doing anything. directory:
+    Option<PathBuf>,
 
     /// Set the number of parallel build jobs.
     #[arg(short, long, value_name = "N")]
     jobs: Option<usize>,
 
     #[command(subcommand)]
-    command: Option<Commands>,
-}
+    command: Option<Commands>, }
 
-enum Commands {
-    /// Build specified targets (or default targets if none are given) [default].
-    Build {
-        /// A list of specific targets to build.
-        targets: Vec<String>,
-    },
+enum Commands { /// Build specified targets (or default targets if none are
+given) [default]. Build { /// A list of specific targets to build. targets:
+Vec<String>, },
 
-    /// Remove build artifacts and intermediate files.
-    Clean {},
+    /// Remove build artifacts and intermediate files. Clean {},
 
     /// Display the build dependency graph in DOT format for visualization.
-    Graph {},
-}
+    Graph {}, }
 ```
 
 *Note: The* `Build` *command is wrapped in an* `Option<Commands>` *and will be
