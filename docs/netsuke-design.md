@@ -21,9 +21,10 @@ string manipulation or conditional logic, to ensure its primary goal: running
 builds as fast as possible.[^2]
 
 This design choice by Ninja's authors necessitates the existence of a higher-
-level generator tool. Netsuke fulfills this role. It provides a rich, user-
-friendly language (YAML with Jinja) for describing the *what* and *why* of a
-build—the project's structure, its logical rules, and its configurable
+
+level generator tool. Netsuke fulfills this role. It provides a rich,
+user-friendly language (YAML with Jinja) for describing the *what* and *why*
+of a build—the project's structure, its logical rules, and its configurable
 parameters. Netsuke's primary responsibility is to compile this high-level
 description into a low-level, highly optimized execution plan that Ninja can
 understand and execute. This separation of concerns—Netsuke managing build
@@ -749,7 +750,7 @@ network operations.
 
 All built-in filters use `snake_case`. The `camel_case` helper is provided in
 place of `camelCase` so naming remains consistent with `snake_case` and
-`kebab- case`.
+`kebab-case`.
 
 #### Generic collection filters
 
@@ -1050,7 +1051,7 @@ strings Instead, parse the Netsuke command template (e.g.,
 `{{ cc }} -c {{ ins }} -o` `{{ outs }}`) and build the final command string
 step by step. The placeholders `{{ ins }}` and `{{ outs }}` are expanded to
 space-separated lists of file paths within Netsuke itself, each path being
-shell-escaped using the `shell- quote` API. When the command is written to
+shell-escaped using the `shell-quote` API. When the command is written to
 `build.ninja`, these lists replace Ninja's `$in` and `$out` macros. After
 substitution, the command is validated with [`shlex`]
 (<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly. This
@@ -1061,8 +1062,8 @@ approach guarantees that every dynamic part of the command is securely quoted.
 The concept of being "friendlier" than `make` extends beyond syntactic sugar to
 encompass safety and reliability. A tool that is easy to use but exposes the
 user to trivial security vulnerabilities is fundamentally unfriendly. In many
-build systems, the burden of correct shell quoting falls on the user, an error-
-prone task that requires specialized knowledge.
+build systems, the burden of correct shell quoting falls on the user, an error-prone
+task that requires specialized knowledge.
 
 Netsuke's design elevates security to a core feature by making it automatic and
 transparent. The user writes a simple, unquoted command template, and Netsuke

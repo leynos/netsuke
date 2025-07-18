@@ -215,7 +215,7 @@ Key points for Ninja snapshot tests:
 With this setup, IR tests and Ninja tests have distinct snapshot files. For
 example, after the first test run (see next section), expected snapshot files
 include `tests/snapshots/ir/simple_manifest_ir.snap` and
-`tests/snapshots/ ninja/simple_manifest_ninja.snap` (or combined snapshot files
+`tests/snapshots/ninja/simple_manifest_ninja.snap` (or combined snapshot files
 per test module). These snapshot files contain the expected IR debug output and
 Ninja file text respectively.
 
@@ -289,7 +289,7 @@ introduce regressions without notice. Use GitHub Actions to run `cargo test`
 to set it up:
 
 **1. CI Workflow Setup:** In the repository (e.g.,
-`.github/workflows/ test.yml`), use a Rust toolchain action and run tests. For
+`.github/workflows/test.yml`), use a Rust toolchain action and run tests. For
 example:
 
 ```yaml

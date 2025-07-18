@@ -56,7 +56,7 @@ function signatures and fixture definitions to wire up dependencies
 automatically.
 
 This reliance on procedural macros is a key architectural decision. It enables
-`rstest` to offer a remarkably clean and intuitive syntax at the test- writing
+`rstest` to offer a remarkably clean and intuitive syntax at the test-writing
 level. Developers declare the dependencies their tests need, and the macros
 handle the resolution and injection. While this significantly improves the
 developer experience for writing tests, the underlying macro expansion involves
@@ -821,7 +821,7 @@ away some of the explicit `async`/`.await` mechanics.
 Long-running or stalled asynchronous operations can cause tests to hang
 indefinitely. `rstest` provides a `#[timeout(…)]` attribute to set a maximum
 execution time for async tests. This feature typically relies on the
-`async- timeout` feature of `rstest`, which is enabled by default.
+`async-timeout` feature of `rstest`, which is enabled by default.
 
 ```rust
 use rstest::*;
