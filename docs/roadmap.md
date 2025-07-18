@@ -1,8 +1,8 @@
 # Netsuke Implementation Roadmap
 
-This roadmap translates the [netsuke-design.md](netsuke-design.md) document into
-a phased, actionable implementation plan. Each phase has a clear objective and a
-checklist of tasks that must be completed to meet the success criteria.
+This roadmap translates the [netsuke-design.md](netsuke-design.md) document
+into a phased, actionable implementation plan. Each phase has a clear objective
+and a checklist of tasks that must be completed to meet the success criteria.
 
 ## Phase 1: The Static Core 🏗️
 

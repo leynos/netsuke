@@ -1,8 +1,8 @@
 # Snapshot Testing IR and Ninja Outputs in Netsuke
 
 Snapshot testing with the `insta` crate provides a powerful way to ensure
-Netsuke’s intermediate representations and generated Ninja build files
-remain correct over time. According to the Netsuke design, the Intermediate
+Netsuke’s intermediate representations and generated Ninja build files remain
+correct over time. According to the Netsuke design, the Intermediate
 Representation (IR) is a backend-agnostic build graph, and the Ninja file
 generation is a separate stage built on that IR. Leverage this separation by
 writing **separate snapshot tests** for IR and for Ninja output. This guide
@@ -26,8 +26,8 @@ tool `cargo-insta` for reviewing or updating snapshots (useful in CI and local
 development).
 
 **Project Structure:** Organize the tests in the `tests/` directory, using one
-module for IR snapshots and another for Ninja snapshots. Each module has its own
-snapshot output directory for clarity. A possible layout:
+module for IR snapshots and another for Ninja snapshots. Each module has its
+own snapshot output directory for clarity. A possible layout:
 
 ```text
 netsuke/
@@ -46,14 +46,14 @@ netsuke/
 ```
 
 By default, `insta` creates a `tests/snapshots` directory and stores snapshot
-data in files named after the test modules. This configuration separates IR
-and Ninja snapshots into subfolders, keeping the expected outputs organized and
+data in files named after the test modules. This configuration separates IR and
+Ninja snapshots into subfolders, keeping the expected outputs organized and
 aligning with Netsuke’s design separation of IR from code generation.
 
 ## Writing Snapshot Tests for IR Outputs
 
-A dedicated test module (e.g. **tests/ir_snapshot_tests.rs**) contains
-IR snapshot tests. Each test feeds a Netsuke manifest (the input build
+A dedicated test module (e.g. **tests/ir_snapshot_tests.rs**) contains IR
+snapshot tests. Each test feeds a Netsuke manifest (the input build
 specification) into the compiler’s IR generation stage and captures the
 resulting IR in a stable, human-readable form. According to the design, the IR
 (BuildGraph) is intended to be independent of any particular backend, so it is
@@ -134,8 +134,8 @@ This test involves:
 
 - **No timestamps or environment-specific data:** The IR should not include
   timestamps, random values, or absolute file system paths. If such data is
-  unavoidable, use `insta` redactions or post-process the output to replace them
-  with placeholders (e.g., `<CURRENT_DIR>`).
+  unavoidable, use `insta` redactions or post-process the output to replace
+  them with placeholders (e.g., `<CURRENT_DIR>`).
 
 By making the IR snapshot output stable, the snapshot tests will reliably catch
 regressions. If the IR generation logic changes intentionally (e.g., new fields
@@ -144,11 +144,11 @@ added), the snapshot will change predictably, prompting a review.
 ## Writing Snapshot Tests for Ninja File Output
 
 Next, create **tests/ninja_snapshot_tests.rs** to verify Ninja build file
-generation separately. This stage takes the IR (BuildGraph) and produces a Ninja
-build script (usually the contents of a `build.ninja` file). Because Netsuke’s
-design cleanly separates IR building from code generation, it is possible to
-use the same manifest (or multiple manifest scenarios) to test the Ninja output
-specifically.
+generation separately. This stage takes the IR (BuildGraph) and produces a
+Ninja build script (usually the contents of a `build.ninja` file). Because
+Netsuke’s design cleanly separates IR building from code generation, it is
+possible to use the same manifest (or multiple manifest scenarios) to test the
+Ninja output specifically.
 
 **Example Ninja Snapshot Test:**
 
@@ -197,8 +197,8 @@ Key points for Ninja snapshot tests:
   realistic coverage.
 
 - Call the Ninja generation function (e.g. `ninja_gen::generate_ninja`), which
-  produces the Ninja file contents as a `String`. This function traverses the IR
-  and outputs rules and build statements in Ninja syntax.
+  produces the Ninja file contents as a `String`. This function traverses the
+  IR and outputs rules and build statements in Ninja syntax.
 
 - As with IR, **determinism is crucial**. The Ninja output should list rules,
   targets, and dependencies in a consistent order. For example, if the IR does
@@ -209,15 +209,15 @@ Key points for Ninja snapshot tests:
   stabilized.
 
 - Use `Settings::set_snapshot_path` to store these snapshots in a separate
-  `tests/snapshots/ninja` directory. The snapshot name `"simple_manifest_ninja"`
-  identifies this particular scenario.
+  `tests/snapshots/ninja` directory. The snapshot name
+  `"simple_manifest_ninja"` identifies this particular scenario.
 
 With this setup, IR tests and Ninja tests have distinct snapshot files. For
 example, after the first test run (see next section), expected snapshot files
-include `tests/snapshots/ir/simple_manifest_ir.snap` and `tests/snapshots/
-ninja/simple_manifest_ninja.snap` (or combined snapshot files per test module).
-These snapshot files contain the expected IR debug output and Ninja file text
-respectively.
+include `tests/snapshots/ir/simple_manifest_ir.snap` and
+`tests/snapshots/ ninja/simple_manifest_ninja.snap` (or combined snapshot files
+per test module). These snapshot files contain the expected IR debug output and
+Ninja file text respectively.
 
 ## Running and Updating Snapshot Tests
 
@@ -245,9 +245,10 @@ snapshot assertion for `simple_manifest_ninja` failed in "tests/ninja_snapshot_t
 …
 ```
 
-On the first run, `insta` (with default `INSTA_UPDATE=auto`) writes new snapshot
-files and marks the tests as failed for review. `.snap` files (or `.snap.new` if
-not auto-approved) appear in the `tests/snapshots/` subdirectories.
+On the first run, `insta` (with default `INSTA_UPDATE=auto`) writes new
+snapshot files and marks the tests as failed for review. `.snap` files (or
+`.snap.new` if not auto-approved) appear in the `tests/snapshots/`
+subdirectories.
 
 **Reviewing and Accepting Snapshots:** Use the `cargo-insta` CLI to review and
 accept these new snapshots:
@@ -257,8 +258,8 @@ accept these new snapshots:
   first run, it only shows the new content.
 
 - Accept the new snapshots using the review interface. `cargo-insta` then moves
-  the `.snap.new` files to replace the old snapshots or create the `.snap` files
-  if they did not exist.
+  the `.snap.new` files to replace the old snapshots or create the `.snap`
+  files if they did not exist.
 
 - As an alternative, when confident in the outputs, run `cargo insta accept
   --all` to accept all changes in one go.
@@ -268,9 +269,9 @@ snapshots now match the output. Commit the new/updated `.snap` files to version
 control. **Always include the snapshot files** so that CI can validate against
 them.
 
-**Deterministic Failures:** If a snapshot test fails unexpectedly in the future,
-it means the IR or Ninja output changed. This could reveal a regression or a
-legitimate update:
+**Deterministic Failures:** If a snapshot test fails unexpectedly in the
+future, it means the IR or Ninja output changed. This could reveal a regression
+or a legitimate update:
 
 - For an intended change (e.g., the IR structure or Ninja output format was
   updated as part of a feature), review and accept the new snapshots, then
@@ -282,13 +283,14 @@ legitimate update:
 
 ## Integrating Snapshot Tests into GitHub Actions CI
 
-Automating snapshot tests in CI ensures that changes to Netsuke do not introduce
-regressions without notice. Use GitHub Actions to run `cargo test` (which
-includes the snapshot tests) on every push or pull request. Here’s how to set
-it up:
+Automating snapshot tests in CI ensures that changes to Netsuke do not
+introduce regressions without notice. Use GitHub Actions to run `cargo test`
+(which includes the snapshot tests) on every push or pull request. Here’s how
+to set it up:
 
-**1. CI Workflow Setup:** In the repository (e.g., `.github/workflows/
-test.yml`), use a Rust toolchain action and run tests. For example:
+**1. CI Workflow Setup:** In the repository (e.g.,
+`.github/workflows/ test.yml`), use a Rust toolchain action and run tests. For
+example:
 
 ```yaml
 name: Rust CI
@@ -330,9 +332,9 @@ jobs:
 **Notes:**
 
 - Setting `INSTA_UPDATE: no` in CI disables automatic snapshot creation or
-  updating. If a snapshot is missing or differs, the tests **fail**. The default
-  `auto` mode already treats CI specially (it will not auto-accept in CI), but
-  setting `no` is an explicit safeguard.
+  updating. If a snapshot is missing or differs, the tests **fail**. The
+  default `auto` mode already treats CI specially (it will not auto-accept in
+  CI), but setting `no` is an explicit safeguard.
 
 - Install `cargo-insta` mainly for completeness – running `cargo test` does not
   strictly require the CLI tool, but its presence enables `cargo insta`
@@ -342,8 +344,8 @@ jobs:
 - The caches for Cargo help speed up CI. Ensure you include the snapshot files
   in the repository so that tests can find the expected outputs.
 
-**2. Handling Snapshot Changes in CI:** In a typical workflow, CI will run tests
-and either pass or fail:
+**2. Handling Snapshot Changes in CI:** In a typical workflow, CI will run
+tests and either pass or fail:
 
 - If all snapshots match, CI passes. No action needed.
 
@@ -375,16 +377,16 @@ Ninja snapshot tests then verify that the IR-to-Ninja translation is correct.
 Both sets of tests use deterministic outputs to ensure consistent, meaningful
 snapshots.
 
-With the `insta` crate, adding new test cases is straightforward – simply create
-a manifest (or multiple variants) and assert that the IR or Ninja output matches
-the snapshot. The snapshot files serve as living documentation of the expected
-build graph and build script for given scenarios. Integrated into GitHub
-Actions, this testing framework will catch regressions early: any change in
-Netsuke’s IR logic or code generation will surface as a snapshot diff, prompting
-careful review.
+With the `insta` crate, adding new test cases is straightforward – simply
+create a manifest (or multiple variants) and assert that the IR or Ninja output
+matches the snapshot. The snapshot files serve as living documentation of the
+expected build graph and build script for given scenarios. Integrated into
+GitHub Actions, this testing framework will catch regressions early: any change
+in Netsuke’s IR logic or code generation will surface as a snapshot diff,
+prompting careful review.
 
-This structured snapshot testing approach enables confident evolution of
-the Netsuke project while preserving the correctness of its core compilation
+This structured snapshot testing approach enables confident evolution of the
+Netsuke project while preserving the correctness of its core compilation
 pipeline.
 
 **Sources:**
