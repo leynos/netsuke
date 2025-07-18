@@ -18,7 +18,7 @@ stakeholders can use to describe and agree upon software requirements.[^2] This
 process is centred on conversation; the discussions about how a feature should
 behave are the most valuable output of BDD.[^3]
 
-The tangible artifact of these conversations is a set of specifications written
+The tangible artefact of these conversations is a set of specifications written
 in a structured, natural language format. These specifications serve a dual
 purpose: they are human-readable documentation of the system's features, and
 they are also executable tests that verify the system's behaviour. This
@@ -1074,8 +1074,8 @@ aligned with what is needed.
     accessed on 14 July 2025,
     <https://medium.com/@buczynski.rafal/gherkin-in-testing-a-beginners-guide-f2e179d5e2df>
 
-[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025,
-      <https://martinfowler.com/bliki/GivenWhenThen.html>
+[^5]: *Given When Then* — Martin Fowler, accessed on 14 July 2025,
+    <https://martinfowler.com/bliki/GivenWhenThen.html>
 
 [^6]: How To Start Writing Gherkin Test Scenarios? - [Selleo.com](http://
     Selleo.com), accessed on 14 July 2025, <https://selleo.com/blog/how-to->
@@ -1087,12 +1087,12 @@ aligned with what is needed.
 [^9]: Given-When-Then - Wikipedia, accessed on 14 July 2025, <https://
     en.wikipedia.org/wiki/Given-When-Then>
 
-[^11]: Writing scenarios with Gherkin syntax | CucumberStudio Documentation,
-    accessed on July 14, 2025, <https://support.smartbear.com/cucumberstudio/>
-    docs/bdd/write-gherkin-scenarios.html>
+[^11]: *Writing scenarios with Gherkin syntax* — CucumberStudio Documentation,
+    accessed on 14 July 2025,
+    <https://support.smartbear.com/cucumberstudio/docs/bdd/write-gherkin-scenarios.html>
 
-[^12]: Introduction - Cucumber Rust Book, accessed on July 14, 2025, <https://
-    cucumber-rs.github.io/cucumber/main/>
+[^12]: *Cucumber Rust Book — Introduction*, accessed on 14 July 2025,
+    <https://cucumber-rs.github.io/cucumber/main/>
 
 [^13]: Rust BDD tests with Cucumber - DEV Community, accessed on July 14, 2025,
     <https://dev.to/rogertorres/rust-bdd-with-cucumber-4p68>
@@ -1106,11 +1106,11 @@ aligned with what is needed.
 
     accessed on July 14, 2025, <https://crates.io/crates/cucumber>
 
-[^18]: Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
-    cucumber-rs.github.io/cucumber/current/quickstart.html>
-
-    July 14, 2025, <https://www.florianreinhard.de/cucumber-in-rust-beginners->
-    tutorial/>
+[^18]: *Quickstart* — Cucumber Rust Book, accessed on 14 July 2025,
+    <https://cucumber-rs.github.io/cucumber/current/quickstart.html> *A
+    Beginner’s Guide to Cucumber in Rust* — Florian Reinhard, accessed on 14
+    July 2025,
+    <https://www.florianreinhard.de/cucumber-in-rust-beginners-tutorial/>
 
 [^20]: Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
     cucumber-rs.github.io/cucumber/main/quickstart.html>
