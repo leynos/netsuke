@@ -1076,11 +1076,11 @@ aligned with what is needed.
 
     <https://www.tutorialspoint.com/cucumber/cucumber_gherkins.htm>
 
-[^5]: Given When Then - Martin Fowler, accessed on July 14, 2025, <https://
+[^5]: Given When Then - Martin Fowler, accessed on 14 July 2025, <https://
     martinfowler.com/bliki/GivenWhenThen.html>
 
 [^6]: How To Start Writing Gherkin Test Scenarios? - [Selleo.com](http://
-    Selleo.com), accessed on July 14, 2025, <https://selleo.com/blog/how-to->
+    Selleo.com), accessed on 14 July 2025, <https://selleo.com/blog/how-to->
     start-writing-gherkin-test-scenarios>
 
 [^7]: Reference - Cucumber, accessed on July 14, 2025, <https://cucumber.io/>
@@ -1088,10 +1088,10 @@ aligned with what is needed.
 
     2025, <https://docs.robotframework.org/docs/testcase_styles/bdd>
 
-[^9]: Given-When-Then - Wikipedia, accessed on July 14, 2025, <https://
+[^9]: Given-When-Then - Wikipedia, accessed on 14 July 2025, <https://
     en.wikipedia.org/wiki/Given-When-Then>
 
-    July 14, 2025, <https://www.ranorex.com/blog/given-when-then-tests/>
+    14 July 2025, <https://www.ranorex.com/blog/given-when-then-tests/>
 
 [^11]: Writing scenarios with Gherkin syntax | CucumberStudio Documentation,
     accessed on July 14, 2025, <https://support.smartbear.com/cucumberstudio/>
@@ -1103,14 +1103,9 @@ aligned with what is needed.
 [^13]: Rust BDD tests with Cucumber - DEV Community, accessed on July 14, 2025,
     <https://dev.to/rogertorres/rust-bdd-with-cucumber-4p68>
 
-[^14]: Cucumber testing framework for Rust. Fully native, no external test
-       runners
-    or dependencies. - GitHub, accessed on July 14, 2025, <https://github.com/>
-    AidaPaul/cucumber-rust>
-
-       runners
-    or dependencies. - GitHub, accessed on July 14, 2025, <https://github.com/>
-    cucumber-rs/cucumber>
+[^14]: *Cucumber-rs* — fully-native Cucumber testing framework for Rust with no
+    external test runners or dependencies. GitHub, accessed on 14 July 2025,
+    <https://github.com/AidaPaul/cucumber-rust>
 
 [^16]: cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July 14, 2025,
     <https://docs.rs/cucumber>
@@ -1156,9 +1151,9 @@ aligned with what is needed.
     jmmv.dev)), accessed on July 14, 2025, <https://jmmv.dev/2023/07/unit->
     testing-a-web-service.html>
 
-       accessed
-    on July 14, 2025, <https://www.browserstack.com/guide/cucumber-best->
-    practices-for-testing>
+       accessed on July 14, 2025,
+       <https://www.browserstack.com/guide/cucumber-best->
+       practices-for-testing>
 
 [^30]: Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
     accessed on July 14, 2025, <https://medium.com/@realtalkdev/common->
