@@ -549,6 +549,12 @@ follows semantic versioning rules. Global and target variable maps now share
 the `HashMap<String, String>` type for consistency. This keeps YAML manifests
 concise while ensuring forward compatibility.
 
+Unit tests in `tests/ast_tests.rs` and behavioural scenarios in
+`tests/features/manifest.feature` validate the deserialisation logic. They
+verify that unknown fields result in errors and that minimal manifests parse
+correctly. This testing strategy guards against regression as the schema
+evolves.
+
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
 To provide the dynamic capabilities and logical expressiveness that make a
