@@ -1,21 +1,27 @@
 # 🧵 Netsuke
 
-A modern, declarative build system compiler.  
+A modern, declarative build system compiler.
 YAML + Jinja in, Ninja out. Nothing more. Nothing less.
 
 ## What is Netsuke?
 
-**Netsuke** is a friendly build system that compiles structured manifests into a Ninja build graph.  
-It’s not a shell-script runner, a meta-task framework, or a domain-specific CI layer. It’s `make`, if `make` hadn’t been invented in 1977.
+**Netsuke** is a friendly build system that compiles structured manifests into
+a Ninja build graph.
+It’s not a shell-script runner, a meta-task framework, or a domain-specific CI
+layer. It’s `make`, if `make` hadn’t been invented in 1977.
 
 ### Key properties
 
 - **Declarative**: Targets, rules, and dependencies described explicitly.
-- **Dynamic when needed**: Jinja templating for loops, macros, conditionals, file globbing.
-- **Static where required**: Always compiles to a reproducible, fully static dependency graph.
-- **Unopinionated**: No magic for C, Rust, Python, JavaScript, or any other blessed language.
+- **Dynamic when needed**: Jinja templating for loops, macros, conditionals,
+  file globbing.
+- **Static where required**: Always compiles to a reproducible, fully static
+  dependency graph.
+- **Unopinionated**: No magic for C, Rust, Python, JavaScript, or any other
+  blessed language.
 - **Safe**: All variable interpolation is securely shell-escaped by default.
-- **Fast**: Builds executed by [Ninja](https://ninja-build.org/), the fastest graph executor we know of.
+- **Fast**: Builds executed by [Ninja](https://ninja-build.org/), the fastest
+  graph executor we know of.
 
 ## Quick Example
 
@@ -44,10 +50,8 @@ targets:
     sources: "{{ glob('src/*.c') | map('basename') | map('with_suffix', '.o') }}"
 ````
 
-Yes, it’s just YAML.
-Yes, that’s a Jinja `foreach`.
-No, you don’t need to define `.PHONY` or remember what `$@` means.
-This is 2025. You deserve better.
+Yes, it’s just YAML. Yes, that’s a Jinja `foreach`. No, you don’t need to
+define `.PHONY` or remember what `$@` means. This is 2025. You deserve better.
 
 ## Key Concepts
 
@@ -55,9 +59,9 @@ This is 2025. You deserve better.
 
 Rules are reusable command templates. Each one has exactly one of:
 
-* `command:` — a single shell string
-* `script:` — a multi-line block
-* (or) can be declared inline on a target
+- `command:` — a single shell string
+- `script:` — a multi-line block
+- (or) can be declared inline on a target
 
 ```yaml
 rules:
@@ -78,9 +82,9 @@ Targets are things you want to build.
 
 Targets can also define:
 
-* `deps`: explicit dependencies
-* `order_only_deps`: e.g. `mkdir -p build`
-* `vars`: per-target variables
+- `deps`: explicit dependencies
+- `order_only_deps`: e.g. `mkdir -p build`
+- `vars`: per-target variables
 
 You may also use `command:` or `script:` instead of referencing a `rule`.
 
@@ -95,7 +99,8 @@ Phony targets behave like Make’s `.PHONY`:
   command: rm -rf build
 ```
 
-For cleaner structure, you may also define phony targets under an `actions:` block:
+For cleaner structure, you may also define phony targets under an `actions:`
+block:
 
 ```yaml
 actions:
@@ -107,14 +112,15 @@ All `actions` are treated as `{ phony: true, always: false }` by default.
 
 ## 🧠 Templating
 
-Netsuke uses [MiniJinja](https://docs.rs/minijinja) to render your manifest before parsing.
+Netsuke uses [MiniJinja](https://docs.rs/minijinja) to render your manifest
+before parsing.
 
 You can:
 
-* Glob files: `{{ glob('src/**/*.c') }}`
-* Read environment vars: `{{ env('CC') }}`
-* Use filters: `{{ path | basename | with_suffix('.o') }}`
-* Define reusable macros:
+- Glob files: `{{ glob('src/**/*.c') }}`
+- Read environment vars: `{{ env('CC') }}`
+- Use filters: `{{ path | basename | with_suffix('.o') }}`
+- Define reusable macros:
 
   ```yaml
   macros:
@@ -127,8 +133,9 @@ Templating happens **before** parsing, so any valid output must be valid YAML.
 
 ## 🔐 Safety
 
-Shell commands are automatically escaped.
-Interpolation into `command:` or `script:` will never yield a command injection vulnerability unless you explicitly ask for `| raw`.
+Shell commands are automatically escaped. Interpolation into `command:` or
+`script:` will never yield a command injection vulnerability unless you
+explicitly ask for `| raw`.
 
 ```yaml
 command: "echo {{ dangerous_value }}"      # Safe
@@ -143,34 +150,36 @@ netsuke clean
 netsuke graph
 ```
 
-* `netsuke` alone builds the `defaults:` targets from your manifest
-* `netsuke graph` emits a Graphviz `.dot` of the build DAG
-* `netsuke clean` runs `ninja -t clean`
+- `netsuke` alone builds the `defaults:` targets from your manifest
+- `netsuke graph` emits a Graphviz `.dot` of the build DAG
+- `netsuke clean` runs `ninja -t clean`
 
 You can also pass:
 
-* `--file` to use an alternate manifest
-* `--directory` to run in a different working dir
-* `-j N` to control parallelism (passed through to Ninja)
+- `--file` to use an alternate manifest
+- `--directory` to run in a different working dir
+- `-j N` to control parallelism (passed through to Ninja)
 
 ## 🚧 Status
 
-Netsuke is **under active development**.
-It’s not finished, but it’s buildable, usable, and increasingly delightful.
+Netsuke is **under active development**. It’s not finished, but it’s buildable,
+usable, and increasingly delightful.
 
 Coming soon:
 
-* `graph --html` for interactive DAGs
-* Extensible plugin system for filters/functions
-* Toolchain presets (`cargo`, `node`, etc.)
+- `graph --html` for interactive DAGs
+- Extensible plugin system for filters/functions
+- Toolchain presets (`cargo`, `node`, etc.)
 
 ## Why “Netsuke”?
 
-A **netsuke** is a small carved object used to fasten things securely to a belt.
-It’s not the sword. It’s not the pouch. It’s the thing that connects them.
+A **netsuke** is a small carved object used to fasten things securely to a
+belt. It’s not the sword. It’s not the pouch. It’s the thing that connects them.
 
-That’s what this is: a tidy connector between your intent and the tool that gets it done.
+That’s what this is: a tidy connector between your intent and the tool that
+gets it done.
 
 ## License
 
-[ISC](https://opensource.org/licenses/ISC) — because you don't need a legal thesis to use a build tool.
+[ISC](https://opensource.org/licenses/ISC) — because you don't need a legal
+thesis to use a build tool.

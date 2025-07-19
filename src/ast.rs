@@ -49,12 +49,12 @@ pub struct NetsukeManifest {
     /// Semantic version of the manifest format.
     pub netsuke_version: Version,
 
-    #[serde(default)]
     /// Global key/value pairs available to recipes.
+    #[serde(default)]
     pub vars: HashMap<String, String>,
 
-    #[serde(default)]
     /// Named rule templates that can be referenced by targets.
+    #[serde(default)]
     pub rules: Vec<Rule>,
 
     /// Optional top-level steps executed before normal targets.
@@ -64,8 +64,8 @@ pub struct NetsukeManifest {
     /// Primary build targets.
     pub targets: Vec<Target>,
 
-    #[serde(default)]
     /// Names of targets built when no command line target is supplied.
+    #[serde(default)]
     pub defaults: Vec<String>,
 }
 
@@ -118,28 +118,28 @@ pub struct Target {
     /// How the target should be built.
     pub recipe: Recipe,
 
-    #[serde(default)]
     /// Input files consumed by the recipe.
+    #[serde(default)]
     pub sources: StringOrList,
 
-    #[serde(default)]
     /// Normal prerequisites that must be built first.
+    #[serde(default)]
     pub deps: StringOrList,
 
-    #[serde(default)]
     /// Dependencies that do not cause a rebuild when changed.
+    #[serde(default)]
     pub order_only_deps: StringOrList,
 
-    #[serde(default)]
     /// Target-scoped variables available during command execution.
+    #[serde(default)]
     pub vars: HashMap<String, String>,
 
-    #[serde(default)]
     /// Declares that the target does not correspond to a real file.
+    #[serde(default)]
     pub phony: bool,
 
-    #[serde(default)]
     /// Force the recipe to run even if the outputs are up to date.
+    #[serde(default)]
     pub always: bool,
 }
 
