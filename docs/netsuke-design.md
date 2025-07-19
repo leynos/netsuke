@@ -184,7 +184,7 @@ level keys.
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
 
-The E-R diagram below summarises the structure of a `Netsukefile` and the
+The E-R diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.
 
 ```mermaid
@@ -373,12 +373,12 @@ critical step is to parse this string and deserialize it into a structured, in-
 memory representation. The choice of libraries and the definition of the target
 data structures are crucial for the robustness and maintainability of Netsuke.
 
-### 3.1 Crate Selection: `serde_yaml`
+### 3.1 Crate Selection: `serde_yml`
 
-For YAML parsing and deserialization, the recommended crate is `serde_yaml`.
+For YAML parsing and deserialization, the recommended crate is `serde_yml`.
 This choice is based on its deep and direct integration with the `serde`
 framework, the de-facto standard for serialization and deserialization in the
-Rust ecosystem. Using `serde_yaml` allows `serde`'s powerful derive macros to
+Rust ecosystem. Using `serde_yml` allows `serde`'s powerful derive macros to
 automatically generate the deserialization logic for Rust structs. This
 approach is idiomatic, highly efficient, and significantly reduces the amount
 of boilerplate code that needs to be written and maintained. A simple `#`
@@ -390,12 +390,12 @@ highly experimental stage (version 0.0.0)[^11]. Building a core component of
 Netsuke on a nascent or unreleased library would introduce significant and
 unnecessary project risk.
 
-`serde_yaml` is mature, widely adopted, and battle-tested, making it the
-prudent choice for production-quality software.
+`serde_yml` is mature, widely adopted, and battle-tested, making it the prudent
+choice for production-quality software.
 
 ### 3.2 Core Data Structures (`ast.rs`)
 
-The Rust structs that `serde_yaml` will deserialize into form the Abstract
+The Rust structs that `serde_yml` will deserialize into form the Abstract
 Syntax Tree (AST) of the build manifest. These structs must precisely mirror
 the YAML schema defined in Section 2. They will be defined in a dedicated
 module, `src/ast.rs`, and annotated with `#` to enable automatic
@@ -496,7 +496,7 @@ as a simple string and multiple as a list, enhancing user-friendliness.*
 
 The integration of a templating engine like Jinja fundamentally shapes the
 parsing pipeline, mandating a two-pass approach. It is impossible to parse the
-user's `Netsukefile` file with `serde_yaml` in a single step.
+user's `Netsukefile` file with `serde_yml` in a single step.
 
 Consider a manifest containing Jinja syntax:
 
@@ -511,7 +511,7 @@ targets:
 
 The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string
 from the perspective of a strict parser. Attempting to deserialize this
-directly with `serde_yaml` would result in a parsing error.
+directly with `serde_yml` would result in a parsing error.
 
 Therefore, the process must be sequential:
 
@@ -531,7 +531,7 @@ YAML
 ```
 
 1. **Second Pass (YAML Deserialization):** This new, rendered string, which is
-   now pure and valid YAML, is then passed to `serde_yaml`. The parser can now
+   now pure and valid YAML, is then passed to `serde_yml`. The parser can now
    successfully deserialize this text into the `NetsukeManifest` Rust struct.
 
 This two-pass mechanism cleanly separates the concerns of templating and data
@@ -542,7 +542,7 @@ interference, ensuring a robust and predictable ingestion pipeline.
 
 The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
 Unknown fields are rejected to surface user errors early. `StringOrList`
-provides a default `Empty` variant so optional lists are trivial to represent.
+provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
 the `HashMap<String, String>` type for consistency. This keeps YAML manifests
@@ -1302,7 +1302,7 @@ goal.
 
     1. Implement the initial `clap` CLI structure for the `build` command.
 
-    1. Implement the YAML parser using `serde_yaml` and the AST data structures
+    1. Implement the YAML parser using `serde_yml` and the AST data structures
        (`ast.rs`).
 
     1. Implement the AST-to-IR transformation logic, including basic validation
@@ -1327,7 +1327,7 @@ goal.
     1. Integrate the `minijinja` crate into the build pipeline.
 
     1. Implement the two-pass parsing mechanism: first render the manifest with
-       `minijinja`, then parse the result with `serde_yaml`.
+       `minijinja`, then parse the result with `serde_yml`.
 
     1. Populate the initial Jinja context with the global `vars` from the
        manifest.
@@ -1370,7 +1370,7 @@ selected for this project and the rationale for their inclusion.
 | Component | Recommended Crate | Rationale |
 | -------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | CLI Parsing | clap | The Rust standard for powerful, derive-based CLI development. |
-| YAML Parsing | serde_yaml | Mature, stable, and provides seamless integration with the serde framework. |
+| YAML Parsing | serde_yml | Mature, stable, and provides seamless integration with the serde framework. |
 | Templating | minijinja | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading. |
 | Shell Quoting | shell-quote | A critical security component; provides robust, shell-specific escaping for command arguments. |
 | Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports. |

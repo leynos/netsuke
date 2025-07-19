@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
+serde_yml = "0.11"
 semver = { version = "1", features = ["serde"] }
 
 [lints.clippy]

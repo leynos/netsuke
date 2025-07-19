@@ -22,7 +22,7 @@ compilation pipeline from parsing to execution.
 
   - [ ] Annotate AST structs with #[derive(Deserialize)] and
     #[serde(deny_unknown_fields)]
-    to enable serde_yaml parsing.
+    to enable serde_yml parsing.
 
   - [ ] Implement parsing for the netsuke_version field and validate it using
     the semver crate.
@@ -80,7 +80,7 @@ configurations with variables, control flow, and custom functions.
 
   - [ ] Implement the two-pass parsing mechanism: the first pass renders the
     manifest as a Jinja template, and the second pass parses the resulting pure
-    YAML string with serde_yaml.
+    YAML string with serde_yml.
 
   - [ ] Create a minijinja::Environment and populate its initial context with
     the global vars defined in the manifest.

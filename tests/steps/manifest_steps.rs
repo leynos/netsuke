@@ -7,8 +7,15 @@ use std::fs;
 
 #[when(expr = "the manifest file {string} is parsed")]
 fn parse_manifest(world: &mut CliWorld, path: String) {
-    let yaml = fs::read_to_string(path).expect("read manifest");
-    match serde_yaml::from_str::<NetsukeManifest>(&yaml) {
+    let yaml = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(e) => {
+            world.manifest = None;
+            world.manifest_error = Some(format!("Failed to read {path}: {e}"));
+            return;
+        }
+    };
+    match serde_yml::from_str::<NetsukeManifest>(&yaml) {
         Ok(manifest) => {
             world.manifest = Some(manifest);
             world.manifest_error = None;
@@ -40,6 +47,6 @@ fn first_target_name(world: &mut CliWorld, name: String) {
     let first = manifest.targets.first().expect("targets");
     match &first.name {
         StringOrList::String(value) => assert_eq!(value, &name),
-        other => panic!("unexpected variant {other:?}"),
+        other => panic!("Expected StringOrList::String, got: {other:?}"),
     }
 }
