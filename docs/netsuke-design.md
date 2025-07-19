@@ -550,6 +550,13 @@ This two-pass mechanism cleanly separates the concerns of templating and data
 structure parsing. It allows each library to do what it does best without
 interference, ensuring a robust and predictable ingestion pipeline.
 
+### 3.4 Design Decisions
+
+The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
+Unknown fields are rejected to surface user errors early. `StringOrList`
+provides a default `Empty` variant so optional lists are trivial to represent.
+This keeps YAML manifests concise while ensuring forward compatibility.
+
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
 To provide the dynamic capabilities and logical expressiveness that make a

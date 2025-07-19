@@ -4,6 +4,8 @@ use cucumber::World;
 pub struct CliWorld {
     pub cli: Option<netsuke::cli::Cli>,
     pub cli_error: Option<String>,
+    pub manifest: Option<netsuke::ast::NetsukeManifest>,
+    pub manifest_error: Option<String>,
 }
 
 mod steps;

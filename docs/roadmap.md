@@ -16,8 +16,9 @@ compilation pipeline from parsing to execution.
     global options (--file, --directory, --jobs), as defined in the design
     document. *(done)*
 
-  - [ ] Define the core Abstract Syntax Tree (AST) data structures
+  - [x] Define the core Abstract Syntax Tree (AST) data structures
     (NetsukeManifest, Rule, Target, StringOrList, Recipe) in `src/ast.rs`.
+    *(done)*
 
   - [ ] Annotate AST structs with #[derive(Deserialize)] and
     #[serde(deny_unknown_fields)]
