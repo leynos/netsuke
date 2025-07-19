@@ -630,8 +630,6 @@ use cucumber::World;
 use reqwest::Response;
 use wiremock::MockServer;
 
-#
-#
 pub struct ApiWorld {
     pub server: MockServer,
     pub client: reqwest::Client,
@@ -822,7 +820,6 @@ focused context structs.
 
 ```rust
 // Less maintainable
-#
 pub struct MonolithicWorld {
     user_id: Option<u32>,
     auth_token: Option<String>,
@@ -833,14 +830,11 @@ pub struct MonolithicWorld {
 }
 
 // More maintainable
-#
 pub struct AuthContext {
     user_id: Option<u32>,
     auth_token: Option<String>,
 }
 
-#
-#
 pub struct ComposedWorld {
     pub auth: AuthContext,
     pub api_client: ApiClient,
@@ -1067,8 +1061,8 @@ aligned with what is needed.
     <https://miro.com/agile/given-when-then-framework/>
 
 [^2]: *Is it acceptable to write a "Given When Then When Then" test in
-      Gherkin?* — Stack Overflow, accessed on 14 July 2025,
-      <https://stackoverflow.com/questions/12060011/is-it-acceptable-to-write-a-given-when-then-when-then-test-in-gherkin>
+    Gherkin?* — Stack Overflow, accessed on 14 July 2025,
+    <https://stackoverflow.com/questions/12060011/is-it-acceptable-to-write-a-given-when-then-when-then-test-in-gherkin>
 
 [^3]: *Gherkin in Testing: A Beginner's Guide* — Rafał Buczyński, Medium,
     accessed on 14 July 2025,
@@ -1077,15 +1071,15 @@ aligned with what is needed.
 [^5]: *Given When Then* — Martin Fowler, accessed on 14 July 2025,
     <https://martinfowler.com/bliki/GivenWhenThen.html>
 
-[^6]: How To Start Writing Gherkin Test Scenarios? - [Selleo.com](http://
-    Selleo.com), accessed on 14 July 2025, <https://selleo.com/blog/how-to->
-    start-writing-gherkin-test-scenarios>
+[^6]: How To Start Writing Gherkin Test Scenarios? -
+    [Selleo.com](http://Selleo.com), accessed on 14 July 2025,
+    <https://selleo.com/blog/how-to-start-writing-gherkin-test-scenarios>
 
 [^7]: *Reference — Cucumber*, accessed on 14 July 2025,
     <https://cucumber.io/docs/gherkin/reference/>
 
-[^9]: Given-When-Then - Wikipedia, accessed on 14 July 2025, <https://
-    en.wikipedia.org/wiki/Given-When-Then>
+[^9]: Given-When-Then - Wikipedia, accessed on 14 July 2025,
+    <https://en.wikipedia.org/wiki/Given-When-Then>
 
 [^11]: *Writing scenarios with Gherkin syntax* — CucumberStudio Documentation,
     accessed on 14 July 2025,
@@ -1094,76 +1088,59 @@ aligned with what is needed.
 [^12]: *Cucumber Rust Book — Introduction*, accessed on 14 July 2025,
     <https://cucumber-rs.github.io/cucumber/main/>
 
-[^13]: Rust BDD tests with Cucumber - DEV Community, accessed on July 14, 2025,
+[^13]: Rust BDD tests with Cucumber - DEV Community, accessed on 14 July 2025
     <https://dev.to/rogertorres/rust-bdd-with-cucumber-4p68>
 
 [^14]: *Cucumber-rs* — fully-native Cucumber testing framework for Rust with no
     external test runners or dependencies. GitHub, accessed on 14 July 2025,
     <https://github.com/AidaPaul/cucumber-rust>
 
-[^16]: cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July 14, 2025,
+[^16]: cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on 14 July 2025,
     <https://docs.rs/cucumber>
 
-    accessed on July 14, 2025, <https://crates.io/crates/cucumber>
-
 [^18]: *Quickstart* — Cucumber Rust Book, accessed on 14 July 2025,
-    <https://cucumber-rs.github.io/cucumber/current/quickstart.html> *A
-    Beginner’s Guide to Cucumber in Rust* — Florian Reinhard, accessed on 14
-    July 2025,
+    <https://cucumber-rs.github.io/cucumber/current/quickstart.html>
+
+[^19]: *A Beginner’s Guide to Cucumber in Rust* — Florian Reinhard, accessed
+    on 14 July 2025,
     <https://www.florianreinhard.de/cucumber-in-rust-beginners-tutorial/>
 
-[^20]: Quickstart - Cucumber Rust Book, accessed on July 14, 2025, <https://
-    cucumber-rs.github.io/cucumber/main/quickstart.html>
+[^20]: Quickstart - Cucumber Rust Book, accessed on 14 July 2025,
+    <https://cucumber-rs.github.io/cucumber/main/quickstart.html>
 
 [^21]: Common Pitfalls and Troubleshooting in Cucumber - GeeksforGeeks, accessed
-    on July 14, 2025, <https://www.geeksforgeeks.org/software-testing/common->
-    pitfalls-and-troubleshooting-in-cucumber/>
+    on July 14, 2025,
+    <https://www.geeksforgeeks.org/software-testing/common-pitfalls-and-troubleshooting-in-cucumber/>
 
 [^22]: How to do error handling in Rust and what are the common pitfalls? -
-    Stack Overflow, accessed on July 14, 2025, <https://stackoverflow.com/>
-    questions/30505639/how-to-do-error-handling-in-rust-and-what-are-the-common-
-    pitfalls>
+    Stack Overflow, accessed on 14 July 2025,
+    <https://stackoverflow.com/questions/30505639/how-to-do-error-handling-in-rust-and-what-are-the-common-pitfalls>
 
-[^23]: Data tables - Cucumber Rust Book, accessed on July 14, 2025, <https://
-    cucumber-rs.github.io/cucumber/main/writing/data_tables.html>
-
-    <https://www.tutorialspoint.com/cucumber/cucumber_data_tables.htm>
+[^23]: Data tables - Cucumber Rust Book, accessed on 14 July 2025, 
+    <https://cucumber-rs.github.io/cucumber/main/writing/data_tables.html>
 
 [^25]: Best practices for scenario writing | CucumberStudio Documentation
 
-- SmartBear Support, accessed on July 14, 2025, <https://
-    support.smartbear.com/cucumberstudio/docs/tests/best-practices.html>
-
 [^26]: Cucumber Best Practices to follow for efficient BDD Testing | by
-    KailashPathak - Medium, accessed on July 14, 2025, <https://kailash->
-    pathak.medium.com/cucumber-best-practices-to-follow-for-efficient-bdd-
-    testing-b3eb1c7e9757>
+    KailashPathak - Medium, accessed on 14 July 2025,
+    <https://kailash-pathak.medium.com/cucumber-best-practices-to-follow-for-efficient-bdd-testing-b3eb1c7e9757>
 
-[^27]: Rust Solutions - WireMock, accessed on July 14, 2025, <https://
-    wiremock.org/> docs/solutions/rust/>
-
-    jmmv.dev)), accessed on July 14, 2025, <https://jmmv.dev/2023/07/unit->
-    testing-a-web-service.html>
-
-       accessed on July 14, 2025,
-       <https://www.browserstack.com/guide/cucumber-best->
-       practices-for-testing>
+[^27]: Rust Solutions - WireMock, accessed on 14 July 2025,
+    <https://wiremock.org/docs/solutions/rust/>
 
 [^30]: Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
-    accessed on July 14, 2025, <https://medium.com/@realtalkdev/common->
-    challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
+    accessed on July 14, 2025,
+    <https://medium.com/@realtalkdev/common-challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
 
-[^31]: Cucumber in cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on July
-    14, 2025, <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
+[^31]: Cucumber in cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on
+    14 July 2025, <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
-[^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on July 14,
-    2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
+[^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on
+    14 July 2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
 
-[^33]: Continuous Integration - Cucumber, accessed on July 14, 2025, <https://
-    cucumber.io/docs/guides/continuous-integration>
-
-    docs.gitlab.com/ci/examples/>
+[^33]: Continuous Integration - Cucumber, accessed on 14 July 2025,
+    <https://cucumber.io/docs/guides/continuous-integration>
 
 [^35]: Setting up effective CI/CD for Rust projects - a short primer -
-    [shuttle.dev](http://shuttle.dev), accessed on July 14, 2025,
+    [shuttle.dev](http://shuttle.dev), accessed on 14 July 2025,
     <https://www.shuttle.dev/blog/2025/01/23/setup-rust-ci-cd>
