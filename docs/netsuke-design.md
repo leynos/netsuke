@@ -157,7 +157,7 @@ A `Netsukefile` file is a YAML mapping containing a set of well-defined top-
 level keys.
 
 - `netsuke_version`: A mandatory string that specifies the version of the
-  Netsuke schema the manifest conforms to (e.g., `"1.0"`). This allows for
+  Netsuke schema the manifest conforms to (e.g., `"1.0.0"`). This allows for
   future evolution of the schema while maintaining backward compatibility. This
   version string should be parsed and validated using the `semver` crate.[^4]
 
@@ -177,70 +177,58 @@ level keys.
   the sources it depends on, and the rule used to produce it. This corresponds
   to a Ninja `build` statement.[^3]
 
-- `actions`: A secondary list of build targets. Any target placed here is
+- `steps`: A secondary list of build targets. Any target placed here is
   treated as `{ phony: true, always: false }` by default.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
 
-The class diagram below summarizes the structure of a `Netsukefile` and the
+The E-R diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.
 
 ```mermaid
-classDiagram
-    class NetsukeManifest {
-        +String netsuke_version
-        +HashMap vars
-        +Vec rules
-        +Vec actions
-        +Vec targets
-        +Vec defaults
+erDiagram
+    NETSUKE_MANIFEST {
+        string netsuke_version
+        map vars
+        list rules
+        list steps
+        list targets
+        list defaults
     }
-    class Target {
-        +StringOrList name
-        +Recipe recipe
-        +StringOrList sources
-        +StringOrList deps
-        +StringOrList order_only_deps
-        +HashMap vars
-        +bool phony
-        +bool always
+    RULE {
+        string name
+        Recipe recipe
+        string description
+        StringOrList deps
     }
-    class Rule {
-        +String name
-        +Recipe recipe
-        +String description
-        +String deps
+    TARGET {
+        StringOrList name
+        Recipe recipe
+        StringOrList sources
+        StringOrList deps
+        StringOrList order_only_deps
+        map vars
+        bool phony
+        bool always
     }
-    class Recipe {
-        <<enumeration>>
-        Command
-        Script
-        Rule
+    RECIPE {
+        enum kind
+        string command
+        string script
+        StringOrList rule
     }
-    class StringOrList {
-        <<enumeration>>
-        Empty
-        String
-        List
+    STRING_OR_LIST {
+        enum value
     }
-    class Value {
-        <<serde_yaml>>
-        Null
-        Bool
-        Number
-        String
-        Sequence
-        Mapping
-        Tagged
-    }
-    NetsukeManifest "1" o-- "*" Target
-    NetsukeManifest "1" o-- "*" Rule
-    NetsukeManifest "1" o-- "*" Value
-    Target "1" -- "1" Recipe
-    Target "1" -- "1" StringOrList
-    Rule "1" -- "1" Recipe
+    NETSUKE_MANIFEST ||--o{ RULE : contains
+    NETSUKE_MANIFEST ||--o{ TARGET : has_steps
+    NETSUKE_MANIFEST ||--o{ TARGET : has_targets
+    RULE }o--|| RECIPE : uses
+    TARGET }o--|| RECIPE : uses
+    TARGET }o--|| STRING_OR_LIST : uses
+    RECIPE }o--|| STRING_OR_LIST : uses
 ```
 
 ### 2.3 Defining `rules`
@@ -286,7 +274,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 ### 2.4 Defining `targets`
 
 Each entry in `targets` defines a build edge; placing a target in the optional
-`actions` list instead marks it as `phony: true` with `always` left `false`.
+`steps` list instead marks it as `phony: true` with `always` left `false`.
 
 - `name`: The primary output file or files for this build step. This can be a
   single string or a list of strings.
@@ -385,12 +373,12 @@ critical step is to parse this string and deserialize it into a structured, in-
 memory representation. The choice of libraries and the definition of the target
 data structures are crucial for the robustness and maintainability of Netsuke.
 
-### 3.1 Crate Selection: `serde_yaml`
+### 3.1 Crate Selection: `serde_yml`
 
-For YAML parsing and deserialization, the recommended crate is `serde_yaml`.
+For YAML parsing and deserialization, the recommended crate is `serde_yml`.
 This choice is based on its deep and direct integration with the `serde`
 framework, the de-facto standard for serialization and deserialization in the
-Rust ecosystem. Using `serde_yaml` allows `serde`'s powerful derive macros to
+Rust ecosystem. Using `serde_yml` allows `serde`'s powerful derive macros to
 automatically generate the deserialization logic for Rust structs. This
 approach is idiomatic, highly efficient, and significantly reduces the amount
 of boilerplate code that needs to be written and maintained. A simple `#`
@@ -402,12 +390,12 @@ highly experimental stage (version 0.0.0)[^11]. Building a core component of
 Netsuke on a nascent or unreleased library would introduce significant and
 unnecessary project risk.
 
-`serde_yaml` is mature, widely adopted, and battle-tested, making it the
-prudent choice for production-quality software.
+`serde_yml` is mature, widely adopted, and battle-tested, making it the prudent
+choice for production-quality software.
 
 ### 3.2 Core Data Structures (`ast.rs`)
 
-The Rust structs that `serde_yaml` will deserialize into form the Abstract
+The Rust structs that `serde_yml` will deserialize into form the Abstract
 Syntax Tree (AST) of the build manifest. These structs must precisely mirror
 the YAML schema defined in Section 2. They will be defined in a dedicated
 module, `src/ast.rs`, and annotated with `#` to enable automatic
@@ -424,16 +412,16 @@ use std::collections::HashMap;
 /// Represents the top-level structure of a Netsukefile file.
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
-    pub netsuke_version: String,
+    pub netsuke_version: Version,
 
     #[serde(default)]
-    pub vars: HashMap<String, serde_yaml::Value>,
+    pub vars: HashMap<String, String>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
 
     #[serde(default)]
-    pub actions: Vec<Target>,
+    pub steps: Vec<Target>,
 
     pub targets: Vec<Target>,
 
@@ -447,7 +435,8 @@ pub struct Rule {
     pub name: String,
     pub recipe: Recipe,
     pub description: Option<String>,
-    pub deps: Option<String>,
+    #[serde(default)]
+    pub deps: StringOrList,
     // Additional fields like 'pool' or 'restat' can be added here
     // to map to more advanced Ninja features.
 }
@@ -508,7 +497,7 @@ as a simple string and multiple as a list, enhancing user-friendliness.*
 
 The integration of a templating engine like Jinja fundamentally shapes the
 parsing pipeline, mandating a two-pass approach. It is impossible to parse the
-user's `Netsukefile` file with `serde_yaml` in a single step.
+user's `Netsukefile` file with `serde_yml` in a single step.
 
 Consider a manifest containing Jinja syntax:
 
@@ -523,7 +512,7 @@ targets:
 
 The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string
 from the perspective of a strict parser. Attempting to deserialize this
-directly with `serde_yaml` would result in a parsing error.
+directly with `serde_yml` would result in a parsing error.
 
 Therefore, the process must be sequential:
 
@@ -543,12 +532,22 @@ YAML
 ```
 
 1. **Second Pass (YAML Deserialization):** This new, rendered string, which is
-   now pure and valid YAML, is then passed to `serde_yaml`. The parser can now
+   now pure and valid YAML, is then passed to `serde_yml`. The parser can now
    successfully deserialize this text into the `NetsukeManifest` Rust struct.
 
 This two-pass mechanism cleanly separates the concerns of templating and data
 structure parsing. It allows each library to do what it does best without
 interference, ensuring a robust and predictable ingestion pipeline.
+
+### 3.4 Design Decisions
+
+The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
+Unknown fields are rejected to surface user errors early. `StringOrList`
+provides a default `Empty` variant, so optional lists are trivial to represent.
+The manifest version is parsed using the `semver` crate to validate that it
+follows semantic versioning rules. Global and target variable maps now share
+the `HashMap<String, String>` type for consistency. This keeps YAML manifests
+concise while ensuring forward compatibility.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
@@ -1304,7 +1303,7 @@ goal.
 
     1. Implement the initial `clap` CLI structure for the `build` command.
 
-    1. Implement the YAML parser using `serde_yaml` and the AST data structures
+    1. Implement the YAML parser using `serde_yml` and the AST data structures
        (`ast.rs`).
 
     1. Implement the AST-to-IR transformation logic, including basic validation
@@ -1329,7 +1328,7 @@ goal.
     1. Integrate the `minijinja` crate into the build pipeline.
 
     1. Implement the two-pass parsing mechanism: first render the manifest with
-       `minijinja`, then parse the result with `serde_yaml`.
+       `minijinja`, then parse the result with `serde_yml`.
 
     1. Populate the initial Jinja context with the global `vars` from the
        manifest.
@@ -1372,7 +1371,7 @@ selected for this project and the rationale for their inclusion.
 | Component | Recommended Crate | Rationale |
 | -------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
 | CLI Parsing | clap | The Rust standard for powerful, derive-based CLI development. |
-| YAML Parsing | serde_yaml | Mature, stable, and provides seamless integration with the serde framework. |
+| YAML Parsing | serde_yml | Mature, stable, and provides seamless integration with the serde framework. |
 | Templating | minijinja | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading. |
 | Shell Quoting | shell-quote | A critical security component; provides robust, shell-specific escaping for command arguments. |
 | Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports. |
