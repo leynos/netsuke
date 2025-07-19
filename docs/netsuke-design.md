@@ -671,9 +671,9 @@ In addition to functions, custom filters provide a concise, pipe-based syntax
 for transforming data within templates.
 
 - `| shell_escape`: A filter that takes a string or list and escapes it for
-  safe inclusion as a single argument in a shell command. This is a non-
-  negotiable security feature to prevent command injection vulnerabilities. The
-  implementation will use the `shell-quote` crate for robust, shell-aware
+  safe inclusion as a single argument in a shell command. This is a
+  non-negotiable security feature to prevent command injection vulnerabilities.
+  The implementation will use the `shell-quote` crate for robust, shell-aware
   quoting.[^22]
 
 - `| to_path`: A filter that converts a string into a platform-native path
@@ -1216,14 +1216,15 @@ use clap::Subcommand;
 #[rustfmt::skip]
 use std::path::PathBuf;
 
-/// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli { /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
     file: PathBuf,
 
-    /// Change to this directory before doing anything. directory:
-    Option<PathBuf>,
+    /// Change to this directory before doing anything.
+    #[arg(short = 'C', long, value_name = "DIR")]
+    directory: Option<PathBuf>,
 
     /// Set the number of parallel build jobs.
     #[arg(short, long, value_name = "N")]
@@ -1232,6 +1233,7 @@ struct Cli { /// Path to the Netsuke manifest file to use.
     #[command(subcommand)]
     command: Option<Commands>, }
 
+#[derive(Subcommand)]
 enum Commands { /// Build specified targets (or default targets if none are
 given) [default]. Build { /// A list of specific targets to build. targets:
 Vec<String>, },
@@ -1239,7 +1241,7 @@ Vec<String>, },
     /// Remove build artifacts and intermediate files. Clean {},
 
     /// Display the build dependency graph in DOT format for visualization.
-    Graph {}, }
+    Graph {},
 ```
 
 *Note: The* `Build` *command is wrapped in an* `Option<Commands>` *and will be
