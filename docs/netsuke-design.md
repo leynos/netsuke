@@ -184,63 +184,51 @@ level keys.
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
 
-The class diagram below summarizes the structure of a `Netsukefile` and the
+The E-R diagram below summarises the structure of a `Netsukefile` and the
 relationships between its components.
 
 ```mermaid
-classDiagram
-    class NetsukeManifest {
-        +String netsuke_version
-        +HashMap vars
-        +Vec rules
-        +Vec actions
-        +Vec targets
-        +Vec defaults
+erDiagram
+    NETSUKE_MANIFEST {
+        string netsuke_version
+        map vars
+        list rules
+        list actions
+        list targets
+        list defaults
     }
-    class Target {
-        +StringOrList name
-        +Recipe recipe
-        +StringOrList sources
-        +StringOrList deps
-        +StringOrList order_only_deps
-        +HashMap vars
-        +bool phony
-        +bool always
+    RULE {
+        string name
+        Recipe recipe
+        string description
+        string deps
     }
-    class Rule {
-        +String name
-        +Recipe recipe
-        +String description
-        +String deps
+    TARGET {
+        StringOrList name
+        Recipe recipe
+        StringOrList sources
+        StringOrList deps
+        StringOrList order_only_deps
+        map vars
+        bool phony
+        bool always
     }
-    class Recipe {
-        <<enumeration>>
-        Command
-        Script
-        Rule
+    RECIPE {
+        enum kind
+        string command
+        string script
+        StringOrList rule
     }
-    class StringOrList {
-        <<enumeration>>
-        Empty
-        String
-        List
+    STRING_OR_LIST {
+        enum value
     }
-    class Value {
-        <<serde_yaml>>
-        Null
-        Bool
-        Number
-        String
-        Sequence
-        Mapping
-        Tagged
-    }
-    NetsukeManifest "1" o-- "*" Target
-    NetsukeManifest "1" o-- "*" Rule
-    NetsukeManifest "1" o-- "*" Value
-    Target "1" -- "1" Recipe
-    Target "1" -- "1" StringOrList
-    Rule "1" -- "1" Recipe
+    NETSUKE_MANIFEST ||--o{ RULE : contains
+    NETSUKE_MANIFEST ||--o{ TARGET : has_actions
+    NETSUKE_MANIFEST ||--o{ TARGET : has_targets
+    RULE }o--|| RECIPE : uses
+    TARGET }o--|| RECIPE : uses
+    TARGET }o--|| STRING_OR_LIST : uses
+    RECIPE }o--|| STRING_OR_LIST : uses
 ```
 
 ### 2.3 Defining `rules`
