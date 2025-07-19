@@ -20,9 +20,9 @@ compilation pipeline from parsing to execution.
     (NetsukeManifest, Rule, Target, StringOrList, Recipe) in `src/ast.rs`.
     *(done)*
 
-  - [ ] Annotate AST structs with #[derive(Deserialize)] and
+  - [x] Annotate AST structs with #[derive(Deserialize)] and
     #[serde(deny_unknown_fields)]
-    to enable serde_yml parsing.
+    to enable serde_yml parsing. *(done)*
 
   - [ ] Implement parsing for the netsuke_version field and validate it using
     the semver crate.
