@@ -589,7 +589,7 @@ fn test_with_destructured_fixture(#[from(complex_user_data_fixture)] (name, _, _
 
 The `#[from]` attribute decouples the fixture's actual function name from the
 variable name used within the consuming function. As shown, if a fixture
-returns a tuple or struct and the test only cares about some parts or wants to
+returns a tuple or struct and the test only cares about some parts or needs to
 use more idiomatic names for destructured elements, `#[from]` is essential to
 link the argument pattern to the correct source fixture.
 
