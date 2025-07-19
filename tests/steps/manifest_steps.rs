@@ -7,7 +7,7 @@ use std::fs;
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments",
+    reason = "Cucumber requires owned String arguments"
 )]
 #[when(expr = "the manifest file {string} is parsed")]
 fn parse_manifest(world: &mut CliWorld, path: String) {
