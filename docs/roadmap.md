@@ -29,7 +29,7 @@ compilation pipeline from parsing to execution.
 
   - [ ] Support `phony` and `always` boolean flags on targets.
 
-  - [ ] Parse the optional actions list, treating each entry as a target with
+  - [ ] Parse the optional steps list, treating each entry as a target with
     phony: true by default.
 
   - [ ] Implement the YAML parsing logic to deserialize a static Netsukefile

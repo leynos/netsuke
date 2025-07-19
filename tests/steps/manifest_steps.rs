@@ -27,7 +27,7 @@ fn parse_manifest(world: &mut CliWorld, path: String) {
 #[then(expr = "the manifest version is {string}")]
 fn manifest_version(world: &mut CliWorld, version: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
-    assert_eq!(manifest.netsuke_version, version);
+    assert_eq!(manifest.netsuke_version.to_string(), version);
 }
 
 #[expect(

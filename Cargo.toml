@@ -7,6 +7,7 @@ edition = "2024"
 clap = { version = "4.5.0", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
+semver = { version = "1", features = ["serde"] }
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }

@@ -4,6 +4,7 @@
 //! `Netsukefile`. They mirror the YAML schema described in the design
 //! document and are deserialised with `serde_yaml`.
 
+use semver::Version;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -11,16 +12,17 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
-    pub netsuke_version: String,
+    pub netsuke_version: Version,
 
     #[serde(default)]
-    pub vars: HashMap<String, serde_yaml::Value>,
+    pub vars: HashMap<String, String>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
 
+    /// Optional top-level steps executed before normal targets.
     #[serde(default)]
-    pub actions: Vec<Target>,
+    pub steps: Vec<Target>,
 
     pub targets: Vec<Target>,
 
@@ -35,7 +37,7 @@ pub struct Rule {
     pub name: String,
     pub recipe: Recipe,
     pub description: Option<String>,
-    pub deps: Option<String>,
+    pub deps: Option<StringOrList>,
 }
 
 /// Execution style for rules and targets.

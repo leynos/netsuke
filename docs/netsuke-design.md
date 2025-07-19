@@ -157,7 +157,7 @@ A `Netsukefile` file is a YAML mapping containing a set of well-defined top-
 level keys.
 
 - `netsuke_version`: A mandatory string that specifies the version of the
-  Netsuke schema the manifest conforms to (e.g., `"1.0"`). This allows for
+  Netsuke schema the manifest conforms to (e.g., `"1.0.0"`). This allows for
   future evolution of the schema while maintaining backward compatibility. This
   version string should be parsed and validated using the `semver` crate.[^4]
 
@@ -177,7 +177,7 @@ level keys.
   the sources it depends on, and the rule used to produce it. This corresponds
   to a Ninja `build` statement.[^3]
 
-- `actions`: A secondary list of build targets. Any target placed here is
+- `steps`: A secondary list of build targets. Any target placed here is
   treated as `{ phony: true, always: false }` by default.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
@@ -193,7 +193,7 @@ erDiagram
         string netsuke_version
         map vars
         list rules
-        list actions
+        list steps
         list targets
         list defaults
     }
@@ -223,7 +223,7 @@ erDiagram
         enum value
     }
     NETSUKE_MANIFEST ||--o{ RULE : contains
-    NETSUKE_MANIFEST ||--o{ TARGET : has_actions
+    NETSUKE_MANIFEST ||--o{ TARGET : has_steps
     NETSUKE_MANIFEST ||--o{ TARGET : has_targets
     RULE }o--|| RECIPE : uses
     TARGET }o--|| RECIPE : uses
@@ -274,7 +274,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 ### 2.4 Defining `targets`
 
 Each entry in `targets` defines a build edge; placing a target in the optional
-`actions` list instead marks it as `phony: true` with `always` left `false`.
+`steps` list instead marks it as `phony: true` with `always` left `false`.
 
 - `name`: The primary output file or files for this build step. This can be a
   single string or a list of strings.
@@ -412,16 +412,16 @@ use std::collections::HashMap;
 /// Represents the top-level structure of a Netsukefile file.
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
-    pub netsuke_version: String,
+    pub netsuke_version: Version,
 
     #[serde(default)]
-    pub vars: HashMap<String, serde_yaml::Value>,
+    pub vars: HashMap<String, String>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
 
     #[serde(default)]
-    pub actions: Vec<Target>,
+    pub steps: Vec<Target>,
 
     pub targets: Vec<Target>,
 
@@ -435,7 +435,7 @@ pub struct Rule {
     pub name: String,
     pub recipe: Recipe,
     pub description: Option<String>,
-    pub deps: Option<String>,
+    pub deps: Option<StringOrList>,
     // Additional fields like 'pool' or 'restat' can be added here
     // to map to more advanced Ninja features.
 }
@@ -543,7 +543,10 @@ interference, ensuring a robust and predictable ingestion pipeline.
 The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
 Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant so optional lists are trivial to represent.
-This keeps YAML manifests concise while ensuring forward compatibility.
+The manifest version is parsed using the `semver` crate to validate that it
+follows semantic versioning rules. Global and target variable maps now share
+the `HashMap<String, String>` type for consistency. This keeps YAML manifests
+concise while ensuring forward compatibility.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
