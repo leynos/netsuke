@@ -201,7 +201,7 @@ erDiagram
         string name
         Recipe recipe
         string description
-        string deps
+        StringOrList deps
     }
     TARGET {
         StringOrList name
@@ -435,7 +435,8 @@ pub struct Rule {
     pub name: String,
     pub recipe: Recipe,
     pub description: Option<String>,
-    pub deps: Option<StringOrList>,
+    #[serde(default)]
+    pub deps: StringOrList,
     // Additional fields like 'pool' or 'restat' can be added here
     // to map to more advanced Ninja features.
 }

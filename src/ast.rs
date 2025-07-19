@@ -8,6 +8,7 @@
 //!
 //! ```rust
 //! use netsuke::ast::NetsukeManifest;
+//! use netsuke::ast::StringOrList;
 //!
 //! let yaml = r#"netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    recipe:\n      kind: command\n      command: \"echo hi\""#;
 //! let manifest: NetsukeManifest = serde_yml::from_str(yaml).expect("parse");
@@ -73,7 +74,8 @@ pub struct NetsukeManifest {
 ///
 /// A rule encapsulates a snippet of work that can be referenced by multiple
 /// targets. It may define a command line, a script block, or delegate to another
-/// named rule. Dependencies are expressed as a whitespace separated list.
+/// named rule. Dependencies may be specified as either a single string or a
+/// list of strings.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
@@ -83,8 +85,9 @@ pub struct Rule {
     pub recipe: Recipe,
     /// Optional human-friendly summary.
     pub description: Option<String>,
-    /// Space separated prerequisites for the rule.
-    pub deps: Option<StringOrList>,
+    /// Prerequisites for the rule. Empty by default.
+    #[serde(default)]
+    pub deps: StringOrList,
 }
 
 /// Execution style for rules and targets.

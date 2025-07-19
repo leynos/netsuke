@@ -177,10 +177,9 @@ fn optional_fields() {
     let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert_eq!(rule.description.as_deref(), Some("Compile"));
-    if let Some(StringOrList::String(dep)) = &rule.deps {
-        assert_eq!(dep, "hello");
-    } else {
-        panic!("deps should be string");
+    match &rule.deps {
+        StringOrList::String(dep) => assert_eq!(dep, "hello"),
+        other => panic!("deps should be String, got: {other:?}"),
     }
 
     let yaml = r#"
@@ -199,7 +198,7 @@ fn optional_fields() {
     let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert!(rule.description.is_none());
-    assert!(rule.deps.is_none());
+    assert!(matches!(rule.deps, StringOrList::Empty));
 }
 
 #[test]
