@@ -933,13 +933,13 @@ variant is far more valuable for debugging than a stack trace from a panic.[^20]
 **Pitfall:** The test run fails with an "ambiguous step" error. This means a
 single Gherkin step matches the patterns of two or more Rust functions.[^21]
 
-**Solution:** <!-- markdownlint-disable MD029 -->
+**Solution:**
 
-5. **Be More Specific:** Make the Gherkin step text or the matching pattern more
-   precise to eliminate the ambiguity.
+1. **Be More Specific:** Make the Gherkin step text or the matching pattern
+   more precise to eliminate the ambiguity.
 
-6. **Anchor Regex:** When using regular expressions, always anchor them with `^`
-   at the start and `$` at the end (e.g., <!-- markdownlint-enable MD029 -->
+2. **Anchor Regex:** When using regular expressions, always anchor them with
+   `^` at the start and `$` at the end (e.g.,
    `regex = r"^the user is logged in$"`). This prevents a step like
    `"the admin user is logged in"` from accidentally matching a less specific
    pattern like `regex = r"user is logged in"`.[^18]
