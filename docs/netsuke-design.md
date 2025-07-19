@@ -1209,7 +1209,11 @@ Rust
 ```rust
 // In src/main.rs
 
-use clap::{Parser, Subcommand};
+#[rustfmt::skip]
+use clap::Parser;
+#[rustfmt::skip]
+use clap::Subcommand;
+#[rustfmt::skip]
 use std::path::PathBuf;
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
