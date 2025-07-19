@@ -1,14 +1,13 @@
 # 🧵 Netsuke
 
-A modern, declarative build system compiler.
-YAML + Jinja in, Ninja out. Nothing more. Nothing less.
+A modern, declarative build system compiler. YAML + Jinja in, Ninja out.
+Nothing more. Nothing less.
 
 ## What is Netsuke?
 
 **Netsuke** is a friendly build system that compiles structured manifests into
-a Ninja build graph.
-It’s not a shell-script runner, a meta-task framework, or a domain-specific CI
-layer. It’s `make`, if `make` hadn’t been invented in 1977.
+a Ninja build graph. It’s not a shell-script runner, a meta-task framework, or
+a domain-specific CI layer. It’s `make`, if `make` hadn’t been invented in 1977.
 
 ### Key properties
 
@@ -48,7 +47,7 @@ targets:
   - name: app
     rule: link
     sources: "{{ glob('src/*.c') | map('basename') | map('with_suffix', '.o') }}"
-````
+```
 
 Yes, it’s just YAML. Yes, that’s a Jinja `foreach`. No, you don’t need to
 define `.PHONY` or remember what `$@` means. This is 2025. You deserve better.
