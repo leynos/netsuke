@@ -595,8 +595,8 @@ concise while ensuring forward compatibility.
 ### 3.5 Testing
 
 Unit tests in `tests/ast_tests.rs` and behavioural scenarios in
-`tests/features/manifest.feature` exercise the deserialisation logic. They
-assert that manifests fail to parse when unknown fields are present and that a
+`tests/features/manifest.feature` exercise the deserialization logic. They
+assert that manifests fail to parse when unknown fields are present, and that a
 minimal manifest round-trips correctly. This suite guards against regressions
 as the schema evolves.
 
