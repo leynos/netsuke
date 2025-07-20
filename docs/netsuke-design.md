@@ -1237,10 +1237,8 @@ enum Commands { /// Build specified targets (or default targets if none are
 given) [default]. Build { /// A list of specific targets to build. targets:
 Vec<String>, },
 
-    /// Remove build artifacts and intermediate files. Clean {},
-
-    /// Display the build dependency graph in DOT format for visualization.
-    Graph {},
+    /// Remove build artefacts and intermediate files. Clean {}, /// Display
+    the build dependency graph in DOT format for visualisation. Graph {}, }
 ```
 
 *Note: The* `Build` *command is wrapped in an* `Option<Commands>` *and will be
