@@ -1135,7 +1135,7 @@ aligned with what is needed.
     Stack Overflow, accessed on 14 July 2025,
     <https://stackoverflow.com/questions/30505639/how-to-do-error-handling-in-rust-and-what-are-the-common-pitfalls>
 
-[^23]: Data tables - Cucumber Rust Book, accessed on 14 July 2025,
+[^23]: Data tables – Cucumber Rust Book — accessed on 14 July 2025 —
     <https://cucumber-rs.github.io/cucumber/main/writing/data_tables.html>
 
 [^24]: Cucumber Data Tables — Tutorialspoint, accessed on 14 July 2025,
@@ -1164,8 +1164,8 @@ aligned with what is needed.
     accessed on July 14, 2025,
     <https://medium.com/@realtalkdev/common-challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
 
-[^31]: Cucumber in cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on
-    14 July 2025,
+[^31]: Cucumber in cucumber – Rust – [Docs.rs](http://Docs.rs) — accessed on 14
+       July 2025 —
     <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
 [^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on

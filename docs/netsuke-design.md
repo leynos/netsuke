@@ -493,6 +493,49 @@ pub enum StringOrList {
 flexibility for users to specify single sources, dependencies, and rule names
 as a simple string and multiple as a list, enhancing user-friendliness.*
 
+#### Example Manifest and AST
+
+The following minimal Netsukefile shows how the derived structures behave when
+unknown fields are denied.
+
+YAML
+
+```yaml
+netsuke_version: "1.0.0"
+targets:
+  - name: hello
+    recipe:
+      kind: command
+      command: echo hi
+```
+
+Rust
+
+```rust
+use std::collections::HashMap;
+use netsuke::ast::*;
+
+let ast = NetsukeManifest {
+    netsuke_version: Version::parse("1.0.0").unwrap(),
+    vars: HashMap::new(),
+    rules: vec![],
+    steps: vec![],
+    targets: vec![Target {
+        name: StringOrList::String("hello".into()),
+        recipe: Recipe::Command {
+            command: "echo hi".into(),
+        },
+        sources: StringOrList::Empty,
+        deps: StringOrList::Empty,
+        order_only_deps: StringOrList::Empty,
+        vars: HashMap::new(),
+        phony: false,
+        always: false,
+    }],
+    defaults: vec![],
+};
+```
+
 ### 3.3 The Two-Pass Parsing Requirement
 
 The integration of a templating engine like Jinja fundamentally shapes the
@@ -548,6 +591,14 @@ The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
 the `HashMap<String, String>` type for consistency. This keeps YAML manifests
 concise while ensuring forward compatibility.
+
+### 3.5 Testing
+
+Unit tests in `tests/ast_tests.rs` and behavioural scenarios in
+`tests/features/manifest.feature` exercise the deserialization logic. They
+assert that manifests fail to parse when unknown fields are present, and that a
+minimal manifest round-trips correctly. This suite guards against regressions
+as the schema evolves.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
