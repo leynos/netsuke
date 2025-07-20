@@ -36,9 +36,10 @@ ambiguity and rework.
 ### 1.2 The Gherkin Language: Structuring Behaviour
 
 To facilitate this process, BDD frameworks like Cucumber use a specific Domain-
-Specific Language (DSL) called Gherkin.[^5] Gherkin provides a simple,
-structured grammar for writing executable specifications in plain text files
-with a `.feature` extension.[^6] Its syntax is designed to be intuitive and
+Specific Language (DSL) called Gherkin.[^4][^5] Other tools, such as Robot
+Framework, also adopt this style.[^8] Gherkin provides a simple, structured
+grammar for writing executable specifications in plain text files with a
+`.feature` extension.[^6] Its syntax is designed to be intuitive and
 accessible, enabling clear communication across different project roles.[^3]
 
 A Gherkin document is line-oriented, with most lines beginning with a specific
@@ -59,11 +60,11 @@ specifications.[^7]
 
 ### 1.3 The Given-When-Then Idiom: A Universal Test Pattern
 
-For developers, the `Given-When-Then` structure is not an entirely new concept.
-It is a highly effective reformulation of well-established testing patterns
-that many are already familiar with from unit testing.[^5] The most common
-parallel is the **Arrange-Act-Assert (AAA)** pattern, conceptualized by Bill
-Wake.
+For developers, the `Given-When-Then` structure is not an entirely new
+concept.[^10] It is a highly effective reformulation of well-established
+testing patterns that many are already familiar with from unit testing.[^5] The
+most common parallel is the **Arrange-Act-Assert (AAA)** pattern,
+conceptualized by Bill Wake.
 
 - **Given** corresponds to **Arrange**: This phase sets up the world. It
   establishes all preconditions, initializes objects, and brings the system
@@ -89,7 +90,7 @@ shared, executable documentation.
 
 Setting up a Rust project to use the `cucumber` crate requires a few specific
 configurations in `Cargo.toml` and a well-defined directory structure. This
-section walks through creating a minimal, runnable test suite from scratch.
+section walks through creating a minimal, runnable test suite from scratch.[^19]
 
 ### 2.1 Configuring `Cargo.toml`
 
@@ -107,7 +108,7 @@ console.[^13]
 | Section            | Key      | Value / Description                                                                                   |
 | ------------------ | -------- | ----------------------------------------------------------------------------------------------------- |
 | [dependencies]     | tokio    | The async runtime. Required with features like macros and rt-multi-thread.[^13]                       |
-| [dev-dependencies] | cucumber | The main testing framework crate.[^16]                                                                |
+| [dev-dependencies] | cucumber | The main testing framework crate.[^16][^17]                                                           |
 | [dev-dependencies] | futures  | Often needed for async operations, particularly with older examples or for specific combinators.[^18] |
 | [[test]]           | name     | The name of the test-runner file (e.g., "cucumber"). This must match the filename in tests/.          |
 | [[test]]           | harness  | Must be set to `false` so cucumber can manage test execution and output.[^14]                         |
@@ -157,7 +158,7 @@ The `.feature` files in `tests/features/` define *what* the system should do.
 These can be read, written, and reviewed by non-technical stakeholders. The
 Rust files in `tests/steps/` define *how* those behaviours are tested. This
 clear boundary is a cornerstone of effective BDD practice and is strongly
-recommended.[^14]
+recommended.[^14][^15]
 
 ### 2.3 The `World` Object: Managing Scenario State
 
@@ -451,7 +452,7 @@ boilerplate.
 
 Sometimes, a step requires a more complex data structure than can be passed
 with simple arguments. For example, setting up an initial inventory or
-providing a list of users. For this, Gherkin provides **Data Tables**.[^23]
+providing a list of users. For this, Gherkin provides **Data Tables**.[^23][^24]
 
 A Data Table is a pipe-delimited table placed directly after a Gherkin step. To
 access this table in a Rust step definition, add a
@@ -663,12 +664,14 @@ because starting the `MockServer` is an async operation and cannot be done in a
 `wiremock-rs` is a pure-Rust library for mocking HTTP-based APIs.[^27]
 Expectations can be defined (for example, "expect a GET request to `/foo`") and
 specify responses. This is done in the `Given` steps to set up the state of the
-external world before the `When` action occurs.
+external world before the `When` action occurs. For a deeper look at using
+`wiremock` in testing, see Julio Merino's tutorial on unit-testing web services
+in Rust.[^28]
 
 Using an in-process mock server like `wiremock-rs` is a superior pattern for
 integration testing. It avoids the complexity and slowness of managing external
 services or Docker containers, leading to faster and more reliable test
-execution.[^27]
+execution.[^27] BrowserStack also offers advice on Cucumber best practices.[^29]
 
 ### 5.4 Implementing the API Step Definitions
 
@@ -976,8 +979,8 @@ The process involves two main steps:
 2. **Publish reports:** Many CI platforms can parse and display test results
    in a structured format. The `cucumber` crate supports generating JUnit XML
    reports via the `output-junit` feature flag.[^16] These XML files can then
-   be published as test artifacts for platforms like GitHub Actions, GitLab CI,
-   or Jenkins to consume.[^33]
+   be published as test artifacts for platforms like GitHub Actions, GitLab
+   CI,[^34] or Jenkins to consume.[^33]
 
 This CI integration closes the BDD loop. The `.feature` files, once checked
 into version control, are no longer static documents. They become active
@@ -1068,6 +1071,9 @@ aligned with what is needed.
     accessed on 14 July 2025,
     <https://medium.com/@buczynski.rafal/gherkin-in-testing-a-beginners-guide-f2e179d5e2df>
 
+[^4]: Gherkin Syntax in Cucumber — Tutorialspoint, accessed on 14 July 2025,
+    <https://www.tutorialspoint.com/cucumber/cucumber_gherkins.htm>
+
 [^5]: *Given When Then* — Martin Fowler, accessed on 14 July 2025,
     <https://martinfowler.com/bliki/GivenWhenThen.html>
 
@@ -1078,8 +1084,14 @@ aligned with what is needed.
 [^7]: *Reference — Cucumber*, accessed on 14 July 2025,
     <https://cucumber.io/docs/gherkin/reference/>
 
+[^8]: BDD (Behavior Driven Development) — ROBOT FRAMEWORK, accessed on 14 July
+      2025, <https://docs.robotframework.org/docs/testcase_styles/bdd>
+
 [^9]: Given-When-Then - Wikipedia, accessed on 14 July 2025,
     <https://en.wikipedia.org/wiki/Given-When-Then>
+
+[^10]: When to Use "Given-When-Then" Acceptance Criteria — Ranorex, accessed on
+       14 July 2025, <https://www.ranorex.com/blog/given-when-then-tests/>
 
 [^11]: *Writing scenarios with Gherkin syntax* — CucumberStudio Documentation,
     accessed on 14 July 2025,
@@ -1095,15 +1107,19 @@ aligned with what is needed.
     external test runners or dependencies. GitHub, accessed on 14 July 2025,
     <https://github.com/AidaPaul/cucumber-rust>
 
+       runners or dependencies. - GitHub, accessed on 14 July 2025,
+       <https://github.com/cucumber-rs/cucumber>
+
 [^16]: cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on 14 July 2025,
     <https://docs.rs/cucumber>
+
+       2025, <https://crates.io/crates/cucumber>
 
 [^18]: *Quickstart* — Cucumber Rust Book, accessed on 14 July 2025,
     <https://cucumber-rs.github.io/cucumber/current/quickstart.html>
 
-[^19]: *A Beginner’s Guide to Cucumber in Rust* — Florian Reinhard, accessed
-    on 14 July 2025,
-    <https://www.florianreinhard.de/cucumber-in-rust-beginners-tutorial/>
+       14 July 2025,
+       <https://www.florianreinhard.de/cucumber-in-rust-beginners-tutorial/>
 
 [^20]: Quickstart - Cucumber Rust Book, accessed on 14 July 2025,
     <https://cucumber-rs.github.io/cucumber/main/quickstart.html>
@@ -1116,10 +1132,15 @@ aligned with what is needed.
     Stack Overflow, accessed on 14 July 2025,
     <https://stackoverflow.com/questions/30505639/how-to-do-error-handling-in-rust-and-what-are-the-common-pitfalls>
 
-[^23]: Data tables - Cucumber Rust Book, accessed on 14 July 2025, 
+[^23]: Data tables - Cucumber Rust Book, accessed on 14 July 2025,
     <https://cucumber-rs.github.io/cucumber/main/writing/data_tables.html>
 
-[^25]: Best practices for scenario writing | CucumberStudio Documentation
+[^24]: Cucumber Data Tables — Tutorialspoint, accessed on 14 July 2025,
+    <https://www.tutorialspoint.com/cucumber/cucumber_data_tables.htm>
+
+[^25]: Best practices for scenario writing — CucumberStudio Documentation,
+    accessed on 14 July 2025,
+    <https://support.smartbear.com/cucumberstudio/docs/tests/best-practices.html>
 
 [^26]: Cucumber Best Practices to follow for efficient BDD Testing | by
     KailashPathak - Medium, accessed on 14 July 2025,
@@ -1128,18 +1149,30 @@ aligned with what is needed.
 [^27]: Rust Solutions - WireMock, accessed on 14 July 2025,
     <https://wiremock.org/docs/solutions/rust/>
 
+[^28]: Unit-testing a web service in Rust — Julio Merino (jmmv.dev), accessed
+       on 14 July 2025,
+    <https://jmmv.dev/2023/07/unit-testing-a-web-service.html>
+
+[^29]: Cucumber Best Practices for Effective BDD Testing — BrowserStack,
+       accessed on 14 July 2025,
+    <https://www.browserstack.com/guide/cucumber-best-practices-for-testing>
+
 [^30]: Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
     accessed on July 14, 2025,
     <https://medium.com/@realtalkdev/common-challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
 
 [^31]: Cucumber in cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on
-    14 July 2025, <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
+    14 July 2025,
+    <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
 [^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on
     14 July 2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
 
 [^33]: Continuous Integration - Cucumber, accessed on 14 July 2025,
     <https://cucumber.io/docs/guides/continuous-integration>
+
+[^34]: GitLab CI/CD examples, accessed on 14 July 2025,
+    <https://docs.gitlab.com/ci/examples/>
 
 [^35]: Setting up effective CI/CD for Rust projects - a short primer -
     [shuttle.dev](http://shuttle.dev), accessed on 14 July 2025,
