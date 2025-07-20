@@ -1103,23 +1103,26 @@ aligned with what is needed.
 [^13]: Rust BDD tests with Cucumber - DEV Community, accessed on 14 July 2025
     <https://dev.to/rogertorres/rust-bdd-with-cucumber-4p68>
 
-[^14]: *Cucumber-rs* — fully-native Cucumber testing framework for Rust with no
-    external test runners or dependencies. GitHub, accessed on 14 July 2025,
+[^14]: Cucumber testing framework for Rust. Fully native, no external test
+    runners or dependencies — GitHub, accessed on 14 July 2025,
     <https://github.com/AidaPaul/cucumber-rust>
 
-       runners or dependencies. - GitHub, accessed on 14 July 2025,
-       <https://github.com/cucumber-rs/cucumber>
+[^15]: Cucumber testing framework for Rust. Fully native, no external test
+    runners or dependencies — GitHub, accessed on 14 July 2025,
+    <https://github.com/cucumber-rs/cucumber>
 
 [^16]: cucumber - Rust - [Docs.rs](http://Docs.rs), accessed on 14 July 2025,
     <https://docs.rs/cucumber>
 
-       2025, <https://crates.io/crates/cucumber>
+[^17]: Cucumber testing framework for Rust — [Crates.io](http://Crates.io),
+    accessed on 14 July 2025, <https://crates.io/crates/cucumber>
 
 [^18]: *Quickstart* — Cucumber Rust Book, accessed on 14 July 2025,
     <https://cucumber-rs.github.io/cucumber/current/quickstart.html>
 
-       14 July 2025,
-       <https://www.florianreinhard.de/cucumber-in-rust-beginners-tutorial/>
+[^19]: Cucumber in Rust - Beginner's Tutorial — Florianrein's Blog, accessed on
+    14 July 2025,
+    <https://www.florianreinhard.de/cucumber-in-rust-beginners-tutorial/>
 
 [^20]: Quickstart - Cucumber Rust Book, accessed on 14 July 2025,
     <https://cucumber-rs.github.io/cucumber/main/quickstart.html>
@@ -1151,11 +1154,11 @@ aligned with what is needed.
 
 [^28]: Unit-testing a web service in Rust — Julio Merino (jmmv.dev), accessed
        on 14 July 2025,
-    <https://jmmv.dev/2023/07/unit-testing-a-web-service.html>
+       <https://jmmv.dev/2023/07/unit-testing-a-web-service.html>
 
 [^29]: Cucumber Best Practices for Effective BDD Testing — BrowserStack,
        accessed on 14 July 2025,
-    <https://www.browserstack.com/guide/cucumber-best-practices-for-testing>
+       <https://www.browserstack.com/guide/cucumber-best-practices-for-testing>
 
 [^30]: Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
     accessed on July 14, 2025,
