@@ -10,4 +10,3 @@ targets:
     recipe:
       kind: command
       command: "true"
-
