@@ -213,3 +213,34 @@ fn invalid_enum_variants() {
     "#;
     assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
 }
+
+#[test]
+fn phony_and_always_flags() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: clean
+            recipe:
+              kind: command
+              command: rm -rf build
+            phony: true
+            always: true
+    "#;
+    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let target = manifest.targets.first().expect("target");
+    assert!(target.phony);
+    assert!(target.always);
+
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: clean
+            recipe:
+              kind: command
+              command: rm -rf build
+    "#;
+    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let target = manifest.targets.first().expect("target");
+    assert!(!target.phony);
+    assert!(!target.always);
+}
