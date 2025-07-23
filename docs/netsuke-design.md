@@ -403,7 +403,7 @@ deserialization and easy debugging.
 
 Rust
 
-````rust
+```rust
 // In src/ast.rs
 
 use serde::Deserialize;
@@ -551,7 +551,7 @@ targets:
   - name: my_app
     sources: "{{ glob('src/*.c') }}"
     rule: compile
-````
+```
 
 The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string
 from the perspective of a strict parser. Attempting to deserialize this
@@ -587,9 +587,10 @@ interference, ensuring a robust and predictable ingestion pipeline.
 The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
 Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
-The manifest version is parsed using the `semver` crate to validate that it
-follows semantic versioning rules. Global and target variable maps now share
-the `HashMap<String, String>` type for consistency. This keeps YAML manifests
+The manifest version is parsed into a `semver::Version`. Using the library's
+`Deserialize` implementation ensures any manifest with an invalid SemVer string
+fails to load. Global and target variable maps now share the
+`HashMap<String, String>` type for consistency. This keeps YAML manifests
 concise while ensuring forward compatibility.
 
 ### 3.5 Testing
@@ -1000,14 +1001,14 @@ structures to the Ninja file syntax.
 
    Code snippet
 
-   ````ninja
+   ```ninja
    # Generated from an ir::Action
    rule cc command = gcc -c -o $out $in description = CC $out depfile = $out.d
    deps = gcc
 
    ```ninja
 
-   ````
+   ```
 
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This

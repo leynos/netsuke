@@ -1166,7 +1166,7 @@ aligned with what is needed.
 
 [^31]: Cucumber in cucumber – Rust – [Docs.rs](http://Docs.rs) — accessed on 14
        July 2025 —
-    <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
+       <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
 [^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on
     14 July 2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>

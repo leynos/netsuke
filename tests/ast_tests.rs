@@ -213,3 +213,9 @@ fn invalid_enum_variants() {
     "#;
     assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
 }
+
+#[test]
+fn invalid_manifest_version() {
+    let yaml = "netsuke_version: '1.0'";
+    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+}
