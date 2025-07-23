@@ -54,3 +54,19 @@ fn first_target_name(world: &mut CliWorld, name: String) {
         other => panic!("Expected StringOrList::String, got: {other:?}"),
     }
 }
+
+#[then("manifest parsing should fail")]
+fn manifest_parsing_should_fail(world: &mut CliWorld) {
+    assert!(world.manifest.is_none(), "expected parsing to fail");
+    assert!(world.manifest_error.is_some(), "error message missing");
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the manifest error message should contain {string}")]
+fn manifest_error_contains(world: &mut CliWorld, text: String) {
+    let err = world.manifest_error.as_ref().expect("error");
+    assert!(err.contains(&text), "{err} does not contain {text}");
+}

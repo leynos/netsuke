@@ -24,8 +24,8 @@ compilation pipeline from parsing to execution.
     #[serde(deny_unknown_fields)]
     to enable serde_yml parsing. *(done)*
 
-  - [ ] Implement parsing for the netsuke_version field and validate it using
-    the semver crate.
+  - [x] Implement parsing for the netsuke_version field and validate it using
+    the semver crate. *(done)*
 
   - [ ] Support `phony` and `always` boolean flags on targets.
 
