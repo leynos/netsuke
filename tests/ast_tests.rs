@@ -216,10 +216,10 @@ fn optional_fields() {
           command: "echo hi"
 "#
 )]
-#[case::steps_missing_recipe(
+#[case::actions_missing_recipe(
     r#"
     netsuke_version: "1.0.0"
-    steps:
+    actions:
       - name: setup
     targets:
       - name: done
@@ -267,7 +267,7 @@ fn phony_and_always_flags() {
 #[case::default_flags(
     r#"
     netsuke_version: "1.0.0"
-    steps:
+    actions:
       - name: setup
         recipe:
           kind: command
@@ -284,7 +284,7 @@ fn phony_and_always_flags() {
 #[case::explicit_phony_false(
     r#"
     netsuke_version: "1.0.0"
-    steps:
+    actions:
       - name: setup
         recipe:
           kind: command
@@ -302,7 +302,7 @@ fn phony_and_always_flags() {
 #[case::explicit_always_true(
     r#"
     netsuke_version: "1.0.0"
-    steps:
+    actions:
       - name: setup
         recipe:
           kind: command
@@ -317,18 +317,22 @@ fn phony_and_always_flags() {
     true,
     true
 )]
-fn steps_behavior(#[case] yaml: &str, #[case] expected_phony: bool, #[case] expected_always: bool) {
+fn actions_behavior(
+    #[case] yaml: &str,
+    #[case] expected_phony: bool,
+    #[case] expected_always: bool,
+) {
     let manifest = parse_manifest(yaml).expect("parse");
-    let step = manifest.steps.first().expect("step");
-    assert_eq!(step.phony, expected_phony);
-    assert_eq!(step.always, expected_always);
+    let action = manifest.actions.first().expect("action");
+    assert_eq!(action.phony, expected_phony);
+    assert_eq!(action.always, expected_always);
 }
 
 #[test]
-fn multiple_steps_are_marked_phony() {
+fn multiple_actions_are_marked_phony() {
     let yaml = r#"
         netsuke_version: "1.0.0"
-        steps:
+        actions:
           - name: setup
             recipe:
               kind: command
@@ -348,9 +352,9 @@ fn multiple_steps_are_marked_phony() {
               command: "true"
     "#;
     let manifest = parse_manifest(yaml).expect("parse");
-    assert_eq!(manifest.steps.len(), 3);
-    for step in &manifest.steps {
-        assert!(step.phony);
-        assert!(!step.always);
+    assert_eq!(manifest.actions.len(), 3);
+    for action in &manifest.actions {
+        assert!(action.phony);
+        assert!(!action.always);
     }
 }

@@ -20,15 +20,15 @@
 use semver::Version;
 use serde::{Deserialize, de::Deserializer};
 
-fn deserialize_steps<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
+fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let mut steps = Vec::<Target>::deserialize(deserializer)?;
-    for step in &mut steps {
-        step.phony = true;
+    let mut actions = Vec::<Target>::deserialize(deserializer)?;
+    for action in &mut actions {
+        action.phony = true;
     }
-    Ok(steps)
+    Ok(actions)
 }
 use std::collections::HashMap;
 
@@ -39,7 +39,7 @@ use std::collections::HashMap;
 ///
 /// ```yaml
 /// netsuke_version: "1.0.0"
-/// steps: []
+/// actions: []
 /// targets:
 ///   - name: hello
 ///     recipe:
@@ -69,10 +69,10 @@ pub struct NetsukeManifest {
     #[serde(default)]
     pub rules: Vec<Rule>,
 
-    /// Optional top-level steps executed before normal targets. Each step is
+    /// Optional setup actions executed before normal targets. Each action is
     /// implicitly marked as `phony` during deserialisation.
-    #[serde(default, deserialize_with = "deserialize_steps")]
-    pub steps: Vec<Target>,
+    #[serde(default, deserialize_with = "deserialize_actions")]
+    pub actions: Vec<Target>,
 
     /// Primary build targets.
     pub targets: Vec<Target>,

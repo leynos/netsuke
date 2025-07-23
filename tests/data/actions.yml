@@ -1,5 +1,5 @@
 netsuke_version: "1.0.0"
-steps:
+actions:
   - name: setup
     recipe:
       kind: command

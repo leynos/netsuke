@@ -69,10 +69,10 @@ fn first_target_always(world: &mut CliWorld) {
     assert!(first.always);
 }
 
-#[then("the first step is phony")]
-fn first_step_phony(world: &mut CliWorld) {
+#[then("the first action is phony")]
+fn first_action_phony(world: &mut CliWorld) {
     let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.steps.first().expect("steps");
+    let first = manifest.actions.first().expect("actions");
     assert!(first.phony);
 }
 
