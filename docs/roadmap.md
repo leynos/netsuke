@@ -27,7 +27,7 @@ compilation pipeline from parsing to execution.
   - [ ] Implement parsing for the netsuke_version field and validate it using
     the semver crate.
 
-  - [ ] Support `phony` and `always` boolean flags on targets.
+  - [x] Support `phony` and `always` boolean flags on targets. *(done)*
 
   - [ ] Parse the optional steps list, treating each entry as a target with
     phony: true by default.

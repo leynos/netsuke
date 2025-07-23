@@ -591,6 +591,9 @@ The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
 the `HashMap<String, String>` type for consistency. This keeps YAML manifests
 concise while ensuring forward compatibility.
+Targets also accept optional `phony` and `always` booleans. They default to
+`false`, making it explicit when a step should run regardless of file
+timestamps.
 
 ### 3.5 Testing
 

@@ -54,3 +54,17 @@ fn first_target_name(world: &mut CliWorld, name: String) {
         other => panic!("Expected StringOrList::String, got: {other:?}"),
     }
 }
+
+#[then("the first target is phony")]
+fn first_target_phony(world: &mut CliWorld) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let first = manifest.targets.first().expect("targets");
+    assert!(first.phony);
+}
+
+#[then("the first target is always rebuilt")]
+fn first_target_always(world: &mut CliWorld) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let first = manifest.targets.first().expect("targets");
+    assert!(first.always);
+}
