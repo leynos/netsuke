@@ -244,3 +244,60 @@ fn phony_and_always_flags() {
     assert!(!target.phony);
     assert!(!target.always);
 }
+
+#[test]
+fn steps_are_marked_phony() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        steps:
+          - name: setup
+            recipe:
+              kind: command
+              command: "echo hi"
+        targets:
+          - name: done
+            recipe:
+              kind: command
+              command: "true"
+    "#;
+    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let step = manifest.steps.first().expect("step");
+    assert!(step.phony);
+    assert!(!step.always);
+}
+
+#[test]
+fn steps_override_phony_false() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        steps:
+          - name: setup
+            recipe:
+              kind: command
+              command: "echo hi"
+            phony: false
+        targets:
+          - name: done
+            recipe:
+              kind: command
+              command: "true"
+    "#;
+    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let step = manifest.steps.first().expect("step");
+    assert!(step.phony, "steps must be treated as phony");
+}
+
+#[test]
+fn steps_missing_fields_fail() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        steps:
+          - name: setup
+        targets:
+          - name: done
+            recipe:
+              kind: command
+              command: "true"
+    "#;
+    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+}

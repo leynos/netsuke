@@ -1,0 +1,10 @@
+netsuke_version: "1.0.0"
+steps:
+  - name: setup
+    phony: false
+targets:
+  - name: done
+    recipe:
+      kind: command
+      command: "true"
+

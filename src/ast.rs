@@ -18,7 +18,18 @@
 //! ```
 
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, de::Deserializer};
+
+fn deserialize_steps<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut steps = Vec::<Target>::deserialize(deserializer)?;
+    for step in &mut steps {
+        step.phony = true;
+    }
+    Ok(steps)
+}
 use std::collections::HashMap;
 
 /// Top-level manifest structure parsed from a `Netsukefile`.
@@ -58,8 +69,9 @@ pub struct NetsukeManifest {
     #[serde(default)]
     pub rules: Vec<Rule>,
 
-    /// Optional top-level steps executed before normal targets.
-    #[serde(default)]
+    /// Optional top-level steps executed before normal targets. Each step is
+    /// implicitly marked as `phony` during deserialisation.
+    #[serde(default, deserialize_with = "deserialize_steps")]
     pub steps: Vec<Target>,
 
     /// Primary build targets.

@@ -403,7 +403,7 @@ deserialization and easy debugging.
 
 Rust
 
-````rust
+```rust
 // In src/ast.rs
 
 use serde::Deserialize;
@@ -551,7 +551,7 @@ targets:
   - name: my_app
     sources: "{{ glob('src/*.c') }}"
     rule: compile
-````
+```
 
 The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string
 from the perspective of a strict parser. Attempting to deserialize this
@@ -590,10 +590,11 @@ provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
 the `HashMap<String, String>` type for consistency. This keeps YAML manifests
-concise while ensuring forward compatibility.
-Targets also accept optional `phony` and `always` booleans. They default to
-`false`, making it explicit when a step should run regardless of file
-timestamps.
+concise while ensuring forward compatibility. Targets also accept optional
+`phony` and `always` booleans. They default to `false`, making it explicit when
+a step should run regardless of file timestamps. Targets listed in the `steps`
+section are deserialised using a custom helper so they are always treated as
+`phony` tasks. This ensures preparation actions never generate build artefacts.
 
 ### 3.5 Testing
 
@@ -1003,14 +1004,14 @@ structures to the Ninja file syntax.
 
    Code snippet
 
-   ````ninja
+   ```ninja
    # Generated from an ir::Action
    rule cc command = gcc -c -o $out $in description = CC $out depfile = $out.d
    deps = gcc
 
    ```ninja
 
-   ````
+   ```
 
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This

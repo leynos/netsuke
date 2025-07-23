@@ -68,3 +68,15 @@ fn first_target_always(world: &mut CliWorld) {
     let first = manifest.targets.first().expect("targets");
     assert!(first.always);
 }
+
+#[then("the first step is phony")]
+fn first_step_phony(world: &mut CliWorld) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let first = manifest.steps.first().expect("steps");
+    assert!(first.phony);
+}
+
+#[then("parsing the manifest fails")]
+fn manifest_parse_error(world: &mut CliWorld) {
+    assert!(world.manifest_error.is_some(), "expected parse error");
+}
