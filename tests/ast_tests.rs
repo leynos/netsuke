@@ -4,6 +4,11 @@ use netsuke::ast::*;
 use rstest::rstest;
 use semver::Version;
 
+/// Convenience wrapper around `serde_yml::from_str` for manifest tests.
+fn parse_manifest(yaml: &str) -> Result<NetsukeManifest, serde_yml::Error> {
+    serde_yml::from_str::<NetsukeManifest>(yaml)
+}
+
 #[rstest]
 fn parse_minimal_manifest() {
     let yaml = r#"netsuke_version: "1.0.0"
@@ -34,7 +39,6 @@ targets:
         panic!("Expected command recipe, got: {:?}", first.recipe);
     }
 }
-
 #[test]
 fn missing_required_fields() {
     let yaml = r#"
@@ -201,17 +205,31 @@ fn optional_fields() {
     assert!(matches!(rule.deps, StringOrList::Empty));
 }
 
-#[test]
-fn invalid_enum_variants() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            recipe:
-              kind: not_a_kind
-              command: "echo hi"
-    "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+#[rstest]
+#[case::invalid_enum_variant(
+    r#"
+    netsuke_version: "1.0.0"
+    targets:
+      - name: hello
+        recipe:
+          kind: not_a_kind
+          command: "echo hi"
+"#
+)]
+#[case::steps_missing_recipe(
+    r#"
+    netsuke_version: "1.0.0"
+    steps:
+      - name: setup
+    targets:
+      - name: done
+        recipe:
+          kind: command
+          command: "true"
+"#
+)]
+fn parsing_failures(#[case] yaml: &str) {
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -245,8 +263,69 @@ fn phony_and_always_flags() {
     assert!(!target.always);
 }
 
+#[rstest]
+#[case::default_flags(
+    r#"
+    netsuke_version: "1.0.0"
+    steps:
+      - name: setup
+        recipe:
+          kind: command
+          command: "echo hi"
+    targets:
+      - name: done
+        recipe:
+          kind: command
+          command: "true"
+"#,
+    true,
+    false
+)]
+#[case::explicit_phony_false(
+    r#"
+    netsuke_version: "1.0.0"
+    steps:
+      - name: setup
+        recipe:
+          kind: command
+          command: "echo hi"
+        phony: false
+    targets:
+      - name: done
+        recipe:
+          kind: command
+          command: "true"
+"#,
+    true,
+    false
+)]
+#[case::explicit_always_true(
+    r#"
+    netsuke_version: "1.0.0"
+    steps:
+      - name: setup
+        recipe:
+          kind: command
+          command: "echo hi"
+        always: true
+    targets:
+      - name: done
+        recipe:
+          kind: command
+          command: "true"
+"#,
+    true,
+    true
+)]
+fn steps_behavior(#[case] yaml: &str, #[case] expected_phony: bool, #[case] expected_always: bool) {
+    let manifest = parse_manifest(yaml).expect("parse");
+    let step = manifest.steps.first().expect("step");
+    assert_eq!(step.phony, expected_phony);
+    assert_eq!(step.always, expected_always);
+}
+
 #[test]
-fn steps_are_marked_phony() {
+fn multiple_steps_are_marked_phony() {
     let yaml = r#"
         netsuke_version: "1.0.0"
         steps:
@@ -254,50 +333,24 @@ fn steps_are_marked_phony() {
             recipe:
               kind: command
               command: "echo hi"
+          - name: build
+            recipe:
+              kind: command
+              command: "make build"
+          - name: test
+            recipe:
+              kind: command
+              command: "cargo test"
         targets:
           - name: done
             recipe:
               kind: command
               command: "true"
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
-    let step = manifest.steps.first().expect("step");
-    assert!(step.phony);
-    assert!(!step.always);
-}
-
-#[test]
-fn steps_override_phony_false() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        steps:
-          - name: setup
-            recipe:
-              kind: command
-              command: "echo hi"
-            phony: false
-        targets:
-          - name: done
-            recipe:
-              kind: command
-              command: "true"
-    "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
-    let step = manifest.steps.first().expect("step");
-    assert!(step.phony, "steps must be treated as phony");
-}
-
-#[test]
-fn steps_missing_fields_fail() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        steps:
-          - name: setup
-        targets:
-          - name: done
-            recipe:
-              kind: command
-              command: "true"
-    "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    let manifest = parse_manifest(yaml).expect("parse");
+    assert_eq!(manifest.steps.len(), 3);
+    for step in &manifest.steps {
+        assert!(step.phony);
+        assert!(!step.always);
+    }
 }
