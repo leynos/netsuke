@@ -1164,11 +1164,12 @@ aligned with what is needed.
     accessed on July 14, 2025,
     <https://medium.com/@realtalkdev/common-challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
 
-[^31]: Cucumber in cucumber – Rust – [Docs.rs](http://Docs.rs) — accessed on 14
-    July 2025 — <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
+[^31]: Cucumber in cucumber – [Docs.rs](http://Docs.rs) — accessed on
+    14 July 2025 —
+    <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
-[^32]: CLI (command-line interface) - Cucumber Rust Book, accessed on
-    14 July 2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
+[^32]: CLI (command-line interface) - Cucumber Rust Book, accessed
+    on 14 July 2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
 
 [^33]: Continuous Integration - Cucumber, accessed on 14 July 2025,
     <https://cucumber.io/docs/guides/continuous-integration>

@@ -1,7 +1,6 @@
 netsuke_version: "1.0.0"
 actions:
   - name: setup
-    phony: false
 targets:
   - name: done
     recipe:
