@@ -4,7 +4,6 @@ actions:
     recipe:
       kind: command
       command: "echo hi"
-    phony: false
 targets:
   - name: done
     recipe:
