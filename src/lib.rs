@@ -5,4 +5,5 @@
 
 pub mod ast;
 pub mod cli;
+pub mod manifest;
 pub mod runner;

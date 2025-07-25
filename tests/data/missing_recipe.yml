@@ -1,0 +1,3 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: hi

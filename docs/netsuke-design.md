@@ -595,15 +595,19 @@ concise while ensuring forward compatibility. Targets also accept optional
 an action should run regardless of file timestamps. Targets listed in the
 `actions` section are deserialised using a custom helper so they are always
 treated as `phony` tasks. This ensures preparation actions never generate build
-artefacts.
+artefacts. Convenience functions in `src/manifest.rs` load a manifest from a
+string or a file path, returning `anyhow::Result` for straightforward error
+handling.
 
 ### 3.5 Testing
 
 Unit tests in `tests/ast_tests.rs` and behavioural scenarios in
 `tests/features/manifest.feature` exercise the deserialization logic. They
 assert that manifests fail to parse when unknown fields are present, and that a
-minimal manifest round-trips correctly. This suite guards against regressions
-as the schema evolves.
+minimal manifest round-trips correctly. A collection of sample manifests under
+`tests/data` cover both valid and invalid permutations of the schema. These
+fixtures are loaded by the tests to ensure real-world YAML files behave as
+expected. This suite guards against regressions as the schema evolves.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 

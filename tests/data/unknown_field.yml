@@ -1,0 +1,7 @@
+netsuke_version: "1.0.0"
+extra: field
+targets:
+  - name: hi
+    recipe:
+      kind: command
+      command: "echo hi"

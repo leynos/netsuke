@@ -17,3 +17,20 @@ Feature: Manifest parsing
   Scenario: Invalid action fails to parse
     When the manifest file "tests/data/action_invalid.yml" is parsed
     Then parsing the manifest fails
+
+  Scenario: Manifest with rules parses correctly
+    When the manifest file "tests/data/rules.yml" is parsed
+    Then the first rule name is "compile"
+    And the first target name is "hello.o"
+
+  Scenario: Unknown field fails to parse
+    When the manifest file "tests/data/unknown_field.yml" is parsed
+    Then parsing the manifest fails
+
+  Scenario: Invalid version fails to parse
+    When the manifest file "tests/data/invalid_version.yml" is parsed
+    Then parsing the manifest fails
+
+  Scenario: Missing recipe fails to parse
+    When the manifest file "tests/data/missing_recipe.yml" is parsed
+    Then parsing the manifest fails
