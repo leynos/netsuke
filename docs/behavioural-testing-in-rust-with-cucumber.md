@@ -1169,7 +1169,8 @@ aligned with what is needed.
     <https://docs.rs/cucumber/latest/cucumber/struct.Cucumber.html>
 
 [^32]: CLI (command-line interface) - Cucumber Rust Book, accessed
-    on 14 July 2025, <https://cucumber-rs.github.io/cucumber/main/cli.html>
+    on 14 July 2025,
+    <https://cucumber-rs.github.io/cucumber/main/cli.html>
 
 [^33]: Continuous Integration - Cucumber, accessed on 14 July 2025,
     <https://cucumber.io/docs/guides/continuous-integration>
