@@ -9,3 +9,11 @@ Feature: Manifest parsing
     When the manifest file "tests/data/phony.yml" is parsed
     Then the first target is phony
     And the first target is always rebuilt
+
+  Scenario: Actions are always treated as phony
+    When the manifest file "tests/data/actions.yml" is parsed
+    Then the first action is phony
+
+  Scenario: Invalid action fails to parse
+    When the manifest file "tests/data/action_invalid.yml" is parsed
+    Then parsing the manifest fails

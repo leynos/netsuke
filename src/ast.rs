@@ -18,7 +18,18 @@
 //! ```
 
 use semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, de::Deserializer};
+
+fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let mut actions = Vec::<Target>::deserialize(deserializer)?;
+    for action in &mut actions {
+        action.phony = true;
+    }
+    Ok(actions)
+}
 use std::collections::HashMap;
 
 /// Top-level manifest structure parsed from a `Netsukefile`.
@@ -28,7 +39,7 @@ use std::collections::HashMap;
 ///
 /// ```yaml
 /// netsuke_version: "1.0.0"
-/// steps: []
+/// actions: []
 /// targets:
 ///   - name: hello
 ///     recipe:
@@ -58,9 +69,10 @@ pub struct NetsukeManifest {
     #[serde(default)]
     pub rules: Vec<Rule>,
 
-    /// Optional top-level steps executed before normal targets.
-    #[serde(default)]
-    pub steps: Vec<Target>,
+    /// Optional setup actions executed before normal targets. Each action is
+    /// implicitly marked as `phony` during deserialisation.
+    #[serde(default, deserialize_with = "deserialize_actions")]
+    pub actions: Vec<Target>,
 
     /// Primary build targets.
     pub targets: Vec<Target>,

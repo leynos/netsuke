@@ -177,7 +177,7 @@ level keys.
   the sources it depends on, and the rule used to produce it. This corresponds
   to a Ninja `build` statement.[^3]
 
-- `steps`: A secondary list of build targets. Any target placed here is
+- `actions`: A secondary list of build targets. Any target placed here is
   treated as `{ phony: true, always: false }` by default.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
@@ -193,7 +193,7 @@ erDiagram
         string netsuke_version
         map vars
         list rules
-        list steps
+        list actions
         list targets
         list defaults
     }
@@ -223,7 +223,7 @@ erDiagram
         enum value
     }
     NETSUKE_MANIFEST ||--o{ RULE : contains
-    NETSUKE_MANIFEST ||--o{ TARGET : has_steps
+    NETSUKE_MANIFEST ||--o{ TARGET : has_actions
     NETSUKE_MANIFEST ||--o{ TARGET : has_targets
     RULE }o--|| RECIPE : uses
     TARGET }o--|| RECIPE : uses
@@ -274,7 +274,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 ### 2.4 Defining `targets`
 
 Each entry in `targets` defines a build edge; placing a target in the optional
-`steps` list instead marks it as `phony: true` with `always` left `false`.
+`actions` list instead marks it as `phony: true` with `always` left `false`.
 
 - `name`: The primary output file or files for this build step. This can be a
   single string or a list of strings.
@@ -403,7 +403,7 @@ deserialization and easy debugging.
 
 Rust
 
-````rust
+```rust
 // In src/ast.rs
 
 use serde::Deserialize;
@@ -421,7 +421,7 @@ pub struct NetsukeManifest {
     pub rules: Vec<Rule>,
 
     #[serde(default)]
-    pub steps: Vec<Target>,
+    pub actions: Vec<Target>,
 
     pub targets: Vec<Target>,
 
@@ -519,7 +519,7 @@ let ast = NetsukeManifest {
     netsuke_version: Version::parse("1.0.0").unwrap(),
     vars: HashMap::new(),
     rules: vec![],
-    steps: vec![],
+    actions: vec![],
     targets: vec![Target {
         name: StringOrList::String("hello".into()),
         recipe: Recipe::Command {
@@ -551,7 +551,7 @@ targets:
   - name: my_app
     sources: "{{ glob('src/*.c') }}"
     rule: compile
-````
+```
 
 The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string
 from the perspective of a strict parser. Attempting to deserialize this
@@ -590,10 +590,12 @@ provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
 the `HashMap<String, String>` type for consistency. This keeps YAML manifests
-concise while ensuring forward compatibility.
-Targets also accept optional `phony` and `always` booleans. They default to
-`false`, making it explicit when a step should run regardless of file
-timestamps.
+concise while ensuring forward compatibility. Targets also accept optional
+`phony` and `always` booleans. They default to `false`, making it explicit when
+an action should run regardless of file timestamps. Targets listed in the
+`actions` section are deserialised using a custom helper so they are always
+treated as `phony` tasks. This ensures preparation actions never generate build
+artefacts.
 
 ### 3.5 Testing
 
@@ -1003,14 +1005,14 @@ structures to the Ninja file syntax.
 
    Code snippet
 
-   ````ninja
+   ```ninja
    # Generated from an ir::Action
    rule cc command = gcc -c -o $out $in description = CC $out depfile = $out.d
    deps = gcc
 
    ```ninja
 
-   ````
+   ```
 
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This

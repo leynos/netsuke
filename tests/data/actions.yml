@@ -1,0 +1,11 @@
+netsuke_version: "1.0.0"
+actions:
+  - name: setup
+    recipe:
+      kind: command
+      command: "echo hi"
+targets:
+  - name: done
+    recipe:
+      kind: command
+      command: "true"
