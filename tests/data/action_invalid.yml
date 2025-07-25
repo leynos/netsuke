@@ -1,3 +1,5 @@
+# This fixture is intentionally invalid. It lacks keys like `recipe` and
+# `phony` so the loader should fail when parsing it.
 netsuke_version: "1.0.0"
 actions:
   - name: setup
