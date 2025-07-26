@@ -96,6 +96,18 @@ impl BuildGraph {
         let mut graph = Self::default();
         let mut rule_map = HashMap::new();
 
+        Self::process_rules(manifest, &mut graph.actions, &mut rule_map);
+        Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
+        Self::process_defaults(manifest, &mut graph.default_targets);
+
+        Ok(graph)
+    }
+
+    fn process_rules(
+        manifest: &NetsukeManifest,
+        actions: &mut HashMap<String, Action>,
+        rule_map: &mut HashMap<String, String>,
+    ) {
         for rule in &manifest.rules {
             let action = Action {
                 recipe: rule.recipe.clone(),
@@ -106,10 +118,17 @@ impl BuildGraph {
                 restat: false,
             };
             let hash = hash_action(&action);
-            graph.actions.entry(hash.clone()).or_insert(action);
+            actions.entry(hash.clone()).or_insert(action);
             rule_map.insert(rule.name.clone(), hash);
         }
+    }
 
+    fn process_targets(
+        manifest: &NetsukeManifest,
+        actions: &mut HashMap<String, Action>,
+        targets: &mut HashMap<PathBuf, BuildEdge>,
+        rule_map: &HashMap<String, String>,
+    ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
             let action_id = match &target.recipe {
@@ -145,7 +164,7 @@ impl BuildGraph {
                         restat: false,
                     };
                     let hash = hash_action(&action);
-                    graph.actions.entry(hash.clone()).or_insert(action);
+                    actions.entry(hash.clone()).or_insert(action);
                     hash
                 }
             };
@@ -161,50 +180,61 @@ impl BuildGraph {
             };
 
             for out in outputs {
-                graph.targets.insert(out, edge.clone());
+                targets.insert(out, edge.clone());
             }
         }
+        Ok(())
+    }
 
+    fn process_defaults(manifest: &NetsukeManifest, defaults: &mut Vec<PathBuf>) {
         for name in &manifest.defaults {
-            graph.default_targets.push(PathBuf::from(name));
+            defaults.push(PathBuf::from(name));
         }
-
-        Ok(graph)
     }
 }
 
 fn hash_action(action: &Action) -> String {
     let mut hasher = Sha256::new();
-    match &action.recipe {
+    hash_recipe(&mut hasher, &action.recipe);
+    hash_optional_fields(&mut hasher, action);
+    format!("{:x}", hasher.finalize())
+}
+
+fn hash_recipe(hasher: &mut Sha256, recipe: &Recipe) {
+    match recipe {
         Recipe::Command { command } => hasher.update(format!("cmd:{command}")),
         Recipe::Script { script } => hasher.update(format!("scr:{script}")),
         Recipe::Rule { rule } => {
             hasher.update("rule:");
-            match rule {
-                StringOrList::String(r) => hasher.update(r.as_bytes()),
-                StringOrList::List(list) => {
-                    for r in list {
-                        hasher.update(r.as_bytes());
-                    }
-                }
-                StringOrList::Empty => {}
-            }
+            hash_rule_reference(hasher, rule);
         }
     }
-    if let Some(d) = &action.description {
-        hasher.update(d.as_bytes());
-    }
-    if let Some(d) = &action.depfile {
-        hasher.update(d.as_bytes());
-    }
-    if let Some(d) = &action.deps_format {
-        hasher.update(d.as_bytes());
-    }
-    if let Some(p) = &action.pool {
-        hasher.update(p.as_bytes());
-    }
+}
+
+fn hash_optional_fields(hasher: &mut Sha256, action: &Action) {
+    hash_optional_string(hasher, action.description.as_ref());
+    hash_optional_string(hasher, action.depfile.as_ref());
+    hash_optional_string(hasher, action.deps_format.as_ref());
+    hash_optional_string(hasher, action.pool.as_ref());
     hasher.update(if action.restat { b"1" } else { b"0" });
-    format!("{:x}", hasher.finalize())
+}
+
+fn hash_rule_reference(hasher: &mut Sha256, rule: &StringOrList) {
+    match rule {
+        StringOrList::String(r) => hasher.update(r.as_bytes()),
+        StringOrList::List(list) => {
+            for r in list {
+                hasher.update(r.as_bytes());
+            }
+        }
+        StringOrList::Empty => {}
+    }
+}
+
+fn hash_optional_string(hasher: &mut Sha256, value: Option<&String>) {
+    if let Some(v) = value {
+        hasher.update(v.as_bytes());
+    }
 }
 
 fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
@@ -220,5 +250,38 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
         StringOrList::String(s) => Some(s),
         StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(
+        Action {
+            recipe: Recipe::Command { command: "echo".into() },
+            description: Some("desc".into()),
+            depfile: Some("$out.d".into()),
+            deps_format: Some("gcc".into()),
+            pool: None,
+            restat: false,
+        },
+        "90e084dfc7f4df17f9a174ffbd97b0ab57c372aa25f0c42ec83ac573a6b77afc"
+    )]
+    #[case(
+        Action {
+            recipe: Recipe::Rule { rule: StringOrList::List(vec!["a".into(), "b".into()]) },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: true,
+        },
+        "c4d115e22054a982b41240841360b1563f035a6ad043b3ae0f0c3a5ed146333b"
+    )]
+    fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
+        assert_eq!(hash_action(&action), expected);
     }
 }
