@@ -2,8 +2,7 @@
 
 use crate::CliWorld;
 use cucumber::{then, when};
-use netsuke::ast::{NetsukeManifest, StringOrList};
-use std::fs;
+use netsuke::{ast::StringOrList, manifest};
 
 #[expect(
     clippy::needless_pass_by_value,
@@ -11,15 +10,7 @@ use std::fs;
 )]
 #[when(expr = "the manifest file {string} is parsed")]
 fn parse_manifest(world: &mut CliWorld, path: String) {
-    let yaml = match fs::read_to_string(&path) {
-        Ok(content) => content,
-        Err(e) => {
-            world.manifest = None;
-            world.manifest_error = Some(format!("Failed to read {path}: {e}"));
-            return;
-        }
-    };
-    match serde_yml::from_str::<NetsukeManifest>(&yaml) {
+    match manifest::from_path(&path) {
         Ok(manifest) => {
             world.manifest = Some(manifest);
             world.manifest_error = None;
@@ -79,4 +70,15 @@ fn first_action_phony(world: &mut CliWorld) {
 #[then("parsing the manifest fails")]
 fn manifest_parse_error(world: &mut CliWorld) {
     assert!(world.manifest_error.is_some(), "expected parse error");
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the first rule name is {string}")]
+fn first_rule_name(world: &mut CliWorld, name: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let rule = manifest.rules.first().expect("rules");
+    assert_eq!(rule.name, name);
 }

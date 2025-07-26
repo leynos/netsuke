@@ -1,12 +1,12 @@
 //! Unit tests for Netsuke manifest AST deserialisation.
 
-use netsuke::ast::*;
+use netsuke::{ast::*, manifest};
 use rstest::rstest;
 use semver::Version;
 
-/// Convenience wrapper around `serde_yml::from_str` for manifest tests.
-fn parse_manifest(yaml: &str) -> Result<NetsukeManifest, serde_yml::Error> {
-    serde_yml::from_str::<NetsukeManifest>(yaml)
+/// Convenience wrapper around the library manifest parser for tests.
+fn parse_manifest(yaml: &str) -> anyhow::Result<NetsukeManifest> {
+    manifest::from_str(yaml)
 }
 
 #[rstest]
@@ -18,7 +18,7 @@ targets:
       kind: command
       command: "echo hi""#;
 
-    let manifest: NetsukeManifest = serde_yml::from_str(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
 
     assert_eq!(
         manifest.netsuke_version,
@@ -48,12 +48,12 @@ fn missing_required_fields() {
               kind: command
               command: "echo hi"
     "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    assert!(manifest::from_str(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
     "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    assert!(manifest::from_str(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
@@ -62,7 +62,7 @@ fn missing_required_fields() {
               kind: command
               command: "echo hi"
     "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    assert!(manifest::from_str(yaml).is_err());
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn unknown_fields() {
               command: "echo hi"
         extra: 42
     "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    assert!(manifest::from_str(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
@@ -87,7 +87,7 @@ fn unknown_fields() {
               command: "echo hi"
             unexpected: true
     "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    assert!(manifest::from_str(yaml).is_err());
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn empty_lists_and_maps() {
         netsuke_version: "1.0.0"
         targets: []
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     assert!(manifest.targets.is_empty());
 
     let yaml = r#"
@@ -105,7 +105,7 @@ fn empty_lists_and_maps() {
           - name: hello
             recipe: {}
     "#;
-    assert!(serde_yml::from_str::<NetsukeManifest>(yaml).is_err());
+    assert!(manifest::from_str(yaml).is_err());
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn string_or_list_variants() {
               kind: command
               command: "echo hi"
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::String(name) = &first.name {
         assert_eq!(name, "hello");
@@ -136,7 +136,7 @@ fn string_or_list_variants() {
               kind: command
               command: "echo hi"
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::List(names) = &first.name {
         assert_eq!(names, &vec!["hello".to_string(), "world".to_string()]);
@@ -152,7 +152,7 @@ fn string_or_list_variants() {
               kind: command
               command: "echo hi"
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::List(names) = &first.name {
         assert!(names.is_empty());
@@ -178,7 +178,7 @@ fn optional_fields() {
               kind: rule
               rule: compile
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert_eq!(rule.description.as_deref(), Some("Compile"));
     match &rule.deps {
@@ -199,7 +199,7 @@ fn optional_fields() {
               kind: rule
               rule: compile
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert!(rule.description.is_none());
     assert!(matches!(rule.deps, StringOrList::Empty));
@@ -244,7 +244,7 @@ fn phony_and_always_flags() {
             phony: true
             always: true
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert!(target.phony);
     assert!(target.always);
@@ -257,7 +257,7 @@ fn phony_and_always_flags() {
               kind: command
               command: rm -rf build
     "#;
-    let manifest = serde_yml::from_str::<NetsukeManifest>(yaml).expect("parse");
+    let manifest = manifest::from_str(yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert!(!target.phony);
     assert!(!target.always);
@@ -357,4 +357,43 @@ fn multiple_actions_are_marked_phony() {
         assert!(action.phony);
         assert!(!action.always);
     }
+}
+
+#[test]
+fn load_manifest_from_file() {
+    let manifest = manifest::from_path("tests/data/minimal.yml").expect("load");
+    assert_eq!(
+        manifest.netsuke_version,
+        Version::parse("1.0.0").expect("ver")
+    );
+}
+
+#[test]
+fn load_manifest_missing_file() {
+    let result = manifest::from_path("tests/data/missing.yml");
+    assert!(result.is_err());
+}
+
+#[rstest]
+#[case("minimal.yml", "hello")]
+#[case("phony.yml", "clean")]
+#[case("rules.yml", "hello.o")]
+fn parse_example_manifests(#[case] file: &str, #[case] first_target: &str) {
+    let path = format!("tests/data/{file}");
+    let manifest = manifest::from_path(&path).expect("load");
+    let first = manifest.targets.first().expect("targets");
+    match &first.name {
+        StringOrList::String(name) => assert_eq!(name, first_target),
+        other => panic!("Expected String variant, got: {other:?}"),
+    }
+}
+
+#[rstest]
+#[case("unknown_field.yml")]
+#[case("invalid_version.yml")]
+#[case("missing_recipe.yml")]
+#[case("action_invalid.yml")]
+fn invalid_manifests_fail(#[case] file: &str) {
+    let path = format!("tests/data/{file}");
+    assert!(manifest::from_path(&path).is_err());
 }
