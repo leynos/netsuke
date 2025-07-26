@@ -15,7 +15,14 @@ use std::{fs, path::Path};
 /// ```
 /// use netsuke::manifest::from_str;
 ///
-/// let yaml = "netsuke_version: 1.0.0\ntargets:\n  - name: a\n    recipe:\n      kind: command\n      command: echo hi";
+/// let yaml = r#"
+/// netsuke_version: 1.0.0
+/// targets:
+///   - name: a
+///     recipe:
+///       kind: command
+///       command: echo hi
+/// "#;
 /// let manifest = from_str(yaml).expect("parse");
 /// assert_eq!(manifest.targets.len(), 1);
 /// ```

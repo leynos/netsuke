@@ -10,3 +10,4 @@ targets:
     recipe:
       kind: rule
       rule: compile
+
