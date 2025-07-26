@@ -26,3 +26,23 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
     let g = world.build_graph.as_ref().expect("graph");
     assert_eq!(g.default_targets.len(), count);
 }
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[when(expr = "the manifest file {string} is compiled to IR")]
+fn compile_manifest(world: &mut CliWorld, path: String) {
+    match netsuke::manifest::from_path(&path)
+        .and_then(|m| BuildGraph::from_manifest(&m).map_err(anyhow::Error::from))
+    {
+        Ok(graph) => {
+            world.build_graph = Some(graph);
+            world.manifest_error = None;
+        }
+        Err(e) => {
+            world.build_graph = None;
+            world.manifest_error = Some(e.to_string());
+        }
+    }
+}

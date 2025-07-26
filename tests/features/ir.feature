@@ -6,3 +6,17 @@ Feature: BuildGraph
     And the graph has 0 targets
     And the graph has 0 default targets
 
+
+  Scenario: BuildGraph from manifest
+    When the manifest file "tests/data/rules.yml" is compiled to IR
+    Then the graph has 1 actions
+    And the graph has 1 targets
+
+  Scenario: Duplicate rules are deduplicated
+    When the manifest file "tests/data/duplicate_rules.yml" is compiled to IR
+    Then the graph has 1 actions
+    And the graph has 2 targets
+
+  Scenario: Rule not found during IR generation
+    When the manifest file "tests/data/missing_rule.yml" is compiled to IR
+    Then parsing the manifest fails

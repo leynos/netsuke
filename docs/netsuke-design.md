@@ -1056,6 +1056,12 @@ action identifier and carries the `phony` and `always` flags verbatim from the
 manifest. No Ninja specific placeholders are stored in the IR to keep the
 representation portable.
 
+- Actions are deduplicated using a SHA-256 hash of their recipe and metadata.
+  Identical commands therefore share the same identifier which keeps the IR
+  deterministic for snapshot tests.
+- Multiple rule references in a single target are not yet supported. The IR
+  generator reports `IrGenError::MultipleRules` when encountered.
+
 ## Section 6: Process Management and Secure Execution
 
 The final stage of a Netsuke build involves executing commands. While Netsuke

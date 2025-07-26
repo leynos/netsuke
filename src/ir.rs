@@ -24,7 +24,6 @@
 //! graph.default_targets.push(PathBuf::from("hello"));
 //! ```
 //
-use crate::ast::Recipe;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -67,4 +66,159 @@ pub struct BuildEdge {
     pub phony: bool,
     /// Run the command on every invocation regardless of timestamps.
     pub always: bool,
+}
+
+use crate::ast::{NetsukeManifest, Recipe, StringOrList};
+use sha2::{Digest, Sha256};
+use thiserror::Error;
+
+/// Errors produced during IR generation.
+#[derive(Debug, Error)]
+pub enum IrGenError {
+    #[error("rule '{rule_name}' referenced by target '{target_name}' was not found")]
+    RuleNotFound {
+        target_name: String,
+        rule_name: String,
+    },
+
+    #[error("multiple rules per target are not supported for '{target_name}'")]
+    MultipleRules { target_name: String },
+}
+
+impl BuildGraph {
+    /// Transform a manifest into a [`BuildGraph`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IrGenError`] when a referenced rule is missing or multiple
+    /// rules are specified for a single target.
+    pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
+        let mut graph = Self::default();
+        let mut rule_map = HashMap::new();
+
+        for rule in &manifest.rules {
+            let action = Action {
+                recipe: rule.recipe.clone(),
+                description: rule.description.clone(),
+                depfile: None,
+                deps_format: None,
+                pool: None,
+                restat: false,
+            };
+            let hash = hash_action(&action);
+            graph.actions.entry(hash.clone()).or_insert(action);
+            rule_map.insert(rule.name.clone(), hash);
+        }
+
+        for target in manifest.actions.iter().chain(&manifest.targets) {
+            let outputs = to_paths(&target.name);
+            let action_id = match &target.recipe {
+                Recipe::Rule { rule } => {
+                    let name = extract_single(rule).ok_or_else(|| IrGenError::MultipleRules {
+                        target_name: outputs
+                            .first()
+                            .cloned()
+                            .unwrap_or_default()
+                            .display()
+                            .to_string(),
+                    })?;
+                    rule_map
+                        .get(name)
+                        .cloned()
+                        .ok_or_else(|| IrGenError::RuleNotFound {
+                            target_name: outputs
+                                .first()
+                                .cloned()
+                                .unwrap_or_default()
+                                .display()
+                                .to_string(),
+                            rule_name: name.to_string(),
+                        })?
+                }
+                Recipe::Command { .. } | Recipe::Script { .. } => {
+                    let action = Action {
+                        recipe: target.recipe.clone(),
+                        description: None,
+                        depfile: None,
+                        deps_format: None,
+                        pool: None,
+                        restat: false,
+                    };
+                    let hash = hash_action(&action);
+                    graph.actions.entry(hash.clone()).or_insert(action);
+                    hash
+                }
+            };
+
+            let edge = BuildEdge {
+                action_id: action_id.clone(),
+                inputs: to_paths(&target.sources),
+                explicit_outputs: outputs.clone(),
+                implicit_outputs: Vec::new(),
+                order_only_deps: to_paths(&target.order_only_deps),
+                phony: target.phony,
+                always: target.always,
+            };
+
+            for out in outputs {
+                graph.targets.insert(out, edge.clone());
+            }
+        }
+
+        for name in &manifest.defaults {
+            graph.default_targets.push(PathBuf::from(name));
+        }
+
+        Ok(graph)
+    }
+}
+
+fn hash_action(action: &Action) -> String {
+    let mut hasher = Sha256::new();
+    match &action.recipe {
+        Recipe::Command { command } => hasher.update(format!("cmd:{command}")),
+        Recipe::Script { script } => hasher.update(format!("scr:{script}")),
+        Recipe::Rule { rule } => {
+            hasher.update("rule:");
+            match rule {
+                StringOrList::String(r) => hasher.update(r.as_bytes()),
+                StringOrList::List(list) => {
+                    for r in list {
+                        hasher.update(r.as_bytes());
+                    }
+                }
+                StringOrList::Empty => {}
+            }
+        }
+    }
+    if let Some(d) = &action.description {
+        hasher.update(d.as_bytes());
+    }
+    if let Some(d) = &action.depfile {
+        hasher.update(d.as_bytes());
+    }
+    if let Some(d) = &action.deps_format {
+        hasher.update(d.as_bytes());
+    }
+    if let Some(p) = &action.pool {
+        hasher.update(p.as_bytes());
+    }
+    hasher.update(if action.restat { b"1" } else { b"0" });
+    format!("{:x}", hasher.finalize())
+}
+
+fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
+    match sol {
+        StringOrList::Empty => Vec::new(),
+        StringOrList::String(s) => vec![PathBuf::from(s)],
+        StringOrList::List(v) => v.iter().map(PathBuf::from).collect(),
+    }
+}
+
+fn extract_single(sol: &StringOrList) -> Option<&str> {
+    match sol {
+        StringOrList::String(s) => Some(s),
+        StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
+        _ => None,
+    }
 }

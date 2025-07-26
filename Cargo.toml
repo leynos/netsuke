@@ -9,6 +9,8 @@ serde = { version = "1", features = ["derive"] }
 serde_yml = "0.0.12"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
+thiserror = "1"
+sha2 = "0.10"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
