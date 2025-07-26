@@ -37,8 +37,8 @@ compilation pipeline from parsing to execution.
 
 - [ ] **Intermediate Representation (IR) and Validation:**
 
-  - [ ] Define the IR data structures (BuildGraph, Action, BuildEdge) in
-    `src/ir.rs`, keeping it backend-agnostic as per the design.
+  - [x] Define the IR data structures (BuildGraph, Action, BuildEdge) in
+    `src/ir.rs`, keeping it backend-agnostic as per the design. *(done)*
 
   - [ ] Implement the ir::from_manifest transformation logic to convert the
     AST into the BuildGraph IR.

@@ -1044,6 +1044,18 @@ default my_app
 
 \`\`\`
 
+### 5.5 Design Decisions
+
+The IR structures defined in `src/ir.rs` are minimal containers that mirror
+Ninja's conceptual model while remaining backend agnostic. `BuildGraph`
+collects all `Action`s and `BuildEdge`s in hash maps keyed by stable strings and
+`PathBuf`s so the graph can be deterministically traversed for snapshot tests.
+Actions hold the parsed `Recipe` and
+optional execution metadata. `BuildEdge` connects inputs to outputs using an
+action identifier and carries the `phony` and `always` flags verbatim from the
+manifest. No Ninja specific placeholders are stored in the IR to keep the
+representation portable.
+
 ## Section 6: Process Management and Secure Execution
 
 The final stage of a Netsuke build involves executing commands. While Netsuke

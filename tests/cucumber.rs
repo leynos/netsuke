@@ -6,6 +6,7 @@ pub struct CliWorld {
     pub cli_error: Option<String>,
     pub manifest: Option<netsuke::ast::NetsukeManifest>,
     pub manifest_error: Option<String>,
+    pub build_graph: Option<netsuke::ir::BuildGraph>,
 }
 
 mod steps;
