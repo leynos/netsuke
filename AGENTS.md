@@ -21,6 +21,12 @@
   related code (e.g., models + utilities + fixtures) close together.
 - **Group by feature, not layer.** Colocate views, logic, fixtures, and helpers
   related to a domain concept rather than splitting by type.
+- **Use consistent spelling and grammar.** Comments must use en-GB-oxendict
+  ("-ize" / "-yse" / "-our") spelling and grammar, with the exception of
+  references to external APIs.
+- **Illustrate with clear examples.** Function documentation must include clear
+  examples demonstrating the usage and outcome of the function. Test documentation
+  should omit examples where the example serves only to reiterate the test logic.
 - **Keep file size managable.** No single code file may be longer than 400 lines.
   Long switch statements or dispatch tables should be broken up by feature and
   constituents colocated with targets. Large blocks of test data should be moved
@@ -35,6 +41,9 @@
   added/removed, or architectural patterns evolve, **proactively update** the
   relevant file(s) in the `docs/` directory to reflect the latest state.
   **Ensure the documentation remains accurate and current.**
+- Documentation must use en-GB-oxendict ("-ize" / "-yse" / "-our") spelling
+  and grammar. (EXCEPTION: the naming of the "LICENSE" file, which
+  is to be left unchanged for community consistency.)
 
 ## Change Quality & Committing
 
@@ -103,8 +112,8 @@ This repository is written in Rust and uses Cargo for building and dependency
 management. Contributors should follow these best practices when working on the
 project:
 
-- Run cargo fmt, cargo clippy -- -D warnings, and RUSTFLAGS="-D warnings" cargo
-  test before committing.
+- Run `make fmt`, `make lint`, and `make test` before committing. These targets
+  wrap `cargo fmt`, `cargo clippy`, and `cargo test` with the appropriate flags.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
@@ -116,6 +125,8 @@ project:
   amount of data returned.
 - Write unit and behavioural tests for new functionality. Run both before and
   after making any change.
+- Every module **must** begin with a module level (`//!`) comment explaining the
+  module's purpose and utility.
 - Document public APIs using Rustdoc comments (`///`) so documentation can be
   generated with cargo doc.
 - Prefer immutable data and avoid unnecessary `mut` bindings.
@@ -156,7 +167,7 @@ project:
 - Validate Markdown files using `make markdownlint`.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
-- Validate Markdown Mermaid diagrams using by running `make nixie`.
+- Validate Mermaid diagrams in Markdown files by running `make nixie`.
 - Markdown paragraphs and bullet points must be wrapped at 80 columns.
 - Code blocks must be wrapped at 120 columns.
 - Tables and headings must not be wrapped.
