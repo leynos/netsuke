@@ -1047,7 +1047,7 @@ default my_app
 ### 5.5 Design Decisions
 
 The IR structures defined in `src/ir.rs` are minimal containers that mirror
-Ninja's conceptual model while remaining backend agnostic. `BuildGraph`
+Ninja's conceptual model while remaining backend-agnostic. `BuildGraph`
 collects all `Action`s and `BuildEdge`s in hash maps keyed by stable strings and
 `PathBuf`s so the graph can be deterministically traversed for snapshot tests.
 Actions hold the parsed `Recipe` and
