@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// The complete, static build graph.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct BuildGraph {
     /// All unique actions in the build keyed by a stable hash.
     pub actions: HashMap<String, Action>,
@@ -40,7 +40,7 @@ pub struct BuildGraph {
 }
 
 /// A reusable command analogous to a Ninja rule.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
@@ -51,7 +51,7 @@ pub struct Action {
 }
 
 /// A single build statement connecting inputs to outputs.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BuildEdge {
     /// Identifier of the [`Action`] used for this edge.
     pub action_id: String,

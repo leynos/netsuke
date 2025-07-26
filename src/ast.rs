@@ -106,7 +106,7 @@ pub struct Rule {
 ///
 /// The variant is selected using the `kind` field in the manifest. Each variant
 /// corresponds to a different way of specifying how a command should run.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Recipe {
     /// A single shell command.
@@ -172,7 +172,7 @@ pub struct Target {
 ///   - hello
 ///   - world
 /// ```
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum StringOrList {
     /// No value provided.
