@@ -1,0 +1,7 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: hello.o
+    sources: hello.c
+    recipe:
+      kind: rule
+      rule: missing
