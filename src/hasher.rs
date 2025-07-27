@@ -71,6 +71,8 @@ impl ActionHasher {
         match rule {
             StringOrList::String(r) => Self::update_with_len(hasher, r.as_bytes()),
             StringOrList::List(list) => {
+                // Preserve the original sequence so that different orders
+                // generate distinct hashes.
                 for r in list {
                     Self::update_with_len(hasher, r.as_bytes());
                 }

@@ -61,6 +61,18 @@ use rstest::rstest;
     },
     "28adc0857704aa0c54c3bc624cb2dc70c101c3936987b20ae520a20319f591c2"
 )]
+// Order of rule names influences the digest.
+#[case(
+    Action {
+        recipe: Recipe::Rule { rule: StringOrList::List(vec!["b".into(), "a".into()]) },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: true,
+    },
+    "b93ff0102089f1f1a3fe9eec082b59d5aab58271a40724ccdfdaade6a68fe340"
+)]
 fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
     assert_eq!(ActionHasher::hash(&action), expected);
 }

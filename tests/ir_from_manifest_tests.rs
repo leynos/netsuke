@@ -37,6 +37,7 @@ enum ExpectedError {
         rules: Vec<String>,
     },
     EmptyRule(String),
+    RuleNotFound(String),
 }
 
 #[rstest]
@@ -59,6 +60,10 @@ enum ExpectedError {
     "tests/data/empty_rule.yml",
     ExpectedError::EmptyRule("hello.o".into())
 )]
+#[case(
+    "tests/data/rule_not_found.yml",
+    ExpectedError::RuleNotFound("missing_rule".into())
+)]
 fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedError) {
     let manifest = manifest::from_path(manifest_path).expect("load");
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
@@ -78,6 +83,9 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
         }
         (IrGenError::EmptyRule { target_name }, ExpectedError::EmptyRule(exp_target)) => {
             assert_eq!(target_name, exp_target);
+        }
+        (IrGenError::RuleNotFound { rule_name, .. }, ExpectedError::RuleNotFound(exp_rule)) => {
+            assert_eq!(rule_name, exp_rule);
         }
         (other, exp) => panic!("expected {exp:?} but got {other:?}"),
     }

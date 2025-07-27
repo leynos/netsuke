@@ -132,30 +132,9 @@ impl BuildGraph {
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
+            let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
-                Recipe::Rule { rule } => {
-                    if let Some(name) = extract_single(rule) {
-                        rule_map
-                            .get(name)
-                            .cloned()
-                            .ok_or_else(|| IrGenError::RuleNotFound {
-                                target_name: get_target_display_name(&outputs),
-                                rule_name: name.to_string(),
-                            })?
-                    } else {
-                        let mut rules = to_string_vec(rule);
-                        if rules.is_empty() {
-                            return Err(IrGenError::EmptyRule {
-                                target_name: get_target_display_name(&outputs),
-                            });
-                        }
-                        rules.sort();
-                        return Err(IrGenError::MultipleRules {
-                            target_name: get_target_display_name(&outputs),
-                            rules,
-                        });
-                    }
-                }
+                Recipe::Rule { rule } => resolve_rule(rule, rule_map, &target_name)?,
                 Recipe::Command { .. } | Recipe::Script { .. } => {
                     register_action(actions, target.recipe.clone(), None)
                 }
@@ -171,17 +150,8 @@ impl BuildGraph {
                 always: target.always,
             };
 
-            let mut duplicates = Vec::new();
-            for out in &outputs {
-                if targets.contains_key(out) {
-                    duplicates.push(out.display().to_string());
-                }
-            }
-            if !duplicates.is_empty() {
-                duplicates.sort();
-                return Err(IrGenError::DuplicateOutput {
-                    outputs: duplicates,
-                });
+            if let Some(dups) = find_duplicates(&outputs, targets) {
+                return Err(IrGenError::DuplicateOutput { outputs: dups });
             }
             for out in outputs {
                 targets.insert(out, edge.clone());
@@ -239,6 +209,55 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
         StringOrList::String(s) => Some(s),
         StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
         _ => None,
+    }
+}
+
+fn resolve_rule(
+    rule: &StringOrList,
+    rule_map: &HashMap<String, String>,
+    target_name: &str,
+) -> Result<String, IrGenError> {
+    extract_single(rule).map_or_else(
+        || {
+            let mut rules = to_string_vec(rule);
+            if rules.is_empty() {
+                Err(IrGenError::EmptyRule {
+                    target_name: target_name.to_string(),
+                })
+            } else {
+                rules.sort();
+                Err(IrGenError::MultipleRules {
+                    target_name: target_name.to_string(),
+                    rules,
+                })
+            }
+        },
+        |name| {
+            rule_map
+                .get(name)
+                .cloned()
+                .ok_or_else(|| IrGenError::RuleNotFound {
+                    target_name: target_name.to_string(),
+                    rule_name: name.to_string(),
+                })
+        },
+    )
+}
+
+fn find_duplicates(
+    outputs: &[PathBuf],
+    targets: &HashMap<PathBuf, BuildEdge>,
+) -> Option<Vec<String>> {
+    let mut dups: Vec<_> = outputs
+        .iter()
+        .filter(|o| targets.contains_key(*o))
+        .map(|o| o.display().to_string())
+        .collect();
+    if dups.is_empty() {
+        None
+    } else {
+        dups.sort();
+        Some(dups)
     }
 }
 
