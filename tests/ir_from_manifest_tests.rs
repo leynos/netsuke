@@ -33,12 +33,35 @@ fn missing_rule_fails() {
 fn duplicate_outputs_fail() {
     let manifest = manifest::from_path("tests/data/duplicate_outputs.yml").expect("load");
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    assert!(matches!(err, IrGenError::DuplicateOutput { .. }));
+    match err {
+        IrGenError::DuplicateOutput { outputs } => {
+            assert_eq!(outputs, vec![String::from("hello.o")]);
+        }
+        _ => panic!("wrong error"),
+    }
 }
 
 #[rstest]
 fn multiple_rules_per_target_fails() {
     let manifest = manifest::from_path("tests/data/multiple_rules_per_target.yml").expect("load");
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    assert!(matches!(err, IrGenError::MultipleRules { .. }));
+    match err {
+        IrGenError::MultipleRules { target_name, rules } => {
+            assert_eq!(target_name, "hello.o");
+            assert_eq!(rules, vec![String::from("compile1"), String::from("compile2")]);
+        }
+        _ => panic!("wrong error"),
+    }
+}
+
+#[rstest]
+fn duplicate_outputs_multi_listed() {
+    let manifest = manifest::from_path("tests/data/duplicate_outputs_multi.yml").expect("load");
+    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
+    match err {
+        IrGenError::DuplicateOutput { outputs } => {
+            assert_eq!(outputs, vec![String::from("bar.o"), String::from("foo.o")]);
+        }
+        _ => panic!("wrong error"),
+    }
 }

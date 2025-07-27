@@ -69,8 +69,9 @@ pub struct BuildEdge {
 }
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::hasher::ActionHasher;
 
 /// Errors produced during IR generation.
 #[derive(Debug, Error)]
@@ -81,11 +82,14 @@ pub enum IrGenError {
         rule_name: String,
     },
 
-    #[error("multiple rules per target are not supported for '{target_name}'")]
-    MultipleRules { target_name: String },
+    #[error("multiple rules for target '{target_name}': {rules:?}")]
+    MultipleRules {
+        target_name: String,
+        rules: Vec<String>,
+    },
 
-    #[error("target output '{output}' defined multiple times")]
-    DuplicateOutput { output: String },
+    #[error("duplicate target outputs: {outputs:?}")]
+    DuplicateOutput { outputs: Vec<String> },
 }
 
 impl BuildGraph {
@@ -127,16 +131,20 @@ impl BuildGraph {
             let outputs = to_paths(&target.name);
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
-                    let name = extract_single(rule).ok_or_else(|| IrGenError::MultipleRules {
-                        target_name: get_target_display_name(&outputs),
-                    })?;
-                    rule_map
-                        .get(name)
-                        .cloned()
-                        .ok_or_else(|| IrGenError::RuleNotFound {
+                    if let Some(name) = extract_single(rule) {
+                        rule_map
+                            .get(name)
+                            .cloned()
+                            .ok_or_else(|| IrGenError::RuleNotFound {
+                                target_name: get_target_display_name(&outputs),
+                                rule_name: name.to_string(),
+                            })?
+                    } else {
+                        return Err(IrGenError::MultipleRules {
                             target_name: get_target_display_name(&outputs),
-                            rule_name: name.to_string(),
-                        })?
+                            rules: to_strings(rule),
+                        });
+                    }
                 }
                 Recipe::Command { .. } | Recipe::Script { .. } => {
                     register_action(actions, target.recipe.clone(), None)
@@ -153,12 +161,18 @@ impl BuildGraph {
                 always: target.always,
             };
 
-            for out in outputs {
-                if targets.contains_key(&out) {
-                    return Err(IrGenError::DuplicateOutput {
-                        output: out.display().to_string(),
-                    });
+            let mut duplicates = Vec::new();
+            for out in &outputs {
+                if targets.contains_key(out) {
+                    duplicates.push(out.display().to_string());
                 }
+            }
+            if !duplicates.is_empty() {
+                return Err(IrGenError::DuplicateOutput {
+                    outputs: duplicates,
+                });
+            }
+            for out in outputs {
                 targets.insert(out, edge.clone());
             }
         }
@@ -185,74 +199,9 @@ fn register_action(
         pool: None,
         restat: false,
     };
-    let hash = hash_action(&action);
+    let hash = ActionHasher::hash(&action);
     actions.entry(hash.clone()).or_insert(action);
     hash
-}
-
-/// Computes a hash for an [`Action`].
-///
-/// Note: The hash depends on the order and formatting of the fields as they
-/// are serialized. If stability across code or format changes is required,
-/// consider using a canonical serialization format via `serde`.
-fn hash_action(action: &Action) -> String {
-    let mut hasher = Sha256::new();
-    hash_recipe(&mut hasher, &action.recipe);
-    hash_optional_fields(&mut hasher, action);
-    format!("{:x}", hasher.finalize())
-}
-
-fn hash_recipe(hasher: &mut Sha256, recipe: &Recipe) {
-    match recipe {
-        Recipe::Command { command } => {
-            hasher.update(b"cmd");
-            update_with_len(hasher, command.as_bytes());
-        }
-        Recipe::Script { script } => {
-            hasher.update(b"scr");
-            update_with_len(hasher, script.as_bytes());
-        }
-        Recipe::Rule { rule } => {
-            hasher.update(b"rule");
-            hash_rule_reference(hasher, rule);
-        }
-    }
-}
-
-fn hash_optional_fields(hasher: &mut Sha256, action: &Action) {
-    hash_optional_string(hasher, action.description.as_ref());
-    hash_optional_string(hasher, action.depfile.as_ref());
-    hash_optional_string(hasher, action.deps_format.as_ref());
-    hash_optional_string(hasher, action.pool.as_ref());
-    hasher.update(if action.restat { b"1" } else { b"0" });
-}
-
-fn hash_rule_reference(hasher: &mut Sha256, rule: &StringOrList) {
-    match rule {
-        StringOrList::String(r) => update_with_len(hasher, r.as_bytes()),
-        StringOrList::List(list) => {
-            for r in list {
-                update_with_len(hasher, r.as_bytes());
-            }
-        }
-        StringOrList::Empty => {}
-    }
-}
-
-fn hash_optional_string(hasher: &mut Sha256, value: Option<&String>) {
-    match value {
-        Some(v) => {
-            hasher.update(b"1");
-            update_with_len(hasher, v.as_bytes());
-        }
-        None => hasher.update(b"0"),
-    }
-}
-
-fn update_with_len(hasher: &mut Sha256, bytes: &[u8]) {
-    let len = bytes.len();
-    hasher.update(format!("{len}:").as_bytes());
-    hasher.update(bytes);
 }
 
 fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
@@ -260,6 +209,14 @@ fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
         StringOrList::Empty => Vec::new(),
         StringOrList::String(s) => vec![PathBuf::from(s)],
         StringOrList::List(v) => v.iter().map(PathBuf::from).collect(),
+    }
+}
+
+fn to_strings(sol: &StringOrList) -> Vec<String> {
+    match sol {
+        StringOrList::Empty => Vec::new(),
+        StringOrList::String(s) => vec![s.clone()],
+        StringOrList::List(v) => v.clone(),
     }
 }
 
@@ -276,37 +233,4 @@ fn get_target_display_name(paths: &[PathBuf]) -> String {
         .first()
         .map(|p| p.display().to_string())
         .unwrap_or_default()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(
-        Action {
-            recipe: Recipe::Command { command: "echo".into() },
-            description: Some("desc".into()),
-            depfile: Some("$out.d".into()),
-            deps_format: Some("gcc".into()),
-            pool: None,
-            restat: false,
-        },
-        "a0f6e2cd3b9b3cee0bf94a7d53bce56cf4178dfe907bb1cb7c832f47846baf38"
-    )]
-    #[case(
-        Action {
-            recipe: Recipe::Rule { rule: StringOrList::List(vec!["a".into(), "b".into()]) },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: true,
-        },
-        "cf8e97357820acf6f66037dcf977ee36c88c2811d60342db30c99507d24a0d60"
-    )]
-    fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
-        assert_eq!(hash_action(&action), expected);
-    }
 }
