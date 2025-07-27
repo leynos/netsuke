@@ -128,23 +128,13 @@ impl BuildGraph {
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
                     let name = extract_single(rule).ok_or_else(|| IrGenError::MultipleRules {
-                        target_name: outputs
-                            .first()
-                            .cloned()
-                            .unwrap_or_default()
-                            .display()
-                            .to_string(),
+                        target_name: get_target_display_name(&outputs),
                     })?;
                     rule_map
                         .get(name)
                         .cloned()
                         .ok_or_else(|| IrGenError::RuleNotFound {
-                            target_name: outputs
-                                .first()
-                                .cloned()
-                                .unwrap_or_default()
-                                .display()
-                                .to_string(),
+                            target_name: get_target_display_name(&outputs),
                             rule_name: name.to_string(),
                         })?
                 }
@@ -154,7 +144,7 @@ impl BuildGraph {
             };
 
             let edge = BuildEdge {
-                action_id: action_id.clone(),
+                action_id,
                 inputs: to_paths(&target.sources),
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
@@ -200,6 +190,11 @@ fn register_action(
     hash
 }
 
+/// Computes a hash for an [`Action`].
+///
+/// Note: The hash depends on the order and formatting of the fields as they
+/// are serialized. If stability across code or format changes is required,
+/// consider using a canonical serialization format via `serde`.
 fn hash_action(action: &Action) -> String {
     let mut hasher = Sha256::new();
     hash_recipe(&mut hasher, &action.recipe);
@@ -274,6 +269,13 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
         StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
         _ => None,
     }
+}
+
+fn get_target_display_name(paths: &[PathBuf]) -> String {
+    paths
+        .first()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

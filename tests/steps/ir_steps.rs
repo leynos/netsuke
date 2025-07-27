@@ -46,3 +46,11 @@ fn compile_manifest(world: &mut CliWorld, path: String) {
         }
     }
 }
+
+#[then("IR generation fails")]
+fn ir_generation_fails(world: &mut CliWorld) {
+    assert!(
+        world.manifest_error.is_some(),
+        "expected IR generation error"
+    );
+}

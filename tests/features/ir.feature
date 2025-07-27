@@ -19,8 +19,12 @@ Feature: BuildGraph
 
   Scenario: Rule not found during IR generation
     When the manifest file "tests/data/missing_rule.yml" is compiled to IR
-    Then parsing the manifest fails
+    Then IR generation fails
+
+  Scenario: Multiple rules specified for target
+    When the manifest file "tests/data/multiple_rules_per_target.yml" is compiled to IR
+    Then IR generation fails
 
   Scenario: Duplicate target outputs
     When the manifest file "tests/data/duplicate_outputs.yml" is compiled to IR
-    Then parsing the manifest fails
+    Then IR generation fails
