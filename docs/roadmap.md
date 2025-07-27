@@ -40,14 +40,15 @@ compilation pipeline from parsing to execution.
   - [x] Define the IR data structures (BuildGraph, Action, BuildEdge) in
     `src/ir.rs`, keeping it backend-agnostic as per the design. *(done)*
 
-  - [ ] Implement the ir::from_manifest transformation logic to convert the
-    AST into the BuildGraph IR.
+  - [x] Implement the ir::from_manifest transformation logic to convert the
+    AST into the BuildGraph IR. *(done)*
 
-  - [ ] During transformation, consolidate and deduplicate rules into ir::Action
-    structs based on a hash of their properties.
+  - [x] During transformation, consolidate and deduplicate rules into ir::Action
+    structs based on a hash of their properties. *(done)*
 
-  - [ ] Implement validation to ensure that every rule, command, or script
+  - [x] Implement validation to ensure that every rule, command, or script
     referenced by a target is valid and that they are mutually exclusive.
+    *(done)*
 
   - [ ] Implement a cycle detection algorithm (e.g., depth-first search) to fail
     compilation if a circular dependency is found in the target graph.
