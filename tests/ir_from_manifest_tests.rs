@@ -29,16 +29,64 @@ fn missing_rule_fails() {
     assert!(matches!(err, IrGenError::RuleNotFound { .. }));
 }
 
-#[rstest]
-fn duplicate_outputs_fail() {
-    let manifest = manifest::from_path("tests/data/duplicate_outputs.yml").expect("load");
-    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    assert!(matches!(err, IrGenError::DuplicateOutput { .. }));
+#[derive(Debug)]
+enum ExpectedError {
+    DuplicateOutput(Vec<String>),
+    MultipleRules {
+        target_name: String,
+        rules: Vec<String>,
+    },
+    EmptyRule(String),
+    RuleNotFound(String),
 }
 
 #[rstest]
-fn multiple_rules_per_target_fails() {
-    let manifest = manifest::from_path("tests/data/multiple_rules_per_target.yml").expect("load");
+#[case(
+    "tests/data/duplicate_outputs.yml",
+    ExpectedError::DuplicateOutput(vec!["hello.o".into()])
+)]
+#[case(
+    "tests/data/duplicate_outputs_multi.yml",
+    ExpectedError::DuplicateOutput(vec!["bar.o".into(), "foo.o".into()])
+)]
+#[case(
+    "tests/data/multiple_rules_per_target.yml",
+    ExpectedError::MultipleRules {
+        target_name: "hello.o".into(),
+        rules: vec!["compile1".into(), "compile2".into()],
+    }
+)]
+#[case(
+    "tests/data/empty_rule.yml",
+    ExpectedError::EmptyRule("hello.o".into())
+)]
+#[case(
+    "tests/data/rule_not_found.yml",
+    ExpectedError::RuleNotFound("missing_rule".into())
+)]
+fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedError) {
+    let manifest = manifest::from_path(manifest_path).expect("load");
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    assert!(matches!(err, IrGenError::MultipleRules { .. }));
+    match (err, expected) {
+        (IrGenError::DuplicateOutput { outputs }, ExpectedError::DuplicateOutput(exp_outputs)) => {
+            assert_eq!(outputs, exp_outputs);
+        }
+        (
+            IrGenError::MultipleRules { target_name, rules },
+            ExpectedError::MultipleRules {
+                target_name: exp_target,
+                rules: exp_rules,
+            },
+        ) => {
+            assert_eq!(target_name, exp_target);
+            assert_eq!(rules, exp_rules);
+        }
+        (IrGenError::EmptyRule { target_name }, ExpectedError::EmptyRule(exp_target)) => {
+            assert_eq!(target_name, exp_target);
+        }
+        (IrGenError::RuleNotFound { rule_name, .. }, ExpectedError::RuleNotFound(exp_rule)) => {
+            assert_eq!(rule_name, exp_rule);
+        }
+        (other, exp) => panic!("expected {exp:?} but got {other:?}"),
+    }
 }

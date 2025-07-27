@@ -5,6 +5,7 @@
 
 pub mod ast;
 pub mod cli;
+pub mod hasher;
 pub mod ir;
 pub mod manifest;
 pub mod runner;
