@@ -83,6 +83,9 @@ pub enum IrGenError {
 
     #[error("multiple rules per target are not supported for '{target_name}'")]
     MultipleRules { target_name: String },
+
+    #[error("target output '{output}' defined multiple times")]
+    DuplicateOutput { output: String },
 }
 
 impl BuildGraph {
@@ -109,16 +112,7 @@ impl BuildGraph {
         rule_map: &mut HashMap<String, String>,
     ) {
         for rule in &manifest.rules {
-            let action = Action {
-                recipe: rule.recipe.clone(),
-                description: rule.description.clone(),
-                depfile: None,
-                deps_format: None,
-                pool: None,
-                restat: false,
-            };
-            let hash = hash_action(&action);
-            actions.entry(hash.clone()).or_insert(action);
+            let hash = register_action(actions, rule.recipe.clone(), rule.description.clone());
             rule_map.insert(rule.name.clone(), hash);
         }
     }
@@ -155,17 +149,7 @@ impl BuildGraph {
                         })?
                 }
                 Recipe::Command { .. } | Recipe::Script { .. } => {
-                    let action = Action {
-                        recipe: target.recipe.clone(),
-                        description: None,
-                        depfile: None,
-                        deps_format: None,
-                        pool: None,
-                        restat: false,
-                    };
-                    let hash = hash_action(&action);
-                    actions.entry(hash.clone()).or_insert(action);
-                    hash
+                    register_action(actions, target.recipe.clone(), None)
                 }
             };
 
@@ -180,6 +164,11 @@ impl BuildGraph {
             };
 
             for out in outputs {
+                if targets.contains_key(&out) {
+                    return Err(IrGenError::DuplicateOutput {
+                        output: out.display().to_string(),
+                    });
+                }
                 targets.insert(out, edge.clone());
             }
         }
@@ -193,6 +182,24 @@ impl BuildGraph {
     }
 }
 
+fn register_action(
+    actions: &mut HashMap<String, Action>,
+    recipe: Recipe,
+    description: Option<String>,
+) -> String {
+    let action = Action {
+        recipe,
+        description,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let hash = hash_action(&action);
+    actions.entry(hash.clone()).or_insert(action);
+    hash
+}
+
 fn hash_action(action: &Action) -> String {
     let mut hasher = Sha256::new();
     hash_recipe(&mut hasher, &action.recipe);
@@ -202,10 +209,16 @@ fn hash_action(action: &Action) -> String {
 
 fn hash_recipe(hasher: &mut Sha256, recipe: &Recipe) {
     match recipe {
-        Recipe::Command { command } => hasher.update(format!("cmd:{command}")),
-        Recipe::Script { script } => hasher.update(format!("scr:{script}")),
+        Recipe::Command { command } => {
+            hasher.update(b"cmd");
+            update_with_len(hasher, command.as_bytes());
+        }
+        Recipe::Script { script } => {
+            hasher.update(b"scr");
+            update_with_len(hasher, script.as_bytes());
+        }
         Recipe::Rule { rule } => {
-            hasher.update("rule:");
+            hasher.update(b"rule");
             hash_rule_reference(hasher, rule);
         }
     }
@@ -221,10 +234,10 @@ fn hash_optional_fields(hasher: &mut Sha256, action: &Action) {
 
 fn hash_rule_reference(hasher: &mut Sha256, rule: &StringOrList) {
     match rule {
-        StringOrList::String(r) => hasher.update(r.as_bytes()),
+        StringOrList::String(r) => update_with_len(hasher, r.as_bytes()),
         StringOrList::List(list) => {
             for r in list {
-                hasher.update(r.as_bytes());
+                update_with_len(hasher, r.as_bytes());
             }
         }
         StringOrList::Empty => {}
@@ -232,9 +245,19 @@ fn hash_rule_reference(hasher: &mut Sha256, rule: &StringOrList) {
 }
 
 fn hash_optional_string(hasher: &mut Sha256, value: Option<&String>) {
-    if let Some(v) = value {
-        hasher.update(v.as_bytes());
+    match value {
+        Some(v) => {
+            hasher.update(b"1");
+            update_with_len(hasher, v.as_bytes());
+        }
+        None => hasher.update(b"0"),
     }
+}
+
+fn update_with_len(hasher: &mut Sha256, bytes: &[u8]) {
+    let len = bytes.len();
+    hasher.update(format!("{len}:").as_bytes());
+    hasher.update(bytes);
 }
 
 fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
@@ -268,7 +291,7 @@ mod tests {
             pool: None,
             restat: false,
         },
-        "90e084dfc7f4df17f9a174ffbd97b0ab57c372aa25f0c42ec83ac573a6b77afc"
+        "a0f6e2cd3b9b3cee0bf94a7d53bce56cf4178dfe907bb1cb7c832f47846baf38"
     )]
     #[case(
         Action {
@@ -279,7 +302,7 @@ mod tests {
             pool: None,
             restat: true,
         },
-        "c4d115e22054a982b41240841360b1563f035a6ad043b3ae0f0c3a5ed146333b"
+        "cf8e97357820acf6f66037dcf977ee36c88c2811d60342db30c99507d24a0d60"
     )]
     fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
         assert_eq!(hash_action(&action), expected);

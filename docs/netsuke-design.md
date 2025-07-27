@@ -1061,6 +1061,8 @@ representation portable.
   deterministic for snapshot tests.
 - Multiple rule references in a single target are not yet supported. The IR
   generator reports `IrGenError::MultipleRules` when encountered.
+- Duplicate output files are rejected. Attempting to define the same output
+  path twice results in `IrGenError::DuplicateOutput`.
 
 ## Section 6: Process Management and Secure Execution
 

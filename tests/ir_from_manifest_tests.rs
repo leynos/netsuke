@@ -28,3 +28,10 @@ fn missing_rule_fails() {
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
     matches!(err, IrGenError::RuleNotFound { .. });
 }
+
+#[test]
+fn duplicate_outputs_fail() {
+    let manifest = manifest::from_path("tests/data/duplicate_outputs.yml").expect("load");
+    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
+    matches!(err, IrGenError::DuplicateOutput { .. });
+}
