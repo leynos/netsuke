@@ -29,9 +29,13 @@ fn missing_rule_fails() {
     assert!(matches!(err, IrGenError::RuleNotFound { .. }));
 }
 
+#[derive(Debug)]
 enum ExpectedError {
     DuplicateOutput(Vec<String>),
-    MultipleRules { target: String, rules: Vec<String> },
+    MultipleRules {
+        target_name: String,
+        rules: Vec<String>,
+    },
     EmptyRule(String),
 }
 
@@ -47,7 +51,7 @@ enum ExpectedError {
 #[case(
     "tests/data/multiple_rules_per_target.yml",
     ExpectedError::MultipleRules {
-        target: "hello.o".into(),
+        target_name: "hello.o".into(),
         rules: vec!["compile1".into(), "compile2".into()],
     }
 )]
@@ -65,16 +69,16 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
         (
             IrGenError::MultipleRules { target_name, rules },
             ExpectedError::MultipleRules {
-                target,
+                target_name: exp_target,
                 rules: exp_rules,
             },
         ) => {
-            assert_eq!(target_name, target);
+            assert_eq!(target_name, exp_target);
             assert_eq!(rules, exp_rules);
         }
         (IrGenError::EmptyRule { target_name }, ExpectedError::EmptyRule(exp_target)) => {
             assert_eq!(target_name, exp_target);
         }
-        (other, _) => panic!("wrong error: {other:?}"),
+        (other, exp) => panic!("expected {exp:?} but got {other:?}"),
     }
 }
