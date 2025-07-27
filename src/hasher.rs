@@ -23,6 +23,7 @@
 //! assert!(!hash.is_empty());
 //! ```
 
+use itoa::Buffer;
 use sha2::{Digest, Sha256};
 
 use crate::ast::{Recipe, StringOrList};
@@ -89,8 +90,11 @@ impl ActionHasher {
     }
 
     fn update_with_len(hasher: &mut Sha256, bytes: &[u8]) {
-        let len = bytes.len();
-        hasher.update(format!("{len}:").as_bytes());
+        // Write the length prefix into a stack buffer to avoid heap allocation.
+        let mut buf = Buffer::new();
+        let len_str = buf.format(bytes.len());
+        hasher.update(len_str.as_bytes());
+        hasher.update(b":");
         hasher.update(bytes);
     }
 }
