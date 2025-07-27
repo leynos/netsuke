@@ -48,7 +48,10 @@ fn multiple_rules_per_target_fails() {
     match err {
         IrGenError::MultipleRules { target_name, rules } => {
             assert_eq!(target_name, "hello.o");
-            assert_eq!(rules, vec![String::from("compile1"), String::from("compile2")]);
+            assert_eq!(
+                rules,
+                vec![String::from("compile1"), String::from("compile2")]
+            );
         }
         _ => panic!("wrong error"),
     }
@@ -61,6 +64,18 @@ fn duplicate_outputs_multi_listed() {
     match err {
         IrGenError::DuplicateOutput { outputs } => {
             assert_eq!(outputs, vec![String::from("bar.o"), String::from("foo.o")]);
+        }
+        _ => panic!("wrong error"),
+    }
+}
+
+#[rstest]
+fn empty_rule_fails() {
+    let manifest = manifest::from_path("tests/data/empty_rule.yml").expect("load");
+    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
+    match err {
+        IrGenError::EmptyRule { target_name } => {
+            assert_eq!(target_name, "hello.o");
         }
         _ => panic!("wrong error"),
     }

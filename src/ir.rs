@@ -88,6 +88,9 @@ pub enum IrGenError {
         rules: Vec<String>,
     },
 
+    #[error("No rules specified for target {target_name}")]
+    EmptyRule { target_name: String },
+
     #[error("duplicate target outputs: {outputs:?}")]
     DuplicateOutput { outputs: Vec<String> },
 }
@@ -97,8 +100,8 @@ impl BuildGraph {
     ///
     /// # Errors
     ///
-    /// Returns [`IrGenError`] when a referenced rule is missing or multiple
-    /// rules are specified for a single target.
+    /// Returns [`IrGenError`] when a referenced rule is missing, multiple rules
+    /// are specified for a single target, or no rule is provided.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
         let mut graph = Self::default();
         let mut rule_map = HashMap::new();
@@ -140,9 +143,16 @@ impl BuildGraph {
                                 rule_name: name.to_string(),
                             })?
                     } else {
+                        let mut rules = to_string_vec(rule);
+                        if rules.is_empty() {
+                            return Err(IrGenError::EmptyRule {
+                                target_name: get_target_display_name(&outputs),
+                            });
+                        }
+                        rules.sort();
                         return Err(IrGenError::MultipleRules {
                             target_name: get_target_display_name(&outputs),
-                            rules: to_strings(rule),
+                            rules,
                         });
                     }
                 }
@@ -168,6 +178,7 @@ impl BuildGraph {
                 }
             }
             if !duplicates.is_empty() {
+                duplicates.sort();
                 return Err(IrGenError::DuplicateOutput {
                     outputs: duplicates,
                 });
@@ -204,20 +215,23 @@ fn register_action(
     hash
 }
 
-fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
+fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
+where
+    F: Fn(&str) -> T,
+{
     match sol {
         StringOrList::Empty => Vec::new(),
-        StringOrList::String(s) => vec![PathBuf::from(s)],
-        StringOrList::List(v) => v.iter().map(PathBuf::from).collect(),
+        StringOrList::String(s) => vec![f(s)],
+        StringOrList::List(v) => v.iter().map(|s| f(s)).collect(),
     }
 }
 
-fn to_strings(sol: &StringOrList) -> Vec<String> {
-    match sol {
-        StringOrList::Empty => Vec::new(),
-        StringOrList::String(s) => vec![s.clone()],
-        StringOrList::List(v) => v.clone(),
-    }
+fn to_paths(sol: &StringOrList) -> Vec<PathBuf> {
+    map_string_or_list(sol, |s| PathBuf::from(s))
+}
+
+fn to_string_vec(sol: &StringOrList) -> Vec<String> {
+    map_string_or_list(sol, str::to_string)
 }
 
 fn extract_single(sol: &StringOrList) -> Option<&str> {
