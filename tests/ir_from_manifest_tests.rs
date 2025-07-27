@@ -29,54 +29,52 @@ fn missing_rule_fails() {
     assert!(matches!(err, IrGenError::RuleNotFound { .. }));
 }
 
-#[rstest]
-fn duplicate_outputs_fail() {
-    let manifest = manifest::from_path("tests/data/duplicate_outputs.yml").expect("load");
-    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    match err {
-        IrGenError::DuplicateOutput { outputs } => {
-            assert_eq!(outputs, vec![String::from("hello.o")]);
-        }
-        _ => panic!("wrong error"),
-    }
+enum ExpectedError {
+    DuplicateOutput(Vec<String>),
+    MultipleRules { target: String, rules: Vec<String> },
+    EmptyRule(String),
 }
 
 #[rstest]
-fn multiple_rules_per_target_fails() {
-    let manifest = manifest::from_path("tests/data/multiple_rules_per_target.yml").expect("load");
-    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    match err {
-        IrGenError::MultipleRules { target_name, rules } => {
-            assert_eq!(target_name, "hello.o");
-            assert_eq!(
-                rules,
-                vec![String::from("compile1"), String::from("compile2")]
-            );
-        }
-        _ => panic!("wrong error"),
+#[case(
+    "tests/data/duplicate_outputs.yml",
+    ExpectedError::DuplicateOutput(vec!["hello.o".into()])
+)]
+#[case(
+    "tests/data/duplicate_outputs_multi.yml",
+    ExpectedError::DuplicateOutput(vec!["bar.o".into(), "foo.o".into()])
+)]
+#[case(
+    "tests/data/multiple_rules_per_target.yml",
+    ExpectedError::MultipleRules {
+        target: "hello.o".into(),
+        rules: vec!["compile1".into(), "compile2".into()],
     }
-}
-
-#[rstest]
-fn duplicate_outputs_multi_listed() {
-    let manifest = manifest::from_path("tests/data/duplicate_outputs_multi.yml").expect("load");
+)]
+#[case(
+    "tests/data/empty_rule.yml",
+    ExpectedError::EmptyRule("hello.o".into())
+)]
+fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedError) {
+    let manifest = manifest::from_path(manifest_path).expect("load");
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    match err {
-        IrGenError::DuplicateOutput { outputs } => {
-            assert_eq!(outputs, vec![String::from("bar.o"), String::from("foo.o")]);
+    match (err, expected) {
+        (IrGenError::DuplicateOutput { outputs }, ExpectedError::DuplicateOutput(exp_outputs)) => {
+            assert_eq!(outputs, exp_outputs);
         }
-        _ => panic!("wrong error"),
-    }
-}
-
-#[rstest]
-fn empty_rule_fails() {
-    let manifest = manifest::from_path("tests/data/empty_rule.yml").expect("load");
-    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    match err {
-        IrGenError::EmptyRule { target_name } => {
-            assert_eq!(target_name, "hello.o");
+        (
+            IrGenError::MultipleRules { target_name, rules },
+            ExpectedError::MultipleRules {
+                target,
+                rules: exp_rules,
+            },
+        ) => {
+            assert_eq!(target_name, target);
+            assert_eq!(rules, exp_rules);
         }
-        _ => panic!("wrong error"),
+        (IrGenError::EmptyRule { target_name }, ExpectedError::EmptyRule(exp_target)) => {
+            assert_eq!(target_name, exp_target);
+        }
+        (other, _) => panic!("wrong error: {other:?}"),
     }
 }
