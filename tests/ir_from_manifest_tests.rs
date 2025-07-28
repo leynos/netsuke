@@ -39,7 +39,7 @@ enum ExpectedError {
     },
     EmptyRule(String),
     RuleNotFound(String),
-    CircularDependency(String),
+    CircularDependency(Vec<String>),
 }
 
 #[rstest]
@@ -68,7 +68,7 @@ enum ExpectedError {
 )]
 #[case(
     "tests/data/circular.yml",
-    ExpectedError::CircularDependency("a".into())
+    ExpectedError::CircularDependency(vec!["a".into(), "b".into(), "a".into()])
 )]
 fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedError) {
     let manifest = manifest::from_path(manifest_path).expect("load");
@@ -93,8 +93,12 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
         (IrGenError::RuleNotFound { rule_name, .. }, ExpectedError::RuleNotFound(exp_rule)) => {
             assert_eq!(rule_name, exp_rule);
         }
-        (IrGenError::CircularDependency { path }, ExpectedError::CircularDependency(exp_path)) => {
-            assert_eq!(path, PathBuf::from(exp_path));
+        (
+            IrGenError::CircularDependency { cycle },
+            ExpectedError::CircularDependency(exp_cycle),
+        ) => {
+            let paths: Vec<PathBuf> = exp_cycle.iter().map(PathBuf::from).collect();
+            assert_eq!(cycle, paths);
         }
         (other, exp) => panic!("expected {exp:?} but got {other:?}"),
     }

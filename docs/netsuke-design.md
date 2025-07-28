@@ -990,10 +990,10 @@ This transformation involves several steps:
    compilation if a circular dependency is found.
 
    The implemented algorithm performs a depth-first traversal of the target
-   graph. Each output path is visited once, and visitation state is tracked to
-   detect back edges. Encountering an already visiting node indicates a cycle,
-   and compilation fails with `IrGenError::CircularDependency` containing the
-   offending path.
+   graph and maintains a recursion stack. Order-only dependencies are ignored
+   during this search. Encountering an already visiting node indicates a cycle.
+   The stack slice from the first occurrence of that node forms the cycle and
+   is returned in `IrGenError::CircularDependency` for easier debugging.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
@@ -1205,8 +1205,8 @@ libraries.[^27]
       #
       RuleNotFound { target_name: String, rule_name: String, },
 
-      #[error("A circular dependency was detected involving target '{path}'.")]
-      CircularDependency { path: PathBuf, },
+      #[error("circular dependency detected: {cycle:?}")]
+      CircularDependency { cycle: Vec<PathBuf>, },
 
       #
       DependencyNotFound { target_name: String, dependency_name: String, }, }
