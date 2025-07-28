@@ -50,8 +50,8 @@ compilation pipeline from parsing to execution.
     referenced by a target is valid and that they are mutually exclusive.
     *(done)*
 
-  - [ ] Implement a cycle detection algorithm (e.g., depth-first search) to fail
-    compilation if a circular dependency is found in the target graph.
+  - [x] Implement a cycle detection algorithm (e.g., depth-first search) to fail
+    compilation if a circular dependency is found in the target graph. *(done)*
 
 - [ ] **Code Generation and Execution:**
 

@@ -93,6 +93,9 @@ pub enum IrGenError {
 
     #[error("duplicate target outputs: {outputs:?}")]
     DuplicateOutput { outputs: Vec<String> },
+
+    #[error("A circular dependency was detected involving target '{path}'")]
+    CircularDependency { path: PathBuf },
 }
 
 impl BuildGraph {
@@ -109,6 +112,8 @@ impl BuildGraph {
         Self::process_rules(manifest, &mut graph.actions, &mut rule_map);
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
         Self::process_defaults(manifest, &mut graph.default_targets);
+
+        graph.detect_cycles()?;
 
         Ok(graph)
     }
@@ -164,6 +169,47 @@ impl BuildGraph {
         for name in &manifest.defaults {
             defaults.push(PathBuf::from(name));
         }
+    }
+
+    fn detect_cycles(&self) -> Result<(), IrGenError> {
+        #[derive(Clone, Copy)]
+        enum State {
+            Visiting,
+            Visited,
+        }
+
+        fn visit<'a>(
+            graph: &'a BuildGraph,
+            node: &'a PathBuf,
+            states: &mut HashMap<&'a PathBuf, State>,
+        ) -> Result<(), &'a PathBuf> {
+            match states.get(node) {
+                Some(State::Visited) => return Ok(()),
+                Some(State::Visiting) => return Err(node),
+                None => {}
+            }
+
+            states.insert(node, State::Visiting);
+            if let Some(edge) = graph.targets.get(node) {
+                for dep in edge.inputs.iter().chain(&edge.order_only_deps) {
+                    if graph.targets.contains_key(dep) {
+                        visit(graph, dep, states)?;
+                    }
+                }
+            }
+            states.insert(node, State::Visited);
+            Ok(())
+        }
+
+        let mut states = HashMap::new();
+        for output in self.targets.keys() {
+            if !states.contains_key(output)
+                && let Err(path) = visit(self, output, &mut states)
+            {
+                return Err(IrGenError::CircularDependency { path: path.clone() });
+            }
+        }
+        Ok(())
     }
 }
 

@@ -5,6 +5,7 @@ use netsuke::{
     manifest,
 };
 use rstest::rstest;
+use std::path::PathBuf;
 
 #[rstest]
 fn minimal_manifest_to_ir() {
@@ -38,6 +39,7 @@ enum ExpectedError {
     },
     EmptyRule(String),
     RuleNotFound(String),
+    CircularDependency(String),
 }
 
 #[rstest]
@@ -64,6 +66,10 @@ enum ExpectedError {
     "tests/data/rule_not_found.yml",
     ExpectedError::RuleNotFound("missing_rule".into())
 )]
+#[case(
+    "tests/data/circular.yml",
+    ExpectedError::CircularDependency("a".into())
+)]
 fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedError) {
     let manifest = manifest::from_path(manifest_path).expect("load");
     let err = BuildGraph::from_manifest(&manifest).expect_err("error");
@@ -86,6 +92,9 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
         }
         (IrGenError::RuleNotFound { rule_name, .. }, ExpectedError::RuleNotFound(exp_rule)) => {
             assert_eq!(rule_name, exp_rule);
+        }
+        (IrGenError::CircularDependency { path }, ExpectedError::CircularDependency(exp_path)) => {
+            assert_eq!(path, PathBuf::from(exp_path));
         }
         (other, exp) => panic!("expected {exp:?} but got {other:?}"),
     }

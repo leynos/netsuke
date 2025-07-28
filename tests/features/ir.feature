@@ -28,3 +28,7 @@ Feature: BuildGraph
   Scenario: Duplicate target outputs
     When the manifest file "tests/data/duplicate_outputs.yml" is compiled to IR
     Then IR generation fails
+
+  Scenario: Circular dependency detection
+    When the manifest file "tests/data/circular.yml" is compiled to IR
+    Then IR generation fails

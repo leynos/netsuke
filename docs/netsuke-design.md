@@ -989,6 +989,12 @@ This transformation involves several steps:
    search maintaining a visitation state) on the dependency graph to fail
    compilation if a circular dependency is found.
 
+   The implemented algorithm performs a depth-first traversal of the target
+   graph. Each output path is visited once, and visitation state is tracked to
+   detect back edges. Encountering an already visiting node indicates a cycle,
+   and compilation fails with `IrGenError::CircularDependency` containing the
+   offending path.
+
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
 The final step is to synthesize the `build.ninja` file from the `BuildGraph`
