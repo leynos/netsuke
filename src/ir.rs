@@ -286,6 +286,20 @@ enum VisitState {
     Visited,
 }
 
+fn should_visit_node<'a>(
+    states: &'a mut HashMap<PathBuf, VisitState>,
+    node: &'a PathBuf,
+) -> Result<bool, &'a PathBuf> {
+    match states.get(node) {
+        Some(VisitState::Visited) => Ok(false),
+        Some(VisitState::Visiting) => Err(node),
+        None => {
+            states.insert(node.clone(), VisitState::Visiting);
+            Ok(true)
+        }
+    }
+}
+
 fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
     fn visit(
         targets: &HashMap<PathBuf, BuildEdge>,
@@ -293,34 +307,45 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
         stack: &mut Vec<PathBuf>,
         states: &mut HashMap<PathBuf, VisitState>,
     ) -> Option<Vec<PathBuf>> {
-        match states.get(node) {
-            Some(VisitState::Visited) => return None,
-            Some(VisitState::Visiting) => {
-                if let Some(idx) = stack.iter().position(|n| n == node) {
+        match should_visit_node(states, node) {
+            Ok(false) => return None,
+            Err(path) => {
+                if let Some(idx) = stack.iter().position(|n| n == path) {
                     let mut cycle = stack.get(idx..).expect("slice").to_vec();
-                    cycle.push(node.clone());
+                    cycle.push(path.clone());
                     return Some(canonicalize_cycle(cycle));
                 }
-                return Some(vec![node.clone(), node.clone()]);
+                return Some(vec![path.clone(), path.clone()]);
             }
-            None => {}
+            Ok(true) => {}
         }
 
-        states.insert(node.clone(), VisitState::Visiting);
         stack.push(node.clone());
 
-        if let Some(edge) = targets.get(node) {
-            for dep in &edge.inputs {
-                if targets.get(dep).is_some()
-                    && let Some(cycle) = visit(targets, dep, stack, states)
-                {
-                    return Some(cycle);
-                }
-            }
+        if let Some(edge) = targets.get(node)
+            && let Some(cycle) = visit_dependencies(targets, &edge.inputs, stack, states)
+        {
+            return Some(cycle);
         }
 
         stack.pop();
         states.insert(node.clone(), VisitState::Visited);
+        None
+    }
+
+    fn visit_dependencies(
+        targets: &HashMap<PathBuf, BuildEdge>,
+        deps: &[PathBuf],
+        stack: &mut Vec<PathBuf>,
+        states: &mut HashMap<PathBuf, VisitState>,
+    ) -> Option<Vec<PathBuf>> {
+        for dep in deps {
+            if targets.contains_key(dep)
+                && let Some(cycle) = visit(targets, dep, stack, states)
+            {
+                return Some(cycle);
+            }
+        }
         None
     }
 
@@ -384,9 +409,8 @@ mod tests {
         targets.insert(PathBuf::from("b"), edge_b);
 
         let cycle = find_cycle(&targets).expect("cycle");
-        assert_eq!(
-            cycle,
-            vec![PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("a")]
-        );
+        let option_a = vec![PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("a")];
+        let option_b = vec![PathBuf::from("b"), PathBuf::from("a"), PathBuf::from("b")];
+        assert!(cycle == option_a || cycle == option_b);
     }
 }

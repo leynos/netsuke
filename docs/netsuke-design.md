@@ -993,7 +993,7 @@ This transformation involves several steps:
    graph and maintains a recursion stack. Order-only dependencies are ignored
    during this search. Encountering an already visiting node indicates a cycle.
    The stack slice from the first occurrence of that node forms the cycle and
-   is returned in `IrGenError::CircularDependency` for easier debugging. The
+   is returned in `IrGenError::CircularDependency` for improved debugging. The
    cycle list is rotated so the lexicographically smallest node appears first,
    ensuring deterministic error messages.
 

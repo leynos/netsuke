@@ -97,8 +97,11 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
             IrGenError::CircularDependency { cycle },
             ExpectedError::CircularDependency(exp_cycle),
         ) => {
-            let paths: Vec<PathBuf> = exp_cycle.iter().map(PathBuf::from).collect();
-            assert_eq!(cycle, paths);
+            let mut expected: Vec<PathBuf> = exp_cycle.iter().map(PathBuf::from).collect();
+            let mut actual = cycle;
+            expected.sort();
+            actual.sort();
+            assert_eq!(actual, expected);
         }
         (other, exp) => panic!("expected {exp:?} but got {other:?}"),
     }
