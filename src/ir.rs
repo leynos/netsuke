@@ -178,24 +178,42 @@ impl BuildGraph {
             Visited,
         }
 
+        fn should_visit_node<'a>(
+            states: &mut HashMap<&'a PathBuf, State>,
+            node: &'a PathBuf,
+        ) -> Result<bool, &'a PathBuf> {
+            match states.get(node) {
+                Some(State::Visited) => Ok(false),
+                Some(State::Visiting) => Err(node),
+                None => Ok(true),
+            }
+        }
+
+        fn visit_dependencies<'a>(
+            graph: &'a BuildGraph,
+            edge: &'a BuildEdge,
+            states: &mut HashMap<&'a PathBuf, State>,
+        ) -> Result<(), &'a PathBuf> {
+            for dep in edge.inputs.iter().chain(&edge.order_only_deps) {
+                if graph.targets.contains_key(dep) {
+                    visit(graph, dep, states)?;
+                }
+            }
+            Ok(())
+        }
+
         fn visit<'a>(
             graph: &'a BuildGraph,
             node: &'a PathBuf,
             states: &mut HashMap<&'a PathBuf, State>,
         ) -> Result<(), &'a PathBuf> {
-            match states.get(node) {
-                Some(State::Visited) => return Ok(()),
-                Some(State::Visiting) => return Err(node),
-                None => {}
+            if !should_visit_node(states, node)? {
+                return Ok(());
             }
 
             states.insert(node, State::Visiting);
             if let Some(edge) = graph.targets.get(node) {
-                for dep in edge.inputs.iter().chain(&edge.order_only_deps) {
-                    if graph.targets.contains_key(dep) {
-                        visit(graph, dep, states)?;
-                    }
-                }
+                visit_dependencies(graph, edge, states)?;
             }
             states.insert(node, State::Visited);
             Ok(())
@@ -203,9 +221,10 @@ impl BuildGraph {
 
         let mut states = HashMap::new();
         for output in self.targets.keys() {
-            if !states.contains_key(output)
-                && let Err(path) = visit(self, output, &mut states)
-            {
+            if states.contains_key(output) {
+                continue;
+            }
+            if let Err(path) = visit(self, output, &mut states) {
                 return Err(IrGenError::CircularDependency { path: path.clone() });
             }
         }
