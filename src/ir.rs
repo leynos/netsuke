@@ -299,9 +299,9 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
                 if let Some(idx) = stack.iter().position(|n| n == node) {
                     let mut cycle = stack.get(idx..).expect("slice").to_vec();
                     cycle.push(node.clone());
-                    return Some(cycle);
+                    return Some(canonicalize_cycle(cycle));
                 }
-                return Some(vec![node.clone()]);
+                return Some(vec![node.clone(), node.clone()]);
             }
             None => {}
         }
@@ -335,6 +335,24 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
         }
     }
     None
+}
+
+fn canonicalize_cycle(mut cycle: Vec<PathBuf>) -> Vec<PathBuf> {
+    if cycle.len() < 2 {
+        return cycle;
+    }
+    let len = cycle.len() - 1;
+    let start = cycle
+        .iter()
+        .take(len)
+        .enumerate()
+        .min_by(|(_, a), (_, b)| a.cmp(b))
+        .map_or(0, |(idx, _)| idx);
+    cycle.rotate_left(start);
+    if let (Some(first), Some(slot)) = (cycle.first().cloned(), cycle.get_mut(len)) {
+        slot.clone_from(&first);
+    }
+    cycle
 }
 
 #[cfg(test)]
