@@ -1,0 +1,8 @@
+---
+source: tests/ninja_snapshot_tests.rs
+expression: ninja_content
+---
+rule ca3067639652d0018b982cd2fc8262e3a02f4404f60148b8493de0f656d9b1a2
+  command = python3 -c 'import os,sys; open(sys.argv[1],"a").close()' $out
+
+build out/a: ca3067639652d0018b982cd2fc8262e3a02f4404f60148b8493de0f656d9b1a2 in/a

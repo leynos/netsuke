@@ -57,6 +57,8 @@ float_arithmetic = "deny"
 rstest = "0.18.0"
 cucumber = "0.20.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
+insta = { version = "1", features = ["yaml"] }
+tempfile = "3"
 
 [[test]]
 name = "cucumber"

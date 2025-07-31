@@ -1074,6 +1074,8 @@ representation portable.
 - The Ninja generator sorts actions and edges before output and
   deduplicates edges by their first explicit output to ensure deterministic
   `build.ninja` files.
+- Integration tests snapshot the generated Ninja file with `insta` and
+  execute the Ninja binary to validate structure and no-op behaviour.
 
 ## Section 6: Process Management and Secure Execution
 
