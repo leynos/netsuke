@@ -96,9 +96,7 @@ impl Display for NamedAction<'_> {
         match &self.action.recipe {
             Recipe::Command { command } => writeln!(f, "  command = {command}")?,
             Recipe::Script { script } => {
-                let escaped = script
-                    .replace('\\', "\\\\")
-                    .replace('"', "\\\"");
+                let escaped = script.replace('\\', "\\\\").replace('"', "\\\"");
                 writeln!(f, "  command = /bin/sh -e -c \"{escaped}\"")?;
             }
             Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
