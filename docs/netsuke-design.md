@@ -1071,6 +1071,9 @@ representation portable.
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output
   path twice results in `IrGenError::DuplicateOutput`.
+- The Ninja generator sorts actions and edges before output and
+  deduplicates edges by their first explicit output to ensure deterministic
+  `build.ninja` files.
 
 ## Section 6: Process Management and Secure Execution
 
