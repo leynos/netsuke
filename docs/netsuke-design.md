@@ -960,6 +960,49 @@ pub struct BuildEdge {
 }
 ```
 
+```mermaid
+classDiagram
+    class BuildGraph {
+        +HashMap<String, Action> actions
+        +HashMap<PathBuf, BuildEdge> targets
+        +Vec<PathBuf> default_targets
+    }
+    class Action {
+        +Recipe recipe
+        +Option<String> description
+        +Option<String> depfile
+        +Option<String> deps_format
+        +Option<String> pool
+        +bool restat
+    }
+    class BuildEdge {
+        +String action_id
+        +Vec<PathBuf> inputs
+        +Vec<PathBuf> explicit_outputs
+        +Vec<PathBuf> implicit_outputs
+        +Vec<PathBuf> order_only_deps
+        +bool phony
+        +bool always
+    }
+    class Recipe {
+        <<enum>>
+        Command
+        Script
+        Rule
+    }
+    class ninja_gen {
+        +generate(graph: &BuildGraph) String
+    }
+    BuildGraph "1" o-- "many" Action : actions
+    BuildGraph "1" o-- "many" BuildEdge : targets
+    Action "1" o-- "1" Recipe
+    BuildEdge "1" --> "1" Action : action_id
+    ninja_gen ..> BuildGraph : uses
+    ninja_gen ..> Action : uses
+    ninja_gen ..> BuildEdge : uses
+    ninja_gen ..> Recipe : uses
+```
+
 ### 5.3 The Transformation Process: AST to IR
 
 The core logic of the validation stage is a function, `ir::from_manifest`, that
@@ -1071,6 +1114,13 @@ representation portable.
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output
   path twice results in `IrGenError::DuplicateOutput`.
+- The Ninja generator sorts actions and edges before output and deduplicates
+  edges based on their full set of explicit outputs. Sorting uses the joined
+  path strings to keep ordering stable across platforms, ensuring deterministic
+  `build.ninja` files. Small macros reduce formatting boilerplate when writing
+  optional key-value pairs or flags, keeping the generator easy to scan.
+- Integration tests snapshot the generated Ninja file with `insta` and
+  execute the Ninja binary to validate structure and no-op behaviour.
 
 ## Section 6: Process Management and Secure Execution
 
