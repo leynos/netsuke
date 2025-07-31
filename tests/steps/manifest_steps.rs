@@ -1,4 +1,8 @@
 //! Step definitions for manifest parsing scenarios.
+#![expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
 
 use crate::CliWorld;
 use cucumber::{given, then, when};
@@ -30,63 +34,30 @@ fn assert_parsed(world: &CliWorld) {
         "manifest should have been parsed"
     );
 }
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[given(expr = "the manifest file {string} is parsed")]
 fn given_parse_manifest(world: &mut CliWorld, path: String) {
     parse_manifest_inner(world, &path);
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[when(expr = "the manifest file {string} is parsed")]
 fn parse_manifest(world: &mut CliWorld, path: String) {
     parse_manifest_inner(world, &path);
 }
 
-#[when("the manifest version is checked")]
-fn when_manifest_version_checked(world: &mut CliWorld) {
-    assert_manifest(world);
+#[when(regex = r"^the (?P<item>[a-z ]+) (?:is|are) checked$")]
+fn when_item_checked(world: &mut CliWorld, item: String) {
+    match item.as_str() {
+        "parsing result" => assert_parsed(world),
+        _ => assert_manifest(world),
+    }
 }
 
-#[when("the target flags are checked")]
-fn when_target_flags_checked(world: &mut CliWorld) {
-    assert_manifest(world);
-}
-
-#[when("the action flags are checked")]
-fn when_action_flags_checked(world: &mut CliWorld) {
-    assert_manifest(world);
-}
-
-#[when("the manifest contents are checked")]
-fn when_manifest_contents_checked(world: &mut CliWorld) {
-    assert_manifest(world);
-}
-
-#[when("the parsing result is checked")]
-fn when_parsing_result_checked(world: &mut CliWorld) {
-    assert_parsed(world);
-}
-
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[then(expr = "the manifest version is {string}")]
 fn manifest_version(world: &mut CliWorld, version: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
     assert_eq!(manifest.netsuke_version.to_string(), version);
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[then(expr = "the first target name is {string}")]
 fn first_target_name(world: &mut CliWorld, name: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
@@ -123,10 +94,6 @@ fn manifest_parse_error(world: &mut CliWorld) {
     assert!(world.manifest_error.is_some(), "expected parse error");
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[then(expr = "the first rule name is {string}")]
 fn first_rule_name(world: &mut CliWorld, name: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
