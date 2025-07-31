@@ -8,4 +8,5 @@ pub mod cli;
 pub mod hasher;
 pub mod ir;
 pub mod manifest;
+pub mod ninja_gen;
 pub mod runner;
