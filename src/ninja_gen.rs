@@ -1,123 +1,152 @@
 //! Ninja file generator.
 //!
 //! This module converts a [`crate::ir::BuildGraph`] into the textual
-//! representation expected by the Ninja build system.
-//! The output is deterministic: actions and edges are sorted to ensure
-//! stable snapshots for testing.
+//! representation expected by the Ninja build system. The generator sorts
+//! actions and edges to ensure deterministic output for snapshot tests.
 
 use crate::ast::Recipe;
 use crate::ir::{BuildEdge, BuildGraph};
-use std::collections::{HashMap, HashSet};
-use std::fmt::Write;
+use std::collections::HashSet;
+use std::fmt::{self, Display, Formatter, Write};
 use std::path::PathBuf;
 
 /// Generate a Ninja build file as a string.
+///
+/// # Panics
+///
+/// Panics if a build edge references an unknown action.
 #[must_use]
 pub fn generate(graph: &BuildGraph) -> String {
     let mut out = String::new();
-    write_rules(&mut out, &graph.actions);
-    write_edges(&mut out, &graph.targets);
-    write_defaults(&mut out, &graph.default_targets);
+
+    let mut actions: Vec<_> = graph.actions.iter().collect();
+    actions.sort_by_key(|(id, _)| *id);
+    for (id, action) in actions {
+        write!(out, "{}", NamedAction { id, action }).expect("write Ninja rule");
+    }
+
+    let mut edges: Vec<_> = graph.targets.values().collect();
+    edges.sort_by(|a, b| path_key(&a.explicit_outputs).cmp(&path_key(&b.explicit_outputs)));
+    let mut seen = HashSet::new();
+    for edge in edges {
+        let key = path_key(&edge.explicit_outputs);
+        if !seen.insert(key.clone()) {
+            continue;
+        }
+        let action = graph.actions.get(&edge.action_id).expect("action");
+        write!(
+            out,
+            "{}",
+            DisplayEdge {
+                edge,
+                action_restat: action.restat,
+            }
+        )
+        .expect("write Ninja edge");
+    }
+
+    if !graph.default_targets.is_empty() {
+        let mut defs: Vec<_> = graph.default_targets.iter().collect();
+        defs.sort();
+        writeln!(
+            out,
+            "default {}",
+            defs.iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(" ")
+        )
+        .expect("write defaults");
+    }
+
     out
 }
 
-fn write_rules(out: &mut String, actions: &HashMap<String, crate::ir::Action>) {
-    let mut ids: Vec<_> = actions.keys().collect();
-    ids.sort();
-    for id in ids {
-        let action = &actions[id];
-        let _ = writeln!(out, "rule {id}");
-        match &action.recipe {
-            Recipe::Command { command } => {
-                let _ = writeln!(out, "  command = {command}");
-            }
-            Recipe::Script { script } => {
-                let _ = writeln!(out, "  command = /bin/sh -e -c \"");
-                for line in script.lines() {
-                    let _ = writeln!(out, "    {line}");
-                }
-                let _ = writeln!(out, "  \"");
-            }
-            Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
-        }
-        if let Some(desc) = &action.description {
-            let _ = writeln!(out, "  description = {desc}");
-        }
-        if let Some(depfile) = &action.depfile {
-            let _ = writeln!(out, "  depfile = {depfile}");
-        }
-        if let Some(deps_format) = &action.deps_format {
-            let _ = writeln!(out, "  deps = {deps_format}");
-        }
-        if let Some(pool) = &action.pool {
-            let _ = writeln!(out, "  pool = {pool}");
-        }
-        if action.restat {
-            let _ = writeln!(out, "  restat = 1");
-        }
-        let _ = writeln!(out);
-    }
-}
-
-fn write_edges(out: &mut String, targets: &HashMap<PathBuf, BuildEdge>) {
-    let mut edges: Vec<&BuildEdge> = targets.values().collect();
-    edges.sort_by(|a, b| a.explicit_outputs.cmp(&b.explicit_outputs));
-    let mut seen = HashSet::new();
-    for edge in edges {
-        if edge
-            .explicit_outputs
-            .first()
-            .is_some_and(|f| !seen.insert(f))
-        {
-            continue;
-        }
-        write_edge(out, edge);
-    }
-}
-
-fn write_edge(out: &mut String, edge: &BuildEdge) {
-    let outputs = join(&edge.explicit_outputs);
-    let _ = write!(out, "build {outputs}");
-    if !edge.implicit_outputs.is_empty() {
-        let _ = write!(out, " | {}", join(&edge.implicit_outputs));
-    }
-    let rule = if edge.phony { "phony" } else { &edge.action_id };
-    let _ = write!(out, ": {rule}");
-    if !edge.inputs.is_empty() {
-        let _ = write!(out, " {}", join(&edge.inputs));
-    }
-    if !edge.order_only_deps.is_empty() {
-        let _ = write!(out, " || {}", join(&edge.order_only_deps));
-    }
-    let _ = writeln!(out);
-    if edge.always {
-        let _ = writeln!(out, "  restat = 1");
-    }
-    let _ = writeln!(out);
-}
-
-fn write_defaults(out: &mut String, defaults: &[PathBuf]) {
-    if defaults.is_empty() {
-        return;
-    }
-    let mut defs: Vec<_> = defaults.iter().collect();
-    defs.sort();
-    let _ = writeln!(
-        out,
-        "default {}",
-        defs.iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()
-            .join(" ")
-    );
-}
-
+/// Convert a slice of paths into a space-separated string.
 fn join(paths: &[PathBuf]) -> String {
     paths
         .iter()
         .map(|p| p.display().to_string())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Generate a stable key for a list of paths.
+fn path_key(paths: &[PathBuf]) -> String {
+    let mut parts: Vec<_> = paths.iter().map(|p| p.display().to_string()).collect();
+    parts.sort();
+    parts.join("\u{0}")
+}
+
+/// Wrapper struct to display a rule with its identifier.
+struct NamedAction<'a> {
+    id: &'a str,
+    action: &'a crate::ir::Action,
+}
+
+impl Display for NamedAction<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "rule {}", self.id)?;
+        match &self.action.recipe {
+            Recipe::Command { command } => writeln!(f, "  command = {command}")?,
+            Recipe::Script { script } => {
+                writeln!(f, "  command = /bin/sh -e -c \"")?;
+                for line in script.lines() {
+                    writeln!(f, "    {line}")?;
+                }
+                writeln!(f, "  \"")?;
+            }
+            Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
+        }
+        if let Some(desc) = &self.action.description {
+            writeln!(f, "  description = {desc}")?;
+        }
+        if let Some(depfile) = &self.action.depfile {
+            writeln!(f, "  depfile = {depfile}")?;
+        }
+        if let Some(deps_format) = &self.action.deps_format {
+            writeln!(f, "  deps = {deps_format}")?;
+        }
+        if let Some(pool) = &self.action.pool {
+            writeln!(f, "  pool = {pool}")?;
+        }
+        if self.action.restat {
+            writeln!(f, "  restat = 1")?;
+        }
+        writeln!(f)
+    }
+}
+
+/// Wrapper struct to display a build edge.
+struct DisplayEdge<'a> {
+    edge: &'a BuildEdge,
+    action_restat: bool,
+}
+
+impl Display for DisplayEdge<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "build {}", join(&self.edge.explicit_outputs))?;
+        if !self.edge.implicit_outputs.is_empty() {
+            write!(f, " | {}", join(&self.edge.implicit_outputs))?;
+        }
+        let rule = if self.edge.phony {
+            "phony"
+        } else {
+            &self.edge.action_id
+        };
+        write!(f, ": {rule}")?;
+        if !self.edge.inputs.is_empty() {
+            write!(f, " {}", join(&self.edge.inputs))?;
+        }
+        if !self.edge.order_only_deps.is_empty() {
+            write!(f, " || {}", join(&self.edge.order_only_deps))?;
+        }
+        writeln!(f)?;
+        if self.edge.always && !self.action_restat {
+            writeln!(f, "  restat = 1")?;
+        }
+        writeln!(f)
+    }
 }
 
 #[cfg(test)]

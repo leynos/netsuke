@@ -1072,8 +1072,9 @@ representation portable.
 - Duplicate output files are rejected. Attempting to define the same output
   path twice results in `IrGenError::DuplicateOutput`.
 - The Ninja generator sorts actions and edges before output and
-  deduplicates edges by their first explicit output to ensure deterministic
-  `build.ninja` files.
+  deduplicates edges based on their full set of explicit outputs. Sorting uses
+  the joined path strings to keep ordering stable across platforms, ensuring
+  deterministic `build.ninja` files.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
 
