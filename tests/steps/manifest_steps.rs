@@ -1,16 +1,11 @@
 //! Step definitions for manifest parsing scenarios.
 
 use crate::CliWorld;
-use cucumber::{then, when};
+use cucumber::{given, then, when};
 use netsuke::{ast::StringOrList, manifest};
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
-#[when(expr = "the manifest file {string} is parsed")]
-fn parse_manifest(world: &mut CliWorld, path: String) {
-    match manifest::from_path(&path) {
+fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
+    match manifest::from_path(path) {
         Ok(manifest) => {
             world.manifest = Some(manifest);
             world.manifest_error = None;
@@ -20,6 +15,62 @@ fn parse_manifest(world: &mut CliWorld, path: String) {
             world.manifest_error = Some(e.to_string());
         }
     }
+}
+
+fn assert_manifest(world: &CliWorld) {
+    assert!(
+        world.manifest.is_some(),
+        "manifest should have been parsed successfully"
+    );
+}
+
+fn assert_parsed(world: &CliWorld) {
+    assert!(
+        world.manifest.is_some() || world.manifest_error.is_some(),
+        "manifest should have been parsed"
+    );
+}
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[given(expr = "the manifest file {string} is parsed")]
+fn given_parse_manifest(world: &mut CliWorld, path: String) {
+    parse_manifest_inner(world, &path);
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[when(expr = "the manifest file {string} is parsed")]
+fn parse_manifest(world: &mut CliWorld, path: String) {
+    parse_manifest_inner(world, &path);
+}
+
+#[when("the manifest version is checked")]
+fn when_manifest_version_checked(world: &mut CliWorld) {
+    assert_manifest(world);
+}
+
+#[when("the target flags are checked")]
+fn when_target_flags_checked(world: &mut CliWorld) {
+    assert_manifest(world);
+}
+
+#[when("the action flags are checked")]
+fn when_action_flags_checked(world: &mut CliWorld) {
+    assert_manifest(world);
+}
+
+#[when("the manifest contents are checked")]
+fn when_manifest_contents_checked(world: &mut CliWorld) {
+    assert_manifest(world);
+}
+
+#[when("the parsing result is checked")]
+fn when_parsing_result_checked(world: &mut CliWorld) {
+    assert_parsed(world);
 }
 
 #[expect(
