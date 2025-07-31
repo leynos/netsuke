@@ -22,10 +22,11 @@ fn run_ok(cmd: &mut Command) -> String {
 
 #[test]
 fn touch_manifest_ninja_validation() {
-    Command::new("ninja")
-        .arg("--version")
-        .output()
-        .expect("ninja must be installed for integration tests");
+    let ninja_check = Command::new("ninja").arg("--version").output();
+    if ninja_check.is_err() || !ninja_check.as_ref().expect("spawn ninja").status.success() {
+        eprintln!("skipping test: ninja must be installed for integration tests");
+        return;
+    }
     let manifest_yaml = r#"
         netsuke_version: "1.0.0"
         rules:

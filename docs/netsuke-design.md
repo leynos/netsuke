@@ -1114,10 +1114,11 @@ representation portable.
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output
   path twice results in `IrGenError::DuplicateOutput`.
-- The Ninja generator sorts actions and edges before output and
-  deduplicates edges based on their full set of explicit outputs. Sorting uses
-  the joined path strings to keep ordering stable across platforms, ensuring
-  deterministic `build.ninja` files.
+- The Ninja generator sorts actions and edges before output and deduplicates
+  edges based on their full set of explicit outputs. Sorting uses the joined
+  path strings to keep ordering stable across platforms, ensuring deterministic
+  `build.ninja` files. Small macros reduce formatting boilerplate when writing
+  optional key-value pairs or flags, keeping the generator easy to scan.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
 

@@ -11,11 +11,28 @@ use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use std::path::PathBuf;
 
+macro_rules! write_kv {
+    ($f:expr, $key:expr, $opt:expr) => {
+        if let Some(val) = $opt {
+            writeln!($f, "  {} = {}", $key, val)?;
+        }
+    };
+}
+
+macro_rules! write_flag {
+    ($f:expr, $key:expr, $cond:expr) => {
+        if $cond {
+            writeln!($f, "  {} = 1", $key)?;
+        }
+    };
+}
+
 /// Generate a Ninja build file as a string.
 ///
 /// # Panics
 ///
-/// Panics if a build edge references an unknown action.
+/// Panics if a build edge references an unknown action or if writing to the
+/// output string fails (which is unexpected under normal conditions).
 #[must_use]
 pub fn generate(graph: &BuildGraph) -> String {
     let mut out = String::new();
@@ -79,29 +96,18 @@ impl Display for NamedAction<'_> {
         match &self.action.recipe {
             Recipe::Command { command } => writeln!(f, "  command = {command}")?,
             Recipe::Script { script } => {
-                writeln!(f, "  command = /bin/sh -e -c \"")?;
-                for line in script.lines() {
-                    writeln!(f, "    {line}")?;
-                }
-                writeln!(f, "  \"")?;
+                let escaped = script
+                    .replace('\\', "\\\\")
+                    .replace('"', "\\\"");
+                writeln!(f, "  command = /bin/sh -e -c \"{escaped}\"")?;
             }
             Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
         }
-        if let Some(desc) = &self.action.description {
-            writeln!(f, "  description = {desc}")?;
-        }
-        if let Some(depfile) = &self.action.depfile {
-            writeln!(f, "  depfile = {depfile}")?;
-        }
-        if let Some(deps_format) = &self.action.deps_format {
-            writeln!(f, "  deps = {deps_format}")?;
-        }
-        if let Some(pool) = &self.action.pool {
-            writeln!(f, "  pool = {pool}")?;
-        }
-        if self.action.restat {
-            writeln!(f, "  restat = 1")?;
-        }
+        write_kv!(f, "description", &self.action.description);
+        write_kv!(f, "depfile", &self.action.depfile);
+        write_kv!(f, "deps", &self.action.deps_format);
+        write_kv!(f, "pool", &self.action.pool);
+        write_flag!(f, "restat", self.action.restat);
         writeln!(f)
     }
 }
@@ -131,9 +137,7 @@ impl Display for DisplayEdge<'_> {
             write!(f, " || {}", join(&self.edge.order_only_deps))?;
         }
         writeln!(f)?;
-        if self.edge.always && !self.action_restat {
-            writeln!(f, "  restat = 1")?;
-        }
+        write_flag!(f, "restat", self.edge.always && !self.action_restat);
         writeln!(f)
     }
 }

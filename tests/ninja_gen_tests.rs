@@ -1,4 +1,8 @@
 //! Unit tests for Ninja file generation.
+//!
+//! Tests cover various scenarios including phony targets, standard builds
+//! with multiple inputs and outputs, complex dependency relationships, and
+//! edge cases like empty build graphs.
 
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
