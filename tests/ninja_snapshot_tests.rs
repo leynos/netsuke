@@ -28,7 +28,7 @@ fn touch_manifest_ninja_validation() {
           - name: touch
             recipe:
               kind: command
-              command: "python3 -c 'import os,sys; open(sys.argv[1],\"a\").close()' $out"
+              command: "python3 -c 'import os,sys; [open(a,\"a\").close() for a in sys.argv[1:]]' $out"
         targets:
           - name: out/a
             sources: in/a
@@ -73,4 +73,73 @@ fn touch_manifest_ninja_validation() {
         second.contains("no work to do"),
         "expected no-op second pass, got:\n{second}"
     );
+}
+
+#[test]
+fn ordering_and_deduplication() {
+    let manifest_yaml = r#"
+        netsuke_version: "1.0.0"
+        rules:
+          - name: z
+            recipe:
+              kind: command
+              command: "python3 -c 'import os,sys; [open(a,\"a\").close() for a in sys.argv[1:]]' $out"
+          - name: a
+            recipe:
+              kind: command
+              command: "python3 -c 'import os,sys; [open(a,\"a\").close() for a in sys.argv[1:]]' $out"
+        targets:
+          - name: out/b
+            sources: in/b
+            recipe:
+              kind: rule
+              rule: z
+          - name: out/a
+            sources: in/a
+            recipe:
+              kind: rule
+              rule: a
+          - name: [out/c1, out/c2]
+            sources: in/c
+            recipe:
+              kind: rule
+              rule: a
+        defaults: [out/c1, out/a]
+    "#;
+
+    let manifest = manifest::from_str(manifest_yaml).expect("parse manifest");
+    let ir = BuildGraph::from_manifest(&manifest).expect("ir generation");
+    let ninja_first = ninja_gen::generate(&ir);
+    let ninja_second = ninja_gen::generate(&ir);
+    assert_eq!(ninja_first, ninja_second);
+
+    let build_lines: Vec<_> = ninja_first
+        .lines()
+        .filter(|l| l.starts_with("build "))
+        .collect();
+    assert_eq!(build_lines.len(), 3);
+
+    assert!(ninja_first.contains("default out/a out/c1"));
+
+    let dir = tempdir().expect("tempdir");
+    let build_file = dir.path().join("build.ninja");
+    fs::write(&build_file, &ninja_first).expect("write ninja");
+    fs::create_dir_all(dir.path().join("in")).expect("dir");
+    fs::create_dir_all(dir.path().join("out")).expect("dir");
+    fs::write(dir.path().join("in/a"), "").expect("in");
+    fs::write(dir.path().join("in/b"), "").expect("in");
+    fs::write(dir.path().join("in/c"), "").expect("in");
+
+    let ninja_cmd = |args: &[&str]| {
+        let mut cmd = Command::new("ninja");
+        cmd.arg("-f").arg(&build_file).args(args);
+        cmd.current_dir(&dir);
+        run_ok(&mut cmd)
+    };
+
+    let _ = ninja_cmd(&["-t", "targets", "all"]);
+    let _ = ninja_cmd(&["-w", "dupbuild=err", "-d", "stats"]);
+    let second = ninja_cmd(&["-n", "-d", "explain", "-v"]);
+    println!("second output: {second}");
+    assert!(second.contains("no work to do"));
 }

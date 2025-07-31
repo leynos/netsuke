@@ -1,8 +1,9 @@
 ---
 source: tests/ninja_snapshot_tests.rs
+assertion_line: 50
 expression: ninja_content
 ---
-rule ca3067639652d0018b982cd2fc8262e3a02f4404f60148b8493de0f656d9b1a2
-  command = python3 -c 'import os,sys; open(sys.argv[1],"a").close()' $out
+rule edca4a86968d45d5dd7b150cb9f29adaec9345fe416a5cdbecb08dd15259e605
+  command = python3 -c 'import os,sys; [open(a,"a").close() for a in sys.argv[1:]]' $out
 
-build out/a: ca3067639652d0018b982cd2fc8262e3a02f4404f60148b8493de0f656d9b1a2 in/a
+build out/a: edca4a86968d45d5dd7b150cb9f29adaec9345fe416a5cdbecb08dd15259e605 in/a

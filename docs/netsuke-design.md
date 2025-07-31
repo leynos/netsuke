@@ -1075,6 +1075,10 @@ representation portable.
   deduplicates edges based on their full set of explicit outputs. Sorting uses
   the joined path strings to keep ordering stable across platforms, ensuring
   deterministic `build.ninja` files.
+- Script actions are emitted under `/bin/sh -e -c` with each line indented so
+  multi-line recipes execute portably.
+- Optional fields such as `description`, `depfile`, `deps`, `pool`, and
+  `restat` are written only when present, matching Ninja's syntax exactly.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
 
