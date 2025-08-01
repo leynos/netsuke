@@ -12,10 +12,11 @@ fn assert_graph(world: &CliWorld) {
 }
 
 fn assert_generation_attempted(world: &CliWorld) {
-    assert!(
-        world.build_graph.is_some() || world.manifest_error.is_some(),
-        "IR generation should have been attempted",
-    );
+    match (world.build_graph.is_some(), world.manifest_error.is_some()) {
+        (true, false) | (false, true) => (),
+        (true, true) => panic!("unexpected: graph and error present"),
+        (false, false) => panic!("IR generation not attempted"),
+    }
 }
 
 #[given("a new BuildGraph is created")]
