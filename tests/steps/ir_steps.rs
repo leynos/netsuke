@@ -4,8 +4,21 @@ use crate::CliWorld;
 use cucumber::{given, then, when};
 use netsuke::ir::BuildGraph;
 
+fn assert_graph(world: &CliWorld) {
+    assert!(
+        world.build_graph.is_some(),
+        "build graph should have been generated",
+    );
+}
+
+fn assert_generation_attempted(world: &CliWorld) {
+    assert!(
+        world.build_graph.is_some() || world.manifest_error.is_some(),
+        "IR generation should have been attempted",
+    );
+}
+
 #[given("a new BuildGraph is created")]
-#[when("a new BuildGraph is created")]
 fn create_graph(world: &mut CliWorld) {
     world.build_graph = Some(BuildGraph::default());
 }
@@ -51,7 +64,17 @@ fn compile_manifest(world: &mut CliWorld, path: String) {
 
 #[when("its contents are checked")]
 fn graph_checked(world: &mut CliWorld) {
-    assert!(world.build_graph.is_some() || world.manifest_error.is_some());
+    assert_graph(world);
+}
+
+#[when("the graph contents are checked")]
+fn graph_contents_checked(world: &mut CliWorld) {
+    assert_graph(world);
+}
+
+#[when("the generation result is checked")]
+fn generation_result_checked(world: &mut CliWorld) {
+    assert_generation_attempted(world);
 }
 
 #[then("IR generation fails")]
