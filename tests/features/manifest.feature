@@ -5,24 +5,24 @@ Feature: Manifest Parsing
 
   Scenario: Parsing a minimal valid manifest
     Given the manifest file "tests/data/minimal.yml" is parsed
-    When the manifest version is checked
+    When the version is checked
     Then the manifest version is "1.0.0"
     And the first target name is "hello"
 
   Scenario: Parsing a manifest with phony and always flags
     Given the manifest file "tests/data/phony.yml" is parsed
-    When the target flags are checked
+    When the flags are checked
     Then the first target is phony
     And the first target is always rebuilt
 
   Scenario: A target in the 'actions' block is implicitly phony
     Given the manifest file "tests/data/actions.yml" is parsed
-    When the action flags are checked
+    When the flags are checked
     Then the first action is phony
 
   Scenario: Parsing a manifest with rules
     Given the manifest file "tests/data/rules.yml" is parsed
-    When the manifest contents are checked
+    When the rules are checked
     Then the first rule name is "compile"
     And the first target name is "hello.o"
 

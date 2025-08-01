@@ -48,7 +48,8 @@ fn parse_manifest(world: &mut CliWorld, path: String) {
 fn when_item_checked(world: &mut CliWorld, item: String) {
     match item.as_str() {
         "parsing result" => assert_parsed(world),
-        _ => assert_manifest(world),
+        "manifest" | "version" | "flags" | "rules" => assert_manifest(world),
+        unexpected => panic!("Unexpected item checked: '{unexpected}'"),
     }
 }
 
