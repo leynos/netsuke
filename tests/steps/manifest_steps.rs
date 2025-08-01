@@ -34,6 +34,20 @@ fn assert_parsed(world: &CliWorld) {
         "manifest should have been parsed"
     );
 }
+
+fn assert_graph(world: &CliWorld) {
+    assert!(
+        world.build_graph.is_some(),
+        "build graph should have been generated",
+    );
+}
+
+fn assert_generation(world: &CliWorld) {
+    assert!(
+        world.build_graph.is_some() || world.manifest_error.is_some(),
+        "IR generation should have been attempted",
+    );
+}
 #[given(expr = "the manifest file {string} is parsed")]
 fn given_parse_manifest(world: &mut CliWorld, path: String) {
     parse_manifest_inner(world, &path);
@@ -49,6 +63,8 @@ fn when_item_checked(world: &mut CliWorld, item: String) {
     match item.as_str() {
         "parsing result" => assert_parsed(world),
         "manifest" | "version" | "flags" | "rules" => assert_manifest(world),
+        "graph contents" => assert_graph(world),
+        "generation result" => assert_generation(world),
         unexpected => panic!("Unexpected item checked: '{unexpected}'"),
     }
 }

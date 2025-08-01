@@ -1,9 +1,10 @@
 //! Step definitions for `BuildGraph` scenarios.
 
 use crate::CliWorld;
-use cucumber::{then, when};
+use cucumber::{given, then, when};
 use netsuke::ir::BuildGraph;
 
+#[given("a new BuildGraph is created")]
 #[when("a new BuildGraph is created")]
 fn create_graph(world: &mut CliWorld) {
     world.build_graph = Some(BuildGraph::default());
@@ -31,6 +32,7 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
+#[given(expr = "the manifest file {string} is compiled to IR")]
 #[when(expr = "the manifest file {string} is compiled to IR")]
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
@@ -45,6 +47,11 @@ fn compile_manifest(world: &mut CliWorld, path: String) {
             world.manifest_error = Some(e.to_string());
         }
     }
+}
+
+#[when("its contents are checked")]
+fn graph_checked(world: &mut CliWorld) {
+    assert!(world.build_graph.is_some() || world.manifest_error.is_some());
 }
 
 #[then("IR generation fails")]
