@@ -61,8 +61,8 @@ compilation pipeline from parsing to execution.
   - [x] Write logic to generate Ninja rule statements from ir::Action structs
     and build statements from ir::BuildEdge structs. *(done)*
 
-  - [ ] Implement the process management logic in `main.rs` to invoke the ninja
-    executable as a subprocess using `std::process::Command`.
+  - [x] Implement the process management logic in `main.rs` to invoke the ninja
+    executable as a subprocess using `std::process::Command`. *(done)*
 
 - **Success Criterion:**
 
