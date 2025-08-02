@@ -322,10 +322,10 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
 
         stack.push(node.clone());
 
-        if let Some(edge) = targets.get(node)
-            && let Some(cycle) = visit_dependencies(targets, &edge.inputs, stack, states)
-        {
-            return Some(cycle);
+        if let Some(edge) = targets.get(node) {
+            if let Some(cycle) = visit_dependencies(targets, &edge.inputs, stack, states) {
+                return Some(cycle);
+            }
         }
 
         stack.pop();
@@ -340,10 +340,10 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
         states: &mut HashMap<PathBuf, VisitState>,
     ) -> Option<Vec<PathBuf>> {
         for dep in deps {
-            if targets.contains_key(dep)
-                && let Some(cycle) = visit(targets, dep, stack, states)
-            {
-                return Some(cycle);
+            if targets.contains_key(dep) {
+                if let Some(cycle) = visit(targets, dep, stack, states) {
+                    return Some(cycle);
+                }
             }
         }
         None
@@ -353,10 +353,10 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
     let mut stack = Vec::new();
 
     for node in targets.keys() {
-        if !states.contains_key(node)
-            && let Some(cycle) = visit(targets, node, &mut stack, &mut states)
-        {
-            return Some(cycle);
+        if !states.contains_key(node) {
+            if let Some(cycle) = visit(targets, node, &mut stack, &mut states) {
+                return Some(cycle);
+            }
         }
     }
     None

@@ -1155,6 +1155,12 @@ The command construction will follow this pattern:
    streamed to the user's console, potentially with additional formatting or
    status updates from Netsuke itself.
 
+In the initial implementation a small helper wraps `Command::new` to forward
+the `-j` and `-C` flags and any explicit build targets. Standard output and
+error are piped and written back to Netsuke's own streams so users see Ninja's
+messages in order. A non-zero exit status or failure to spawn the process is
+reported as an `io::Error` for the CLI to surface.
+
 ### 6.2 The Criticality of Shell Escaping
 
 A primary security responsibility for Netsuke is the prevention of command
