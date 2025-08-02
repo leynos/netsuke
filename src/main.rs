@@ -1,6 +1,17 @@
-use netsuke::{cli::Cli, runner};
+//! Application entry point.
+//!
+//! Parses command-line arguments and delegates execution to [`runner::run`].
 
-fn main() {
+use netsuke::{cli::Cli, runner};
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
     let cli = Cli::parse_with_default();
-    runner::run(cli);
+    match runner::run(&cli) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("{err}");
+            ExitCode::FAILURE
+        }
+    }
 }

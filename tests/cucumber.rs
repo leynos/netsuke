@@ -8,9 +8,23 @@ pub struct CliWorld {
     pub manifest_error: Option<String>,
     pub build_graph: Option<netsuke::ir::BuildGraph>,
     pub ninja: Option<String>,
+    pub run_status: Option<bool>,
+    pub run_error: Option<String>,
+    pub temp: Option<tempfile::TempDir>,
+    pub original_path: Option<std::ffi::OsString>,
 }
 
 mod steps;
+
+impl Drop for CliWorld {
+    fn drop(&mut self) {
+        if let Some(path) = self.original_path.take() {
+            unsafe {
+                std::env::set_var("PATH", path);
+            }
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
