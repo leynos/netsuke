@@ -8,6 +8,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
+/// Creates a default CLI configuration for testing Ninja invocation.
 fn test_cli() -> Cli {
     Cli {
         file: PathBuf::from("Netsukefile"),

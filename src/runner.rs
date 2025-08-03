@@ -5,9 +5,10 @@
 //! subprocess, streaming its output back to the user.
 
 use crate::cli::{Cli, Commands};
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
 
 /// Execute the parsed [`Cli`] commands.
 ///
@@ -41,6 +42,10 @@ pub fn run(cli: &Cli) -> io::Result<()> {
 ///
 /// Returns an [`io::Error`] if the Ninja process fails to spawn or reports a
 /// non-zero exit status.
+///
+/// # Panics
+///
+/// Panics if the child's output streams cannot be captured.
 pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
@@ -50,16 +55,35 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
         cmd.arg("-j").arg(jobs.to_string());
     }
     cmd.args(targets);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
 
-    let output = cmd.output()?;
-    io::stdout().write_all(&output.stdout)?;
-    io::stderr().write_all(&output.stderr)?;
-    if output.status.success() {
+    let mut child = cmd.spawn()?;
+    let stdout = child.stdout.take().expect("child stdout");
+    let stderr = child.stderr.take().expect("child stderr");
+
+    let out_handle = thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        let mut handle = io::stdout();
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = writeln!(handle, "{line}");
+        }
+    });
+    let err_handle = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        let mut handle = io::stderr();
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = writeln!(handle, "{line}");
+        }
+    });
+
+    let status = child.wait()?;
+    let _ = out_handle.join();
+    let _ = err_handle.join();
+
+    if status.success() {
         Ok(())
     } else {
-        Err(io::Error::other(format!(
-            "ninja exited with {}",
-            output.status
-        )))
+        Err(io::Error::other(format!("ninja exited with {status}")))
     }
 }
