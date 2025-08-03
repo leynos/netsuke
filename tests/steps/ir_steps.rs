@@ -1,10 +1,25 @@
 //! Step definitions for `BuildGraph` scenarios.
 
 use crate::CliWorld;
-use cucumber::{then, when};
+use cucumber::{given, then, when};
 use netsuke::ir::BuildGraph;
 
-#[when("a new BuildGraph is created")]
+fn assert_graph(world: &CliWorld) {
+    assert!(
+        world.build_graph.is_some(),
+        "build graph should have been generated",
+    );
+}
+
+fn assert_generation_attempted(world: &CliWorld) {
+    match (world.build_graph.is_some(), world.manifest_error.is_some()) {
+        (true, false) | (false, true) => (),
+        (true, true) => panic!("unexpected: graph and error present"),
+        (false, false) => panic!("IR generation not attempted"),
+    }
+}
+
+#[given("a new BuildGraph is created")]
 fn create_graph(world: &mut CliWorld) {
     world.build_graph = Some(BuildGraph::default());
 }
@@ -31,6 +46,7 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
+#[given(expr = "the manifest file {string} is compiled to IR")]
 #[when(expr = "the manifest file {string} is compiled to IR")]
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
@@ -45,6 +61,21 @@ fn compile_manifest(world: &mut CliWorld, path: String) {
             world.manifest_error = Some(e.to_string());
         }
     }
+}
+
+#[when("its contents are checked")]
+fn graph_checked(world: &mut CliWorld) {
+    assert_graph(world);
+}
+
+#[when("the graph contents are checked")]
+fn graph_contents_checked(world: &mut CliWorld) {
+    assert_graph(world);
+}
+
+#[when("the generation result is checked")]
+fn generation_result_checked(world: &mut CliWorld) {
+    assert_generation_attempted(world);
 }
 
 #[then("IR generation fails")]
