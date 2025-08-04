@@ -10,6 +10,7 @@ pub struct CliWorld {
     pub manifest: Option<netsuke::ast::NetsukeManifest>,
     pub manifest_error: Option<String>,
     pub build_graph: Option<netsuke::ir::BuildGraph>,
+    /// Generated Ninja file content.
     pub ninja: Option<String>,
     /// Status of the last process execution (true for success, false for
     /// failure).

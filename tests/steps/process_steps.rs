@@ -14,9 +14,9 @@ fn fake_ninja(world: &mut CliWorld, code: i32) {
 
 /// Sets up a scenario where no ninja executable is available.
 ///
-/// This step creates a temporary directory and sets the ninja path to a
-/// non-existent executable within that directory, allowing tests to verify
-/// behaviour when ninja is not found on the system.
+/// This step creates a temporary directory and records the path to a
+/// non-existent `ninja` binary within that directory, allowing tests to verify
+/// behaviour when the executable is missing.
 #[given("no ninja executable is available")]
 fn no_ninja(world: &mut CliWorld) {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -26,9 +26,9 @@ fn no_ninja(world: &mut CliWorld) {
 
 /// Executes the ninja process and captures the result in the test world.
 ///
-/// This step runs the ninja executable (either real or fake) using the CLI
-/// configuration stored in the world, then updates the world's `run_status` and
-/// `run_error` fields based on the execution outcome.
+/// This step runs the `ninja` executable using the CLI configuration stored in
+/// the world, then updates the world's `run_status` and `run_error` fields based
+/// on the execution outcome.
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");

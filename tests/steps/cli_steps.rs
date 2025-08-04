@@ -5,7 +5,7 @@
 
 use crate::CliWorld;
 use clap::Parser;
-use cucumber::{then, when};
+use cucumber::{given, then, when};
 use netsuke::cli::{Cli, Commands};
 use std::path::PathBuf;
 
@@ -42,6 +42,7 @@ fn extract_build(world: &CliWorld) -> Option<&Vec<String>> {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
+#[given(expr = "the CLI is parsed with {string}")]
 #[when(expr = "the CLI is parsed with {string}")]
 fn parse_cli(world: &mut CliWorld, args: String) {
     apply_cli(world, &args);
@@ -51,6 +52,7 @@ fn parse_cli(world: &mut CliWorld, args: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
+#[given(expr = "the CLI is parsed with invalid arguments {string}")]
 #[when(expr = "the CLI is parsed with invalid arguments {string}")]
 fn parse_cli_invalid(world: &mut CliWorld, args: String) {
     apply_cli(world, &args);
