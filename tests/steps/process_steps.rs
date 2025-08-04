@@ -52,7 +52,7 @@ fn no_ninja(world: &mut CliWorld) {
 /// on the execution outcome.
 #[expect(
     clippy::option_if_let_else,
-    reason = "explicit conditional is clearer than map_or_else",
+    reason = "explicit conditional is clearer than map_or_else"
 )]
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
