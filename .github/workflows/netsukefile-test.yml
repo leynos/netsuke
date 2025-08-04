@@ -1,0 +1,33 @@
+name: Netsukefile Build Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  netsukefile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
+      - name: Build Netsuke
+        run: make build
+      - name: Create Netsukefile
+        run: |
+          cat <<'MANIFEST' > Netsukefile
+          netsuke_version: "1.0.0"
+          targets:
+            - name: generated.txt
+              recipe:
+                kind: command
+                command: "bash -c 'if [ ! -f generated.txt ]; then touch generated.txt; fi'"
+          MANIFEST
+      - name: Run Netsuke
+        run: ./target/debug/netsuke build generated.txt
+      - name: Assert artefact exists
+        run: scripts/assert-file-exists.sh generated.txt
