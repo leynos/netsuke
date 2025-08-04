@@ -25,7 +25,7 @@ jobs:
             - name: generated.txt
               recipe:
                 kind: command
-                command: "bash -c 'if [ ! -f generated.txt ]; then touch generated.txt; fi'"
+                command: "touch generated.txt"
           MANIFEST
       - name: Run Netsuke
         run: ./target/debug/netsuke build generated.txt
