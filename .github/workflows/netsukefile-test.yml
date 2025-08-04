@@ -1,0 +1,44 @@
+name: Netsukefile Build Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  netsukefile:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
+      - name: Cache Cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+      - name: Build Netsuke
+        run: make build
+      - name: Create Netsukefile
+        run: |
+          cat <<-'MANIFEST' > Netsukefile
+          netsuke_version: "1.0.0"
+          targets:
+            - name: generated.txt
+              recipe:
+                kind: command
+                command: "touch generated.txt"
+          MANIFEST
+      - name: Run Netsuke
+        run: ./target/debug/netsuke build generated.txt
+      - name: Assert artefact exists
+        run: scripts/assert-file-exists.sh generated.txt

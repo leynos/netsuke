@@ -66,9 +66,9 @@ compilation pipeline from parsing to execution.
 
 - **Success Criterion:**
 
-  - [ ] Netsuke can successfully take a Netsukefile without any Jinja syntax,
+  - [x] Netsuke can successfully take a Netsukefile without any Jinja syntax,
     compile it to a `build.ninja` file, and execute it via the ninja subprocess
-    to produce the correct build artifacts.
+    to produce the correct build artefacts. *(validated via CI workflow)*
 
 ## Phase 2: The Dynamic Engine ✨
 
