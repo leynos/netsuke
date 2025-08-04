@@ -25,8 +25,8 @@ pub struct CliWorld {
 
 impl Drop for CliWorld {
     fn drop(&mut self) {
-        if let Some(path) = self.original_path.as_ref() {
-            // SAFETY: restoring the environment ensures isolation between tests.
+        if let Some(path) = self.original_path.take() {
+            // SAFETY: nightly marks `set_var` as unsafe; restore path for isolation.
             unsafe {
                 std::env::set_var("PATH", path);
             }

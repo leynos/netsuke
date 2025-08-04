@@ -16,11 +16,8 @@ fn install_test_ninja(world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
         .original_path
         .get_or_insert_with(|| std::env::var_os("PATH").unwrap_or_default());
 
-    let mut new_path = std::ffi::OsString::from(dir.path());
-    new_path.push(":");
-    new_path.push(original);
-
-    // SAFETY: tests require PATH overrides to exercise process lookup.
+    let new_path = format!("{}:{}", dir.path().display(), original.to_string_lossy());
+    // SAFETY: nightly marks `set_var` as unsafe; override path for test isolation.
     unsafe {
         std::env::set_var("PATH", &new_path);
     }
@@ -53,13 +50,18 @@ fn no_ninja(world: &mut CliWorld) {
 /// This step runs the `ninja` executable using the CLI configuration stored in
 /// the world, then updates the world's `run_status` and `run_error` fields based
 /// on the execution outcome.
+#[expect(
+    clippy::option_if_let_else,
+    reason = "explicit conditional is clearer than map_or_else",
+)]
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");
-    let program = world
-        .ninja
-        .as_ref()
-        .map_or_else(|| std::path::Path::new("ninja"), std::path::Path::new);
+    let program = if let Some(ninja) = &world.ninja {
+        std::path::Path::new(ninja)
+    } else {
+        std::path::Path::new("ninja")
+    };
     match runner::run_ninja(program, cli, &[]) {
         Ok(()) => {
             world.run_status = Some(true);
