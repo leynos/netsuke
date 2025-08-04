@@ -65,7 +65,7 @@ fn command_should_fail(world: &mut CliWorld) {
 }
 
 /// Asserts that the command failed and the error message matches the expected value.
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "cucumber step parameters require owned Strings"
 )]

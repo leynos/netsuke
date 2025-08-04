@@ -84,7 +84,7 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     if status.success() {
         Ok(())
     } else {
-        #[allow(
+        #[expect(
             clippy::io_other_error,
             reason = "use explicit error kind for compatibility with older Rust"
         )]
