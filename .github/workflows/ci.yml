@@ -24,6 +24,8 @@ jobs:
         run: make check-fmt
       - name: Lint
         run: make lint
+      - name: Test
+        run: make test
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@c6559452842af6a83b83429129dccaf910e34562
         with:
