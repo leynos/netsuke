@@ -356,10 +356,12 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
     let mut stack = Vec::new();
 
     for node in targets.keys() {
-        if !states.contains_key(node) {
-            if let Some(cycle) = visit(targets, node, &mut stack, &mut states) {
-                return Some(cycle);
-            }
+        // Skip nodes we've already processed to avoid redundant traversal.
+        if states.contains_key(node) {
+            continue;
+        }
+        if let Some(cycle) = visit(targets, node, &mut stack, &mut states) {
+            return Some(cycle);
         }
     }
     None

@@ -84,6 +84,13 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     if status.success() {
         Ok(())
     } else {
-        Err(io::Error::other(format!("ninja exited with {status}")))
+        #[allow(
+            clippy::io_other_error,
+            reason = "use explicit error kind for compatibility with older Rust"
+        )]
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("ninja exited with {status}"),
+        ))
     }
 }
