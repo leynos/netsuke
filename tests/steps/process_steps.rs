@@ -1,28 +1,22 @@
 //! Step definitions for Ninja process execution.
 
-use crate::CliWorld;
+use crate::{CliWorld, support};
 use cucumber::{given, then, when};
 use netsuke::runner;
-use std::fs::{self, File};
-use std::io::Write;
 
+/// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn fake_ninja(world: &mut CliWorld, code: i32) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let path = dir.path().join("ninja");
-    let mut file = File::create(&path).expect("script");
-    writeln!(file, "#!/bin/sh\nexit {code}").expect("write script");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&path).expect("meta").permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&path, perms).expect("perms");
-    }
+    let (dir, path) = support::fake_ninja(code);
     world.ninja = Some(path.to_string_lossy().into_owned());
     world.temp = Some(dir);
 }
 
+/// Sets up a scenario where no ninja executable is available.
+///
+/// This step creates a temporary directory and sets the ninja path to a
+/// non-existent executable within that directory, allowing tests to verify
+/// behaviour when ninja is not found on the system.
 #[given("no ninja executable is available")]
 fn no_ninja(world: &mut CliWorld) {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -30,6 +24,11 @@ fn no_ninja(world: &mut CliWorld) {
     world.temp = Some(dir);
 }
 
+/// Executes the ninja process and captures the result in the test world.
+///
+/// This step runs the ninja executable (either real or fake) using the CLI
+/// configuration stored in the world, then updates the world's `run_status` and
+/// `run_error` fields based on the execution outcome.
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");
@@ -49,17 +48,19 @@ fn run(world: &mut CliWorld) {
     }
 }
 
+/// Asserts that the command succeeds.
 #[then("the command should succeed")]
 fn command_should_succeed(world: &mut CliWorld) {
     assert_eq!(world.run_status, Some(true));
 }
 
+/// Asserts that the command fails and records an error message.
 #[then("the command should fail")]
 fn command_should_fail(world: &mut CliWorld) {
     assert_eq!(world.run_status, Some(false));
     assert!(
         world.run_error.is_some(),
-        "Expected an error message, but none was found"
+        "Expected an error message, but none was found",
     );
 }
 
@@ -77,6 +78,6 @@ fn command_should_fail_with_error(world: &mut CliWorld, expected: String) {
         .expect("Expected an error message, but none was found");
     assert!(
         actual.contains(&expected),
-        "Expected error message to contain '{expected}', but got '{actual}'"
+        "Expected error message to contain '{expected}', but got '{actual}'",
     );
 }

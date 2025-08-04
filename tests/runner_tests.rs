@@ -3,10 +3,7 @@
 use netsuke::cli::{Cli, Commands};
 use netsuke::runner;
 use rstest::rstest;
-use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
 
 /// Creates a default CLI configuration for testing Ninja invocation.
 fn test_cli() -> Cli {
@@ -20,39 +17,15 @@ fn test_cli() -> Cli {
     }
 }
 
-struct FakeNinja {
-    _dir: TempDir,
-    path: PathBuf,
-}
-
-impl FakeNinja {
-    fn new(exit_code: i32) -> Self {
-        let dir = TempDir::new().expect("temp dir");
-        let path = dir.path().join("ninja");
-        let mut file = File::create(&path).expect("script");
-        writeln!(file, "#!/bin/sh\nexit {exit_code}").expect("write script");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&path).expect("meta").permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(&path, perms).expect("perms");
-        }
-        Self { _dir: dir, path }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
+mod support;
 
 #[rstest]
 #[case(0, true)]
 #[case(1, false)]
 fn run_ninja_status(#[case] code: i32, #[case] succeeds: bool) {
-    let fake = FakeNinja::new(code);
+    let (_dir, path) = support::fake_ninja(code);
     let cli = test_cli();
-    let result = runner::run_ninja(fake.path(), &cli, &[]);
+    let result = runner::run_ninja(&path, &cli, &[]);
     assert_eq!(result.is_ok(), succeeds);
 }
 
