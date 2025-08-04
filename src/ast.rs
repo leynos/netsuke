@@ -10,7 +10,7 @@
 //! use netsuke::ast::NetsukeManifest;
 //! use netsuke::ast::StringOrList;
 //!
-//! let yaml = r#"netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    recipe:\n      kind: command\n      command: \"echo hi\""#;
+//! let yaml = "netsuke_version: 1.0.0\ntargets:\n  - name: hello\n    recipe:\n      kind: command\n      command: \"echo hi\"";
 //! let manifest: NetsukeManifest = serde_yml::from_str(yaml).expect("parse");
 //! if let StringOrList::String(name) = &manifest.targets[0].name {
 //!     assert_eq!(name, "hello");

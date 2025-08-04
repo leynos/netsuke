@@ -3,31 +3,37 @@
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
 use netsuke::runner;
+use std::path::PathBuf;
+use tempfile::TempDir;
 
-/// Saves the original `PATH` and installs a test-specific value.
-fn set_test_path(world: &mut CliWorld, new_path: impl AsRef<std::ffi::OsStr>) {
-    if world.original_path.is_none() {
-        world.original_path = Some(std::env::var_os("PATH").unwrap_or_default());
-    }
+/// Installs a test-specific ninja binary and updates the `PATH`.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "helper owns path for simplicity"
+)]
+fn install_test_ninja(world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
+    let original = world
+        .original_path
+        .get_or_insert_with(|| std::env::var_os("PATH").unwrap_or_default());
+
+    let mut new_path = std::ffi::OsString::from(dir.path());
+    new_path.push(":");
+    new_path.push(original);
+
     // SAFETY: tests require PATH overrides to exercise process lookup.
     unsafe {
-        std::env::set_var("PATH", new_path);
+        std::env::set_var("PATH", &new_path);
     }
+
+    world.ninja = Some(ninja_path.to_string_lossy().into_owned());
+    world.temp = Some(dir);
 }
 
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn fake_ninja(world: &mut CliWorld, code: i32) {
     let (dir, path) = support::fake_ninja(code);
-    let dir_path = dir.path().display().to_string();
-    let new_path = if let Some(old) = world.original_path.as_ref() {
-        format!("{dir_path}:{}", old.to_string_lossy())
-    } else {
-        dir_path
-    };
-    set_test_path(world, new_path);
-    world.ninja = Some(path.to_string_lossy().into_owned());
-    world.temp = Some(dir);
+    install_test_ninja(world, dir, path);
 }
 
 /// Sets up a scenario where no ninja executable is available.
@@ -37,16 +43,9 @@ fn fake_ninja(world: &mut CliWorld, code: i32) {
 /// behaviour when the executable is missing.
 #[given("no ninja executable is available")]
 fn no_ninja(world: &mut CliWorld) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let dir_path = dir.path().display().to_string();
-    let new_path = if let Some(old) = world.original_path.as_ref() {
-        format!("{dir_path}:{}", old.to_string_lossy())
-    } else {
-        dir_path
-    };
-    set_test_path(world, new_path);
-    world.ninja = Some(dir.path().join("ninja").to_string_lossy().into_owned());
-    world.temp = Some(dir);
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("ninja");
+    install_test_ninja(world, dir, path);
 }
 
 /// Executes the ninja process and captures the result in the test world.
