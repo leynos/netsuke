@@ -2,7 +2,6 @@ use netsuke::cli::{Cli, Commands};
 use netsuke::runner::{run, run_ninja};
 use rstest::rstest;
 use serial_test::serial;
-use std::error::Error;
 use std::path::{Path, PathBuf};
 
 mod support;
@@ -26,12 +25,7 @@ fn run_exits_with_manifest_error_on_invalid_version() {
     let result = run(&cli);
     assert!(result.is_err());
     let err = result.expect_err("should have error");
-    assert!(
-        err.source()
-            .expect("should have source")
-            .to_string()
-            .contains("version")
-    );
+    assert!(err.chain().any(|e| e.to_string().contains("version")));
 }
 
 #[rstest]

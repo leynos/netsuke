@@ -6,6 +6,7 @@
 
 use crate::cli::{Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
+use anyhow::{Context, Result};
 use serde_json;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
@@ -19,39 +20,32 @@ use tracing::{debug, info};
 ///
 /// # Errors
 ///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn or exits with a
-/// non-zero status code.
-pub fn run(cli: &Cli) -> io::Result<()> {
+/// Returns an error if manifest generation or the Ninja process fails.
+pub fn run(cli: &Cli) -> Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build {
         emit: None,
         targets: Vec::new(),
     });
     match command {
         Commands::Build { targets, emit } => {
-            let ninja_content = generate_ninja(cli)?;
+            let ninja = generate_ninja(cli)?;
             if let Some(path) = emit {
-                fs::write(&path, ninja_content.as_bytes()).map_err(io::Error::other)?;
-                info!("Generated Ninja file at {}", path.display());
-                run_ninja(Path::new("ninja"), cli, &path, &targets)
+                write_and_log(&path, &ninja)?;
+                run_ninja(Path::new("ninja"), cli, &path, &targets)?;
             } else {
-                let mut tmp = Builder::new()
+                let tmp = Builder::new()
                     .prefix("netsuke.")
                     .suffix(".ninja")
                     .tempfile()
-                    .map_err(io::Error::other)?;
-                tmp.write_all(ninja_content.as_bytes())
-                    .map_err(io::Error::other)?;
-                let path = tmp.into_temp_path();
-                info!("Generated Ninja file at {}", path.display());
-                let result = run_ninja(Path::new("ninja"), cli, path.as_ref(), &targets);
-                drop(path);
-                result
+                    .context("create temp file")?;
+                write_and_log(tmp.path(), &ninja)?;
+                run_ninja(Path::new("ninja"), cli, tmp.path(), &targets)?;
             }
+            Ok(())
         }
         Commands::Emit { file } => {
-            let ninja_content = generate_ninja(cli)?;
-            fs::write(&file, ninja_content.as_bytes()).map_err(io::Error::other)?;
-            info!("Generated Ninja file at {}", file.display());
+            let ninja = generate_ninja(cli)?;
+            write_and_log(&file, &ninja)?;
             Ok(())
         }
         Commands::Clean => {
@@ -65,11 +59,27 @@ pub fn run(cli: &Cli) -> io::Result<()> {
     }
 }
 
+/// Write `content` to `path` and log the file's location.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the file cannot be written.
+///
+/// # Examples
+/// ```ignore
+/// write_and_log(Path::new("out.ninja"), "rule cc\n").unwrap();
+/// ```
+fn write_and_log(path: &Path, content: &str) -> io::Result<()> {
+    fs::write(path, content)?;
+    info!("Generated Ninja file at {}", path.display());
+    Ok(())
+}
+
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
 ///
 /// # Errors
 ///
-/// Returns an [`io::Error`] if the manifest cannot be loaded or translated.
+/// Returns an error if the manifest cannot be loaded or translated.
 ///
 /// # Examples
 /// ```ignore
@@ -85,15 +95,16 @@ pub fn run(cli: &Cli) -> io::Result<()> {
 /// let ninja = generate_ninja(&cli).expect("generate");
 /// assert!(ninja.contains("rule"));
 /// ```
-fn generate_ninja(cli: &Cli) -> io::Result<String> {
+fn generate_ninja(cli: &Cli) -> Result<String> {
     let manifest_path = cli
         .directory
         .as_ref()
         .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
-    let manifest = manifest::from_path(&manifest_path).map_err(io::Error::other)?;
-    let ast_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
+    let manifest = manifest::from_path(&manifest_path)
+        .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
+    let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
     debug!("AST:\n{ast_json}");
-    let graph = BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;
     Ok(ninja_gen::generate(&graph))
 }
 
@@ -184,7 +195,13 @@ pub fn run_ninja(
     if let Some(jobs) = cli.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
-    cmd.arg("-f").arg(build_file);
+    // Canonicalise the build file path so Ninja resolves it correctly from the
+    // working directory. Fall back to the original on failure so Ninja can
+    // surface a meaningful error.
+    let build_file_path = build_file
+        .canonicalize()
+        .unwrap_or_else(|_| build_file.to_path_buf());
+    cmd.arg("-f").arg(&build_file_path);
     cmd.args(targets);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
