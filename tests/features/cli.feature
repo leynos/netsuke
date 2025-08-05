@@ -23,6 +23,19 @@ Feature: CLI parsing
     And the manifest path is "alt.yml"
     And the first target is "target"
 
+  Scenario: Build command writes Ninja file
+    When the CLI is parsed with "build --emit out.ninja target"
+    Then parsing succeeds
+    And the command is build
+    And the emit path is "out.ninja"
+    And the first target is "target"
+
+  Scenario: Emit subcommand writes Ninja file
+    When the CLI is parsed with "emit out.ninja"
+    Then parsing succeeds
+    And the command is emit
+    And the emit command path is "out.ninja"
+
   Scenario: Unknown command fails
     When the CLI is parsed with invalid arguments "unknown"
     Then an error should be returned

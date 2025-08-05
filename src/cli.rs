@@ -72,6 +72,7 @@ impl Cli {
     fn with_default_command(mut self) -> Self {
         if self.command.is_none() {
             self.command = Some(Commands::Build {
+                emit: None,
                 targets: Vec::new(),
             });
         }
@@ -84,6 +85,10 @@ impl Cli {
 pub enum Commands {
     /// Build specified targets (or default targets if none are given) [default].
     Build {
+        /// Write the generated Ninja manifest to this path and retain it.
+        #[arg(long, value_name = "FILE")]
+        emit: Option<PathBuf>,
+
         /// A list of specific targets to build.
         targets: Vec<String>,
     },
@@ -93,4 +98,11 @@ pub enum Commands {
 
     /// Display the build dependency graph in DOT format for visualization.
     Graph,
+
+    /// Emit the Ninja manifest to the specified file without running Ninja.
+    Emit {
+        /// Output path for the generated Ninja file.
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+    },
 }

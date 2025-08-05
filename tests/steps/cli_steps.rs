@@ -17,6 +17,7 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
         Ok(mut cli) => {
             if cli.command.is_none() {
                 cli.command = Some(Commands::Build {
+                    emit: None,
                     targets: Vec::new(),
                 });
             }
@@ -30,10 +31,10 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
     }
 }
 
-fn extract_build(world: &CliWorld) -> Option<&Vec<String>> {
+fn extract_build(world: &CliWorld) -> Option<(&Vec<String>, &Option<PathBuf>)> {
     let cli = world.cli.as_ref()?;
     match cli.command.as_ref()? {
-        Commands::Build { targets } => Some(targets),
+        Commands::Build { targets, emit } => Some((targets, emit)),
         _ => None,
     }
 }
@@ -86,6 +87,15 @@ fn command_is_graph(world: &mut CliWorld) {
     ));
 }
 
+#[then("the command is emit")]
+fn command_is_emit(world: &mut CliWorld) {
+    let cli = world.cli.as_ref().expect("cli");
+    assert!(matches!(
+        cli.command.as_ref().expect("command"),
+        Commands::Emit { .. }
+    ));
+}
+
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
@@ -102,7 +112,7 @@ fn manifest_path(world: &mut CliWorld, path: String) {
 )]
 #[then(expr = "the first target is {string}")]
 fn first_target(world: &mut CliWorld, target: String) {
-    let targets = extract_build(world).expect("command should be build");
+    let (targets, _) = extract_build(world).expect("command should be build");
     assert_eq!(targets.first(), Some(&target));
 }
 
@@ -120,6 +130,28 @@ fn working_directory(world: &mut CliWorld, dir: String) {
 fn job_count(world: &mut CliWorld, jobs: usize) {
     let cli = world.cli.as_ref().expect("cli");
     assert_eq!(cli.jobs, Some(jobs));
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the emit path is {string}")]
+fn emit_path(world: &mut CliWorld, path: String) {
+    let (_, emit) = extract_build(world).expect("command should be build");
+    assert_eq!(emit.as_ref(), Some(&PathBuf::from(path)));
+}
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the emit command path is {string}")]
+fn emit_command_path(world: &mut CliWorld, path: String) {
+    let cli = world.cli.as_ref().expect("cli");
+    match cli.command.as_ref().expect("command") {
+        Commands::Emit { file } => assert_eq!(file, &PathBuf::from(path)),
+        _ => panic!("command should be emit"),
+    }
 }
 
 #[then("an error should be returned")]

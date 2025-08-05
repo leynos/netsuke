@@ -3,7 +3,7 @@
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
 use netsuke::runner;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
@@ -62,7 +62,7 @@ fn run(world: &mut CliWorld) {
     } else {
         std::path::Path::new("ninja")
     };
-    match runner::run_ninja(program, cli, &[]) {
+    match runner::run_ninja(program, cli, Path::new("build.ninja"), &[]) {
         Ok(()) => {
             world.run_status = Some(true);
             world.run_error = None;

@@ -1348,14 +1348,7 @@ entire CLI specification.
 Rust
 
 ```rust
-// In src/main.rs
-
-#[rustfmt::skip]
-use clap::Parser;
-#[rustfmt::skip]
-use clap::Subcommand;
-#[rustfmt::skip]
-use std::path::PathBuf;
+use clap::{Parser, Subcommand}; use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -1380,11 +1373,22 @@ struct Cli { /// Path to the Netsuke manifest file to use.
 
 #[derive(Subcommand)]
 enum Commands { /// Build specified targets (or default targets if none are
-given) [default]. Build { /// A list of specific targets to build. targets:
-Vec<String>, },
+given) [default]. Build { /// Write the generated Ninja manifest to this path
+and retain it.
+        #[arg(long, value_name = "FILE")]
+        emit: Option<PathBuf>,
 
-    /// Remove build artefacts and intermediate files. Clean {}, /// Display
-    the build dependency graph in DOT format for visualisation. Graph {}, }
+        /// A list of specific targets to build. targets: Vec<String>, },
+
+    /// Remove build artefacts and intermediate files. Clean {},
+
+    /// Display the build dependency graph in DOT format for visualisation.
+    Graph {},
+
+    /// Emit the Ninja manifest to `FILE` without invoking Ninja. Emit { ///
+    Output path for the generated Ninja file.
+        #[arg(value_name = "FILE")]
+        file: PathBuf, }, }
 ```
 
 *Note: The* `Build` *command is wrapped in an* `Option<Commands>` *and will be
@@ -1395,12 +1399,14 @@ treated as the default subcommand if none is provided, allowing for the common*
 
 The behaviour of each subcommand is clearly defined:
 
-- `Netsuke build [targets...]`: This is the primary and default command. It
-  executes the full five-stage pipeline: ingestion, Jinja rendering, YAML
-  parsing, IR generation, and Ninja synthesis. It then invokes `ninja` to build
-  the list of specified `targets`. If no targets are provided on the command
-  line, it will build the targets listed in the `defaults` section of the
-  manifest.
+- `Netsuke build [--emit FILE] [targets...]`: This is the primary and default
+  command. It executes the full five-stage pipeline: ingestion, Jinja
+  rendering, YAML parsing, IR generation, and Ninja synthesis. By default the
+  generated Ninja file is written to a securely created temporary location and
+  removed after the build completes. Supplying `--emit FILE` writes the Ninja
+  file to `FILE` and retains it. If no targets are provided on the command
+  line, the targets listed in the `defaults` section of the manifest are
+  built.
 
 - `Netsuke clean`: This command provides a convenient way to clean the build
   directory. It will invoke the Ninja backend with the appropriate flags, such
@@ -1413,6 +1419,10 @@ The behaviour of each subcommand is clearly defined:
   `dot -Tsvg` or displayed via `netsuke graph --html` using an embedded
   Dagre.js viewer. Visualizing the graph is invaluable for understanding and
   debugging complex projects.
+
+- `Netsuke emit FILE`: This command performs the pipeline up to Ninja
+  synthesis and writes the resulting Ninja file to `FILE` without invoking
+  Ninja.
 
 ### 8.4 Design Decisions
 

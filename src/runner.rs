@@ -9,9 +9,10 @@ use crate::{ir::BuildGraph, manifest, ninja_gen};
 use serde_json;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
+use tempfile::Builder;
 use tracing::{debug, info};
 
 /// Execute the parsed [`Cli`] commands.
@@ -22,26 +23,36 @@ use tracing::{debug, info};
 /// non-zero status code.
 pub fn run(cli: &Cli) -> io::Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build {
+        emit: None,
         targets: Vec::new(),
     });
     match command {
-        Commands::Build { targets } => {
-            let manifest_path = cli
-                .directory
-                .as_ref()
-                .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
-            let manifest = manifest::from_path(&manifest_path).map_err(io::Error::other)?;
-            let ast_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
-            debug!("AST:\n{ast_json}");
-            let graph = BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
-            let ninja_content = ninja_gen::generate(&graph);
-            let ninja_path = cli.directory.as_ref().map_or_else(
-                || PathBuf::from("build.ninja"),
-                |dir| dir.join("build.ninja"),
-            );
-            fs::write(&ninja_path, ninja_content).map_err(io::Error::other)?;
-            info!("Generated Ninja file at {}", ninja_path.display());
-            run_ninja(Path::new("ninja"), cli, &targets)
+        Commands::Build { targets, emit } => {
+            let ninja_content = generate_ninja(cli)?;
+            if let Some(path) = emit {
+                fs::write(&path, ninja_content.as_bytes()).map_err(io::Error::other)?;
+                info!("Generated Ninja file at {}", path.display());
+                run_ninja(Path::new("ninja"), cli, &path, &targets)
+            } else {
+                let mut tmp = Builder::new()
+                    .prefix("netsuke.")
+                    .suffix(".ninja")
+                    .tempfile()
+                    .map_err(io::Error::other)?;
+                tmp.write_all(ninja_content.as_bytes())
+                    .map_err(io::Error::other)?;
+                let path = tmp.into_temp_path();
+                info!("Generated Ninja file at {}", path.display());
+                let result = run_ninja(Path::new("ninja"), cli, path.as_ref(), &targets);
+                drop(path);
+                result
+            }
+        }
+        Commands::Emit { file } => {
+            let ninja_content = generate_ninja(cli)?;
+            fs::write(&file, ninja_content.as_bytes()).map_err(io::Error::other)?;
+            info!("Generated Ninja file at {}", file.display());
+            Ok(())
         }
         Commands::Clean => {
             println!("Clean requested");
@@ -52,6 +63,38 @@ pub fn run(cli: &Cli) -> io::Result<()> {
             Ok(())
         }
     }
+}
+
+/// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the manifest cannot be loaded or translated.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::cli::{Cli, Commands};
+/// use netsuke::runner::generate_ninja;
+/// let cli = Cli {
+///     file: "Netsukefile".into(),
+///     directory: None,
+///     jobs: None,
+///     verbose: false,
+///     command: Some(Commands::Build { emit: None, targets: vec![] }),
+/// };
+/// let ninja = generate_ninja(&cli).expect("generate");
+/// assert!(ninja.contains("rule"));
+/// ```
+fn generate_ninja(cli: &Cli) -> io::Result<String> {
+    let manifest_path = cli
+        .directory
+        .as_ref()
+        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
+    let manifest = manifest::from_path(&manifest_path).map_err(io::Error::other)?;
+    let ast_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
+    debug!("AST:\n{ast_json}");
+    let graph = BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
+    Ok(ninja_gen::generate(&graph))
 }
 
 /// Check if `arg` contains a sensitive keyword.
@@ -111,8 +154,9 @@ fn redact_sensitive_args(args: &[String]) -> Vec<String> {
 
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
-/// The function forwards the job count and working directory to Ninja and
-/// streams its standard output and error back to the user.
+/// The function forwards the job count and working directory to Ninja,
+/// specifies the temporary build file, and streams its standard output and
+/// error back to the user.
 ///
 /// # Errors
 ///
@@ -122,7 +166,12 @@ fn redact_sensitive_args(args: &[String]) -> Vec<String> {
 /// # Panics
 ///
 /// Panics if the child's output streams cannot be captured.
-pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()> {
+pub fn run_ninja(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &[String],
+) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
         // Resolve and canonicalise the directory so Ninja receives a stable
@@ -135,6 +184,7 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     if let Some(jobs) = cli.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
+    cmd.arg("-f").arg(build_file);
     cmd.args(targets);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
