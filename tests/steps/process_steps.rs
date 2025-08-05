@@ -5,7 +5,7 @@ use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
 #[expect(
@@ -79,6 +79,29 @@ fn build_dir_exists(world: &mut CliWorld) {
 )]
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
+    let dir = world.temp.as_ref().expect("temp dir");
+    let manifest_path = {
+        let cli = world.cli.as_ref().expect("cli");
+        if cli.file.is_absolute() {
+            cli.file.clone()
+        } else {
+            dir.path().join(&cli.file)
+        }
+    };
+
+    if !manifest_path.exists() {
+        let mut file =
+            NamedTempFile::new_in(dir.path()).expect("Failed to create temporary manifest file");
+        support::write_manifest(&mut file).expect("Failed to write manifest content");
+        file.persist(&manifest_path)
+            .expect("Failed to persist manifest file");
+    }
+
+    {
+        let cli = world.cli.as_mut().expect("cli");
+        cli.file.clone_from(&manifest_path);
+    }
+
     let cli = world.cli.as_ref().expect("cli");
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)
