@@ -1,3 +1,5 @@
 target/
 **/*.rs.bk
+**/*~
 .crush
+build.ninja
