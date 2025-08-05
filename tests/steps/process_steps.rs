@@ -3,8 +3,9 @@
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
 use netsuke::runner;
-use std::path::PathBuf;
-use tempfile::TempDir;
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempfile::{NamedTempFile, TempDir};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
 #[expect(
@@ -50,18 +51,30 @@ fn no_ninja(world: &mut CliWorld) {
 /// This step runs the `ninja` executable using the CLI configuration stored in
 /// the world, then updates the world's `run_status` and `run_error` fields based
 /// on the execution outcome.
-#[expect(
-    clippy::option_if_let_else,
-    reason = "explicit conditional is clearer than map_or_else"
-)]
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
-    let cli = world.cli.as_ref().expect("cli");
-    let program = if let Some(ninja) = &world.ninja {
-        std::path::Path::new(ninja)
+    let cli = world.cli.as_mut().expect("cli");
+
+    // Ensure a manifest exists at the path expected by the CLI.
+    let dir = world.temp.as_ref().expect("temp dir");
+    let manifest_path = if cli.file.is_absolute() {
+        cli.file.clone()
     } else {
-        std::path::Path::new("ninja")
+        dir.path().join(&cli.file)
     };
+    if !manifest_path.exists() {
+        let mut file = NamedTempFile::new_in(dir.path()).expect("manifest");
+        support::write_manifest(&mut file);
+        // Persist the temporary file to the desired manifest path.
+        file.persist(&manifest_path).expect("persist manifest");
+    }
+    cli.file.clone_from(&manifest_path);
+
+    let program = world
+        .ninja
+        .as_ref()
+        .map_or_else(|| Path::new("ninja"), Path::new);
+
     match runner::run_ninja(program, cli, &[]) {
         Ok(()) => {
             world.run_status = Some(true);
@@ -71,6 +84,11 @@ fn run(world: &mut CliWorld) {
             world.run_status = Some(false);
             world.run_error = Some(e.to_string());
         }
+    }
+
+    // Clean up any manifest left outside the temporary directory.
+    if !manifest_path.starts_with(dir.path()) {
+        let _ = fs::remove_file(manifest_path);
     }
 }
 
