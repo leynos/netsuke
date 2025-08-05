@@ -29,7 +29,6 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     (dir, path)
 }
 
-#[allow(dead_code, reason = "compiled as its own crate during linting")]
 #[derive(Clone)]
 struct BufferWriter {
     buf: Arc<Mutex<Vec<u8>>>,
@@ -54,7 +53,7 @@ impl Write for BufferWriter {
 /// let output = capture_logs(Level::INFO, || tracing::info!("hello"));
 /// assert!(output.contains("hello"));
 /// ```
-#[allow(dead_code, reason = "compiled as its own crate during linting")]
+#[expect(dead_code, reason = "compiled as its own crate during linting")]
 pub fn capture_logs<F>(level: Level, f: F) -> String
 where
     F: FnOnce(),
@@ -77,7 +76,7 @@ where
 /// specified as the first argument.
 ///
 /// Returns the temporary directory and the path to the executable.
-#[allow(dead_code, reason = "used only in directory tests")]
+#[expect(dead_code, reason = "used only in directory tests")]
 pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
@@ -97,7 +96,9 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
 /// Write a minimal manifest to `file`.
 ///
 /// The manifest declares a single `hello` target that prints a greeting.
-#[expect(dead_code, reason = "shared test utility not used in all crates")]
+/// This must be `allow` as `expect` will trigger an unfulfilled warning
+/// despite the lint violation arising.
+#[allow(dead_code, reason = "shared test utility not used in all crates")]
 pub fn write_manifest(file: &mut impl Write) {
     writeln!(
         file,
