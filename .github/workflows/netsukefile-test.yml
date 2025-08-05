@@ -30,13 +30,39 @@ jobs:
         run: make build
       - name: Create Netsukefile
         run: |
-          cat <<-'MANIFEST' > Netsukefile
+          cat <<'MANIFEST' > Netsukefile
           netsuke_version: "1.0.0"
           targets:
-            - name: generated.txt
-              command: "touch generated.txt"
+            - name: base.txt
+              command: "touch base.txt"
+            - name: dependent.txt
+              command: "cp base.txt dependent.txt"
+              sources: ["base.txt"]
+            - name: inline-command.txt
+              command: "touch inline-command.txt"
+            - name: inline-script.txt
+              script: |
+                #!/bin/sh
+                touch inline-script.txt
+          actions:
+            - name: say-hello
+              command: "touch action-called.txt"
+            - name: unused-action
+              command: "touch unused.txt"
           MANIFEST
-      - name: Run Netsuke
-        run: ./target/debug/netsuke --verbose build generated.txt
-      - name: Assert artefact exists
-        run: scripts/assert-file-exists.sh generated.txt
+      - name: Build dependent and inline targets
+        run: ./target/debug/netsuke --verbose build dependent.txt inline-command.txt inline-script.txt
+      - name: Assert dependent artefacts exist
+        run: |
+          scripts/assert-file-exists.sh base.txt
+          scripts/assert-file-exists.sh dependent.txt
+      - name: Assert inline command artefact exists
+        run: scripts/assert-file-exists.sh inline-command.txt
+      - name: Assert inline script artefact exists
+        run: scripts/assert-file-exists.sh inline-script.txt
+      - name: Run action target
+        run: ./target/debug/netsuke --verbose build say-hello
+      - name: Assert action artefact exists
+        run: scripts/assert-file-exists.sh action-called.txt
+      - name: Assert unused action artefact absent
+        run: test ! -f unused.txt
