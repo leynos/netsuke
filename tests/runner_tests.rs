@@ -33,7 +33,11 @@ fn fake_ninja_pwd() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
     let mut file = File::create(&path).expect("script");
-    writeln!(file, "#!/bin/sh\npwd > \"$1\"").expect("write script");
+    writeln!(
+        file,
+        "#!/bin/sh\nif [ -n \"$1\" ]; then pwd > \"$1\"; else pwd; fi"
+    )
+    .expect("write script");
     let mut perms = fs::metadata(&path).expect("meta").permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("perms");
