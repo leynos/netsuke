@@ -106,7 +106,7 @@ pub struct Rule {
 /// Exactly one variant must be provided for a rule or target. The fields are
 /// flattened in the manifest, so the presence of `command`, `script`, or `rule`
 /// determines the variant.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
     /// A single shell command.
     Command { command: String },
