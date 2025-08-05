@@ -54,6 +54,61 @@ pub fn run(cli: &Cli) -> io::Result<()> {
     }
 }
 
+/// Check if `arg` contains a sensitive keyword.
+///
+/// # Examples
+/// ```
+/// assert!(contains_sensitive_keyword("token=abc"));
+/// assert!(!contains_sensitive_keyword("path=/tmp"));
+/// ```
+fn contains_sensitive_keyword(arg: &str) -> bool {
+    let lower = arg.to_lowercase();
+    lower.contains("password") || lower.contains("token") || lower.contains("secret")
+}
+
+/// Determine whether the argument should be redacted.
+///
+/// # Examples
+/// ```
+/// assert!(is_sensitive_arg("password=123"));
+/// assert!(!is_sensitive_arg("file=readme"));
+/// ```
+fn is_sensitive_arg(arg: &str) -> bool {
+    contains_sensitive_keyword(arg)
+}
+
+/// Redact sensitive information in a single argument.
+///
+/// Sensitive values are replaced with `***REDACTED***`, preserving keys.
+///
+/// # Examples
+/// ```
+/// assert_eq!(redact_argument("token=abc"), "token=***REDACTED***");
+/// assert_eq!(redact_argument("path=/tmp"), "path=/tmp");
+/// ```
+fn redact_argument(arg: &str) -> String {
+    if is_sensitive_arg(arg) {
+        arg.split_once('=').map_or_else(
+            || "***REDACTED***".to_string(),
+            |(key, _)| format!("{key}=***REDACTED***"),
+        )
+    } else {
+        arg.to_string()
+    }
+}
+
+/// Redact sensitive information from all `args`.
+///
+/// # Examples
+/// ```
+/// let args = vec!["ninja".into(), "token=abc".into()];
+/// let redacted = redact_sensitive_args(&args);
+/// assert_eq!(redacted[1], "token=***REDACTED***");
+/// ```
+fn redact_sensitive_args(args: &[String]) -> Vec<String> {
+    args.iter().map(|arg| redact_argument(arg)).collect()
+}
+
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
 /// The function forwards the job count and working directory to Ninja and
@@ -84,20 +139,7 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
         .get_args()
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
-    let redacted_args: Vec<String> = args
-        .iter()
-        .map(|arg| {
-            let lower = arg.to_lowercase();
-            if lower.contains("password") || lower.contains("token") || lower.contains("secret") {
-                arg.split_once('=').map_or_else(
-                    || "***REDACTED***".to_string(),
-                    |(key, _)| format!("{key}=***REDACTED***"),
-                )
-            } else {
-                arg.clone()
-            }
-        })
-        .collect();
+    let redacted_args = redact_sensitive_args(&args);
     info!("Running command: {} {}", program, redacted_args.join(" "));
 
     let mut child = cmd.spawn()?;
