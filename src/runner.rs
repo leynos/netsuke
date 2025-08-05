@@ -5,10 +5,14 @@
 //! subprocess, streaming its output back to the user.
 
 use crate::cli::{Cli, Commands};
+use crate::{ir::BuildGraph, manifest, ninja_gen};
+use serde_json;
+use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
+use tracing::{debug, info};
 
 /// Execute the parsed [`Cli`] commands.
 ///
@@ -21,7 +25,24 @@ pub fn run(cli: &Cli) -> io::Result<()> {
         targets: Vec::new(),
     });
     match command {
-        Commands::Build { targets } => run_ninja(Path::new("ninja"), cli, &targets),
+        Commands::Build { targets } => {
+            let manifest_path = cli
+                .directory
+                .as_ref()
+                .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
+            let manifest = manifest::from_path(&manifest_path).map_err(io::Error::other)?;
+            let ast_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
+            debug!("AST:\n{ast_json}");
+            let graph = BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
+            let ninja_content = ninja_gen::generate(&graph);
+            let ninja_path = cli.directory.as_ref().map_or_else(
+                || PathBuf::from("build.ninja"),
+                |dir| dir.join("build.ninja"),
+            );
+            fs::write(&ninja_path, ninja_content).map_err(io::Error::other)?;
+            info!("Generated Ninja file at {}", ninja_path.display());
+            run_ninja(Path::new("ninja"), cli, &targets)
+        }
         Commands::Clean => {
             println!("Clean requested");
             Ok(())
@@ -57,6 +78,13 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     cmd.args(targets);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+
+    let program = cmd.get_program().to_string_lossy().into_owned();
+    let args: Vec<String> = cmd
+        .get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    info!("Running command: {} {}", program, args.join(" "));
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");

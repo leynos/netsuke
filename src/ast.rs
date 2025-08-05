@@ -18,7 +18,7 @@
 //! ```
 
 use semver::Version;
-use serde::{Deserialize, de::Deserializer};
+use serde::{Deserialize, Serialize, de::Deserializer};
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -55,7 +55,7 @@ use std::collections::HashMap;
 /// assert_eq!(manifest.targets.len(), 1);
 /// # Ok(()) }
 /// ```
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
     /// Semantic version of the manifest format.
@@ -88,7 +88,7 @@ pub struct NetsukeManifest {
 /// targets. It may define a command line, a script block, or delegate to another
 /// named rule. Dependencies may be specified as either a single string or a
 /// list of strings.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     /// Unique identifier used by targets to reference this rule.
@@ -106,7 +106,7 @@ pub struct Rule {
 ///
 /// The variant is selected using the `kind` field in the manifest. Each variant
 /// corresponds to a different way of specifying how a command should run.
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Recipe {
     /// A single shell command.
@@ -125,7 +125,7 @@ pub enum Recipe {
 /// Targets describe the files produced by a rule and their dependencies.
 /// `phony` targets are always considered out of date, while `always` targets are
 /// regenerated even if their inputs are unchanged.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
     /// Output file or files.
@@ -172,7 +172,7 @@ pub struct Target {
 ///   - hello
 ///   - world
 /// ```
-#[derive(Debug, Deserialize, Default, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum StringOrList {
     /// No value provided.

@@ -13,6 +13,9 @@ thiserror = "1"
 sha2 = "0.10"
 itoa = "1"
 itertools = "0.12"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
+serde_json = "1"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
