@@ -148,12 +148,19 @@ fn run_ninja_with_directory(#[case] absolute: bool) {
     });
 
     let prev = std::env::current_dir().expect("cwd");
-    std::env::set_current_dir(root.path()).expect("chdir");
+    if !absolute {
+        std::env::set_current_dir(root.path()).expect("chdir");
+    }
     runner::run_ninja(&path, &cli, &[output.to_string_lossy().to_string()]).expect("ninja run");
-    std::env::set_current_dir(prev).expect("restore cwd");
 
-    let recorded = fs::read_to_string(output).expect("read output");
+    let recorded = fs::read_to_string(&output).expect("read output");
     let expected = fs::canonicalize(&workdir).expect("canon workdir");
+
+    if !absolute {
+        std::env::set_current_dir(prev).expect("restore cwd");
+    }
+    drop(root); // ensure tempdir outlives any `chdir`
+
     assert_eq!(recorded.trim(), expected.to_string_lossy());
 }
 
