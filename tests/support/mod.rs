@@ -1,9 +1,12 @@
-//! Test utilities for process management.
+//! Test utilities for process management and log capture.
 
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
+use tracing::Level;
+use tracing_subscriber::fmt;
 
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
@@ -21,4 +24,48 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
         fs::set_permissions(&path, perms).expect("perms");
     }
     (dir, path)
+}
+
+#[allow(dead_code, reason = "compiled as its own crate during linting")]
+#[derive(Clone)]
+struct BufferWriter {
+    buf: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Write for BufferWriter {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.buf.lock().expect("lock").write(data)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.buf.lock().expect("lock").flush()
+    }
+}
+
+/// Capture logs emitted within the provided closure.
+///
+/// # Examples
+///
+/// ```ignore
+/// use tracing::Level;
+/// let output = capture_logs(Level::INFO, || tracing::info!("hello"));
+/// assert!(output.contains("hello"));
+/// ```
+#[allow(dead_code, reason = "compiled as its own crate during linting")]
+pub fn capture_logs<F>(level: Level, f: F) -> String
+where
+    F: FnOnce(),
+{
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let writer = BufferWriter {
+        buf: Arc::clone(&buf),
+    };
+    let subscriber = fmt()
+        .with_max_level(level)
+        .without_time()
+        .with_writer(move || writer.clone())
+        .finish();
+    tracing::subscriber::with_default(subscriber, f);
+    let locked = buf.lock().expect("lock");
+    String::from_utf8(locked.clone()).expect("utf8")
 }

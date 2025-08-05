@@ -84,7 +84,21 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
         .get_args()
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
-    info!("Running command: {} {}", program, args.join(" "));
+    let redacted_args: Vec<String> = args
+        .iter()
+        .map(|arg| {
+            let lower = arg.to_lowercase();
+            if lower.contains("password") || lower.contains("token") || lower.contains("secret") {
+                arg.split_once('=').map_or_else(
+                    || "***REDACTED***".to_string(),
+                    |(key, _)| format!("{key}=***REDACTED***"),
+                )
+            } else {
+                arg.clone()
+            }
+        })
+        .collect();
+    info!("Running command: {} {}", program, redacted_args.join(" "));
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");
