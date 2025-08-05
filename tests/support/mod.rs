@@ -30,7 +30,10 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 ///
 /// The script exits with status `1` if the file is missing or not a regular
 /// file, otherwise `0`.
-#[allow(unfulfilled_lint_expectations, reason = "used only in some test crates")]
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "used only in some test crates"
+)]
 #[expect(dead_code, reason = "used in build file validation tests")]
 pub fn fake_ninja_check_build_file() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
@@ -58,7 +61,10 @@ pub fn fake_ninja_check_build_file() -> (TempDir, PathBuf) {
     (dir, path)
 }
 
-#[allow(unfulfilled_lint_expectations, reason = "compiled only for logging tests")]
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "compiled only for logging tests"
+)]
 #[expect(dead_code, reason = "compiled as its own crate during linting")]
 #[derive(Clone)]
 struct BufferWriter {
@@ -84,7 +90,10 @@ impl Write for BufferWriter {
 /// let output = capture_logs(Level::INFO, || tracing::info!("hello"));
 /// assert!(output.contains("hello"));
 /// ```
-#[allow(unfulfilled_lint_expectations, reason = "compiled only for logging tests")]
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "compiled only for logging tests"
+)]
 #[expect(dead_code, reason = "compiled as its own crate during linting")]
 pub fn capture_logs<F>(level: Level, f: F) -> String
 where
