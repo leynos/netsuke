@@ -19,9 +19,7 @@ use std::{fs, path::Path};
 /// netsuke_version: 1.0.0
 /// targets:
 ///   - name: a
-///     recipe:
-///       kind: command
-///       command: echo hi
+///     command: echo hi
 /// "#;
 /// let manifest = from_str(yaml).expect("parse");
 /// assert_eq!(manifest.targets.len(), 1);

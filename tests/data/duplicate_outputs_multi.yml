@@ -4,13 +4,9 @@ targets:
       - foo.o
       - bar.o
     sources: foo.c
-    recipe:
-      kind: command
-      command: "cc -c $in -o $out"
+    command: "cc -c $in -o $out"
   - name:
       - bar.o
       - foo.o
     sources: bar.c
-    recipe:
-      kind: command
-      command: "cc -c $in -o $out"
+    command: "cc -c $in -o $out"

@@ -2,11 +2,7 @@ netsuke_version: "1.0.0"
 targets:
   - name: hello.o
     sources: hello.c
-    recipe:
-      kind: command
-      command: "cc -c $in -o $out"
+    command: "cc -c $in -o $out"
   - name: hello.o
     sources: world.c
-    recipe:
-      kind: command
-      command: "cc -c $in -o $out"
+    command: "cc -c $in -o $out"

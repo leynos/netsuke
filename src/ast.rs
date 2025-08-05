@@ -10,7 +10,7 @@
 //! use netsuke::ast::NetsukeManifest;
 //! use netsuke::ast::StringOrList;
 //!
-//! let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    recipe:\n      kind: command\n      command: \"echo hi\"";
+//! let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    command: \"echo hi\"";
 //! let manifest: NetsukeManifest = serde_yml::from_str(yaml).expect("parse");
 //! if let StringOrList::String(name) = &manifest.targets[0].name {
 //!     assert_eq!(name, "hello");
@@ -42,15 +42,13 @@ use std::collections::HashMap;
 /// actions: []
 /// targets:
 ///   - name: hello
-///     recipe:
-///       kind: command
-///       command: echo hi
+///     command: echo hi
 /// ```
 ///
 /// ```rust
 /// use netsuke::ast::NetsukeManifest;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    recipe:\n      kind: command\n      command: echo hi";
+/// let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    command: echo hi";
 /// let manifest: NetsukeManifest = serde_yml::from_str(yaml)?;
 /// assert_eq!(manifest.targets.len(), 1);
 /// # Ok(()) }
@@ -94,6 +92,7 @@ pub struct Rule {
     /// Unique identifier used by targets to reference this rule.
     pub name: String,
     /// The action executed when the rule is invoked.
+    #[serde(flatten)]
     pub recipe: Recipe,
     /// Optional human-friendly summary.
     pub description: Option<String>,
@@ -104,20 +103,60 @@ pub struct Rule {
 
 /// Execution style for rules and targets.
 ///
-/// The variant is selected using the `kind` field in the manifest. Each variant
-/// corresponds to a different way of specifying how a command should run.
-#[derive(Debug, Deserialize, Clone, PartialEq)]
-#[serde(tag = "kind", rename_all = "lowercase")]
+/// Exactly one variant must be provided for a rule or target. The fields are
+/// flattened in the manifest, so the presence of `command`, `script`, or `rule`
+/// determines the variant.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Recipe {
     /// A single shell command.
-    #[serde(alias = "command")]
     Command { command: String },
     /// An embedded multi-line script.
-    #[serde(alias = "script")]
     Script { script: String },
     /// Invoke another named rule.
-    #[serde(alias = "rule")]
     Rule { rule: StringOrList },
+}
+
+impl<'de> Deserialize<'de> for Recipe {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawRecipe {
+            command: Option<String>,
+            script: Option<String>,
+            rule: Option<StringOrList>,
+        }
+
+        let raw = RawRecipe::deserialize(deserializer)?;
+        let present: Vec<&str> = [
+            ("command", raw.command.is_some()),
+            ("script", raw.script.is_some()),
+            ("rule", raw.rule.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(name, is_present)| is_present.then_some(name))
+        .collect();
+
+        match present.as_slice() {
+            ["command"] => Ok(Self::Command {
+                command: raw.command.expect("checked"),
+            }),
+            ["script"] => Ok(Self::Script {
+                script: raw.script.expect("checked"),
+            }),
+            ["rule"] => Ok(Self::Rule {
+                rule: raw.rule.expect("checked"),
+            }),
+            [] => Err(serde::de::Error::custom(
+                "missing one of command, script, or rule",
+            )),
+            fields => Err(serde::de::Error::custom(format!(
+                "fields {} are mutually exclusive",
+                fields.join(", ")
+            ))),
+        }
+    }
 }
 
 /// A single build target.
@@ -131,6 +170,7 @@ pub struct Target {
     /// Output file or files.
     pub name: StringOrList,
     /// How the target should be built.
+    #[serde(flatten)]
     pub recipe: Recipe,
 
     /// Input files consumed by the recipe.
