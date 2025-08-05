@@ -30,7 +30,7 @@ jobs:
         run: make build
       - name: Create Netsukefile
         run: |
-          cat <<'MANIFEST' > Netsukefile
+          cat <<- 'MANIFEST' > Netsukefile
           netsuke_version: "1.0.0"
           targets:
             - name: base.txt
