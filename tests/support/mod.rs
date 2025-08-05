@@ -1,4 +1,7 @@
-//! Test utilities for process management and log capture.
+//! Test utilities for process management.
+//!
+//! This module provides helpers for creating fake executables and
+//! generating minimal manifests used in behavioural tests.
 
 use std::fs::{self, File};
 use std::io::{self, Write};
@@ -89,4 +92,23 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
         fs::set_permissions(&path, perms).expect("perms");
     }
     (dir, path)
+}
+
+/// Write a minimal manifest to `file`.
+///
+/// The manifest declares a single `hello` target that prints a greeting.
+#[allow(dead_code, reason = "shared test utility not used in all crates")]
+pub fn write_manifest(file: &mut impl Write) {
+    writeln!(
+        file,
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: hello\n",
+            "    recipe:\n",
+            "      kind: command\n",
+            "      command: \"echo hi\"\n"
+        ),
+    )
+    .expect("write manifest content");
 }
