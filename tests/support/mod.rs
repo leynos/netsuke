@@ -97,7 +97,7 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
 /// Write a minimal manifest to `file`.
 ///
 /// The manifest declares a single `hello` target that prints a greeting.
-#[allow(dead_code, reason = "shared test utility not used in all crates")]
+#[expect(dead_code, reason = "shared test utility not used in all crates")]
 pub fn write_manifest(file: &mut impl Write) {
     writeln!(
         file,
