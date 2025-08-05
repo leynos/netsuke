@@ -16,7 +16,7 @@ targets:
   - name: hello
     command: "echo hi""#;
 
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
 
     assert_eq!(
         manifest.netsuke_version,
@@ -44,19 +44,19 @@ fn missing_required_fields() {
           - name: hello
             command: "echo hi"
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
         targets:
           - command: "echo hi"
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn unknown_fields() {
             command: "echo hi"
         extra: 42
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
@@ -77,7 +77,7 @@ fn unknown_fields() {
             command: "echo hi"
             unexpected: true
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn empty_lists_and_maps() {
         netsuke_version: "1.0.0"
         targets: []
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     assert!(manifest.targets.is_empty());
 
     let yaml = r#"
@@ -95,7 +95,23 @@ fn empty_lists_and_maps() {
           - name: hello
             command: {}
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
+
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: hello
+            script: {}
+    "#;
+    assert!(parse_manifest(yaml).is_err());
+
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: hello
+            rule: {}
+    "#;
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -106,7 +122,7 @@ fn string_or_list_variants() {
           - name: hello
             command: "echo hi"
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::String(name) = &first.name {
         assert_eq!(name, "hello");
@@ -122,7 +138,7 @@ fn string_or_list_variants() {
               - world
             command: "echo hi"
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::List(names) = &first.name {
         assert_eq!(names, &vec!["hello".to_string(), "world".to_string()]);
@@ -136,7 +152,7 @@ fn string_or_list_variants() {
           - name: []
             command: "echo hi"
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::List(names) = &first.name {
         assert!(names.is_empty());
@@ -158,7 +174,7 @@ fn optional_fields() {
           - name: hello
             rule: compile
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert_eq!(rule.description.as_deref(), Some("Compile"));
     match &rule.deps {
@@ -175,7 +191,7 @@ fn optional_fields() {
           - name: hello
             rule: compile
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert!(rule.description.is_none());
     assert!(matches!(rule.deps, StringOrList::Empty));
@@ -215,7 +231,7 @@ fn phony_and_always_flags() {
             phony: true
             always: true
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert!(target.phony);
     assert!(target.always);
@@ -226,7 +242,7 @@ fn phony_and_always_flags() {
           - name: clean
             command: rm -rf build
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert!(!target.phony);
     assert!(!target.always);

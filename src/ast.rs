@@ -129,21 +129,32 @@ impl<'de> Deserialize<'de> for Recipe {
         }
 
         let raw = RawRecipe::deserialize(deserializer)?;
-        let count =
-            raw.command.iter().count() + raw.script.iter().count() + raw.rule.iter().count();
-        if count != 1 {
-            return Err(serde::de::Error::custom(
-                "rule, command and script are mutually exclusive",
-            ));
-        }
-        if let Some(command) = raw.command {
-            Ok(Self::Command { command })
-        } else if let Some(script) = raw.script {
-            Ok(Self::Script { script })
-        } else if let Some(rule) = raw.rule {
-            Ok(Self::Rule { rule })
-        } else {
-            Err(serde::de::Error::custom("missing rule, command or script"))
+        let present: Vec<&str> = [
+            ("command", raw.command.is_some()),
+            ("script", raw.script.is_some()),
+            ("rule", raw.rule.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(name, is_present)| is_present.then_some(name))
+        .collect();
+
+        match present.as_slice() {
+            ["command"] => Ok(Self::Command {
+                command: raw.command.expect("checked"),
+            }),
+            ["script"] => Ok(Self::Script {
+                script: raw.script.expect("checked"),
+            }),
+            ["rule"] => Ok(Self::Rule {
+                rule: raw.rule.expect("checked"),
+            }),
+            [] => Err(serde::de::Error::custom(
+                "missing one of command, script, or rule",
+            )),
+            fields => Err(serde::de::Error::custom(format!(
+                "fields {} are mutually exclusive",
+                fields.join(", ")
+            ))),
         }
     }
 }
