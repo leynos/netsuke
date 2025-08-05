@@ -1,5 +1,5 @@
 use netsuke::cli::{Cli, Commands};
-use netsuke::runner::{run, run_ninja};
+use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::rstest;
 use serial_test::serial;
 use std::path::{Path, PathBuf};
@@ -40,11 +40,12 @@ fn run_ninja_not_found() {
             targets: vec![],
         }),
     };
+    let targets = BuildTargets::new(vec![]);
     let err = run_ninja(
         Path::new("does-not-exist"),
         &cli,
         Path::new("build.ninja"),
-        &[],
+        &targets,
     )
     .expect_err("process should fail");
     assert_eq!(err.kind(), std::io::ErrorKind::NotFound);

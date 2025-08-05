@@ -2,7 +2,7 @@
 
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
-use netsuke::runner;
+use netsuke::runner::{self, BuildTargets};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -85,7 +85,8 @@ fn run(world: &mut CliWorld) {
     } else {
         std::path::Path::new("ninja")
     };
-    match runner::run_ninja(program, cli, Path::new("build.ninja"), &[]) {
+    let targets = BuildTargets::new(vec![]);
+    match runner::run_ninja(program, cli, Path::new("build.ninja"), &targets) {
         Ok(()) => {
             world.run_status = Some(true);
             world.run_error = None;

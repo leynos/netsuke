@@ -16,6 +16,53 @@ use std::thread;
 use tempfile::Builder;
 use tracing::{debug, info};
 
+#[derive(Debug, Clone)]
+pub struct NinjaContent(String);
+impl NinjaContent {
+    #[must_use]
+    pub fn new(content: String) -> Self {
+        Self(content)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommandArg(String);
+impl CommandArg {
+    #[must_use]
+    pub fn new(arg: String) -> Self {
+        Self(arg)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BuildTargets(Vec<String>);
+impl BuildTargets {
+    #[must_use]
+    pub fn new(targets: Vec<String>) -> Self {
+        Self(targets)
+    }
+    #[must_use]
+    pub fn as_slice(&self) -> &[String] {
+        &self.0
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 /// Execute the parsed [`Cli`] commands.
 ///
 /// # Errors
@@ -29,6 +76,7 @@ pub fn run(cli: &Cli) -> Result<()> {
     match command {
         Commands::Build { targets, emit } => {
             let ninja = generate_ninja(cli)?;
+            let targets = BuildTargets::new(targets);
             if let Some(path) = emit {
                 write_and_log(&path, &ninja)?;
                 run_ninja(Path::new("ninja"), cli, &path, &targets)?;
@@ -67,10 +115,11 @@ pub fn run(cli: &Cli) -> Result<()> {
 ///
 /// # Examples
 /// ```ignore
-/// write_and_log(Path::new("out.ninja"), "rule cc\n").unwrap();
+/// let content = NinjaContent::new("rule cc\n".to_string());
+/// write_and_log(Path::new("out.ninja"), &content).unwrap();
 /// ```
-fn write_and_log(path: &Path, content: &str) -> io::Result<()> {
-    fs::write(path, content)?;
+fn write_and_log(path: &Path, content: &NinjaContent) -> io::Result<()> {
+    fs::write(path, content.as_str())?;
     info!("Generated Ninja file at {}", path.display());
     Ok(())
 }
@@ -93,9 +142,9 @@ fn write_and_log(path: &Path, content: &str) -> io::Result<()> {
 ///     command: Some(Commands::Build { emit: None, targets: vec![] }),
 /// };
 /// let ninja = generate_ninja(&cli).expect("generate");
-/// assert!(ninja.contains("rule"));
+/// assert!(ninja.as_str().contains("rule"));
 /// ```
-fn generate_ninja(cli: &Cli) -> Result<String> {
+fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = cli
         .directory
         .as_ref()
@@ -105,18 +154,18 @@ fn generate_ninja(cli: &Cli) -> Result<String> {
     let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
     debug!("AST:\n{ast_json}");
     let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;
-    Ok(ninja_gen::generate(&graph))
+    Ok(NinjaContent::new(ninja_gen::generate(&graph)))
 }
 
 /// Check if `arg` contains a sensitive keyword.
 ///
 /// # Examples
 /// ```
-/// assert!(contains_sensitive_keyword("token=abc"));
-/// assert!(!contains_sensitive_keyword("path=/tmp"));
+/// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
+/// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
 /// ```
-fn contains_sensitive_keyword(arg: &str) -> bool {
-    let lower = arg.to_lowercase();
+fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+    let lower = arg.as_str().to_lowercase();
     lower.contains("password") || lower.contains("token") || lower.contains("secret")
 }
 
@@ -124,10 +173,10 @@ fn contains_sensitive_keyword(arg: &str) -> bool {
 ///
 /// # Examples
 /// ```
-/// assert!(is_sensitive_arg("password=123"));
-/// assert!(!is_sensitive_arg("file=readme"));
+/// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
+/// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
 /// ```
-fn is_sensitive_arg(arg: &str) -> bool {
+fn is_sensitive_arg(arg: &CommandArg) -> bool {
     contains_sensitive_keyword(arg)
 }
 
@@ -137,17 +186,20 @@ fn is_sensitive_arg(arg: &str) -> bool {
 ///
 /// # Examples
 /// ```
-/// assert_eq!(redact_argument("token=abc"), "token=***REDACTED***");
-/// assert_eq!(redact_argument("path=/tmp"), "path=/tmp");
+/// let arg = CommandArg::new("token=abc".into());
+/// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
+/// let arg = CommandArg::new("path=/tmp".into());
+/// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
 /// ```
-fn redact_argument(arg: &str) -> String {
+fn redact_argument(arg: &CommandArg) -> CommandArg {
     if is_sensitive_arg(arg) {
-        arg.split_once('=').map_or_else(
+        let redacted = arg.as_str().split_once('=').map_or_else(
             || "***REDACTED***".to_string(),
             |(key, _)| format!("{key}=***REDACTED***"),
-        )
+        );
+        CommandArg::new(redacted)
     } else {
-        arg.to_string()
+        arg.clone()
     }
 }
 
@@ -155,12 +207,15 @@ fn redact_argument(arg: &str) -> String {
 ///
 /// # Examples
 /// ```
-/// let args = vec!["ninja".into(), "token=abc".into()];
+/// let args = vec![
+///     CommandArg::new("ninja".into()),
+///     CommandArg::new("token=abc".into()),
+/// ];
 /// let redacted = redact_sensitive_args(&args);
-/// assert_eq!(redacted[1], "token=***REDACTED***");
+/// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
 /// ```
-fn redact_sensitive_args(args: &[String]) -> Vec<String> {
-    args.iter().map(|arg| redact_argument(arg)).collect()
+fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+    args.iter().map(redact_argument).collect()
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -181,7 +236,7 @@ pub fn run_ninja(
     program: &Path,
     cli: &Cli,
     build_file: &Path,
-    targets: &[String],
+    targets: &BuildTargets,
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
@@ -202,17 +257,18 @@ pub fn run_ninja(
         .canonicalize()
         .unwrap_or_else(|_| build_file.to_path_buf());
     cmd.arg("-f").arg(&build_file_path);
-    cmd.args(targets);
+    cmd.args(targets.as_slice());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
     let program = cmd.get_program().to_string_lossy().into_owned();
-    let args: Vec<String> = cmd
+    let args: Vec<CommandArg> = cmd
         .get_args()
-        .map(|a| a.to_string_lossy().into_owned())
+        .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
         .collect();
     let redacted_args = redact_sensitive_args(&args);
-    info!("Running command: {} {}", program, redacted_args.join(" "));
+    let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
+    info!("Running command: {} {}", program, arg_strings.join(" "));
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");
