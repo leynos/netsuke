@@ -74,7 +74,7 @@ where
 /// specified as the first argument.
 ///
 /// Returns the temporary directory and the path to the executable.
-#[allow(dead_code, reason = "used only in directory tests")]
+#[expect(dead_code, reason = "used only in directory tests")]
 pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
