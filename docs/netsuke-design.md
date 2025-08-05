@@ -1369,6 +1369,10 @@ struct Cli { /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "N")]
     jobs: Option<usize>,
 
+    /// Enable verbose logging output.
+    #[arg(short, long)]
+    verbose: bool,
+
     #[command(subcommand)]
     command: Option<Commands>, }
 
@@ -1513,6 +1517,7 @@ selected for this project and the rationale for their inclusion.
 | Templating | minijinja | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading. |
 | Shell Quoting | shell-quote | A critical security component; provides robust, shell-specific escaping for command arguments. |
 | Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports. |
+| Logging | tracing | Structured, levelled diagnostic output for debugging and insight. |
 | Versioning | semver | The standard library for parsing and evaluating Semantic Versioning strings, essential for the `netsuke_version` field. |
 
 ### 9.3 Future Enhancements

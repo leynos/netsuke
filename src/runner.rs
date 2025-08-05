@@ -5,10 +5,14 @@
 //! subprocess, streaming its output back to the user.
 
 use crate::cli::{Cli, Commands};
+use crate::{ir::BuildGraph, manifest, ninja_gen};
+use serde_json;
+use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
+use tracing::{debug, info};
 
 /// Execute the parsed [`Cli`] commands.
 ///
@@ -21,7 +25,24 @@ pub fn run(cli: &Cli) -> io::Result<()> {
         targets: Vec::new(),
     });
     match command {
-        Commands::Build { targets } => run_ninja(Path::new("ninja"), cli, &targets),
+        Commands::Build { targets } => {
+            let manifest_path = cli
+                .directory
+                .as_ref()
+                .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
+            let manifest = manifest::from_path(&manifest_path).map_err(io::Error::other)?;
+            let ast_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
+            debug!("AST:\n{ast_json}");
+            let graph = BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
+            let ninja_content = ninja_gen::generate(&graph);
+            let ninja_path = cli.directory.as_ref().map_or_else(
+                || PathBuf::from("build.ninja"),
+                |dir| dir.join("build.ninja"),
+            );
+            fs::write(&ninja_path, ninja_content).map_err(io::Error::other)?;
+            info!("Generated Ninja file at {}", ninja_path.display());
+            run_ninja(Path::new("ninja"), cli, &targets)
+        }
         Commands::Clean => {
             println!("Clean requested");
             Ok(())
@@ -31,6 +52,61 @@ pub fn run(cli: &Cli) -> io::Result<()> {
             Ok(())
         }
     }
+}
+
+/// Check if `arg` contains a sensitive keyword.
+///
+/// # Examples
+/// ```
+/// assert!(contains_sensitive_keyword("token=abc"));
+/// assert!(!contains_sensitive_keyword("path=/tmp"));
+/// ```
+fn contains_sensitive_keyword(arg: &str) -> bool {
+    let lower = arg.to_lowercase();
+    lower.contains("password") || lower.contains("token") || lower.contains("secret")
+}
+
+/// Determine whether the argument should be redacted.
+///
+/// # Examples
+/// ```
+/// assert!(is_sensitive_arg("password=123"));
+/// assert!(!is_sensitive_arg("file=readme"));
+/// ```
+fn is_sensitive_arg(arg: &str) -> bool {
+    contains_sensitive_keyword(arg)
+}
+
+/// Redact sensitive information in a single argument.
+///
+/// Sensitive values are replaced with `***REDACTED***`, preserving keys.
+///
+/// # Examples
+/// ```
+/// assert_eq!(redact_argument("token=abc"), "token=***REDACTED***");
+/// assert_eq!(redact_argument("path=/tmp"), "path=/tmp");
+/// ```
+fn redact_argument(arg: &str) -> String {
+    if is_sensitive_arg(arg) {
+        arg.split_once('=').map_or_else(
+            || "***REDACTED***".to_string(),
+            |(key, _)| format!("{key}=***REDACTED***"),
+        )
+    } else {
+        arg.to_string()
+    }
+}
+
+/// Redact sensitive information from all `args`.
+///
+/// # Examples
+/// ```
+/// let args = vec!["ninja".into(), "token=abc".into()];
+/// let redacted = redact_sensitive_args(&args);
+/// assert_eq!(redacted[1], "token=***REDACTED***");
+/// ```
+fn redact_sensitive_args(args: &[String]) -> Vec<String> {
+    args.iter().map(|arg| redact_argument(arg)).collect()
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -57,6 +133,14 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     cmd.args(targets);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+
+    let program = cmd.get_program().to_string_lossy().into_owned();
+    let args: Vec<String> = cmd
+        .get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    let redacted_args = redact_sensitive_args(&args);
+    info!("Running command: {} {}", program, redacted_args.join(" "));
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");

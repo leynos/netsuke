@@ -37,6 +37,6 @@ jobs:
               command: "touch generated.txt"
           MANIFEST
       - name: Run Netsuke
-        run: ./target/debug/netsuke build generated.txt
+        run: ./target/debug/netsuke --verbose build generated.txt
       - name: Assert artefact exists
         run: scripts/assert-file-exists.sh generated.txt

@@ -9,25 +9,29 @@ use rstest::rstest;
 use std::path::PathBuf;
 
 #[rstest]
-#[case(vec!["netsuke"], PathBuf::from("Netsukefile"), None, None, Commands::Build { targets: Vec::new() })]
+#[case(vec!["netsuke"], PathBuf::from("Netsukefile"), None, None, false, Commands::Build { targets: Vec::new() })]
 #[case(
     vec!["netsuke", "--file", "alt.yml", "-C", "work", "-j", "4", "build", "a", "b"],
     PathBuf::from("alt.yml"),
     Some(PathBuf::from("work")),
     Some(4),
+    false,
     Commands::Build { targets: vec!["a".into(), "b".into()] },
 )]
+#[case(vec!["netsuke", "--verbose"], PathBuf::from("Netsukefile"), None, None, true, Commands::Build { targets: Vec::new() })]
 fn parse_cli(
     #[case] argv: Vec<&str>,
     #[case] file: PathBuf,
     #[case] directory: Option<PathBuf>,
     #[case] jobs: Option<usize>,
+    #[case] verbose: bool,
     #[case] expected_cmd: Commands,
 ) {
     let cli = Cli::parse_from_with_default(argv.clone());
     assert_eq!(cli.file, file);
     assert_eq!(cli.directory, directory);
     assert_eq!(cli.jobs, jobs);
+    assert_eq!(cli.verbose, verbose);
     assert_eq!(cli.command.expect("command should be set"), expected_cmd);
 }
 

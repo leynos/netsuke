@@ -158,6 +158,7 @@ You can also pass:
 - `--file` to use an alternate manifest
 - `--directory` to run in a different working dir
 - `-j N` to control parallelism (passed through to Ninja)
+- `-v`, `--verbose` to enable verbose logging
 
 ## 🚧 Status
 

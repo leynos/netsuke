@@ -4,6 +4,7 @@ use netsuke::cli::{Cli, Commands};
 use netsuke::runner;
 use rstest::rstest;
 use std::path::{Path, PathBuf};
+use tracing::Level;
 
 /// Creates a default CLI configuration for testing Ninja invocation.
 fn test_cli() -> Cli {
@@ -11,6 +12,7 @@ fn test_cli() -> Cli {
         file: PathBuf::from("Netsukefile"),
         directory: None,
         jobs: None,
+        verbose: false,
         command: Some(Commands::Build {
             targets: Vec::new(),
         }),
@@ -35,4 +37,87 @@ fn run_ninja_not_found() {
     let err =
         runner::run_ninja(Path::new("does-not-exist"), &cli, &[]).expect_err("process should fail");
     assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+}
+
+#[rstest]
+fn run_writes_ninja_file() {
+    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
+    paths.insert(0, ninja_dir.path().to_path_buf());
+    let new_path = std::env::join_paths(paths).expect("join paths");
+    unsafe {
+        std::env::set_var("PATH", &new_path);
+    } // Nightly marks set_var unsafe.
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
+    let cli = Cli {
+        file: manifest_path,
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: false,
+        command: Some(Commands::Build {
+            targets: Vec::new(),
+        }),
+    };
+
+    runner::run(&cli).expect("run");
+    assert!(temp.path().join("build.ninja").exists());
+
+    unsafe {
+        std::env::set_var("PATH", original_path);
+    } // Nightly marks set_var unsafe.
+    drop(ninja_path);
+}
+
+#[rstest]
+fn run_ninja_logs_command() {
+    let (_dir, path) = support::fake_ninja(0);
+    let mut cli = test_cli();
+    cli.verbose = true;
+    let logs = support::capture_logs(Level::INFO, || {
+        runner::run_ninja(&path, &cli, &["--password=123".to_string()]).expect("run");
+    });
+    assert!(logs.contains("Running command:"));
+    assert!(logs.contains("password=***REDACTED***"));
+    assert!(!logs.contains("123"));
+}
+
+#[rstest]
+fn run_with_verbose_mode_emits_logs() {
+    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
+    paths.insert(0, ninja_dir.path().to_path_buf());
+    let new_path = std::env::join_paths(paths).expect("join paths");
+    unsafe {
+        std::env::set_var("PATH", &new_path);
+    } // Nightly marks set_var unsafe.
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
+    let cli = Cli {
+        file: manifest_path,
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: true,
+        command: Some(Commands::Build {
+            targets: Vec::new(),
+        }),
+    };
+
+    let logs = support::capture_logs(Level::DEBUG, || {
+        runner::run(&cli).expect("run");
+    });
+    assert!(logs.contains("AST:"));
+    assert!(logs.contains("Generated Ninja file at"));
+    assert!(logs.contains("Running command:"));
+
+    unsafe {
+        std::env::set_var("PATH", original_path);
+    } // Nightly marks set_var unsafe.
+    drop(ninja_path);
 }

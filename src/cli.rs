@@ -36,6 +36,10 @@ pub struct Cli {
     #[arg(short, long, value_name = "N", value_parser = parse_jobs)]
     pub jobs: Option<usize>,
 
+    /// Enable verbose logging output.
+    #[arg(short, long)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
