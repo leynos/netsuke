@@ -133,6 +133,7 @@ fn run_build_with_emit_keeps_file() {
 }
 
 #[test]
+#[serial]
 fn run_emit_subcommand_writes_file() {
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     unsafe {

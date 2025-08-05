@@ -132,16 +132,16 @@ fn job_count(world: &mut CliWorld, jobs: usize) {
     assert_eq!(cli.jobs, Some(jobs));
 }
 
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the emit path is {string}")]
 fn emit_path(world: &mut CliWorld, path: String) {
     let (_, emit) = extract_build(world).expect("command should be build");
-    assert_eq!(emit.as_ref(), Some(&PathBuf::from(path)));
+    assert_eq!(emit.as_ref(), Some(&PathBuf::from(&path)));
 }
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
@@ -149,7 +149,7 @@ fn emit_path(world: &mut CliWorld, path: String) {
 fn emit_command_path(world: &mut CliWorld, path: String) {
     let cli = world.cli.as_ref().expect("cli");
     match cli.command.as_ref().expect("command") {
-        Commands::Emit { file } => assert_eq!(file, &PathBuf::from(path)),
+        Commands::Emit { file } => assert_eq!(file, &PathBuf::from(&path)),
         _ => panic!("command should be emit"),
     }
 }

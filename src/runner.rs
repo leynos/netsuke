@@ -111,15 +111,16 @@ pub fn run(cli: &Cli) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an [`io::Error`] if the file cannot be written.
+/// Returns an error if the file cannot be written.
 ///
 /// # Examples
 /// ```ignore
 /// let content = NinjaContent::new("rule cc\n".to_string());
 /// write_and_log(Path::new("out.ninja"), &content).unwrap();
 /// ```
-fn write_and_log(path: &Path, content: &NinjaContent) -> io::Result<()> {
-    fs::write(path, content.as_str())?;
+fn write_and_log(path: &Path, content: &NinjaContent) -> Result<()> {
+    fs::write(path, content.as_str())
+        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
     info!("Generated Ninja file at {}", path.display());
     Ok(())
 }

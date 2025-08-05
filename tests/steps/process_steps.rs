@@ -81,9 +81,9 @@ fn build_dir_exists(world: &mut CliWorld) {
 fn run(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");
     let program = if let Some(ninja) = &world.ninja {
-        std::path::Path::new(ninja)
+        Path::new(ninja)
     } else {
-        std::path::Path::new("ninja")
+        Path::new("ninja")
     };
     let targets = BuildTargets::new(vec![]);
     match runner::run_ninja(program, cli, Path::new("build.ninja"), &targets) {
