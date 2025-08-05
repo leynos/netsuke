@@ -341,10 +341,10 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
         states: &mut HashMap<PathBuf, VisitState>,
     ) -> Option<Vec<PathBuf>> {
         for dep in deps {
-            if targets.contains_key(dep)
-                && let Some(cycle) = visit(targets, dep, stack, states)
-            {
-                return Some(cycle);
+            if targets.contains_key(dep) {
+                if let Some(cycle) = visit(targets, dep, stack, states) {
+                    return Some(cycle);
+                }
             }
         }
         None

@@ -18,11 +18,7 @@
 //! ```
 
 use semver::Version;
-use serde::{
-    Deserialize, Serialize,
-    de::Deserializer,
-    ser::{SerializeMap, Serializer},
-};
+use serde::{Deserialize, Serialize, de::Deserializer};
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -110,7 +106,8 @@ pub struct Rule {
 /// Exactly one variant must be provided for a rule or target. The fields are
 /// flattened in the manifest, so the presence of `command`, `script`, or `rule`
 /// determines the variant.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
 pub enum Recipe {
     /// A single shell command.
     Command { command: String },
@@ -160,22 +157,6 @@ impl<'de> Deserialize<'de> for Recipe {
                 fields.join(", ")
             ))),
         }
-    }
-}
-// Serialise into a single-key map so `#[serde(flatten)]` on parent
-// structs inserts the appropriate recipe field directly.
-impl Serialize for Recipe {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(1))?;
-        match self {
-            Self::Command { command } => map.serialize_entry("command", command)?,
-            Self::Script { script } => map.serialize_entry("script", script)?,
-            Self::Rule { rule } => map.serialize_entry("rule", rule)?,
-        }
-        map.end()
     }
 }
 
