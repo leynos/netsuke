@@ -3,7 +3,7 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 
 fn write_script(dir: &TempDir, body: &str) -> PathBuf {
     let path = dir.path().join("ninja");
@@ -43,4 +43,23 @@ pub fn fake_ninja_capture() -> (TempDir, PathBuf, PathBuf) {
     );
     let path = write_script(&dir, &body);
     (dir, path, capture)
+}
+
+/// Write a minimal Netsukefile to the provided temporary file.
+#[allow(
+    dead_code,
+    reason = "helper is unused when the support crate builds independently"
+)]
+pub fn write_manifest(file: &mut NamedTempFile) {
+    let manifest = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: out\n",
+        "    recipe:\n",
+        "      kind: command\n",
+        "      command: echo hi\n",
+        "defaults:\n",
+        "  - out\n",
+    );
+    file.write_all(manifest.as_bytes()).expect("write manifest");
 }

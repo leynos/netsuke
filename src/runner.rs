@@ -9,7 +9,7 @@ use crate::{
     ir, manifest, ninja_gen,
 };
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
 use tempfile::NamedTempFile;
@@ -39,9 +39,10 @@ pub fn run(cli: &Cli) -> io::Result<()> {
 
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
-/// This loads the `Netsukefile`, converts it into a Ninja build file, and then
-/// forwards the job count and working directory to Ninja. The child's standard
-/// output and error are streamed back to the user.
+/// This loads the `Netsukefile`, converts it to an intermediate representation,
+/// generates a temporary Ninja build script, and executes Ninja with this
+/// script. Job count and working directory options are forwarded to Ninja, and
+/// the child's standard output and error are streamed back to the user.
 ///
 /// # Errors
 ///
@@ -52,14 +53,9 @@ pub fn run(cli: &Cli) -> io::Result<()> {
 ///
 /// Panics if the child's output streams cannot be captured.
 pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()> {
-    let manifest = manifest::from_path(&cli.file).map_err(io::Error::other)?;
-    let graph = ir::BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
-    let ninja_script = ninja_gen::generate(&graph);
-
-    let mut build_file = NamedTempFile::new().map_err(io::Error::other)?;
-    build_file.write_all(ninja_script.as_bytes())?;
-    build_file.flush()?;
-    let build_path: PathBuf = build_file.path().to_path_buf();
+    // Keep the file handle alive so the temporary script outlives the child
+    // process.
+    let build_file = manifest_to_build_file(&cli.file)?;
 
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
@@ -68,7 +64,7 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     if let Some(jobs) = cli.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
-    cmd.arg("-f").arg(&build_path);
+    cmd.arg("-f").arg(build_file.path());
     cmd.args(targets);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
@@ -108,4 +104,16 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
             format!("ninja exited with {status}"),
         ))
     }
+}
+
+/// Generate a temporary Ninja build file from a manifest.
+fn manifest_to_build_file(path: &Path) -> io::Result<NamedTempFile> {
+    let manifest = manifest::from_path(path).map_err(io::Error::other)?;
+    let graph = ir::BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
+    let ninja_script = ninja_gen::generate(&graph);
+
+    let mut build_file = NamedTempFile::new().map_err(io::Error::other)?;
+    build_file.write_all(ninja_script.as_bytes())?;
+    build_file.flush()?;
+    Ok(build_file)
 }
