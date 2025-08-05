@@ -1143,9 +1143,9 @@ The command construction will follow this pattern:
    will also be passed through.[^8]
 
 1. The working directory for the Ninja process will be set using
-   `.current_dir()`. When the user supplies a `-C` flag, Netsuke resolves the
-   path relative to its current directory and applies it via `current_dir`
-   rather than forwarding the flag to Ninja.
+   `.current_dir()`. When the user supplies a `-C` flag, Netsuke
+   canonicalises the path and applies it via `current_dir` rather than
+   forwarding the flag to Ninja.
 
 1. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
    `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.[^24] This allows

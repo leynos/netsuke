@@ -3,9 +3,17 @@
 use netsuke::cli::{Cli, Commands};
 use netsuke::runner;
 use rstest::rstest;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 use tracing::Level;
+
+#[cfg(unix)]
+mod support;
+
+#[cfg(unix)]
+use serial_test::serial;
 
 /// Creates a default CLI configuration for testing Ninja invocation.
 fn test_cli() -> Cli {
@@ -20,8 +28,7 @@ fn test_cli() -> Cli {
     }
 }
 
-mod support;
-
+#[cfg(unix)]
 #[rstest]
 #[case(0, true)]
 #[case(1, false)]
@@ -123,14 +130,22 @@ fn run_with_verbose_mode_emits_logs() {
     drop(ninja_path);
 }
 
+#[cfg(unix)]
 #[rstest]
-fn run_ninja_with_directory() {
-    let (root, path) = support::fake_ninja_pwd();
+#[serial]
+#[case(false)]
+#[case(true)]
+fn run_ninja_with_directory(#[case] absolute: bool) {
+    let (root, path) = fake_ninja_pwd();
     let workdir = root.path().join("work");
     fs::create_dir(&workdir).expect("workdir");
     let output = root.path().join("out.txt");
     let mut cli = test_cli();
-    cli.directory = Some(PathBuf::from("work"));
+    cli.directory = Some(if absolute {
+        workdir.clone()
+    } else {
+        PathBuf::from("work")
+    });
 
     let prev = std::env::current_dir().expect("cwd");
     std::env::set_current_dir(root.path()).expect("chdir");
@@ -138,5 +153,19 @@ fn run_ninja_with_directory() {
     std::env::set_current_dir(prev).expect("restore cwd");
 
     let recorded = fs::read_to_string(output).expect("read output");
-    assert_eq!(recorded.trim(), workdir.to_string_lossy());
+    let expected = fs::canonicalize(&workdir).expect("canon workdir");
+    assert_eq!(recorded.trim(), expected.to_string_lossy());
+}
+
+#[cfg(unix)]
+fn fake_ninja_pwd() -> (TempDir, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("ninja");
+    let mut file = File::create(&path).expect("script");
+    writeln!(file, "#!/bin/sh\npwd > \"$1\"").expect("write script");
+    let mut perms = fs::metadata(&path).expect("meta").permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("perms");
+    (dir, path)
 }
