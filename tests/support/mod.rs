@@ -99,7 +99,7 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
 /// This must be `allow` as `expect` will trigger an unfulfilled warning
 /// despite the lint violation arising.
 #[allow(dead_code, reason = "shared test utility not used in all crates")]
-pub fn write_manifest(file: &mut impl Write) {
+pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     writeln!(
         file,
         concat!(
@@ -111,5 +111,4 @@ pub fn write_manifest(file: &mut impl Write) {
             "      command: \"echo hi\"\n"
         ),
     )
-    .expect("write manifest content");
 }

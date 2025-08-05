@@ -69,7 +69,7 @@ fn run(world: &mut CliWorld) {
     if !manifest_path.exists() {
         let mut file =
             NamedTempFile::new_in(dir.path()).expect("Failed to create temporary manifest file");
-        support::write_manifest(&mut file);
+        support::write_manifest(&mut file).expect("Failed to write manifest content");
         file.persist(&manifest_path)
             .expect("Failed to persist manifest file");
     }
