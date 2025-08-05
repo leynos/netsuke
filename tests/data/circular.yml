@@ -2,11 +2,7 @@ netsuke_version: "1.0.0"
 targets:
   - name: a
     sources: b
-    recipe:
-      kind: command
-      command: "touch a"
+    command: "touch a"
   - name: b
     sources: a
-    recipe:
-      kind: command
-      command: "touch b"
+    command: "touch b"

@@ -14,11 +14,9 @@ fn parse_minimal_manifest() {
     let yaml = r#"netsuke_version: "1.0.0"
 targets:
   - name: hello
-    recipe:
-      kind: command
-      command: "echo hi""#;
+    command: "echo hi""#;
 
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
 
     assert_eq!(
         manifest.netsuke_version,
@@ -44,25 +42,21 @@ fn missing_required_fields() {
     let yaml = r#"
         targets:
           - name: hello
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
         targets:
-          - recipe:
-              kind: command
-              command: "echo hi"
+          - command: "echo hi"
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -71,23 +65,19 @@ fn unknown_fields() {
         netsuke_version: "1.0.0"
         targets:
           - name: hello
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
         extra: 42
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
         targets:
           - name: hello
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
             unexpected: true
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -96,16 +86,32 @@ fn empty_lists_and_maps() {
         netsuke_version: "1.0.0"
         targets: []
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     assert!(manifest.targets.is_empty());
 
     let yaml = r#"
         netsuke_version: "1.0.0"
         targets:
           - name: hello
-            recipe: {}
+            command: {}
     "#;
-    assert!(manifest::from_str(yaml).is_err());
+    assert!(parse_manifest(yaml).is_err());
+
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: hello
+            script: {}
+    "#;
+    assert!(parse_manifest(yaml).is_err());
+
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: hello
+            rule: {}
+    "#;
+    assert!(parse_manifest(yaml).is_err());
 }
 
 #[test]
@@ -114,11 +120,9 @@ fn string_or_list_variants() {
         netsuke_version: "1.0.0"
         targets:
           - name: hello
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::String(name) = &first.name {
         assert_eq!(name, "hello");
@@ -132,11 +136,9 @@ fn string_or_list_variants() {
           - name:
               - hello
               - world
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::List(names) = &first.name {
         assert_eq!(names, &vec!["hello".to_string(), "world".to_string()]);
@@ -148,11 +150,9 @@ fn string_or_list_variants() {
         netsuke_version: "1.0.0"
         targets:
           - name: []
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let StringOrList::List(names) = &first.name {
         assert!(names.is_empty());
@@ -167,18 +167,14 @@ fn optional_fields() {
         netsuke_version: "1.0.0"
         rules:
           - name: compile
-            recipe:
-              kind: command
-              command: cc
+            command: cc
             description: "Compile"
             deps: hello
         targets:
           - name: hello
-            recipe:
-              kind: rule
-              rule: compile
+            rule: compile
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert_eq!(rule.description.as_deref(), Some("Compile"));
     match &rule.deps {
@@ -190,16 +186,12 @@ fn optional_fields() {
         netsuke_version: "1.0.0"
         rules:
           - name: compile
-            recipe:
-              kind: command
-              command: cc
+            command: cc
         targets:
           - name: hello
-            recipe:
-              kind: rule
-              rule: compile
+            rule: compile
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let rule = manifest.rules.first().expect("rule");
     assert!(rule.description.is_none());
     assert!(matches!(rule.deps, StringOrList::Empty));
@@ -211,9 +203,8 @@ fn optional_fields() {
     netsuke_version: "1.0.0"
     targets:
       - name: hello
-        recipe:
-          kind: not_a_kind
-          command: "echo hi"
+        kind: not_a_kind
+        command: "echo hi"
 "#
 )]
 #[case::actions_missing_recipe(
@@ -223,9 +214,7 @@ fn optional_fields() {
       - name: setup
     targets:
       - name: done
-        recipe:
-          kind: command
-          command: "true"
+        command: "true"
 "#
 )]
 fn parsing_failures(#[case] yaml: &str) {
@@ -238,13 +227,11 @@ fn phony_and_always_flags() {
         netsuke_version: "1.0.0"
         targets:
           - name: clean
-            recipe:
-              kind: command
-              command: rm -rf build
+            command: rm -rf build
             phony: true
             always: true
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert!(target.phony);
     assert!(target.always);
@@ -253,11 +240,9 @@ fn phony_and_always_flags() {
         netsuke_version: "1.0.0"
         targets:
           - name: clean
-            recipe:
-              kind: command
-              command: rm -rf build
+            command: rm -rf build
     "#;
-    let manifest = manifest::from_str(yaml).expect("parse");
+    let manifest = parse_manifest(yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert!(!target.phony);
     assert!(!target.always);
@@ -269,14 +254,10 @@ fn phony_and_always_flags() {
     netsuke_version: "1.0.0"
     actions:
       - name: setup
-        recipe:
-          kind: command
-          command: "echo hi"
+        command: "echo hi"
     targets:
       - name: done
-        recipe:
-          kind: command
-          command: "true"
+        command: "true"
 "#,
     true,
     false
@@ -286,15 +267,11 @@ fn phony_and_always_flags() {
     netsuke_version: "1.0.0"
     actions:
       - name: setup
-        recipe:
-          kind: command
-          command: "echo hi"
+        command: "echo hi"
         phony: false
     targets:
       - name: done
-        recipe:
-          kind: command
-          command: "true"
+        command: "true"
 "#,
     true,
     false
@@ -304,15 +281,11 @@ fn phony_and_always_flags() {
     netsuke_version: "1.0.0"
     actions:
       - name: setup
-        recipe:
-          kind: command
-          command: "echo hi"
+        command: "echo hi"
         always: true
     targets:
       - name: done
-        recipe:
-          kind: command
-          command: "true"
+        command: "true"
 "#,
     true,
     true
@@ -334,22 +307,14 @@ fn multiple_actions_are_marked_phony() {
         netsuke_version: "1.0.0"
         actions:
           - name: setup
-            recipe:
-              kind: command
-              command: "echo hi"
+            command: "echo hi"
           - name: build
-            recipe:
-              kind: command
-              command: "make build"
+            command: "make build"
           - name: test
-            recipe:
-              kind: command
-              command: "cargo test"
+            command: "cargo test"
         targets:
           - name: done
-            recipe:
-              kind: command
-              command: "true"
+            command: "true"
     "#;
     let manifest = parse_manifest(yaml).expect("parse");
     assert_eq!(manifest.actions.len(), 3);

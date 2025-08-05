@@ -1,8 +1,6 @@
 netsuke_version: "1.0.0"
 targets:
   - name: clean
-    recipe:
-      kind: command
-      command: "rm -rf build"
+    command: "rm -rf build"
     phony: true
     always: true

@@ -31,15 +31,11 @@ fn touch_manifest_ninja_validation() {
         netsuke_version: "1.0.0"
         rules:
           - name: touch
-            recipe:
-              kind: command
-              command: "python3 -c 'import os,sys; open(sys.argv[1],\"a\").close()' $out"
+            command: "python3 -c 'import os,sys; open(sys.argv[1],\"a\").close()' $out"
         targets:
           - name: out/a
             sources: in/a
-            recipe:
-              kind: rule
-              rule: touch
+            rule: touch
     "#;
 
     let manifest = manifest::from_str(manifest_yaml).expect("parse manifest");
