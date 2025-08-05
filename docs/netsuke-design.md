@@ -1138,12 +1138,14 @@ The command construction will follow this pattern:
    `ninja` is available in the system's `PATH`.
 
 1. Arguments passed to Netsuke's own CLI will be translated and forwarded to
-   Ninja. For example, a `Netsuke build -C build/ my_target` command would
-   result in `Command::new("ninja").arg("-C").arg("build/").arg("my_target")`.
-   Flags like `-j` for parallelism will also be passed through.[^8]
+   Ninja. For example, a `Netsuke build my_target` command would result in
+   `Command::new("ninja").arg("my_target")`. Flags like `-j` for parallelism
+   will also be passed through.[^8]
 
 1. The working directory for the Ninja process will be set using
-   `.current_dir()` if the user provides a `-C` flag.
+   `.current_dir()`. When the user supplies a `-C` flag, Netsuke
+   canonicalises the path and applies it via `current_dir` rather than
+   forwarding the flag to Ninja.
 
 1. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
    `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.[^24] This allows
@@ -1418,10 +1420,10 @@ The CLI is implemented using clap's derive API in `src/cli.rs`. Clap's
 `default_value_t` attribute marks `Build` as the default subcommand, so
 invoking `netsuke` with no explicit command still triggers a build. CLI
 execution and dispatch live in `src/runner.rs`, keeping `main.rs` focused on
-parsing. The working directory flag uses `-C` to mirror Ninja's convention,
-ensuring command line arguments map directly onto the underlying build tool.
-Error scenarios are validated using clap's `ErrorKind` enumeration in unit
-tests and via Cucumber steps for behavioural coverage.
+parsing. The working directory flag mirrors Ninja's `-C` option but is resolved
+internally; Netsuke changes directory before spawning Ninja rather than
+forwarding the flag. Error scenarios are validated using clap's `ErrorKind`
+enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 

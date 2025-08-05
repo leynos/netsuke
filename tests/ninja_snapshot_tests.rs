@@ -68,7 +68,7 @@ fn touch_manifest_ninja_validation() {
     let _ = ninja_cmd(&["-t", "targets", "all"]);
     let _ = ninja_cmd(&["-t", "query", "out/a"]);
 
-    let _ = ninja_cmd(&["-w", "dupbuild=err", "-d", "stats"]);
+    let _ = ninja_cmd(&["-w", "phonycycle=err", "-d", "stats"]);
     let second = ninja_cmd(&["-n", "-d", "explain", "-v"]);
     assert!(
         second.contains("no work to do"),

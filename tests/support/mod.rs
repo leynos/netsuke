@@ -69,3 +69,24 @@ where
     let locked = buf.lock().expect("lock");
     String::from_utf8(locked.clone()).expect("utf8")
 }
+
+/// Create a fake Ninja executable that writes its current directory to the file
+/// specified as the first argument.
+///
+/// Returns the temporary directory and the path to the executable.
+#[allow(dead_code, reason = "used only in directory tests")]
+pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
+    let dir = TempDir::new().expect("temp dir");
+    let path = dir.path().join("ninja");
+    let mut file = File::create(&path).expect("script");
+    // The script writes its working directory to the provided file and exits.
+    writeln!(file, "#!/bin/sh\npwd > \"$1\"").expect("write script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&path).expect("meta").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("perms");
+    }
+    (dir, path)
+}
