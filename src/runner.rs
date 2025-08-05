@@ -6,42 +6,95 @@
 
 use crate::cli::{Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
+use anyhow::{Context, Result};
 use serde_json;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
+use tempfile::Builder;
 use tracing::{debug, info};
+
+#[derive(Debug, Clone)]
+pub struct NinjaContent(String);
+impl NinjaContent {
+    #[must_use]
+    pub fn new(content: String) -> Self {
+        Self(content)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    #[must_use]
+    pub fn into_string(self) -> String {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommandArg(String);
+impl CommandArg {
+    #[must_use]
+    pub fn new(arg: String) -> Self {
+        Self(arg)
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BuildTargets(Vec<String>);
+impl BuildTargets {
+    #[must_use]
+    pub fn new(targets: Vec<String>) -> Self {
+        Self(targets)
+    }
+    #[must_use]
+    pub fn as_slice(&self) -> &[String] {
+        &self.0
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// Execute the parsed [`Cli`] commands.
 ///
 /// # Errors
 ///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn or exits with a
-/// non-zero status code.
-pub fn run(cli: &Cli) -> io::Result<()> {
+/// Returns an error if manifest generation or the Ninja process fails.
+pub fn run(cli: &Cli) -> Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build {
+        emit: None,
         targets: Vec::new(),
     });
     match command {
-        Commands::Build { targets } => {
-            let manifest_path = cli
-                .directory
-                .as_ref()
-                .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
-            let manifest = manifest::from_path(&manifest_path).map_err(io::Error::other)?;
-            let ast_json = serde_json::to_string_pretty(&manifest).map_err(io::Error::other)?;
-            debug!("AST:\n{ast_json}");
-            let graph = BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
-            let ninja_content = ninja_gen::generate(&graph);
-            let ninja_path = cli.directory.as_ref().map_or_else(
-                || PathBuf::from("build.ninja"),
-                |dir| dir.join("build.ninja"),
-            );
-            fs::write(&ninja_path, ninja_content).map_err(io::Error::other)?;
-            info!("Generated Ninja file at {}", ninja_path.display());
-            run_ninja(Path::new("ninja"), cli, &targets)
+        Commands::Build { targets, emit } => {
+            let ninja = generate_ninja(cli)?;
+            let targets = BuildTargets::new(targets);
+            if let Some(path) = emit {
+                write_and_log(&path, &ninja)?;
+                run_ninja(Path::new("ninja"), cli, &path, &targets)?;
+            } else {
+                let tmp = Builder::new()
+                    .prefix("netsuke.")
+                    .suffix(".ninja")
+                    .tempfile()
+                    .context("create temp file")?;
+                write_and_log(tmp.path(), &ninja)?;
+                run_ninja(Path::new("ninja"), cli, tmp.path(), &targets)?;
+            }
+            Ok(())
+        }
+        Commands::Emit { file } => {
+            let ninja = generate_ninja(cli)?;
+            write_and_log(&file, &ninja)?;
+            Ok(())
         }
         Commands::Clean => {
             println!("Clean requested");
@@ -54,15 +107,66 @@ pub fn run(cli: &Cli) -> io::Result<()> {
     }
 }
 
+/// Write `content` to `path` and log the file's location.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be written.
+///
+/// # Examples
+/// ```ignore
+/// let content = NinjaContent::new("rule cc\n".to_string());
+/// write_and_log(Path::new("out.ninja"), &content).unwrap();
+/// ```
+fn write_and_log(path: &Path, content: &NinjaContent) -> Result<()> {
+    fs::write(path, content.as_str())
+        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
+    info!("Generated Ninja file at {}", path.display());
+    Ok(())
+}
+
+/// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be loaded or translated.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::cli::{Cli, Commands};
+/// use netsuke::runner::generate_ninja;
+/// let cli = Cli {
+///     file: "Netsukefile".into(),
+///     directory: None,
+///     jobs: None,
+///     verbose: false,
+///     command: Some(Commands::Build { emit: None, targets: vec![] }),
+/// };
+/// let ninja = generate_ninja(&cli).expect("generate");
+/// assert!(ninja.as_str().contains("rule"));
+/// ```
+fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
+    let manifest_path = cli
+        .directory
+        .as_ref()
+        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
+    let manifest = manifest::from_path(&manifest_path)
+        .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
+    let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
+    debug!("AST:\n{ast_json}");
+    let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;
+    Ok(NinjaContent::new(ninja_gen::generate(&graph)))
+}
+
 /// Check if `arg` contains a sensitive keyword.
 ///
 /// # Examples
 /// ```
-/// assert!(contains_sensitive_keyword("token=abc"));
-/// assert!(!contains_sensitive_keyword("path=/tmp"));
+/// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
+/// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
 /// ```
-fn contains_sensitive_keyword(arg: &str) -> bool {
-    let lower = arg.to_lowercase();
+fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+    let lower = arg.as_str().to_lowercase();
     lower.contains("password") || lower.contains("token") || lower.contains("secret")
 }
 
@@ -70,10 +174,10 @@ fn contains_sensitive_keyword(arg: &str) -> bool {
 ///
 /// # Examples
 /// ```
-/// assert!(is_sensitive_arg("password=123"));
-/// assert!(!is_sensitive_arg("file=readme"));
+/// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
+/// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
 /// ```
-fn is_sensitive_arg(arg: &str) -> bool {
+fn is_sensitive_arg(arg: &CommandArg) -> bool {
     contains_sensitive_keyword(arg)
 }
 
@@ -83,17 +187,20 @@ fn is_sensitive_arg(arg: &str) -> bool {
 ///
 /// # Examples
 /// ```
-/// assert_eq!(redact_argument("token=abc"), "token=***REDACTED***");
-/// assert_eq!(redact_argument("path=/tmp"), "path=/tmp");
+/// let arg = CommandArg::new("token=abc".into());
+/// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
+/// let arg = CommandArg::new("path=/tmp".into());
+/// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
 /// ```
-fn redact_argument(arg: &str) -> String {
+fn redact_argument(arg: &CommandArg) -> CommandArg {
     if is_sensitive_arg(arg) {
-        arg.split_once('=').map_or_else(
+        let redacted = arg.as_str().split_once('=').map_or_else(
             || "***REDACTED***".to_string(),
             |(key, _)| format!("{key}=***REDACTED***"),
-        )
+        );
+        CommandArg::new(redacted)
     } else {
-        arg.to_string()
+        arg.clone()
     }
 }
 
@@ -101,18 +208,22 @@ fn redact_argument(arg: &str) -> String {
 ///
 /// # Examples
 /// ```
-/// let args = vec!["ninja".into(), "token=abc".into()];
+/// let args = vec![
+///     CommandArg::new("ninja".into()),
+///     CommandArg::new("token=abc".into()),
+/// ];
 /// let redacted = redact_sensitive_args(&args);
-/// assert_eq!(redacted[1], "token=***REDACTED***");
+/// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
 /// ```
-fn redact_sensitive_args(args: &[String]) -> Vec<String> {
-    args.iter().map(|arg| redact_argument(arg)).collect()
+fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+    args.iter().map(redact_argument).collect()
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
-/// The function forwards the job count and working directory to Ninja and
-/// streams its standard output and error back to the user.
+/// The function forwards the job count and working directory to Ninja,
+/// specifies the temporary build file, and streams its standard output and
+/// error back to the user.
 ///
 /// # Errors
 ///
@@ -122,7 +233,12 @@ fn redact_sensitive_args(args: &[String]) -> Vec<String> {
 /// # Panics
 ///
 /// Panics if the child's output streams cannot be captured.
-pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()> {
+pub fn run_ninja(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets,
+) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
         // Resolve and canonicalise the directory so Ninja receives a stable
@@ -135,17 +251,25 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
     if let Some(jobs) = cli.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
-    cmd.args(targets);
+    // Canonicalise the build file path so Ninja resolves it correctly from the
+    // working directory. Fall back to the original on failure so Ninja can
+    // surface a meaningful error.
+    let build_file_path = build_file
+        .canonicalize()
+        .unwrap_or_else(|_| build_file.to_path_buf());
+    cmd.arg("-f").arg(&build_file_path);
+    cmd.args(targets.as_slice());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
     let program = cmd.get_program().to_string_lossy().into_owned();
-    let args: Vec<String> = cmd
+    let args: Vec<CommandArg> = cmd
         .get_args()
-        .map(|a| a.to_string_lossy().into_owned())
+        .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
         .collect();
     let redacted_args = redact_sensitive_args(&args);
-    info!("Running command: {} {}", program, redacted_args.join(" "));
+    let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
+    info!("Running command: {} {}", program, arg_strings.join(" "));
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");

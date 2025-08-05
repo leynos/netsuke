@@ -2,9 +2,10 @@
 
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
-use netsuke::runner;
-use std::path::PathBuf;
-use tempfile::{NamedTempFile, TempDir};
+use netsuke::runner::{self, BuildTargets};
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
 #[expect(
@@ -33,6 +34,13 @@ fn fake_ninja(world: &mut CliWorld, code: i32) {
     install_test_ninja(world, dir, path);
 }
 
+/// Creates a fake ninja executable that validates the build file path.
+#[given("a fake ninja executable that checks for the build file")]
+fn fake_ninja_check(world: &mut CliWorld) {
+    let (dir, path) = support::fake_ninja_check_build_file();
+    install_test_ninja(world, dir, path);
+}
+
 /// Sets up a scenario where no ninja executable is available.
 ///
 /// This step creates a temporary directory and records the path to a
@@ -43,6 +51,21 @@ fn no_ninja(world: &mut CliWorld) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
     install_test_ninja(world, dir, path);
+}
+
+/// Updates the CLI to use the temporary directory created for the fake ninja.
+#[given("the CLI uses the temporary directory")]
+fn cli_uses_temp_dir(world: &mut CliWorld) {
+    let temp = world.temp.as_ref().expect("temp dir");
+    let cli = world.cli.as_mut().expect("cli");
+    cli.directory = Some(temp.path().to_path_buf());
+}
+
+/// Creates a directory named `build.ninja` in the temporary working directory.
+#[given("a directory named build.ninja exists")]
+fn build_dir_exists(world: &mut CliWorld) {
+    let temp = world.temp.as_ref().expect("temp dir");
+    fs::create_dir(temp.path().join("build.ninja")).expect("create dir");
 }
 
 /// Executes the ninja process and captures the result in the test world.
@@ -81,11 +104,12 @@ fn run(world: &mut CliWorld) {
 
     let cli = world.cli.as_ref().expect("cli");
     let program = if let Some(ninja) = &world.ninja {
-        std::path::Path::new(ninja)
+        Path::new(ninja)
     } else {
-        std::path::Path::new("ninja")
+        Path::new("ninja")
     };
-    match runner::run_ninja(program, cli, &[]) {
+    let targets = BuildTargets::new(vec![]);
+    match runner::run_ninja(program, cli, Path::new("build.ninja"), &targets) {
         Ok(()) => {
             world.run_status = Some(true);
             world.run_error = None;
