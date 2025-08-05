@@ -1,11 +1,8 @@
 use netsuke::cli::{Cli, Commands};
-use netsuke::runner::{run, run_ninja};
+use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::rstest;
-use std::error::Error;
-use std::fs::{self, File};
-use std::io::Write;
+use serial_test::serial;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
 
 mod support;
 
@@ -19,75 +16,16 @@ fn run_exits_with_manifest_error_on_invalid_version() {
         directory: None,
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build { targets: vec![] }),
+        command: Some(Commands::Build {
+            emit: None,
+            targets: vec![],
+        }),
     };
 
     let result = run(&cli);
     assert!(result.is_err());
     let err = result.expect_err("should have error");
-    assert!(
-        err.source()
-            .expect("should have source")
-            .to_string()
-            .contains("version")
-    );
-}
-
-#[cfg(unix)]
-fn fake_ninja_pwd() -> (TempDir, PathBuf) {
-    use std::os::unix::fs::PermissionsExt;
-    let dir = TempDir::new().expect("temp dir");
-    let path = dir.path().join("ninja");
-    let mut file = File::create(&path).expect("script");
-    writeln!(
-        file,
-        "#!/bin/sh\nif [ -n \"$1\" ]; then pwd > \"$1\"; else pwd; fi"
-    )
-    .expect("write script");
-    let mut perms = fs::metadata(&path).expect("meta").permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&path, perms).expect("perms");
-    (dir, path)
-}
-
-#[cfg(unix)]
-#[test]
-fn run_executes_ninja_and_captures_logs() {
-    let (ninja_dir, ninja_path) = fake_ninja_pwd();
-    let original_path = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
-    paths.insert(0, ninja_dir.path().to_path_buf());
-    let new_path = std::env::join_paths(paths).expect("join paths");
-    unsafe {
-        std::env::set_var("PATH", &new_path);
-    } // Nightly marks set_var unsafe.
-
-    let temp = tempfile::tempdir().expect("temp dir");
-    let manifest_path = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        jobs: None,
-        verbose: false,
-        command: Some(Commands::Build { targets: vec![] }),
-    };
-
-    let result = run(&cli);
-    assert!(result.is_ok());
-
-    // Verify the ninja file was written and contains some content
-    let ninja_file_path = temp.path().join("build.ninja");
-    assert!(ninja_file_path.exists());
-    let ninja_content = std::fs::read_to_string(&ninja_file_path).expect("read ninja file");
-    assert!(!ninja_content.is_empty());
-    assert!(ninja_content.contains("build "));
-    assert!(ninja_content.contains("rule "));
-
-    unsafe {
-        std::env::set_var("PATH", original_path);
-    } // Nightly marks set_var unsafe.
-    drop(ninja_path);
+    assert!(err.chain().any(|e| e.to_string().contains("version")));
 }
 
 #[rstest]
@@ -97,14 +35,25 @@ fn run_ninja_not_found() {
         directory: None,
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build { targets: vec![] }),
+        command: Some(Commands::Build {
+            emit: None,
+            targets: vec![],
+        }),
     };
-    let err = run_ninja(Path::new("does-not-exist"), &cli, &[]).expect_err("process should fail");
+    let targets = BuildTargets::new(vec![]);
+    let err = run_ninja(
+        Path::new("does-not-exist"),
+        &cli,
+        Path::new("build.ninja"),
+        &targets,
+    )
+    .expect_err("process should fail");
     assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 }
 
 #[rstest]
-fn run_writes_ninja_file() {
+#[serial]
+fn run_executes_ninja_without_persisting_file() {
     let (ninja_dir, ninja_path) = support::fake_ninja(0);
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
@@ -122,22 +71,95 @@ fn run_writes_ninja_file() {
         directory: Some(temp.path().to_path_buf()),
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build { targets: vec![] }),
+        command: Some(Commands::Build {
+            emit: None,
+            targets: vec![],
+        }),
     };
 
     let result = run(&cli);
     assert!(result.is_ok());
 
-    // Verify the ninja file was written and contains some content
-    let ninja_file_path = temp.path().join("build.ninja");
-    assert!(ninja_file_path.exists());
-    let ninja_content = std::fs::read_to_string(&ninja_file_path).expect("read ninja file");
-    assert!(!ninja_content.is_empty());
-    assert!(ninja_content.contains("build "));
-    assert!(ninja_content.contains("rule "));
+    // Ensure no ninja file remains in project directory
+    assert!(!temp.path().join("build.ninja").exists());
 
     unsafe {
         std::env::set_var("PATH", original_path);
     } // Nightly marks set_var unsafe.
     drop(ninja_path);
+}
+
+#[cfg(unix)]
+#[test]
+#[serial]
+fn run_build_with_emit_keeps_file() {
+    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
+    paths.insert(0, ninja_dir.path().to_path_buf());
+    let new_path = std::env::join_paths(paths).expect("join paths");
+    unsafe {
+        std::env::set_var("PATH", &new_path);
+    }
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
+    let emit_path = temp.path().join("emitted.ninja");
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: false,
+        command: Some(Commands::Build {
+            emit: Some(emit_path.clone()),
+            targets: vec![],
+        }),
+    };
+
+    let result = run(&cli);
+    assert!(result.is_ok());
+
+    assert!(emit_path.exists());
+    let emitted = std::fs::read_to_string(&emit_path).expect("read emitted");
+    assert!(emitted.contains("rule "));
+    assert!(emitted.contains("build "));
+    assert!(!temp.path().join("build.ninja").exists());
+
+    unsafe {
+        std::env::set_var("PATH", original_path);
+    }
+    drop(ninja_path);
+}
+
+#[test]
+#[serial]
+fn run_emit_subcommand_writes_file() {
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    unsafe {
+        std::env::set_var("PATH", "");
+    }
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
+    let emit_path = temp.path().join("standalone.ninja");
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: false,
+        command: Some(Commands::Emit {
+            file: emit_path.clone(),
+        }),
+    };
+
+    let result = run(&cli);
+    assert!(result.is_ok());
+    assert!(emit_path.exists());
+    assert!(!temp.path().join("build.ninja").exists());
+
+    unsafe {
+        std::env::set_var("PATH", original_path);
+    }
 }
