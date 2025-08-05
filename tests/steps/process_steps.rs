@@ -5,7 +5,7 @@ use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
+use tempfile::{NamedTempFile, TempDir};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
 #[expect(
