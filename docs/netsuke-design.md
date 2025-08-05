@@ -214,7 +214,6 @@ erDiagram
         bool always
     }
     RECIPE {
-        enum kind
         string command
         string script
         StringOrList rule
@@ -258,9 +257,9 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   setting. Exactly one of `command` or `script` must be provided. The manifest
   parser enforces this rule to prevent invalid states.
 
-  Internally, these options deserialize into a shared `Recipe` enum tagged with
-  a `kind` field. Serde aliases ensure manifests that omit the tag continue to
-  load correctly.
+  Internally, these options deserialize into a shared `Recipe` enum. The parser
+  selects the appropriate variant based on whether `command` or `script` is
+  present.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -299,8 +298,8 @@ present, Netsuke emits a `RecipeConflict` error with the message "rule, command
 and script are mutually exclusive".
 
 This union deserializes into the same `Recipe` enum used for rules. The parser
-enforces that only one variant is present, maintaining backward compatibility
-through serde aliases when `kind` is omitted.
+enforces that only one variant is present and errors if multiple recipe fields
+are specified.
 
 - `sources`: The input files required by the command. This can be a single
   string or a list of strings. If any source entry matches the `name` of
@@ -433,6 +432,7 @@ pub struct NetsukeManifest {
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub name: String,
+    #[serde(flatten)]
     pub recipe: Recipe,
     pub description: Option<String>,
     #[serde(default)]
@@ -442,13 +442,10 @@ pub struct Rule {
 }
 
 /// A union of execution styles for both rules and targets.
-#[serde(tag = "kind", rename_all = "lowercase")]
+#[serde(untagged)]
 pub enum Recipe {
-    #[serde(alias = "command")]
     Command { command: String },
-    #[serde(alias = "script")]
     Script { script: String },
-    #[serde(alias = "rule")]
     Rule { rule: StringOrList },
 }
 
@@ -456,6 +453,7 @@ pub enum Recipe {
 #[serde(deny_unknown_fields)]
 pub struct Target {
     pub name: StringOrList,
+    #[serde(flatten)]
     pub recipe: Recipe,
 
     #[serde(default)]
@@ -504,9 +502,7 @@ YAML
 netsuke_version: "1.0.0"
 targets:
   - name: hello
-    recipe:
-      kind: command
-      command: echo hi
+    command: echo hi
 ```
 
 Rust

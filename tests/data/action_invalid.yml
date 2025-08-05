@@ -1,10 +1,8 @@
-# This fixture is intentionally invalid. It lacks keys like `recipe` and
-# `phony` so the loader should fail when parsing it.
+# This fixture is intentionally invalid. It lacks a `command` or `rule`
+# so the loader should fail when parsing it.
 netsuke_version: "1.0.0"
 actions:
   - name: setup
 targets:
   - name: done
-    recipe:
-      kind: command
-      command: "true"
+    command: "true"
