@@ -125,7 +125,15 @@ fn redact_sensitive_args(args: &[String]) -> Vec<String> {
 pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
-        cmd.current_dir(dir).arg("-C").arg(dir);
+        // Resolve relative directories so Ninja receives a stable path. Using only
+        // `current_dir` avoids combining it with Ninja's own `-C` flag which would
+        // otherwise double-apply the directory and break relative paths.
+        let dir = if dir.is_absolute() {
+            dir.clone()
+        } else {
+            std::env::current_dir()?.join(dir)
+        };
+        cmd.current_dir(dir);
     }
     if let Some(jobs) = cli.jobs {
         cmd.arg("-j").arg(jobs.to_string());

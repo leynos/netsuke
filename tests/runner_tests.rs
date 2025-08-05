@@ -3,6 +3,7 @@
 use netsuke::cli::{Cli, Commands};
 use netsuke::runner;
 use rstest::rstest;
+use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::Level;
 
@@ -120,4 +121,22 @@ fn run_with_verbose_mode_emits_logs() {
         std::env::set_var("PATH", original_path);
     } // Nightly marks set_var unsafe.
     drop(ninja_path);
+}
+
+#[rstest]
+fn run_ninja_with_directory() {
+    let (root, path) = support::fake_ninja_pwd();
+    let workdir = root.path().join("work");
+    fs::create_dir(&workdir).expect("workdir");
+    let output = root.path().join("out.txt");
+    let mut cli = test_cli();
+    cli.directory = Some(PathBuf::from("work"));
+
+    let prev = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(root.path()).expect("chdir");
+    runner::run_ninja(&path, &cli, &[output.to_string_lossy().to_string()]).expect("ninja run");
+    std::env::set_current_dir(prev).expect("restore cwd");
+
+    let recorded = fs::read_to_string(output).expect("read output");
+    assert_eq!(recorded.trim(), workdir.to_string_lossy());
 }
