@@ -1,8 +1,9 @@
-//! Unit tests for Netsuke manifest AST deserialisation.
+//! Unit tests for Netsuke manifest AST serialisation and deserialisation.
 
 use netsuke::{ast::*, manifest};
 use rstest::rstest;
 use semver::Version;
+use serde_yml::Value;
 
 /// Convenience wrapper around the library manifest parser for tests.
 fn parse_manifest(yaml: &str) -> anyhow::Result<NetsukeManifest> {
@@ -361,4 +362,19 @@ fn parse_example_manifests(#[case] file: &str, #[case] first_target: &str) {
 fn invalid_manifests_fail(#[case] file: &str) {
     let path = format!("tests/data/{file}");
     assert!(manifest::from_path(&path).is_err());
+}
+
+#[rstest]
+#[case(Recipe::Command { command: "echo".into() }, "command: echo")]
+#[case(Recipe::Script { script: "run".into() }, "script: run")]
+#[case(
+    Recipe::Rule {
+        rule: StringOrList::List(vec!["a".into(), "b".into()]),
+    },
+    concat!("rule:\n", "  - a\n", "  - b"),
+)]
+fn serialize_recipe_variants(#[case] recipe: Recipe, #[case] expected_yaml: &str) {
+    let actual: Value = serde_yml::to_value(&recipe).expect("serialize");
+    let expected: Value = serde_yml::from_str(expected_yaml).expect("yaml");
+    assert_eq!(actual, expected);
 }

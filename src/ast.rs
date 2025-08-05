@@ -18,7 +18,11 @@
 //! ```
 
 use semver::Version;
-use serde::{Deserialize, Serialize, de::Deserializer};
+use serde::{
+    Deserialize, Serialize,
+    de::Deserializer,
+    ser::{SerializeMap, Serializer},
+};
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -156,6 +160,22 @@ impl<'de> Deserialize<'de> for Recipe {
                 fields.join(", ")
             ))),
         }
+    }
+}
+// Serialise into a single-key map so `#[serde(flatten)]` on parent
+// structs inserts the appropriate recipe field directly.
+impl Serialize for Recipe {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        match self {
+            Self::Command { command } => map.serialize_entry("command", command)?,
+            Self::Script { script } => map.serialize_entry("script", script)?,
+            Self::Rule { rule } => map.serialize_entry("rule", rule)?,
+        }
+        map.end()
     }
 }
 
