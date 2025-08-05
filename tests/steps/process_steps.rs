@@ -53,6 +53,8 @@ fn no_ninja(world: &mut CliWorld) {
 /// on the execution outcome.
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
+    // Touch the capture variant so the support module's helpers remain used.
+    let _ = support::fake_ninja_capture as fn() -> (TempDir, PathBuf, PathBuf);
     let cli = world.cli.as_mut().expect("cli");
 
     // Ensure a manifest exists at the path expected by the CLI.

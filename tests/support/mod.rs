@@ -33,23 +33,29 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 ///
 /// Returns the temporary directory, path to the executable and the capture file
 /// location.
-#[allow(dead_code, reason = "not every test exercises the capture variant")]
 pub fn fake_ninja_capture() -> (TempDir, PathBuf, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let capture = dir.path().join("captured.ninja");
     let body = format!(
-        "#!/bin/sh\nwhile [ \"$1\" != \"\" ]; do\n  if [ \"$1\" = \"-f\" ]; then\n    shift\n    cat \"$1\" > \"{}\"\n  fi\n  shift\ndone\n",
-        capture.display()
+        concat!(
+            "#!/bin/sh\n",
+            "while [ $# -gt 0 ]; do\n",
+            "  if [ \"$1\" = \"-f\" ] && [ $# -gt 1 ]; then\n",
+            "    shift\n",
+            "    cat \"$1\" > \"{}\"\n",
+            "    shift\n",
+            "  else\n",
+            "    shift\n",
+            "  fi\n",
+            "done\n",
+        ),
+        capture.display(),
     );
     let path = write_script(&dir, &body);
     (dir, path, capture)
 }
 
 /// Write a minimal Netsukefile to the provided temporary file.
-#[allow(
-    dead_code,
-    reason = "helper is unused when the support crate builds independently"
-)]
 pub fn write_manifest(file: &mut NamedTempFile) {
     let manifest = concat!(
         "netsuke_version: \"1.0.0\"\n",

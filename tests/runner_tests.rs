@@ -1,4 +1,7 @@
 //! Unit tests for Ninja process invocation.
+//!
+//! These tests verify that the runner can translate a manifest into a Ninja
+//! build script and invoke the Ninja process with appropriate arguments.
 
 use netsuke::cli::{Cli, Commands};
 use netsuke::runner;

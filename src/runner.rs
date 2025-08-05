@@ -107,13 +107,39 @@ pub fn run_ninja(program: &Path, cli: &Cli, targets: &[String]) -> io::Result<()
 }
 
 /// Generate a temporary Ninja build file from a manifest.
+///
+/// # Examples
+///
+/// ```ignore
+/// # use std::path::Path;
+/// # fn demo() -> std::io::Result<()> {
+/// let file = netsuke::runner::manifest_to_build_file(Path::new("tests/data/rules.yml"))?;
+/// assert!(file.path().exists());
+/// # Ok(())
+/// # }
+/// ```
 fn manifest_to_build_file(path: &Path) -> io::Result<NamedTempFile> {
-    let manifest = manifest::from_path(path).map_err(io::Error::other)?;
-    let graph = ir::BuildGraph::from_manifest(&manifest).map_err(io::Error::other)?;
+    let manifest = manifest::from_path(path).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed to load manifest from {}: {e}", path.display()),
+        )
+    })?;
+    let graph = ir::BuildGraph::from_manifest(&manifest).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Failed to convert manifest to build graph: {e}"),
+        )
+    })?;
     let ninja_script = ninja_gen::generate(&graph);
 
-    let mut build_file = NamedTempFile::new().map_err(io::Error::other)?;
-    build_file.write_all(ninja_script.as_bytes())?;
-    build_file.flush()?;
+    let mut build_file = NamedTempFile::new()
+        .map_err(|e| io::Error::other(format!("Failed to create temporary build file: {e}")))?;
+    build_file
+        .write_all(ninja_script.as_bytes())
+        .map_err(|e| io::Error::other(format!("Failed to write build file: {e}")))?;
+    build_file
+        .flush()
+        .map_err(|e| io::Error::other(format!("Failed to flush build file: {e}")))?;
     Ok(build_file)
 }
