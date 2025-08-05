@@ -34,9 +34,7 @@ jobs:
           netsuke_version: "1.0.0"
           targets:
             - name: generated.txt
-              recipe:
-                kind: command
-                command: "touch generated.txt"
+              command: "touch generated.txt"
           MANIFEST
       - name: Run Netsuke
         run: ./target/debug/netsuke build generated.txt
