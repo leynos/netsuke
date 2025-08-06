@@ -6,7 +6,7 @@ set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
   echo "Usage: $(basename "$0") <file>" >&2
-  exit 64   # EX_USAGE
+  exit 2   # usage error
 fi
 
 file="$1"
