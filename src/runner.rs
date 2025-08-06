@@ -4,7 +4,7 @@
 //! handles command execution. It now delegates build requests to the Ninja
 //! subprocess, streaming its output back to the user.
 
-use crate::cli::{Cli, Commands};
+use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use serde_json;
@@ -69,15 +69,15 @@ impl BuildTargets {
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli) -> Result<()> {
-    let command = cli.command.clone().unwrap_or(Commands::Build {
+    let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
         targets: Vec::new(),
-    });
+    }));
     match command {
-        Commands::Build { targets, emit } => {
+        Commands::Build(args) => {
             let ninja = generate_ninja(cli)?;
-            let targets = BuildTargets::new(targets);
-            if let Some(path) = emit {
+            let targets = BuildTargets::new(args.targets);
+            if let Some(path) = args.emit {
                 write_and_log(&path, &ninja)?;
                 run_ninja(Path::new("ninja"), cli, &path, &targets)?;
             } else {
@@ -140,7 +140,7 @@ fn write_and_log(path: &Path, content: &NinjaContent) -> Result<()> {
 ///     directory: None,
 ///     jobs: None,
 ///     verbose: false,
-///     command: Some(Commands::Build { emit: None, targets: vec![] }),
+///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
 /// };
 /// let ninja = generate_ninja(&cli).expect("generate");
 /// assert!(ninja.as_str().contains("rule"));

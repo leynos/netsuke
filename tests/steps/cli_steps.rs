@@ -6,7 +6,7 @@
 use crate::CliWorld;
 use clap::Parser;
 use cucumber::{given, then, when};
-use netsuke::cli::{Cli, Commands};
+use netsuke::cli::{BuildArgs, Cli, Commands};
 use std::path::PathBuf;
 
 fn apply_cli(world: &mut CliWorld, args: &str) {
@@ -16,10 +16,10 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
     match Cli::try_parse_from(tokens) {
         Ok(mut cli) => {
             if cli.command.is_none() {
-                cli.command = Some(Commands::Build {
+                cli.command = Some(Commands::Build(BuildArgs {
                     emit: None,
                     targets: Vec::new(),
-                });
+                }));
             }
             world.cli = Some(cli);
             world.cli_error = None;
@@ -34,7 +34,7 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
 fn extract_build(world: &CliWorld) -> Option<(&Vec<String>, &Option<PathBuf>)> {
     let cli = world.cli.as_ref()?;
     match cli.command.as_ref()? {
-        Commands::Build { targets, emit } => Some((targets, emit)),
+        Commands::Build(args) => Some((&args.targets, &args.emit)),
         _ => None,
     }
 }

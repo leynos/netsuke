@@ -4,28 +4,28 @@
 //! using `rstest` for parameterised coverage of success and error scenarios.
 use clap::Parser;
 use clap::error::ErrorKind;
-use netsuke::cli::{Cli, Commands};
+use netsuke::cli::{BuildArgs, Cli, Commands};
 use rstest::rstest;
 use std::path::PathBuf;
 
 #[rstest]
-#[case(vec!["netsuke"], PathBuf::from("Netsukefile"), None, None, false, Commands::Build { emit: None, targets: Vec::new() })]
+#[case(vec!["netsuke"], PathBuf::from("Netsukefile"), None, None, false, Commands::Build(BuildArgs { emit: None, targets: Vec::new() }))]
 #[case(
     vec!["netsuke", "--file", "alt.yml", "-C", "work", "-j", "4", "build", "a", "b"],
     PathBuf::from("alt.yml"),
     Some(PathBuf::from("work")),
     Some(4),
     false,
-    Commands::Build { emit: None, targets: vec!["a".into(), "b".into()] },
+    Commands::Build(BuildArgs { emit: None, targets: vec!["a".into(), "b".into()] }),
 )]
-#[case(vec!["netsuke", "--verbose"], PathBuf::from("Netsukefile"), None, None, true, Commands::Build { emit: None, targets: Vec::new() })]
+#[case(vec!["netsuke", "--verbose"], PathBuf::from("Netsukefile"), None, None, true, Commands::Build(BuildArgs { emit: None, targets: Vec::new() }))]
 #[case(
     vec!["netsuke", "build", "--emit", "out.ninja", "a"],
     PathBuf::from("Netsukefile"),
     None,
     None,
     false,
-    Commands::Build { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] },
+    Commands::Build(BuildArgs { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] }),
 )]
 #[case(
     vec!["netsuke", "manifest", "out.ninja"],
