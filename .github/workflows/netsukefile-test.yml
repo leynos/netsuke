@@ -51,18 +51,28 @@ jobs:
               command: "touch unused.txt"
           MANIFEST
       - name: Build dependent and inline targets
-        run: ./target/debug/netsuke --verbose build dependent.txt inline-command.txt inline-script.txt
+        run: ./target/debug/netsuke --verbose build --emit build.ninja dependent.txt inline-command.txt inline-script.txt
       - name: Assert dependent artefacts exist
+        env:
+          NINJA_MANIFEST: build.ninja
         run: |
           scripts/assert-file-exists.sh base.txt
           scripts/assert-file-exists.sh dependent.txt
       - name: Assert inline command artefact exists
+        env:
+          NINJA_MANIFEST: build.ninja
         run: scripts/assert-file-exists.sh inline-command.txt
       - name: Assert inline script artefact exists
+        env:
+          NINJA_MANIFEST: build.ninja
         run: scripts/assert-file-exists.sh inline-script.txt
       - name: Run action target
-        run: ./target/debug/netsuke --verbose build say-hello
+        run: ./target/debug/netsuke --verbose build --emit action.ninja say-hello
       - name: Assert action artefact exists
+        env:
+          NINJA_MANIFEST: action.ninja
         run: scripts/assert-file-exists.sh action-called.txt
       - name: Assert unused action artefact absent
-        run: test ! -f unused.txt
+        env:
+          NINJA_MANIFEST: action.ninja
+        run: scripts/assert-file-absent.sh unused.txt
