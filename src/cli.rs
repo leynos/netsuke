@@ -99,8 +99,8 @@ pub enum Commands {
     /// Display the build dependency graph in DOT format for visualization.
     Graph,
 
-    /// Emit the Ninja manifest to the specified file without running Ninja.
-    Emit {
+    /// Write the Ninja manifest to the specified file without invoking Ninja.
+    Manifest {
         /// Output path for the generated Ninja file.
         #[arg(value_name = "FILE")]
         file: PathBuf,

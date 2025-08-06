@@ -1387,8 +1387,8 @@ and retain it.
     /// Display the build dependency graph in DOT format for visualisation.
     Graph {},
 
-    /// Emit the Ninja manifest to `FILE` without invoking Ninja. Emit { ///
-    Output path for the generated Ninja file.
+    /// Write the Ninja manifest to `FILE` without invoking Ninja. Manifest {
+    /// Output path for the generated Ninja file.
         #[arg(value_name = "FILE")]
         file: PathBuf, }, }
 ```
@@ -1422,7 +1422,7 @@ The behaviour of each subcommand is clearly defined:
   Dagre.js viewer. Visualizing the graph is invaluable for understanding and
   debugging complex projects.
 
-- `Netsuke emit FILE`: This command performs the pipeline up to Ninja
+- `Netsuke manifest FILE`: This command performs the pipeline up to Ninja
   synthesis and writes the resulting Ninja file to `FILE` without invoking
   Ninja.
 

@@ -64,6 +64,7 @@ cucumber = "0.20.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
 serial_test = "3"
+assert_cmd = "2.0.17"
 
 [[test]]
 name = "cucumber"

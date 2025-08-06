@@ -134,7 +134,7 @@ fn run_build_with_emit_keeps_file() {
 
 #[test]
 #[serial]
-fn run_emit_subcommand_writes_file() {
+fn run_manifest_subcommand_writes_file() {
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     unsafe {
         std::env::set_var("PATH", "");
@@ -143,20 +143,20 @@ fn run_emit_subcommand_writes_file() {
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
     std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
-    let emit_path = temp.path().join("standalone.ninja");
+    let output_path = temp.path().join("standalone.ninja");
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
         jobs: None,
         verbose: false,
-        command: Some(Commands::Emit {
-            file: emit_path.clone(),
+        command: Some(Commands::Manifest {
+            file: output_path.clone(),
         }),
     };
 
     let result = run(&cli);
     assert!(result.is_ok());
-    assert!(emit_path.exists());
+    assert!(output_path.exists());
     assert!(!temp.path().join("build.ninja").exists());
 
     unsafe {

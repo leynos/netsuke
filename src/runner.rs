@@ -91,7 +91,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::Emit { file } => {
+        Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
             write_and_log(&file, &ninja)?;
             Ok(())

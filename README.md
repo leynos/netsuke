@@ -147,11 +147,14 @@ command: "echo {{ dangerous_value | raw }}" # Unsafe (your problem now)
 netsuke [build] [target1 target2 ...]
 netsuke clean
 netsuke graph
+ netsuke manifest FILE
 ```
 
 - `netsuke` alone builds the `defaults:` targets from your manifest
 - `netsuke graph` emits a Graphviz `.dot` of the build DAG
 - `netsuke clean` runs `ninja -t clean`
+- `netsuke manifest FILE` writes the Ninja manifest to `FILE` without invoking
+  Ninja
 
 You can also pass:
 
