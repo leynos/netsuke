@@ -30,11 +30,11 @@ Feature: CLI parsing
     And the emit path is "out.ninja"
     And the first target is "target"
 
-  Scenario: Emit subcommand writes Ninja file
-    When the CLI is parsed with "emit out.ninja"
+  Scenario: Manifest subcommand writes Ninja file
+    When the CLI is parsed with "manifest out.ninja"
     Then parsing succeeds
-    And the command is emit
-    And the emit command path is "out.ninja"
+    And the command is manifest
+    And the manifest command path is "out.ninja"
 
   Scenario: Unknown command fails
     When the CLI is parsed with invalid arguments "unknown"

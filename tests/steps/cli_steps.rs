@@ -87,12 +87,12 @@ fn command_is_graph(world: &mut CliWorld) {
     ));
 }
 
-#[then("the command is emit")]
-fn command_is_emit(world: &mut CliWorld) {
+#[then("the command is manifest")]
+fn command_is_manifest(world: &mut CliWorld) {
     let cli = world.cli.as_ref().expect("cli");
     assert!(matches!(
         cli.command.as_ref().expect("command"),
-        Commands::Emit { .. }
+        Commands::Manifest { .. }
     ));
 }
 
@@ -145,12 +145,12 @@ fn emit_path(world: &mut CliWorld, path: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-#[then(expr = "the emit command path is {string}")]
-fn emit_command_path(world: &mut CliWorld, path: String) {
+#[then(expr = "the manifest command path is {string}")]
+fn manifest_command_path(world: &mut CliWorld, path: String) {
     let cli = world.cli.as_ref().expect("cli");
     match cli.command.as_ref().expect("command") {
-        Commands::Emit { file } => assert_eq!(file, &PathBuf::from(&path)),
-        _ => panic!("command should be emit"),
+        Commands::Manifest { file } => assert_eq!(file, &PathBuf::from(&path)),
+        _ => panic!("command should be manifest"),
     }
 }
 

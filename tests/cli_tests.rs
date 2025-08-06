@@ -28,12 +28,12 @@ use std::path::PathBuf;
     Commands::Build { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] },
 )]
 #[case(
-    vec!["netsuke", "emit", "out.ninja"],
+    vec!["netsuke", "manifest", "out.ninja"],
     PathBuf::from("Netsukefile"),
     None,
     None,
     false,
-    Commands::Emit { file: PathBuf::from("out.ninja") },
+    Commands::Manifest { file: PathBuf::from("out.ninja") },
 )]
 fn parse_cli(
     #[case] argv: Vec<&str>,
