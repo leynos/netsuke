@@ -6,15 +6,8 @@
 
 use crate::ast::NetsukeManifest;
 use anyhow::{Context, Result};
-use minijinja::{context, value::Value, Environment, UndefinedBehavior};
-use serde::Deserialize;
+use minijinja::{Environment, UndefinedBehavior, context, value::Value};
 use std::{collections::HashMap, fs, path::Path};
-
-#[derive(Default, Deserialize)]
-struct VarsOnly {
-    #[serde(default)]
-    vars: HashMap<String, String>,
-}
 
 /// Parse a manifest string using Jinja for templating.
 ///
@@ -51,28 +44,41 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
     // First pass: render the raw template to plain YAML, ignoring unresolved
     // expressions. This gives us access to the top-level `vars` mapping which
     // seeds the real render pass.
-    let rendered = env
-        .render_str(yaml, context! {})
-        .context("Jinja render error")?;
+    let rendered = render(&env, yaml, "first-pass")?;
 
-    let vars_only: VarsOnly = serde_yml::from_str(&rendered).context("YAML parse error")?;
+    let doc: serde_yml::Value =
+        serde_yml::from_str(&rendered).context("first-pass YAML parse error")?;
+    let vars = doc
+        .get("vars")
+        .and_then(|v| v.as_mapping())
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| k.as_str().and_then(|key| v.as_str().map(|val| (key, val))))
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
 
     // Populate the environment with the extracted variables for subsequent
     // rendering. Undefined variables now trigger errors to surface template
     // mistakes early.
-    for (key, value) in &vars_only.vars {
-        env.add_global(key, Value::from(value.clone()));
+    for (key, value) in vars {
+        env.add_global(key, Value::from(value));
     }
 
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
     // Second pass: render the template again with the enriched context to
     // obtain a pure YAML manifest ready for deserialisation.
-    let rendered = env
-        .render_str(yaml, context! {})
-        .context("Jinja render error")?;
+    let rendered = render(&env, yaml, "second-pass")?;
 
-    serde_yml::from_str::<NetsukeManifest>(&rendered).context("YAML parse error")
+    serde_yml::from_str::<NetsukeManifest>(&rendered).context("manifest parse error")
+}
+
+/// Render a Jinja template with contextual error reporting.
+fn render(env: &Environment, tpl: &str, pass: &str) -> Result<String> {
+    env.render_str(tpl, context! {})
+        .with_context(|| format!("{pass} render error"))
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
