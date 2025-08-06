@@ -1348,11 +1348,13 @@ entire CLI specification.
 Rust
 
 ```rust
-use clap::{Args, Parser, Subcommand}; use std::path::PathBuf;
+use clap::{Args, Parser, Subcommand};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-struct Cli { /// Path to the Netsuke manifest file to use.
+struct Cli {
+    /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
     file: PathBuf,
 
@@ -1369,29 +1371,38 @@ struct Cli { /// Path to the Netsuke manifest file to use.
     verbose: bool,
 
     #[command(subcommand)]
-    command: Option<Commands>, }
+    command: Option<Commands>,
+}
 
 #[derive(Subcommand)]
-enum Commands { /// Build specified targets (or default targets if none are
-given) [default]. Build(BuildArgs),
+enum Commands {
+    /// Build specified targets (or default targets if none are given).
+    /// This is the default subcommand.
+    Build(BuildArgs),
 
-    /// Remove build artefacts and intermediate files. Clean,
+    /// Remove build artefacts and intermediate files.
+    Clean,
 
     /// Display the build dependency graph in DOT format for visualisation.
     Graph,
 
-    /// Write the Ninja manifest to `FILE` without invoking Ninja. Manifest {
-    /// Output path for the generated Ninja file.
+    /// Write the Ninja manifest to `FILE` without invoking Ninja.
+    Manifest {
+        /// Output path for the generated Ninja file.
         #[arg(value_name = "FILE")]
-        file: PathBuf, }, }
+        file: PathBuf,
+    },
+}
 
 #[derive(Args)]
-struct BuildArgs { /// Write the generated Ninja manifest to this path and
-retain it.
+struct BuildArgs {
+    /// Write the generated Ninja manifest to this path and retain it.
     #[arg(long, value_name = "FILE")]
     emit: Option<PathBuf>,
 
-    /// A list of specific targets to build. targets: Vec<String>, }
+    /// A list of specific targets to build.
+    targets: Vec<String>,
+}
 ```
 
 *Note: The* `Build` *command is wrapped in an* `Option<Commands>` *and will be
