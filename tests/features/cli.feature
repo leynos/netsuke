@@ -36,6 +36,11 @@ Feature: CLI parsing
     And the command is manifest
     And the manifest command path is "out.ninja"
 
+  Scenario: Manifest subcommand requires a path
+    When the CLI is parsed with invalid arguments "manifest"
+    Then an error should be returned
+    And the error message should contain "<FILE>"
+
   Scenario: Unknown command fails
     When the CLI is parsed with invalid arguments "unknown"
     Then an error should be returned

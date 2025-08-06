@@ -56,6 +56,7 @@ fn parse_cli(
 #[case(vec!["netsuke", "--file"], ErrorKind::InvalidValue)]
 #[case(vec!["netsuke", "-j", "notanumber"], ErrorKind::ValueValidation)]
 #[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
+#[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]
 fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) {
     let err = Cli::try_parse_from(argv).expect_err("unexpected success");
     assert_eq!(err.kind(), expected_error);

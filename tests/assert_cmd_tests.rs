@@ -33,8 +33,7 @@ fn build_with_emit_writes_file() {
     let output = temp.path().join("emitted.ninja");
     let original = std::env::var_os("PATH").unwrap_or_default();
     let path = std::env::join_paths(
-        std::iter::once(ninja_dir.path().to_path_buf())
-            .chain(std::env::split_paths(&original)),
+        std::iter::once(ninja_dir.path().to_path_buf()).chain(std::env::split_paths(&original)),
     )
     .expect("join path");
     let mut cmd = Command::cargo_bin("netsuke").expect("binary");
