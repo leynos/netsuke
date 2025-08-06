@@ -3,7 +3,7 @@
 //! This module defines the [`Cli`] structure and its subcommands.
 //! It mirrors the design described in `docs/netsuke-design.md`.
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
 /// Maximum number of jobs accepted by the CLI.
@@ -71,27 +71,31 @@ impl Cli {
     #[must_use]
     fn with_default_command(mut self) -> Self {
         if self.command.is_none() {
-            self.command = Some(Commands::Build {
+            self.command = Some(Commands::Build(BuildArgs {
                 emit: None,
                 targets: Vec::new(),
-            });
+            }));
         }
         self
     }
+}
+
+/// Arguments accepted by the `build` command.
+#[derive(Debug, Args, PartialEq, Eq, Clone)]
+pub struct BuildArgs {
+    /// Write the generated Ninja manifest to this path and retain it.
+    #[arg(long, value_name = "FILE")]
+    pub emit: Option<PathBuf>,
+
+    /// A list of specific targets to build.
+    pub targets: Vec<String>,
 }
 
 /// Available top-level commands for Netsuke.
 #[derive(Debug, Subcommand, PartialEq, Eq, Clone)]
 pub enum Commands {
     /// Build specified targets (or default targets if none are given) [default].
-    Build {
-        /// Write the generated Ninja manifest to this path and retain it.
-        #[arg(long, value_name = "FILE")]
-        emit: Option<PathBuf>,
-
-        /// A list of specific targets to build.
-        targets: Vec<String>,
-    },
+    Build(BuildArgs),
 
     /// Remove build artifacts and intermediate files.
     Clean,

@@ -1,4 +1,4 @@
-use netsuke::cli::{Cli, Commands};
+use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::rstest;
 use serial_test::serial;
@@ -16,10 +16,10 @@ fn run_exits_with_manifest_error_on_invalid_version() {
         directory: None,
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build {
+        command: Some(Commands::Build(BuildArgs {
             emit: None,
             targets: vec![],
-        }),
+        })),
     };
 
     let result = run(&cli);
@@ -35,10 +35,10 @@ fn run_ninja_not_found() {
         directory: None,
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build {
+        command: Some(Commands::Build(BuildArgs {
             emit: None,
             targets: vec![],
-        }),
+        })),
     };
     let targets = BuildTargets::new(vec![]);
     let err = run_ninja(
@@ -71,10 +71,10 @@ fn run_executes_ninja_without_persisting_file() {
         directory: Some(temp.path().to_path_buf()),
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build {
+        command: Some(Commands::Build(BuildArgs {
             emit: None,
             targets: vec![],
-        }),
+        })),
     };
 
     let result = run(&cli);
@@ -111,10 +111,10 @@ fn run_build_with_emit_keeps_file() {
         directory: Some(temp.path().to_path_buf()),
         jobs: None,
         verbose: false,
-        command: Some(Commands::Build {
+        command: Some(Commands::Build(BuildArgs {
             emit: Some(emit_path.clone()),
             targets: vec![],
-        }),
+        })),
     };
 
     let result = run(&cli);
