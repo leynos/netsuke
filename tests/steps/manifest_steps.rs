@@ -6,7 +6,10 @@
 
 use crate::CliWorld;
 use cucumber::{given, then, when};
-use netsuke::{ast::StringOrList, manifest};
+use netsuke::{
+    ast::{Recipe, StringOrList},
+    manifest,
+};
 
 fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
     match manifest::from_path(path) {
@@ -101,4 +104,15 @@ fn first_rule_name(world: &mut CliWorld, name: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
     let rule = manifest.rules.first().expect("rules");
     assert_eq!(rule.name, name);
+}
+
+#[then(expr = "the first target command is {string}")]
+fn first_target_command(world: &mut CliWorld, command: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let first = manifest.targets.first().expect("targets");
+    if let Recipe::Command { command: actual } = &first.recipe {
+        assert_eq!(actual, &command);
+    } else {
+        panic!("Expected command recipe, got: {:?}", first.recipe);
+    }
 }

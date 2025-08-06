@@ -1,0 +1,6 @@
+netsuke_version: "1.0.0"
+vars:
+  who: world
+targets:
+  - name: hello
+    command: "echo {{ who }}"

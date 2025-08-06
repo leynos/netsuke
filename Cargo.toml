@@ -7,6 +7,7 @@ edition = "2024"
 clap = { version = "4.5.0", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yml = "0.0.12"
+minijinja = "2.11.0"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 thiserror = "1"
