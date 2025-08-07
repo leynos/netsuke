@@ -260,3 +260,47 @@ fn generate_script_with_percent() {
     let content = fs::read_to_string(dir.path().join("out")).expect("read out");
     assert_eq!(content.trim(), "100%");
 }
+
+#[rstest]
+#[ignore = "requires Ninja"]
+fn generate_script_with_backtick() {
+    if skip_if_ninja_unavailable() {
+        return;
+    }
+
+    let action = Action {
+        recipe: Recipe::Script {
+            script: "echo `echo hi` > out".into(),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "tick".into(),
+        inputs: Vec::new(),
+        explicit_outputs: vec![PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("tick".into(), action);
+    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.default_targets.push(PathBuf::from("out"));
+
+    let ninja = generate(&graph);
+    let dir = tempdir().expect("temp dir");
+    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
+    let status = Command::new("ninja")
+        .arg("out")
+        .current_dir(dir.path())
+        .status()
+        .expect("run ninja");
+    assert!(status.success());
+    let content = fs::read_to_string(dir.path().join("out")).expect("read out");
+    assert_eq!(content.trim(), "hi");
+}
