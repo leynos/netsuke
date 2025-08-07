@@ -28,7 +28,7 @@ fn skip_if_ninja_unavailable() -> bool {
 }
 
 #[rstest]
-#[case::phony(
+#[case::phony_target_runs_command(
     Action {
         recipe: Recipe::Command { command: "true".into() },
         description: None,
@@ -50,7 +50,7 @@ fn skip_if_ninja_unavailable() -> bool {
     concat!(
         "rule a\n",
         "  command = true\n\n",
-        "build out: phony in\n\n",
+        "build out: a in\n\n",
     ),
 )]
 #[case::standard_build(
@@ -303,4 +303,49 @@ fn generate_script_with_backtick() {
     assert!(status.success());
     let content = fs::read_to_string(dir.path().join("out")).expect("read out");
     assert_eq!(content.trim(), "hi");
+}
+
+#[rstest]
+fn integration_phony_action_executes_command() {
+    if skip_if_ninja_unavailable() {
+        return;
+    }
+
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "hello".into(),
+        Action {
+            recipe: Recipe::Command {
+                command: "touch action-called.txt".into(),
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph.targets.insert(
+        PathBuf::from("say-hello"),
+        BuildEdge {
+            action_id: "hello".into(),
+            inputs: Vec::new(),
+            explicit_outputs: vec![PathBuf::from("say-hello")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: true,
+            always: false,
+        },
+    );
+
+    let ninja = generate(&graph);
+    let dir = tempdir().expect("temp dir");
+    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
+    let status = Command::new("ninja")
+        .arg("say-hello")
+        .current_dir(dir.path())
+        .status()
+        .expect("run ninja");
+    assert!(status.success());
+    assert!(dir.path().join("action-called.txt").exists());
 }

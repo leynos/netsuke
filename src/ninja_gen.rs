@@ -145,12 +145,7 @@ impl Display for DisplayEdge<'_> {
         if !self.edge.implicit_outputs.is_empty() {
             write!(f, " | {}", join(&self.edge.implicit_outputs))?;
         }
-        let rule = if self.edge.phony {
-            "phony"
-        } else {
-            &self.edge.action_id
-        };
-        write!(f, ": {rule}")?;
+        write!(f, ": {}", self.edge.action_id)?;
         if !self.edge.inputs.is_empty() {
             write!(f, " {}", join(&self.edge.inputs))?;
         }
