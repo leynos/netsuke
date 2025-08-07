@@ -45,3 +45,13 @@ Feature: Manifest Parsing
     Given the manifest file "tests/data/action_invalid.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
+
+  Scenario: Rendering Jinja variables in a manifest
+    Given the manifest file "tests/data/jinja_vars.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo world"
+
+  Scenario: Parsing fails when a Jinja variable is undefined
+    Given the manifest file "tests/data/jinja_undefined.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails

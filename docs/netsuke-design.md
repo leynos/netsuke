@@ -485,7 +485,7 @@ pub enum StringOrList {
     String(String),
     List(Vec<String>),
 }
-```rust
+```
 
 *Note: The* `StringOrList` *enum with* `#[serde(untagged)]` *provides the
 flexibility for users to specify single sources, dependencies, and rule names
@@ -659,6 +659,12 @@ targets:
     sources: "{{ glob(src_dir ~ '/*.c') }}"
     #...
 ```
+
+To extract the `vars` mapping without triggering errors for undefined
+placeholders elsewhere in the template, Netsuke first renders the manifest with
+lenient undefined behaviour. The resulting YAML is parsed to obtain the global
+variables, which are then injected into the environment before a second, strict
+render pass produces the final manifest for deserialisation.
 
 ### 4.3 User-Defined Macros
 
@@ -1252,22 +1258,33 @@ libraries.[^27]
   error types. The `#[derive(Error)]` macro reduces boilerplate and allows for
   the creation of rich, semantic errors.[^29]
 
-  Rust
+Rust
 
-  ```rust // In src/ir.rs use thiserror::Error; use std::path::PathBuf;
+```rust
+// In src/ir.rs
+use thiserror::Error;
+use std::path::PathBuf;
 
-  #
-  pub enum IrGenError {
-      #
-      RuleNotFound { target_name: String, rule_name: String, },
+#[derive(Debug, Error)]
+pub enum IrGenError {
+    #[error("rule not found: {rule_name} for target {target_name}")]
+    RuleNotFound {
+        target_name: String,
+        rule_name: String,
+    },
 
-      #[error("circular dependency detected: {cycle:?}")]
-      CircularDependency { cycle: Vec<PathBuf>, },
+    #[error("circular dependency detected: {cycle:?}")]
+    CircularDependency {
+        cycle: Vec<PathBuf>,
+    },
 
-      #
-      DependencyNotFound { target_name: String, dependency_name: String, }, }
-
-  ```
+    #[error("dependency not found: {dependency_name} for target {target_name}")]
+    DependencyNotFound {
+        target_name: String,
+        dependency_name: String,
+    },
+}
+```
 
 - `anyhow`: This crate will be used in the main application logic (`main.rs`)
   and at the boundaries between modules. `anyhow::Result` serves as a

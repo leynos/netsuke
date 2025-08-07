@@ -75,15 +75,15 @@ compilation pipeline from parsing to execution.
 Objective: To integrate the minijinja templating engine, enabling dynamic build
 configurations with variables, control flow, and custom functions.
 
-- [ ] **Jinja Integration:**
+- [x] **Jinja Integration:**
 
-  - [ ] Integrate the `minijinja` crate into the build pipeline.
+  - [x] Integrate the `minijinja` crate into the build pipeline.
 
-  - [ ] Implement the two-pass parsing mechanism: the first pass renders the
+  - [x] Implement the two-pass parsing mechanism: the first pass renders the
     manifest as a Jinja template, and the second pass parses the resulting pure
     YAML string with serde_yml.
 
-  - [ ] Create a minijinja::Environment and populate its initial context with
+  - [x] Create a minijinja::Environment and populate its initial context with
     the global vars defined in the manifest.
 
 - [ ] **Dynamic Features and Custom Functions:**
