@@ -4,6 +4,7 @@
 //! with multiple inputs and outputs, complex dependency relationships, and
 //! edge cases like empty build graphs.
 
+use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::generate;
@@ -147,6 +148,14 @@ fn generate_multiline_script_valid() {
     graph.default_targets.push(PathBuf::from("out"));
 
     let ninja = generate(&graph);
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja",
+    ));
+    settings.bind(|| {
+        assert_snapshot!("multiline_script_ninja", &ninja);
+    });
     let lines: Vec<&str> = ninja.lines().collect();
     let command_line = lines.get(1).expect("command line");
     assert!(
