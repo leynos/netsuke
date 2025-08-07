@@ -84,6 +84,20 @@ fn path_key(paths: &[PathBuf]) -> String {
     parts.join("\u{0}")
 }
 
+/// Escape a script for embedding within a `printf %b` string.
+///
+/// `printf` interprets backslashes, so each backslash is doubled. Double quotes
+/// and dollar signs are escaped to prevent the outer shell from expanding them
+/// before `printf` processes the string. Newlines are encoded as `\n` to keep
+/// the command on a single line.
+fn escape_script(script: &str) -> String {
+    script
+        .replace('\\', "\\\\")
+        .replace('$', "\\$")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
+
 /// Wrapper struct to display a rule with its identifier.
 struct NamedAction<'a> {
     id: &'a str,
@@ -99,11 +113,7 @@ impl Display for NamedAction<'_> {
                 // Ninja commands must be single-line. Encode newlines and
                 // reconstruct the original script with `printf %b` piped into
                 // a fresh shell to preserve expected expansions.
-                let escaped = script
-                    .replace('\\', "\\\\")
-                    .replace('$', "\\$")
-                    .replace('"', "\\\"")
-                    .replace('\n', "\\n");
+                let escaped = escape_script(script);
                 writeln!(
                     f,
                     "  command = /bin/sh -e -c \"printf %b \\\"{escaped}\\\" | /bin/sh -e\""

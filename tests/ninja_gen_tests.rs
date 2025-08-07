@@ -168,3 +168,47 @@ fn generate_multiline_script_valid() {
         .expect("run ninja");
     assert!(status.success());
 }
+
+#[rstest]
+fn generate_script_with_percent() {
+    let action = Action {
+        recipe: Recipe::Script {
+            script: "echo 100% > out".into(),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "percent".into(),
+        inputs: Vec::new(),
+        explicit_outputs: vec![PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("percent".into(), action);
+    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.default_targets.push(PathBuf::from("out"));
+
+    let ninja = generate(&graph);
+    let ninja_check = Command::new("ninja").arg("--version").output();
+    if ninja_check.is_err() || !ninja_check.as_ref().expect("spawn ninja").status.success() {
+        eprintln!("skipping test: ninja must be installed for integration tests");
+        return;
+    }
+    let dir = tempdir().expect("temp dir");
+    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
+    let status = Command::new("ninja")
+        .arg("out")
+        .current_dir(dir.path())
+        .status()
+        .expect("run ninja");
+    assert!(status.success());
+    let content = fs::read_to_string(dir.path().join("out")).expect("read out");
+    assert_eq!(content.trim(), "100%");
+}
