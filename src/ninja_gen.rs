@@ -86,17 +86,16 @@ fn path_key(paths: &[PathBuf]) -> String {
 
 /// Escape a script for embedding within a single-quoted `printf %b` argument.
 ///
-/// Backslashes and single quotes are escaped so the outer shell preserves
-/// them, while newlines become `\n` to keep the rule on one line. Percent
-/// signs, dollar signs, and backticks are passed through unchanged because the
-/// script is an argument rather than a format string, allowing the inner shell
-/// to perform variable expansion and command substitution.
+/// Backslashes, single quotes, and backticks are escaped so the outer shell
+/// preserves them, while newlines become `\n` to keep the rule on one line.
+/// Percent and dollar signs are passed through unchanged because the script is
+/// an argument rather than a format string, allowing the inner shell to
+/// perform variable expansion.
 fn escape_script(script: &str) -> String {
     script
         .replace('\\', "\\\\")
         .replace('\'', "'\"'\"'")
-        // Backticks remain unescaped to allow command substitution when the
-        // script executes.
+        .replace('`', "\\`")
         .replace('\n', "\\n")
 }
 
