@@ -62,7 +62,7 @@ pub struct BuildEdge {
     pub implicit_outputs: Vec<PathBuf>,
     /// Order-only dependencies that do not trigger rebuilds (Ninja `||`).
     pub order_only_deps: Vec<PathBuf>,
-    /// Always run the command even if the output exists.
+    /// Output does not correspond to a real file.
     pub phony: bool,
     /// Run the command on every invocation regardless of timestamps.
     pub always: bool,

@@ -9,9 +9,9 @@ use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::generate;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::{fs, path::PathBuf, process::Command};
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 
 fn skip_if_ninja_unavailable() -> bool {
     match Command::new("ninja").arg("--version").output() {
@@ -27,8 +27,26 @@ fn skip_if_ninja_unavailable() -> bool {
     }
 }
 
+/// Define how the integration test should assert Ninja's behaviour.
+#[derive(Debug)]
+enum AssertionType {
+    FileContent(String),
+    FileExists,
+    StatusSuccess,
+}
+
+/// Provide a temporary directory when Ninja is available, skipping otherwise.
+#[fixture]
+fn ninja_integration_setup() -> Option<TempDir> {
+    if skip_if_ninja_unavailable() {
+        None
+    } else {
+        Some(tempdir().expect("temp dir"))
+    }
+}
+
 #[rstest]
-#[case::phony(
+#[case::phony_target_runs_command(
     Action {
         recipe: Recipe::Command { command: "true".into() },
         description: None,
@@ -50,7 +68,7 @@ fn skip_if_ninja_unavailable() -> bool {
     concat!(
         "rule a\n",
         "  command = true\n\n",
-        "build out: phony in\n\n",
+        "build out: a in\n\n",
     ),
 )]
 #[case::standard_build(
@@ -169,72 +187,40 @@ fn generate_multiline_script_snapshot() {
     );
 }
 
-/// Ensure a multi-line script produces a Ninja manifest that Ninja accepts.
+/// Integration scenarios to confirm Ninja executes commands correctly.
 #[rstest]
-#[ignore = "requires Ninja"]
-fn integration_multiline_script_valid() {
-    if skip_if_ninja_unavailable() {
-        return;
-    }
-
-    let mut graph = BuildGraph::default();
-    graph.actions.insert(
-        "script".into(),
-        Action {
-            recipe: Recipe::Script {
-                script: "echo one\necho two".into(),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        },
-    );
-    graph.targets.insert(
-        PathBuf::from("out"),
-        BuildEdge {
-            action_id: "script".into(),
-            inputs: Vec::new(),
-            explicit_outputs: vec![PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
-    graph.default_targets.push(PathBuf::from("out"));
-
-    let ninja = generate(&graph);
-    let dir = tempdir().expect("temp dir");
-    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
-    let status = Command::new("ninja")
-        .arg("-n")
-        .current_dir(dir.path())
-        .status()
-        .expect("run ninja");
-    assert!(status.success());
-}
-
-/// Test that scripts containing percent signs execute correctly.
-#[rstest]
-#[ignore = "requires Ninja"]
-fn generate_script_with_percent() {
-    if skip_if_ninja_unavailable() {
-        return;
-    }
-
-    let action = Action {
-        recipe: Recipe::Script {
-            script: "echo 100% > out".into(),
-        },
+#[case::multiline_script_valid(
+    Action {
+        recipe: Recipe::Script { script: "echo one\necho two".into() },
         description: None,
         depfile: None,
         deps_format: None,
         pool: None,
         restat: false,
-    };
-    let edge = BuildEdge {
+    },
+    BuildEdge {
+        action_id: "script".into(),
+        inputs: Vec::new(),
+        explicit_outputs: vec![PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    },
+    PathBuf::from("out"),
+    vec!["-n"],
+    AssertionType::StatusSuccess,
+)]
+#[case::script_with_percent(
+    Action {
+        recipe: Recipe::Script { script: "echo 100% > out".into() },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    },
+    BuildEdge {
         action_id: "percent".into(),
         inputs: Vec::new(),
         explicit_outputs: vec![PathBuf::from("out")],
@@ -242,43 +228,21 @@ fn generate_script_with_percent() {
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
-    };
-    let mut graph = BuildGraph::default();
-    graph.actions.insert("percent".into(), action);
-    graph.targets.insert(PathBuf::from("out"), edge);
-    graph.default_targets.push(PathBuf::from("out"));
-
-    let ninja = generate(&graph);
-    let dir = tempdir().expect("temp dir");
-    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
-    let status = Command::new("ninja")
-        .arg("out")
-        .current_dir(dir.path())
-        .status()
-        .expect("run ninja");
-    assert!(status.success());
-    let content = fs::read_to_string(dir.path().join("out")).expect("read out");
-    assert_eq!(content.trim(), "100%");
-}
-
-#[rstest]
-#[ignore = "requires Ninja"]
-fn generate_script_with_backtick() {
-    if skip_if_ninja_unavailable() {
-        return;
-    }
-
-    let action = Action {
-        recipe: Recipe::Script {
-            script: "echo `echo hi` > out".into(),
-        },
+    },
+    PathBuf::from("out"),
+    vec!["out"],
+    AssertionType::FileContent("100%".into()),
+)]
+#[case::script_with_backtick(
+    Action {
+        recipe: Recipe::Script { script: "echo `echo hi` > out".into() },
         description: None,
         depfile: None,
         deps_format: None,
         pool: None,
         restat: false,
-    };
-    let edge = BuildEdge {
+    },
+    BuildEdge {
         action_id: "tick".into(),
         inputs: Vec::new(),
         explicit_outputs: vec![PathBuf::from("out")],
@@ -286,21 +250,74 @@ fn generate_script_with_backtick() {
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
+    },
+    PathBuf::from("out"),
+    vec!["out"],
+    AssertionType::FileContent("hi".into()),
+)]
+#[case::phony_action_executes_command(
+    Action {
+        recipe: Recipe::Command { command: "touch action-called.txt".into() },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    },
+    BuildEdge {
+        action_id: "hello".into(),
+        inputs: Vec::new(),
+        explicit_outputs: vec![PathBuf::from("say-hello")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: true,
+        always: false,
+    },
+    PathBuf::from("action-called.txt"),
+    vec!["say-hello"],
+    AssertionType::FileExists,
+)]
+fn ninja_integration_tests(
+    ninja_integration_setup: Option<TempDir>,
+    #[case] action: Action,
+    #[case] edge: BuildEdge,
+    #[case] target_name: PathBuf,
+    #[case] ninja_args: Vec<&str>,
+    #[case] assertion: AssertionType,
+) {
+    let Some(dir) = ninja_integration_setup else {
+        return;
     };
+
+    let output = edge
+        .explicit_outputs
+        .first()
+        .expect("explicit output")
+        .clone();
     let mut graph = BuildGraph::default();
-    graph.actions.insert("tick".into(), action);
-    graph.targets.insert(PathBuf::from("out"), edge);
-    graph.default_targets.push(PathBuf::from("out"));
+    graph.actions.insert(edge.action_id.clone(), action);
+    graph.targets.insert(output.clone(), edge);
+    graph.default_targets.push(output);
 
     let ninja = generate(&graph);
-    let dir = tempdir().expect("temp dir");
     fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
     let status = Command::new("ninja")
-        .arg("out")
+        .args(&ninja_args)
         .current_dir(dir.path())
         .status()
         .expect("run ninja");
-    assert!(status.success());
-    let content = fs::read_to_string(dir.path().join("out")).expect("read out");
-    assert_eq!(content.trim(), "hi");
+
+    match assertion {
+        AssertionType::StatusSuccess => assert!(status.success()),
+        AssertionType::FileExists => {
+            assert!(status.success());
+            assert!(dir.path().join(target_name).exists());
+        }
+        AssertionType::FileContent(expected) => {
+            assert!(status.success());
+            let content =
+                fs::read_to_string(dir.path().join(target_name)).expect("read target file");
+            assert_eq!(content.trim(), expected);
+        }
+    }
 }
