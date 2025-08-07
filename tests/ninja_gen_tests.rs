@@ -8,7 +8,8 @@ use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::generate;
 use rstest::rstest;
-use std::path::PathBuf;
+use std::{fs, path::PathBuf, process::Command};
+use tempfile::tempdir;
 
 #[rstest]
 fn generate_phony() {
@@ -117,4 +118,53 @@ fn generate_empty_graph() {
     let graph = BuildGraph::default();
     let ninja = generate(&graph);
     assert!(ninja.is_empty());
+}
+
+#[rstest]
+fn generate_multiline_script_valid() {
+    let action = Action {
+        recipe: Recipe::Script {
+            script: "echo one\necho two".into(),
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "script".into(),
+        inputs: Vec::new(),
+        explicit_outputs: vec![PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("script".into(), action);
+    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.default_targets.push(PathBuf::from("out"));
+
+    let ninja = generate(&graph);
+    let lines: Vec<&str> = ninja.lines().collect();
+    let command_line = lines.get(1).expect("command line");
+    assert!(
+        command_line.contains("\\n"),
+        "script newline should be encoded"
+    );
+
+    let ninja_check = Command::new("ninja").arg("--version").output();
+    if ninja_check.is_err() || !ninja_check.as_ref().expect("spawn ninja").status.success() {
+        eprintln!("skipping test: ninja must be installed for integration tests");
+        return;
+    }
+    let dir = tempdir().expect("temp dir");
+    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
+    let status = Command::new("ninja")
+        .arg("-n")
+        .current_dir(dir.path())
+        .status()
+        .expect("run ninja");
+    assert!(status.success());
 }
