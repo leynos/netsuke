@@ -84,6 +84,23 @@ fn path_key(paths: &[PathBuf]) -> String {
     parts.join("\u{0}")
 }
 
+/// Escape a script for embedding within a single-quoted `printf %b` argument.
+///
+/// Backslashes, dollar signs, double quotes, backticks, and single quotes are
+/// escaped so the outer shell preserves them, while newlines become `\n` to
+/// keep the rule on one line. Percent signs are passed through unchanged because
+/// the script is an argument rather than a format string, allowing the inner
+/// shell to perform variable expansion.
+fn escape_script(script: &str) -> String {
+    script
+        .replace('\\', "\\\\")
+        .replace('$', "\\$")
+        .replace('"', "\\\"")
+        .replace('`', "\\`")
+        .replace('\'', "'\"'\"'")
+        .replace('\n', "\\n")
+}
+
 /// Wrapper struct to display a rule with its identifier.
 struct NamedAction<'a> {
     id: &'a str,
@@ -96,8 +113,14 @@ impl Display for NamedAction<'_> {
         match &self.action.recipe {
             Recipe::Command { command } => writeln!(f, "  command = {command}")?,
             Recipe::Script { script } => {
-                let escaped = script.replace('\\', "\\\\").replace('"', "\\\"");
-                writeln!(f, "  command = /bin/sh -e -c \"{escaped}\"")?;
+                // Ninja commands must be single-line. Encode newlines and
+                // reconstruct the original script with `printf %b` piped into
+                // a fresh shell to preserve expected expansions.
+                let escaped = escape_script(script);
+                writeln!(
+                    f,
+                    "  command = /bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\""
+                )?;
             }
             Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
         }

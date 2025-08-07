@@ -1,0 +1,11 @@
+---
+source: tests/ninja_gen_tests.rs
+assertion_line: 176
+expression: "&ninja"
+---
+rule script
+  command = /bin/sh -e -c "printf %b 'echo one\necho two' | /bin/sh -e"
+
+build out: script
+
+default out
