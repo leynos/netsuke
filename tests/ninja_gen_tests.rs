@@ -1,8 +1,9 @@
 //! Unit tests for Ninja file generation.
 //!
-//! Tests cover various scenarios including phony targets, standard builds
-//! with multiple inputs and outputs, complex dependency relationships, and
-//! edge cases like empty build graphs.
+//! Snapshot tests use `insta` to ensure the emitted manifest remains stable.
+//! Tests cover various scenarios including phony targets, standard builds with
+//! multiple inputs and outputs, complex dependency relationships, and edge
+//! cases like empty build graphs.
 
 use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
@@ -11,6 +12,20 @@ use netsuke::ninja_gen::generate;
 use rstest::rstest;
 use std::{fs, path::PathBuf, process::Command};
 use tempfile::tempdir;
+
+fn skip_if_ninja_unavailable() -> bool {
+    match Command::new("ninja").arg("--version").output() {
+        Err(_) => {
+            eprintln!("skipping test: ninja not found in PATH");
+            true
+        }
+        Ok(output) if !output.status.success() => {
+            eprintln!("skipping test: ninja --version failed");
+            true
+        }
+        Ok(_) => false,
+    }
+}
 
 #[rstest]
 fn generate_phony() {
@@ -122,29 +137,33 @@ fn generate_empty_graph() {
 }
 
 #[rstest]
-fn generate_multiline_script_valid() {
-    let action = Action {
-        recipe: Recipe::Script {
-            script: "echo one\necho two".into(),
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let edge = BuildEdge {
-        action_id: "script".into(),
-        inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    };
+fn generate_multiline_script_snapshot() {
     let mut graph = BuildGraph::default();
-    graph.actions.insert("script".into(), action);
-    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.actions.insert(
+        "script".into(),
+        Action {
+            recipe: Recipe::Script {
+                script: "echo one\necho two".into(),
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph.targets.insert(
+        PathBuf::from("out"),
+        BuildEdge {
+            action_id: "script".into(),
+            inputs: Vec::new(),
+            explicit_outputs: vec![PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: false,
+            always: false,
+        },
+    );
     graph.default_targets.push(PathBuf::from("out"));
 
     let ninja = generate(&graph);
@@ -160,14 +179,47 @@ fn generate_multiline_script_valid() {
     let command_line = lines.get(1).expect("command line");
     assert!(
         command_line.contains("\\n"),
-        "script newline should be encoded"
+        "script newline should be encoded",
     );
+}
 
-    let ninja_check = Command::new("ninja").arg("--version").output();
-    if ninja_check.is_err() || !ninja_check.as_ref().expect("spawn ninja").status.success() {
-        eprintln!("skipping test: ninja must be installed for integration tests");
+/// Ensure a multi-line script produces a Ninja manifest that Ninja accepts.
+#[rstest]
+#[ignore = "requires Ninja"]
+fn integration_multiline_script_valid() {
+    if skip_if_ninja_unavailable() {
         return;
     }
+
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "script".into(),
+        Action {
+            recipe: Recipe::Script {
+                script: "echo one\necho two".into(),
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph.targets.insert(
+        PathBuf::from("out"),
+        BuildEdge {
+            action_id: "script".into(),
+            inputs: Vec::new(),
+            explicit_outputs: vec![PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: false,
+            always: false,
+        },
+    );
+    graph.default_targets.push(PathBuf::from("out"));
+
+    let ninja = generate(&graph);
     let dir = tempdir().expect("temp dir");
     fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
     let status = Command::new("ninja")
@@ -178,8 +230,14 @@ fn generate_multiline_script_valid() {
     assert!(status.success());
 }
 
+/// Test that scripts containing percent signs execute correctly.
 #[rstest]
+#[ignore = "requires Ninja"]
 fn generate_script_with_percent() {
+    if skip_if_ninja_unavailable() {
+        return;
+    }
+
     let action = Action {
         recipe: Recipe::Script {
             script: "echo 100% > out".into(),
@@ -205,11 +263,6 @@ fn generate_script_with_percent() {
     graph.default_targets.push(PathBuf::from("out"));
 
     let ninja = generate(&graph);
-    let ninja_check = Command::new("ninja").arg("--version").output();
-    if ninja_check.is_err() || !ninja_check.as_ref().expect("spawn ninja").status.success() {
-        eprintln!("skipping test: ninja must be installed for integration tests");
-        return;
-    }
     let dir = tempdir().expect("temp dir");
     fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
     let status = Command::new("ninja")

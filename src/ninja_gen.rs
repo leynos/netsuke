@@ -84,17 +84,19 @@ fn path_key(paths: &[PathBuf]) -> String {
     parts.join("\u{0}")
 }
 
-/// Escape a script for embedding within a `printf %b` string.
+/// Escape a script for embedding within a single-quoted `printf %b` argument.
 ///
-/// `printf` interprets backslashes, so each backslash is doubled. Double quotes
-/// and dollar signs are escaped to prevent the outer shell from expanding them
-/// before `printf` processes the string. Newlines are encoded as `\n` to keep
-/// the command on a single line.
+/// Backslashes and single quotes are escaped so the outer shell preserves
+/// them, while newlines become `\n` to keep the rule on one line. Percent
+/// signs, dollar signs, and backticks are passed through unchanged because the
+/// script is an argument rather than a format string, allowing the inner shell
+/// to perform variable expansion and command substitution.
 fn escape_script(script: &str) -> String {
     script
         .replace('\\', "\\\\")
-        .replace('$', "\\$")
-        .replace('"', "\\\"")
+        .replace('\'', "'\"'\"'")
+        // Backticks remain unescaped to allow command substitution when the
+        // script executes.
         .replace('\n', "\\n")
 }
 
@@ -116,7 +118,7 @@ impl Display for NamedAction<'_> {
                 let escaped = escape_script(script);
                 writeln!(
                     f,
-                    "  command = /bin/sh -e -c \"printf %b \\\"{escaped}\\\" | /bin/sh -e\""
+                    "  command = /bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\""
                 )?;
             }
             Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
