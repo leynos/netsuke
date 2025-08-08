@@ -132,6 +132,47 @@ fn run_build_with_emit_keeps_file() {
     drop(ninja_path);
 }
 
+#[cfg(unix)]
+#[test]
+#[serial]
+fn run_build_with_emit_creates_parent_dirs() {
+    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let original_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
+    paths.insert(0, ninja_dir.path().to_path_buf());
+    let new_path = std::env::join_paths(paths).expect("join paths");
+    unsafe {
+        std::env::set_var("PATH", &new_path);
+    }
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
+    let nested_dir = temp.path().join("nested").join("dir");
+    let emit_path = nested_dir.join("emitted.ninja");
+    assert!(!nested_dir.exists());
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: false,
+        command: Some(Commands::Build(BuildArgs {
+            emit: Some(emit_path.clone()),
+            targets: vec![],
+        })),
+    };
+
+    let result = run(&cli);
+    assert!(result.is_ok());
+    assert!(emit_path.exists());
+    assert!(nested_dir.exists());
+
+    unsafe {
+        std::env::set_var("PATH", original_path);
+    }
+    drop(ninja_path);
+}
+
 #[test]
 #[serial]
 fn run_manifest_subcommand_writes_file() {

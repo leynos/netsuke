@@ -163,6 +163,13 @@ fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
 /// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
 /// ```
 fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
+    // Ensure the parent directory exists; this prevents failures when the
+    // user specifies a nested output path with --emit or when temporary
+    // files are created under a new directory structure.
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
+    }
     fs::write(path, content.as_str())
         .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
     info!("Generated Ninja file at {}", path.display());
