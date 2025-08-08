@@ -51,7 +51,7 @@ impl CommandArg {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
     #[must_use]
@@ -65,6 +65,16 @@ impl<'a> BuildTargets<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+#[allow(
+    clippy::derivable_impls,
+    reason = "Derive fails for non-'static lifetimes; manual impl returns empty slice."
+)]
+impl Default for BuildTargets<'_> {
+    fn default() -> Self {
+        Self(&[])
     }
 }
 
