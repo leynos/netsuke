@@ -15,7 +15,7 @@ use rstest::rstest;
         pool: None,
         restat: false,
     },
-    "b43a76a10b522e53fc0fb0fcb3354939e00d6b708252050c27100da204a811ae"
+    "0fe3670f0746dcec34768df158d814ac099e416b6045e7e213d0aabd6aa761cb"
 )]
 #[case(
     Action {
@@ -59,7 +59,7 @@ use rstest::rstest;
         pool: None,
         restat: false,
     },
-    "333d2b3f4f805b80c2e1aef1b5c9f1e0bbc990b77121c731f14edf3691ce120c"
+    "57023b1c00f7daf410d3d2077346e38014d3612c278aadef73a8484c94bdcb77"
 )]
 // Order of rule names influences the digest.
 #[case(
@@ -74,5 +74,6 @@ use rstest::rstest;
     "d5f1a262a95b75db3a7a79a5855eb27b6b430833e7ba93538502a16ebd03f50b"
 )]
 fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
-    assert_eq!(ActionHasher::hash(&action), expected);
+    let digest = ActionHasher::hash(&action).expect("hash action");
+    assert_eq!(digest, expected);
 }

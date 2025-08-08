@@ -1267,14 +1267,23 @@ Rust
 
 #[derive(Debug, Error)]
 pub enum IrGenError {
-    #[error("rule not found: {rule_name} for target {target_name}")]
-    RuleNotFound { target_name: String, rule_name: String, },
+    #[error("rule '{rule_name}' referenced by target '{target_name}' was not found")]
+    RuleNotFound { target_name: String, rule_name: String },
+
+    #[error("multiple rules for target '{target_name}': {rules:?}")]
+    MultipleRules { target_name: String, rules: Vec<String> },
+
+    #[error("No rules specified for target {target_name}")]
+    EmptyRule { target_name: String },
+
+    #[error("duplicate target outputs: {outputs:?}")]
+    DuplicateOutput { outputs: Vec<String> },
 
     #[error("circular dependency detected: {cycle:?}")]
-    CircularDependency { cycle: Vec<PathBuf>, },
+    CircularDependency { cycle: Vec<PathBuf> },
 
-    #[error("dependency not found: {dependency_name} for target {target_name}")]
-    DependencyNotFound { target_name: String, dependency_name: String, }, }
+    #[error("failed to serialise action: {0}")]
+    ActionSerialisation(#[from] serde_json::Error), }
 ```
 
 - `anyhow`: This crate will be used in the main application logic (`main.rs`)

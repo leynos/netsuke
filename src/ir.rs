@@ -102,6 +102,9 @@ pub enum IrGenError {
 
     #[error("circular dependency detected: {cycle:?}")]
     CircularDependency { cycle: Vec<PathBuf> },
+
+    #[error("failed to serialise action: {0}")]
+    ActionSerialisation(#[from] serde_json::Error),
 }
 
 impl BuildGraph {
@@ -115,7 +118,7 @@ impl BuildGraph {
         let mut graph = Self::default();
         let mut rule_map = HashMap::new();
 
-        Self::process_rules(manifest, &mut graph.actions, &mut rule_map);
+        Self::process_rules(manifest, &mut graph.actions, &mut rule_map)?;
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
         Self::process_defaults(manifest, &mut graph.default_targets);
 
@@ -128,11 +131,12 @@ impl BuildGraph {
         manifest: &NetsukeManifest,
         actions: &mut HashMap<String, Action>,
         rule_map: &mut HashMap<String, String>,
-    ) {
+    ) -> Result<(), IrGenError> {
         for rule in &manifest.rules {
-            let hash = register_action(actions, rule.recipe.clone(), rule.description.clone());
+            let hash = register_action(actions, rule.recipe.clone(), rule.description.clone())?;
             rule_map.insert(rule.name.clone(), hash);
         }
+        Ok(())
     }
 
     fn process_targets(
@@ -147,7 +151,7 @@ impl BuildGraph {
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => resolve_rule(rule, rule_map, &target_name)?,
                 Recipe::Command { .. } | Recipe::Script { .. } => {
-                    register_action(actions, target.recipe.clone(), None)
+                    register_action(actions, target.recipe.clone(), None)?
                 }
             };
 
@@ -189,7 +193,7 @@ fn register_action(
     actions: &mut HashMap<String, Action>,
     recipe: Recipe,
     description: Option<String>,
-) -> String {
+) -> Result<String, IrGenError> {
     let action = Action {
         recipe,
         description,
@@ -198,9 +202,9 @@ fn register_action(
         pool: None,
         restat: false,
     };
-    let hash = ActionHasher::hash(&action);
+    let hash = ActionHasher::hash(&action).map_err(IrGenError::ActionSerialisation)?;
     actions.entry(hash.clone()).or_insert(action);
-    hash
+    Ok(hash)
 }
 
 fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>

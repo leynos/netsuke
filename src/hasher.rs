@@ -26,22 +26,40 @@
 use sha2::{Digest, Sha256};
 
 use crate::ir::Action;
+use serde_json_canonicalizer::to_writer;
+use std::io::{self, Write};
 
 /// Computes stable digests for [`Action`] definitions.
 pub struct ActionHasher;
 
+struct DigestWriter<'a, D: Digest>(&'a mut D);
+
+impl<D: Digest> Write for DigestWriter<'_, D> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.update(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 impl ActionHasher {
     /// Calculate the hash of an [`Action`].
     ///
-    /// # Panics
+    /// Returns a lowercase hex-encoded SHA-256 of the action's canonical JSON.
     ///
-    /// Panics if the action cannot be serialised to JSON.
-    #[must_use]
-    pub fn hash(action: &Action) -> String {
-        // Serialise using canonical JSON so field order and absent options do
-        // not affect the resulting digest.
-        let bytes = serde_json::to_vec(action).expect("serialise action to JSON");
-        let digest = Sha256::digest(bytes);
-        format!("{digest:x}")
+    /// # Errors
+    ///
+    /// Returns an error if the action cannot be serialised to JSON.
+    pub fn hash(action: &Action) -> Result<String, serde_json::Error> {
+        let mut hasher = Sha256::new();
+        {
+            // Canonical JSON: compact formatting with sorted keys.
+            let mut writer = DigestWriter(&mut hasher);
+            to_writer(action, &mut writer)?;
+        }
+        Ok(format!("{:x}", hasher.finalize()))
     }
 }
