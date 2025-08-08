@@ -1,0 +1,10 @@
+netsuke_version: 1.0.0
+vars:
+  items:
+    - foo
+    - bar
+targets:
+{% for item in items %}
+  - name: "{{ item }}"
+    command: "echo {{ item }}"
+{% endfor %}
