@@ -18,6 +18,8 @@ use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
+/// Environment variable override for the Ninja executable.
+pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
@@ -49,7 +51,7 @@ impl CommandArg {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
     #[must_use]
@@ -122,7 +124,8 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
         (tmp.path().to_path_buf(), Some(tmp))
     };
 
-    run_ninja(Path::new(NINJA_PROGRAM), cli, &build_path, &targets)?;
+    let program = resolve_ninja_program();
+    run_ninja(program.as_path(), cli, &build_path, &targets)?;
     Ok(())
 }
 
@@ -210,6 +213,12 @@ fn resolve_manifest_path(cli: &Cli) -> std::path::PathBuf {
     cli.directory
         .as_ref()
         .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file))
+}
+
+/// Determine which Ninja executable to invoke.
+#[must_use]
+fn resolve_ninja_program() -> PathBuf {
+    std::env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
 }
 
 /// Check if `arg` contains a sensitive keyword.

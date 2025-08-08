@@ -108,7 +108,7 @@ fn run(world: &mut CliWorld) {
     } else {
         Path::new(NINJA_PROGRAM)
     };
-    let targets = BuildTargets::new(&[]);
+    let targets = BuildTargets::default();
     match runner::run_ninja(program, cli, Path::new("build.ninja"), &targets) {
         Ok(()) => {
             world.run_status = Some(true);
