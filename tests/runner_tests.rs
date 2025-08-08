@@ -169,9 +169,7 @@ fn run_manifest_subcommand_writes_file() {
 fn run_respects_env_override_for_ninja() {
     let (temp_dir, ninja_path) = support::fake_ninja(0);
     let original = std::env::var_os(NINJA_ENV);
-    unsafe {
-        std::env::set_var(NINJA_ENV, &ninja_path);
-    }
+    std::env::set_var(NINJA_ENV, &ninja_path);
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -190,12 +188,10 @@ fn run_respects_env_override_for_ninja() {
     let result = run(&cli);
     assert!(result.is_ok());
 
-    unsafe {
-        if let Some(val) = original {
-            std::env::set_var(NINJA_ENV, val);
-        } else {
-            std::env::remove_var(NINJA_ENV);
-        }
+    if let Some(val) = original {
+        std::env::set_var(NINJA_ENV, val);
+    } else {
+        std::env::remove_var(NINJA_ENV);
     }
     drop(ninja_path);
     drop(temp_dir);
