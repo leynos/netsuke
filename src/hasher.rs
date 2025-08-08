@@ -19,7 +19,7 @@
 //!     pool: None,
 //!     restat: false,
 //! };
-//! let hash = ActionHasher::hash(&action);
+//! let hash = ActionHasher::hash(&action).expect("hash action");
 //! assert!(!hash.is_empty());
 //! ```
 
