@@ -13,14 +13,15 @@ prevents them from reliably performing context-aware refactoring, where a
 change in one syntactic location (e.g., a function signature) should not affect
 another (e.g., a string literal).
 
-This is the precise gap that `srgn`, the "code surgeon," is designed to fill.1
-It operates as a powerful hybrid, blending the regex-based pattern matching of
+This is the precise gap that `srgn`, the "code surgeon," is designed to
+fill.[^1] It operates as a powerful hybrid, blending the regex-based pattern
+matching of
 
 `grep`, the stream-editing capabilities of `tr` and `sed`, and the syntactic
-intelligence of the `tree-sitter` parsing framework.1
+intelligence of the `tree-sitter` parsing framework.[^1]
 
 `srgn` complements traditional tools by operating on a different "dimension" of
-code analysis.1 It is not a replacement for full-featured IDE refactoring
+code analysis.[^1] It is not a replacement for full-featured IDE refactoring
 engines but a specialized scalpel for tasks that are too complex for a simple
 regex and too specific for a generic IDE command.
 
@@ -40,17 +41,17 @@ complex cleanups.
 
 To ensure clarity, it is essential to acknowledge that the name "srgn" is
 overloaded across different domains. This guide is exclusively dedicated to
-`alexpovel/srgn`, the command-line code search and manipulation utility.1 Other
-projects bearing a similar name are unrelated to the tool discussed here. These
-include, but are not limited to, SRGAN, a Generative Adversarial Network for
-image super-resolution 3; SRGN, a high-energy physics technique for parameter
-estimation 4; and SRGN (SolRagon), a cryptocurrency token.6 This report focuses
-solely on the code refactoring tool.
+`alexpovel/srgn`, the command-line code search and manipulation utility.[^1]
+Other projects bearing a similar name are unrelated to the tool discussed here.
+These include, but are not limited to, SRGAN, a Generative Adversarial Network
+for image super-resolution 3; SRGN, a high-energy physics technique for
+parameter estimation 4; and SRGN (SolRagon), a cryptocurrency token.[^6] This
+report focuses solely on the code refactoring tool.
 
 ### 1.3 Core Philosophy: Scopes, Actions, and Intentional Simplicity
 
 The design of `srgn` is built upon two foundational pillars: **Scopes** and
-**Actions**.2 Scopes define
+**Actions**.[^2] Scopes define
 
 *where* in the code an operation should take place, while Actions define *what*
 should be done to the text within that scope. This separation of concerns is
@@ -58,7 +59,7 @@ central to the tool's power and usability.
 
 A core tenet of `srgn` is its intentional simplicity. The documentation states
 its design goal clearly: "if you know regex and the basics of the language you
-are working with, you are good to go".2 This philosophy distinguishes
+are working with, you are good to go".[^2] This philosophy distinguishes
 
 `srgn` from other advanced code-querying tools. While tools like Semgrep use a
 declarative, template-based syntax with metavariables (`$X`) and ellipses
@@ -87,12 +88,12 @@ supported 1:
 
 - **Prebuilt Binaries**: The most straightforward method is to download a
   prebuilt binary for your specific architecture directly from the project's
-  GitHub Releases page.1
+  GitHub Releases page.[^1]
 
 - `cargo-binstall`: For users with the Rust toolchain, this is the recommended
   installation method. It is significantly faster than compiling from source as
   it downloads prebuilt binaries when available. It is tested in the project's
-  CI and serves as a reliable installation vector.1
+  CI and serves as a reliable installation vector.[^1]
 
   Bash
 
@@ -107,7 +108,7 @@ supported 1:
 
 - `cargo install`: The traditional method of compiling from source using Rust's
   package manager. This requires a C compiler to be present on the system
-  (`gcc` on Linux, `clang` on macOS, or MSVC on Windows).1
+  (`gcc` on Linux, `clang` on macOS, or MSVC on Windows).[^1]
 
   Bash
 
@@ -128,7 +129,8 @@ supported 1:
   - **MacPorts (macOS):** `sudo port install srgn`
 
 For integration into automated workflows, a GitHub Action is available for
-`cargo-binstall`, allowing for easy installation of `srgn` in CI/CD pipelines.1
+`cargo-binstall`, allowing for easy installation of `srgn` in CI/CD
+pipelines.[^1]
 
 ### 2.2 The Anatomy of a srgn Command
 
@@ -156,23 +158,24 @@ echo 'Hello World!' | srgn '[wW]orld' -- 'there'
 - \`\`: These are optional file or directory paths. If omitted, `srgn` reads
   from standard input (`stdin`). If a directory is provided, `srgn` performs a
   high-speed, recursive search for relevant files based on extensions and
-  shebangs.1
+  shebangs.[^1]
 
 - `-- ''`: This is the optional replacement string. The `--` separator is a
   critical safety feature that disambiguates the replacement string from file
   paths or other arguments, especially when the replacement itself might
-  resemble a flag.1
+  resemble a flag.[^1]
 
 If no replacement string or action flags are provided, `srgn` may enter its
-"search mode," which transforms it into a powerful, syntax-aware search tool.1
+"search mode," which transforms it into a powerful, syntax-aware search
+tool.[^1]
 
 ### 2.3 Search Mode: ripgrep with Syntactic Superpowers
 
 When a language flag (e.g., `--python` or its shorthand `--py` 9) is provided
 without any accompanying actions or a replacement string,
 
-`srgn` enters search mode.1 The documentation describes this mode as "'ripgrep
-but with syntactical language elements'".2
+`srgn` enters search mode.[^1] The documentation describes this mode as
+"'ripgrep but with syntactical language elements'".[^2]
 
 For instance, to find all class definitions in a Python project, one could run:
 
@@ -184,14 +187,14 @@ srgn --python 'class'.
 
 The output mimics `grep` and `ripgrep`, prepending the file name and line
 number to each match, making it easy to integrate into standard command-line
-workflows.2
+workflows.[^2]
 
 This mode is not only precise but also exceptionally fast. A benchmark cited in
 the documentation demonstrates its performance: `srgn` can find approximately
 140,000 occurrences of a regex pattern within Go string literals across the
 entire Kubernetes codebase (\~3 million lines of code) in under 3 seconds on a
-modern multi-core machine.1 This combination of speed and syntactic precision
-makes search mode a formidable tool for code exploration and auditing.
+modern multi-core machine.[^1] This combination of speed and syntactic
+precision makes search mode a formidable tool for code exploration and auditing.
 
 ## Part 3: The Core Concept - Surgical Scoping
 
@@ -200,14 +203,14 @@ makes search mode a formidable tool for code exploration and auditing.
 The term "scope" carries significant weight in programming, often referring to
 semantic concepts of visibility and lifetime, such as Python's LEGB rule
 (Local, Enclosing, Global, Built-in) or Rust's complex ownership and lifetime
-scopes.10 A critical step in mastering
+scopes.[^10] A critical step in mastering
 
 `srgn` is understanding that its use of the term is different.
 
 In `srgn`, a "language grammar-aware scope" does not refer to a semantic
 namespace but to a **textual region** of the source code that corresponds to a
-specific node in its Abstract Syntax Tree (AST), as parsed by `tree-sitter`.2
-For example, the
+specific node in its Abstract Syntax Tree (AST), as parsed by
+`tree-sitter`.[^2] For example, the
 
 `--python 'function'` scope selects the entire block of text that constitutes a
 function definition, from the `def` keyword to the end of its body. It does not
@@ -223,8 +226,8 @@ of its capabilities.
 ### 3.2 The Scoping Pipeline: Layering with Logical AND
 
 The precision of `srgn` comes from its default mechanism of combining scopes: a
-left-to-right, progressively narrowing filter that acts as a logical AND.2 Each
-subsequent scope operates only on the text that was passed through by the
+left-to-right, progressively narrowing filter that acts as a logical AND.[^2]
+Each subsequent scope operates only on the text that was passed through by the
 previous one.
 
 Consider the following command:
@@ -252,16 +255,16 @@ This directional, filtering nature means the order of scopes is crucial. The
 documentation provides a clear example of a nonsensical query,
 `srgn --python 'doc-strings' --python 'class'`, which would attempt to find a
 class definition *inside* a docstring and would almost certainly return no
-results.1 This illustrates the power and predictability of the intersectional
-pipeline.
+results.[^1] This illustrates the power and predictability of the
+intersectional pipeline.
 
 ### 3.3 Broadening the Search: Joining Scopes with Logical OR
 
 While the default AND logic is excellent for drilling down, some tasks require
 a broader search across different types of syntax. For this, `srgn` provides
-the `--join-language-scopes` flag (or its shorthand, `-j`).2 This flag alters
-the behavior for language scopes, changing the operation from intersection
-(AND) to a union (OR).
+the `--join-language-scopes` flag (or its shorthand, `-j`).[^2] This flag
+alters the behavior for language scopes, changing the operation from
+intersection (AND) to a union (OR).
 
 A practical example from the release notes demonstrates its utility 9:
 
@@ -286,13 +289,13 @@ scopes:
 1. **Language Grammar Scopes**: These are the predefined syntactic elements
    specified with the `--<LANG> '<SCOPE_NAME>'` syntax (e.g.,
    `--python 'class'`, `--rust 'unsafe'`). They leverage `tree-sitter` to
-   provide the foundational context awareness that sets `srgn` apart.1 A
+   provide the foundational context awareness that sets `srgn` apart.[^1] A
    reference list of known scopes is provided in the Appendix.
 
 2. **Regular Expression Scope**: This is the mandatory, positional argument
    that provides the final, fine-grained pattern matching. It is always the
    last filter applied in the pipeline, operating only on the text selected by
-   the preceding language scopes.2
+   the preceding language scopes.[^2]
 
 ## Part 4: Taking Action - Manipulation and Refactoring
 
@@ -302,7 +305,7 @@ The simplest action in `srgn` is replacement, specified with the
 `-- 'replacement'` syntax. However, for any meaningful refactoring, dynamic
 replacements are essential. `srgn` supports this through regex capture groups
 (`$1`, `$2`, etc.), which substitute parts of the matched text into the
-replacement string.2
+replacement string.[^2]
 
 A rich example from the documentation showcases several advanced features at
 once 2:
@@ -330,38 +333,39 @@ This command deconstructs as follows:
 
 Beyond simple replacement, `srgn` offers a suite of built-in actions specified
 via command-line flags. These actions are applied in a defined order *after*
-the main replacement has occurred.2
+the main replacement has occurred.[^2]
 
 The command `srgn --upper '[wW]orld' -- 'you'` illustrates this two-stage
 process. First, the regex match `World` is replaced with `you`. Second, the
-`--upper` action is applied to that result, yielding the final output `YOU`.2
+`--upper` action is applied to that result, yielding the final output `YOU`.[^2]
 
 Common built-in action flags include:
 
-- `--upper`, `--lower`, `--titlecase`: For changing the case of matched text.2
+- `--upper`, `--lower`, `--titlecase`: For changing the case of matched
+  text.[^2]
 
 - `--delete`: Removes the matched text. As a safety measure, this action will
   produce an error if no scope is specified, preventing the accidental deletion
-  of an entire file's content.1
+  of an entire file's content.[^1]
 
 - `--squeeze`: Collapses sequences of whitespace. Like `--delete`, this
-  requires an explicit scope.1
+  requires an explicit scope.[^1]
 
 - `--german`: A specialized action that correctly handles German orthography,
   such as converting "Ueberflieger" to "Überflieger," demonstrating the
-  potential for domain-specific transformations.7
+  potential for domain-specific transformations.[^7]
 
 ### 4.3 In-place File Modification and Operational Safety
 
 To apply changes directly to files on disk, one can provide a path to `srgn`
 instead of piping from `stdin`. For more complex file selections, the `--glob`
-option accepts a glob pattern.1
+option accepts a glob pattern.[^1]
 
 It is crucial to heed the official documentation's warning: `srgn` is currently
 in beta (major version 0). **Any in-place modifications should only be
-performed on files that are safely under version control**.1
+performed on files that are safely under version control**.[^1]
 
-To mitigate risk, the `--dry-run` flag is an indispensable safety feature.9
+To mitigate risk, the `--dry-run` flag is an indispensable safety feature.[^9]
 When used,
 
 `srgn` will print a `diff`-like output of the changes it *would* make without
@@ -390,8 +394,8 @@ challenges by combining `srgn`'s scoping and action capabilities.
 
 - **Explanation**: This command's precision comes from the
   `'module-names-in-imports'` grammar scope, a feature highlighted in the
-  project's release notes.9 This scope surgically targets only the module names
-  within
+  project's release notes.[^9] This scope surgically targets only the module
+  names within
 
   `import` and `from... import` statements, completely avoiding the risk of
   altering variables or strings that happen to contain the text `old_utils`.
@@ -468,7 +472,7 @@ showcasing `srgn`'s versatility across different languages.
   `#[expect(some_lint)]`. This ensures that if the underlying code is fixed and
   no longer triggers the lint, the build will fail, forcing the removal of the
   now-unnecessary attribute. This exact use case is mentioned as an example in
-  the `srgn` documentation.2
+  the `srgn` documentation.[^2]
 
 - **Command**:
 
@@ -526,7 +530,7 @@ showcasing `srgn`'s versatility across different languages.
 
 - **Explanation**: This operation's surgical precision is enabled by the
   `'names-in-uses-declarations'` scope, a powerful feature documented in the
-  release notes.9 This scope targets
+  release notes.[^9] This scope targets
 
   *only* the paths inside `use...;` statements. It will correctly change
   `use old_api::prelude::*;` to `use new_api::prelude::*;` and
@@ -542,7 +546,7 @@ showcasing `srgn`'s versatility across different languages.
 
 For the most demanding refactoring tasks, `srgn` offers an escape hatch beyond
 the command line. It is a dual-use tool, available not only as a binary but
-also as a Rust library that can be added to a project with `cargo add srgn`.7
+also as a Rust library that can be added to a project with `cargo add srgn`.[^7]
 
 This library interface provides the ultimate level of control for power users.
 For extremely complex, multi-pass, or stateful refactoring scenarios where the
@@ -610,20 +614,20 @@ modifications that would otherwise be tedious and error-prone.
 
 ## Appendix: Grammar Scope Reference
 
-### A.1 A Note on This List
+### A.[^1] A Note on This List
 
 The following tables list the known language grammar scopes for Python and
 Rust. This reference has been meticulously compiled from the official `srgn`
-documentation, README examples, and GitHub release notes.2 As direct inspection
-of the
+documentation, README examples, and GitHub release notes.[^2] As direct
+inspection of the
 
 `PreparedQuery` source enum was not possible during research 15, this list
 should be considered comprehensive but potentially subject to change in future
 
 `srgn` versions. Users can often discover available scopes by providing an
-invalid one, as `srgn` will helpfully list the valid options.9
+invalid one, as `srgn` will helpfully list the valid options.[^9]
 
-### A.2 Table: Python Grammar Scopes (`--python <SCOPE>` or `--py <SCOPE>`)
+### A.[^2] Table: Python Grammar Scopes (`--python <SCOPE>` or `--py <SCOPE>`)
 
 | Scope Name              | Description                                                               | Example Command                               |
 | ----------------------- | ------------------------------------------------------------------------- | --------------------------------------------- |
@@ -636,7 +640,7 @@ invalid one, as `srgn` will helpfully list the valid options.9
 | module-names-in-imports | Selects only the module names in import and from... import statements.    | srgn --py 'module-names-in-imports' 'old_lib' |
 | call                    | Selects entire function or method call expressions (e.g., foo(bar, baz)). | srgn --py 'call' '^print\('                   |
 
-### A.3 Table: Rust Grammar Scopes (`--rust <SCOPE>` or `--rs <SCOPE>`)
+### A.[^3] Table: Rust Grammar Scopes (`--rust <SCOPE>` or `--rs <SCOPE>`)
 
 | Scope Name                 | Description                                                    | Example Command                                        |
 | -------------------------- | -------------------------------------------------------------- | ------------------------------------------------------ |
