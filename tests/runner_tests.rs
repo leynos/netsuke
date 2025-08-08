@@ -1,5 +1,5 @@
 use netsuke::cli::{BuildArgs, Cli, Commands};
-use netsuke::runner::{BuildTargets, run, run_ninja};
+use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::rstest;
 use serial_test::serial;
 use std::path::{Path, PathBuf};
@@ -40,7 +40,7 @@ fn run_ninja_not_found() {
             targets: vec![],
         })),
     };
-    let targets = BuildTargets::new(vec![]);
+    let targets = BuildTargets::default();
     let err = run_ninja(
         Path::new("does-not-exist"),
         &cli,
@@ -54,7 +54,7 @@ fn run_ninja_not_found() {
 #[rstest]
 #[serial]
 fn run_executes_ninja_without_persisting_file() {
-    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
@@ -93,7 +93,7 @@ fn run_executes_ninja_without_persisting_file() {
 #[test]
 #[serial]
 fn run_build_with_emit_keeps_file() {
-    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
@@ -162,4 +162,41 @@ fn run_manifest_subcommand_writes_file() {
     unsafe {
         std::env::set_var("PATH", original_path);
     }
+}
+
+#[test]
+#[serial]
+fn run_respects_env_override_for_ninja() {
+    let (temp_dir, ninja_path) = support::fake_ninja(0);
+    let original = std::env::var_os(NINJA_ENV);
+    unsafe {
+        std::env::set_var(NINJA_ENV, &ninja_path);
+    }
+
+    let temp = tempfile::tempdir().expect("temp dir");
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: false,
+        command: Some(Commands::Build(BuildArgs {
+            emit: None,
+            targets: vec![],
+        })),
+    };
+
+    let result = run(&cli);
+    assert!(result.is_ok());
+
+    unsafe {
+        if let Some(val) = original {
+            std::env::set_var(NINJA_ENV, val);
+        } else {
+            std::env::remove_var(NINJA_ENV);
+        }
+    }
+    drop(ninja_path);
+    drop(temp_dir);
 }

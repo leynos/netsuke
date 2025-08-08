@@ -14,6 +14,11 @@ use tracing_subscriber::fmt;
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "used only in some test crates"
+)]
+#[expect(dead_code, reason = "used in CLI behaviour tests")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
@@ -143,7 +148,11 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
 /// The manifest declares a single `hello` target that prints a greeting.
 /// This must be `allow` as `expect` will trigger an unfulfilled warning
 /// despite the lint violation arising.
-#[allow(dead_code, reason = "shared test utility not used in all crates")]
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "shared test utility not used in all crates"
+)]
+#[expect(dead_code, reason = "shared test utility not used in all crates")]
 pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     writeln!(
         file,

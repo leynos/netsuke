@@ -10,11 +10,16 @@ use anyhow::{Context, Result};
 use serde_json;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use tempfile::Builder;
+use tempfile::{Builder, NamedTempFile};
 use tracing::{debug, info};
+
+/// Default Ninja executable to invoke.
+pub const NINJA_PROGRAM: &str = "ninja";
+/// Environment variable override for the Ninja executable.
+pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
@@ -46,16 +51,16 @@ impl CommandArg {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct BuildTargets(Vec<String>);
-impl BuildTargets {
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BuildTargets<'a>(&'a [String]);
+impl<'a> BuildTargets<'a> {
     #[must_use]
-    pub fn new(targets: Vec<String>) -> Self {
+    pub fn new(targets: &'a [String]) -> Self {
         Self(targets)
     }
     #[must_use]
-    pub fn as_slice(&self) -> &[String] {
-        &self.0
+    pub fn as_slice(&self) -> &'a [String] {
+        self.0
     }
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -74,26 +79,10 @@ pub fn run(cli: &Cli) -> Result<()> {
         targets: Vec::new(),
     }));
     match command {
-        Commands::Build(args) => {
-            let ninja = generate_ninja(cli)?;
-            let targets = BuildTargets::new(args.targets);
-            if let Some(path) = args.emit {
-                write_and_log(&path, &ninja)?;
-                run_ninja(Path::new("ninja"), cli, &path, &targets)?;
-            } else {
-                let tmp = Builder::new()
-                    .prefix("netsuke.")
-                    .suffix(".ninja")
-                    .tempfile()
-                    .context("create temp file")?;
-                write_and_log(tmp.path(), &ninja)?;
-                run_ninja(Path::new("ninja"), cli, tmp.path(), &targets)?;
-            }
-            Ok(())
-        }
+        Commands::Build(args) => handle_build(cli, &args),
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
-            write_and_log(&file, &ninja)?;
+            write_ninja_file(&file, &ninja)?;
             Ok(())
         }
         Commands::Clean => {
@@ -107,6 +96,61 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
 }
 
+/// Resolve the manifest, generate the Ninja file and invoke the build.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or Ninja execution fails.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::cli::{BuildArgs, Cli};
+/// use netsuke::runner::handle_build;
+/// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
+/// let args = BuildArgs { emit: None, targets: vec![] };
+/// handle_build(&cli, &args).unwrap();
+/// ```
+fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
+    let ninja = generate_ninja(cli)?;
+    let targets = BuildTargets::new(&args.targets);
+
+    // Normalise the build file path and keep the temporary file alive for the
+    // duration of the Ninja invocation.
+    let (build_path, _tmp): (PathBuf, Option<NamedTempFile>) = if let Some(path) = &args.emit {
+        write_ninja_file(path, &ninja)?;
+        (path.clone(), None)
+    } else {
+        let tmp = create_temp_ninja_file(&ninja)?;
+        (tmp.path().to_path_buf(), Some(tmp))
+    };
+
+    let program = resolve_ninja_program();
+    run_ninja(program.as_path(), cli, &build_path, &targets)?;
+    Ok(())
+}
+
+/// Create a temporary Ninja file on disk containing `content`.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be created or written.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::runner::{create_temp_ninja_file, NinjaContent};
+/// let tmp = create_temp_ninja_file(&NinjaContent::new("".into())).unwrap();
+/// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
+/// ```
+fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
+    let tmp = Builder::new()
+        .prefix("netsuke.")
+        .suffix(".ninja")
+        .tempfile()
+        .context("create temp file")?;
+    write_ninja_file(tmp.path(), content)?;
+    Ok(tmp)
+}
+
 /// Write `content` to `path` and log the file's location.
 ///
 /// # Errors
@@ -116,9 +160,9 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// # Examples
 /// ```ignore
 /// let content = NinjaContent::new("rule cc\n".to_string());
-/// write_and_log(Path::new("out.ninja"), &content).unwrap();
+/// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
 /// ```
-fn write_and_log(path: &Path, content: &NinjaContent) -> Result<()> {
+fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
     fs::write(path, content.as_str())
         .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
     info!("Generated Ninja file at {}", path.display());
@@ -146,16 +190,35 @@ fn write_and_log(path: &Path, content: &NinjaContent) -> Result<()> {
 /// assert!(ninja.as_str().contains("rule"));
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
-    let manifest_path = cli
-        .directory
-        .as_ref()
-        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file));
+    let manifest_path = resolve_manifest_path(cli);
     let manifest = manifest::from_path(&manifest_path)
         .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
     let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
     debug!("AST:\n{ast_json}");
     let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;
     Ok(NinjaContent::new(ninja_gen::generate(&graph)))
+}
+
+/// Determine the manifest path respecting the CLI's directory option.
+///
+/// # Examples
+/// ```ignore
+/// use crate::cli::Cli;
+/// use crate::runner::resolve_manifest_path;
+/// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
+/// assert!(resolve_manifest_path(&cli).ends_with("Netsukefile"));
+/// ```
+#[must_use]
+fn resolve_manifest_path(cli: &Cli) -> std::path::PathBuf {
+    cli.directory
+        .as_ref()
+        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file))
+}
+
+/// Determine which Ninja executable to invoke.
+#[must_use]
+fn resolve_ninja_program() -> PathBuf {
+    std::env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
 }
 
 /// Check if `arg` contains a sensitive keyword.
@@ -237,7 +300,7 @@ pub fn run_ninja(
     program: &Path,
     cli: &Cli,
     build_file: &Path,
-    targets: &BuildTargets,
+    targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
