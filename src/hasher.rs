@@ -1,8 +1,8 @@
 //! Action hashing utilities.
 //!
-//! This module provides the [`ActionHasher`] type used to compute a stable
-//! SHA-256 digest for [`Action`] definitions. The hash is used to deduplicate
-//! identical actions when generating the build graph.
+//! [`ActionHasher`] computes stable SHA-256 digests for [`Action`] definitions.
+//! Each action is serialised to canonical JSON before hashing, ensuring
+//! identical actions map to the same digest even as the struct evolves.
 //!
 //! # Examples
 //!
@@ -23,80 +23,43 @@
 //! assert!(!hash.is_empty());
 //! ```
 
-use itoa::Buffer;
 use sha2::{Digest, Sha256};
 
-use crate::ast::{Recipe, StringOrList};
 use crate::ir::Action;
+use serde_json_canonicalizer::to_writer;
+use std::io::{self, Write};
 
 /// Computes stable digests for [`Action`] definitions.
 pub struct ActionHasher;
 
+struct DigestWriter<'a, D: Digest>(&'a mut D);
+
+impl<D: Digest> Write for DigestWriter<'_, D> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.0.update(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 impl ActionHasher {
     /// Calculate the hash of an [`Action`].
-    #[must_use]
-    pub fn hash(action: &Action) -> String {
+    ///
+    /// Returns a lowercase hex-encoded SHA-256 of the action's canonical JSON.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action cannot be serialised to JSON.
+    pub fn hash(action: &Action) -> Result<String, serde_json::Error> {
         let mut hasher = Sha256::new();
-        Self::hash_recipe(&mut hasher, &action.recipe);
-        Self::hash_optional_fields(&mut hasher, action);
-        format!("{:x}", hasher.finalize())
-    }
-
-    fn hash_recipe(hasher: &mut Sha256, recipe: &Recipe) {
-        match recipe {
-            Recipe::Command { command } => {
-                hasher.update(b"cmd");
-                Self::update_with_len(hasher, command.as_bytes());
-            }
-            Recipe::Script { script } => {
-                hasher.update(b"scr");
-                Self::update_with_len(hasher, script.as_bytes());
-            }
-            Recipe::Rule { rule } => {
-                hasher.update(b"rule");
-                Self::hash_rule_reference(hasher, rule);
-            }
+        {
+            // Canonical JSON: compact formatting with sorted keys.
+            let mut writer = DigestWriter(&mut hasher);
+            to_writer(action, &mut writer)?;
         }
-    }
-
-    fn hash_optional_fields(hasher: &mut Sha256, action: &Action) {
-        Self::hash_optional_string(hasher, action.description.as_ref());
-        Self::hash_optional_string(hasher, action.depfile.as_ref());
-        Self::hash_optional_string(hasher, action.deps_format.as_ref());
-        Self::hash_optional_string(hasher, action.pool.as_ref());
-        hasher.update(if action.restat { b"1" } else { b"0" });
-    }
-
-    fn hash_rule_reference(hasher: &mut Sha256, rule: &StringOrList) {
-        match rule {
-            StringOrList::String(r) => Self::update_with_len(hasher, r.as_bytes()),
-            StringOrList::List(list) => {
-                // Preserve the original sequence so that different orders
-                // generate distinct hashes.
-                for r in list {
-                    Self::update_with_len(hasher, r.as_bytes());
-                }
-            }
-            StringOrList::Empty => {}
-        }
-    }
-
-    fn hash_optional_string(hasher: &mut Sha256, value: Option<&String>) {
-        match value {
-            Some(v) => {
-                hasher.update(b"1");
-                Self::update_with_len(hasher, v.as_bytes());
-            }
-            None => hasher.update(b"0"),
-        }
-    }
-
-    fn update_with_len(hasher: &mut Sha256, bytes: &[u8]) {
-        // Write the length prefix into a stack buffer to avoid heap allocation.
-        let mut buf = Buffer::new();
-        let len_str = buf.format(bytes.len());
-        hasher.update(len_str.as_bytes());
-        hasher.update(b":");
-        hasher.update(bytes);
+        Ok(format!("{:x}", hasher.finalize()))
     }
 }

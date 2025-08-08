@@ -913,7 +913,8 @@ use std::path::{Path, PathBuf};
 /// The complete, static build graph.
 pub struct BuildGraph {
     /// A map of all unique actions (rules) in the build.
-    /// The key is a hash of the action's properties to enable deduplication.
+    /// The key is a hash of a canonical JSON serialisation of the action's
+    /// properties to enable deduplication.
     pub actions: HashMap<String, Action>,
 
     /// A map of all target files to be built. The key is the output path.
@@ -1109,9 +1110,10 @@ action identifier and carries the `phony` and `always` flags verbatim from the
 manifest. No Ninja specific placeholders are stored in the IR to keep the
 representation portable.
 
-- Actions are deduplicated using a SHA-256 hash of their recipe and metadata.
-  Identical commands therefore share the same identifier which keeps the IR
-  deterministic for snapshot tests.
+- Actions are deduplicated using a SHA-256 hash of a canonical JSON
+  serialisation of their recipe and metadata. Identical commands therefore
+  share the same identifier which keeps the IR deterministic for snapshot
+  tests.
 - Multiple rule references in a single target are not yet supported. The IR
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output
@@ -1261,29 +1263,27 @@ libraries.[^27]
 Rust
 
 ```rust
-// In src/ir.rs
-use thiserror::Error;
-use std::path::PathBuf;
+// In src/ir.rs use thiserror::Error; use std::path::PathBuf;
 
 #[derive(Debug, Error)]
 pub enum IrGenError {
-    #[error("rule not found: {rule_name} for target {target_name}")]
-    RuleNotFound {
-        target_name: String,
-        rule_name: String,
-    },
+    #[error("rule '{rule_name}' referenced by target '{target_name}' was not found")]
+    RuleNotFound { target_name: String, rule_name: String },
+
+    #[error("multiple rules for target '{target_name}': {rules:?}")]
+    MultipleRules { target_name: String, rules: Vec<String> },
+
+    #[error("No rules specified for target {target_name}")]
+    EmptyRule { target_name: String },
+
+    #[error("duplicate target outputs: {outputs:?}")]
+    DuplicateOutput { outputs: Vec<String> },
 
     #[error("circular dependency detected: {cycle:?}")]
-    CircularDependency {
-        cycle: Vec<PathBuf>,
-    },
+    CircularDependency { cycle: Vec<PathBuf> },
 
-    #[error("dependency not found: {dependency_name} for target {target_name}")]
-    DependencyNotFound {
-        target_name: String,
-        dependency_name: String,
-    },
-}
+    #[error("failed to serialise action: {0}")]
+    ActionSerialisation(#[from] serde_json::Error), }
 ```
 
 - `anyhow`: This crate will be used in the main application logic (`main.rs`)

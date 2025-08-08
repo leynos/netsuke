@@ -15,7 +15,7 @@ use rstest::rstest;
         pool: None,
         restat: false,
     },
-    "a0f6e2cd3b9b3cee0bf94a7d53bce56cf4178dfe907bb1cb7c832f47846baf38"
+    "0fe3670f0746dcec34768df158d814ac099e416b6045e7e213d0aabd6aa761cb"
 )]
 #[case(
     Action {
@@ -26,7 +26,7 @@ use rstest::rstest;
         pool: None,
         restat: true,
     },
-    "cf8e97357820acf6f66037dcf977ee36c88c2811d60342db30c99507d24a0d60"
+    "9b0289f92ea0e374eecdaf50c8c9080547635aaff38d07fe2a278af6894c3207"
 )]
 #[case(
     Action {
@@ -37,7 +37,7 @@ use rstest::rstest;
         pool: None,
         restat: false,
     },
-    "69f72afccc2aa5a709af1139a9c7ef5f4f72e57cf5376e6c043e575f68f2ef8d"
+    "9733343b512253e636fbacfea40ef4f5771d49409fcda026aec7c7ce2f5405ec"
 )]
 #[case(
     Action {
@@ -48,7 +48,7 @@ use rstest::rstest;
         pool: None,
         restat: false,
     },
-    "c28b5c0b7f20bf1093cbab990976b904268f173413f54b7007166b2c02f498f3"
+    "9b53c477668394e59eca5b34416ef7ad7fb5799ca96dd283e81d7acda6c56006"
 )]
 #[case(
     Action {
@@ -59,7 +59,7 @@ use rstest::rstest;
         pool: None,
         restat: false,
     },
-    "28adc0857704aa0c54c3bc624cb2dc70c101c3936987b20ae520a20319f591c2"
+    "57023b1c00f7daf410d3d2077346e38014d3612c278aadef73a8484c94bdcb77"
 )]
 // Order of rule names influences the digest.
 #[case(
@@ -71,8 +71,9 @@ use rstest::rstest;
         pool: None,
         restat: true,
     },
-    "b93ff0102089f1f1a3fe9eec082b59d5aab58271a40724ccdfdaade6a68fe340"
+    "d5f1a262a95b75db3a7a79a5855eb27b6b430833e7ba93538502a16ebd03f50b"
 )]
 fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
-    assert_eq!(ActionHasher::hash(&action), expected);
+    let digest = ActionHasher::hash(&action).expect("hash action");
+    assert_eq!(digest, expected);
 }
