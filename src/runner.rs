@@ -8,6 +8,7 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use serde_json;
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -115,17 +116,18 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let targets = BuildTargets::new(&args.targets);
 
     // Normalise the build file path and keep the temporary file alive for the
-    // duration of the Ninja invocation.
-    let (build_path, _tmp): (PathBuf, Option<NamedTempFile>) = if let Some(path) = &args.emit {
+    // duration of the Ninja invocation. Borrow the emitted path when provided
+    // to avoid unnecessary allocation.
+    let (build_path, _tmp): (Cow<Path>, Option<NamedTempFile>) = if let Some(path) = &args.emit {
         write_ninja_file(path, &ninja)?;
-        (path.clone(), None)
+        (Cow::Borrowed(path.as_path()), None)
     } else {
         let tmp = create_temp_ninja_file(&ninja)?;
-        (tmp.path().to_path_buf(), Some(tmp))
+        (Cow::Owned(tmp.path().to_path_buf()), Some(tmp))
     };
 
     let program = resolve_ninja_program();
-    run_ninja(program.as_path(), cli, &build_path, &targets)?;
+    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets)?;
     Ok(())
 }
 
