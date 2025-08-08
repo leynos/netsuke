@@ -14,6 +14,11 @@ use tracing_subscriber::fmt;
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "used only in some test crates",
+)]
+#[expect(dead_code, reason = "used in CLI behaviour tests")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");

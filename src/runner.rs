@@ -10,11 +10,14 @@ use anyhow::{Context, Result};
 use serde_json;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use tempfile::{Builder, NamedTempFile};
 use tracing::{debug, info};
+
+/// Default Ninja executable to invoke.
+const NINJA_PROGRAM: &str = "ninja";
 
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
@@ -46,16 +49,16 @@ impl CommandArg {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct BuildTargets(Vec<String>);
-impl BuildTargets {
+#[derive(Debug, Clone, Copy)]
+pub struct BuildTargets<'a>(&'a [String]);
+impl<'a> BuildTargets<'a> {
     #[must_use]
-    pub fn new(targets: Vec<String>) -> Self {
+    pub fn new(targets: &'a [String]) -> Self {
         Self(targets)
     }
     #[must_use]
-    pub fn as_slice(&self) -> &[String] {
-        &self.0
+    pub fn as_slice(&self) -> &'a [String] {
+        self.0
     }
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -107,15 +110,19 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// ```
 fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let ninja = generate_ninja(cli)?;
-    let targets = BuildTargets::new(args.targets.clone());
+    let targets = BuildTargets::new(&args.targets);
 
-    if let Some(path) = &args.emit {
+    // Normalise the build file path and keep the temporary file alive for the
+    // duration of the Ninja invocation.
+    let (build_path, _tmp): (PathBuf, Option<NamedTempFile>) = if let Some(path) = &args.emit {
         write_ninja_file(path, &ninja)?;
-        run_ninja(Path::new("ninja"), cli, path, &targets)?;
+        (path.clone(), None)
     } else {
         let tmp = create_temp_ninja_file(&ninja)?;
-        run_ninja(Path::new("ninja"), cli, tmp.path(), &targets)?;
-    }
+        (tmp.path().to_path_buf(), Some(tmp))
+    };
+
+    run_ninja(Path::new(NINJA_PROGRAM), cli, &build_path, &targets)?;
     Ok(())
 }
 
@@ -192,9 +199,9 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 /// Determine the manifest path respecting the CLI's directory option.
 ///
 /// # Examples
-/// ```
-/// use netsuke::cli::Cli;
-/// use netsuke::runner::resolve_manifest_path;
+/// ```ignore
+/// use crate::cli::Cli;
+/// use crate::runner::resolve_manifest_path;
 /// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
 /// assert!(resolve_manifest_path(&cli).ends_with("Netsukefile"));
 /// ```
@@ -284,7 +291,7 @@ pub fn run_ninja(
     program: &Path,
     cli: &Cli,
     build_file: &Path,
-    targets: &BuildTargets,
+    targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {

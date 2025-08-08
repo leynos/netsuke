@@ -40,7 +40,7 @@ fn run_ninja_not_found() {
             targets: vec![],
         })),
     };
-    let targets = BuildTargets::new(vec![]);
+    let targets = BuildTargets::new(&[]);
     let err = run_ninja(
         Path::new("does-not-exist"),
         &cli,
@@ -54,7 +54,7 @@ fn run_ninja_not_found() {
 #[rstest]
 #[serial]
 fn run_executes_ninja_without_persisting_file() {
-    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
@@ -93,7 +93,7 @@ fn run_executes_ninja_without_persisting_file() {
 #[test]
 #[serial]
 fn run_build_with_emit_keeps_file() {
-    let (ninja_dir, ninja_path) = support::fake_ninja(0);
+    let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
