@@ -1,4 +1,3 @@
-
 name: Release Binary
 
 on:
@@ -23,52 +22,51 @@ jobs:
             arch: aarch64
             target: aarch64-unknown-linux-gnu
             ext: ""
-          - os: windows
-            arch: x86_64
-            target: x86_64-pc-windows-msvc
-            ext: ".exe"
-          - os: windows
-            arch: aarch64
-            target: aarch64-pc-windows-msvc
-            ext: ".exe"
-          - os: macos
-            arch: x86_64
-            target: x86_64-apple-darwin
-            ext: ""
-          - os: macos
-            arch: aarch64
-            target: aarch64-apple-darwin
-            ext: ""
+#          - os: windows
+#            arch: x86_64
+#            target: x86_64-pc-windows-msvc
+#            ext: ".exe"
+#          - os: windows
+#            arch: aarch64
+#            target: aarch64-pc-windows-msvc
+#            ext: ".exe"
+#          - os: macos
+#            arch: x86_64
+#            target: x86_64-apple-darwin
+#            ext: ""
+#          - os: macos
+#            arch: aarch64
+#            target: aarch64-apple-darwin
+#            ext: ""
           - os: freebsd
             arch: x86_64
             target: x86_64-unknown-freebsd
             ext: ""
-          - os: freebsd
-            arch: aarch64
-            target: aarch64-unknown-freebsd
-            ext: ""
-          - os: openbsd
-            arch: x86_64
-            target: x86_64-unknown-openbsd
-            ext: ""
-          - os: openbsd
-            arch: aarch64
-            target: aarch64-unknown-openbsd
-            ext: ""
+#          - os: freebsd
+#            arch: aarch64
+#            target: aarch64-unknown-freebsd
+#            ext: ""
+#          - os: openbsd
+#            arch: x86_64
+#            target: x86_64-unknown-openbsd
+#            ext: ""
+#          - os: openbsd
+#            arch: aarch64
+#            target: aarch64-unknown-openbsd
+#            ext: ""
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@9d7e65c320fdb52dcd45ffaa68deb6c02c8754d9
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Cache cross binary
         uses: actions/cache@v4
         with:
           path: ~/.cargo/bin/cross
-          key: cross-${{ runner.os }}
+          key: cross-v0.2.5-${{ runner.os }}
       - name: Install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        env:
+          RUSTFLAGS: ""
+        run: cargo install cross --git https://github.com/cross-rs/cross --tag v0.2.5
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -79,6 +77,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+      - name: Add release target
+        run: rustup target add ${{ matrix.target }}
       - name: Build release binary
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
@@ -113,4 +113,3 @@ jobs:
           done
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
