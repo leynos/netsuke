@@ -55,3 +55,20 @@ Feature: Manifest Parsing
     Given the manifest file "tests/data/jinja_undefined.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
+
+  Scenario: Rendering Jinja conditionals in a manifest
+    Given the manifest file "tests/data/jinja_if.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo on"
+
+  Scenario: Rendering Jinja loops in a manifest
+    Given the manifest file "tests/data/jinja_for.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 2 targets
+    And the target 1 command is "echo foo"
+    And the target 2 command is "echo bar"
+
+  Scenario: Parsing fails when a Jinja loop iterates over a non-list
+    Given the manifest file "tests/data/jinja_for_invalid.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails

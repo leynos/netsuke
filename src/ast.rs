@@ -61,7 +61,7 @@ pub struct NetsukeManifest {
 
     /// Global key/value pairs available to recipes.
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: HashMap<String, serde_yml::Value>,
 
     /// Named rule templates that can be referenced by targets.
     #[serde(default)]
@@ -187,7 +187,7 @@ pub struct Target {
 
     /// Target-scoped variables available during command execution.
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: HashMap<String, serde_yml::Value>,
 
     /// Declares that the target does not correspond to a real file.
     #[serde(default)]

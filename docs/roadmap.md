@@ -88,9 +88,9 @@ configurations with variables, control flow, and custom functions.
 
 - [ ] **Dynamic Features and Custom Functions:**
 
-  - [ ] Implement support for basic Jinja control structures (`{% if %}` and
-        `{% for %}`) 
-    
+  - [x] Implement support for basic Jinja control structures (`{% if %}` and
+        `{% for %}`)
+
   - [ ] Implement the foreach key for target generation.
 
   - [ ] Implement the essential custom Jinja function env(var_name) to read

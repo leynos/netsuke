@@ -116,3 +116,36 @@ fn first_target_command(world: &mut CliWorld, command: String) {
         panic!("Expected command recipe, got: {:?}", first.recipe);
     }
 }
+
+#[then(expr = "the manifest has {int} targets")]
+fn manifest_has_targets(world: &mut CliWorld, count: usize) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    assert_eq!(manifest.targets.len(), count);
+}
+
+#[then(expr = "the target {int} name is {string}")]
+fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    match &target.name {
+        StringOrList::String(value) => assert_eq!(value, &name),
+        other => panic!("Expected StringOrList::String, got: {other:?}"),
+    }
+}
+
+#[then(expr = "the target {int} command is {string}")]
+fn target_command_n(world: &mut CliWorld, index: usize, command: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    if let Recipe::Command { command: actual } = &target.recipe {
+        assert_eq!(actual, &command);
+    } else {
+        panic!("Expected command recipe, got: {:?}", target.recipe);
+    }
+}
