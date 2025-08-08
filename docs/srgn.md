@@ -15,10 +15,8 @@ another (e.g., a string literal).
 
 This is the precise gap that `srgn`, the "code surgeon," is designed to
 fill.[^1] It operates as a powerful hybrid, blending the regex-based pattern
-matching of
-
-`grep`, the stream-editing capabilities of `tr` and `sed`, and the syntactic
-intelligence of the `tree-sitter` parsing framework.[^1]
+matching of `grep`, the stream-editing capabilities of `tr` and `sed`, and the
+syntactic intelligence of the `tree-sitter` parsing framework.[^1]
 
 `srgn` complements traditional tools by operating on a different "dimension" of
 code analysis.[^1] It is not a replacement for full-featured IDE refactoring

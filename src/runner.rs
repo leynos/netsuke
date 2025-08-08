@@ -17,7 +17,7 @@ use tempfile::{Builder, NamedTempFile};
 use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
-const NINJA_PROGRAM: &str = "ninja";
+pub const NINJA_PROGRAM: &str = "ninja";
 
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
