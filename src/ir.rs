@@ -39,12 +39,18 @@ pub struct BuildGraph {
 }
 
 /// A reusable command analogous to a Ninja rule.
-#[derive(Debug, Clone, PartialEq)]
+use serde::Serialize;
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Action {
     pub recipe: Recipe,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub depfile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub deps_format: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub pool: Option<String>,
     pub restat: bool,
 }
