@@ -58,9 +58,10 @@
     behaviour being corrected both to validate the fix and to guard against
     regression.
   - Passes all relevant unit and behavioral tests according to the guidelines
-    above.
-  - Passes lint checks
-  - Adheres to formatting standards tested using a formatting validator.
+    above. (Use `make test` to verify).
+  - Passes lint checks. (Use `make lint` to verify).
+  - Adheres to formatting standards tested using a formatting validator. (Use
+    `make check-fmt` to verify).
 - **Committing:**
   - Only changes that meet all the quality gates above should be committed.
   - Write clear, descriptive commit messages summarizing the change, following
@@ -147,6 +148,19 @@ project:
 - Prefer `.expect()` over `.unwrap()`.
 - Use `concat!()` to combine long string literals rather than escaping newlines
   with a backslash.
+- Prefer single line versions of functions where appropriate. I.e.,
+
+  ```
+  pub fn new(id: u64) -> Self { Self(id) }
+  ```
+
+  Instead of:
+
+  ```
+  pub fn new(id: u64) -> Self {
+      Self(id)
+  }
+  ```
 
 ### Dependency Management
 
@@ -185,6 +199,36 @@ project:
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
+
+## Additional tooling
+
+The following tooling is available in this environment:
+
+- `mbake` – A Makefile validator. Run using `mbake validate Makefile`.
+- `strace` – Traces system calls and signals made by a process; useful for debugging runtime behaviour and syscalls.
+- `gdb` – The GNU Debugger, for inspecting and controlling programs as they execute (or post-mortem via core dumps).
+- `ripgrep` – Fast, recursive text search tool (`grep` alternative) that respects `.gitignore` files.
+- `ltrace` – Traces calls to dynamic library functions made by a process.
+- `valgrind` – Suite for detecting memory leaks, profiling, and debugging low-level memory errors.
+- `bpftrace` – High-level tracing tool for eBPF, using a custom scripting language for kernel and application tracing.
+- `lsof` – Lists open files and the processes using them.
+- `htop` – Interactive process viewer (visual upgrade to `top`).
+- `iotop` – Displays and monitors I/O usage by processes.
+- `ncdu` – NCurses-based disk usage viewer for finding large files/folders.
+- `tree` – Displays directory structure as a tree.
+- `bat` – `cat` clone with syntax highlighting, Git integration, and paging.
+- `delta` – Syntax-highlighted pager for Git and diff output.
+- `tcpdump` – Captures and analyses network traffic at the packet level.
+- `nmap` – Network scanner for host discovery, port scanning, and service identification.
+- `lldb` – LLVM debugger, alternative to `gdb`.
+- `eza` – Modern `ls` replacement with more features and better defaults.
+- `fzf` – Interactive fuzzy finder for selecting files, commands, etc.
+- `hyperfine` – Command-line benchmarking tool with statistical output.
+- `shellcheck` – Linter for shell scripts, identifying errors and bad practices.
+- `fd` – Fast, user-friendly `find` alternative with sensible defaults.
+- `checkmake` – Linter for `Makefile`s, ensuring they follow best practices and conventions.
+- `srgn` – [Structural grep](https://github.com/alexpovel/srgn), searches code and enables editing by syntax tree patterns (see `docs/srgn.md` for a complete guide).
+- `difft` **(Difftastic)** – Semantic diff tool that compares code structure rather than just text differences.
 
 ## Key Takeaway
 
