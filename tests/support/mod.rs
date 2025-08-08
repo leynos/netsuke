@@ -16,7 +16,7 @@ use tracing_subscriber::fmt;
 /// Returns the temporary directory and the path to the executable.
 #[allow(
     unfulfilled_lint_expectations,
-    reason = "used only in some test crates",
+    reason = "used only in some test crates"
 )]
 #[expect(dead_code, reason = "used in CLI behaviour tests")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
