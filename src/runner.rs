@@ -119,6 +119,10 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// write_and_log(Path::new("out.ninja"), &content).unwrap();
 /// ```
 fn write_and_log(path: &Path, content: &NinjaContent) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
+    }
     fs::write(path, content.as_str())
         .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
     info!("Generated Ninja file at {}", path.display());
