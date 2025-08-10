@@ -118,16 +118,25 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     // Normalise the build file path and keep the temporary file alive for the
     // duration of the Ninja invocation. Borrow the emitted path when provided
     // to avoid unnecessary allocation.
-    let (build_path, _tmp): (Cow<Path>, Option<NamedTempFile>) = if let Some(path) = &args.emit {
+    let build_path: Cow<Path>;
+    let mut tmp_file: Option<NamedTempFile> = None;
+    if let Some(path) = &args.emit {
         write_ninja_file(path, &ninja)?;
-        (Cow::Borrowed(path.as_path()), None)
+        build_path = Cow::Borrowed(path.as_path());
     } else {
         let tmp = create_temp_ninja_file(&ninja)?;
-        (Cow::Owned(tmp.path().to_path_buf()), Some(tmp))
-    };
+        tmp_file = Some(tmp);
+        build_path = Cow::Borrowed(
+            tmp_file
+                .as_ref()
+                .expect("temporary Ninja file should exist")
+                .path(),
+        );
+    }
 
     let program = resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets)?;
+    drop(tmp_file);
     Ok(())
 }
 
