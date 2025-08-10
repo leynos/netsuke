@@ -86,11 +86,11 @@ pub fn run(cli: &Cli) -> Result<()> {
             Ok(())
         }
         Commands::Clean => {
-            println!("Clean requested");
+            info!("Clean requested");
             Ok(())
         }
         Commands::Graph => {
-            println!("Graph requested");
+            info!("Graph requested");
             Ok(())
         }
     }
