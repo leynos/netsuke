@@ -95,7 +95,7 @@ supported 1:
 
   Bash
 
-  ```bash
+  ```sh
   # Install the Rust toolchain if you haven't already
   # Then, install cargo-binstall
   cargo install cargo-binstall
@@ -110,7 +110,7 @@ supported 1:
 
   Bash
 
-  ```bash
+  ```sh
   cargo install srgn
   
   ```
@@ -142,7 +142,7 @@ example from the documentation 1:
 
 Bash
 
-```bash
+```sh
 echo 'Hello World!' | srgn '[wW]orld' -- 'there'
 # Output: Hello there!
 ```
@@ -179,7 +179,7 @@ For instance, to find all class definitions in a Python project, one could run:
 
 Bash
 
-```bash
+```sh
 srgn --python 'class'.
 ```
 
@@ -232,7 +232,7 @@ Consider the following command:
 
 Bash
 
-```bash
+```sh
 # Find all occurrences of 'github.com' but only inside docstrings of Python classes.
 srgn --python 'class' --python 'doc-strings' 'github\.com' my_project/
 ```
@@ -268,7 +268,7 @@ A practical example from the release notes demonstrates its utility 9:
 
 Bash
 
-```bash
+```sh
 # Find all TODOs, whether they are in comments or docstrings.
 srgn -j --python comments --python doc-strings 'TODO:' src/
 ```
@@ -310,7 +310,7 @@ once 2:
 
 Bash
 
-```bash
+```sh
 srgn --python 'doc-strings' '(?<!The )GNU ([a-z]+)' -- '$1: GNU 🐂 is not Unix'
 ```
 
@@ -385,7 +385,7 @@ challenges by combining `srgn`'s scoping and action capabilities.
 
   Bash
 
-  ```bash
+  ```sh
   srgn --py 'module-names-in-imports' '^old_utils$' -- 'new_core_utils' src/
   
   ```
@@ -410,7 +410,7 @@ challenges by combining `srgn`'s scoping and action capabilities.
 
   Bash
 
-  ```bash
+  ```sh
   srgn --py 'call' '^print\((.*)\)$' -- 'logging.info($1)'. --dry-run
   
   ```
@@ -437,7 +437,7 @@ challenges by combining `srgn`'s scoping and action capabilities.
 
   Bash
 
-  ```bash
+  ```sh
   srgn --py 'function' 'def\s+\w+\(.*\):\n\s+[^"''#\s]'.
   
   ```
@@ -476,7 +476,7 @@ showcasing `srgn`'s versatility across different languages.
 
   Bash
 
-  ```bash
+  ```sh
   srgn --rs 'attribute' 'allow\((clippy::some_lint)\)' -- 'expect($1)' src/
   
   ```
@@ -496,7 +496,7 @@ showcasing `srgn`'s versatility across different languages.
 
   Bash
 
-  ```bash
+  ```sh
   srgn --rs 'unsafe' 'unsafe' -- '// TODO: Justify this unsafe block\nunsafe'.
   
   ```
@@ -521,7 +521,7 @@ showcasing `srgn`'s versatility across different languages.
 
   Bash
 
-  ```bash
+  ```sh
   srgn --rs 'names-in-uses-declarations' '^old_api' -- 'new_api'.
   
   ```
