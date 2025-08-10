@@ -3,6 +3,7 @@
 //! This module provides helpers for creating fake executables and
 //! generating minimal manifests used in behavioural tests.
 
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -165,4 +166,41 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
             "      command: \"echo hi\"\n"
         ),
     )
+}
+
+/// Scoped environment variable setter that restores the original value on drop.
+///
+/// # Examples
+///
+/// ```ignore
+/// let _guard = ScopedEnv::set("PATH", "");
+/// // PATH is now empty within this scope
+/// ```
+#[allow(dead_code, reason = "used only in some test crates")]
+pub struct ScopedEnv {
+    key: &'static str,
+    original: Option<OsString>,
+}
+
+impl ScopedEnv {
+    /// Set `key` to `value`, returning a guard that resets it when dropped.
+    #[must_use]
+    #[allow(dead_code, reason = "used only in some test crates")]
+    pub fn set(key: &'static str, value: &OsStr) -> Self {
+        let original = std::env::var_os(key);
+        unsafe { std::env::set_var(key, value) };
+        Self { key, original }
+    }
+}
+
+impl Drop for ScopedEnv {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(val) = &self.original {
+                std::env::set_var(self.key, val);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
 }

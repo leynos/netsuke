@@ -2,9 +2,13 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::rstest;
 use serial_test::serial;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 mod support;
+use support::ScopedEnv;
 
 #[test]
 fn run_exits_with_manifest_error_on_invalid_version() {
@@ -59,9 +63,7 @@ fn run_executes_ninja_without_persisting_file() {
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
-    unsafe {
-        std::env::set_var("PATH", &new_path);
-    } // Nightly marks set_var unsafe.
+    let _guard = ScopedEnv::set("PATH", &new_path);
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -83,9 +85,6 @@ fn run_executes_ninja_without_persisting_file() {
     // Ensure no ninja file remains in project directory
     assert!(!temp.path().join("build.ninja").exists());
 
-    unsafe {
-        std::env::set_var("PATH", original_path);
-    } // Nightly marks set_var unsafe.
     drop(ninja_path);
 }
 
@@ -98,9 +97,7 @@ fn run_build_with_emit_keeps_file() {
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
-    unsafe {
-        std::env::set_var("PATH", &new_path);
-    }
+    let _guard = ScopedEnv::set("PATH", &new_path);
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -126,9 +123,6 @@ fn run_build_with_emit_keeps_file() {
     assert!(emitted.contains("build "));
     assert!(!temp.path().join("build.ninja").exists());
 
-    unsafe {
-        std::env::set_var("PATH", original_path);
-    }
     drop(ninja_path);
 }
 
@@ -141,9 +135,7 @@ fn run_build_with_emit_creates_parent_dirs() {
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
-    unsafe {
-        std::env::set_var("PATH", &new_path);
-    }
+    let _guard = ScopedEnv::set("PATH", &new_path);
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -167,19 +159,13 @@ fn run_build_with_emit_creates_parent_dirs() {
     assert!(emit_path.exists());
     assert!(nested_dir.exists());
 
-    unsafe {
-        std::env::set_var("PATH", original_path);
-    }
     drop(ninja_path);
 }
 
 #[test]
 #[serial]
 fn run_manifest_subcommand_writes_file() {
-    let original_path = std::env::var_os("PATH").unwrap_or_default();
-    unsafe {
-        std::env::set_var("PATH", "");
-    }
+    let _guard = ScopedEnv::set("PATH", OsStr::new(""));
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -199,10 +185,6 @@ fn run_manifest_subcommand_writes_file() {
     assert!(result.is_ok());
     assert!(output_path.exists());
     assert!(!temp.path().join("build.ninja").exists());
-
-    unsafe {
-        std::env::set_var("PATH", original_path);
-    }
 }
 
 #[test]
