@@ -19,6 +19,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt"] }
 serde_json = "1"
 serde_json_canonicalizer = "0.3"
 tempfile = "3.8.0"
+mockable = "0.3"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
@@ -65,8 +66,8 @@ rstest = "0.18.0"
 cucumber = "0.20.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
-serial_test = "3"
 assert_cmd = "2.0.17"
+mockable = { version = "0.3", features = ["mock"] }
 
 [[test]]
 name = "cucumber"

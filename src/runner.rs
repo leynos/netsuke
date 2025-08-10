@@ -7,7 +7,9 @@
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
+use mockable::{DefaultEnv as RealEnv, Env};
 use serde_json;
+use std::ffi::OsString;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -68,18 +70,76 @@ impl<'a> BuildTargets<'a> {
     }
 }
 
-/// Execute the parsed [`Cli`] commands.
+/// Execute the parsed [`Cli`] commands using the real environment.
+///
+/// This is a thin wrapper around [`run_with_env`] that injects the process
+/// environment.
 ///
 /// # Errors
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli) -> Result<()> {
+    run_with_env(cli, &RealEnv::new())
+}
+
+/// Execute the parsed [`Cli`] commands using `env` for lookups.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or the Ninja process fails.
+///
+/// # Examples
+/// ```ignore
+/// use mockable::DefaultEnv;
+/// let cli = Cli { /* fields */ };
+/// run_with_env(&cli, &DefaultEnv::new()).unwrap();
+/// ```
+pub fn run_with_env(cli: &Cli, env: &impl Env) -> Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
         targets: Vec::new(),
     }));
     match command {
+<<<<<<< HEAD
         Commands::Build(args) => handle_build(cli, &args),
+||||||| parent of a15353f (Inject env for ninja path)
+        Commands::Build(args) => {
+            let ninja = generate_ninja(cli)?;
+            let targets = BuildTargets::new(args.targets);
+            if let Some(path) = args.emit {
+                write_and_log(&path, &ninja)?;
+                run_ninja(Path::new("ninja"), cli, &path, &targets)?;
+            } else {
+                let tmp = Builder::new()
+                    .prefix("netsuke.")
+                    .suffix(".ninja")
+                    .tempfile()
+                    .context("create temp file")?;
+                write_and_log(tmp.path(), &ninja)?;
+                run_ninja(Path::new("ninja"), cli, tmp.path(), &targets)?;
+            }
+            Ok(())
+        }
+=======
+        Commands::Build(args) => {
+            let ninja = generate_ninja(cli)?;
+            let targets = BuildTargets::new(args.targets);
+            let program = find_in_path("ninja", env).context("locating ninja")?;
+            if let Some(path) = args.emit {
+                write_and_log(&path, &ninja)?;
+                run_ninja(&program, cli, &path, &targets)?;
+            } else {
+                let tmp = Builder::new()
+                    .prefix("netsuke.")
+                    .suffix(".ninja")
+                    .tempfile()
+                    .context("create temp file")?;
+                write_and_log(tmp.path(), &ninja)?;
+                run_ninja(&program, cli, tmp.path(), &targets)?;
+            }
+            Ok(())
+        }
+>>>>>>> a15353f (Inject env for ninja path)
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
             write_ninja_file(&file, &ninja)?;
@@ -96,6 +156,7 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
 }
 
+<<<<<<< HEAD
 /// Resolve the manifest, generate the Ninja file and invoke the build.
 ///
 /// # Errors
@@ -149,6 +210,26 @@ fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
         .context("create temp file")?;
     write_ninja_file(tmp.path(), content)?;
     Ok(tmp)
+||||||| parent of a15353f (Inject env for ninja path)
+=======
+/// Locate `program` in the directories listed by `PATH` from `env`.
+///
+/// # Errors
+///
+/// Returns [`io::ErrorKind::NotFound`] if the program cannot be found.
+fn find_in_path(program: &str, env: &impl Env) -> io::Result<PathBuf> {
+    let paths = env.raw("PATH").unwrap_or_default();
+    for dir in std::env::split_paths(&OsString::from(paths)) {
+        let candidate = dir.join(program);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::NotFound,
+        format!("{program} not found in PATH"),
+    ))
+>>>>>>> a15353f (Inject env for ninja path)
 }
 
 /// Write `content` to `path` and log the file's location.
