@@ -11,7 +11,7 @@ type Cleanup = Box<dyn FnOnce()>;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
 ///
-/// Returns: (tempdir holding ninja, ninja_path, cleanup PATH closure)
+/// Returns: (tempdir holding ninja, `ninja_path`, cleanup PATH closure)
 #[fixture]
 fn ninja_in_path() -> (tempfile::TempDir, PathBuf, Cleanup) {
     let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
@@ -35,7 +35,7 @@ fn ninja_in_path() -> (tempfile::TempDir, PathBuf, Cleanup) {
 ///
 /// The default exit code is 0, but can be customised via `#[with(...)]`.
 ///
-/// Returns: (tempdir holding ninja, ninja_path, cleanup PATH closure)
+/// Returns: (tempdir holding ninja, `ninja_path`, cleanup PATH closure)
 #[fixture]
 fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, Cleanup) {
     let (ninja_dir, ninja_path) = support::fake_ninja(exit_code);
