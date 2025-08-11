@@ -4,15 +4,19 @@ use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
 
+#[path = "support/check_ninja.rs"]
+mod check_ninja;
+#[path = "support/path_guard.rs"]
+mod path_guard;
 mod support;
-use support::PathGuard;
+use path_guard::PathGuard;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
 ///
 /// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
 fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
-    let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
+    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file();
 
     // Save PATH and prepend our fake ninja directory.
     let original_path = std::env::var_os("PATH").unwrap_or_default();

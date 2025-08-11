@@ -8,24 +8,13 @@ use std::ffi::OsString;
 /// Guard that restores `PATH` to its original value when dropped.
 ///
 /// This uses RAII to ensure the environment is reset even if a test panics.
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "used only in select test crates"
-)]
-#[cfg_attr(test, expect(dead_code, reason = "constructed only in PATH tests"))]
 #[derive(Debug)]
 pub struct PathGuard {
     original: OsString,
 }
 
-#[cfg_attr(test, expect(dead_code, reason = "constructed only in PATH tests"))]
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "used only in select test crates"
-)]
 impl PathGuard {
     /// Create a guard capturing the current `PATH`.
-    #[cfg_attr(test, expect(dead_code, reason = "constructed only in PATH tests"))]
     pub fn new(original: OsString) -> Self {
         Self { original }
     }

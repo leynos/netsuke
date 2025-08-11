@@ -20,9 +20,15 @@ pub struct CliWorld {
     /// Temporary directory handle for test isolation.
     pub temp: Option<tempfile::TempDir>,
     /// Guard that restores `PATH` after each scenario.
-    pub path_guard: Option<support::PathGuard>,
+    pub path_guard: Option<path_guard::PathGuard>,
 }
 
+#[path = "support/check_ninja.rs"]
+mod check_ninja;
+#[path = "support/env.rs"]
+mod env;
+#[path = "support/path_guard.rs"]
+mod path_guard;
 mod steps;
 mod support;
 

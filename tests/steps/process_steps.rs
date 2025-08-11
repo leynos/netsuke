@@ -1,6 +1,6 @@
 //! Step definitions for Ninja process execution.
 
-use crate::{CliWorld, support};
+use crate::{CliWorld, check_ninja, env, path_guard, support};
 use cucumber::{given, then, when};
 use mockable::Env;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
@@ -15,7 +15,7 @@ use tempfile::{NamedTempFile, TempDir};
 )]
 fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
     let original = env.raw("PATH").unwrap_or_default();
-    let guard = support::PathGuard::new(original.clone().into());
+    let guard = path_guard::PathGuard::new(original.clone().into());
     let new_path = format!("{}:{}", dir.path().display(), original);
     // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state; `PathGuard`
     // restores the prior value when dropped.
@@ -32,15 +32,15 @@ fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn fake_ninja(world: &mut CliWorld, code: i32) {
     let (dir, path) = support::fake_ninja(code);
-    let env = support::mocked_path_env();
+    let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
 
 /// Creates a fake ninja executable that validates the build file path.
 #[given("a fake ninja executable that checks for the build file")]
 fn fake_ninja_check(world: &mut CliWorld) {
-    let (dir, path) = support::fake_ninja_check_build_file();
-    let env = support::mocked_path_env();
+    let (dir, path) = check_ninja::fake_ninja_check_build_file();
+    let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
 
@@ -53,7 +53,7 @@ fn fake_ninja_check(world: &mut CliWorld) {
 fn no_ninja(world: &mut CliWorld) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
-    let env = support::mocked_path_env();
+    let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
 
@@ -96,7 +96,7 @@ fn run(world: &mut CliWorld) {
     if !manifest_path.exists() {
         let mut file =
             NamedTempFile::new_in(dir.path()).expect("Failed to create temporary manifest file");
-        support::write_manifest(&mut file).expect("Failed to write manifest content");
+        env::write_manifest(&mut file).expect("Failed to write manifest content");
         file.persist(&manifest_path)
             .expect("Failed to persist manifest file");
     }
