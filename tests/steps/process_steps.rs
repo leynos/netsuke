@@ -2,7 +2,7 @@
 
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
-use mockable::{Env, MockEnv};
+use mockable::Env;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,35 +14,25 @@ use tempfile::{NamedTempFile, TempDir};
     reason = "helper owns path for simplicity"
 )]
 fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
-    let original = world
-        .original_path
-        .get_or_insert_with(|| env.raw("PATH").unwrap_or_default().into());
-
-    let new_path = format!("{}:{}", dir.path().display(), original.to_string_lossy());
-    // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state; restoring
-    // the original `PATH` after the test mitigates this risk.
+    let original = env.raw("PATH").unwrap_or_default();
+    let guard = support::PathGuard::new(original.clone().into());
+    let new_path = format!("{}:{}", dir.path().display(), original);
+    // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state; `PathGuard`
+    // restores the prior value when dropped.
     unsafe {
         std::env::set_var("PATH", &new_path);
     }
 
+    world.path_guard = Some(guard);
     world.ninja = Some(ninja_path.to_string_lossy().into_owned());
     world.temp = Some(dir);
-}
-
-fn mocked_path_env() -> MockEnv {
-    let original = std::env::var("PATH").unwrap_or_default();
-    let mut env = MockEnv::new();
-    env.expect_raw()
-        .withf(|k| k == "PATH")
-        .returning(move |_| Ok(original.clone()));
-    env
 }
 
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn fake_ninja(world: &mut CliWorld, code: i32) {
     let (dir, path) = support::fake_ninja(code);
-    let env = mocked_path_env();
+    let env = support::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
 
@@ -50,7 +40,7 @@ fn fake_ninja(world: &mut CliWorld, code: i32) {
 #[given("a fake ninja executable that checks for the build file")]
 fn fake_ninja_check(world: &mut CliWorld) {
     let (dir, path) = support::fake_ninja_check_build_file();
-    let env = mocked_path_env();
+    let env = support::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
 
@@ -63,7 +53,7 @@ fn fake_ninja_check(world: &mut CliWorld) {
 fn no_ninja(world: &mut CliWorld) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
-    let env = mocked_path_env();
+    let env = support::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
 

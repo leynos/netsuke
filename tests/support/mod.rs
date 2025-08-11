@@ -4,6 +4,7 @@
 //! generating minimal manifests used in behavioural tests.
 
 use mockable::MockEnv;
+use rstest::fixture;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -11,6 +12,10 @@ use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 use tracing::Level;
 use tracing_subscriber::fmt;
+
+mod path_guard;
+#[allow(unused_imports, reason = "re-export for selective test crates")]
+pub use path_guard::PathGuard;
 
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
@@ -75,6 +80,25 @@ pub fn mock_path_to(env: &mut MockEnv, dir: &Path) -> std::io::Result<()> {
         .returning(move |_| Ok(path.clone()));
 
     Ok(())
+}
+
+/// Fixture: capture the original `PATH` via a mocked environment.
+///
+/// Returns a `MockEnv` that yields the current `PATH` when queried. Tests can
+/// modify the real environment while the mock continues to expose the initial
+/// value.
+#[fixture]
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "only used in process step tests"
+)]
+pub fn mocked_path_env() -> MockEnv {
+    let original = std::env::var("PATH").unwrap_or_default();
+    let mut env = MockEnv::new();
+    env.expect_raw()
+        .withf(|k| k == "PATH")
+        .returning(move |_| Ok(original.clone()));
+    env
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.

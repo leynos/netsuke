@@ -2,31 +2,10 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 mod support;
-
-/// Guard that restores PATH to its original value when dropped.
-///
-/// Using a simple guard avoids heap allocation and guarantees teardown on
-/// early returns or panics.
-struct PathGuard {
-    original: OsString,
-}
-
-impl PathGuard {
-    fn new(original: OsString) -> Self {
-        Self { original }
-    }
-}
-
-impl Drop for PathGuard {
-    fn drop(&mut self) {
-        // Nightly marks set_var unsafe.
-        unsafe { std::env::set_var("PATH", &self.original) };
-    }
-}
+use support::PathGuard;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
 ///
