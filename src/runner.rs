@@ -115,7 +115,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let ninja = generate_ninja(cli)?;
     let targets = BuildTargets::new(&args.targets);
 
-    // Normalise the build file path and keep the temporary file alive for the
+    // Normalize the build file path and keep the temporary file alive for the
     // duration of the Ninja invocation. Borrow the emitted path when provided
     // to avoid unnecessary allocation.
     let build_path: Cow<Path>;
