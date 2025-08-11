@@ -1,3 +1,8 @@
+//! Restore `PATH` after tests mutate it.
+//!
+//! Provides a guard that resets the environment variable on drop so tests do
+//! not pollute global state.
+
 use std::ffi::OsString;
 
 /// Guard that restores `PATH` to its original value when dropped.
@@ -5,7 +10,7 @@ use std::ffi::OsString;
 /// This uses RAII to ensure the environment is reset even if a test panics.
 #[allow(
     unfulfilled_lint_expectations,
-    reason = "used only in select test crates",
+    reason = "used only in select test crates"
 )]
 #[expect(dead_code, reason = "constructed only in PATH tests")]
 #[derive(Debug)]
@@ -13,9 +18,10 @@ pub struct PathGuard {
     original: OsString,
 }
 
+#[cfg_attr(test, expect(dead_code, reason = "constructed only in PATH tests"))]
 #[allow(
     unfulfilled_lint_expectations,
-    reason = "used only in select test crates",
+    reason = "used only in select test crates"
 )]
 impl PathGuard {
     /// Create a guard capturing the current `PATH`.
