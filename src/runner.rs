@@ -21,6 +21,30 @@ pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
 pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
+// Public helpers for doctests only. This exposes internal helpers as a stable
+// testing surface without exporting them in release builds.
+#[doc(hidden)]
+pub mod doc {
+    #[allow(unused_imports, reason = "doctest-only wrapper module")]
+    use super::*;
+
+    // Public wrappers to expose crate-private helpers to doctests.
+    #[must_use]
+    pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+        super::contains_sensitive_keyword(arg)
+    }
+    #[must_use]
+    pub fn is_sensitive_arg(arg: &CommandArg) -> bool { super::is_sensitive_arg(arg) }
+    #[must_use]
+    pub fn redact_argument(arg: &CommandArg) -> CommandArg { super::redact_argument(arg) }
+    #[must_use]
+    pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+        super::redact_sensitive_args(args)
+    }
+
+    pub use super::CommandArg;
+}
+
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
 impl NinjaContent {
@@ -231,10 +255,11 @@ fn resolve_ninja_program() -> PathBuf {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, contains_sensitive_keyword};
 /// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
 /// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
 /// ```
-fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+pub(crate) fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
     let lower = arg.as_str().to_lowercase();
     lower.contains("password") || lower.contains("token") || lower.contains("secret")
 }
@@ -243,10 +268,11 @@ fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, is_sensitive_arg};
 /// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
 /// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
 /// ```
-fn is_sensitive_arg(arg: &CommandArg) -> bool {
+pub(crate) fn is_sensitive_arg(arg: &CommandArg) -> bool {
     contains_sensitive_keyword(arg)
 }
 
@@ -256,12 +282,13 @@ fn is_sensitive_arg(arg: &CommandArg) -> bool {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, redact_argument};
 /// let arg = CommandArg::new("token=abc".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
 /// let arg = CommandArg::new("path=/tmp".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
 /// ```
-fn redact_argument(arg: &CommandArg) -> CommandArg {
+pub(crate) fn redact_argument(arg: &CommandArg) -> CommandArg {
     if is_sensitive_arg(arg) {
         let redacted = arg.as_str().split_once('=').map_or_else(
             || "***REDACTED***".to_string(),
@@ -277,6 +304,7 @@ fn redact_argument(arg: &CommandArg) -> CommandArg {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
 /// let args = vec![
 ///     CommandArg::new("ninja".into()),
 ///     CommandArg::new("token=abc".into()),
@@ -284,7 +312,7 @@ fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// let redacted = redact_sensitive_args(&args);
 /// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
 /// ```
-fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+pub(crate) fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
     args.iter().map(redact_argument).collect()
 }
 
