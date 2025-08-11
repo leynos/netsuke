@@ -1,3 +1,4 @@
+use mockable::{DefaultEnv, MockEnv};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
@@ -94,8 +95,8 @@ fn run_exits_with_manifest_error_on_invalid_version() {
             targets: vec![],
         })),
     };
-
-    let result = run(&cli);
+    let env = DefaultEnv::new();
+    let result = run(&cli, &env);
     assert!(result.is_err());
     let err = result.expect_err("should have error");
     assert!(err.chain().any(|e| e.to_string().contains("version")));
@@ -139,8 +140,8 @@ fn run_executes_ninja_without_persisting_file() {
             targets: vec![],
         })),
     };
-
-    let result = run(&cli);
+    let env = DefaultEnv::new();
+    let result = run(&cli, &env);
     assert!(result.is_ok());
 
     // Ensure no ninja file remains in project directory
@@ -167,8 +168,8 @@ fn run_build_with_emit_keeps_file() {
             targets: vec![],
         })),
     };
-
-    let result = run(&cli);
+    let env = DefaultEnv::new();
+    let result = run(&cli, &env);
     assert!(result.is_ok());
 
     assert!(emit_path.exists());
@@ -200,8 +201,8 @@ fn run_build_with_emit_creates_parent_dirs() {
             targets: vec![],
         })),
     };
-
-    let result = run(&cli);
+    let env = DefaultEnv::new();
+    let result = run(&cli, &env);
     assert!(result.is_ok());
     assert!(emit_path.exists());
     assert!(nested_dir.exists());
@@ -225,8 +226,8 @@ fn run_manifest_subcommand_writes_file() {
             file: output_path.clone(),
         }),
     };
-
-    let result = run(&cli);
+    let env = DefaultEnv::new();
+    let result = run(&cli, &env);
     assert!(result.is_ok());
     assert!(output_path.exists());
     assert!(!temp.path().join("build.ninja").exists());
@@ -237,9 +238,21 @@ fn run_manifest_subcommand_writes_file() {
 fn run_respects_env_override_for_ninja() {
     let (temp_dir, ninja_path) = support::fake_ninja(0);
     let original = std::env::var_os(NINJA_ENV);
+    // SAFETY: Rust 2024 marks `set_var` as unsafe. This test injects a bogus
+    // value and restores `NINJA_ENV` afterwards to avoid leaking state.
     unsafe {
-        std::env::set_var(NINJA_ENV, &ninja_path);
+        std::env::set_var(NINJA_ENV, "does-not-exist");
     }
+
+    let mut env = MockEnv::new();
+    let path_string = ninja_path
+        .to_str()
+        .expect("ninja path is valid UTF-8")
+        .to_string();
+    env.expect_raw().returning(move |key| {
+        assert_eq!(key, NINJA_ENV);
+        Ok(path_string.clone())
+    });
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -255,9 +268,10 @@ fn run_respects_env_override_for_ninja() {
         })),
     };
 
-    let result = run(&cli);
+    let result = run(&cli, &env);
     assert!(result.is_ok());
 
+    // SAFETY: restore original `NINJA_ENV` for other tests.
     unsafe {
         if let Some(val) = original {
             std::env::set_var(NINJA_ENV, val);

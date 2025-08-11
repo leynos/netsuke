@@ -2,6 +2,7 @@
 //!
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
+use mockable::DefaultEnv;
 use netsuke::{cli::Cli, runner};
 use std::process::ExitCode;
 use tracing::Level;
@@ -12,7 +13,8 @@ fn main() -> ExitCode {
     if cli.verbose {
         fmt().with_max_level(Level::DEBUG).init();
     }
-    match runner::run(&cli) {
+    let env = DefaultEnv::new();
+    match runner::run(&cli, &env) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("{err}");

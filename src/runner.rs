@@ -7,6 +7,7 @@
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
+use mockable::Env;
 use serde_json;
 use std::borrow::Cow;
 use std::fs;
@@ -99,16 +100,20 @@ impl<'a> BuildTargets<'a> {
 
 /// Execute the parsed [`Cli`] commands.
 ///
+/// The environment determines which Ninja program to run. Injecting an
+/// implementation of [`Env`] allows tests to control `NINJA_ENV` without
+/// touching global state.
+///
 /// # Errors
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
-pub fn run(cli: &Cli) -> Result<()> {
+pub fn run(cli: &Cli, env: &impl Env) -> Result<()> {
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
         targets: Vec::new(),
     }));
     match command {
-        Commands::Build(args) => handle_build(cli, &args),
+        Commands::Build(args) => handle_build(cli, &args, env),
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
             write_ninja_file(&file, &ninja)?;
@@ -133,13 +138,14 @@ pub fn run(cli: &Cli) -> Result<()> {
 ///
 /// # Examples
 /// ```ignore
+/// use mockable::DefaultEnv;
 /// use netsuke::cli::{BuildArgs, Cli};
 /// use netsuke::runner::handle_build;
 /// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
 /// let args = BuildArgs { emit: None, targets: vec![] };
-/// handle_build(&cli, &args).unwrap();
+/// handle_build(&cli, &args, &DefaultEnv::new()).unwrap();
 /// ```
-fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
+fn handle_build(cli: &Cli, args: &BuildArgs, env: &impl Env) -> Result<()> {
     let ninja = generate_ninja(cli)?;
     let targets = BuildTargets::new(&args.targets);
 
@@ -162,7 +168,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
         );
     }
 
-    let program = resolve_ninja_program();
+    let program = resolve_ninja_program(env);
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets)?;
     drop(tmp_file);
     Ok(())
@@ -260,10 +266,22 @@ fn resolve_manifest_path(cli: &Cli) -> std::path::PathBuf {
         .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file))
 }
 
-/// Determine which Ninja executable to invoke.
+/// Determine which Ninja executable to invoke, allowing an environment
+/// override.
+///
+/// # Examples
+/// ```ignore
+/// use mockable::DefaultEnv;
+/// use netsuke::runner::{resolve_ninja_program, NINJA_ENV};
+/// unsafe { std::env::set_var(NINJA_ENV, "/custom/ninja"); }
+/// let env = DefaultEnv::new();
+/// assert!(resolve_ninja_program(&env).ends_with("/custom/ninja"));
+/// ```
 #[must_use]
-fn resolve_ninja_program() -> PathBuf {
-    std::env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
+fn resolve_ninja_program(env: &impl Env) -> PathBuf {
+    env.raw(NINJA_ENV)
+        .ok()
+        .map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
 }
 
 /// Check if `arg` contains a sensitive keyword.
