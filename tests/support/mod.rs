@@ -3,9 +3,10 @@
 //! This module provides helpers for creating fake executables and
 //! generating minimal manifests used in behavioural tests.
 
+use mockable::MockEnv;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 use tracing::Level;
@@ -32,6 +33,26 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
         fs::set_permissions(&path, perms).expect("perms");
     }
     (dir, path)
+}
+
+/// Set up `env` so `PATH` resolves only to `dir`.
+///
+/// # Examples
+/// ```ignore
+/// let (dir, _) = fake_ninja(0);
+/// let mut env = MockEnv::new();
+/// mock_path_to(&mut env, dir.path());
+/// ```
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "used only in some test crates",
+)]
+#[expect(dead_code, reason = "used in PATH tests")]
+pub fn mock_path_to(env: &mut MockEnv, dir: &Path) {
+    let path = dir.to_string_lossy().into_owned();
+    env.expect_raw()
+        .withf(|key| key == "PATH")
+        .returning(move |_| Ok(path.clone()));
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.
