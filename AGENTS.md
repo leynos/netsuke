@@ -145,6 +145,10 @@ project:
 - Use `rstest` fixtures for shared setup.
 - Replace duplicated tests with `#[rstest(...)]` parameterised cases.
 - Prefer `mockall` for mocks/stubs.
+- Mock non-deterministic dependencies (e.g., environment variables and the
+  system clock) using dependency injection with the `mockable` crate (traits
+  like `Env` and `Clock`) where appropriate. See
+  `docs/reliable-testing-in-rust-via-dependency-injection.md` for guidance.
 - Prefer `.expect()` over `.unwrap()`.
 - Use `concat!()` to combine long string literals rather than escaping newlines
   with a backslash.
