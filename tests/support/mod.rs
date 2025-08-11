@@ -45,7 +45,7 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 /// ```
 #[allow(
     unfulfilled_lint_expectations,
-    reason = "used only in some test crates",
+    reason = "used only in some test crates"
 )]
 #[expect(dead_code, reason = "used in PATH tests")]
 pub fn mock_path_to(env: &mut MockEnv, dir: &Path) {

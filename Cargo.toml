@@ -68,6 +68,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-featu
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.17"
 mockable = { version = "0.3", features = ["mock"] }
+serial_test = "3"
 
 [[test]]
 name = "cucumber"

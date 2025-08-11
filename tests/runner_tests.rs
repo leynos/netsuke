@@ -141,7 +141,9 @@ fn run_build_with_emit_creates_parent_dirs() {
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
-    unsafe { std::env::set_var("PATH", &new_path); }
+    unsafe {
+        std::env::set_var("PATH", &new_path);
+    }
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -165,7 +167,9 @@ fn run_build_with_emit_creates_parent_dirs() {
     assert!(emit_path.exists());
     assert!(nested_dir.exists());
 
-    unsafe { std::env::set_var("PATH", original_path); }
+    unsafe {
+        std::env::set_var("PATH", original_path);
+    }
     drop(ninja_path);
 }
 

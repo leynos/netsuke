@@ -96,21 +96,10 @@ pub fn run(cli: &Cli) -> Result<()> {
     }
 }
 
-<<<<<<< HEAD
 /// Resolve the manifest, generate the Ninja file and invoke the build.
-||||||| parent of 2d777b7 (Search PATHEXT when locating executables)
-/// Locate `program` in the directories listed by `PATH` from `env`.
-///
-/// On Windows this also checks for a `.exe` suffix.
-=======
-/// Locate `program` in the directories listed by `PATH` from `env`.
-///
-/// On Windows this also checks extensions from `PATHEXT`.
->>>>>>> 2d777b7 (Search PATHEXT when locating executables)
 ///
 /// # Errors
 ///
-<<<<<<< HEAD
 /// Returns an error if manifest generation or Ninja execution fails.
 ///
 /// # Examples
@@ -160,57 +149,6 @@ fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
         .context("create temp file")?;
     write_ninja_file(tmp.path(), content)?;
     Ok(tmp)
-||||||| parent of 2d777b7 (Search PATHEXT when locating executables)
-/// Returns [`io::ErrorKind::NotFound`] if the programme cannot be found.
-fn find_in_path(program: &str, env: &impl Env) -> io::Result<PathBuf> {
-    let paths = env.raw("PATH").unwrap_or_default();
-    for dir in std::env::split_paths(&OsString::from(paths)) {
-        let candidate = dir.join(program);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-        #[cfg(windows)]
-        {
-            let mut with_exe = candidate.clone();
-            with_exe.set_extension("exe");
-            if with_exe.is_file() {
-                return Ok(with_exe);
-            }
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        format!("{program} not found in PATH"),
-    ))
-=======
-/// Returns [`io::ErrorKind::NotFound`] if the programme cannot be found.
-fn find_in_path(program: &str, env: &impl Env) -> io::Result<PathBuf> {
-    let paths = env.raw("PATH").unwrap_or_default();
-    for dir in std::env::split_paths(&OsString::from(paths)) {
-        let candidate = dir.join(program);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-        #[cfg(windows)]
-        {
-            let pathext = env
-                .raw("PATHEXT")
-                .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
-            for ext in pathext.split(';').filter(|e| !e.is_empty()) {
-                let e = ext.trim().trim_start_matches('.');
-                let mut with_ext = candidate.clone();
-                with_ext.set_extension(e);
-                if with_ext.is_file() {
-                    return Ok(with_ext);
-                }
-            }
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        format!("{program} not found in PATH"),
-    ))
->>>>>>> 2d777b7 (Search PATHEXT when locating executables)
 }
 
 /// Write `content` to `path` and log the file's location.
