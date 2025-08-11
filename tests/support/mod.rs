@@ -24,7 +24,7 @@ pub use path_guard::PathGuard;
     unfulfilled_lint_expectations,
     reason = "used only in some test crates"
 )]
-#[expect(dead_code, reason = "used in CLI behaviour tests")]
+#[cfg_attr(test, expect(dead_code, reason = "used in CLI behaviour tests"))]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
@@ -52,7 +52,7 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     unfulfilled_lint_expectations,
     reason = "used only in some test crates"
 )]
-#[expect(dead_code, reason = "used in PATH tests")]
+#[cfg_attr(test, expect(dead_code, reason = "used in PATH tests"))]
 /// Build a valid `PATH` string that contains exactly one entry pointing to
 /// `dir` and configure the mock to return it. This avoids lossy conversions
 /// and makes the UTF-8 requirement explicit to callers.
@@ -109,7 +109,10 @@ pub fn mocked_path_env() -> MockEnv {
     unfulfilled_lint_expectations,
     reason = "used only in some test crates"
 )]
-#[expect(dead_code, reason = "used in build file validation tests")]
+#[cfg_attr(
+    test,
+    expect(dead_code, reason = "used in build file validation tests")
+)]
 pub fn fake_ninja_check_build_file() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
@@ -140,7 +143,10 @@ pub fn fake_ninja_check_build_file() -> (TempDir, PathBuf) {
     unfulfilled_lint_expectations,
     reason = "compiled only for logging tests"
 )]
-#[expect(dead_code, reason = "compiled as its own crate during linting")]
+#[cfg_attr(
+    test,
+    expect(dead_code, reason = "compiled as its own crate during linting")
+)]
 #[derive(Clone)]
 struct BufferWriter {
     buf: Arc<Mutex<Vec<u8>>>,
@@ -169,7 +175,10 @@ impl Write for BufferWriter {
     unfulfilled_lint_expectations,
     reason = "compiled only for logging tests"
 )]
-#[expect(dead_code, reason = "compiled as its own crate during linting")]
+#[cfg_attr(
+    test,
+    expect(dead_code, reason = "compiled as its own crate during linting")
+)]
 pub fn capture_logs<F>(level: Level, f: F) -> String
 where
     F: FnOnce(),
@@ -193,7 +202,7 @@ where
 ///
 /// Returns the temporary directory and the path to the executable.
 #[allow(unfulfilled_lint_expectations, reason = "used only in directory tests")]
-#[expect(dead_code, reason = "used only in directory tests")]
+#[cfg_attr(test, expect(dead_code, reason = "used only in directory tests"))]
 pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
@@ -219,7 +228,10 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
     unfulfilled_lint_expectations,
     reason = "shared test utility not used in all crates"
 )]
-#[expect(dead_code, reason = "shared test utility not used in all crates")]
+#[cfg_attr(
+    test,
+    expect(dead_code, reason = "shared test utility not used in all crates")
+)]
 pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     writeln!(
         file,

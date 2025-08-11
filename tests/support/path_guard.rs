@@ -12,7 +12,7 @@ use std::ffi::OsString;
     unfulfilled_lint_expectations,
     reason = "used only in select test crates"
 )]
-#[expect(dead_code, reason = "constructed only in PATH tests")]
+#[cfg_attr(test, expect(dead_code, reason = "constructed only in PATH tests"))]
 #[derive(Debug)]
 pub struct PathGuard {
     original: OsString,
@@ -25,7 +25,7 @@ pub struct PathGuard {
 )]
 impl PathGuard {
     /// Create a guard capturing the current `PATH`.
-    #[expect(dead_code, reason = "constructed only in PATH tests")]
+    #[cfg_attr(test, expect(dead_code, reason = "constructed only in PATH tests"))]
     pub fn new(original: OsString) -> Self {
         Self { original }
     }
