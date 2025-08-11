@@ -5,7 +5,7 @@
 //! They wrap `serde_yml` and add basic file handling.
 
 use crate::ast::NetsukeManifest;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use minijinja::{Environment, UndefinedBehavior, context, value::Value};
 use std::{fs, path::Path};
 
@@ -53,9 +53,10 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
         // types so control structures like `{% if %}` and `{% for %}` can operate
         // on booleans and sequences.
         for (k, v) in vars {
-            if let Some(key) = k.as_str() {
-                env.add_global(key, Value::from_serialize(v.clone()));
-            }
+            let Some(key) = k.as_str() else {
+                bail!("non-string key in 'vars' mapping: {k:?}");
+            };
+            env.add_global(key, Value::from_serialize(v.clone()));
         }
     }
 

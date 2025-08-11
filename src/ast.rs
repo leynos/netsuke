@@ -19,6 +19,7 @@
 
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
+use std::collections::HashMap;
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -30,7 +31,6 @@ where
     }
     Ok(actions)
 }
-use std::collections::HashMap;
 
 /// Top-level manifest structure parsed from a `Netsukefile`.
 ///

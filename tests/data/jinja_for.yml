@@ -8,3 +8,4 @@ targets:
   - name: "{{ item }}"
     command: "echo {{ item }}"
 {% endfor %}
+

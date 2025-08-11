@@ -161,9 +161,9 @@ level keys.
   future evolution of the schema while maintaining backward compatibility. This
   version string should be parsed and validated using the `semver` crate.[^4]
 
-- `vars`: A mapping of global key-value pairs. Values may be strings, numbers,
-  booleans, or sequences. These variables seed the Jinja templating context and
-  drive control flow within the manifest.
+- `vars`: A mapping of global key-value pairs. Keys must be strings. Values may
+  be strings, numbers, booleans, or sequences. These variables seed the Jinja
+  templating context and drive control flow within the manifest.
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
   `signature` string using standard Jinja syntax and a `body` declared with the
@@ -668,7 +668,8 @@ render pass produces the final manifest for deserialisation.
 The parser copies `vars` values into the environment using
 `Value::from_serializable`. This preserves native YAML types so Jinja's
 `{% if %}` and `{% for %}` constructs can branch on booleans or iterate over
-sequences. Attempting to iterate over a non-sequence results in a render error
+sequences. Keys must be strings; any non-string key causes manifest parsing to
+fail. Attempting to iterate over a non-sequence results in a render error
 surfaced during manifest loading.
 
 ### 4.3 User-Defined Macros

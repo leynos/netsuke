@@ -1,8 +1,4 @@
-//! Step definitions for manifest parsing scenarios.
-#![expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
+//! Step definitions for manifest feature tests.
 
 use crate::CliWorld;
 use cucumber::{given, then, when};
@@ -27,28 +23,40 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
 fn assert_manifest(world: &CliWorld) {
     assert!(
         world.manifest.is_some(),
-        "manifest should have been parsed successfully"
+        "manifest should have been parsed successfully",
     );
 }
 
 fn assert_parsed(world: &CliWorld) {
     assert!(
         world.manifest.is_some() || world.manifest_error.is_some(),
-        "manifest should have been parsed"
+        "manifest should have been parsed",
     );
 }
 
 #[given(expr = "the manifest file {string} is parsed")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn given_parse_manifest(world: &mut CliWorld, path: String) {
     parse_manifest_inner(world, &path);
 }
 
 #[when(expr = "the manifest file {string} is parsed")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn parse_manifest(world: &mut CliWorld, path: String) {
     parse_manifest_inner(world, &path);
 }
 
 #[when(regex = r"^the (?P<item>parsing result|manifest|version|flags|rules) (?:is|are) checked$")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn when_item_checked(world: &mut CliWorld, item: String) {
     match item.as_str() {
         "parsing result" => assert_parsed(world),
@@ -58,19 +66,22 @@ fn when_item_checked(world: &mut CliWorld, item: String) {
 }
 
 #[then(expr = "the manifest version is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn manifest_version(world: &mut CliWorld, version: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
     assert_eq!(manifest.netsuke_version.to_string(), version);
 }
 
 #[then(expr = "the first target name is {string}")]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn first_target_name(world: &mut CliWorld, name: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.targets.first().expect("targets");
-    match &first.name {
-        StringOrList::String(value) => assert_eq!(value, &name),
-        other => panic!("Expected StringOrList::String, got: {other:?}"),
-    }
+    target_name_n(world, 1, name);
 }
 
 #[then("the first target is phony")]
@@ -100,6 +111,10 @@ fn manifest_parse_error(world: &mut CliWorld) {
 }
 
 #[then(expr = "the first rule name is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn first_rule_name(world: &mut CliWorld, name: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
     let rule = manifest.rules.first().expect("rules");
@@ -107,14 +122,12 @@ fn first_rule_name(world: &mut CliWorld, name: String) {
 }
 
 #[then(expr = "the first target command is {string}")]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn first_target_command(world: &mut CliWorld, command: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.targets.first().expect("targets");
-    if let Recipe::Command { command: actual } = &first.recipe {
-        assert_eq!(actual, &command);
-    } else {
-        panic!("Expected command recipe, got: {:?}", first.recipe);
-    }
+    target_command_n(world, 1, command);
 }
 
 #[then(expr = "the manifest has {int} targets")]
@@ -124,6 +137,10 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
 }
 
 #[then(expr = "the target {int} name is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
     let target = manifest
@@ -137,6 +154,10 @@ fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
 }
 
 #[then(expr = "the target {int} command is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 fn target_command_n(world: &mut CliWorld, index: usize, command: String) {
     let manifest = world.manifest.as_ref().expect("manifest");
     let target = manifest
