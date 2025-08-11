@@ -3,6 +3,7 @@
 use crate::{CliWorld, support};
 use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{NamedTempFile, TempDir};
@@ -13,9 +14,13 @@ use tempfile::{NamedTempFile, TempDir};
     reason = "helper owns path for simplicity"
 )]
 fn install_test_ninja(world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
-    let original = world
-        .original_path
-        .get_or_insert_with(|| std::env::var_os("PATH").unwrap_or_default());
+    let original = world.original_path.get_or_insert_with(|| {
+        world
+            .env
+            .raw("PATH")
+            .map(OsString::from)
+            .unwrap_or_default()
+    });
 
     let new_path = format!("{}:{}", dir.path().display(), original.to_string_lossy());
     // SAFETY: nightly marks `set_var` as unsafe; override path for test isolation.
