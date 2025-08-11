@@ -62,6 +62,12 @@ Feature: Manifest Parsing
     Then the first target name is "hello"
     And the first target command is "echo on"
 
+  Scenario: Rendering Jinja conditionals in a manifest (disabled)
+    Given the manifest file "tests/data/jinja_if_disabled.yml" is parsed
+    When the manifest is checked
+    Then the first target name is "hello"
+    And the first target command is "echo off"
+
   Scenario: Rendering Jinja loops in a manifest
     Given the manifest file "tests/data/jinja_for.yml" is parsed
     When the manifest is checked

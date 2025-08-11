@@ -40,15 +40,17 @@ fn syntax_error_errors() {
 #[case(true, "echo on")]
 #[case(false, "echo off")]
 fn renders_if_blocks(#[case] flag: bool, #[case] expected: &str) {
+    let cmd = "{% if flag %}echo on{% else %}echo off{% endif %}";
     let yaml = manifest_yaml(&format!(
         concat!(
             "vars:\n",
             "  flag: {flag}\n",
             "targets:\n",
             "  - name: test\n",
-            "    command: {{% if flag %}}echo on{{% else %}}echo off{{% endif %}}\n",
+            "    command: {cmd}\n",
         ),
-        flag = flag
+        flag = flag,
+        cmd = cmd,
     ));
 
     let manifest = manifest::from_str(&yaml).expect("parse");

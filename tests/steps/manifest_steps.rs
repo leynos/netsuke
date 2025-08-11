@@ -76,12 +76,12 @@ fn manifest_version(world: &mut CliWorld, version: String) {
 }
 
 #[then(expr = "the first target name is {string}")]
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
 fn first_target_name(world: &mut CliWorld, name: String) {
-    target_name_n(world, 1, name);
+    assert_target_name(world, 1, &name);
 }
 
 #[then("the first target is phony")]
@@ -122,12 +122,12 @@ fn first_rule_name(world: &mut CliWorld, name: String) {
 }
 
 #[then(expr = "the first target command is {string}")]
-#[allow(
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
 fn first_target_command(world: &mut CliWorld, command: String) {
-    target_command_n(world, 1, command);
+    assert_target_command(world, 1, &command);
 }
 
 #[then(expr = "the manifest has {int} targets")]
@@ -136,21 +136,38 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     assert_eq!(manifest.targets.len(), count);
 }
 
-#[then(expr = "the target {int} name is {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String"
-)]
-fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
+fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
     let manifest = world.manifest.as_ref().expect("manifest");
     let target = manifest
         .targets
         .get(index - 1)
         .unwrap_or_else(|| panic!("missing target {index}"));
     match &target.name {
-        StringOrList::String(value) => assert_eq!(value, &name),
+        StringOrList::String(value) => assert_eq!(value, name),
         other => panic!("Expected StringOrList::String, got: {other:?}"),
     }
+}
+
+fn assert_target_command(world: &CliWorld, index: usize, command: &str) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    if let Recipe::Command { command: actual } = &target.recipe {
+        assert_eq!(actual, command);
+    } else {
+        panic!("Expected command recipe, got: {:?}", target.recipe);
+    }
+}
+
+#[then(expr = "the target {int} name is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
+    assert_target_name(world, index, &name);
 }
 
 #[then(expr = "the target {int} command is {string}")]
@@ -159,14 +176,5 @@ fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn target_command_n(world: &mut CliWorld, index: usize, command: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
-    if let Recipe::Command { command: actual } = &target.recipe {
-        assert_eq!(actual, &command);
-    } else {
-        panic!("Expected command recipe, got: {:?}", target.recipe);
-    }
+    assert_target_command(world, index, &command);
 }
