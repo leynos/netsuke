@@ -16,7 +16,9 @@ struct PathGuard {
 }
 
 impl PathGuard {
-    fn new(original: OsString) -> Self { Self { original } }
+    fn new(original: OsString) -> Self {
+        Self { original }
+    }
 }
 
 impl Drop for PathGuard {

@@ -34,9 +34,13 @@ pub mod doc {
         super::contains_sensitive_keyword(arg)
     }
     #[must_use]
-    pub fn is_sensitive_arg(arg: &CommandArg) -> bool { super::is_sensitive_arg(arg) }
+    pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
+        super::is_sensitive_arg(arg)
+    }
     #[must_use]
-    pub fn redact_argument(arg: &CommandArg) -> CommandArg { super::redact_argument(arg) }
+    pub fn redact_argument(arg: &CommandArg) -> CommandArg {
+        super::redact_argument(arg)
+    }
     #[must_use]
     pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
         super::redact_sensitive_args(args)
