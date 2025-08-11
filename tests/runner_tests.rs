@@ -2,18 +2,35 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 mod support;
 
-// Helper alias for returning cleanup callbacks from fixtures.
-type Cleanup = Box<dyn FnOnce()>;
+/// Guard that restores PATH to its original value when dropped.
+///
+/// Using a simple guard avoids heap allocation and guarantees teardown on
+/// early returns or panics.
+struct PathGuard {
+    original: OsString,
+}
+
+impl PathGuard {
+    fn new(original: OsString) -> Self { Self { original } }
+}
+
+impl Drop for PathGuard {
+    fn drop(&mut self) {
+        // Nightly marks set_var unsafe.
+        unsafe { std::env::set_var("PATH", &self.original) };
+    }
+}
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
 ///
-/// Returns: (tempdir holding ninja, `ninja_path`, cleanup PATH closure)
+/// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
-fn ninja_in_path() -> (tempfile::TempDir, PathBuf, Cleanup) {
+fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
 
     // Save PATH and prepend our fake ninja directory.
@@ -24,20 +41,17 @@ fn ninja_in_path() -> (tempfile::TempDir, PathBuf, Cleanup) {
     // Nightly marks set_var unsafe.
     unsafe { std::env::set_var("PATH", &new_path) };
 
-    let cleanup: Cleanup = Box::new(move || unsafe {
-        std::env::set_var("PATH", &original_path);
-    });
-
-    (ninja_dir, ninja_path, cleanup)
+    let guard = PathGuard::new(original_path);
+    (ninja_dir, ninja_path, guard)
 }
 
 /// Fixture: Put a fake `ninja` with a specific exit code on PATH.
 ///
 /// The default exit code is 0, but can be customised via `#[with(...)]`.
 ///
-/// Returns: (tempdir holding ninja, `ninja_path`, cleanup PATH closure)
+/// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
-fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, Cleanup) {
+fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = support::fake_ninja(exit_code);
 
     // Save PATH and prepend our fake ninja directory.
@@ -48,11 +62,8 @@ fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, Pat
     // Nightly marks set_var unsafe.
     unsafe { std::env::set_var("PATH", &new_path) };
 
-    let cleanup: Cleanup = Box::new(move || unsafe {
-        std::env::set_var("PATH", &original_path);
-    });
-
-    (ninja_dir, ninja_path, cleanup)
+    let guard = PathGuard::new(original_path);
+    (ninja_dir, ninja_path, guard)
 }
 
 /// Fixture: Create a temporary project with a Netsukefile from minimal.yml.
@@ -114,7 +125,7 @@ fn run_ninja_not_found() {
 #[rstest]
 #[serial]
 fn run_executes_ninja_without_persisting_file() {
-    let (_ninja_dir, ninja_path, cleanup) = ninja_in_path();
+    let (_ninja_dir, ninja_path, _guard) = ninja_in_path();
     let (temp, manifest_path) = test_manifest();
     let cli = Cli {
         file: manifest_path.clone(),
@@ -133,8 +144,7 @@ fn run_executes_ninja_without_persisting_file() {
     // Ensure no ninja file remains in project directory
     assert!(!temp.path().join("build.ninja").exists());
 
-    // Cleanup PATH then drop the fake ninja artifacts.
-    cleanup();
+    // Drop the fake ninja artifacts. PATH is restored by guard drop.
     drop(ninja_path);
 }
 
@@ -142,7 +152,7 @@ fn run_executes_ninja_without_persisting_file() {
 #[serial]
 #[rstest]
 fn run_build_with_emit_keeps_file() {
-    let (_ninja_dir, ninja_path, cleanup) = ninja_in_path();
+    let (_ninja_dir, ninja_path, _guard) = ninja_in_path();
     let (temp, manifest_path) = test_manifest();
     let emit_path = temp.path().join("emitted.ninja");
     let cli = Cli {
@@ -165,8 +175,7 @@ fn run_build_with_emit_keeps_file() {
     assert!(emitted.contains("build "));
     assert!(!temp.path().join("build.ninja").exists());
 
-    // Cleanup PATH then drop the fake ninja artifacts.
-    cleanup();
+    // Drop the fake ninja artifacts. PATH is restored by guard drop.
     drop(ninja_path);
 }
 
@@ -174,7 +183,7 @@ fn run_build_with_emit_keeps_file() {
 #[serial]
 #[rstest]
 fn run_build_with_emit_creates_parent_dirs() {
-    let (_ninja_dir, ninja_path, cleanup) = ninja_with_exit_code(0);
+    let (_ninja_dir, ninja_path, _guard) = ninja_with_exit_code(0);
     let (temp, manifest_path) = test_manifest();
     let nested_dir = temp.path().join("nested").join("dir");
     let emit_path = nested_dir.join("emitted.ninja");
@@ -195,8 +204,7 @@ fn run_build_with_emit_creates_parent_dirs() {
     assert!(emit_path.exists());
     assert!(nested_dir.exists());
 
-    // Cleanup PATH then drop the fake ninja artifacts.
-    cleanup();
+    // Drop the fake ninja artifacts. PATH is restored by guard drop.
     drop(ninja_path);
 }
 
