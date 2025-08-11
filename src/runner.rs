@@ -437,3 +437,32 @@ pub fn run_ninja(
         ))
     }
 }
+#[cfg(test)]
+mod tests {
+    //! Tests for `resolve_ninja_program`.
+    use super::*;
+    use mockable::MockEnv;
+    use std::env::VarError;
+
+    #[test]
+    fn resolve_ninja_program_uses_env_override() {
+        let mut env = MockEnv::new();
+        env.expect_raw()
+            .withf(|key| key == NINJA_ENV)
+            .returning(|_| Ok("/custom/ninja".into()));
+
+        let path = resolve_ninja_program(&env);
+        assert_eq!(path, PathBuf::from("/custom/ninja"));
+    }
+
+    #[test]
+    fn resolve_ninja_program_defaults_when_env_missing() {
+        let mut env = MockEnv::new();
+        env.expect_raw()
+            .withf(|key| key == NINJA_ENV)
+            .returning(|_| Err(VarError::NotPresent));
+
+        let path = resolve_ninja_program(&env);
+        assert_eq!(path, PathBuf::from(NINJA_PROGRAM));
+    }
+}

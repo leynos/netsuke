@@ -282,3 +282,27 @@ fn run_respects_env_override_for_ninja() {
     drop(ninja_path);
     drop(temp_dir);
 }
+
+#[test]
+#[serial]
+fn run_uses_default_ninja_when_env_not_set() {
+    let (_ninja_dir, ninja_path, _guard) = ninja_in_path();
+    let (temp, manifest_path) = test_manifest();
+    let mut env = MockEnv::new();
+    env.expect_raw()
+        .withf(|key| key == NINJA_ENV)
+        .returning(|_| Err(std::env::VarError::NotPresent));
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        jobs: None,
+        verbose: false,
+        command: Some(Commands::Build(BuildArgs {
+            emit: None,
+            targets: vec![],
+        })),
+    };
+    let result = run(&cli, &env);
+    assert!(result.is_ok());
+    drop(ninja_path);
+}
