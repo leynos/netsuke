@@ -19,6 +19,10 @@
 
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
+use std::collections::HashMap;
+
+/// Map type for `vars` blocks, preserving YAML values.
+pub type Vars = HashMap<String, serde_yml::Value>;
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -30,7 +34,6 @@ where
     }
     Ok(actions)
 }
-use std::collections::HashMap;
 
 /// Top-level manifest structure parsed from a `Netsukefile`.
 ///
@@ -61,7 +64,7 @@ pub struct NetsukeManifest {
 
     /// Global key/value pairs available to recipes.
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: Vars,
 
     /// Named rule templates that can be referenced by targets.
     #[serde(default)]
@@ -187,7 +190,7 @@ pub struct Target {
 
     /// Target-scoped variables available during command execution.
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: Vars,
 
     /// Declares that the target does not correspond to a real file.
     #[serde(default)]

@@ -1,0 +1,6 @@
+netsuke_version: 1.0.0
+vars:
+  enable: false
+targets:
+  - name: hello
+    command: "{% if enable %}echo on{% else %}echo off{% endif %}"

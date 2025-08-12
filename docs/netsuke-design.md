@@ -161,9 +161,9 @@ level keys.
   future evolution of the schema while maintaining backward compatibility. This
   version string should be parsed and validated using the `semver` crate.[^4]
 
-- `vars`: A mapping of global key-value string pairs. These variables are
-  available for substitution in rule commands and target definitions and are
-  exposed to the Jinja templating context.
+- `vars`: A mapping of global key-value pairs. Keys must be strings. Values may
+  be strings, numbers, booleans, or sequences. These variables seed the Jinja
+  templating context and drive control flow within the manifest.
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
   `signature` string using standard Jinja syntax and a `body` declared with the
@@ -414,7 +414,7 @@ pub struct NetsukeManifest {
     pub netsuke_version: Version,
 
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: HashMap<String, serde_yml::Value>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
@@ -466,7 +466,7 @@ pub struct Target {
     pub order_only_deps: StringOrList,
 
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: HashMap<String, serde_yml::Value>,
 
     /// Run this target when requested even if a file with the same name exists.
     #[serde(default)]
@@ -585,15 +585,14 @@ Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
-the `HashMap<String, String>` type for consistency. This keeps YAML manifests
-concise while ensuring forward compatibility. Targets also accept optional
-`phony` and `always` booleans. They default to `false`, making it explicit when
-an action should run regardless of file timestamps. Targets listed in the
-`actions` section are deserialised using a custom helper so they are always
-treated as `phony` tasks. This ensures preparation actions never generate build
-artefacts. Convenience functions in `src/manifest.rs` load a manifest from a
-string or a file path, returning `anyhow::Result` for straightforward error
-handling.
+the `HashMap<String, serde_yml::Value>` type so booleans and sequences are
+preserved for Jinja control flow. Targets also accept optional `phony` and
+`always` booleans. They default to `false`, making it explicit when an action
+should run regardless of file timestamps. Targets listed in the `actions`
+section are deserialised using a custom helper so they are always treated as
+`phony` tasks. This ensures preparation actions never generate build artefacts.
+Convenience functions in `src/manifest.rs` load a manifest from a string or a
+file path, returning `anyhow::Result` for straightforward error handling.
 
 ### 3.5 Testing
 
@@ -665,6 +664,13 @@ placeholders elsewhere in the template, Netsuke first renders the manifest with
 lenient undefined behaviour. The resulting YAML is parsed to obtain the global
 variables, which are then injected into the environment before a second, strict
 render pass produces the final manifest for deserialisation.
+
+The parser copies `vars` values into the environment using
+`Value::from_serializable`. This preserves native YAML types so Jinja's
+`{% if %}` and `{% for %}` constructs can branch on booleans or iterate over
+sequences. Keys must be strings; any non-string key causes manifest parsing to
+fail. Attempting to iterate over a non-sequence results in a render error
+surfaced during manifest loading.
 
 ### 4.3 User-Defined Macros
 
