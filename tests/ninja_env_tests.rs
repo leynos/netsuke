@@ -4,6 +4,10 @@ use std::env::VarError;
 use support::env_lock::EnvLock;
 use support::ninja_env::override_ninja_env;
 
+#[expect(
+    unused,
+    reason = "support module exports helpers unused in these tests"
+)]
 mod support;
 
 #[test]

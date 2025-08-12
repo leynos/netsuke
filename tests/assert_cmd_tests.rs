@@ -8,6 +8,7 @@ use assert_cmd::Command;
 use std::fs;
 use tempfile::tempdir;
 
+#[expect(unused, reason = "support module exports helpers unused in this test")]
 mod support;
 
 #[test]

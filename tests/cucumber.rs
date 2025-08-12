@@ -28,6 +28,7 @@ mod check_ninja;
 #[path = "support/env.rs"]
 mod env;
 mod steps;
+#[expect(unused, reason = "support module exports helpers unused in this test")]
 mod support;
 
 #[tokio::main]

@@ -32,7 +32,10 @@ pub struct NinjaEnvGuard {
 /// let env = DefaultEnv::new();
 /// let _guard = override_ninja_env(&env, "/usr/bin/ninja");
 /// ```
-#[allow(dead_code, reason = "only some tests override NINJA_ENV")]
+#[cfg_attr(
+    not(test),
+    expect(unused_code, reason = "only some tests override NINJA_ENV")
+)]
 pub fn override_ninja_env(env: &impl Env, value: &str) -> NinjaEnvGuard {
     let original = env.raw(NINJA_ENV).ok();
     // Callers must hold [`EnvLock`](super::env_lock::EnvLock) to serialise this
