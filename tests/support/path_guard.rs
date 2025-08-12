@@ -7,6 +7,7 @@ use std::ffi::OsString;
 
 use super::env_lock::EnvLock;
 
+/// Original `PATH` state captured by `PathGuard`.
 #[allow(dead_code, reason = "only some tests mutate PATH")]
 #[derive(Debug)]
 enum OriginalPath {
@@ -24,8 +25,8 @@ pub struct PathGuard {
 }
 
 impl PathGuard {
-    #[allow(dead_code, reason = "only some tests mutate PATH")]
     /// Create a guard capturing the current `PATH`.
+    #[allow(dead_code, reason = "only some tests mutate PATH")]
     pub fn new(original: Option<OsString>) -> Self {
         let state = original.map_or(OriginalPath::Unset, OriginalPath::Set);
         Self {

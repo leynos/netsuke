@@ -1,11 +1,14 @@
-use mockable::{DefaultEnv as SystemEnv, Env};
+//! Tests for scoped manipulation of `PATH` via `prepend_dir_to_path` and
+//! `PathGuard`.
+
+use mockable::Env;
 use rstest::rstest;
 use serial_test::serial;
 
 #[path = "support/env.rs"]
 mod env;
 mod support;
-use env::{mocked_path_env, prepend_dir_to_path};
+use env::{SystemEnv, mocked_path_env, prepend_dir_to_path};
 use support::env_lock::EnvLock;
 
 #[rstest]

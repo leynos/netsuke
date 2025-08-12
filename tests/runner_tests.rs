@@ -1,4 +1,3 @@
-use mockable::DefaultEnv as SystemEnv;
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
@@ -10,7 +9,7 @@ mod check_ninja;
 #[path = "support/env.rs"]
 mod env;
 mod support;
-use env::prepend_dir_to_path;
+use env::{SystemEnv, prepend_dir_to_path};
 use support::path_guard::PathGuard;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on `PATH`.

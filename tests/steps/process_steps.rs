@@ -1,13 +1,14 @@
 //! Step definitions for Ninja process execution.
 
-use crate::{CliWorld, check_ninja, env, support};
+use crate::{
+    CliWorld, check_ninja,
+    env::{self, EnvMut},
+    support,
+};
 use cucumber::{given, then, when};
-use mockable::Env;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
-use support::env_lock::EnvLock;
-use support::path_guard::PathGuard;
 use tempfile::{NamedTempFile, TempDir};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
@@ -15,20 +16,8 @@ use tempfile::{NamedTempFile, TempDir};
     clippy::needless_pass_by_value,
     reason = "helper owns path for simplicity"
 )]
-fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
-    let original = env.raw("PATH").ok();
-    let guard = PathGuard::new(original.clone().map(Into::into));
-    let new_path = original.as_ref().map_or_else(
-        || dir.path().display().to_string(),
-        |orig| format!("{}:{}", dir.path().display(), orig),
-    );
-    // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state.
-    // `EnvLock` serialises mutations and `PathGuard` restores the prior value.
-    let _lock = EnvLock::acquire();
-    unsafe {
-        std::env::set_var("PATH", &new_path);
-    }
-
+fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
+    let guard = env::prepend_dir_to_path(env, dir.path());
     world.path_guard = Some(guard);
     world.ninja = Some(ninja_path.to_string_lossy().into_owned());
     world.temp = Some(dir);
