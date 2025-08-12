@@ -28,7 +28,7 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 pub mod doc {
     #[cfg_attr(
         not(doc),
-        allow(unused_imports, reason = "doctest-only wrapper module")
+        expect(unused_imports, reason = "doctest-only wrapper module")
     )]
     use super::*;
 
