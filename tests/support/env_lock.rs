@@ -6,7 +6,7 @@
 use std::sync::{Mutex, MutexGuard};
 
 /// Global mutex protecting environment changes.
-#[cfg_attr(test, expect(dead_code, reason = "only some tests mutate PATH"))]
+#[cfg_attr(not(test), expect(dead_code, reason = "only some tests mutate PATH"))]
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 /// RAII guard that holds the global environment lock.
