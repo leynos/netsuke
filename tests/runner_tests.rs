@@ -6,10 +6,9 @@ use std::path::{Path, PathBuf};
 
 #[path = "support/check_ninja.rs"]
 mod check_ninja;
-#[path = "support/path_guard.rs"]
-mod path_guard;
 mod support;
-use path_guard::PathGuard;
+use support::env_lock::EnvLock;
+use support::path_guard::PathGuard;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
 ///
@@ -23,6 +22,7 @@ fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
+    let _lock = EnvLock::acquire();
     // Nightly marks set_var unsafe.
     unsafe { std::env::set_var("PATH", &new_path) };
 
@@ -44,6 +44,7 @@ fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, Pat
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
+    let _lock = EnvLock::acquire();
     // Nightly marks set_var unsafe.
     unsafe { std::env::set_var("PATH", &new_path) };
 

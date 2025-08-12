@@ -1,11 +1,13 @@
 //! Step definitions for Ninja process execution.
 
-use crate::{CliWorld, check_ninja, env, path_guard, support};
+use crate::{CliWorld, check_ninja, env, support};
 use cucumber::{given, then, when};
 use mockable::Env;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
+use support::env_lock::EnvLock;
+use support::path_guard::PathGuard;
 use tempfile::{NamedTempFile, TempDir};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
@@ -15,10 +17,11 @@ use tempfile::{NamedTempFile, TempDir};
 )]
 fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
     let original = env.raw("PATH").unwrap_or_default();
-    let guard = path_guard::PathGuard::new(original.clone().into());
+    let guard = PathGuard::new(original.clone().into());
     let new_path = format!("{}:{}", dir.path().display(), original);
-    // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state; `PathGuard`
-    // restores the prior value when dropped.
+    // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state.
+    // `EnvLock` serialises mutations and `PathGuard` restores the prior value.
+    let _lock = EnvLock::acquire();
     unsafe {
         std::env::set_var("PATH", &new_path);
     }

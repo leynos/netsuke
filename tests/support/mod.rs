@@ -3,6 +3,12 @@
 //! This module provides helpers for creating fake executables along with
 //! logging utilities used in behavioural tests.
 
+pub mod env_lock;
+pub mod path_guard;
+
+#[expect(unused_imports, reason = "re-export for selective test crates")]
+pub use path_guard::PathGuard;
+
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
