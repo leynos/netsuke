@@ -125,8 +125,6 @@ project:
   meaningfully named structs.
 - Where a function is returning a large error consider using `Arc` to reduce the
   amount of data returned.
-- Write unit and behavioural tests for new functionality. Run both before and
-  after making any change.
 - Every module **must** begin with a module level (`//!`) comment explaining the
   module's purpose and utility.
 - Document public APIs using Rustdoc comments (`///`) so documentation can be
@@ -142,13 +140,8 @@ project:
 - Lints must not be silenced except as a **last resort**.
 - Lint rule suppressions must be tightly scoped and include a clear reason.
 - Prefer `expect` over `allow`.
-- Use `rstest` fixtures for shared setup.
-- Replace duplicated tests with `#[rstest(...)]` parameterised cases.
-- Prefer `mockall` for mocks/stubs.
-- Mock non-deterministic dependencies (e.g., environment variables and the
-  system clock) using dependency injection with the `mockable` crate (traits
-  like `Env` and `Clock`) where appropriate. See
-  `docs/reliable-testing-in-rust-via-dependency-injection.md` for guidance.
+- Where a function is unused with specific features selected, use conditional
+  compilation with `#[cfg]` or `#[cfg_attr]`.
 - Prefer `.expect()` over `.unwrap()`.
 - Use `concat!()` to combine long string literals rather than escaping newlines
   with a backslash.
@@ -165,6 +158,18 @@ project:
       Self(id)
   }
   ```
+
+### Testing
+
+- Write unit and behavioural tests for new functionality. Run both before and
+  after making any change.
+- Use `rstest` fixtures for shared setup.
+- Replace duplicated tests with `#[rstest(...)]` parameterised cases.
+- Prefer `mockall` for mocks/stubs.
+- Mock non-deterministic dependencies (e.g., environment variables and the
+  system clock) using dependency injection with the `mockable` crate (traits
+  like `Env` and `Clock`) where appropriate. See
+  `docs/reliable-testing-in-rust-via-dependency-injection.md` for guidance.
 
 ### Dependency Management
 
