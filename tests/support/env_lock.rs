@@ -15,6 +15,8 @@ pub struct EnvLock {
 impl EnvLock {
     /// Acquire the global lock serialising environment mutations.
     pub fn acquire() -> Self {
-        Self { _guard: ENV_LOCK.lock().expect("env lock") }
+        Self {
+            _guard: ENV_LOCK.lock().expect("env lock"),
+        }
     }
 }
