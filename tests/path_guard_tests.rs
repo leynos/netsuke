@@ -1,3 +1,8 @@
+//! Tests for PATH restoration behaviour using mock environments.
+//!
+//! Verifies that `PathGuard` restores `PATH` without mutating the real
+//! process environment.
+
 mod support;
 
 use mockall::{Sequence, mock};
