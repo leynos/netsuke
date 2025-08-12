@@ -1,10 +1,13 @@
 //! Step definitions for Ninja process execution.
 
-use crate::{CliWorld, support};
+use crate::{CliWorld, check_ninja, env, support};
 use cucumber::{given, then, when};
+use mockable::Env;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
+use support::env_lock::EnvLock;
+use support::path_guard::PathGuard;
 use tempfile::{NamedTempFile, TempDir};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
@@ -12,17 +15,18 @@ use tempfile::{NamedTempFile, TempDir};
     clippy::needless_pass_by_value,
     reason = "helper owns path for simplicity"
 )]
-fn install_test_ninja(world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
-    let original = world
-        .original_path
-        .get_or_insert_with(|| std::env::var_os("PATH").unwrap_or_default());
-
-    let new_path = format!("{}:{}", dir.path().display(), original.to_string_lossy());
-    // SAFETY: nightly marks `set_var` as unsafe; override path for test isolation.
+fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
+    let original = env.raw("PATH").unwrap_or_default();
+    let guard = PathGuard::new(original.clone().into());
+    let new_path = format!("{}:{}", dir.path().display(), original);
+    // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state.
+    // `EnvLock` serialises mutations and `PathGuard` restores the prior value.
+    let _lock = EnvLock::acquire();
     unsafe {
         std::env::set_var("PATH", &new_path);
     }
 
+    world.path_guard = Some(guard);
     world.ninja = Some(ninja_path.to_string_lossy().into_owned());
     world.temp = Some(dir);
 }
@@ -31,14 +35,16 @@ fn install_test_ninja(world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn fake_ninja(world: &mut CliWorld, code: i32) {
     let (dir, path) = support::fake_ninja(code);
-    install_test_ninja(world, dir, path);
+    let env = env::mocked_path_env();
+    install_test_ninja(&env, world, dir, path);
 }
 
 /// Creates a fake ninja executable that validates the build file path.
 #[given("a fake ninja executable that checks for the build file")]
 fn fake_ninja_check(world: &mut CliWorld) {
-    let (dir, path) = support::fake_ninja_check_build_file();
-    install_test_ninja(world, dir, path);
+    let (dir, path) = check_ninja::fake_ninja_check_build_file();
+    let env = env::mocked_path_env();
+    install_test_ninja(&env, world, dir, path);
 }
 
 /// Sets up a scenario where no ninja executable is available.
@@ -50,7 +56,8 @@ fn fake_ninja_check(world: &mut CliWorld) {
 fn no_ninja(world: &mut CliWorld) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
-    install_test_ninja(world, dir, path);
+    let env = env::mocked_path_env();
+    install_test_ninja(&env, world, dir, path);
 }
 
 /// Updates the CLI to use the temporary directory created for the fake ninja.
@@ -92,7 +99,7 @@ fn run(world: &mut CliWorld) {
     if !manifest_path.exists() {
         let mut file =
             NamedTempFile::new_in(dir.path()).expect("Failed to create temporary manifest file");
-        support::write_manifest(&mut file).expect("Failed to write manifest content");
+        env::write_manifest(&mut file).expect("Failed to write manifest content");
         file.persist(&manifest_path)
             .expect("Failed to persist manifest file");
     }

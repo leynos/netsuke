@@ -19,21 +19,14 @@ pub struct CliWorld {
     pub run_error: Option<String>,
     /// Temporary directory handle for test isolation.
     pub temp: Option<tempfile::TempDir>,
-    /// Original `PATH` value restored after each scenario.
-    pub original_path: Option<std::ffi::OsString>,
+    /// Guard that restores `PATH` after each scenario.
+    pub path_guard: Option<support::path_guard::PathGuard>,
 }
 
-impl Drop for CliWorld {
-    fn drop(&mut self) {
-        if let Some(path) = self.original_path.take() {
-            // SAFETY: nightly marks `set_var` as unsafe; restore path for isolation.
-            unsafe {
-                std::env::set_var("PATH", path);
-            }
-        }
-    }
-}
-
+#[path = "support/check_ninja.rs"]
+mod check_ninja;
+#[path = "support/env.rs"]
+mod env;
 mod steps;
 mod support;
 

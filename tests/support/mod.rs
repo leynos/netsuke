@@ -1,25 +1,22 @@
 //! Test utilities for process management.
 //!
-//! This module provides helpers for creating fake executables and
-//! generating minimal manifests used in behavioural tests.
+//! This module provides helpers for creating fake executables along with
+//! logging utilities used in behavioural tests.
 
-use mockable::MockEnv;
+pub mod env_lock;
+pub mod path_guard;
+
+#[expect(unused_imports, reason = "re-export for selective test crates")]
+pub use path_guard::PathGuard;
+
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-use tracing::Level;
-use tracing_subscriber::fmt;
 
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "used only in some test crates"
-)]
-#[expect(dead_code, reason = "used in CLI behaviour tests")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
@@ -37,17 +34,6 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 
 /// Set up `env` so `PATH` resolves only to `dir`.
 ///
-/// # Examples
-/// ```ignore
-/// let (dir, _) = fake_ninja(0);
-/// let mut env = MockEnv::new();
-/// mock_path_to(&mut env, dir.path());
-/// ```
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "used only in some test crates"
-)]
-#[expect(dead_code, reason = "used in PATH tests")]
 /// Build a valid `PATH` string that contains exactly one entry pointing to
 /// `dir` and configure the mock to return it. This avoids lossy conversions
 /// and makes the UTF-8 requirement explicit to callers.
@@ -55,17 +41,25 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 /// Note: `MockEnv::raw` returns a `String`, so callers must accept UTF-8. This
 /// helper returns an error if the constructed `PATH` cannot be represented as
 /// UTF-8.
-pub fn mock_path_to(env: &mut MockEnv, dir: &Path) -> std::io::Result<()> {
+///
+/// # Examples
+/// ```ignore
+/// let (dir, _) = fake_ninja(0);
+/// let mut env = MockEnv::new();
+/// mock_path_to(&mut env, dir.path());
+/// ```
+#[expect(dead_code, reason = "used in PATH tests")]
+pub fn mock_path_to(env: &mut mockable::MockEnv, dir: &Path) -> io::Result<()> {
     // Join using the platform-appropriate separator while ensuring exactly one
     // element is present in the PATH value.
     let joined = std::env::join_paths([dir.as_os_str()])
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
 
     // `MockEnv::raw` expects a `String`. Propagate if the single-entry PATH is
     // not valid UTF-8 to keep the contract explicit.
     let path = joined.into_string().map_err(|os| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+        io::Error::new(
+            io::ErrorKind::InvalidData,
             format!("non-UTF-8 PATH entry: {}", os.to_string_lossy()),
         )
     })?;
@@ -77,98 +71,10 @@ pub fn mock_path_to(env: &mut MockEnv, dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Create a fake Ninja that validates the build file path provided via `-f`.
-///
-/// The script exits with status `1` if the file is missing or not a regular
-/// file, otherwise `0`.
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "used only in some test crates"
-)]
-#[expect(dead_code, reason = "used in build file validation tests")]
-pub fn fake_ninja_check_build_file() -> (TempDir, PathBuf) {
-    let dir = TempDir::new().expect("temp dir");
-    let path = dir.path().join("ninja");
-    let mut file = File::create(&path).expect("script");
-    writeln!(
-        file,
-        concat!(
-            "#!/bin/sh\n",
-            "if [ \"$1\" = \"-f\" ] && [ ! -f \"$2\" ]; then\n",
-            "  echo 'missing build file: $2' >&2\n",
-            "  exit 1\n",
-            "fi\n",
-            "exit 0"
-        )
-    )
-    .expect("write script");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&path).expect("meta").permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&path, perms).expect("perms");
-    }
-    (dir, path)
-}
-
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "compiled only for logging tests"
-)]
-#[expect(dead_code, reason = "compiled as its own crate during linting")]
-#[derive(Clone)]
-struct BufferWriter {
-    buf: Arc<Mutex<Vec<u8>>>,
-}
-
-impl Write for BufferWriter {
-    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
-        self.buf.lock().expect("lock").write(data)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.buf.lock().expect("lock").flush()
-    }
-}
-
-/// Capture logs emitted within the provided closure.
-///
-/// # Examples
-///
-/// ```ignore
-/// use tracing::Level;
-/// let output = capture_logs(Level::INFO, || tracing::info!("hello"));
-/// assert!(output.contains("hello"));
-/// ```
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "compiled only for logging tests"
-)]
-#[expect(dead_code, reason = "compiled as its own crate during linting")]
-pub fn capture_logs<F>(level: Level, f: F) -> String
-where
-    F: FnOnce(),
-{
-    let buf = Arc::new(Mutex::new(Vec::new()));
-    let writer = BufferWriter {
-        buf: Arc::clone(&buf),
-    };
-    let subscriber = fmt()
-        .with_max_level(level)
-        .without_time()
-        .with_writer(move || writer.clone())
-        .finish();
-    tracing::subscriber::with_default(subscriber, f);
-    let locked = buf.lock().expect("lock");
-    String::from_utf8(locked.clone()).expect("utf8")
-}
-
 /// Create a fake Ninja executable that writes its current directory to the file
 /// specified as the first argument.
 ///
 /// Returns the temporary directory and the path to the executable.
-#[allow(unfulfilled_lint_expectations, reason = "used only in directory tests")]
 #[expect(dead_code, reason = "used only in directory tests")]
 pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
@@ -184,28 +90,4 @@ pub fn fake_ninja_pwd() -> (TempDir, PathBuf) {
         fs::set_permissions(&path, perms).expect("perms");
     }
     (dir, path)
-}
-
-/// Write a minimal manifest to `file`.
-///
-/// The manifest declares a single `hello` target that prints a greeting.
-/// This must be `allow` as `expect` will trigger an unfulfilled warning
-/// despite the lint violation arising.
-#[allow(
-    unfulfilled_lint_expectations,
-    reason = "shared test utility not used in all crates"
-)]
-#[expect(dead_code, reason = "shared test utility not used in all crates")]
-pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
-    writeln!(
-        file,
-        concat!(
-            "netsuke_version: \"1.0.0\"\n",
-            "targets:\n",
-            "  - name: hello\n",
-            "    recipe:\n",
-            "      kind: command\n",
-            "      command: \"echo hi\"\n"
-        ),
-    )
 }

@@ -2,44 +2,27 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+#[path = "support/check_ninja.rs"]
+mod check_ninja;
 mod support;
-
-/// Guard that restores PATH to its original value when dropped.
-///
-/// Using a simple guard avoids heap allocation and guarantees teardown on
-/// early returns or panics.
-struct PathGuard {
-    original: OsString,
-}
-
-impl PathGuard {
-    fn new(original: OsString) -> Self {
-        Self { original }
-    }
-}
-
-impl Drop for PathGuard {
-    fn drop(&mut self) {
-        // Nightly marks set_var unsafe.
-        unsafe { std::env::set_var("PATH", &self.original) };
-    }
-}
+use support::env_lock::EnvLock;
+use support::path_guard::PathGuard;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
 ///
 /// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
 fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
-    let (ninja_dir, ninja_path) = support::fake_ninja_check_build_file();
+    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file();
 
     // Save PATH and prepend our fake ninja directory.
     let original_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
+    let _lock = EnvLock::acquire();
     // Nightly marks set_var unsafe.
     unsafe { std::env::set_var("PATH", &new_path) };
 
@@ -61,6 +44,7 @@ fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, Pat
     let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
     paths.insert(0, ninja_dir.path().to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
+    let _lock = EnvLock::acquire();
     // Nightly marks set_var unsafe.
     unsafe { std::env::set_var("PATH", &new_path) };
 
