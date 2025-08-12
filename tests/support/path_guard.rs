@@ -52,7 +52,10 @@ impl PathGuard {
     #[allow(dead_code, reason = "only some tests mutate PATH")]
     pub fn new(original: Option<OsString>) -> Self {
         let state = original.map_or(OriginalPath::Unset, OriginalPath::Set);
-        Self { original: Some(state), env: StdEnv }
+        Self {
+            original: Some(state),
+            env: StdEnv,
+        }
     }
 }
 
