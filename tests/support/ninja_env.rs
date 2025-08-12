@@ -1,9 +1,9 @@
-//! Override and restore `NINJA_ENV` for tests.
+//! Override and restore [`NINJA_ENV`] for tests.
 //!
-//! Provides a helper that sets the `NETSUKE_NINJA` environment variable while
-//! ensuring it is restored afterwards. This uses [`EnvLock`] to serialise
-//! mutations to the global environment and captures the previous value through a
-//! `mockable::Env` implementation so tests can inject their own state.
+//! Provides a helper that sets [`NINJA_ENV`] while ensuring it is restored
+//! afterwards. This uses [`EnvLock`] to serialise mutations to the global
+//! environment and captures the previous value through a `mockable::Env`
+//! implementation so tests can inject their own state.
 
 use mockable::Env;
 use netsuke::runner::NINJA_ENV;
@@ -17,8 +17,13 @@ pub struct NinjaEnvGuard {
     original: Option<String>,
 }
 
-/// Set `NINJA_ENV` to `value`, returning a guard that restores the previous
+/// Set [`NINJA_ENV`] to `value`, returning a guard that restores the previous
 /// value when dropped.
+///
+/// # Thread Safety
+///
+/// This function is **not thread-safe**. Callers must hold
+/// [`EnvLock`](super::env_lock::EnvLock) to serialise this mutation.
 ///
 /// # Examples
 /// ```ignore
@@ -39,6 +44,9 @@ pub fn override_ninja_env(env: &impl Env, value: &str) -> NinjaEnvGuard {
 
 impl Drop for NinjaEnvGuard {
     fn drop(&mut self) {
+        // Safety: callers hold [`EnvLock`] for the guard's lifetime, so these
+        // `set_var`/`remove_var` calls are serialised. Both functions are
+        // `unsafe` on Rust 2024.
         unsafe {
             if let Some(ref val) = self.original {
                 std::env::set_var(NINJA_ENV, val);
