@@ -10,8 +10,7 @@ use std::ffi::{OsStr, OsString};
 use super::env_lock::EnvLock;
 
 /// Environment interface allowing `PATH` mutation.
-#[cfg_attr(expect, expect(dead_code, reason = "used in PATH tests"))]
-#[cfg_attr(not(expect), allow(dead_code, reason = "used in PATH tests"))]
+#[cfg(test)]
 pub trait Env {
     /// Set an environment variable.
     ///
@@ -22,8 +21,7 @@ pub trait Env {
 }
 
 /// Real environment implementation.
-#[cfg_attr(expect, expect(dead_code, reason = "used in PATH tests"))]
-#[cfg_attr(not(expect), allow(dead_code, reason = "used in PATH tests"))]
+#[cfg(test)]
 #[derive(Debug, Default)]
 pub struct RealEnv;
 

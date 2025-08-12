@@ -3,11 +3,14 @@
 //! Verifies that `PathGuard` restores `PATH` without mutating the real
 //! process environment.
 
-mod support;
+#[path = "support/env_lock.rs"]
+mod env_lock;
+#[path = "support/path_guard.rs"]
+mod path_guard;
 
 use mockall::{Sequence, mock};
+use path_guard::{Env, PathGuard};
 use std::ffi::OsStr;
-use support::path_guard::{Env, PathGuard};
 
 mock! {
     pub Env {}
