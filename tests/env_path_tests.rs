@@ -19,9 +19,7 @@ fn prepend_dir_to_path_sets_and_restores() {
     let dir = tempfile::tempdir().expect("temp dir");
     let guard = prepend_dir_to_path(&env, dir.path());
     let after = std::env::var("PATH").expect("path var");
-    let first = std::env::split_paths(&std::ffi::OsString::from(&after))
-        .next()
-        .expect("first path");
+    let first = std::env::split_paths(&after).next().expect("first path");
     assert_eq!(first, dir.path());
     drop(guard);
     let restored = std::env::var("PATH").expect("path var");

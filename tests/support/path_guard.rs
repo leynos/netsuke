@@ -26,6 +26,8 @@ pub struct PathGuard {
 
 impl PathGuard {
     /// Create a guard capturing the current `PATH`.
+    ///
+    /// Returns a guard that restores the variable when dropped.
     #[allow(dead_code, reason = "only some tests mutate PATH")]
     pub fn new(original: Option<OsString>) -> Self {
         let state = original.map_or(OriginalPath::Unset, OriginalPath::Set);
