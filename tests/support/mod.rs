@@ -28,13 +28,6 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 
 /// Set up `env` so `PATH` resolves only to `dir`.
 ///
-/// # Examples
-/// ```ignore
-/// let (dir, _) = fake_ninja(0);
-/// let mut env = MockEnv::new();
-/// mock_path_to(&mut env, dir.path());
-/// ```
-#[expect(dead_code, reason = "used in PATH tests")]
 /// Build a valid `PATH` string that contains exactly one entry pointing to
 /// `dir` and configure the mock to return it. This avoids lossy conversions
 /// and makes the UTF-8 requirement explicit to callers.
@@ -42,6 +35,14 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 /// Note: `MockEnv::raw` returns a `String`, so callers must accept UTF-8. This
 /// helper returns an error if the constructed `PATH` cannot be represented as
 /// UTF-8.
+///
+/// # Examples
+/// ```ignore
+/// let (dir, _) = fake_ninja(0);
+/// let mut env = MockEnv::new();
+/// mock_path_to(&mut env, dir.path());
+/// ```
+#[expect(dead_code, reason = "used in PATH tests")]
 pub fn mock_path_to(env: &mut mockable::MockEnv, dir: &Path) -> io::Result<()> {
     // Join using the platform-appropriate separator while ensuring exactly one
     // element is present in the PATH value.
