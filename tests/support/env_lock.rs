@@ -10,6 +10,7 @@ use std::sync::{Mutex, MutexGuard};
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 #[allow(dead_code, reason = "only some tests mutate PATH")]
+#[derive(Debug)]
 /// RAII guard that holds the global environment lock.
 pub struct EnvLock(MutexGuard<'static, ()>);
 

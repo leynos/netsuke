@@ -12,7 +12,6 @@ mod support;
 
 #[test]
 fn override_ninja_env_restores_original() {
-    let _lock = EnvLock::acquire();
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
@@ -20,18 +19,18 @@ fn override_ninja_env_restores_original() {
         .returning(|_| Ok("orig".to_string()));
 
     {
-        let _guard = override_ninja_env(&env, "new");
+        let _guard = override_ninja_env(EnvLock::acquire(), &env, "new");
         assert_eq!(std::env::var(NINJA_ENV).as_deref(), Ok("new"));
     }
     assert_eq!(std::env::var(NINJA_ENV).as_deref(), Ok("orig"));
     // Clean up to avoid leaking environment state. `remove_var` is `unsafe`
-    // on Rust 2024; the lock above serialises this mutation.
+    // on Rust 2024; a fresh lock serialises this mutation.
+    let _cleanup = EnvLock::acquire();
     unsafe { std::env::remove_var(NINJA_ENV) };
 }
 
 #[test]
 fn override_ninja_env_removes_when_unset() {
-    let _lock = EnvLock::acquire();
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
@@ -39,16 +38,16 @@ fn override_ninja_env_removes_when_unset() {
         .returning(|_| Err(VarError::NotPresent));
 
     {
-        let _guard = override_ninja_env(&env, "new");
+        let _guard = override_ninja_env(EnvLock::acquire(), &env, "new");
         assert_eq!(std::env::var(NINJA_ENV).as_deref(), Ok("new"));
     }
     assert!(std::env::var(NINJA_ENV).is_err());
+    let _cleanup = EnvLock::acquire();
     unsafe { std::env::remove_var(NINJA_ENV) };
 }
 
 #[test]
 fn override_ninja_env_restores_empty() {
-    let _lock = EnvLock::acquire();
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
@@ -56,9 +55,10 @@ fn override_ninja_env_restores_empty() {
         .returning(|_| Ok(String::new()));
 
     {
-        let _guard = override_ninja_env(&env, "new");
+        let _guard = override_ninja_env(EnvLock::acquire(), &env, "new");
         assert_eq!(std::env::var(NINJA_ENV).as_deref(), Ok("new"));
     }
     assert_eq!(std::env::var(NINJA_ENV).as_deref(), Ok(""));
+    let _cleanup = EnvLock::acquire();
     unsafe { std::env::remove_var(NINJA_ENV) };
 }

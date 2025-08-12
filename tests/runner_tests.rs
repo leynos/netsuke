@@ -222,12 +222,12 @@ fn run_manifest_subcommand_writes_file() {
 #[serial]
 fn run_respects_env_override_for_ninja() {
     let (temp_dir, ninja_path) = support::fake_ninja(0);
+    // `NINJA_ENV` expects UTF-8; lossy conversion is acceptable in this test.
     let program = ninja_path.to_string_lossy().into_owned();
     let env = DefaultEnv::new();
-    let _lock = EnvLock::acquire();
     // `set_var` is `unsafe` on Rust 2024; the lock serialises the mutation and
     // `override_ninja_env` restores the original value via its guard.
-    let _guard = override_ninja_env(&env, &program);
+    let _guard = override_ninja_env(EnvLock::acquire(), &env, &program);
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
