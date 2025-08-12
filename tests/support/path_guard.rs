@@ -10,7 +10,14 @@ use super::env_lock::EnvLock;
 /// Guard that restores `PATH` to its original value when dropped.
 ///
 /// This uses RAII to ensure the environment is reset even if a test panics.
-#[cfg_attr(test, allow(dead_code, reason = "only some tests mutate PATH"))]
+#[cfg_attr(
+    test,
+    expect(dead_code, reason = "only some tests mutate PATH"),
+    allow(
+        unfulfilled_lint_expectations,
+        reason = "PathGuard is used in some test crates"
+    )
+)]
 #[derive(Debug)]
 pub struct PathGuard {
     original_path: Option<OsString>,
@@ -18,7 +25,14 @@ pub struct PathGuard {
 
 impl PathGuard {
     /// Create a guard capturing the current `PATH`.
-    #[cfg_attr(test, allow(dead_code, reason = "only some tests mutate PATH"))]
+    #[cfg_attr(
+        test,
+        expect(dead_code, reason = "only some tests mutate PATH"),
+        allow(
+            unfulfilled_lint_expectations,
+            reason = "PathGuard is used in some test crates"
+        )
+    )]
     pub fn new(original: OsString) -> Self {
         Self {
             original_path: Some(original),
