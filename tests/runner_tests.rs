@@ -1,5 +1,6 @@
+use mockable::DefaultEnv;
 use netsuke::cli::{BuildArgs, Cli, Commands};
-use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
+use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
@@ -8,6 +9,7 @@ use std::path::{Path, PathBuf};
 mod check_ninja;
 mod support;
 use support::env_lock::EnvLock;
+use support::ninja_env::override_ninja_env;
 use support::path_guard::PathGuard;
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
@@ -220,10 +222,12 @@ fn run_manifest_subcommand_writes_file() {
 #[serial]
 fn run_respects_env_override_for_ninja() {
     let (temp_dir, ninja_path) = support::fake_ninja(0);
-    let original = std::env::var_os(NINJA_ENV);
-    unsafe {
-        std::env::set_var(NINJA_ENV, &ninja_path);
-    }
+    let program = ninja_path.to_string_lossy().into_owned();
+    let env = DefaultEnv::new();
+    let _lock = EnvLock::acquire();
+    // `set_var` is `unsafe` on Rust 2024; the lock serialises the mutation and
+    // `override_ninja_env` restores the original value via its guard.
+    let _guard = override_ninja_env(&env, &program);
 
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
@@ -241,14 +245,6 @@ fn run_respects_env_override_for_ninja() {
 
     let result = run(&cli);
     assert!(result.is_ok());
-
-    unsafe {
-        if let Some(val) = original {
-            std::env::set_var(NINJA_ENV, val);
-        } else {
-            std::env::remove_var(NINJA_ENV);
-        }
-    }
     drop(ninja_path);
     drop(temp_dir);
 }

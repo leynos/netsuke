@@ -4,6 +4,7 @@
 //! logging utilities used in behavioural tests.
 
 pub mod env_lock;
+pub mod ninja_env;
 pub mod path_guard;
 
 #[expect(unused_imports, reason = "re-export for selective test crates")]
@@ -17,6 +18,7 @@ use tempfile::TempDir;
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
+#[allow(dead_code, reason = "only some test crates spawn fake ninja binaries")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
