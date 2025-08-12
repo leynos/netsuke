@@ -3,6 +3,8 @@
 //! This module provides helpers for creating fake executables along with
 //! logging utilities used in behavioural tests.
 
+#![allow(unexpected_cfgs, reason = "test utilities use custom cfg")]
+
 pub mod env_lock;
 pub mod path_guard;
 
@@ -17,6 +19,7 @@ use tempfile::TempDir;
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
+#[cfg_attr(expect, expect(dead_code, reason = "used in PATH tests"))]
 #[allow(dead_code, reason = "used in PATH tests")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");

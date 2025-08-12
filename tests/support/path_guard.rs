@@ -3,6 +3,8 @@
 //! Provides a guard that resets the environment variable on drop so tests do
 //! not pollute global state.
 
+#![allow(unexpected_cfgs, reason = "test utilities use custom cfg")]
+
 use std::ffi::{OsStr, OsString};
 
 use super::env_lock::EnvLock;
@@ -22,7 +24,7 @@ pub trait Env {
 pub struct RealEnv;
 
 impl Env for RealEnv {
-    #[allow(unsafe_op_in_unsafe_fn, reason = "delegates to std::env")]
+    #[expect(unsafe_op_in_unsafe_fn, reason = "delegates to std::env")]
     unsafe fn set_var(&mut self, key: &str, val: &OsStr) {
         std::env::set_var(key, val);
     }
@@ -31,6 +33,7 @@ impl Env for RealEnv {
 /// Guard that restores `PATH` to its original value when dropped.
 ///
 /// This uses RAII to ensure the environment is reset even if a test panics.
+#[cfg_attr(expect, expect(dead_code, reason = "only some tests mutate PATH"))]
 #[allow(dead_code, reason = "only some tests mutate PATH")]
 #[derive(Debug)]
 pub struct PathGuard<E: Env = RealEnv> {
@@ -39,6 +42,7 @@ pub struct PathGuard<E: Env = RealEnv> {
 }
 
 impl PathGuard {
+    #[cfg_attr(expect, expect(dead_code, reason = "only some tests mutate PATH"))]
     #[allow(dead_code, reason = "only some tests mutate PATH")]
     /// Create a guard capturing the current `PATH` using the real environment.
     pub fn new(original: OsString) -> Self {
@@ -47,6 +51,7 @@ impl PathGuard {
 }
 
 impl<E: Env> PathGuard<E> {
+    #[cfg_attr(expect, expect(dead_code, reason = "only some tests mutate PATH"))]
     #[allow(dead_code, reason = "only some tests mutate PATH")]
     /// Create a guard for `PATH` using a provided environment.
     pub fn with_env(original: OsString, env: E) -> Self {
@@ -57,6 +62,7 @@ impl<E: Env> PathGuard<E> {
     }
 
     /// Access the underlying environment for mutation during a test.
+    #[cfg_attr(expect, expect(dead_code, reason = "used in env injection tests"))]
     #[allow(dead_code, reason = "used in env injection tests")]
     pub fn env_mut(&mut self) -> &mut E {
         &mut self.env
