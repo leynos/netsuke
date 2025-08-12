@@ -68,9 +68,9 @@ impl<'a> BuildTargets<'a> {
     }
 }
 
-#[allow(
+#[expect(
     clippy::derivable_impls,
-    reason = "Derive fails for non-'static lifetimes; manual impl returns empty slice."
+    reason = "Default derive requires 'static lifetime; manual impl returns empty slice."
 )]
 impl Default for BuildTargets<'_> {
     fn default() -> Self {
