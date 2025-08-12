@@ -26,7 +26,10 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 // testing surface without exporting them in release builds.
 #[doc(hidden)]
 pub mod doc {
-    #[allow(unused_imports, reason = "doctest-only wrapper module")]
+    #[cfg_attr(
+        not(doc),
+        allow(unused_imports, reason = "doctest-only wrapper module")
+    )]
     use super::*;
 
     // Public wrappers to expose crate-private helpers to doctests.
