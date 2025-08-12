@@ -3,9 +3,14 @@
 //! Provides fixtures and utilities for managing `PATH` and writing minimal
 //! manifests.
 
-use mockable::MockEnv;
+use mockable::{Env, MockEnv};
 use rstest::fixture;
+use std::ffi::OsString;
 use std::io::{self, Write};
+use std::path::Path;
+
+use crate::support::env_lock::EnvLock;
+use crate::support::path_guard::PathGuard;
 
 /// Fixture: capture the original `PATH` via a mocked environment.
 ///
@@ -25,6 +30,7 @@ pub fn mocked_path_env() -> MockEnv {
 /// Write a minimal manifest to `file`.
 ///
 /// The manifest declares a single `hello` target that prints a greeting.
+#[allow(dead_code, reason = "used in Cucumber tests")]
 pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     writeln!(
         file,
@@ -37,4 +43,22 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
             "      command: \"echo hi\"\n"
         ),
     )
+}
+
+/// Prepend `dir` to the real `PATH`, returning a guard that restores it.
+///
+/// `std::env::set_var` is `unsafe` in Rust 2024 because it mutates process
+/// globals. `EnvLock` serialises access and `PathGuard` rolls back the change,
+/// keeping the unsafety scoped to a single test.
+#[allow(dead_code, reason = "used in runner tests")]
+pub fn prepend_dir_to_path(env: &impl Env, dir: &Path) -> PathGuard {
+    let original = env.raw("PATH").unwrap_or_default();
+    let original_os: OsString = original.clone().into();
+    let mut paths: Vec<_> = std::env::split_paths(&original_os).collect();
+    paths.insert(0, dir.to_path_buf());
+    let new_path = std::env::join_paths(paths).expect("join paths");
+    let _lock = EnvLock::acquire();
+    // SAFETY: protected by `EnvLock` and reverted by the returned `PathGuard`.
+    unsafe { std::env::set_var("PATH", &new_path) };
+    PathGuard::new(original_os)
 }

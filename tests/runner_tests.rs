@@ -1,3 +1,4 @@
+use mockable::DefaultEnv;
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
@@ -6,49 +7,39 @@ use std::path::{Path, PathBuf};
 
 #[path = "support/check_ninja.rs"]
 mod check_ninja;
+#[path = "support/env.rs"]
+mod env;
 mod support;
-use support::env_lock::EnvLock;
+use env::prepend_dir_to_path;
 use support::path_guard::PathGuard;
 
-/// Fixture: Put a fake `ninja` (that checks for a build file) on PATH.
+/// Fixture: Put a fake `ninja` (that checks for a build file) on `PATH`.
+///
+/// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates
+/// process-global state. `EnvLock` serialises the mutation and the returned
+/// [`PathGuard`] restores the prior value, so the risk is confined to this test.
 ///
 /// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
 fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file();
-
-    // Save PATH and prepend our fake ninja directory.
-    let original_path = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
-    paths.insert(0, ninja_dir.path().to_path_buf());
-    let new_path = std::env::join_paths(paths).expect("join paths");
-    let _lock = EnvLock::acquire();
-    // Nightly marks set_var unsafe.
-    unsafe { std::env::set_var("PATH", &new_path) };
-
-    let guard = PathGuard::new(original_path);
+    let env = DefaultEnv::new();
+    let guard = prepend_dir_to_path(&env, ninja_dir.path());
     (ninja_dir, ninja_path, guard)
 }
 
-/// Fixture: Put a fake `ninja` with a specific exit code on PATH.
+/// Fixture: Put a fake `ninja` with a specific exit code on `PATH`.
 ///
-/// The default exit code is 0, but can be customised via `#[with(...)]`.
+/// The default exit code is 0 but may be customised via `#[with(...)]`. The
+/// fixture uses `EnvLock` and [`PathGuard`] to tame the `unsafe` `set_var` call,
+/// mirroring [`ninja_in_path`].
 ///
 /// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
 fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = support::fake_ninja(exit_code);
-
-    // Save PATH and prepend our fake ninja directory.
-    let original_path = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths: Vec<_> = std::env::split_paths(&original_path).collect();
-    paths.insert(0, ninja_dir.path().to_path_buf());
-    let new_path = std::env::join_paths(paths).expect("join paths");
-    let _lock = EnvLock::acquire();
-    // Nightly marks set_var unsafe.
-    unsafe { std::env::set_var("PATH", &new_path) };
-
-    let guard = PathGuard::new(original_path);
+    let env = DefaultEnv::new();
+    let guard = prepend_dir_to_path(&env, ninja_dir.path());
     (ninja_dir, ninja_path, guard)
 }
 
