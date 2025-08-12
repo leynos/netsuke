@@ -5,7 +5,7 @@
 
 use std::ffi::{OsStr, OsString};
 
-use super::env_lock::EnvLock;
+use crate::env_lock::EnvLock;
 
 /// Environment abstraction for setting variables.
 pub trait Env {
@@ -28,7 +28,6 @@ impl Env for StdEnv {
 }
 
 /// Original `PATH` state captured by `PathGuard`.
-#[allow(dead_code, reason = "only some tests mutate PATH")]
 #[derive(Debug)]
 enum OriginalPath {
     Unset,
@@ -38,7 +37,6 @@ enum OriginalPath {
 /// Guard that restores `PATH` to its original value when dropped.
 ///
 /// This uses RAII to ensure the environment is reset even if a test panics.
-#[allow(dead_code, reason = "only some tests mutate PATH")]
 #[derive(Debug)]
 pub struct PathGuard<E: Env = StdEnv> {
     original: Option<OriginalPath>,
@@ -49,7 +47,6 @@ impl PathGuard {
     /// Create a guard capturing the current `PATH` using the real environment.
     ///
     /// Returns a guard that restores the variable when dropped.
-    #[allow(dead_code, reason = "only some tests mutate PATH")]
     pub fn new(original: Option<OsString>) -> Self {
         let state = original.map_or(OriginalPath::Unset, OriginalPath::Set);
         Self {
@@ -61,7 +58,6 @@ impl PathGuard {
 
 impl<E: Env> PathGuard<E> {
     /// Create a guard that uses `env` to restore `PATH`.
-    #[allow(dead_code, reason = "only some tests mutate PATH")]
     pub fn with_env(original: OsString, env: E) -> Self {
         Self {
             original: Some(OriginalPath::Set(original)),
@@ -70,7 +66,6 @@ impl<E: Env> PathGuard<E> {
     }
 
     /// Access the underlying environment.
-    #[allow(dead_code, reason = "only some tests mutate PATH")]
     pub fn env_mut(&mut self) -> &mut E {
         &mut self.env
     }

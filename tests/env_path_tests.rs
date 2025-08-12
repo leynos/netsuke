@@ -4,12 +4,10 @@
 use mockable::Env;
 use rstest::rstest;
 use serial_test::serial;
-
-#[path = "support/env.rs"]
-mod env;
-mod support;
-use env::{SystemEnv, mocked_path_env, prepend_dir_to_path};
-use support::env_lock::EnvLock;
+use test_support::{
+    env::{SystemEnv, mocked_path_env, prepend_dir_to_path},
+    env_lock::EnvLock,
+};
 
 #[rstest]
 #[serial]
