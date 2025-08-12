@@ -3,9 +3,10 @@
 //! This module provides helpers for creating fake executables and
 //! generating minimal manifests used in behavioural tests.
 
+use mockable::MockEnv;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 use tracing::Level;
@@ -32,6 +33,48 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
         fs::set_permissions(&path, perms).expect("perms");
     }
     (dir, path)
+}
+
+/// Set up `env` so `PATH` resolves only to `dir`.
+///
+/// # Examples
+/// ```ignore
+/// let (dir, _) = fake_ninja(0);
+/// let mut env = MockEnv::new();
+/// mock_path_to(&mut env, dir.path());
+/// ```
+#[allow(
+    unfulfilled_lint_expectations,
+    reason = "used only in some test crates"
+)]
+#[expect(dead_code, reason = "used in PATH tests")]
+/// Build a valid `PATH` string that contains exactly one entry pointing to
+/// `dir` and configure the mock to return it. This avoids lossy conversions
+/// and makes the UTF-8 requirement explicit to callers.
+///
+/// Note: `MockEnv::raw` returns a `String`, so callers must accept UTF-8. This
+/// helper returns an error if the constructed `PATH` cannot be represented as
+/// UTF-8.
+pub fn mock_path_to(env: &mut MockEnv, dir: &Path) -> std::io::Result<()> {
+    // Join using the platform-appropriate separator while ensuring exactly one
+    // element is present in the PATH value.
+    let joined = std::env::join_paths([dir.as_os_str()])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
+    // `MockEnv::raw` expects a `String`. Propagate if the single-entry PATH is
+    // not valid UTF-8 to keep the contract explicit.
+    let path = joined.into_string().map_err(|os| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("non-UTF-8 PATH entry: {}", os.to_string_lossy()),
+        )
+    })?;
+
+    env.expect_raw()
+        .withf(|key| key == "PATH")
+        .returning(move |_| Ok(path.clone()));
+
+    Ok(())
 }
 
 /// Create a fake Ninja that validates the build file path provided via `-f`.

@@ -8,6 +8,7 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use serde_json;
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -20,6 +21,34 @@ use tracing::{debug, info};
 pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
 pub const NINJA_ENV: &str = "NETSUKE_NINJA";
+
+// Public helpers for doctests only. This exposes internal helpers as a stable
+// testing surface without exporting them in release builds.
+#[doc(hidden)]
+pub mod doc {
+    #[allow(unused_imports, reason = "doctest-only wrapper module")]
+    use super::*;
+
+    // Public wrappers to expose crate-private helpers to doctests.
+    #[must_use]
+    pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+        super::contains_sensitive_keyword(arg)
+    }
+    #[must_use]
+    pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
+        super::is_sensitive_arg(arg)
+    }
+    #[must_use]
+    pub fn redact_argument(arg: &CommandArg) -> CommandArg {
+        super::redact_argument(arg)
+    }
+    #[must_use]
+    pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+        super::redact_sensitive_args(args)
+    }
+
+    pub use super::CommandArg;
+}
 
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
@@ -114,18 +143,28 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let ninja = generate_ninja(cli)?;
     let targets = BuildTargets::new(&args.targets);
 
-    // Normalise the build file path and keep the temporary file alive for the
-    // duration of the Ninja invocation.
-    let (build_path, _tmp): (PathBuf, Option<NamedTempFile>) = if let Some(path) = &args.emit {
+    // Normalize the build file path and keep the temporary file alive for the
+    // duration of the Ninja invocation. Borrow the emitted path when provided
+    // to avoid unnecessary allocation.
+    let build_path: Cow<Path>;
+    let mut tmp_file: Option<NamedTempFile> = None;
+    if let Some(path) = &args.emit {
         write_ninja_file(path, &ninja)?;
-        (path.clone(), None)
+        build_path = Cow::Borrowed(path.as_path());
     } else {
         let tmp = create_temp_ninja_file(&ninja)?;
-        (tmp.path().to_path_buf(), Some(tmp))
-    };
+        tmp_file = Some(tmp);
+        build_path = Cow::Borrowed(
+            tmp_file
+                .as_ref()
+                .expect("temporary Ninja file should exist")
+                .path(),
+        );
+    }
 
     let program = resolve_ninja_program();
-    run_ninja(program.as_path(), cli, &build_path, &targets)?;
+    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets)?;
+    drop(tmp_file);
     Ok(())
 }
 
@@ -163,6 +202,12 @@ fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
 /// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
 /// ```
 fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
+    // Ensure the parent directory exists; guard against empty components so we
+    // do not attempt to create the current directory on some platforms.
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
+    }
     fs::write(path, content.as_str())
         .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
     info!("Generated Ninja file at {}", path.display());
@@ -225,10 +270,11 @@ fn resolve_ninja_program() -> PathBuf {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, contains_sensitive_keyword};
 /// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
 /// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
 /// ```
-fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+pub(crate) fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
     let lower = arg.as_str().to_lowercase();
     lower.contains("password") || lower.contains("token") || lower.contains("secret")
 }
@@ -237,10 +283,11 @@ fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, is_sensitive_arg};
 /// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
 /// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
 /// ```
-fn is_sensitive_arg(arg: &CommandArg) -> bool {
+pub(crate) fn is_sensitive_arg(arg: &CommandArg) -> bool {
     contains_sensitive_keyword(arg)
 }
 
@@ -250,12 +297,13 @@ fn is_sensitive_arg(arg: &CommandArg) -> bool {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, redact_argument};
 /// let arg = CommandArg::new("token=abc".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
 /// let arg = CommandArg::new("path=/tmp".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
 /// ```
-fn redact_argument(arg: &CommandArg) -> CommandArg {
+pub(crate) fn redact_argument(arg: &CommandArg) -> CommandArg {
     if is_sensitive_arg(arg) {
         let redacted = arg.as_str().split_once('=').map_or_else(
             || "***REDACTED***".to_string(),
@@ -271,6 +319,7 @@ fn redact_argument(arg: &CommandArg) -> CommandArg {
 ///
 /// # Examples
 /// ```
+/// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
 /// let args = vec![
 ///     CommandArg::new("ninja".into()),
 ///     CommandArg::new("token=abc".into()),
@@ -278,7 +327,7 @@ fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// let redacted = redact_sensitive_args(&args);
 /// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
 /// ```
-fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+pub(crate) fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
     args.iter().map(redact_argument).collect()
 }
 
