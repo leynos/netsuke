@@ -58,7 +58,8 @@ pub fn prepend_dir_to_path(env: &impl Env, dir: &Path) -> PathGuard {
     paths.insert(0, dir.to_path_buf());
     let new_path = std::env::join_paths(paths).expect("join paths");
     let _lock = EnvLock::acquire();
-    // SAFETY: protected by `EnvLock` and reverted by the returned `PathGuard`.
+    // Mockable's `Env` trait cannot mutate variables, so call directly.
+    // SAFETY: `EnvLock` serialises mutations and the guard restores on drop.
     unsafe { std::env::set_var("PATH", &new_path) };
     PathGuard::new(original_os)
 }

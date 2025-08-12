@@ -1,4 +1,4 @@
-use mockable::DefaultEnv;
+use mockable::DefaultEnv as SystemEnv;
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
@@ -23,7 +23,7 @@ use support::path_guard::PathGuard;
 #[fixture]
 fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file();
-    let env = DefaultEnv::new();
+    let env = SystemEnv::new();
     let guard = prepend_dir_to_path(&env, ninja_dir.path());
     (ninja_dir, ninja_path, guard)
 }
@@ -38,7 +38,7 @@ fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
 #[fixture]
 fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = support::fake_ninja(exit_code);
-    let env = DefaultEnv::new();
+    let env = SystemEnv::new();
     let guard = prepend_dir_to_path(&env, ninja_dir.path());
     (ninja_dir, ninja_path, guard)
 }

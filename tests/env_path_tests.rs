@@ -1,4 +1,4 @@
-use mockable::Env;
+use mockable::{DefaultEnv as SystemEnv, Env};
 use rstest::rstest;
 use serial_test::serial;
 
@@ -6,12 +6,13 @@ use serial_test::serial;
 mod env;
 mod support;
 use env::{mocked_path_env, prepend_dir_to_path};
+use support::env_lock::EnvLock;
 
 #[rstest]
 #[serial]
 fn prepend_dir_to_path_sets_and_restores() {
     let env = mocked_path_env();
-    let original = env.raw("PATH").expect("PATH missing in mock");
+    let original = env.raw("PATH").expect("PATH should be set in mock");
     let dir = tempfile::tempdir().expect("temp dir");
     let guard = prepend_dir_to_path(&env, dir.path());
     let after = std::env::var("PATH").expect("path var");
@@ -22,4 +23,31 @@ fn prepend_dir_to_path_sets_and_restores() {
     drop(guard);
     let restored = std::env::var("PATH").expect("path var");
     assert_eq!(restored, original);
+}
+
+#[rstest]
+#[serial]
+fn prepend_dir_to_path_handles_empty_path() {
+    let original = std::env::var_os("PATH");
+    {
+        let _lock = EnvLock::acquire();
+        unsafe { std::env::set_var("PATH", "") };
+    }
+    let env = SystemEnv::new();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let guard = prepend_dir_to_path(&env, dir.path());
+    let after = std::env::var_os("PATH").expect("path var");
+    let paths = std::env::split_paths(&after)
+        .filter(|p| !p.as_os_str().is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(paths, vec![dir.path().to_path_buf()]);
+    drop(guard);
+    {
+        let _lock = EnvLock::acquire();
+        if let Some(path) = original {
+            unsafe { std::env::set_var("PATH", path) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
+        }
+    }
 }
