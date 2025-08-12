@@ -5,18 +5,18 @@
 
 use std::sync::{Mutex, MutexGuard};
 
-#[allow(dead_code, reason = "only some tests mutate PATH")]
-/// Global mutex protecting environment changes.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-#[allow(dead_code, reason = "only some tests mutate PATH")]
 /// RAII guard that holds the global environment lock.
-pub struct EnvLock(MutexGuard<'static, ()>);
+pub struct EnvLock {
+    _guard: MutexGuard<'static, ()>,
+}
 
 impl EnvLock {
-    #[allow(dead_code, reason = "only some tests mutate PATH")]
     /// Acquire the global lock serialising environment mutations.
     pub fn acquire() -> Self {
-        Self(ENV_LOCK.lock().expect("env lock"))
+        Self {
+            _guard: ENV_LOCK.lock().expect("env lock"),
+        }
     }
 }
