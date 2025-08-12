@@ -52,11 +52,14 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
 /// keeping the unsafety scoped to a single test.
 #[allow(dead_code, reason = "used in runner tests")]
 pub fn prepend_dir_to_path(env: &impl Env, dir: &Path) -> PathGuard {
-    let original = env.raw("PATH").unwrap_or_default();
-    let original_os: OsString = original.clone().into();
-    let mut paths: Vec<_> = std::env::split_paths(&original_os).collect();
+    let original = env.raw("PATH").ok();
+    let original_os = original.clone().map(OsString::from);
+    let mut paths: Vec<_> = original_os
+        .clone()
+        .map(|os| std::env::split_paths(&os).collect())
+        .unwrap_or_default();
     paths.insert(0, dir.to_path_buf());
-    let new_path = std::env::join_paths(paths).expect("join paths");
+    let new_path = std::env::join_paths(&paths).expect("failed to join PATH entries");
     let _lock = EnvLock::acquire();
     // Mockable's `Env` trait cannot mutate variables, so call directly.
     // SAFETY: `EnvLock` serialises mutations and the guard restores on drop.

@@ -16,9 +16,12 @@ use tempfile::{NamedTempFile, TempDir};
     reason = "helper owns path for simplicity"
 )]
 fn install_test_ninja(env: &impl Env, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
-    let original = env.raw("PATH").unwrap_or_default();
-    let guard = PathGuard::new(original.clone().into());
-    let new_path = format!("{}:{}", dir.path().display(), original);
+    let original = env.raw("PATH").ok();
+    let guard = PathGuard::new(original.clone().map(Into::into));
+    let new_path = original.as_ref().map_or_else(
+        || dir.path().display().to_string(),
+        |orig| format!("{}:{}", dir.path().display(), orig),
+    );
     // SAFETY: `std::env::set_var` is `unsafe` in Rust 2024 due to global state.
     // `EnvLock` serialises mutations and `PathGuard` restores the prior value.
     let _lock = EnvLock::acquire();

@@ -7,21 +7,29 @@ use std::ffi::OsString;
 
 use super::env_lock::EnvLock;
 
+#[allow(dead_code, reason = "only some tests mutate PATH")]
+#[derive(Debug)]
+enum OriginalPath {
+    Unset,
+    Set(OsString),
+}
+
 /// Guard that restores `PATH` to its original value when dropped.
 ///
 /// This uses RAII to ensure the environment is reset even if a test panics.
 #[allow(dead_code, reason = "only some tests mutate PATH")]
 #[derive(Debug)]
 pub struct PathGuard {
-    original_path: Option<OsString>,
+    original: Option<OriginalPath>,
 }
 
 impl PathGuard {
     #[allow(dead_code, reason = "only some tests mutate PATH")]
     /// Create a guard capturing the current `PATH`.
-    pub fn new(original: OsString) -> Self {
+    pub fn new(original: Option<OsString>) -> Self {
+        let state = original.map_or(OriginalPath::Unset, OriginalPath::Set);
         Self {
-            original_path: Some(original),
+            original: Some(state),
         }
     }
 }
@@ -29,9 +37,12 @@ impl PathGuard {
 impl Drop for PathGuard {
     fn drop(&mut self) {
         let _lock = EnvLock::acquire();
-        if let Some(path) = self.original_path.take() {
-            // Nightly marks `set_var` unsafe; restoring `PATH` cleans up global state.
-            unsafe { std::env::set_var("PATH", path) };
+        match self.original.take() {
+            Some(OriginalPath::Set(path)) => {
+                // Nightly marks `set_var` unsafe; restoring cleans up global state.
+                unsafe { std::env::set_var("PATH", path) };
+            }
+            Some(OriginalPath::Unset) | None => unsafe { std::env::remove_var("PATH") },
         }
     }
 }

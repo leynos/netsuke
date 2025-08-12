@@ -42,6 +42,33 @@ fn prepend_dir_to_path_handles_empty_path() {
         .collect::<Vec<_>>();
     assert_eq!(paths, vec![dir.path().to_path_buf()]);
     drop(guard);
+    assert_eq!(std::env::var_os("PATH"), Some(std::ffi::OsString::new()));
+    {
+        let _lock = EnvLock::acquire();
+        if let Some(path) = original {
+            unsafe { std::env::set_var("PATH", path) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
+        }
+    }
+}
+
+#[rstest]
+#[serial]
+fn prepend_dir_to_path_handles_missing_path() {
+    let original = std::env::var_os("PATH");
+    {
+        let _lock = EnvLock::acquire();
+        unsafe { std::env::remove_var("PATH") };
+    }
+    let env = SystemEnv::new();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let guard = prepend_dir_to_path(&env, dir.path());
+    let after = std::env::var_os("PATH").expect("PATH should exist after prepend");
+    let paths: Vec<_> = std::env::split_paths(&after).collect();
+    assert_eq!(paths, vec![dir.path().to_path_buf()]);
+    drop(guard);
+    assert!(std::env::var_os("PATH").is_none());
     {
         let _lock = EnvLock::acquire();
         if let Some(path) = original {
