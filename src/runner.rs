@@ -24,13 +24,10 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
+#[cfg(doctest)]
 #[doc(hidden)]
 pub mod doc {
-    #[cfg_attr(
-        not(doc),
-        expect(unused_imports, reason = "doctest-only wrapper module")
-    )]
-    use super::*;
+    pub use super::CommandArg;
 
     // Public wrappers to expose crate-private helpers to doctests.
     #[must_use]
@@ -49,8 +46,6 @@ pub mod doc {
     pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
         super::redact_sensitive_args(args)
     }
-
-    pub use super::CommandArg;
 }
 
 #[derive(Debug, Clone)]
