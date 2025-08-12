@@ -51,7 +51,10 @@ impl CommandArg {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+/// Target list passed through to Ninja.
+/// An empty slice means “use the defaults” emitted by IR generation
+/// (default targets).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
     #[must_use]
