@@ -1,6 +1,6 @@
 //! CLI execution and command dispatch logic.
 //!
-//! This module keeps [`main`] minimal by providing a single entry point that
+//! This module keeps `main` minimal by providing a single entry point that
 //! handles command execution. It now delegates build requests to the Ninja
 //! subprocess, streaming its output back to the user.
 
