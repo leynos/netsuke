@@ -1,12 +1,11 @@
 use netsuke::cli::{BuildArgs, Cli, Commands};
-use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
+use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
 use test_support::{
     check_ninja,
-    env::{SystemEnv, prepend_dir_to_path},
-    env_lock::EnvLock,
+    env::{SystemEnv, override_ninja_env, prepend_dir_to_path},
     fake_ninja,
     path_guard::PathGuard,
 };
@@ -209,13 +208,8 @@ fn run_manifest_subcommand_writes_file() {
 #[serial]
 fn run_respects_env_override_for_ninja() {
     let (temp_dir, ninja_path) = fake_ninja(0u8);
-    let original = std::env::var_os(NINJA_ENV);
-    let _lock = EnvLock::acquire();
-    // SAFETY: `EnvLock` serialises access to process-global state.
-    unsafe {
-        std::env::set_var(NINJA_ENV, &ninja_path);
-    }
-
+    let env = SystemEnv::new();
+    let guard = override_ninja_env(&env, &ninja_path);
     let temp = tempfile::tempdir().expect("temp dir");
     let manifest_path = temp.path().join("Netsukefile");
     std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
@@ -232,15 +226,7 @@ fn run_respects_env_override_for_ninja() {
 
     let result = run(&cli);
     assert!(result.is_ok());
-
-    // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
-    unsafe {
-        if let Some(val) = original {
-            std::env::set_var(NINJA_ENV, val);
-        } else {
-            std::env::remove_var(NINJA_ENV);
-        }
-    }
+    drop(guard);
     drop(ninja_path);
     drop(temp_dir);
 }
