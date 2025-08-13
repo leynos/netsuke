@@ -1,7 +1,7 @@
 //! Cucumber test runner and world state.
 
 use cucumber::World;
-use test_support::path_guard::PathGuard;
+use test_support::PathGuard;
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]

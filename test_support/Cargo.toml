@@ -2,8 +2,11 @@
 name = "test_support"
 version = "0.1.0"
 edition = "2024"
+publish = false
 
 [dependencies]
 tempfile = "3.8.0"
 mockable = { version = "0.3", features = ["mock"] }
+
+[dev-dependencies]
 rstest = "0.18.0"

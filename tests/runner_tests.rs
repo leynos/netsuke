@@ -4,10 +4,9 @@ use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
 use test_support::{
-    check_ninja,
+    PathGuard, check_ninja,
     env::{SystemEnv, prepend_dir_to_path},
     fake_ninja,
-    path_guard::PathGuard,
 };
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on `PATH`.

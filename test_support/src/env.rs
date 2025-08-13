@@ -4,7 +4,6 @@
 //! manifests.
 
 use mockable::{DefaultEnv, Env, MockEnv};
-use rstest::fixture;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 use std::path::Path;
@@ -42,7 +41,6 @@ impl EnvMut for MockEnv {
 /// Returns a `MockEnv` that yields the current `PATH` when queried. Tests can
 /// modify the real environment while the mock continues to expose the initial
 /// value.
-#[fixture]
 pub fn mocked_path_env() -> MockEnv {
     let original = std::env::var("PATH").unwrap_or_default();
     let mut env = MockEnv::new();

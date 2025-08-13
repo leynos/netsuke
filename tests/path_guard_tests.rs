@@ -5,7 +5,7 @@
 
 use mockall::{Sequence, mock};
 use std::ffi::OsStr;
-use test_support::path_guard::{Env, PathGuard};
+use test_support::{PathGuard, path_guard::Env};
 
 mock! {
     pub Env {}

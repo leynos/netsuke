@@ -9,6 +9,7 @@ use tempfile::{NamedTempFile, TempDir};
 use test_support::{
     check_ninja,
     env::{self, EnvMut},
+    fake_ninja,
 };
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
@@ -25,8 +26,8 @@ fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, nin
 
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
-fn fake_ninja(world: &mut CliWorld, code: i32) {
-    let (dir, path) = test_support::fake_ninja(code);
+fn install_fake_ninja(world: &mut CliWorld, code: i32) {
+    let (dir, path) = fake_ninja(code);
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
