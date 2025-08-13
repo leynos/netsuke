@@ -128,11 +128,11 @@ pub fn run(cli: &Cli) -> Result<()> {
             Ok(())
         }
         Commands::Clean => {
-            println!("Clean requested");
+            info!(target: "netsuke::subcommand", subcommand = "clean", "Subcommand requested");
             Ok(())
         }
         Commands::Graph => {
-            println!("Graph requested");
+            info!(target: "netsuke::subcommand", subcommand = "graph", "Subcommand requested");
             Ok(())
         }
     }
