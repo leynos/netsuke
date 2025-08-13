@@ -6,7 +6,10 @@ use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{NamedTempFile, TempDir};
-use test_support::{check_ninja, env::{self, EnvMut}};
+use test_support::{
+    check_ninja,
+    env::{self, EnvMut},
+};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
 #[expect(
