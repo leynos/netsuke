@@ -14,7 +14,7 @@ pub mod check_ninja;
 pub mod env;
 pub mod env_lock;
 pub mod path_guard;
-
+/// Re-export of [`PathGuard`] for crate-level ergonomics in tests.
 pub use path_guard::PathGuard;
 
 use std::fs::{self, File};

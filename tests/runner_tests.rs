@@ -4,9 +4,11 @@ use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
 use test_support::{
-    PathGuard, check_ninja,
+    check_ninja,
     env::{SystemEnv, prepend_dir_to_path},
+    env_lock::EnvLock,
     fake_ninja,
+    path_guard::PathGuard,
 };
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on `PATH`.
@@ -208,6 +210,8 @@ fn run_manifest_subcommand_writes_file() {
 fn run_respects_env_override_for_ninja() {
     let (temp_dir, ninja_path) = fake_ninja(0u8);
     let original = std::env::var_os(NINJA_ENV);
+    let _lock = EnvLock::acquire();
+    // SAFETY: `EnvLock` serialises access to process-global state.
     unsafe {
         std::env::set_var(NINJA_ENV, &ninja_path);
     }
@@ -229,6 +233,7 @@ fn run_respects_env_override_for_ninja() {
     let result = run(&cli);
     assert!(result.is_ok());
 
+    // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
     unsafe {
         if let Some(val) = original {
             std::env::set_var(NINJA_ENV, val);
