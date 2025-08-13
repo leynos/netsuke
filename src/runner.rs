@@ -86,11 +86,11 @@ pub fn run(cli: &Cli) -> Result<()> {
             Ok(())
         }
         Commands::Clean => {
-            info!("Clean requested");
+            info!(target: "netsuke::subcommand", subcommand = "clean", "Subcommand requested");
             Ok(())
         }
         Commands::Graph => {
-            info!("Graph requested");
+            info!(target: "netsuke::subcommand", subcommand = "graph", "Subcommand requested");
             Ok(())
         }
     }
