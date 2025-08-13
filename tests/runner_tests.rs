@@ -32,7 +32,7 @@ fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
 ///
 /// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
-fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, PathGuard) {
+fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> (tempfile::TempDir, PathBuf, PathGuard) {
     let (ninja_dir, ninja_path) = fake_ninja(exit_code);
     let env = SystemEnv::new();
     let guard = prepend_dir_to_path(&env, ninja_dir.path());
@@ -206,7 +206,7 @@ fn run_manifest_subcommand_writes_file() {
 #[test]
 #[serial]
 fn run_respects_env_override_for_ninja() {
-    let (temp_dir, ninja_path) = fake_ninja(0);
+    let (temp_dir, ninja_path) = fake_ninja(0u8);
     let original = std::env::var_os(NINJA_ENV);
     unsafe {
         std::env::set_var(NINJA_ENV, &ninja_path);

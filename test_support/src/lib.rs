@@ -1,8 +1,14 @@
-//! Test-only utilities for integration and unit tests.
+//! Test-support crate for Netsuke.
 //!
-//! This crate offers helpers for crafting fake executables, manipulating the
-//! environment, and guarding global state so tests can exercise process
-//! interactions without touching the host system.
+//! This crate provides test-only utilities for:
+//! - creating fake executables for process-related tests
+//! - manipulating PATH safely (PathGuard)
+//! - serialising environment mutation across tests (EnvLock)
+//!
+//! All items are intended for use in tests within this workspace; avoid using
+//! them in production code.
+//!
+//! Platform notes: fake executables are implemented for Unix and Windows.
 
 pub mod check_ninja;
 pub mod env;
@@ -19,8 +25,24 @@ use tempfile::TempDir;
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
-pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
-    let dir = TempDir::new().expect("failed to create temporary directory");
+///
+/// The returned [`TempDir`] must be kept alive for the executable to remain on
+/// disk.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use test_support::fake_ninja;
+///
+/// // Create a fake `ninja` that exits with code 1
+/// let (dir, ninja_path) = fake_ninja(1u8);
+///
+/// // Prepend `dir.path()` to PATH via your env helper, then spawn `ninja`.
+/// // When `dir` is dropped, the fake executable is removed.
+/// ```
+pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
+    let dir = TempDir::new()
+        .unwrap_or_else(|e| panic!("fake_ninja: failed to create temporary directory: {e}"));
 
     #[cfg(unix)]
     let path = dir.path().join("ninja");
@@ -29,20 +51,47 @@ pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
 
     #[cfg(unix)]
     {
-        let mut file = File::create(&path).expect("failed to create script");
-        writeln!(file, "#!/bin/sh\nexit {}", exit_code).expect("failed to write script");
+        let mut file = File::create(&path).unwrap_or_else(|e| {
+            panic!(
+                "fake_ninja: failed to create script {}: {e}",
+                path.display()
+            )
+        });
+        writeln!(file, "#!/bin/sh\nexit {}", exit_code).unwrap_or_else(|e| {
+            panic!("fake_ninja: failed to write script {}: {e}", path.display())
+        });
         use std::os::unix::fs::PermissionsExt;
         let mut perms = fs::metadata(&path)
-            .expect("failed to read script metadata")
+            .unwrap_or_else(|e| {
+                panic!(
+                    "fake_ninja: failed to read metadata {}: {e}",
+                    path.display()
+                )
+            })
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&path, perms).expect("failed to set script permissions");
+        fs::set_permissions(&path, perms).unwrap_or_else(|e| {
+            panic!(
+                "fake_ninja: failed to set permissions {}: {e}",
+                path.display()
+            )
+        });
     }
 
     #[cfg(windows)]
     {
-        let mut file = File::create(&path).expect("failed to create batch file");
-        writeln!(file, "@echo off\r\nexit /B {}", exit_code).expect("failed to write batch file");
+        let mut file = File::create(&path).unwrap_or_else(|e| {
+            panic!(
+                "fake_ninja: failed to create batch file {}: {e}",
+                path.display()
+            )
+        });
+        writeln!(file, "@echo off\r\nexit /B {}", exit_code).unwrap_or_else(|e| {
+            panic!(
+                "fake_ninja: failed to write batch file {}: {e}",
+                path.display()
+            )
+        });
     }
 
     (dir, path)

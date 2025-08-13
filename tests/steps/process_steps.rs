@@ -27,7 +27,9 @@ fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, nin
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn install_fake_ninja(world: &mut CliWorld, code: i32) {
-    let (dir, path) = fake_ninja(code);
+    let (dir, path) = fake_ninja(
+        u8::try_from(code).expect("exit code must be between 0 and 255"),
+    );
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
