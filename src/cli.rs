@@ -94,7 +94,7 @@ pub struct BuildArgs {
 /// Available top-level commands for Netsuke.
 #[derive(Debug, Subcommand, PartialEq, Eq, Clone)]
 pub enum Commands {
-    /// Build specified targets (or default targets if none are given) \[default\].
+    /// Build specified targets (or default targets if none are given) `default`.
     Build(BuildArgs),
 
     /// Remove build artifacts and intermediate files.

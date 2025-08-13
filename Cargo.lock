@@ -884,6 +884,7 @@ dependencies = [
  "itoa",
  "minijinja",
  "mockable",
+ "mockall",
  "rstest",
  "semver",
  "serde",

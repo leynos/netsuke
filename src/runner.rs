@@ -80,7 +80,10 @@ impl CommandArg {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+/// Target list passed through to Ninja.
+/// An empty slice means “use the defaults” emitted by IR generation
+/// (default targets).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
     #[must_use]
@@ -94,6 +97,16 @@ impl<'a> BuildTargets<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+#[expect(
+    clippy::derivable_impls,
+    reason = "Default derive requires 'static lifetime; manual impl returns empty slice."
+)]
+impl Default for BuildTargets<'_> {
+    fn default() -> Self {
+        Self(&[])
     }
 }
 

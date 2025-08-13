@@ -17,6 +17,7 @@ use tempfile::TempDir;
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
+#[allow(dead_code, reason = "used in other test crates")]
 pub fn fake_ninja(exit_code: i32) -> (TempDir, PathBuf) {
     let dir = TempDir::new().expect("temp dir");
     let path = dir.path().join("ninja");
