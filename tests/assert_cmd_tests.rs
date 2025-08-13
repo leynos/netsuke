@@ -7,8 +7,7 @@
 use assert_cmd::Command;
 use std::fs;
 use tempfile::tempdir;
-
-mod support;
+use test_support::fake_ninja;
 
 #[test]
 fn manifest_subcommand_writes_file() {
@@ -27,7 +26,7 @@ fn manifest_subcommand_writes_file() {
 
 #[test]
 fn build_with_emit_writes_file() {
-    let (ninja_dir, _ninja_path) = support::fake_ninja(0);
+    let (ninja_dir, _ninja_path) = fake_ninja(0u8);
     let temp = tempdir().expect("temp dir");
     fs::copy("tests/data/minimal.yml", temp.path().join("Netsukefile")).expect("copy manifest");
     let output = temp.path().join("emitted.ninja");

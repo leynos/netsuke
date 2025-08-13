@@ -3,14 +3,13 @@ use netsuke::runner::{BuildTargets, NINJA_ENV, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
-
-#[path = "support/check_ninja.rs"]
-mod check_ninja;
-#[path = "support/env.rs"]
-mod env;
-mod support;
-use env::{SystemEnv, prepend_dir_to_path};
-use support::path_guard::PathGuard;
+use test_support::{
+    check_ninja,
+    env::{SystemEnv, prepend_dir_to_path},
+    env_lock::EnvLock,
+    fake_ninja,
+    path_guard::PathGuard,
+};
 
 /// Fixture: Put a fake `ninja` (that checks for a build file) on `PATH`.
 ///
@@ -35,8 +34,8 @@ fn ninja_in_path() -> (tempfile::TempDir, PathBuf, PathGuard) {
 ///
 /// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
 #[fixture]
-fn ninja_with_exit_code(#[default(0)] exit_code: i32) -> (tempfile::TempDir, PathBuf, PathGuard) {
-    let (ninja_dir, ninja_path) = support::fake_ninja(exit_code);
+fn ninja_with_exit_code(#[default(0u8)] exit_code: u8) -> (tempfile::TempDir, PathBuf, PathGuard) {
+    let (ninja_dir, ninja_path) = fake_ninja(exit_code);
     let env = SystemEnv::new();
     let guard = prepend_dir_to_path(&env, ninja_dir.path());
     (ninja_dir, ninja_path, guard)
@@ -209,8 +208,10 @@ fn run_manifest_subcommand_writes_file() {
 #[test]
 #[serial]
 fn run_respects_env_override_for_ninja() {
-    let (temp_dir, ninja_path) = support::fake_ninja(0);
+    let (temp_dir, ninja_path) = fake_ninja(0u8);
     let original = std::env::var_os(NINJA_ENV);
+    let _lock = EnvLock::acquire();
+    // SAFETY: `EnvLock` serialises access to process-global state.
     unsafe {
         std::env::set_var(NINJA_ENV, &ninja_path);
     }
@@ -232,6 +233,7 @@ fn run_respects_env_override_for_ninja() {
     let result = run(&cli);
     assert!(result.is_ok());
 
+    // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
     unsafe {
         if let Some(val) = original {
             std::env::set_var(NINJA_ENV, val);

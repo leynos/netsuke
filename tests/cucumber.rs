@@ -1,6 +1,7 @@
 //! Cucumber test runner and world state.
 
 use cucumber::World;
+use test_support::PathGuard;
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
@@ -20,15 +21,10 @@ pub struct CliWorld {
     /// Temporary directory handle for test isolation.
     pub temp: Option<tempfile::TempDir>,
     /// Guard that restores `PATH` after each scenario.
-    pub path_guard: Option<support::path_guard::PathGuard>,
+    pub path_guard: Option<PathGuard>,
 }
 
-#[path = "support/check_ninja.rs"]
-mod check_ninja;
-#[path = "support/env.rs"]
-mod env;
 mod steps;
-mod support;
 
 #[tokio::main]
 async fn main() {

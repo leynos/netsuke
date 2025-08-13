@@ -4,16 +4,13 @@
 //! manifests.
 
 use mockable::{DefaultEnv, Env, MockEnv};
-use rstest::fixture;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 use std::path::Path;
 
-use crate::support::env_lock::EnvLock;
-use crate::support::path_guard::PathGuard;
+use crate::{env_lock::EnvLock, path_guard::PathGuard};
 
 /// Alias for the real process environment.
-#[allow(dead_code, reason = "re-exported for tests")]
 pub type SystemEnv = DefaultEnv;
 
 /// Environment trait with mutation capabilities.
@@ -44,7 +41,6 @@ impl EnvMut for MockEnv {
 /// Returns a `MockEnv` that yields the current `PATH` when queried. Tests can
 /// modify the real environment while the mock continues to expose the initial
 /// value.
-#[fixture]
 pub fn mocked_path_env() -> MockEnv {
     let original = std::env::var("PATH").unwrap_or_default();
     let mut env = MockEnv::new();
@@ -57,7 +53,6 @@ pub fn mocked_path_env() -> MockEnv {
 /// Write a minimal manifest to `file`.
 ///
 /// The manifest declares a single `hello` target that prints a greeting.
-#[allow(dead_code, reason = "used in Cucumber tests")]
 pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
     writeln!(
         file,
@@ -77,7 +72,6 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
 /// Mutating `PATH` is `unsafe` in Rust 2024 because it alters process globals.
 /// `EnvLock` serialises access and `PathGuard` rolls back the change, keeping
 /// the unsafety scoped to a single test.
-#[allow(dead_code, reason = "used in runner tests")]
 pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
     let original = env.raw("PATH").ok();
     let original_os = original.clone().map(OsString::from);

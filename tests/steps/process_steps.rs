@@ -1,15 +1,16 @@
 //! Step definitions for Ninja process execution.
 
-use crate::{
-    CliWorld, check_ninja,
-    env::{self, EnvMut},
-    support,
-};
+use crate::CliWorld;
 use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{NamedTempFile, TempDir};
+use test_support::{
+    check_ninja,
+    env::{self, EnvMut},
+    fake_ninja,
+};
 
 /// Installs a test-specific ninja binary and updates the `PATH`.
 #[expect(
@@ -25,8 +26,8 @@ fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, nin
 
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
-fn fake_ninja(world: &mut CliWorld, code: i32) {
-    let (dir, path) = support::fake_ninja(code);
+fn install_fake_ninja(world: &mut CliWorld, code: i32) {
+    let (dir, path) = fake_ninja(u8::try_from(code).expect("exit code must be between 0 and 255"));
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
