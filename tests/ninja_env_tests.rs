@@ -1,4 +1,4 @@
-//! Tests for overriding the NINJA_ENV variable via a mock environment.
+//! Tests for overriding the `NINJA_ENV` variable via a mock environment.
 
 use mockable::MockEnv;
 use netsuke::runner::NINJA_ENV;
