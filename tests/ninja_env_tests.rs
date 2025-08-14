@@ -33,7 +33,6 @@ fn override_ninja_env_sets_and_restores() {
 #[rstest]
 #[serial]
 fn override_ninja_env_unset_removes_variable() {
-    let before = std::env::var_os(NINJA_ENV);
     let lock = EnvLock::acquire();
     // SAFETY: `EnvLock` serialises mutations during setup.
     unsafe { std::env::remove_var(NINJA_ENV) };
@@ -50,13 +49,4 @@ fn override_ninja_env_unset_removes_variable() {
         drop(guard);
     }
     assert!(std::env::var(NINJA_ENV).is_err());
-
-    let lock = EnvLock::acquire();
-    // SAFETY: `EnvLock` serialises mutations while restoring the original state.
-    unsafe {
-        if let Some(val) = before {
-            std::env::set_var(NINJA_ENV, val);
-        }
-    }
-    drop(lock);
 }
