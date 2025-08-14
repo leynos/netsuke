@@ -885,6 +885,7 @@ dependencies = [
  "minijinja",
  "mockable",
  "mockall",
+ "ninja_env",
  "rstest",
  "semver",
  "serde",
@@ -900,6 +901,10 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
+
+[[package]]
+name = "ninja_env"
+version = "0.1.0"
 
 [[package]]
 name = "nom"
@@ -1530,7 +1535,7 @@ name = "test_support"
 version = "0.1.0"
 dependencies = [
  "mockable",
- "netsuke",
+ "ninja_env",
  "tempfile",
 ]
 

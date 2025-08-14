@@ -15,16 +15,11 @@ fn override_ninja_env_sets_and_restores() {
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
-        .returning(move |_| {
-            original
-                .as_ref()
-                .map_or(Err(std::env::VarError::NotPresent), |val| Ok(val.clone()))
-        });
+        .returning(move |_| original.clone().ok_or(std::env::VarError::NotPresent));
     {
-        let guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
+        let _guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
         let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
         assert_eq!(after, "/tmp/ninja");
-        drop(guard);
     }
     let restored = std::env::var_os(NINJA_ENV);
     assert_eq!(restored, before);
@@ -33,6 +28,7 @@ fn override_ninja_env_sets_and_restores() {
 #[rstest]
 #[serial]
 fn override_ninja_env_unset_removes_variable() {
+    let before = std::env::var_os(NINJA_ENV);
     let lock = EnvLock::acquire();
     // SAFETY: `EnvLock` serialises mutations during setup.
     unsafe { std::env::remove_var(NINJA_ENV) };
@@ -43,10 +39,20 @@ fn override_ninja_env_unset_removes_variable() {
         .withf(|k| k == NINJA_ENV)
         .returning(|_| Err(std::env::VarError::NotPresent));
     {
-        let guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
+        let _guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
         let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
         assert_eq!(after, "/tmp/ninja");
-        drop(guard);
     }
     assert!(std::env::var(NINJA_ENV).is_err());
+
+    // Restore original global state for isolation
+    let lock = EnvLock::acquire();
+    if let Some(val) = before {
+        // SAFETY: `EnvLock` serialises mutations while restoring.
+        unsafe { std::env::set_var(NINJA_ENV, val) };
+    } else {
+        // SAFETY: `EnvLock` serialises mutations while restoring.
+        unsafe { std::env::remove_var(NINJA_ENV) };
+    }
+    drop(lock);
 }

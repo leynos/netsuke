@@ -4,7 +4,7 @@
 //! manifests.
 
 use mockable::{DefaultEnv, Env, MockEnv};
-use netsuke::runner::NINJA_ENV;
+use ninja_env::NINJA_ENV;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 use std::path::Path;
@@ -103,7 +103,7 @@ pub struct NinjaEnvGuard {
 /// # Examples
 ///
 /// ```
-/// use netsuke::runner::NINJA_ENV;
+/// use ninja_env::NINJA_ENV;
 /// use std::path::Path;
 /// use test_support::env::{SystemEnv, override_ninja_env};
 ///
@@ -114,8 +114,8 @@ pub struct NinjaEnvGuard {
 /// assert!(std::env::var(NINJA_ENV).is_err());
 /// ```
 pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
-    let original = env.raw(NINJA_ENV).ok().map(OsString::from);
     let _lock = EnvLock::acquire();
+    let original = env.raw(NINJA_ENV).ok().map(OsString::from);
     // SAFETY: `EnvLock` serialises the mutation and the guard restores on drop.
     unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
     NinjaEnvGuard { original }
@@ -124,13 +124,12 @@ pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
 impl Drop for NinjaEnvGuard {
     fn drop(&mut self) {
         let _lock = EnvLock::acquire();
-        // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
-        unsafe {
-            if let Some(val) = self.original.take() {
-                std::env::set_var(NINJA_ENV, val);
-            } else {
-                std::env::remove_var(NINJA_ENV);
-            }
+        if let Some(val) = self.original.take() {
+            // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
+            unsafe { std::env::set_var(NINJA_ENV, val) };
+        } else {
+            // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
+            unsafe { std::env::remove_var(NINJA_ENV) };
         }
     }
 }
