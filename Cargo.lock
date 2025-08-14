@@ -1530,6 +1530,7 @@ name = "test_support"
 version = "0.1.0"
 dependencies = [
  "mockable",
+ "netsuke",
  "tempfile",
 ]
 

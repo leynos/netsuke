@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 tempfile = "3.8.0"
 mockable = { version = "0.3", features = ["mock"] }
+netsuke = { path = ".." }
 
 [dev-dependencies]
 rstest = "0.18.0"

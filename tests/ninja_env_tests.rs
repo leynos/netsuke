@@ -11,25 +11,52 @@ use test_support::{env::override_ninja_env, env_lock::EnvLock};
 #[serial]
 fn override_ninja_env_sets_and_restores() {
     let before = std::env::var_os(NINJA_ENV);
+    let original = before.clone().map(|v| v.to_string_lossy().into_owned());
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
-        .returning(|_| Ok("restored".to_string()));
+        .returning(move |_| {
+            original
+                .as_ref()
+                .map_or(Err(std::env::VarError::NotPresent), |val| Ok(val.clone()))
+        });
     {
         let guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
-        let after = std::env::var(NINJA_ENV).expect("env var");
+        let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
         assert_eq!(after, "/tmp/ninja");
         drop(guard);
     }
-    let restored = std::env::var(NINJA_ENV).expect("env var");
-    assert_eq!(restored, "restored");
-    let _lock = EnvLock::acquire();
-    // SAFETY: `EnvLock` serialises access while the variable is reset.
+    let restored = std::env::var_os(NINJA_ENV);
+    assert_eq!(restored, before);
+}
+
+#[rstest]
+#[serial]
+fn override_ninja_env_unset_removes_variable() {
+    let before = std::env::var_os(NINJA_ENV);
+    let lock = EnvLock::acquire();
+    // SAFETY: `EnvLock` serialises mutations during setup.
+    unsafe { std::env::remove_var(NINJA_ENV) };
+    drop(lock);
+
+    let mut env = MockEnv::new();
+    env.expect_raw()
+        .withf(|k| k == NINJA_ENV)
+        .returning(|_| Err(std::env::VarError::NotPresent));
+    {
+        let guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
+        let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
+        assert_eq!(after, "/tmp/ninja");
+        drop(guard);
+    }
+    assert!(std::env::var(NINJA_ENV).is_err());
+
+    let lock = EnvLock::acquire();
+    // SAFETY: `EnvLock` serialises mutations while restoring the original state.
     unsafe {
         if let Some(val) = before {
             std::env::set_var(NINJA_ENV, val);
-        } else {
-            std::env::remove_var(NINJA_ENV);
         }
     }
+    drop(lock);
 }

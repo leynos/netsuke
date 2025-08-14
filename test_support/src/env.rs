@@ -4,6 +4,7 @@
 //! manifests.
 
 use mockable::{DefaultEnv, Env, MockEnv};
+use netsuke::runner::NINJA_ENV;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 use std::path::Path;
@@ -87,8 +88,6 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
     PathGuard::new(original_os)
 }
 
-const NINJA_ENV: &str = "NETSUKE_NINJA";
-
 /// Guard that restores `NINJA_ENV` to its previous value on drop.
 #[derive(Debug)]
 pub struct NinjaEnvGuard {
@@ -104,14 +103,15 @@ pub struct NinjaEnvGuard {
 /// # Examples
 ///
 /// ```
+/// use netsuke::runner::NINJA_ENV;
 /// use std::path::Path;
 /// use test_support::env::{SystemEnv, override_ninja_env};
 ///
 /// let env = SystemEnv::new();
 /// let guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
-/// assert_eq!(std::env::var("NETSUKE_NINJA").unwrap(), "/tmp/ninja");
+/// assert_eq!(std::env::var(NINJA_ENV).unwrap(), "/tmp/ninja");
 /// drop(guard);
-/// assert!(std::env::var("NETSUKE_NINJA").is_err());
+/// assert!(std::env::var(NINJA_ENV).is_err());
 /// ```
 pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
     let original = env.raw(NINJA_ENV).ok().map(OsString::from);
