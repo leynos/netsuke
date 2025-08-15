@@ -34,7 +34,7 @@ architecture.
 ### 1.2 The Six Stages of a Netsuke Build
 
 The process of transforming a user's `Netsukefile` manifest into a completed
-build artefact now follows a six-stage pipeline. This data flow validates the
+build artifact now follows a six-stage pipeline. This data flow validates the
 manifest as YAML first, then resolves all dynamic logic into a static plan
 before execution, a critical requirement for compatibility with Ninja.
 
@@ -77,7 +77,7 @@ before execution, a critical requirement for compatibility with Ninja.
 6. Stage 6: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
-   synthesises the content of a `build.ninja` file, translating the IR's nodes
+   synthesizes the content of a `build.ninja` file, translating the IR's nodes
    and edges into corresponding Ninja rule and build statements. Once the file
    is written, Netsuke invokes the `ninja` executable as a subprocess, passing
    control to it for the final dependency checking and command-execution phase.
@@ -88,18 +88,12 @@ before execution, a critical requirement for compatibility with Ninja.
    output suitable for caching or source control.
 
 ```mermaid
-sequenceDiagram
-    participant User
-    participant Netsuke
-    participant IR_Generator
-    participant Ninja
-
-    User->>Netsuke: Provide Netsukefile and environment
-    Netsuke->>IR_Generator: Parse and validate manifest
-    IR_Generator->>IR_Generator: Generate deterministic BuildGraph (IR)
-    IR_Generator->>Netsuke: Return BuildGraph (byte-for-byte deterministic)
-    Netsuke->>Ninja: Synthesize build.ninja and invoke Ninja
-    Ninja-->>User: Execute build and report results
+flowchart TD
+    A[Stage 1:\nManifest Ingestion] --> B[Stage 2:\nInitial YAML Parsing]
+    B --> C[Stage 3:\nTemplate Expansion]
+    C --> D[Stage 4:\nDeserialisation & Final Rendering]
+    D --> E[Stage 5:\nIR Generation & Validation]
+    E --> F[Stage 6:\nNinja Synthesis & Execution]
 ```
 
 ### 1.3 The Static Graph Mandate
@@ -598,7 +592,7 @@ preserved for Jinja control flow. Targets also accept optional `phony` and
 `always` booleans. They default to `false`, making it explicit when an action
 should run regardless of file timestamps. Targets listed in the `actions`
 section are deserialised using a custom helper so they are always treated as
-`phony` tasks. This ensures preparation actions never generate build artefacts.
+`phony` tasks. This ensures preparation actions never generate build artifacts.
 Convenience functions in `src/manifest.rs` load a manifest from a string or a
 file path, returning `anyhow::Result` for straightforward error handling.
 
@@ -1406,7 +1400,7 @@ struct Cli { /// Path to the Netsuke manifest file to use.
 enum Commands { /// Build specified targets (or default targets if none are
 given). /// This is the default subcommand. Build(BuildArgs),
 
-    /// Remove build artefacts and intermediate files. Clean,
+    /// Remove build artifacts and intermediate files. Clean,
 
     /// Display the build dependency graph in DOT format for visualisation.
     Graph,
@@ -1434,13 +1428,13 @@ treated as the default subcommand if none is provided, allowing for the common*
 The behaviour of each subcommand is clearly defined:
 
 - `Netsuke build [--emit FILE] [targets...]`: This is the primary and default
-command. It executes the full six-stage pipeline: ingestion, Jinja
-  rendering, YAML parsing, IR generation, and Ninja synthesis. By default the
-  generated Ninja file is written to a securely created temporary location and
-  removed after the build completes. Supplying `--emit FILE` writes the Ninja
-  file to `FILE` and retains it. If no targets are provided on the command
-  line, the targets listed in the `defaults` section of the manifest are
-  built.
+command. It executes the full six-stage pipeline: Manifest Ingestion, Initial
+YAML Parsing, Template Expansion, Deserialisation & Final Rendering, IR
+Generation & Validation, and Ninja Synthesis & Execution. By default the
+generated Ninja file is written to a securely created temporary location and
+removed after the build completes. Supplying `--emit FILE` writes the Ninja
+file to `FILE` and retains it. If no targets are provided on the command line,
+the targets listed in the `defaults` section of the manifest are built.
 
 - `Netsuke clean`: This command provides a convenient way to clean the build
   directory. It will invoke the Ninja backend with the appropriate flags, such

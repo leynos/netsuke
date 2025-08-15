@@ -18,7 +18,7 @@ stakeholders can use to describe and agree upon software requirements.[^2] This
 process is centred on conversation; the discussions about how a feature should
 behave are the most valuable output of BDD.[^3]
 
-The tangible artefact of these conversations is a set of specifications written
+The tangible artifact of these conversations is a set of specifications written
 in a structured, natural language format. These specifications serve a dual
 purpose: they are human-readable documentation of the system's features, and
 they are also executable tests that verify the system's behaviour. This
