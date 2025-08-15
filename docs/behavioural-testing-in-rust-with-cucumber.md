@@ -979,7 +979,7 @@ The process involves two main steps:
 2. **Publish reports:** Many CI platforms can parse and display test results
    in a structured format. The `cucumber` crate supports generating JUnit XML
    reports via the `output-junit` feature flag.[^16] These XML files can then
-   be published as test artifacts for platforms like GitHub Actions, GitLab
+   be published as test artefacts for platforms like GitHub Actions, GitLab
    CI,[^34] or Jenkins to consume.[^33]
 
 This CI integration closes the BDD loop. The `.feature` files, once checked

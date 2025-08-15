@@ -79,19 +79,24 @@ configurations with variables, control flow, and custom functions.
 
   - [x] Integrate the `minijinja` crate into the build pipeline.
 
-  - [x] Implement the two-pass parsing mechanism: the first pass renders the
-    manifest as a Jinja template, and the second pass parses the resulting pure
-    YAML string with serde_yml.
+  - [x] Implement data-first parsing: parse the manifest into a
+    `serde_yml::Value` (Stage 2: Initial YAML Parsing), expand `foreach` and
+    `when` entries with a Jinja environment (Stage 3: Template Expansion), then
+    deserialise the expanded tree into the typed AST and render remaining
+    string fields (Stage 4: Deserialisation & Final Rendering).
 
   - [x] Create a minijinja::Environment and populate its initial context with
     the global vars defined in the manifest.
 
 - [ ] **Dynamic Features and Custom Functions:**
 
-  - [x] Implement support for basic Jinja control structures (`{% if %}` and
-        `{% for %}`)
+  - [x] Evaluate Jinja expressions only within string values, forbidding
+        structural tags such as `{% if %}` and `{% for %}`.
 
-  - [ ] Implement the foreach key for target generation.
+  - [ ] Implement the `foreach` and `when` keys for target generation,
+        exposing `item` and optional `index` variables and layering
+        per-iteration locals over `target.vars` and manifest globals for
+        subsequent rendering phases.
 
   - [ ] Implement the essential custom Jinja function env(var_name) to read
     system environment variables.
@@ -105,8 +110,9 @@ configurations with variables, control flow, and custom functions.
 - **Success Criterion:**
 
   - [ ] Netsuke can successfully build a manifest that uses variables,
-    conditional logic, the foreach loop, custom macros, and the glob() function
-    to discover and operate on source files.
+    conditional logic within string values, the `foreach` and `when` keys,
+    custom macros, and the `glob()` function to discover and operate on source
+    files.
 
 ## Phase 3: The "Friendly" Polish 🛡️
 
