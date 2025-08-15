@@ -51,10 +51,13 @@ before execution, a critical requirement for compatibility with Ninja.
 3. Stage 3: Template Expansion
 
    Netsuke walks the YAML `Value`, evaluating Jinja macros, variables, and the
-   `foreach` and `when` keys. Each mapping containing these keys is expanded by
-   the Jinja engine, and the environment from each iteration is preserved. At
-   this stage Jinja may not modify the YAML structure directly; control
-   constructs live only within these explicit keys.
+   `foreach` and `when` keys. Each mapping containing these keys is expanded
+   with an iteration context providing `item` and optional `index`. Variable
+   lookups respect the precedence `globals` < `target.vars` < per-iteration
+   locals, and this context is preserved for later rendering. At this stage
+   Jinja must not modify the YAML structure directly; control constructs live
+   only within these explicit keys. Structural Jinja blocks (`{% ... %}`) are
+   not permitted to reshape mappings or sequences.
 
 4. Stage 4: Deserialisation & Final Rendering
 
@@ -335,9 +338,9 @@ are specified.
 Large sets of similar outputs can clutter a manifest when written individually.
 Netsuke supports a `foreach` entry within `targets` to generate multiple
 outputs succinctly. The `foreach` and optional `when` keys accept bare Jinja
-expressions that are evaluated after the initial YAML pass. Each resulting
-value becomes `item` in the target context, and the environment at that
-iteration is preserved for later rendering.
+expressions evaluated after the initial YAML pass. Each resulting value becomes
+`item` in the target context, and the per-iteration environment is carried
+forward to later rendering.
 
 ```yaml
 - foreach: glob('assets/svg/*.svg')
@@ -347,11 +350,11 @@ iteration is preserved for later rendering.
   sources: "{{ item }}"
 ```
 
-Each element in the sequence produces a separate target. Per-iteration context:
+Each element in the sequence produces a separate target. The iteration context:
 
-- item: current element
-- index: 0-based index (optional)
-- vars: resolved in order `globals` < `target.vars` < per-iteration locals
+- `item`: current element
+- `index`: 0-based index (optional)
+- Variables resolve with precedence `globals` < `target.vars` < iteration locals
 
 Jinja control structures cannot shape the YAML; all templating must occur
 within the string values. The resulting build graph is still fully static and

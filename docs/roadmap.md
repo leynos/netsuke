@@ -93,8 +93,10 @@ configurations with variables, control flow, and custom functions.
   - [x] Evaluate Jinja expressions only within string values, forbidding
         structural tags such as `{% if %}` and `{% for %}`.
 
-  - [ ] Implement the `foreach` and `when` keys for target generation, carrying
-        the iteration context into subsequent rendering phases.
+  - [ ] Implement the `foreach` and `when` keys for target generation,
+        exposing `item` and optional `index` variables and layering
+        per-iteration locals over `target.vars` and manifest globals for
+        subsequent rendering phases.
 
   - [ ] Implement the essential custom Jinja function env(var_name) to read
     system environment variables.
