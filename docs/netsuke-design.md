@@ -31,11 +31,11 @@ understand and execute. This separation of concerns—Netsuke managing build
 logic and Ninja managing execution—is the foundational principle of the entire
 architecture.
 
-### 1.2 The Five Stages of a Netsuke Build
+### 1.2 The Six Stages of a Netsuke Build
 
 The process of transforming a user's `Netsukefile` manifest into a completed
-build artifact follows a distinct, five-stage pipeline. This multi-stage data
-flow ensures that dynamic configurations are fully resolved into a static plan
+build artefact now follows a six-stage pipeline. This data flow validates the
+manifest as YAML first, then resolves all dynamic logic into a static plan
 before execution, a critical requirement for compatibility with Ninja.
 
 1. Stage 1: Manifest Ingestion
@@ -43,23 +43,27 @@ before execution, a critical requirement for compatibility with Ninja.
    The process begins by locating and reading the user's project manifest file
    (e.g., Netsukefile) from the filesystem into memory as a raw string.
 
-2. Stage 2: Jinja Evaluation
+2. Stage 2: Initial YAML Parsing
 
-   The raw manifest string is treated as a Jinja template. Netsuke's templating
-   engine processes this string, evaluating all expressions, executing control
-   structures (loops, conditionals), and applying filters. This stage resolves
-   all dynamic aspects of the build, producing a static, pure YAML string as
-   its output.
+   The raw string is parsed into an untyped `serde_yml::Value`. This step
+   ensures the manifest is valid YAML before any templating takes place.
 
-3. Stage 3: YAML Parsing & Deserialization
+3. Stage 3: Template Expansion
 
-   The static YAML string generated in the previous stage is passed to a YAML
-   parser. This parser validates the YAML syntax and deserializes the content
-   into a set of strongly typed Rust data structures. This collection of
-   structs, which directly mirrors the YAML schema, can be considered an
-   "unprocessed" Abstract Syntax Tree (AST) of the build plan.
+   Netsuke walks the YAML `Value`, evaluating Jinja macros, variables, and the
+   `foreach` and `when` keys. Each mapping containing these keys is expanded by
+   the Jinja engine, and the environment from each iteration is preserved. At
+   this stage Jinja may not modify the YAML structure directly; control
+   constructs live only within these explicit keys.
 
-4. Stage 4: IR Generation & Validation
+4. Stage 4: Deserialisation & Final Rendering
+
+   The expanded `Value` is deserialised into strongly typed Rust structs. Jinja
+   expressions are then rendered, but only within string fields. Structural
+   templating using `{% %}` blocks is forbidden; all control flow must appear
+   in YAML values.
+
+5. Stage 5: IR Generation & Validation
 
    The AST is traversed to construct a canonical, fully resolved Intermediate
    Representation (IR) of the build. This IR represents the build as a static
@@ -70,10 +74,10 @@ before execution, a critical requirement for compatibility with Ninja.
    exactly one of `rule`, `command`, or `script`. Circular dependencies and
    missing inputs are also detected at this stage.
 
-5. Stage 5: Ninja Synthesis & Execution
+6. Stage 6: Ninja Synthesis & Execution
 
    The final, validated IR is traversed by a code generator. This generator
-   synthesizes the content of a `build.ninja` file, translating the IR's nodes
+   synthesises the content of a `build.ninja` file, translating the IR's nodes
    and edges into corresponding Ninja rule and build statements. Once the file
    is written, Netsuke invokes the `ninja` executable as a subprocess, passing
    control to it for the final dependency checking and command-execution phase.
@@ -120,8 +124,8 @@ Representation (IR) generated in Stage 4. The IR serves as a static snapshot of
 the build plan after all Jinja logic has been resolved. It is the "object code"
 that the Netsuke "compiler" produces, which can then be handed off to the Ninja
 "assembler" for execution. This mandate for a pre-computed static graph
-dictates the entire five-stage pipeline and establishes a clean boundary
-between the user-facing logic layer and the machine-facing execution layer.
+dictates the entire six-stage pipeline and establishes a clean boundary between
+the user-facing logic layer and the machine-facing execution layer.
 
 ## Section 2: The Netsuke Manifest: A User-Centric YAML Schema
 
@@ -336,19 +340,23 @@ are specified.
 
 Large sets of similar outputs can clutter a manifest when written individually.
 Netsuke supports a `foreach` entry within `targets` to generate multiple
-outputs succinctly. The expression assigned to `foreach` is evaluated during
-the Jinja render phase, and each value becomes `item` in the target context.
+outputs succinctly. The `foreach` and optional `when` keys accept bare Jinja
+expressions that are evaluated after the initial YAML pass. Each resulting
+value becomes `item` in the target context, and the environment at that
+iteration is preserved for later rendering.
 
 ```yaml
-- foreach: "{{ glob('assets/svg/*.svg') }}"
+- foreach: glob('assets/svg/*.svg')
+  when: item | basename != 'logo.svg'
   name: "{{ outdir }}/{{ item | basename | replace('.svg', '.png') }}"
   rule: rasterise
   sources: "{{ item }}"
 ```
 
-Each element in the sequence produces a separate target. The resulting build
-graph is still fully static and behaves the same as if every target were
-declared explicitly.
+Each element in the sequence produces a separate target. Jinja control
+structures cannot shape the YAML; all templating must occur within the string
+values. The resulting build graph is still fully static and behaves the same as
+if every target were declared explicitly.
 
 ### 2.6 Table: Netsuke Manifest vs. Makefile
 
@@ -1426,7 +1434,7 @@ treated as the default subcommand if none is provided, allowing for the common*
 The behaviour of each subcommand is clearly defined:
 
 - `Netsuke build [--emit FILE] [targets...]`: This is the primary and default
-  command. It executes the full five-stage pipeline: ingestion, Jinja
+command. It executes the full six-stage pipeline: ingestion, Jinja
   rendering, YAML parsing, IR generation, and Ninja synthesis. By default the
   generated Ninja file is written to a securely created temporary location and
   removed after the build completes. Supplying `--emit FILE` writes the Ninja
