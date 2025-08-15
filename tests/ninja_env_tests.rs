@@ -2,13 +2,19 @@
 
 use mockable::MockEnv;
 use ninja_env::NINJA_ENV;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serial_test::serial;
+use std::path::PathBuf;
 use test_support::{env::override_ninja_env, env_lock::EnvLock};
+
+#[fixture]
+fn ninja_tmp() -> PathBuf {
+    std::env::temp_dir().join("ninja")
+}
 
 #[rstest]
 #[serial]
-fn override_ninja_env_sets_and_restores() {
+fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) {
     let before = std::env::var_os(NINJA_ENV);
     let original = before
         .as_ref()
@@ -18,10 +24,9 @@ fn override_ninja_env_sets_and_restores() {
         .withf(|k| k == NINJA_ENV)
         .returning(move |_| original.clone().ok_or(std::env::VarError::NotPresent));
     {
-        let target = std::env::temp_dir().join("ninja");
-        let _guard = override_ninja_env(&env, target.as_path());
-        let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
-        assert_eq!(after, target.to_string_lossy().as_ref());
+        let _guard = override_ninja_env(&env, ninja_tmp.as_path());
+        let after = std::env::var_os(NINJA_ENV).expect("NINJA_ENV should be set after override");
+        assert_eq!(after, ninja_tmp.as_os_str());
     }
     let restored = std::env::var_os(NINJA_ENV);
     assert_eq!(restored, before);
@@ -29,11 +34,11 @@ fn override_ninja_env_sets_and_restores() {
 
 #[rstest]
 #[serial]
-fn override_ninja_env_unset_removes_variable() {
+fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) {
     let before = std::env::var_os(NINJA_ENV);
     {
         let _lock = EnvLock::acquire();
-        // SAFETY: `EnvLock` serialises mutations during setup.
+        // EnvLock serialises mutations during setup.
         unsafe { std::env::remove_var(NINJA_ENV) };
     }
 
@@ -42,10 +47,9 @@ fn override_ninja_env_unset_removes_variable() {
         .withf(|k| k == NINJA_ENV)
         .returning(|_| Err(std::env::VarError::NotPresent));
     {
-        let target = std::env::temp_dir().join("ninja");
-        let _guard = override_ninja_env(&env, target.as_path());
-        let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
-        assert_eq!(after, target.to_string_lossy().as_ref());
+        let _guard = override_ninja_env(&env, ninja_tmp.as_path());
+        let after = std::env::var_os(NINJA_ENV).expect("NINJA_ENV should be set after override");
+        assert_eq!(after, ninja_tmp.as_os_str());
     }
     assert!(std::env::var_os(NINJA_ENV).is_none());
 
@@ -53,10 +57,10 @@ fn override_ninja_env_unset_removes_variable() {
     {
         let _lock = EnvLock::acquire();
         if let Some(val) = before {
-            // SAFETY: `EnvLock` serialises mutations while restoring.
+            // EnvLock serialises mutations while restoring.
             unsafe { std::env::set_var(NINJA_ENV, val) };
         } else {
-            // SAFETY: `EnvLock` serialises mutations while restoring.
+            // EnvLock serialises mutations while restoring.
             unsafe { std::env::remove_var(NINJA_ENV) };
         }
     }
