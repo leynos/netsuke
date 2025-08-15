@@ -104,12 +104,12 @@ pub struct NinjaEnvGuard {
 ///
 /// ```
 /// use ninja_env::NINJA_ENV;
-/// use std::path::Path;
 /// use test_support::env::{SystemEnv, override_ninja_env};
 ///
 /// let env = SystemEnv::new();
-/// let guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
-/// assert_eq!(std::env::var(NINJA_ENV).unwrap(), "/tmp/ninja");
+/// let path = std::env::temp_dir().join("ninja");
+/// let guard = override_ninja_env(&env, path.as_path());
+/// assert_eq!(std::env::var(NINJA_ENV).unwrap(), path.to_string_lossy());
 /// drop(guard);
 /// assert!(std::env::var(NINJA_ENV).is_err());
 /// ```

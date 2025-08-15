@@ -1,25 +1,27 @@
 //! Tests for overriding the `NINJA_ENV` variable via a mock environment.
 
 use mockable::MockEnv;
-use netsuke::runner::NINJA_ENV;
+use ninja_env::NINJA_ENV;
 use rstest::rstest;
 use serial_test::serial;
-use std::path::Path;
 use test_support::{env::override_ninja_env, env_lock::EnvLock};
 
 #[rstest]
 #[serial]
 fn override_ninja_env_sets_and_restores() {
     let before = std::env::var_os(NINJA_ENV);
-    let original = before.clone().map(|v| v.to_string_lossy().into_owned());
+    let original = before
+        .as_ref()
+        .and_then(|v| v.to_str().map(ToOwned::to_owned));
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
         .returning(move |_| original.clone().ok_or(std::env::VarError::NotPresent));
     {
-        let _guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
+        let target = std::env::temp_dir().join("ninja");
+        let _guard = override_ninja_env(&env, target.as_path());
         let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
-        assert_eq!(after, "/tmp/ninja");
+        assert_eq!(after, target.to_string_lossy().as_ref());
     }
     let restored = std::env::var_os(NINJA_ENV);
     assert_eq!(restored, before);
@@ -40,9 +42,10 @@ fn override_ninja_env_unset_removes_variable() {
         .withf(|k| k == NINJA_ENV)
         .returning(|_| Err(std::env::VarError::NotPresent));
     {
-        let _guard = override_ninja_env(&env, Path::new("/tmp/ninja"));
+        let target = std::env::temp_dir().join("ninja");
+        let _guard = override_ninja_env(&env, target.as_path());
         let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
-        assert_eq!(after, "/tmp/ninja");
+        assert_eq!(after, target.to_string_lossy().as_ref());
     }
     assert!(std::env::var(NINJA_ENV).is_err());
 
