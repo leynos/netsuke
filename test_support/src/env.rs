@@ -4,6 +4,7 @@
 //! manifests.
 
 use mockable::{DefaultEnv, Env, MockEnv};
+use ninja_env::NINJA_ENV;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Write};
 use std::path::Path;
@@ -85,4 +86,50 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
     // SAFETY: `EnvLock` serialises mutations and the guard restores on drop.
     unsafe { env.set_var("PATH", &new_path) };
     PathGuard::new(original_os)
+}
+
+/// Guard that restores `NINJA_ENV` to its previous value on drop.
+#[derive(Debug)]
+pub struct NinjaEnvGuard {
+    original: Option<OsString>,
+}
+
+/// Override the `NINJA_ENV` variable with `path`, returning a guard that resets it.
+///
+/// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates process-global
+/// state. `EnvLock` serialises the mutation and the guard restores the prior
+/// value, confining the unsafety to the scope of the guard.
+///
+/// # Examples
+///
+/// ```
+/// use ninja_env::NINJA_ENV;
+/// use test_support::env::{SystemEnv, override_ninja_env};
+///
+/// let env = SystemEnv::new();
+/// let path = std::env::temp_dir().join("ninja");
+/// let guard = override_ninja_env(&env, path.as_path());
+/// assert_eq!(std::env::var(NINJA_ENV).unwrap(), path.to_string_lossy());
+/// drop(guard);
+/// assert!(std::env::var(NINJA_ENV).is_err());
+/// ```
+pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
+    let _lock = EnvLock::acquire();
+    let original = env.raw(NINJA_ENV).ok().map(OsString::from);
+    // SAFETY: `EnvLock` serialises the mutation and the guard restores on drop.
+    unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
+    NinjaEnvGuard { original }
+}
+
+impl Drop for NinjaEnvGuard {
+    fn drop(&mut self) {
+        let _lock = EnvLock::acquire();
+        if let Some(val) = self.original.take() {
+            // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
+            unsafe { std::env::set_var(NINJA_ENV, val) };
+        } else {
+            // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
+            unsafe { std::env::remove_var(NINJA_ENV) };
+        }
+    }
 }

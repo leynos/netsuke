@@ -20,7 +20,7 @@ use tracing::{debug, info};
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
-pub const NINJA_ENV: &str = "NETSUKE_NINJA";
+pub use ninja_env::NINJA_ENV;
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
