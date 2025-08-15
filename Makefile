@@ -12,7 +12,7 @@ release: target/release/$(APP) ## Build release binary
 
 all: release ## Default target builds release binary
 
-clean: ## Remove build artifacts
+clean: ## Remove build artefacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors

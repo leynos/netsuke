@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Ensures the Netsuke build did not produce an unexpected artifact.
-# If the artifact is present and `NINJA_MANIFEST` is set, the referenced
+# Ensures the Netsuke build did not produce an unexpected artefact.
+# If the artefact is present and `NINJA_MANIFEST` is set, the referenced
 # Ninja manifest is dumped to stderr for debugging.
 set -euo pipefail
 
@@ -12,7 +12,7 @@ fi
 file="$1"
 
 if [[ -f "$file" ]]; then
-  echo "Unexpected build artifact '$file' present." >&2
+  echo "Unexpected build artefact '$file' present." >&2
   if [[ -n "${NINJA_MANIFEST:-}" && -f "$NINJA_MANIFEST" ]]; then
     echo "Ninja manifest '$NINJA_MANIFEST' for debugging:" >&2
     echo "-----BEGIN NINJA MANIFEST-----" >&2

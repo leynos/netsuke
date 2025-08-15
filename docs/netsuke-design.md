@@ -34,7 +34,7 @@ architecture.
 ### 1.2 The Six Stages of a Netsuke Build
 
 The process of transforming a user's `Netsukefile` manifest into a completed
-build artifact now follows a six-stage pipeline. This data flow validates the
+build artefact now follows a six-stage pipeline. This data flow validates the
 manifest as YAML first, then resolves all dynamic logic into a static plan
 before execution, a critical requirement for compatibility with Ninja.
 
@@ -347,10 +347,15 @@ iteration is preserved for later rendering.
   sources: "{{ item }}"
 ```
 
-Each element in the sequence produces a separate target. Jinja control
-structures cannot shape the YAML; all templating must occur within the string
-values. The resulting build graph is still fully static and behaves the same as
-if every target were declared explicitly.
+Each element in the sequence produces a separate target. Per-iteration context:
+
+- item: current element
+- index: 0-based index (optional)
+- vars: resolved in order `globals` < `target.vars` < per-iteration locals
+
+Jinja control structures cannot shape the YAML; all templating must occur
+within the string values. The resulting build graph is still fully static and
+behaves the same as if every target were declared explicitly.
 
 ### 2.6 Table: Netsuke Manifest vs. Makefile
 
@@ -592,7 +597,7 @@ preserved for Jinja control flow. Targets also accept optional `phony` and
 `always` booleans. They default to `false`, making it explicit when an action
 should run regardless of file timestamps. Targets listed in the `actions`
 section are deserialised using a custom helper so they are always treated as
-`phony` tasks. This ensures preparation actions never generate build artifacts.
+`phony` tasks. This ensures preparation actions never generate build artefacts.
 Convenience functions in `src/manifest.rs` load a manifest from a string or a
 file path, returning `anyhow::Result` for straightforward error handling.
 
@@ -1400,7 +1405,7 @@ struct Cli { /// Path to the Netsuke manifest file to use.
 enum Commands { /// Build specified targets (or default targets if none are
 given). /// This is the default subcommand. Build(BuildArgs),
 
-    /// Remove build artifacts and intermediate files. Clean,
+    /// Remove build artefacts and intermediate files. Clean,
 
     /// Display the build dependency graph in DOT format for visualisation.
     Graph,
@@ -1497,7 +1502,7 @@ goal.
 
   - **Success Criterion:** Netsuke can successfully take a `Netsukefile` file
     *without any Jinja syntax* and compile it to a `build.ninja` file, then
-    execute it to produce the correct artifacts. This phase validates the
+    execute it to produce the correct artefacts. This phase validates the
     entire static compilation pipeline.
 
 - **Phase 2: The Dynamic Engine**
@@ -1567,7 +1572,7 @@ powerful build tool. The use of a decoupled IR, in particular, opens up many
 possibilities for future enhancements beyond the initial scope.
 
 - **Advanced Caching:** While Ninja provides excellent file-based incremental
-  build caching, Netsuke could implement a higher-level artifact caching layer.
+  build caching, Netsuke could implement a higher-level artefact caching layer.
   This could involve caching build outputs in a shared network location (e.g.,
   S3) or a local content-addressed store, allowing for cache hits across
   different machines or clean checkouts.

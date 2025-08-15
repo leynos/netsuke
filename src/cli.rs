@@ -97,7 +97,7 @@ pub enum Commands {
     /// Build specified targets (or default targets if none are given) `default`.
     Build(BuildArgs),
 
-    /// Remove build artifacts and intermediate files.
+    /// Remove build artefacts and intermediate files.
     Clean,
 
     /// Display the build dependency graph in DOT format for visualization.

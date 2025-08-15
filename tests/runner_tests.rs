@@ -119,7 +119,7 @@ fn run_executes_ninja_without_persisting_file() {
     // Ensure no ninja file remains in project directory
     assert!(!temp.path().join("build.ninja").exists());
 
-    // Drop the fake ninja artifacts. PATH is restored by guard drop.
+    // Drop the fake ninja artefacts. PATH is restored by guard drop.
     drop(ninja_path);
 }
 
@@ -150,7 +150,7 @@ fn run_build_with_emit_keeps_file() {
     assert!(emitted.contains("build "));
     assert!(!temp.path().join("build.ninja").exists());
 
-    // Drop the fake ninja artifacts. PATH is restored by guard drop.
+    // Drop the fake ninja artefacts. PATH is restored by guard drop.
     drop(ninja_path);
 }
 
@@ -179,7 +179,7 @@ fn run_build_with_emit_creates_parent_dirs() {
     assert!(emit_path.exists());
     assert!(nested_dir.exists());
 
-    // Drop the fake ninja artifacts. PATH is restored by guard drop.
+    // Drop the fake ninja artefacts. PATH is restored by guard drop.
     drop(ninja_path);
 }
 

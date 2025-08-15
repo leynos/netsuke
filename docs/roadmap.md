@@ -68,7 +68,7 @@ compilation pipeline from parsing to execution.
 
   - [x] Netsuke can successfully take a Netsukefile without any Jinja syntax,
     compile it to a `build.ninja` file, and execute it via the ninja subprocess
-    to produce the correct build artifacts. *(validated via CI workflow)*
+    to produce the correct build artefacts. *(validated via CI workflow)*
 
 ## Phase 2: The Dynamic Engine ✨
 
@@ -80,9 +80,10 @@ configurations with variables, control flow, and custom functions.
   - [x] Integrate the `minijinja` crate into the build pipeline.
 
   - [x] Implement data-first parsing: parse the manifest into a
-    `serde_yml::Value`, expand `foreach` and `when` entries with a Jinja
-    environment, then deserialize the expanded tree into the typed AST and
-    render remaining string fields.
+    `serde_yml::Value` (Stage 2: Initial YAML Parsing), expand `foreach` and
+    `when` entries with a Jinja environment (Stage 3: Template Expansion), then
+    deserialise the expanded tree into the typed AST and render remaining
+    string fields (Stage 4: Deserialisation & Final Rendering).
 
   - [x] Create a minijinja::Environment and populate its initial context with
     the global vars defined in the manifest.

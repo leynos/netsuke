@@ -18,7 +18,7 @@ stakeholders can use to describe and agree upon software requirements.[^2] This
 process is centred on conversation; the discussions about how a feature should
 behave are the most valuable output of BDD.[^3]
 
-The tangible artifact of these conversations is a set of specifications written
+The tangible artefact of these conversations is a set of specifications written
 in a structured, natural language format. These specifications serve a dual
 purpose: they are human-readable documentation of the system's features, and
 they are also executable tests that verify the system's behaviour. This
@@ -979,7 +979,7 @@ The process involves two main steps:
 2. **Publish reports:** Many CI platforms can parse and display test results
    in a structured format. The `cucumber` crate supports generating JUnit XML
    reports via the `output-junit` feature flag.[^16] These XML files can then
-   be published as test artifacts for platforms like GitHub Actions, GitLab
+   be published as test artefacts for platforms like GitHub Actions, GitLab
    CI,[^34] or Jenkins to consume.[^33]
 
 This CI integration closes the BDD loop. The `.feature` files, once checked
