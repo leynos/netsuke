@@ -30,7 +30,7 @@ fn override_ninja_env_sets_and_restores() {
 #[rstest]
 #[serial]
 fn override_ninja_env_unset_removes_variable() {
-    let before = std::env::var(NINJA_ENV).ok();
+    let before = std::env::var_os(NINJA_ENV);
     {
         let _lock = EnvLock::acquire();
         // SAFETY: `EnvLock` serialises mutations during setup.
@@ -47,7 +47,7 @@ fn override_ninja_env_unset_removes_variable() {
         let after = std::env::var(NINJA_ENV).expect("NINJA_ENV should be set after override");
         assert_eq!(after, target.to_string_lossy().as_ref());
     }
-    assert!(std::env::var(NINJA_ENV).is_err());
+    assert!(std::env::var_os(NINJA_ENV).is_none());
 
     // Restore original global state for isolation
     {
