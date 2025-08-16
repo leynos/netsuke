@@ -36,12 +36,6 @@ fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) {
 #[serial]
 fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) {
     let before = std::env::var_os(NINJA_ENV);
-    {
-        let _lock = EnvLock::acquire();
-        // EnvLock serialises mutations during setup.
-        unsafe { std::env::remove_var(NINJA_ENV) };
-    }
-
     let mut env = MockEnv::new();
     env.expect_raw()
         .withf(|k| k == NINJA_ENV)
