@@ -14,7 +14,7 @@ rules:
     command: "make-gallery {{ out_dir }} > {outs}"
 
 targets:
-  - foreach: "{{ glob(raw_dir ~ '/*.CR2') }}"
+  - foreach: glob(raw_dir ~ '/*.CR2')
     name: "{{ out_dir }}/{{ item | basename | replace('.CR2', '.jpg') }}"
     rule: convert_raw
     sources: "{{ item }}"

@@ -90,10 +90,13 @@ configurations with variables, control flow, and custom functions.
 
 - [ ] **Dynamic Features and Custom Functions:**
 
+  - [x] Remove the global first-pass Jinja parsing so manifests are valid YAML
+        before any templating occurs.
+
   - [x] Evaluate Jinja expressions only within string values, forbidding
         structural tags such as `{% if %}` and `{% for %}`.
 
-  - [ ] Implement the `foreach` and `when` keys for target generation,
+  - [x] Implement the `foreach` and `when` keys for target generation,
         exposing `item` and optional `index` variables and layering
         per-iteration locals over `target.vars` and manifest globals for
         subsequent rendering phases.
