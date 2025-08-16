@@ -47,7 +47,7 @@ fn renders_if_blocks(#[case] flag: bool, #[case] expected: &str) {
             "  flag: {flag}\n",
             "targets:\n",
             "  - name: test\n",
-            "    command: {cmd}\n",
+            "    command: \"{cmd}\"\n",
         ),
         flag = flag,
         cmd = cmd,
@@ -63,9 +63,9 @@ fn renders_if_blocks(#[case] flag: bool, #[case] expected: &str) {
 }
 
 #[rstest]
-fn renders_for_loops() {
+fn expands_foreach_targets() {
     let yaml = manifest_yaml(
-        "vars:\n  items:\n    - a\n    - b\ntargets:\n{% for item in items %}\n  - name: \"{{ item }}\"\n    command: \"echo {{ item }}\"\n{% endfor %}\n",
+        "targets:\n  - foreach: \"['a', 'b']\"\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
     );
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -92,27 +92,36 @@ fn renders_for_loops() {
 }
 
 #[rstest]
-fn for_loop_non_iterable_errors() {
-    let yaml = manifest_yaml(
-        "vars:\n  items: 1\ntargets:\n{% for item in items %}\n  - name: \"{{ item }}\"\n    command: \"echo {{ item }}\"\n{% endfor %}\n",
-    );
+fn foreach_non_iterable_errors() {
+    let yaml =
+        manifest_yaml("targets:\n  - foreach: \"1\"\n    name: 'a'\n    command: 'echo a'\n");
 
     assert!(manifest::from_str(&yaml).is_err());
+}
+
+#[rstest]
+fn foreach_when_filters_items() {
+    let yaml = manifest_yaml(
+        "targets:\n  - foreach: \"['a', 'skip', 'b']\"\n    when: item != 'skip'\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
+    );
+
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    assert_eq!(manifest.targets.len(), 2);
+    let names: Vec<_> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            netsuke::ast::StringOrList::String(s) => s.clone(),
+            other => panic!("Expected String, got: {other:?}"),
+        })
+        .collect();
+    assert_eq!(names, vec!["a", "b"]);
 }
 
 #[rstest]
 fn undefined_in_if_errors() {
     let yaml = manifest_yaml(
-        "targets:\n  - name: test\n    command: {% if missing %}echo hi{% endif %}\n",
-    );
-
-    assert!(manifest::from_str(&yaml).is_err());
-}
-
-#[rstest]
-fn undefined_in_for_errors() {
-    let yaml = manifest_yaml(
-        "targets:\n{% for item in missing %}\n  - name: \"{{ item }}\"\n    command: \"echo {{ item }}\"\n{% endfor %}\n",
+        "targets:\n  - name: test\n    command: \"{% if missing %}echo hi{% endif %}\"\n",
     );
 
     assert!(manifest::from_str(&yaml).is_err());

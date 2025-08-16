@@ -559,34 +559,23 @@ targets:
     rule: compile
 ```
 
-The value of `sources`, `{{ glob('src/*.c') }}`, is not a valid YAML string
-from the perspective of a strict parser. Attempting to deserialize this
-directly with `serde_yml` would result in a parsing error.
+The value of `sources`, `{{ glob('src/*.c') }}`, is a plain YAML string. The
+manifest must be valid YAML before any templating occurs, so the parser can
+first load it into a `serde_yml::Value` tree.
 
-Therefore, the process must be sequential:
+Once parsed, Netsuke performs a series of transformation stages:
 
-1. **First Pass (Jinja Rendering):** The entire `Netsukefile` file is read as a
-   raw text template. The `minijinja` engine renders this template, executing
-   the `glob('src/*.c')` function and substituting its result. The output of
-   this pass is a new string.
+1. **Template Expansion:** The `foreach` and optional `when` keys in the raw
+   YAML are evaluated to generate additional targets. Each iteration layers the
+   `item` and `index` variables over the manifest's globals and any target
+   locals.
+2. **Deserialisation:** The expanded document is deserialised into the typed
+   [`NetsukeManifest`] AST.
+3. **Final Rendering:** Remaining string fields are rendered using Jinja,
+   resolving expressions such as `{{ glob('src/*.c') }}`.
 
-YAML
-
-```yaml
- targets:
-   - name: my_app
-     sources: ["src/main.c", "src/utils.c"]
-     rule: compile
-
-```
-
-1. **Second Pass (YAML Deserialization):** This new, rendered string, which is
-   now pure and valid YAML, is then passed to `serde_yml`. The parser can now
-   successfully deserialize this text into the `NetsukeManifest` Rust struct.
-
-This two-pass mechanism cleanly separates the concerns of templating and data
-structure parsing. It allows each library to do what it does best without
-interference, ensuring a robust and predictable ingestion pipeline.
+This data-first approach avoids a lossy text-rendering pre-pass and keeps YAML
+parsing and template evaluation cleanly separated.
 
 ### 3.4 Design Decisions
 
@@ -603,6 +592,11 @@ section are deserialised using a custom helper so they are always treated as
 `phony` tasks. This ensures preparation actions never generate build artefacts.
 Convenience functions in `src/manifest.rs` load a manifest from a string or a
 file path, returning `anyhow::Result` for straightforward error handling.
+
+The ingestion pipeline now parses the manifest as YAML before any Jinja
+evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
+fields are rendered only after deserialisation, keeping data and templating
+concerns clearly separated.
 
 ### 3.5 Testing
 

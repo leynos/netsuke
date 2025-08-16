@@ -1,9 +1,0 @@
-netsuke_version: 1.0.0
-vars:
-  items: 1
-targets:
-{% for item in items %}
-  - name: "{{ item }}"
-    command: "echo {{ item }}"
-{% endfor %}
-
