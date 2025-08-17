@@ -218,32 +218,33 @@ fn renders_target_fields_command() {
 }
 
 #[rstest]
-fn renders_target_fields_script() {
-    let yaml = manifest_yaml(
-        "vars:\n  base: base\n  \ntargets:\n  - name: script\n    vars:\n      path: '{{ base }}.sh'\n    script: 'run {{ path }}'\n",
-    );
+#[case(
+    "script",
+    "run base.sh",
+    "vars:\n  base: base\n  \ntargets:\n  - name: script\n    vars:\n      path: '{{ base }}.sh'\n    script: 'run {{ path }}'\n"
+)]
+#[case(
+    "rule",
+    "base-rule",
+    "vars:\n  base: base\nrules:\n  - name: base-rule\n    command: echo hi\n\ntargets:\n  - name: use-rule\n    rule: '{{ base }}-rule'\n"
+)]
+fn renders_target_fields_recipe_types(
+    #[case] recipe_type: &str,
+    #[case] expected_value: &str,
+    #[case] yaml_body: &str,
+) {
+    let yaml = manifest_yaml(yaml_body);
 
     let manifest = manifest::from_str(&yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
-    if let Recipe::Script { script } = &target.recipe {
-        assert_eq!(script, "run base.sh");
-    } else {
-        panic!("Expected script recipe, got: {:?}", target.recipe);
-    }
-}
-
-#[rstest]
-fn renders_target_fields_rule() {
-    let yaml = manifest_yaml(
-        "vars:\n  base: base\nrules:\n  - name: base-rule\n    command: echo hi\n\ntargets:\n  - name: use-rule\n    rule: '{{ base }}-rule'\n",
-    );
-
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let target = manifest.targets.first().expect("target");
-    if let Recipe::Rule { rule } = &target.recipe {
-        assert_string_or_list_eq(rule, "base-rule", "rule");
-    } else {
-        panic!("Expected rule recipe, got: {:?}", target.recipe);
+    match (recipe_type, &target.recipe) {
+        ("script", Recipe::Script { script }) => assert_eq!(script, expected_value),
+        ("rule", Recipe::Rule { rule }) => {
+            assert_string_or_list_eq(rule, expected_value, "rule");
+        }
+        ("script", recipe) => panic!("Expected script recipe, got: {recipe:?}"),
+        ("rule", recipe) => panic!("Expected rule recipe, got: {recipe:?}"),
+        (other, _) => panic!("Unexpected recipe type: {other}"),
     }
 }
 
