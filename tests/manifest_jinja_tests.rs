@@ -14,11 +14,11 @@ fn assert_string_or_list_eq(actual: &netsuke::ast::StringOrList, expected: &str,
         netsuke::ast::StringOrList::List(list) if list.len() == 1 => {
             assert_eq!(list.first().expect("list"), expected);
         }
-        other => panic!("Expected String for {field}, got: {other:?}"),
+        other => panic!("Expected String or single-item List for {field}, got: {other:?}"),
     }
 }
 
-fn assert_string_or_list_contains(
+fn assert_string_or_list_eq_list(
     actual: &netsuke::ast::StringOrList,
     expected: &[String],
     field: &str,
@@ -289,9 +289,9 @@ fn renders_target_fields_command() {
     let manifest = manifest::from_str(&yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     assert_string_or_list_eq(&target.name, "base1", "name");
-    assert_string_or_list_contains(&target.sources, &["base1.src".to_string()], "sources");
-    assert_string_or_list_contains(&target.deps, &["base1.dep".to_string()], "deps");
-    assert_string_or_list_contains(
+    assert_string_or_list_eq_list(&target.sources, &["base1.src".to_string()], "sources");
+    assert_string_or_list_eq_list(&target.deps, &["base1.dep".to_string()], "deps");
+    assert_string_or_list_eq_list(
         &target.order_only_deps,
         &["base1.ord".to_string()],
         "order_only_deps",

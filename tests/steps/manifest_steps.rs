@@ -13,7 +13,7 @@ fn get_string_from_string_or_list(value: &StringOrList, field_name: &str) -> Str
     match value {
         StringOrList::String(s) => s.clone(),
         StringOrList::List(list) if list.len() == 1 => list.first().expect("one element").clone(),
-        other => panic!("Expected String for {field_name}, got: {other:?}"),
+        other => panic!("Expected String or single-item List for {field_name}, got: {other:?}"),
     }
 }
 
@@ -46,9 +46,10 @@ fn assert_parsed(world: &CliWorld) {
 
 fn get_target(world: &CliWorld, index: usize) -> &Target {
     let manifest = world.manifest.as_ref().expect("manifest");
+    let idx0 = index.checked_sub(1).expect("target index is 1-based");
     manifest
         .targets
-        .get(index - 1)
+        .get(idx0)
         .unwrap_or_else(|| panic!("missing target {index}"))
 }
 
