@@ -258,9 +258,8 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   setting. Exactly one of `command`, `script`, or `rule` must be provided. The
   manifest parser enforces this rule to prevent invalid states.
 
-  Internally, these options deserialise into a shared `Recipe` enum. The parser
-  selects the appropriate variant based on whether `command`, `script`, or
-  `rule` is present.
+  Internally, these options deserialise into a shared `Recipe` enum. Presence
+  of exactly one of `command`, `script`, or `rule` determines the variant.
 
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
@@ -389,9 +388,9 @@ This choice is based on its deep and direct integration with the `serde`
 framework, the de-facto standard for serialisation and deserialisation in the
 Rust ecosystem. Using `serde_yml` allows `serde`'s powerful derive macros to
 automatically generate the deserialisation logic for Rust structs. This
-approach is idiomatic, highly efficient, and significantly reduces the amount
-of boilerplate code that needs to be written and maintained. A simple `#`
-annotation on a struct is sufficient to make it a deserialisation target.
+approach is idiomatic, highly efficient, and significantly reduces boilerplate.
+Add `#[derive(Deserialize)]` (optionally also `Debug`) to make a struct a
+deserialisation target.
 
 While other promising YAML libraries like `saphyr` exist, their `serde`
 integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
@@ -407,8 +406,8 @@ choice for production-quality software.
 The Rust structs that `serde_yml` will deserialise into form the Abstract
 Syntax Tree (AST) of the build manifest. These structs must precisely mirror
 the YAML schema defined in Section 2. They will be defined in a dedicated
-module, `src/ast.rs`, and annotated with `#` to enable automatic
-deserialisation and easy debugging.
+module, `src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`)
+to enable automatic deserialisation and easy debugging.
 
 Rust
 

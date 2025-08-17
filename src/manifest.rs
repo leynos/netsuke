@@ -83,6 +83,9 @@ fn expand_target(map: YamlMapping, env: &Environment) -> Result<Vec<YamlValue>> 
 }
 
 fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<Value>> {
+    if let Some(seq) = expr_val.as_sequence() {
+        return Ok(seq.iter().cloned().map(Value::from_serialize).collect());
+    }
     let expr = as_str(expr_val, "foreach")?;
     let seq = eval_expression(env, "foreach", expr, context! {})?;
     let iter = seq

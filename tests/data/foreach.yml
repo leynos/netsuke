@@ -1,5 +1,7 @@
 netsuke_version: 1.0.0
 targets:
-  - foreach: "['foo', 'bar']"
-    name: "{{ index }}-{{ item }}"
-    command: "echo {{ index }} {{ item }}"
+  - foreach:
+      - foo
+      - bar
+    name: "{{ item }}"
+    command: "echo '{{ item }}'"

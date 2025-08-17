@@ -16,7 +16,7 @@ rules:
     command: "mkdir -p {{ outs }}"
 
 targets:
-  - foreach: sorted(glob(chapters_dir ~ '/*.md'))
+  - foreach: glob(chapters_dir ~ '/*.md')
     name: "{{ build_dir }}/{{ item | basename | replace('.md', '.tex') }}"
     rule: tex
     sources: "{{ item }}"

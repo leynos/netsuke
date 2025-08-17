@@ -7,6 +7,27 @@ fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
 }
 
+fn assert_string_or_list_eq(actual: &netsuke::ast::StringOrList, expected: &str, field: &str) {
+    match actual {
+        netsuke::ast::StringOrList::String(s) => assert_eq!(s, expected),
+        netsuke::ast::StringOrList::List(list) if list.len() == 1 => {
+            assert_eq!(list.first().expect("list"), expected);
+        }
+        other => panic!("Expected String for {field}, got: {other:?}"),
+    }
+}
+
+fn assert_string_or_list_contains(
+    actual: &netsuke::ast::StringOrList,
+    expected: &[String],
+    field: &str,
+) {
+    match actual {
+        netsuke::ast::StringOrList::List(list) => assert_eq!(list, expected),
+        other => panic!("Expected List for {field}, got: {other:?}"),
+    }
+}
+
 #[rstest]
 fn renders_global_vars() {
     let yaml = manifest_yaml(
@@ -65,7 +86,7 @@ fn renders_if_blocks(#[case] flag: bool, #[case] expected: &str) {
 #[rstest]
 fn expands_foreach_targets() {
     let yaml = manifest_yaml(
-        "targets:\n  - foreach: \"['a', 'b']\"\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
+        "targets:\n  - foreach:\n      - a\n      - b\n    name: '{{ item }}'\n    command: \"echo '{{ item }}'\"\n",
     );
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -88,7 +109,7 @@ fn expands_foreach_targets() {
             other => panic!("Expected command recipe, got: {other:?}"),
         })
         .collect();
-    assert_eq!(commands, vec!["echo a", "echo b"]);
+    assert_eq!(commands, vec!["echo 'a'", "echo 'b'"]);
 }
 
 #[rstest]
@@ -120,7 +141,7 @@ fn no_targets_generated_scenarios(
 #[rstest]
 fn expands_single_item_foreach_targets() {
     let yaml = manifest_yaml(
-        "targets:\n  - foreach: \"['only']\"\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
+        "targets:\n  - foreach:\n      - only\n    name: '{{ item }}'\n    command: \"echo '{{ item }}'\"\n",
     );
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -130,12 +151,9 @@ fn expands_single_item_foreach_targets() {
         "exactly one target should be generated for single-item foreach list"
     );
     let first = manifest.targets.first().expect("target");
-    match &first.name {
-        netsuke::ast::StringOrList::String(name) => assert_eq!(name, "only"),
-        other => panic!("Expected String, got: {other:?}"),
-    }
+    assert_string_or_list_eq(&first.name, "only", "name");
     if let Recipe::Command { command } = &first.recipe {
-        assert_eq!(command, "echo only");
+        assert_eq!(command, "echo 'only'");
     } else {
         panic!("Expected command recipe, got: {:?}", first.recipe);
     }
@@ -160,7 +178,7 @@ fn foreach_non_iterable_errors(#[case] val: &str, #[case] quoted: bool) {
 #[rstest]
 fn foreach_when_filters_items() {
     let yaml = manifest_yaml(
-        "targets:\n  - foreach: \"['a', 'skip', 'b']\"\n    when: item != 'skip'\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
+        "targets:\n  - foreach:\n      - a\n      - skip\n      - b\n    when: item != 'skip'\n    name: '{{ item }}'\n    command: \"echo '{{ item }}'\"\n",
     );
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -179,36 +197,21 @@ fn foreach_when_filters_items() {
 #[rstest]
 fn renders_target_fields_command() {
     let yaml = manifest_yaml(
-        "vars:\n  base: base\n  \ntargets:\n  - foreach: \"[1]\"\n    vars:\n      local: '{{ base }}{{ item }}'\n    name: '{{ local }}'\n    sources: ['{{ local }}.src']\n    deps: ['{{ local }}.dep']\n    order_only_deps: ['{{ local }}.ord']\n    command: 'echo {{ local }}'\n",
+        "vars:\n  base: base\n  \ntargets:\n  - foreach:\n      - 1\n    vars:\n      local: '{{ base }}{{ item }}'\n    name: '{{ local }}'\n    sources: ['{{ local }}.src']\n    deps: ['{{ local }}.dep']\n    order_only_deps: ['{{ local }}.ord']\n    command: \"echo '{{ local }}'\"\n",
     );
 
     let manifest = manifest::from_str(&yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
-
-    match &target.name {
-        netsuke::ast::StringOrList::String(n) => assert_eq!(n, "base1"),
-        other => panic!("Expected String, got: {other:?}"),
-    }
-
-    match &target.sources {
-        netsuke::ast::StringOrList::List(list) => assert_eq!(list, &["base1.src".to_string()]),
-        other => panic!("Expected List, got: {other:?}"),
-    }
-
-    match &target.deps {
-        netsuke::ast::StringOrList::List(list) => assert_eq!(list, &["base1.dep".to_string()]),
-        other => panic!("Expected List, got: {other:?}"),
-    }
-
-    match &target.order_only_deps {
-        netsuke::ast::StringOrList::List(list) => {
-            assert_eq!(list, &["base1.ord".to_string()]);
-        }
-        other => panic!("Expected List, got: {other:?}"),
-    }
-
+    assert_string_or_list_eq(&target.name, "base1", "name");
+    assert_string_or_list_contains(&target.sources, &["base1.src".to_string()], "sources");
+    assert_string_or_list_contains(&target.deps, &["base1.dep".to_string()], "deps");
+    assert_string_or_list_contains(
+        &target.order_only_deps,
+        &["base1.ord".to_string()],
+        "order_only_deps",
+    );
     if let Recipe::Command { command } = &target.recipe {
-        assert_eq!(command, "echo base1");
+        assert_eq!(command, "echo 'base1'");
     } else {
         panic!("Expected command recipe, got: {:?}", target.recipe);
     }
@@ -238,10 +241,7 @@ fn renders_target_fields_rule() {
     let manifest = manifest::from_str(&yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
     if let Recipe::Rule { rule } = &target.recipe {
-        match rule {
-            netsuke::ast::StringOrList::String(name) => assert_eq!(name, "base-rule"),
-            other => panic!("Expected String, got: {other:?}"),
-        }
+        assert_string_or_list_eq(rule, "base-rule", "rule");
     } else {
         panic!("Expected rule recipe, got: {:?}", target.recipe);
     }

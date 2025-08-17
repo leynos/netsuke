@@ -72,10 +72,12 @@ Feature: Manifest Parsing
     Given the manifest file "tests/data/foreach.yml" is parsed
     When the manifest is checked
     Then the manifest has 2 targets
-    And the target 1 name is "0-foo"
-    And the target 1 command is "echo 0 foo"
-    And the target 2 name is "1-bar"
-    And the target 2 command is "echo 1 bar"
+    And the target 1 name is "foo"
+    And the target 1 command is "echo 'foo'"
+    And the target 1 index is 0
+    And the target 2 name is "bar"
+    And the target 2 command is "echo 'bar'"
+    And the target 2 index is 1
 
   Scenario: Parsing fails when a foreach expression is not iterable
     Given the manifest file "tests/data/foreach_invalid.yml" is parsed

@@ -161,6 +161,17 @@ fn assert_target_command(world: &CliWorld, index: usize, command: &str) {
     }
 }
 
+fn assert_target_index(world: &CliWorld, index: usize, expected: usize) {
+    let target = get_target(world, index);
+    let actual = target
+        .vars
+        .get("index")
+        .and_then(serde_yml::Value::as_u64)
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or_else(|| panic!("target {index} missing index"));
+    assert_eq!(actual, expected, "unexpected index for target {index}");
+}
+
 fn assert_list_contains(value: &StringOrList, expected: &str) {
     match value {
         StringOrList::List(list) => {
@@ -189,6 +200,11 @@ fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
 )]
 fn target_command_n(world: &mut CliWorld, index: usize, command: String) {
     assert_target_command(world, index, &command);
+}
+
+#[then(expr = "the target {int} index is {int}")]
+fn target_index_n(world: &mut CliWorld, index: usize, expected: usize) {
+    assert_target_index(world, index, expected);
 }
 
 #[then(expr = "the target {int} has source {string}")]
