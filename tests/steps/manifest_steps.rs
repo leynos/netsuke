@@ -7,6 +7,16 @@ use netsuke::{
     manifest,
 };
 
+const INDEX_KEY: &str = "index";
+
+fn get_string_from_string_or_list(value: &StringOrList, field_name: &str) -> String {
+    match value {
+        StringOrList::String(s) => s.clone(),
+        StringOrList::List(list) if list.len() == 1 => list.first().expect("one element").clone(),
+        other => panic!("Expected String for {field_name}, got: {other:?}"),
+    }
+}
+
 fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
     match manifest::from_path(path) {
         Ok(manifest) => {
@@ -146,10 +156,8 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
 
 fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
     let target = get_target(world, index);
-    match &target.name {
-        StringOrList::String(value) => assert_eq!(value, name),
-        other => panic!("Expected StringOrList::String, got: {other:?}"),
-    }
+    let actual = get_string_from_string_or_list(&target.name, "name");
+    assert_eq!(&actual, name);
 }
 
 fn assert_target_command(world: &CliWorld, index: usize, command: &str) {
@@ -165,7 +173,7 @@ fn assert_target_index(world: &CliWorld, index: usize, expected: usize) {
     let target = get_target(world, index);
     let actual = target
         .vars
-        .get("index")
+        .get(INDEX_KEY)
         .and_then(serde_yml::Value::as_u64)
         .and_then(|n| usize::try_from(n).ok())
         .unwrap_or_else(|| panic!("target {index} missing index"));
@@ -259,10 +267,8 @@ fn target_script_is(world: &mut CliWorld, index: usize, script: String) {
 fn target_rule_is(world: &mut CliWorld, index: usize, rule_name: String) {
     let target = get_target(world, index);
     if let Recipe::Rule { rule } = &target.recipe {
-        match rule {
-            StringOrList::String(name) => assert_eq!(name, &rule_name),
-            other => panic!("Expected String, got: {other:?}"),
-        }
+        let actual = get_string_from_string_or_list(rule, "rule");
+        assert_eq!(actual, rule_name);
     } else {
         panic!("Expected rule recipe, got: {:?}", target.recipe);
     }

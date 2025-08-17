@@ -157,16 +157,29 @@ fn expands_foreach_with_item_and_index(
 }
 
 #[rstest]
-#[case("[]", "", "no targets should be generated for empty foreach list")]
+#[case(
+    "[]",
+    "",
+    "no targets should be generated for empty foreach list",
+    true
+)]
 #[case(
     "['a', 'b']",
     "'false'",
-    "no targets should be generated when condition is always false"
+    "no targets should be generated when condition is always false",
+    true
+)]
+#[case(
+    "[]",
+    "",
+    "no targets should be generated for empty foreach list (typed)",
+    false
 )]
 fn no_targets_generated_scenarios(
     #[case] foreach_value: &str,
     #[case] when_clause: &str,
     #[case] assertion_message: &str,
+    #[case] quoted_foreach: bool,
 ) {
     let when_line = if when_clause.is_empty() {
         String::new()
@@ -174,8 +187,14 @@ fn no_targets_generated_scenarios(
         format!("    when: {when_clause}\n")
     };
 
+    let foreach_lit = if quoted_foreach {
+        format!("\"{foreach_value}\"")
+    } else {
+        foreach_value.to_string()
+    };
+
     let yaml = manifest_yaml(&format!(
-        "targets:\n  - foreach: \"{foreach_value}\"\n{when_line}    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
+        "targets:\n  - foreach: {foreach_lit}\n{when_line}    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
     ));
 
     let manifest = manifest::from_str(&yaml).expect("parse");
