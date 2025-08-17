@@ -165,7 +165,7 @@ fn expands_foreach_with_item_and_index(
 )]
 #[case(
     "['a', 'b']",
-    "'false'",
+    "false",
     "no targets should be generated when condition is always false",
     true
 )]
@@ -184,7 +184,7 @@ fn no_targets_generated_scenarios(
     let when_line = if when_clause.is_empty() {
         String::new()
     } else {
-        format!("    when: {when_clause}\n")
+        format!("    when: \"{when_clause}\"\n")
     };
 
     let foreach_lit = if quoted_foreach {
@@ -255,6 +255,16 @@ fn foreach_when_filters_items() {
         })
         .collect();
     assert_eq!(names, vec!["a", "b"]);
+
+    let commands: Vec<_> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.recipe {
+            Recipe::Command { command } => command.clone(),
+            other => panic!("Expected command recipe, got: {other:?}"),
+        })
+        .collect();
+    assert_eq!(commands, vec!["echo 'a'", "echo 'b'"]);
 }
 
 #[rstest]
