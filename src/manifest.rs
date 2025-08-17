@@ -112,13 +112,13 @@ fn when_allows(
 
 fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> Result<()> {
     let vars_key = YamlValue::String("vars".into());
-    let mut vars = map
-        .remove(&vars_key)
-        .and_then(|v| match v {
-            YamlValue::Mapping(m) => Some(m),
-            _ => None,
-        })
-        .unwrap_or_default();
+    let mut vars = match map.remove(&vars_key) {
+        None => YamlMapping::new(),
+        Some(YamlValue::Mapping(m)) => m,
+        Some(other) => {
+            return Err(anyhow!("target.vars must be a mapping, got: {other:?}"));
+        }
+    };
     vars.insert(
         YamlValue::String("item".into()),
         serde_yml::to_value(item).context("serialise item")?,

@@ -239,6 +239,19 @@ fn foreach_non_iterable_errors(#[case] val: &str, #[case] quoted: bool) {
 }
 
 #[rstest]
+fn foreach_vars_must_be_mapping() {
+    let yaml = manifest_yaml(
+        "targets:\n  - foreach: ['a']\n    vars: 1\n    name: 'x'\n    command: 'echo x'\n",
+    );
+
+    let err = manifest::from_str(&yaml).expect_err("parse should fail");
+    assert!(
+        err.to_string().contains("target.vars must be a mapping"),
+        "unexpected error: {err}"
+    );
+}
+
+#[rstest]
 fn foreach_when_filters_items() {
     let yaml = manifest_yaml(
         "targets:\n  - foreach:\n      - a\n      - skip\n      - b\n    when: item != 'skip'\n    name: '{{ item }}'\n    command: \"echo '{{ item }}'\"\n",

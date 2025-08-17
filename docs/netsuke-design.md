@@ -884,12 +884,12 @@ be marked `pure` if safe for caching or `impure` otherwise.
 
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 
-After the user's manifest has been fully rendered by Jinja and deserialised
-into the AST, the next phase is to transform this high-level representation
-into a format suitable for the Ninja backend. This is accomplished via a
-two-step process: converting the AST into a canonical Intermediate
-Representation (IR), and then synthesizing the final `build.ninja` file from
-that IR.
+After the user's manifest has been deserialized into the AST and remaining
+string fields have been rendered by Jinja, the next phase is to transform this
+high-level representation into a format suitable for the Ninja backend. This is
+accomplished via a two-step process: converting the AST into a canonical
+Intermediate Representation (IR), and then synthesizing the final `build.ninja`
+file from that IR.
 
 ### 5.1 The Role of the Intermediate Representation (IR)
 
