@@ -84,18 +84,44 @@ fn first_target_name(world: &mut CliWorld, name: String) {
     assert_target_name(world, 1, &name);
 }
 
-#[then("the first target is phony")]
-fn first_target_phony(world: &mut CliWorld) {
+#[then(expr = "the target {int} is phony")]
+fn target_is_phony(world: &mut CliWorld, index: usize) {
     let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.targets.first().expect("targets");
-    assert!(first.phony);
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert!(target.phony);
 }
 
-#[then("the first target is always rebuilt")]
-fn first_target_always(world: &mut CliWorld) {
+#[then(expr = "the target {int} is always rebuilt")]
+fn target_is_always(world: &mut CliWorld, index: usize) {
     let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.targets.first().expect("targets");
-    assert!(first.always);
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert!(target.always);
+}
+
+#[then(expr = "the target {int} is not phony")]
+fn target_not_phony(world: &mut CliWorld, index: usize) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert!(!target.phony);
+}
+
+#[then(expr = "the target {int} is not always rebuilt")]
+fn target_not_always(world: &mut CliWorld, index: usize) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert!(!target.always);
 }
 
 #[then("the first action is phony")]
