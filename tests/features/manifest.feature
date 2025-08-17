@@ -82,16 +82,18 @@ Feature: Manifest Parsing
     When the parsing result is checked
     Then parsing the manifest fails
 
-  Scenario: Rendering all target fields
+  Scenario Outline: Targets default flags are false
     Given the manifest file "tests/data/target_defaults.yml" is parsed
     When the manifest is checked
     Then the manifest has 3 targets
-    And the target 1 is not phony
-    And the target 1 is not always rebuilt
-    And the target 2 is not phony
-    And the target 2 is not always rebuilt
-    And the target 3 is not phony
-    And the target 3 is not always rebuilt
+    And the target <index> is not phony
+    And the target <index> is not always rebuilt
+
+    Examples:
+      | index |
+      | 1     |
+      | 2     |
+      | 3     |
 
   Scenario: Parsing fails when rule and command are both defined
     Given the manifest file "tests/data/rule_command_conflict.yml" is parsed

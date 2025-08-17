@@ -1226,7 +1226,7 @@ The concept of being "friendlier" than `make` extends beyond syntactic sugar to
 encompass safety and reliability. A tool that is easy to use but exposes the
 user to trivial security vulnerabilities is fundamentally unfriendly. In many
 build systems, the burden of correct shell quoting falls on the user, an
-error-prone task that requires specialized knowledge.
+error-prone task that requires specialised knowledge.
 
 Netsuke's design elevates security to a core feature by making it automatic and
 transparent. The user writes a simple, unquoted command template, and Netsuke
