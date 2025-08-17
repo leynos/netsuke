@@ -92,16 +92,29 @@ fn expands_foreach_targets() {
 }
 
 #[rstest]
-fn expands_empty_foreach_targets() {
-    let yaml = manifest_yaml(
-        "targets:\n  - foreach: \"[]\"\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
-    );
+#[case("[]", "", "no targets should be generated for empty foreach list")]
+#[case(
+    "['a', 'b']",
+    "'false'",
+    "no targets should be generated when condition is always false"
+)]
+fn no_targets_generated_scenarios(
+    #[case] foreach_value: &str,
+    #[case] when_clause: &str,
+    #[case] assertion_message: &str,
+) {
+    let when_line = if when_clause.is_empty() {
+        String::new()
+    } else {
+        format!("    when: {when_clause}\n")
+    };
+
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: \"{foreach_value}\"\n{when_line}    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
+    ));
 
     let manifest = manifest::from_str(&yaml).expect("parse");
-    assert!(
-        manifest.targets.is_empty(),
-        "no targets should be generated for empty foreach list"
-    );
+    assert!(manifest.targets.is_empty(), "{assertion_message}");
 }
 
 #[rstest]
@@ -153,19 +166,6 @@ fn foreach_when_filters_items() {
         })
         .collect();
     assert_eq!(names, vec!["a", "b"]);
-}
-
-#[rstest]
-fn foreach_when_always_false_yields_no_targets() {
-    let yaml = manifest_yaml(
-        "targets:\n  - foreach: \"['a', 'b']\"\n    when: 'false'\n    name: '{{ item }}'\n    command: 'echo {{ item }}'\n",
-    );
-
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    assert!(
-        manifest.targets.is_empty(),
-        "no targets should be generated when condition is always false"
-    );
 }
 
 #[rstest]
