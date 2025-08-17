@@ -13,7 +13,7 @@ rules:
     command: "rm -rf {{ out_dir }}"
 
 targets:
-  - foreach: glob(src_dir ~ '/*.svg')
+  - foreach: sorted(glob(src_dir ~ '/*.svg'))
     name: "{{ out_dir }}/{{ item | basename | replace('.svg', '.png') }}"
     rule: rasterise
     sources: "{{ item }}"

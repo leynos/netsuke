@@ -142,9 +142,17 @@ fn expands_single_item_foreach_targets() {
 }
 
 #[rstest]
-fn foreach_non_iterable_errors() {
-    let yaml =
-        manifest_yaml("targets:\n  - foreach: \"1\"\n    name: 'a'\n    command: 'echo a'\n");
+#[case("1", true)] // foreach: "1"
+#[case("1", false)] // foreach: 1
+fn foreach_non_iterable_errors(#[case] val: &str, #[case] quoted: bool) {
+    let foreach = if quoted {
+        format!("\"{val}\"")
+    } else {
+        val.to_string()
+    };
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: {foreach}\n    name: 'a'\n    command: 'echo a'\n",
+    ));
 
     assert!(manifest::from_str(&yaml).is_err());
 }

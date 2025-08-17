@@ -90,8 +90,8 @@ configurations with variables, control flow, and custom functions.
 
 - [ ] **Dynamic Features and Custom Functions:**
 
-  - [x] Remove the global first-pass Jinja parsing so manifests are valid YAML
-        before any templating occurs.
+  - [x] Remove the global first-pass Jinja parsing, so that manifests are
+        valid YAML before any templating occurs.
 
   - [x] Evaluate Jinja expressions only within string values, forbidding
         structural tags such as `{% if %}` and `{% for %}`.

@@ -14,7 +14,7 @@ rules:
       cat {{ ins }} > {{ site_dir }}/index.html
 
 targets:
-  - foreach: glob(pages_dir ~ '/*.md')
+  - foreach: sorted(glob(pages_dir ~ '/*.md'))
     name: "{{ site_dir }}/{{ item | basename | replace('.md', '.html') }}"
     rule: page
     sources: "{{ item }}"

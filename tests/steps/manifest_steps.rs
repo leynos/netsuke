@@ -3,7 +3,7 @@
 use crate::CliWorld;
 use cucumber::{given, then, when};
 use netsuke::{
-    ast::{Recipe, StringOrList},
+    ast::{Recipe, StringOrList, Target},
     manifest,
 };
 
@@ -32,6 +32,14 @@ fn assert_parsed(world: &CliWorld) {
         world.manifest.is_some() || world.manifest_error.is_some(),
         "manifest should have been parsed",
     );
+}
+
+fn get_target(world: &CliWorld, index: usize) -> &Target {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"))
 }
 
 #[given(expr = "the manifest file {string} is parsed")]
@@ -137,11 +145,7 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
 }
 
 fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     match &target.name {
         StringOrList::String(value) => assert_eq!(value, name),
         other => panic!("Expected StringOrList::String, got: {other:?}"),
@@ -149,11 +153,7 @@ fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
 }
 
 fn assert_target_command(world: &CliWorld, index: usize, command: &str) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     if let Recipe::Command { command: actual } = &target.recipe {
         assert_eq!(actual, command);
     } else {
@@ -197,11 +197,7 @@ fn target_command_n(world: &mut CliWorld, index: usize, command: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn target_has_source(world: &mut CliWorld, index: usize, source: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     assert_list_contains(&target.sources, &source);
 }
 
@@ -211,11 +207,7 @@ fn target_has_source(world: &mut CliWorld, index: usize, source: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn target_has_dep(world: &mut CliWorld, index: usize, dep: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     assert_list_contains(&target.deps, &dep);
 }
 
@@ -225,11 +217,7 @@ fn target_has_dep(world: &mut CliWorld, index: usize, dep: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn target_has_order_only_dep(world: &mut CliWorld, index: usize, dep: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     assert_list_contains(&target.order_only_deps, &dep);
 }
 
@@ -239,11 +227,7 @@ fn target_has_order_only_dep(world: &mut CliWorld, index: usize, dep: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn target_script_is(world: &mut CliWorld, index: usize, script: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     if let Recipe::Script { script: actual } = &target.recipe {
         assert_eq!(actual, &script);
     } else {
@@ -257,11 +241,7 @@ fn target_script_is(world: &mut CliWorld, index: usize, script: String) {
     reason = "Cucumber step requires owned String"
 )]
 fn target_rule_is(world: &mut CliWorld, index: usize, rule_name: String) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     if let Recipe::Rule { rule } = &target.recipe {
         match rule {
             StringOrList::String(name) => assert_eq!(name, &rule_name),

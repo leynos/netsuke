@@ -258,7 +258,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   setting. Exactly one of `command`, `script`, or `rule` must be provided. The
   manifest parser enforces this rule to prevent invalid states.
 
-  Internally, these options deserialize into a shared `Recipe` enum. The parser
+  Internally, these options deserialise into a shared `Recipe` enum. The parser
   selects the appropriate variant based on whether `command`, `script`, or
   `rule` is present.
 
@@ -294,11 +294,11 @@ rule:
   defined using the YAML `|` block style.
 
 Only one of `rule`, `command`, or `script` may be specified. The parser
-validates this exclusivity during deserialization. When multiple fields are
+validates this exclusivity during deserialisation. When multiple fields are
 present, Netsuke emits a `RecipeConflict` error with the message "rule, command
 and script are mutually exclusive".
 
-This union deserializes into the same `Recipe` enum used for rules. The parser
+This union deserialises into the same `Recipe` enum used for rules. The parser
 enforces that only one variant is present and errors if multiple recipe fields
 are specified.
 
@@ -375,23 +375,23 @@ explicit, structured, and self-documenting nature.
 | Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: [main.o, utils.o] }                                           |
 | Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
 
-## Section 3: Parsing and Deserialization Strategy
+## Section 3: Parsing and Deserialisation Strategy
 
 Once the Jinja evaluation stage has produced a pure YAML string, the next
-critical step is to parse this string and deserialize it into a structured, in-
+critical step is to parse this string and deserialise it into a structured, in-
 memory representation. The choice of libraries and the definition of the target
 data structures are crucial for the robustness and maintainability of Netsuke.
 
 ### 3.1 Crate Selection: `serde_yml`
 
-For YAML parsing and deserialization, the recommended crate is `serde_yml`.
+For YAML parsing and deserialisation, the recommended crate is `serde_yml`.
 This choice is based on its deep and direct integration with the `serde`
-framework, the de-facto standard for serialization and deserialization in the
+framework, the de-facto standard for serialisation and deserialisation in the
 Rust ecosystem. Using `serde_yml` allows `serde`'s powerful derive macros to
-automatically generate the deserialization logic for Rust structs. This
+automatically generate the deserialisation logic for Rust structs. This
 approach is idiomatic, highly efficient, and significantly reduces the amount
 of boilerplate code that needs to be written and maintained. A simple `#`
-annotation on a struct is sufficient to make it a deserialization target.
+annotation on a struct is sufficient to make it a deserialisation target.
 
 While other promising YAML libraries like `saphyr` exist, their `serde`
 integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
@@ -404,11 +404,11 @@ choice for production-quality software.
 
 ### 3.2 Core Data Structures (`ast.rs`)
 
-The Rust structs that `serde_yml` will deserialize into form the Abstract
+The Rust structs that `serde_yml` will deserialise into form the Abstract
 Syntax Tree (AST) of the build manifest. These structs must precisely mirror
 the YAML schema defined in Section 2. They will be defined in a dedicated
 module, `src/ast.rs`, and annotated with `#` to enable automatic
-deserialization and easy debugging.
+deserialisation and easy debugging.
 
 Rust
 
@@ -542,7 +542,7 @@ let ast = NetsukeManifest {
 };
 ```
 
-### 3.3 The Two-Pass Parsing Requirement
+### 3.3 YAML-First Multi-Stage Ingestion
 
 The integration of a templating engine like Jinja fundamentally shapes the
 parsing pipeline, mandating a two-pass approach. It is impossible to parse the
@@ -601,7 +601,7 @@ concerns clearly separated.
 ### 3.5 Testing
 
 Unit tests in `tests/ast_tests.rs` and behavioural scenarios in
-`tests/features/manifest.feature` exercise the deserialization logic. They
+`tests/features/manifest.feature` exercise the deserialisation logic. They
 assert that manifests fail to parse when unknown fields are present, and that a
 minimal manifest round-trips correctly. A collection of sample manifests under
 `tests/data` cover both valid and invalid permutations of the schema. These
@@ -870,7 +870,7 @@ be marked `pure` if safe for caching or `impure` otherwise.
 
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 
-After the user's manifest has been fully rendered by Jinja and deserialized
+After the user's manifest has been fully rendered by Jinja and deserialised
 into the AST, the next phase is to transform this high-level representation
 into a format suitable for the Ninja backend. This is accomplished via a
 two-step process: converting the AST into a canonical Intermediate
@@ -1335,7 +1335,7 @@ enrichment:
    to the specific.
 
 For automation use cases, Netsuke will support a `--diag-json` flag. When
-enabled, the entire error chain is serialized to JSON, allowing editors and CI
+enabled, the entire error chain is serialised to JSON, allowing editors and CI
 tools to annotate failures inline.
 
 ### 7.4 Table: Transforming Errors into User-Friendly Messages
