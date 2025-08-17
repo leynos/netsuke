@@ -84,18 +84,28 @@ fn first_target_name(world: &mut CliWorld, name: String) {
     assert_target_name(world, 1, &name);
 }
 
-#[then("the first target is phony")]
-fn first_target_phony(world: &mut CliWorld) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.targets.first().expect("targets");
-    assert!(first.phony);
+#[then(expr = "the target {int} is phony")]
+fn target_is_phony(world: &mut CliWorld, index: usize) {
+    let target = get_target(world, index);
+    assert!(target.phony);
 }
 
-#[then("the first target is always rebuilt")]
-fn first_target_always(world: &mut CliWorld) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let first = manifest.targets.first().expect("targets");
-    assert!(first.always);
+#[then(expr = "the target {int} is always rebuilt")]
+fn target_is_always(world: &mut CliWorld, index: usize) {
+    let target = get_target(world, index);
+    assert!(target.always);
+}
+
+#[then(expr = "the target {int} is not phony")]
+fn target_not_phony(world: &mut CliWorld, index: usize) {
+    let target = get_target(world, index);
+    assert!(!target.phony);
+}
+
+#[then(expr = "the target {int} is not always rebuilt")]
+fn target_not_always(world: &mut CliWorld, index: usize) {
+    let target = get_target(world, index);
+    assert!(!target.always);
 }
 
 #[then("the first action is phony")]
@@ -136,12 +146,16 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     assert_eq!(manifest.targets.len(), count);
 }
 
-fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
+fn get_target(world: &CliWorld, index: usize) -> &netsuke::ast::Target {
     let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
+    manifest
         .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+        .get(index.saturating_sub(1))
+        .unwrap_or_else(|| panic!("missing target {index}"))
+}
+
+fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
+    let target = get_target(world, index);
     match &target.name {
         StringOrList::String(value) => assert_eq!(value, name),
         other => panic!("Expected StringOrList::String, got: {other:?}"),
@@ -149,11 +163,7 @@ fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
 }
 
 fn assert_target_command(world: &CliWorld, index: usize, command: &str) {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    let target = manifest
-        .targets
-        .get(index - 1)
-        .unwrap_or_else(|| panic!("missing target {index}"));
+    let target = get_target(world, index);
     if let Recipe::Command { command: actual } = &target.recipe {
         assert_eq!(actual, command);
     } else {

@@ -1,0 +1,8 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: first
+    command: "echo first"
+  - name: second
+    command: "echo second"
+  - name: third
+    command: "echo third"

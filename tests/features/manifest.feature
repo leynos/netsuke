@@ -12,8 +12,8 @@ Feature: Manifest Parsing
   Scenario: Parsing a manifest with phony and always flags
     Given the manifest file "tests/data/phony.yml" is parsed
     When the flags are checked
-    Then the first target is phony
-    And the first target is always rebuilt
+    Then the target 1 is phony
+    And the target 1 is always rebuilt
 
   Scenario: A target in the 'actions' block is implicitly phony
     Given the manifest file "tests/data/actions.yml" is parsed
@@ -79,5 +79,23 @@ Feature: Manifest Parsing
 
   Scenario: Parsing fails when a Jinja loop iterates over a non-list
     Given the manifest file "tests/data/jinja_for_invalid.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+
+  Scenario Outline: Targets default flags are false
+    Given the manifest file "tests/data/target_defaults.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 3 targets
+    And the target <index> is not phony
+    And the target <index> is not always rebuilt
+
+    Examples:
+      | index |
+      | 1     |
+      | 2     |
+      | 3     |
+
+  Scenario: Parsing fails when rule and command are both defined
+    Given the manifest file "tests/data/rule_command_conflict.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
