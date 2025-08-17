@@ -349,6 +349,21 @@ forward to later rendering.
   sources: "{{ item }}"
 ```
 
+The expansion flow is:
+
+```mermaid
+flowchart TD
+    A[Iterate over targets in YAML] --> B{Has foreach?}
+    B -- Yes --> C[Evaluate foreach expression]
+    C --> D[For each item:]
+    D --> E{Has when?}
+    E -- Yes --> F[Evaluate when expression]
+    F -- True --> G[Expand target with item/index]
+    F -- False --> H[Skip target]
+    E -- No --> G
+    B -- No --> I[Keep target as is]
+```
+
 Each element in the sequence produces a separate target. The iteration context:
 
 - `item`: current element
