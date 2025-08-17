@@ -29,26 +29,25 @@ fn assert_string_or_list_contains(
     }
 }
 
+fn extract_target_field<F>(manifest: &netsuke::ast::NetsukeManifest, extract: F) -> Vec<String>
+where
+    F: Fn(&netsuke::ast::Target) -> String,
+{
+    manifest.targets.iter().map(extract).collect()
+}
+
 fn extract_target_names(manifest: &netsuke::ast::NetsukeManifest) -> Vec<String> {
-    manifest
-        .targets
-        .iter()
-        .map(|t| match &t.name {
-            netsuke::ast::StringOrList::String(s) => s.clone(),
-            other => panic!("Expected String, got: {other:?}"),
-        })
-        .collect()
+    extract_target_field(manifest, |t| match &t.name {
+        netsuke::ast::StringOrList::String(s) => s.clone(),
+        other => panic!("Expected String, got: {other:?}"),
+    })
 }
 
 fn extract_target_commands(manifest: &netsuke::ast::NetsukeManifest) -> Vec<String> {
-    manifest
-        .targets
-        .iter()
-        .map(|t| match &t.recipe {
-            Recipe::Command { command } => command.clone(),
-            other => panic!("Expected command recipe, got: {other:?}"),
-        })
-        .collect()
+    extract_target_field(manifest, |t| match &t.recipe {
+        Recipe::Command { command } => command.clone(),
+        other => panic!("Expected command recipe, got: {other:?}"),
+    })
 }
 
 #[rstest]
