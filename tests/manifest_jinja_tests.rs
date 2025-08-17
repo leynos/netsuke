@@ -1,4 +1,5 @@
-//! Tests for Jinja-templated manifest parsing.
+//! Tests for the YAML-first manifest pipeline: parse YAML, expand foreach/when,
+//! then render Jinja only in string values.
 
 use netsuke::{ast::Recipe, manifest};
 use rstest::rstest;
@@ -110,6 +111,34 @@ fn expands_foreach_targets() {
         })
         .collect();
     assert_eq!(commands, vec!["echo 'a'", "echo 'b'"]);
+}
+
+#[rstest]
+fn foreach_exposes_index() {
+    let yaml = manifest_yaml(
+        "targets:\n  - foreach: \"['x', 'y']\"\n    name: '{{ index }}:{{ item }}'\n    command: 'echo {{ index }} {{ item }}'\n",
+    );
+
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let names: Vec<_> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            netsuke::ast::StringOrList::String(s) => s.clone(),
+            other => panic!("Expected String, got: {other:?}"),
+        })
+        .collect();
+    assert_eq!(names, vec!["0:x", "1:y"]);
+
+    let commands: Vec<_> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.recipe {
+            Recipe::Command { command } => command.clone(),
+            other => panic!("Expected command recipe, got: {other:?}"),
+        })
+        .collect();
+    assert_eq!(commands, vec!["echo 0 x", "echo 1 y"]);
 }
 
 #[rstest]
