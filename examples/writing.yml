@@ -20,7 +20,8 @@ targets:
     name: "{{ build_dir }}/{{ item | basename | replace('.md', '.tex') }}"
     rule: tex
     sources: "{{ item }}"
-    deps: "{{ build_dir }}"
+    deps:
+      - "{{ build_dir }}"
 
   - name: "{{ build_dir }}/book.pdf"
     rule: combine
