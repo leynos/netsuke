@@ -29,6 +29,28 @@ fn assert_string_or_list_contains(
     }
 }
 
+fn extract_target_names(manifest: &netsuke::ast::NetsukeManifest) -> Vec<String> {
+    manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            netsuke::ast::StringOrList::String(s) => s.clone(),
+            other => panic!("Expected String, got: {other:?}"),
+        })
+        .collect()
+}
+
+fn extract_target_commands(manifest: &netsuke::ast::NetsukeManifest) -> Vec<String> {
+    manifest
+        .targets
+        .iter()
+        .map(|t| match &t.recipe {
+            Recipe::Command { command } => command.clone(),
+            other => panic!("Expected command recipe, got: {other:?}"),
+        })
+        .collect()
+}
+
 #[rstest]
 fn renders_global_vars() {
     let yaml = manifest_yaml(
@@ -85,60 +107,54 @@ fn renders_if_blocks(#[case] flag: bool, #[case] expected: &str) {
 }
 
 #[rstest]
-fn expands_foreach_targets() {
-    let yaml = manifest_yaml(
-        "targets:\n  - foreach:\n      - a\n      - b\n    name: '{{ item }}'\n    command: \"echo '{{ item }}'\"\n",
-    );
+#[case(
+    concat!(
+        "targets:\n",
+        "  - foreach:\n",
+        "      - a\n",
+        "      - b\n",
+        "    name: '{{ item }}'\n",
+        "    command: \"echo '{{ item }}'\"\n",
+    ),
+    vec!["a", "b"],
+    vec!["echo 'a'", "echo 'b'"],
+)]
+#[case(
+    concat!(
+        "targets:\n",
+        "  - foreach: \"['x', 'y']\"\n",
+        "    name: '{{ index }}:{{ item }}'\n",
+        "    command: 'echo {{ index }} {{ item }}'\n",
+    ),
+    vec!["0:x", "1:y"],
+    vec!["echo 0 x", "echo 1 y"],
+)]
+fn expands_foreach_with_item_and_index(
+    #[case] yaml_body: &str,
+    #[case] expected_names: Vec<&str>,
+    #[case] expected_commands: Vec<&str>,
+) {
+    let yaml = manifest_yaml(yaml_body);
 
     let manifest = manifest::from_str(&yaml).expect("parse");
-    assert_eq!(manifest.targets.len(), 2);
-    let names: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.name {
-            netsuke::ast::StringOrList::String(s) => s.clone(),
-            other => panic!("Expected String, got: {other:?}"),
-        })
-        .collect();
-    assert_eq!(names, vec!["a", "b"]);
 
-    let commands: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.recipe {
-            Recipe::Command { command } => command.clone(),
-            other => panic!("Expected command recipe, got: {other:?}"),
-        })
-        .collect();
-    assert_eq!(commands, vec!["echo 'a'", "echo 'b'"]);
-}
-
-#[rstest]
-fn foreach_exposes_index() {
-    let yaml = manifest_yaml(
-        "targets:\n  - foreach: \"['x', 'y']\"\n    name: '{{ index }}:{{ item }}'\n    command: 'echo {{ index }} {{ item }}'\n",
+    let names = extract_target_names(&manifest);
+    assert_eq!(
+        names,
+        expected_names
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
     );
 
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let names: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.name {
-            netsuke::ast::StringOrList::String(s) => s.clone(),
-            other => panic!("Expected String, got: {other:?}"),
-        })
-        .collect();
-    assert_eq!(names, vec!["0:x", "1:y"]);
-
-    let commands: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.recipe {
-            Recipe::Command { command } => command.clone(),
-            other => panic!("Expected command recipe, got: {other:?}"),
-        })
-        .collect();
-    assert_eq!(commands, vec!["echo 0 x", "echo 1 y"]);
+    let commands = extract_target_commands(&manifest);
+    assert_eq!(
+        commands,
+        expected_commands
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+    );
 }
 
 #[rstest]
