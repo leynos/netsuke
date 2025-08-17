@@ -7,8 +7,11 @@
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result, anyhow};
 use minijinja::{Environment, UndefinedBehavior, context, value::Value};
-use serde_yml::Value as YamlValue;
+use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
+
+const ERR_INITIAL_YAML_PARSE: &str = "initial YAML parse error";
+const ERR_MANIFEST_PARSE: &str = "manifest parse error";
 
 /// Parse a manifest string using Jinja for value templating.
 ///
@@ -19,7 +22,7 @@ use std::{fs, path::Path};
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_yml::from_str(yaml).context("initial YAML parse error")?;
+    let mut doc: YamlValue = serde_yml::from_str(yaml).context(ERR_INITIAL_YAML_PARSE)?;
 
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -36,7 +39,7 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 
     expand_foreach(&mut doc, &env)?;
 
-    let manifest: NetsukeManifest = serde_yml::from_value(doc).context("manifest parse error")?;
+    let manifest: NetsukeManifest = serde_yml::from_value(doc).context(ERR_MANIFEST_PARSE)?;
 
     render_manifest(manifest, &env)
 }
@@ -49,69 +52,93 @@ fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
 
     let mut expanded = Vec::new();
     for target in std::mem::take(targets) {
-        let YamlValue::Mapping(mut map) = target else {
-            expanded.push(target);
-            continue;
-        };
-
-        let foreach_key = YamlValue::String("foreach".into());
-        if let Some(expr_val) = map.remove(&foreach_key) {
-            let expr = expr_val
-                .as_str()
-                .context("foreach must be a string expression")?;
-            let expr = env
-                .compile_expression(expr)
-                .context("foreach expression parse error")?;
-            let seq = expr.eval(context! {}).context("foreach evaluation error")?;
-            let iter = seq
-                .try_iter()
-                .context("foreach expression did not yield an iterable")?;
-
-            for (index, item) in iter.enumerate() {
-                let mut clone = map.clone();
-
-                let when_key = YamlValue::String("when".into());
-                if let Some(when_val) = clone.remove(&when_key) {
-                    let when_expr = when_val
-                        .as_str()
-                        .context("when must be a string expression")?;
-                    let when = env
-                        .compile_expression(when_expr)
-                        .context("when expression parse error")?
-                        .eval(context! { item, index })
-                        .context("when evaluation error")?;
-                    if !when.is_true() {
-                        continue;
-                    }
-                }
-
-                let vars_key = YamlValue::String("vars".into());
-                let mut vars = clone
-                    .remove(&vars_key)
-                    .and_then(|v| match v {
-                        YamlValue::Mapping(m) => Some(m),
-                        _ => None,
-                    })
-                    .unwrap_or_default();
-                vars.insert(
-                    YamlValue::String("item".into()),
-                    serde_yml::to_value(&item).context("serialise item")?,
-                );
-                vars.insert(
-                    YamlValue::String("index".into()),
-                    YamlValue::Number(u64::try_from(index).expect("index overflow").into()),
-                );
-                clone.insert(vars_key, YamlValue::Mapping(vars));
-
-                expanded.push(YamlValue::Mapping(clone));
-            }
-        } else {
-            expanded.push(YamlValue::Mapping(map));
+        match target {
+            YamlValue::Mapping(map) => expanded.extend(expand_target(map, env)?),
+            other => expanded.push(other),
         }
     }
 
     *targets = expanded;
     Ok(())
+}
+
+fn expand_target(map: YamlMapping, env: &Environment) -> Result<Vec<YamlValue>> {
+    let foreach_key = YamlValue::String("foreach".into());
+    if let Some(expr_val) = map.get(&foreach_key) {
+        let values = parse_foreach_values(expr_val, env)?;
+        let mut items = Vec::new();
+        for (index, item) in values.into_iter().enumerate() {
+            let mut clone = map.clone();
+            clone.remove(&foreach_key);
+            if !when_allows(&mut clone, env, &item, index)? {
+                continue;
+            }
+            inject_iteration_vars(&mut clone, &item, index)?;
+            items.push(YamlValue::Mapping(clone));
+        }
+        Ok(items)
+    } else {
+        Ok(vec![YamlValue::Mapping(map)])
+    }
+}
+
+fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<Value>> {
+    let expr = as_str(expr_val, "foreach")?;
+    let seq = eval_expression(env, "foreach", expr, context! {})?;
+    let iter = seq
+        .try_iter()
+        .context("foreach expression did not yield an iterable")?;
+    Ok(iter.collect())
+}
+
+fn when_allows(
+    map: &mut YamlMapping,
+    env: &Environment,
+    item: &Value,
+    index: usize,
+) -> Result<bool> {
+    let when_key = YamlValue::String("when".into());
+    if let Some(when_val) = map.remove(&when_key) {
+        let expr = as_str(&when_val, "when")?;
+        let result = eval_expression(env, "when", expr, context! { item, index })?;
+        Ok(result.is_true())
+    } else {
+        Ok(true)
+    }
+}
+
+fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> Result<()> {
+    let vars_key = YamlValue::String("vars".into());
+    let mut vars = map
+        .remove(&vars_key)
+        .and_then(|v| match v {
+            YamlValue::Mapping(m) => Some(m),
+            _ => None,
+        })
+        .unwrap_or_default();
+    vars.insert(
+        YamlValue::String("item".into()),
+        serde_yml::to_value(item).context("serialise item")?,
+    );
+    vars.insert(
+        YamlValue::String("index".into()),
+        YamlValue::Number(u64::try_from(index).expect("index overflow").into()),
+    );
+    map.insert(vars_key, YamlValue::Mapping(vars));
+    Ok(())
+}
+
+fn as_str<'a>(value: &'a YamlValue, field: &str) -> Result<&'a str> {
+    value
+        .as_str()
+        .with_context(|| format!("{field} must be a string expression"))
+}
+
+fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {
+    env.compile_expression(expr)
+        .with_context(|| format!("{name} expression parse error"))?
+        .eval(ctx)
+        .with_context(|| format!("{name} evaluation error"))
 }
 
 /// Render all templated strings in the manifest.

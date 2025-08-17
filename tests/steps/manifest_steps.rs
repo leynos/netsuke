@@ -161,6 +161,18 @@ fn assert_target_command(world: &CliWorld, index: usize, command: &str) {
     }
 }
 
+fn assert_list_contains(value: &StringOrList, expected: &str) {
+    match value {
+        StringOrList::List(list) => {
+            assert!(list.contains(&expected.to_string()), "missing {expected}");
+        }
+        StringOrList::String(s) => {
+            assert_eq!(s, expected);
+        }
+        StringOrList::Empty => panic!("value is empty"),
+    }
+}
+
 #[then(expr = "the target {int} name is {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -177,4 +189,85 @@ fn target_name_n(world: &mut CliWorld, index: usize, name: String) {
 )]
 fn target_command_n(world: &mut CliWorld, index: usize, command: String) {
     assert_target_command(world, index, &command);
+}
+
+#[then(expr = "the target {int} has source {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn target_has_source(world: &mut CliWorld, index: usize, source: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert_list_contains(&target.sources, &source);
+}
+
+#[then(expr = "the target {int} has dep {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn target_has_dep(world: &mut CliWorld, index: usize, dep: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert_list_contains(&target.deps, &dep);
+}
+
+#[then(expr = "the target {int} has order-only dep {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn target_has_order_only_dep(world: &mut CliWorld, index: usize, dep: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    assert_list_contains(&target.order_only_deps, &dep);
+}
+
+#[then(expr = "the target {int} script is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn target_script_is(world: &mut CliWorld, index: usize, script: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    if let Recipe::Script { script: actual } = &target.recipe {
+        assert_eq!(actual, &script);
+    } else {
+        panic!("Expected script recipe, got: {:?}", target.recipe);
+    }
+}
+
+#[then(expr = "the target {int} rule is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn target_rule_is(world: &mut CliWorld, index: usize, rule_name: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let target = manifest
+        .targets
+        .get(index - 1)
+        .unwrap_or_else(|| panic!("missing target {index}"));
+    if let Recipe::Rule { rule } = &target.recipe {
+        match rule {
+            StringOrList::String(name) => assert_eq!(name, &rule_name),
+            other => panic!("Expected String, got: {other:?}"),
+        }
+    } else {
+        panic!("Expected rule recipe, got: {:?}", target.recipe);
+    }
 }

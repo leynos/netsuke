@@ -1,0 +1,24 @@
+netsuke_version: 1.0.0
+vars:
+  base: base
+rules:
+  - name: base-rule
+    command: echo rule
+targets:
+  - foreach: "[1]"
+    vars:
+      local: "{{ base }}{{ item }}"
+    name: "{{ local }}"
+    sources:
+      - "{{ local }}.src"
+    deps:
+      - "{{ local }}.dep"
+    order_only_deps:
+      - "{{ local }}.ord"
+    command: "echo {{ local }}"
+  - name: script-target
+    vars:
+      path: "{{ base }}.sh"
+    script: "run {{ path }}"
+  - name: rule-target
+    rule: "{{ base }}-rule"

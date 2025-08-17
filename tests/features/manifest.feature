@@ -81,3 +81,14 @@ Feature: Manifest Parsing
     Given the manifest file "tests/data/foreach_invalid.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
+
+  Scenario: Rendering all target fields
+    Given the manifest file "tests/data/render_target.yml" is parsed
+    When the manifest is checked
+    Then the target 1 name is "base1"
+    And the target 1 has source "base1.src"
+    And the target 1 has dep "base1.dep"
+    And the target 1 has order-only dep "base1.ord"
+    And the target 1 command is "echo base1"
+    And the target 2 script is "run base.sh"
+    And the target 3 rule is "base-rule"
