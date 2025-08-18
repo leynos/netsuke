@@ -21,51 +21,35 @@ fn manifest_yaml(body: &str) -> String {
 }
 
 #[rstest]
+#[case("NETSUKE_ENV_TEST", "world", "echo world")]
+#[case(
+    "NETSUKE_ENV_SPECIAL",
+    "spaced value $with #symbols",
+    "echo spaced value $with #symbols"
+)]
 #[serial]
-fn env_var_renders() {
-    let key = "NETSUKE_ENV_TEST";
-    let yaml = manifest_yaml(
-        "targets:\n  - name: hello\n    command: \"echo {{ env('NETSUKE_ENV_TEST') }}\"\n",
-    );
+fn env_var_renders_parameterized(
+    #[case] env_key: &str,
+    #[case] env_value: &str,
+    #[case] expected_command: &str,
+) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - name: hello\n    command: \"echo {{{{ env('{env_key}') }}}}\"\n"
+    ));
     {
         let _lock = EnvLock::acquire();
-        set_var(key, OsStr::new("world"));
+        set_var(env_key, OsStr::new(env_value));
     }
     let manifest = manifest::from_str(&yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
     if let Recipe::Command { command } = &first.recipe {
-        assert_eq!(command, "echo world");
+        assert_eq!(command, expected_command);
     } else {
         panic!("Expected command recipe, got: {:?}", first.recipe);
     }
     {
         let _lock = EnvLock::acquire();
-        remove_var(key);
-    }
-}
-
-#[rstest]
-#[serial]
-fn env_var_with_special_chars_renders() {
-    let key = "NETSUKE_ENV_SPECIAL";
-    let value = "spaced value $with #symbols";
-    let yaml = manifest_yaml(
-        "targets:\n  - name: hello\n    command: \"echo {{ env('NETSUKE_ENV_SPECIAL') }}\"\n",
-    );
-    {
-        let _lock = EnvLock::acquire();
-        set_var(key, OsStr::new(value));
-    }
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let first = manifest.targets.first().expect("target");
-    if let Recipe::Command { command } = &first.recipe {
-        assert_eq!(command, &format!("echo {value}"));
-    } else {
-        panic!("Expected command recipe, got: {:?}", first.recipe);
-    }
-    {
-        let _lock = EnvLock::acquire();
-        remove_var(key);
+        remove_var(env_key);
     }
 }
 
