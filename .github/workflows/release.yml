@@ -56,6 +56,14 @@ jobs:
 #            ext: ""
     steps:
       - uses: actions/checkout@v4
+      - name: Verify tag matches Cargo.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_version=$(grep '^version = ' Cargo.toml | head -n 1 | cut -d '"' -f2)
+          if [ "$tag" != "$cargo_version" ]; then
+            echo "Tag version $tag does not match Cargo.toml version $cargo_version"
+            exit 1
+          fi
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Cache cross binary
