@@ -11,6 +11,20 @@ use rstest::rstest;
     "targets:\n  - name: hi\n    command echo\n",
     &["line 3", "expected ':'", "Ensure each key is followed by ':'"],
 )]
+#[case(
+    concat!(
+        "targets:\n",
+        "  - name: ok\n",
+        "    command: echo\n",
+        "  name: missing\n",
+        "    command: echo\n",
+    ),
+    &["line 4", "did not find expected '-'", "Start list items with '-'"],
+)]
+#[case(
+    "targets:\n  - command: [echo\n",
+    &["line 2", "did not find expected ',' or ']'"],
+)]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
     let diag = err
