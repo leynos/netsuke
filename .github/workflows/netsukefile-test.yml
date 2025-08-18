@@ -46,14 +46,21 @@ jobs:
               script: |
                 #!/bin/sh
                 touch inline-script.txt
+            - foreach:
+                - a
+                - skip
+                - b
+              when: item != 'skip'
+              name: "{{ item }}-foreach.txt"
+              command: "touch {{ item }}-foreach.txt"
           actions:
             - name: say-hello
               command: "touch action-called.txt"
             - name: unused-action
               command: "touch unused.txt"
           MANIFEST
-      - name: Build dependent and inline targets
-        run: ./target/debug/netsuke --verbose build --emit build.ninja dependent.txt inline-command.txt inline-script.txt
+      - name: Build dependent, inline, and foreach targets
+        run: ./target/debug/netsuke --verbose build --emit build.ninja dependent.txt inline-command.txt inline-script.txt a-foreach.txt b-foreach.txt
       - name: Assert dependent artefacts exist
         env:
           NINJA_MANIFEST: build.ninja
@@ -68,6 +75,16 @@ jobs:
         env:
           NINJA_MANIFEST: build.ninja
         run: scripts/assert-file-exists.sh inline-script.txt
+      - name: Assert foreach artefacts exist
+        env:
+          NINJA_MANIFEST: build.ninja
+        run: |
+          scripts/assert-file-exists.sh a-foreach.txt
+          scripts/assert-file-exists.sh b-foreach.txt
+      - name: Assert skipped foreach artefact absent
+        env:
+          NINJA_MANIFEST: build.ninja
+        run: scripts/assert-file-absent.sh skip-foreach.txt
       - name: Run action target
         run: ./target/debug/netsuke --verbose build --emit action.ninja say-hello
       - name: Assert action artefact exists
