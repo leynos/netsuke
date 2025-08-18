@@ -7,11 +7,37 @@
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result, anyhow};
 use minijinja::{Environment, UndefinedBehavior, context, value::Value};
+use serde_yml::Error as YamlError;
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
 
-const ERR_INITIAL_YAML_PARSE: &str = "initial YAML parse error";
 const ERR_MANIFEST_PARSE: &str = "manifest parse error";
+
+fn format_yaml_error(err: &YamlError, src: &str) -> anyhow::Error {
+    let location = err.location().map(|l| (l.line(), l.column()));
+    let err_str = err.to_string();
+    let mut msg = match location {
+        Some((line, column)) => {
+            format!("YAML parse error at line {line}, column {column}: {err_str}")
+        }
+        None => format!("YAML parse error: {err_str}"),
+    };
+    let lower = err_str.to_lowercase();
+    let hint = if src.contains('\t') {
+        Some("Use spaces for indentation; tabs are invalid in YAML.")
+    } else if lower.contains("did not find expected '-'") {
+        Some("Start list items with '-' and ensure proper indentation.")
+    } else if lower.contains("expected ':'") {
+        Some("Ensure each key is followed by ':' separating key and value.")
+    } else {
+        None
+    };
+    if let Some(h) = hint {
+        use std::fmt::Write;
+        write!(&mut msg, " Hint: {h}").expect("string write");
+    }
+    anyhow!(msg)
+}
 
 /// Parse a manifest string using Jinja for value templating.
 ///
@@ -22,7 +48,7 @@ const ERR_MANIFEST_PARSE: &str = "manifest parse error";
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_yml::from_str(yaml).context(ERR_INITIAL_YAML_PARSE)?;
+    let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| format_yaml_error(&e, yaml))?;
 
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
