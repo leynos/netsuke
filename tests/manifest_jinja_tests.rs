@@ -3,6 +3,8 @@
 
 use netsuke::{ast::Recipe, manifest};
 use rstest::rstest;
+use serial_test::serial;
+use test_support::env_lock::EnvLock;
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
@@ -76,6 +78,47 @@ fn undefined_variable_errors() {
 fn syntax_error_errors() {
     let yaml = manifest_yaml("targets:\n  - name: hello\n    command: echo {{ who\n");
 
+    assert!(manifest::from_str(&yaml).is_err());
+}
+
+#[rstest]
+#[serial]
+fn env_var_renders() {
+    let key = "NETSUKE_ENV_TEST";
+    let yaml = manifest_yaml(
+        "targets:\n  - name: hello\n    command: \"echo {{ env('NETSUKE_ENV_TEST') }}\"\n",
+    );
+    {
+        let _lock = EnvLock::acquire();
+        // SAFETY: guarded by `EnvLock` to serialise mutations.
+        unsafe { std::env::set_var(key, "world") };
+    }
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let first = manifest.targets.first().expect("target");
+    if let Recipe::Command { command } = &first.recipe {
+        assert_eq!(command, "echo world");
+    } else {
+        panic!("Expected command recipe, got: {:?}", first.recipe);
+    }
+    {
+        let _lock = EnvLock::acquire();
+        // SAFETY: guarded by `EnvLock` to serialise mutations.
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+#[rstest]
+#[serial]
+fn missing_env_var_errors() {
+    let key = "NETSUKE_ENV_MISSING";
+    {
+        let _lock = EnvLock::acquire();
+        // SAFETY: guarded by `EnvLock` to serialise mutations.
+        unsafe { std::env::remove_var(key) };
+    }
+    let yaml = manifest_yaml(
+        "targets:\n  - name: hello\n    command: \"echo {{ env('NETSUKE_ENV_MISSING') }}\"\n",
+    );
     assert!(manifest::from_str(&yaml).is_err());
 }
 

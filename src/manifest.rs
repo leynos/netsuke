@@ -6,7 +6,7 @@
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use miette::{Context, Diagnostic, IntoDiagnostic, NamedSource, Report, Result, SourceSpan};
-use minijinja::{Environment, UndefinedBehavior, context, value::Value};
+use minijinja::{context, value::Value, Environment, Error, ErrorKind, UndefinedBehavior};
 use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
@@ -117,6 +117,21 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
+    // Add "env(name)" function to read environment variables from templates.
+    // If a variable is not set, raise a descriptive templating error so
+    // callers see a clear cause and location.
+    env.add_function(
+        "env",
+        |name: String| -> std::result::Result<String, Error> {
+            std::env::var(&name).map_err(|_| {
+                Error::new(
+                    ErrorKind::UndefinedError,
+                    format!("environment variable '{name}' is not set"),
+                )
+            })
+        },
+    );
+
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {
             let key = k
@@ -144,9 +159,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 /// # Errors
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
-pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    from_str_named(yaml, "Netsukefile")
-}
+pub fn from_str(yaml: &str) -> Result<NetsukeManifest> { from_str_named(yaml, "Netsukefile") }
 
 /// Expand `foreach` entries within the raw YAML document.
 fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {

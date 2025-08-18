@@ -101,7 +101,7 @@ configurations with variables, control flow, and custom functions.
         per-iteration locals over `target.vars` and manifest globals for
         subsequent rendering phases.
 
-  - [ ] Implement the essential custom Jinja function env(var_name) to read
+  - [x] Implement the essential custom Jinja function env(var_name) to read
     system environment variables.
 
   - [ ] Implement the critical glob(pattern) custom function to perform file

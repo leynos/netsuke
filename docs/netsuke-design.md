@@ -729,7 +729,9 @@ providing a secure bridge to the underlying system.
 
 - `env(var_name: &str) -> Result<String, Error>`: A function that reads an
   environment variable from the system. This allows build configurations to be
-  influenced by the external environment (e.g., `PATH`, `CC`).
+  influenced by the external environment (e.g., `PATH`, `CC`). It returns an
+  error if the variable is undefined or contains invalid UTF-8 to ensure
+  manifests fail fast on missing inputs.
 
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: A function that performs
   file path globbing. This is a critical feature for any modern build tool,

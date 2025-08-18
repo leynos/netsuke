@@ -6,6 +6,7 @@ use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
 };
+use test_support::env_lock::EnvLock;
 
 const INDEX_KEY: &str = "index";
 
@@ -51,6 +52,19 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
         .targets
         .get(idx0)
         .unwrap_or_else(|| panic!("missing target {index}"))
+}
+
+#[given(expr = "the environment variable {string} is set to {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn set_env_var(world: &mut CliWorld, key: String, value: String) {
+    let _lock = EnvLock::acquire();
+    let previous = std::env::var(&key).ok();
+    // SAFETY: `EnvLock` serialises mutations and the world restores on drop.
+    unsafe { std::env::set_var(&key, &value) };
+    world.env_vars.insert(key, previous);
 }
 
 #[given(expr = "the manifest file {string} is parsed")]
