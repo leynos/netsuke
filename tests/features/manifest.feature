@@ -68,19 +68,32 @@ Feature: Manifest Parsing
     Then the first target name is "hello"
     And the first target command is "echo off"
 
-  Scenario: Rendering Jinja loops in a manifest
-    Given the manifest file "tests/data/jinja_for.yml" is parsed
+  Scenario: Generating targets with foreach
+    Given the manifest file "tests/data/foreach.yml" is parsed
     When the manifest is checked
     Then the manifest has 2 targets
     And the target 1 name is "foo"
-    And the target 1 command is "echo foo"
+    And the target 1 command is "echo 'foo'"
+    And the target 1 index is 0
     And the target 2 name is "bar"
-    And the target 2 command is "echo bar"
+    And the target 2 command is "echo 'bar'"
+    And the target 2 index is 1
 
-  Scenario: Parsing fails when a Jinja loop iterates over a non-list
-    Given the manifest file "tests/data/jinja_for_invalid.yml" is parsed
+  Scenario: Parsing fails when a foreach expression is not iterable
+    Given the manifest file "tests/data/foreach_invalid.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
+
+  Scenario: Rendering all target fields
+    Given the manifest file "tests/data/render_target.yml" is parsed
+    When the manifest is checked
+    Then the target 1 name is "base1"
+    And the target 1 has source "base1.src"
+    And the target 1 has dep "base1.dep"
+    And the target 1 has order-only dep "base1.ord"
+    And the target 1 command is "echo base1"
+    And the target 2 script is "run base.sh"
+    And the target 3 rule is "base-rule"
 
   Scenario Outline: Targets default flags are false
     Given the manifest file "tests/data/target_defaults.yml" is parsed
