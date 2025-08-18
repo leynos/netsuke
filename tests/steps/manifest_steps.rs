@@ -165,7 +165,6 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     assert_eq!(manifest.targets.len(), count);
 }
 
-
 fn get_target(world: &CliWorld, index: usize) -> &netsuke::ast::Target {
     let manifest = world.manifest.as_ref().expect("manifest");
     manifest
