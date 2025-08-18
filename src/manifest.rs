@@ -2,7 +2,9 @@
 //!
 //! This module parses a `Netsukefile` without relying on a global Jinja
 //! preprocessing pass. The YAML is parsed first and Jinja expressions are
-//! evaluated only within string values or the `foreach` and `when` keys.
+//! evaluated only within string values or the `foreach` and `when` keys. It
+//! exposes an `env()` function to surface environment variables, failing fast
+//! when values are missing or invalid.
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use miette::{Context, Diagnostic, IntoDiagnostic, NamedSource, Report, Result, SourceSpan};
@@ -123,12 +125,17 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     env.add_function(
         "env",
         |name: String| -> std::result::Result<String, Error> {
-            std::env::var(&name).map_err(|_| {
-                Error::new(
+            match std::env::var(&name) {
+                Ok(val) => Ok(val),
+                Err(std::env::VarError::NotPresent) => Err(Error::new(
                     ErrorKind::UndefinedError,
                     format!("environment variable '{name}' is not set"),
-                )
-            })
+                )),
+                Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("environment variable '{name}' is set but contains invalid UTF-8"),
+                )),
+            }
         },
     );
 

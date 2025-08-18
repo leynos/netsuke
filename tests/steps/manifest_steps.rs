@@ -67,6 +67,15 @@ fn set_env_var(world: &mut CliWorld, key: String, value: String) {
     world.env_vars.insert(key, previous);
 }
 
+#[given(expr = "the environment variable {string} is unset")]
+fn unset_env_var(world: &mut CliWorld, key: String) {
+    let _lock = EnvLock::acquire();
+    let previous = std::env::var(&key).ok();
+    // SAFETY: `EnvLock` serialises mutations and the world restores on drop.
+    unsafe { std::env::remove_var(&key) };
+    world.env_vars.insert(key, previous);
+}
+
 #[given(expr = "the manifest file {string} is parsed")]
 #[expect(
     clippy::needless_pass_by_value,

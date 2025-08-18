@@ -63,7 +63,8 @@ Feature: Manifest Parsing
     Then the first target command is "echo world"
 
   Scenario: Parsing fails when an environment variable is undefined
-    Given the manifest file "tests/data/jinja_env_missing.yml" is parsed
+    Given the environment variable "NETSUKE_UNDEFINED_ENV" is unset
+    And the manifest file "tests/data/jinja_env_missing.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
 

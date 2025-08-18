@@ -109,6 +109,33 @@ fn env_var_renders() {
 
 #[rstest]
 #[serial]
+fn env_var_with_special_chars_renders() {
+    let key = "NETSUKE_ENV_SPECIAL";
+    let value = "spaced value $with #symbols";
+    let yaml = manifest_yaml(
+        "targets:\n  - name: hello\n    command: \"echo {{ env('NETSUKE_ENV_SPECIAL') }}\"\n",
+    );
+    {
+        let _lock = EnvLock::acquire();
+        // SAFETY: guarded by `EnvLock` to serialise mutations.
+        unsafe { std::env::set_var(key, value) };
+    }
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let first = manifest.targets.first().expect("target");
+    if let Recipe::Command { command } = &first.recipe {
+        assert_eq!(command, &format!("echo {value}"));
+    } else {
+        panic!("Expected command recipe, got: {:?}", first.recipe);
+    }
+    {
+        let _lock = EnvLock::acquire();
+        // SAFETY: guarded by `EnvLock` to serialise mutations.
+        unsafe { std::env::remove_var(key) };
+    }
+}
+
+#[rstest]
+#[serial]
 fn missing_env_var_errors() {
     let key = "NETSUKE_ENV_MISSING";
     {
