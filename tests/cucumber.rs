@@ -1,7 +1,10 @@
 //! Cucumber test runner and world state.
 
 use cucumber::World;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    ffi::{OsStr, OsString},
+};
 use test_support::{PathGuard, env_lock::EnvLock};
 
 /// Shared state for Cucumber scenarios.
@@ -24,7 +27,17 @@ pub struct CliWorld {
     /// Guard that restores `PATH` after each scenario.
     pub path_guard: Option<PathGuard>,
     /// Environment variables overridden during a scenario.
-    pub env_vars: HashMap<String, Option<String>>,
+    pub env_vars: HashMap<String, Option<OsString>>,
+}
+
+fn set_var(key: &str, value: &OsStr) {
+    // SAFETY: `EnvLock` serialises mutations.
+    unsafe { std::env::set_var(key, value) };
+}
+
+fn remove_var(key: &str) {
+    // SAFETY: `EnvLock` serialises mutations.
+    unsafe { std::env::remove_var(key) };
 }
 
 mod steps;
@@ -36,13 +49,10 @@ impl Drop for CliWorld {
         }
         let _lock = EnvLock::acquire();
         for (key, val) in self.env_vars.drain() {
-            // SAFETY: mutations are serialised by `EnvLock` and restored on drop.
-            unsafe {
-                if let Some(v) = val {
-                    std::env::set_var(&key, v);
-                } else {
-                    std::env::remove_var(&key);
-                }
+            if let Some(v) = val {
+                set_var(&key, &v);
+            } else {
+                remove_var(&key);
             }
         }
     }

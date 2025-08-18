@@ -6,6 +6,7 @@ use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
 };
+use std::ffi::OsStr;
 use test_support::env_lock::EnvLock;
 
 const INDEX_KEY: &str = "index";
@@ -16,6 +17,16 @@ fn get_string_from_string_or_list(value: &StringOrList, field_name: &str) -> Str
         StringOrList::List(list) if list.len() == 1 => list.first().expect("one element").clone(),
         other => panic!("Expected String or single-item List for {field_name}, got: {other:?}"),
     }
+}
+
+fn set_var(key: &str, value: &OsStr) {
+    // SAFETY: `EnvLock` serialises mutations and the world restores on drop.
+    unsafe { std::env::set_var(key, value) };
+}
+
+fn remove_var(key: &str) {
+    // SAFETY: `EnvLock` serialises mutations and the world restores on drop.
+    unsafe { std::env::remove_var(key) };
 }
 
 fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
@@ -61,18 +72,16 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
 )]
 fn set_env_var(world: &mut CliWorld, key: String, value: String) {
     let _lock = EnvLock::acquire();
-    let previous = std::env::var(&key).ok();
-    // SAFETY: `EnvLock` serialises mutations and the world restores on drop.
-    unsafe { std::env::set_var(&key, &value) };
+    let previous = std::env::var_os(&key);
+    set_var(&key, OsStr::new(&value));
     world.env_vars.insert(key, previous);
 }
 
 #[given(expr = "the environment variable {string} is unset")]
 fn unset_env_var(world: &mut CliWorld, key: String) {
     let _lock = EnvLock::acquire();
-    let previous = std::env::var(&key).ok();
-    // SAFETY: `EnvLock` serialises mutations and the world restores on drop.
-    unsafe { std::env::remove_var(&key) };
+    let previous = std::env::var_os(&key);
+    remove_var(&key);
     world.env_vars.insert(key, previous);
 }
 
