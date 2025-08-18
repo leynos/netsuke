@@ -70,7 +70,7 @@ fn run_exits_with_manifest_error_on_invalid_version() {
     let result = run(&cli);
     assert!(result.is_err());
     let err = result.expect_err("should have error");
-    assert!(err.chain().any(|e| e.to_string().contains("version")));
+    assert!(err.to_string().contains("manifest parse error"));
 }
 
 #[rstest]

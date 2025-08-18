@@ -6,7 +6,7 @@
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use serde_json;
 use std::borrow::Cow;
 use std::fs;
@@ -247,8 +247,12 @@ fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli);
-    let manifest = manifest::from_path(&manifest_path)
-        .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
+    let manifest = manifest::from_path(&manifest_path).map_err(|e| {
+        Error::msg(format!(
+            "loading manifest at {}: {e}",
+            manifest_path.display()
+        ))
+    })?;
     let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
     debug!("AST:\n{ast_json}");
     let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;

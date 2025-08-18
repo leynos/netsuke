@@ -72,6 +72,7 @@ mockable = { version = "0.3", features = ["mock"] }
 serial_test = "3"
 mockall = "0.11"
 test_support = { path = "test_support" }
+strip-ansi-escapes = "0.2"
 
 [[test]]
 name = "cucumber"

@@ -1,11 +1,12 @@
 //! Unit tests for Netsuke manifest AST deserialisation.
 
+use miette::Result;
 use netsuke::{ast::*, manifest};
 use rstest::rstest;
 use semver::Version;
 
 /// Convenience wrapper around the library manifest parser for tests.
-fn parse_manifest(yaml: &str) -> anyhow::Result<NetsukeManifest> {
+fn parse_manifest(yaml: &str) -> Result<NetsukeManifest> {
     manifest::from_str(yaml)
 }
 

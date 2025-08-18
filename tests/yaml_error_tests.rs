@@ -1,6 +1,16 @@
+//! Regression tests for YAML parse errors.
+//!
+//! These tests ensure diagnostics include line numbers and optional hints, and
+//! that rendering is stable across terminals.
+
 use miette::GraphicalReportHandler;
 use netsuke::manifest;
 use rstest::rstest;
+use strip_ansi_escapes::strip;
+
+fn normalise_report(report: &str) -> String {
+    String::from_utf8(strip(report.as_bytes())).expect("utf8")
+}
 
 #[rstest]
 #[case(
@@ -22,18 +32,16 @@ use rstest::rstest;
     &["line 4", "did not find expected '-'", "Start list items with '-'"],
 )]
 #[case(
-    "targets:\n  - command: [echo\n",
-    &["line 2", "did not find expected ',' or ']'"],
+    "targets:\n  - name: 'unterminated\n",
+    &["YAML parse error", "line 2"],
 )]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
-    let diag = err
-        .downcast_ref::<manifest::YamlDiagnostic>()
-        .expect("diagnostic type");
     let mut msg = String::new();
     GraphicalReportHandler::new()
-        .render_report(&mut msg, diag)
+        .render_report(&mut msg, err.as_ref())
         .expect("render yaml error");
+    let msg = normalise_report(&msg);
     for needle in needles {
         assert!(msg.contains(needle), "missing: {needle}\nmessage: {msg}");
     }

@@ -5,8 +5,7 @@
 //! evaluated only within string values or the `foreach` and `when` keys.
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
-use anyhow::{Context, Result, anyhow};
-use miette::{Diagnostic, NamedSource, SourceSpan};
+use miette::{Context, Diagnostic, IntoDiagnostic, NamedSource, Report, Result, SourceSpan};
 use minijinja::{Environment, UndefinedBehavior, context, value::Value};
 use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
@@ -39,7 +38,7 @@ pub struct YamlDiagnostic {
     #[help]
     help: Option<String>,
     #[source]
-    source: Option<anyhow::Error>,
+    source: YamlError,
     message: String,
 }
 
@@ -75,7 +74,7 @@ fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
     }
 }
 
-fn map_yaml_error(err: &YamlError, src: &str, name: &str) -> anyhow::Error {
+fn map_yaml_error(err: YamlError, src: &str, name: &str) -> Report {
     let loc = err.location();
     let (line, col, span) = loc.map_or((1, 1, None), |l| {
         (l.line(), l.column(), Some(to_span(src, l)))
@@ -88,11 +87,11 @@ fn map_yaml_error(err: &YamlError, src: &str, name: &str) -> anyhow::Error {
         src: NamedSource::new(name, src.to_string()),
         span,
         help: hint,
-        source: Some(anyhow::Error::msg(err_str)),
+        source: err,
         message,
     };
 
-    anyhow::Error::new(diag)
+    Report::new(diag)
 }
 
 /// Parse a manifest string using Jinja for value templating.
@@ -105,7 +104,7 @@ fn map_yaml_error(err: &YamlError, src: &str, name: &str) -> anyhow::Error {
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     let mut doc: YamlValue =
-        serde_yml::from_str(yaml).map_err(|e| map_yaml_error(&e, yaml, name))?;
+        serde_yml::from_str(yaml).map_err(|e| map_yaml_error(e, yaml, name))?;
 
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -114,7 +113,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
         for (k, v) in vars {
             let key = k
                 .as_str()
-                .ok_or_else(|| anyhow!("non-string key in 'vars' mapping: {k:?}"))?
+                .ok_or_else(|| Report::msg(format!("non-string key in 'vars' mapping: {k:?}")))?
                 .to_string();
             env.add_global(key, Value::from_serialize(v));
         }
@@ -122,7 +121,9 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     expand_foreach(&mut doc, &env)?;
 
-    let manifest: NetsukeManifest = serde_yml::from_value(doc).context(ERR_MANIFEST_PARSE)?;
+    let manifest: NetsukeManifest = serde_yml::from_value(doc)
+        .into_diagnostic()
+        .wrap_err(ERR_MANIFEST_PARSE)?;
 
     render_manifest(manifest, &env)
 }
@@ -185,7 +186,8 @@ fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<V
     let seq = eval_expression(env, "foreach", expr, context! {})?;
     let iter = seq
         .try_iter()
-        .context("foreach expression did not yield an iterable")?;
+        .into_diagnostic()
+        .wrap_err("foreach expression did not yield an iterable")?;
     Ok(iter.collect())
 }
 
@@ -211,12 +213,16 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
         None => YamlMapping::new(),
         Some(YamlValue::Mapping(m)) => m,
         Some(other) => {
-            return Err(anyhow!("target.vars must be a mapping, got: {other:?}"));
+            return Err(Report::msg(format!(
+                "target.vars must be a mapping, got: {other:?}"
+            )));
         }
     };
     vars.insert(
         YamlValue::String("item".into()),
-        serde_yml::to_value(item).context("serialise item")?,
+        serde_yml::to_value(item)
+            .into_diagnostic()
+            .wrap_err("serialise item")?,
     );
     vars.insert(
         YamlValue::String("index".into()),
@@ -229,14 +235,16 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
 fn as_str<'a>(value: &'a YamlValue, field: &str) -> Result<&'a str> {
     value
         .as_str()
-        .with_context(|| format!("{field} must be a string expression"))
+        .ok_or_else(|| Report::msg(format!("{field} must be a string expression")))
 }
 
 fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {
     env.compile_expression(expr)
-        .with_context(|| format!("{name} expression parse error"))?
+        .into_diagnostic()
+        .wrap_err_with(|| format!("{name} expression parse error"))?
         .eval(ctx)
-        .with_context(|| format!("{name} evaluation error"))
+        .into_diagnostic()
+        .wrap_err_with(|| format!("{name} evaluation error"))
 }
 
 /// Render all templated strings in the manifest.
@@ -257,19 +265,22 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment) -> Result<()> {
     if let Some(desc) = &mut rule.description {
         *desc = env
             .render_str(desc, context! {})
-            .context("render rule description")?;
+            .into_diagnostic()
+            .wrap_err("render rule description")?;
     }
     render_string_or_list(&mut rule.deps, env, &Vars::new())?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
             *command = env
                 .render_str(command, context! {})
-                .context("render rule command")?;
+                .into_diagnostic()
+                .wrap_err("render rule command")?;
         }
         Recipe::Script { script } => {
             *script = env
                 .render_str(script, context! {})
-                .context("render rule script")?;
+                .into_diagnostic()
+                .wrap_err("render rule script")?;
         }
         Recipe::Rule { rule: r } => render_string_or_list(r, env, &Vars::new())?,
     }
@@ -286,12 +297,14 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
         Recipe::Command { command } => {
             *command = env
                 .render_str(command, &target.vars)
-                .context("render target command")?;
+                .into_diagnostic()
+                .wrap_err("render target command")?;
         }
         Recipe::Script { script } => {
             *script = env
                 .render_str(script, &target.vars)
-                .context("render target script")?;
+                .into_diagnostic()
+                .wrap_err("render target script")?;
         }
         Recipe::Rule { rule } => render_string_or_list(rule, env, &target.vars)?,
     }
@@ -304,7 +317,8 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
         if let YamlValue::String(s) = value {
             *s = env
                 .render_str(s, &snapshot)
-                .with_context(|| format!("render var '{key}'"))?;
+                .into_diagnostic()
+                .wrap_err_with(|| format!("render var '{key}'"))?;
         }
     }
     Ok(())
@@ -313,11 +327,17 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
 fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars) -> Result<()> {
     match value {
         StringOrList::String(s) => {
-            *s = env.render_str(s, ctx).context("render string value")?;
+            *s = env
+                .render_str(s, ctx)
+                .into_diagnostic()
+                .wrap_err("render string value")?;
         }
         StringOrList::List(list) => {
             for item in list {
-                *item = env.render_str(item, ctx).context("render list value")?;
+                *item = env
+                    .render_str(item, ctx)
+                    .into_diagnostic()
+                    .wrap_err("render list value")?;
             }
         }
         StringOrList::Empty => {}
@@ -333,6 +353,7 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref)
-        .with_context(|| format!("Failed to read {}", path_ref.display()))?;
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to read {}", path_ref.display()))?;
     from_str_named(&data, &path_ref.display().to_string())
 }
