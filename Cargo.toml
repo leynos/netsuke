@@ -11,6 +11,8 @@ minijinja = "2.11.0"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 thiserror = "1"
+miette = { version = "5", features = ["fancy"] }
+serde_spanned = "1"
 sha2 = "0.10"
 itoa = "1"
 itertools = "0.12"

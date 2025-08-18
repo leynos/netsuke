@@ -1269,12 +1269,13 @@ three fundamental questions:
    Found a tab character, which is not allowed. Hint: Use spaces for
    indentation instead.").
 
-### 7.2 Crate Selection and Strategy: `anyhow` and `thiserror`
+### 7.2 Crate Selection and Strategy: `anyhow`, `thiserror`, and `miette`
 
-To implement this philosophy, Netsuke will adopt a hybrid error handling
-strategy using the `anyhow` and `thiserror` crates. This is a common and highly
-effective pattern in the Rust ecosystem for creating robust applications and
-libraries.[^27]
+To implement this philosophy, Netsuke adopts a hybrid error handling strategy
+using the `anyhow`, `thiserror`, and `miette` crates. This is a common and
+highly effective pattern in the Rust ecosystem for creating robust applications
+and libraries.[^27] `miette` renders user-facing diagnostics, underlining spans
+from `serde_spanned`.
 
 - `thiserror`: This crate will be used *within* Netsuke's internal library
   modules (e.g., `parser`, `ir`, `ninja_gen`) to define specific, structured
@@ -1315,6 +1316,9 @@ pub enum IrGenError {
   `?` operator for clean error propagation and the `.context()` and
   `.with_context()` methods for adding high-level, human-readable context to
   errors as they bubble up the call stack.[^31]
+
+- `miette`: Presents human-friendly diagnostics, leveraging spans from
+  `serde_spanned` to highlight exact error locations.
 
 ### 7.3 Error Handling Flow
 
@@ -1563,15 +1567,15 @@ goal.
 This table serves as a quick-reference guide to the core third-party crates
 selected for this project and the rationale for their inclusion.
 
-| Component      | Recommended Crate  | Rationale                                                                                                               |
-| -------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| CLI Parsing    | clap               | The Rust standard for powerful, derive-based CLI development.                                                           |
-| YAML Parsing   | serde_yml          | Mature, stable, and provides seamless integration with the serde framework.                                             |
-| Templating     | minijinja          | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                            |
-| Shell Quoting  | shell-quote        | A critical security component; provides robust, shell-specific escaping for command arguments.                          |
-| Error Handling | anyhow + thiserror | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports.                   |
-| Logging        | tracing            | Structured, levelled diagnostic output for debugging and insight.                                                       |
-| Versioning     | semver             | The standard library for parsing and evaluating Semantic Versioning strings, essential for the `netsuke_version` field. |
+| Component      | Recommended Crate                           | Rationale                                                                                                                       |
+| -------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| CLI Parsing    | clap                                        | The Rust standard for powerful, derive-based CLI development.                                                                   |
+| YAML Parsing   | serde_yml                                   | Mature, stable, and provides seamless integration with the serde framework.                                                     |
+| Templating     | minijinja                                   | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                                    |
+| Shell Quoting  | shell-quote                                 | A critical security component; provides robust, shell-specific escaping for command arguments.                                  |
+| Error Handling | anyhow + thiserror + miette + serde_spanned | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports with precise source spans. |
+| Logging        | tracing                                     | Structured, levelled diagnostic output for debugging and insight.                                                               |
+| Versioning     | semver                                      | The standard library for parsing and evaluating Semantic Versioning strings, essential for the `netsuke_version` field.         |
 
 ### 9.3 Future Enhancements
 
