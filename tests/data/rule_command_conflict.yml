@@ -1,0 +1,8 @@
+netsuke_version: "1.0.0"
+rules:
+  - name: compile
+    command: "cc -c $in -o $out"
+targets:
+  - name: hello
+    command: "echo hi"
+    rule: compile
