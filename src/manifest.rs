@@ -11,7 +11,6 @@ use minijinja::{Environment, UndefinedBehavior, context, value::Value};
 use serde_spanned::Spanned;
 use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
-use std::fmt::Write;
 use std::{fs, path::Path};
 use thiserror::Error;
 
@@ -31,7 +30,8 @@ fn to_span(src: &str, loc: Location) -> SourceSpan {
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
-struct YamlDiagnostic {
+#[doc(hidden)]
+pub struct YamlDiagnostic {
     #[source_code]
     src: NamedSource,
     #[label("{label}")]
@@ -64,10 +64,7 @@ fn map_yaml_error(err: &YamlError, src: &str) -> anyhow::Error {
     });
     let err_str = err.to_string();
     let hint = hint_for(&err_str, src);
-    let mut message = format!("YAML parse error at line {line}, column {col}: {err_str}");
-    if let Some(h) = &hint {
-        write!(message, " Hint: {h}").expect("string write");
-    }
+    let message = format!("YAML parse error at line {line}, column {col}: {err_str}");
 
     let diag = YamlDiagnostic {
         src: NamedSource::new("manifest.yml", src.to_string()),
