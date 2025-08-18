@@ -6,12 +6,80 @@
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result, anyhow};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use minijinja::{Environment, UndefinedBehavior, context, value::Value};
+use serde_spanned::Spanned;
+use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
+use std::fmt::Write;
 use std::{fs, path::Path};
+use thiserror::Error;
 
-const ERR_INITIAL_YAML_PARSE: &str = "initial YAML parse error";
 const ERR_MANIFEST_PARSE: &str = "manifest parse error";
+
+// Compute a narrow highlight span from a location.
+fn to_span(src: &str, loc: Location) -> SourceSpan {
+    let at = loc.index();
+    let end = if src.as_bytes().get(at).is_some_and(|b| *b != b'\n') {
+        at + 1
+    } else {
+        at
+    };
+    let span = Spanned::new(at..end, ());
+    SourceSpan::new(span.span().start.into(), span.span().len().into())
+}
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+struct YamlDiagnostic {
+    #[source_code]
+    src: NamedSource,
+    #[label("{label}")]
+    span: Option<SourceSpan>,
+    #[help]
+    help: Option<String>,
+    #[source]
+    source: Option<anyhow::Error>,
+    #[diagnostic(code(netsuke.yaml.parse))]
+    message: String,
+    label: String,
+}
+
+fn hint_for(err_str: &str, src: &str) -> Option<String> {
+    let lower = err_str.to_lowercase();
+    if src.contains('\t') {
+        Some("Use spaces for indentation; tabs are invalid in YAML.".into())
+    } else if lower.contains("did not find expected '-'") {
+        Some("Start list items with '-' and ensure proper indentation.".into())
+    } else if lower.contains("expected ':'") {
+        Some("Ensure each key is followed by ':' separating key and value.".into())
+    } else {
+        None
+    }
+}
+
+fn map_yaml_error(err: &YamlError, src: &str) -> anyhow::Error {
+    let (line, col, span) = err.location().map_or((1, 1, None), |l| {
+        (l.line(), l.column(), Some(to_span(src, l)))
+    });
+    let err_str = err.to_string();
+    let hint = hint_for(&err_str, src);
+    let mut message = format!("YAML parse error at line {line}, column {col}: {err_str}");
+    if let Some(h) = &hint {
+        write!(message, " Hint: {h}").expect("string write");
+    }
+
+    let diag = YamlDiagnostic {
+        src: NamedSource::new("manifest.yml", src.to_string()),
+        span,
+        help: hint,
+        source: Some(anyhow::Error::msg(err_str.clone())),
+        message,
+        label: "parse error here".into(),
+    };
+
+    anyhow::Error::new(diag)
+}
 
 /// Parse a manifest string using Jinja for value templating.
 ///
@@ -22,7 +90,7 @@ const ERR_MANIFEST_PARSE: &str = "manifest parse error";
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_yml::from_str(yaml).context(ERR_INITIAL_YAML_PARSE)?;
+    let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| map_yaml_error(&e, yaml))?;
 
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
