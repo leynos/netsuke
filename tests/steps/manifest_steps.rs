@@ -165,14 +165,6 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     assert_eq!(manifest.targets.len(), count);
 }
 
-fn get_target(world: &CliWorld, index: usize) -> &netsuke::ast::Target {
-    let manifest = world.manifest.as_ref().expect("manifest");
-    manifest
-        .targets
-        .get(index.saturating_sub(1))
-        .unwrap_or_else(|| panic!("missing target {index}"))
-}
-
 fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
     let target = get_target(world, index);
     let actual = get_string_from_string_or_list(&target.name, "name");
