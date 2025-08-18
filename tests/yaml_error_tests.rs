@@ -1,39 +1,26 @@
 use miette::GraphicalReportHandler;
-use netsuke::manifest::{self, YamlDiagnostic};
+use netsuke::manifest;
+use rstest::rstest;
 
-#[test]
-fn reports_line_and_column_with_tab_hint() {
-    let yaml = "targets:\n\t- name: test\n";
+#[rstest]
+#[case(
+    "targets:\n\t- name: test\n",
+    &["line 2, column 1", "Use spaces for indentation"],
+)]
+#[case(
+    "targets:\n  - name: hi\n    command echo\n",
+    &["line 3", "expected ':'", "Ensure each key is followed by ':'"],
+)]
+fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
     let diag = err
-        .downcast_ref::<YamlDiagnostic>()
+        .downcast_ref::<manifest::YamlDiagnostic>()
         .expect("diagnostic type");
     let mut msg = String::new();
     GraphicalReportHandler::new()
         .render_report(&mut msg, diag)
         .expect("render yaml error");
-    assert!(msg.contains("line 2, column 1"), "missing location: {msg}");
-    assert!(
-        msg.contains("Use spaces for indentation"),
-        "missing hint: {msg}"
-    );
-}
-
-#[test]
-fn suggests_colon_when_missing() {
-    let yaml = "targets:\n  - name: hi\n    command echo\n";
-    let err = manifest::from_str(yaml).expect_err("parse should fail");
-    let diag = err
-        .downcast_ref::<YamlDiagnostic>()
-        .expect("diagnostic type");
-    let mut msg = String::new();
-    GraphicalReportHandler::new()
-        .render_report(&mut msg, diag)
-        .expect("render yaml error");
-    assert!(msg.contains("line 3"), "missing line info: {msg}");
-    assert!(msg.contains("expected ':'"), "missing error detail: {msg}");
-    assert!(
-        msg.contains("Ensure each key is followed by ':'"),
-        "missing suggestion: {msg}"
-    );
+    for needle in needles {
+        assert!(msg.contains(needle), "missing: {needle}\nmessage: {msg}");
+    }
 }
