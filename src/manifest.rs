@@ -5,13 +5,136 @@
 //! evaluated only within string values or the `foreach` and `when` keys.
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
-use anyhow::{Context, Result, anyhow};
+use miette::{Context, Diagnostic, IntoDiagnostic, NamedSource, Report, Result, SourceSpan};
 use minijinja::{Environment, UndefinedBehavior, context, value::Value};
+use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
+use thiserror::Error;
 
-const ERR_INITIAL_YAML_PARSE: &str = "initial YAML parse error";
 const ERR_MANIFEST_PARSE: &str = "manifest parse error";
+
+// Compute a narrow highlight span from a location.
+fn to_span(src: &str, loc: Location) -> SourceSpan {
+    let at = loc.index();
+    let bytes = src.as_bytes();
+    let (start, end) = match bytes.get(at) {
+        Some(&b) if b != b'\n' => (at, at + 1),
+        _ => {
+            // Fallback: highlight the previous byte on the same line when possible.
+            let start = if at > 0 && bytes.get(at - 1).is_some_and(|p| *p != b'\n') {
+                at - 1
+            } else {
+                at
+            };
+            (start, at)
+        }
+    };
+    let len = end.saturating_sub(start);
+    #[allow(clippy::useless_conversion, reason = "future-proof span length type")]
+    SourceSpan::new(start.into(), len.into())
+}
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(netsuke::yaml::parse))]
+pub(crate) struct YamlDiagnostic {
+    #[source_code]
+    src: NamedSource<String>,
+    #[label("parse error here")]
+    span: Option<SourceSpan>,
+    #[help]
+    help: Option<String>,
+    #[source]
+    source: YamlError,
+    message: String,
+}
+
+fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
+    let lower = err_str.to_lowercase();
+    if let Some(loc) = loc {
+        let idx = loc.index();
+        let bytes = src.as_bytes();
+        let line_start = bytes
+            .get(..idx)
+            .and_then(|b| b.iter().rposition(|b| *b == b'\n').map(|p| p + 1))
+            .unwrap_or(0);
+        let line_end = bytes
+            .get(idx..)
+            .and_then(|b| b.iter().position(|b| *b == b'\n').map(|p| idx + p))
+            .unwrap_or(bytes.len());
+        if bytes
+            .get(line_start..line_end)
+            .unwrap_or(&[])
+            .iter()
+            .take_while(|b| **b == b' ' || **b == b'\t')
+            .any(|b| *b == b'\t')
+        {
+            return Some("Use spaces for indentation; tabs are invalid in YAML.".into());
+        }
+    }
+    if lower.contains("did not find expected '-'") {
+        Some("Start list items with '-' and ensure proper indentation.".into())
+    } else if lower.contains("expected ':'") {
+        Some("Ensure each key is followed by ':' separating key and value.".into())
+    } else {
+        None
+    }
+}
+
+fn map_yaml_error(err: YamlError, src: &str, name: &str) -> Report {
+    let loc = err.location();
+    let (line, col, span) = loc.map_or((1, 1, None), |l| {
+        (l.line(), l.column(), Some(to_span(src, l)))
+    });
+    let err_str = err.to_string();
+    let hint = hint_for(&err_str, src, loc);
+    let message = format!("YAML parse error at line {line}, column {col}: {err_str}");
+
+    let diag = YamlDiagnostic {
+        src: NamedSource::new(name, src.to_string()),
+        span,
+        help: hint,
+        source: err,
+        message,
+    };
+
+    Report::new(diag)
+}
+
+/// Parse a manifest string using Jinja for value templating.
+///
+/// The input YAML must be valid on its own. Jinja expressions are evaluated
+/// only inside recognised string fields and the `foreach` and `when` keys.
+///
+/// # Errors
+///
+/// Returns an error if YAML parsing or Jinja evaluation fails.
+fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
+    let mut doc: YamlValue =
+        serde_yml::from_str(yaml).map_err(|e| map_yaml_error(e, yaml, name))?;
+
+    let mut env = Environment::new();
+    env.set_undefined_behavior(UndefinedBehavior::Strict);
+
+    if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
+        for (k, v) in vars {
+            let key = k
+                .as_str()
+                .ok_or_else(|| Report::msg(format!("non-string key in 'vars' mapping: {k:?}")))?
+                .to_string();
+            env.add_global(key, Value::from_serialize(v));
+        }
+    }
+
+    expand_foreach(&mut doc, &env)?;
+
+    let manifest: NetsukeManifest = serde_yml::from_value(doc)
+        .into_diagnostic()
+        .wrap_err(ERR_MANIFEST_PARSE)?;
+
+    render_manifest(manifest, &env)
+}
 
 /// Parse a manifest string using Jinja for value templating.
 ///
@@ -22,26 +145,7 @@ const ERR_MANIFEST_PARSE: &str = "manifest parse error";
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_yml::from_str(yaml).context(ERR_INITIAL_YAML_PARSE)?;
-
-    let mut env = Environment::new();
-    env.set_undefined_behavior(UndefinedBehavior::Strict);
-
-    if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
-        for (k, v) in vars {
-            let key = k
-                .as_str()
-                .ok_or_else(|| anyhow!("non-string key in 'vars' mapping: {k:?}"))?
-                .to_string();
-            env.add_global(key, Value::from_serialize(v));
-        }
-    }
-
-    expand_foreach(&mut doc, &env)?;
-
-    let manifest: NetsukeManifest = serde_yml::from_value(doc).context(ERR_MANIFEST_PARSE)?;
-
-    render_manifest(manifest, &env)
+    from_str_named(yaml, "Netsukefile")
 }
 
 /// Expand `foreach` entries within the raw YAML document.
@@ -90,7 +194,8 @@ fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<V
     let seq = eval_expression(env, "foreach", expr, context! {})?;
     let iter = seq
         .try_iter()
-        .context("foreach expression did not yield an iterable")?;
+        .into_diagnostic()
+        .wrap_err("foreach expression did not yield an iterable")?;
     Ok(iter.collect())
 }
 
@@ -116,12 +221,16 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
         None => YamlMapping::new(),
         Some(YamlValue::Mapping(m)) => m,
         Some(other) => {
-            return Err(anyhow!("target.vars must be a mapping, got: {other:?}"));
+            return Err(Report::msg(format!(
+                "target.vars must be a mapping, got: {other:?}"
+            )));
         }
     };
     vars.insert(
         YamlValue::String("item".into()),
-        serde_yml::to_value(item).context("serialise item")?,
+        serde_yml::to_value(item)
+            .into_diagnostic()
+            .wrap_err("serialise item")?,
     );
     vars.insert(
         YamlValue::String("index".into()),
@@ -134,14 +243,28 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
 fn as_str<'a>(value: &'a YamlValue, field: &str) -> Result<&'a str> {
     value
         .as_str()
-        .with_context(|| format!("{field} must be a string expression"))
+        .ok_or_else(|| Report::msg(format!("{field} must be a string expression")))
 }
 
 fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {
     env.compile_expression(expr)
-        .with_context(|| format!("{name} expression parse error"))?
+        .into_diagnostic()
+        .wrap_err_with(|| format!("{name} expression parse error"))?
         .eval(ctx)
-        .with_context(|| format!("{name} evaluation error"))
+        .into_diagnostic()
+        .wrap_err_with(|| format!("{name} evaluation error"))
+}
+
+/// Render a Jinja template and label any error with the given context.
+fn render_str_with(
+    env: &Environment,
+    tpl: &str,
+    ctx: &impl serde::Serialize,
+    what: impl FnOnce() -> String,
+) -> Result<String> {
+    env.render_str(tpl, ctx)
+        .into_diagnostic()
+        .wrap_err_with(what)
 }
 
 /// Render all templated strings in the manifest.
@@ -160,21 +283,16 @@ fn render_manifest(mut manifest: NetsukeManifest, env: &Environment) -> Result<N
 
 fn render_rule(rule: &mut crate::ast::Rule, env: &Environment) -> Result<()> {
     if let Some(desc) = &mut rule.description {
-        *desc = env
-            .render_str(desc, context! {})
-            .context("render rule description")?;
+        *desc = render_str_with(env, desc, &context! {}, || "render rule description".into())?;
     }
     render_string_or_list(&mut rule.deps, env, &Vars::new())?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command = env
-                .render_str(command, context! {})
-                .context("render rule command")?;
+            *command =
+                render_str_with(env, command, &context! {}, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
-            *script = env
-                .render_str(script, context! {})
-                .context("render rule script")?;
+            *script = render_str_with(env, script, &context! {}, || "render rule script".into())?;
         }
         Recipe::Rule { rule: r } => render_string_or_list(r, env, &Vars::new())?,
     }
@@ -189,14 +307,12 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
     match &mut target.recipe {
         Recipe::Command { command } => {
-            *command = env
-                .render_str(command, &target.vars)
-                .context("render target command")?;
+            *command = render_str_with(env, command, &target.vars, || {
+                "render target command".into()
+            })?;
         }
         Recipe::Script { script } => {
-            *script = env
-                .render_str(script, &target.vars)
-                .context("render target script")?;
+            *script = render_str_with(env, script, &target.vars, || "render target script".into())?;
         }
         Recipe::Rule { rule } => render_string_or_list(rule, env, &target.vars)?,
     }
@@ -207,9 +323,7 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     let snapshot = vars.clone();
     for (key, value) in vars.iter_mut() {
         if let YamlValue::String(s) = value {
-            *s = env
-                .render_str(s, &snapshot)
-                .with_context(|| format!("render var '{key}'"))?;
+            *s = render_str_with(env, s, &snapshot, || format!("render var '{key}'"))?;
         }
     }
     Ok(())
@@ -218,11 +332,11 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
 fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars) -> Result<()> {
     match value {
         StringOrList::String(s) => {
-            *s = env.render_str(s, ctx).context("render string value")?;
+            *s = render_str_with(env, s, ctx, || "render string value".into())?;
         }
         StringOrList::List(list) => {
             for item in list {
-                *item = env.render_str(item, ctx).context("render list value")?;
+                *item = render_str_with(env, item, ctx, || "render list value".into())?;
             }
         }
         StringOrList::Empty => {}
@@ -238,6 +352,7 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref)
-        .with_context(|| format!("Failed to read {}", path_ref.display()))?;
-    from_str(&data)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to read {}", path_ref.display()))?;
+    from_str_named(&data, &path_ref.display().to_string())
 }

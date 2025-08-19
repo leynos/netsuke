@@ -11,6 +11,7 @@ minijinja = "2.11.0"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 thiserror = "1"
+miette = { version = "7.6.0", features = ["fancy"] }
 sha2 = "0.10"
 itoa = "1"
 itertools = "0.12"
@@ -71,6 +72,7 @@ mockable = { version = "0.3", features = ["mock"] }
 serial_test = "3"
 mockall = "0.11"
 test_support = { path = "test_support" }
+strip-ansi-escapes = "0.2"
 
 [[test]]
 name = "cucumber"
