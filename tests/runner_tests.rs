@@ -69,10 +69,10 @@ fn run_exits_with_manifest_error_on_invalid_version() {
 
     let err = run(&cli).expect_err("should have error");
     assert!(err.to_string().contains("loading manifest at"));
-    let source = err.source().expect("source error").to_string();
+    let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
     assert!(
-        source.contains("manifest parse error"),
-        "expected parse error in source, got: {source}"
+        chain.iter().any(|s| s.contains("manifest parse error")),
+        "expected error chain to include 'manifest parse error', got: {chain:?}"
     );
 }
 

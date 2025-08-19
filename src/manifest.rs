@@ -31,7 +31,8 @@ fn to_span(src: &str, loc: Location) -> SourceSpan {
         }
     };
     let len = end.saturating_sub(start);
-    SourceSpan::new(start.into(), len)
+    #[allow(clippy::useless_conversion, reason = "future-proof span length type")]
+    SourceSpan::new(start.into(), len.into())
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -254,6 +255,18 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
         .wrap_err_with(|| format!("{name} evaluation error"))
 }
 
+/// Render a Jinja template and label any error with the given context.
+fn render_str_with(
+    env: &Environment,
+    tpl: &str,
+    ctx: &impl serde::Serialize,
+    what: impl FnOnce() -> String,
+) -> Result<String> {
+    env.render_str(tpl, ctx)
+        .into_diagnostic()
+        .wrap_err_with(what)
+}
+
 /// Render all templated strings in the manifest.
 fn render_manifest(mut manifest: NetsukeManifest, env: &Environment) -> Result<NetsukeManifest> {
     for action in &mut manifest.actions {
@@ -270,24 +283,16 @@ fn render_manifest(mut manifest: NetsukeManifest, env: &Environment) -> Result<N
 
 fn render_rule(rule: &mut crate::ast::Rule, env: &Environment) -> Result<()> {
     if let Some(desc) = &mut rule.description {
-        *desc = env
-            .render_str(desc, context! {})
-            .into_diagnostic()
-            .wrap_err("render rule description")?;
+        *desc = render_str_with(env, desc, &context! {}, || "render rule description".into())?;
     }
     render_string_or_list(&mut rule.deps, env, &Vars::new())?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command = env
-                .render_str(command, context! {})
-                .into_diagnostic()
-                .wrap_err("render rule command")?;
+            *command =
+                render_str_with(env, command, &context! {}, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
-            *script = env
-                .render_str(script, context! {})
-                .into_diagnostic()
-                .wrap_err("render rule script")?;
+            *script = render_str_with(env, script, &context! {}, || "render rule script".into())?;
         }
         Recipe::Rule { rule: r } => render_string_or_list(r, env, &Vars::new())?,
     }
@@ -302,16 +307,12 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
     match &mut target.recipe {
         Recipe::Command { command } => {
-            *command = env
-                .render_str(command, &target.vars)
-                .into_diagnostic()
-                .wrap_err("render target command")?;
+            *command = render_str_with(env, command, &target.vars, || {
+                "render target command".into()
+            })?;
         }
         Recipe::Script { script } => {
-            *script = env
-                .render_str(script, &target.vars)
-                .into_diagnostic()
-                .wrap_err("render target script")?;
+            *script = render_str_with(env, script, &target.vars, || "render target script".into())?;
         }
         Recipe::Rule { rule } => render_string_or_list(rule, env, &target.vars)?,
     }
@@ -322,10 +323,7 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     let snapshot = vars.clone();
     for (key, value) in vars.iter_mut() {
         if let YamlValue::String(s) = value {
-            *s = env
-                .render_str(s, &snapshot)
-                .into_diagnostic()
-                .wrap_err_with(|| format!("render var '{key}'"))?;
+            *s = render_str_with(env, s, &snapshot, || format!("render var '{key}'"))?;
         }
     }
     Ok(())
@@ -334,17 +332,11 @@ fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
 fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars) -> Result<()> {
     match value {
         StringOrList::String(s) => {
-            *s = env
-                .render_str(s, ctx)
-                .into_diagnostic()
-                .wrap_err("render string value")?;
+            *s = render_str_with(env, s, ctx, || "render string value".into())?;
         }
         StringOrList::List(list) => {
             for item in list {
-                *item = env
-                    .render_str(item, ctx)
-                    .into_diagnostic()
-                    .wrap_err("render list value")?;
+                *item = render_str_with(env, item, ctx, || "render list value".into())?;
             }
         }
         StringOrList::Empty => {}
