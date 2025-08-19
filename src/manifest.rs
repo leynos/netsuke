@@ -8,7 +8,7 @@
 
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use miette::{Context, Diagnostic, IntoDiagnostic, NamedSource, Report, Result, SourceSpan};
-use minijinja::{context, value::Value, Environment, Error, ErrorKind, UndefinedBehavior};
+use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, context, value::Value};
 use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
@@ -177,7 +177,9 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 /// # Errors
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
-pub fn from_str(yaml: &str) -> Result<NetsukeManifest> { from_str_named(yaml, "Netsukefile") }
+pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
+    from_str_named(yaml, "Netsukefile")
+}
 
 /// Expand `foreach` entries within the raw YAML document.
 fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
