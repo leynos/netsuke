@@ -6,6 +6,8 @@ use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
 };
+use std::ffi::OsStr;
+use test_support::env::{remove_var, set_var};
 
 const INDEX_KEY: &str = "index";
 
@@ -51,6 +53,25 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
         .targets
         .get(idx0)
         .unwrap_or_else(|| panic!("missing target {index}"))
+}
+
+#[given(expr = "the environment variable {string} is set to {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn set_env_var(world: &mut CliWorld, key: String, value: String) {
+    // Central helper acquires the global lock and returns the prior value so
+    // the scenario can restore it afterwards.
+    let previous = set_var(&key, OsStr::new(&value));
+    world.env_vars.entry(key).or_insert(previous);
+}
+
+#[given(expr = "the environment variable {string} is unset")]
+fn unset_env_var(world: &mut CliWorld, key: String) {
+    // Capture any previous value for restoration when the scenario ends.
+    let previous = remove_var(&key);
+    world.env_vars.entry(key).or_insert(previous);
 }
 
 #[given(expr = "the manifest file {string} is parsed")]
