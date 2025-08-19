@@ -57,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python 3.11
+        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -67,10 +68,14 @@ jobs:
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
             CARGO_TOML_PATH="$toml_path" \
-            python3 -c "import os, tomllib; print(tomllib.load(open(os.environ['CARGO_TOML_PATH'],'rb'))['package']['version'])" || echo ""
+            "${{ steps.setup-python.outputs.python-path }}" - <<'PY' || echo ""
+import os, tomllib
+with open(os.environ['CARGO_TOML_PATH'], 'rb') as f:
+    print(tomllib.load(f)['package']['version'])
+PY
           )"
           if [ -z "${cargo_version:-}" ]; then
-            echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}. Ensure Python ≥3.11 (tomllib available) and that the manifest contains [package]."
+            echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}. Ensure Python ≥3.11 (tomllib available) and that the manifest contains [package], or set CARGO_TOML_PATH to the crate's Cargo.toml."
             exit 1
           fi
           if [ "$tag" != "$cargo_version" ]; then
