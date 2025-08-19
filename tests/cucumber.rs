@@ -2,10 +2,7 @@
 
 use cucumber::World;
 use std::{collections::HashMap, ffi::OsString};
-use test_support::{
-    PathGuard,
-    env::{remove_var, set_var},
-};
+use test_support::{PathGuard, env::restore_many};
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
@@ -35,15 +32,8 @@ mod steps;
 
 impl Drop for CliWorld {
     fn drop(&mut self) {
-        if self.env_vars.is_empty() {
-            return;
-        }
-        for (key, val) in self.env_vars.drain() {
-            if let Some(v) = val {
-                let _ = set_var(&key, &v);
-            } else {
-                let _ = remove_var(&key);
-            }
+        if !self.env_vars.is_empty() {
+            restore_many(self.env_vars.drain().collect());
         }
     }
 }

@@ -5,9 +5,12 @@
 
 use mockable::{DefaultEnv, Env, MockEnv};
 use ninja_env::NINJA_ENV;
-use std::ffi::{OsStr, OsString};
-use std::io::{self, Write};
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    ffi::{OsStr, OsString},
+    io::{self, Write},
+    path::Path,
+};
 
 use crate::{env_lock::EnvLock, path_guard::PathGuard};
 
@@ -73,6 +76,39 @@ pub fn remove_var(key: &str) -> Option<OsString> {
     // SAFETY: `EnvLock` serialises mutations.
     unsafe { std::env::remove_var(key) };
     previous
+}
+
+/// Restore multiple environment variables under a single lock.
+///
+/// Each `key` is reset to its corresponding prior value or removed when
+/// `None`. Mutating process-wide state is `unsafe`; [`EnvLock`] serialises the
+/// operations to keep tests deterministic.
+///
+/// # Examples
+///
+/// ```
+/// use std::{collections::HashMap, ffi::OsStr};
+/// use test_support::env::{restore_many, set_var};
+///
+/// let mut snapshot = HashMap::new();
+/// snapshot.insert("HELLO".into(), set_var("HELLO", OsStr::new("world")));
+/// restore_many(snapshot);
+/// assert!(std::env::var("HELLO").is_err());
+/// ```
+pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
+    if vars.is_empty() {
+        return;
+    }
+    let _lock = EnvLock::acquire();
+    for (key, val) in vars {
+        if let Some(v) = val {
+            // SAFETY: `EnvLock` serialises mutations for all variables at once.
+            unsafe { std::env::set_var(key, v) };
+        } else {
+            // SAFETY: `EnvLock` serialises mutations for all variables at once.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
 }
 
 /// Guard that restores an environment variable to its prior value on drop.
