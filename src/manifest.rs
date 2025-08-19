@@ -104,6 +104,35 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> Report {
     Report::new(diag)
 }
 
+/// Resolve the value of an environment variable for the `env()` Jinja helper.
+///
+/// Returns the variable's value or a structured error that mirrors Jinja's
+/// failure modes, ensuring templates halt when a variable is missing or not
+/// valid UTF-8.
+///
+/// # Examples
+///
+/// ```ignore
+/// use netsuke::manifest::env_var;
+///
+/// std::env::set_var("EXAMPLE_KEY", "value");
+/// assert_eq!(env_var("EXAMPLE_KEY").unwrap(), "value");
+/// std::env::remove_var("EXAMPLE_KEY");
+/// ```
+fn env_var(name: &str) -> std::result::Result<String, Error> {
+    match std::env::var(name) {
+        Ok(val) => Ok(val),
+        Err(std::env::VarError::NotPresent) => Err(Error::new(
+            ErrorKind::UndefinedError,
+            format!("environment variable '{name}' is not set"),
+        )),
+        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("environment variable '{name}' is set but contains invalid UTF-8"),
+        )),
+    }
+}
+
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
@@ -119,25 +148,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
 
-    // Add "env(name)" function to read environment variables from templates.
-    // If a variable is not set, raise a descriptive templating error so
-    // callers see a clear cause and location.
-    env.add_function(
-        "env",
-        |name: String| -> std::result::Result<String, Error> {
-            match std::env::var(&name) {
-                Ok(val) => Ok(val),
-                Err(std::env::VarError::NotPresent) => Err(Error::new(
-                    ErrorKind::UndefinedError,
-                    format!("environment variable '{name}' is not set"),
-                )),
-                Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    format!("environment variable '{name}' is set but contains invalid UTF-8"),
-                )),
-            }
-        },
-    );
+    env.add_function("env", |name: String| env_var(&name));
 
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {
