@@ -51,6 +51,86 @@ pub fn mocked_path_env() -> MockEnv {
     env
 }
 
+/// Set an environment variable, returning its previous value.
+///
+/// The mutation is `unsafe` in Rust 2024 as it alters process state. The
+/// unsafety is scoped by acquiring [`EnvLock`].
+pub fn set_var(key: &str, value: &OsStr) -> Option<OsString> {
+    let _lock = EnvLock::acquire();
+    let previous = std::env::var_os(key);
+    // SAFETY: `EnvLock` serialises mutations.
+    unsafe { std::env::set_var(key, value) };
+    previous
+}
+
+/// Remove an environment variable, returning its previous value.
+///
+/// The mutation is `unsafe` in Rust 2024 as it alters process state. The
+/// unsafety is scoped by acquiring [`EnvLock`].
+pub fn remove_var(key: &str) -> Option<OsString> {
+    let _lock = EnvLock::acquire();
+    let previous = std::env::var_os(key);
+    // SAFETY: `EnvLock` serialises mutations.
+    unsafe { std::env::remove_var(key) };
+    previous
+}
+
+/// Guard that restores an environment variable to its prior value on drop.
+#[derive(Debug)]
+pub struct VarGuard {
+    key: String,
+    previous: Option<OsString>,
+}
+
+impl VarGuard {
+    /// Set `key` to `value`, returning a guard that resets it on drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::ffi::OsStr;
+    /// use test_support::env::VarGuard;
+    ///
+    /// let _guard = VarGuard::set("HELLO", OsStr::new("world"));
+    /// assert_eq!(std::env::var("HELLO").unwrap(), "world");
+    /// ```
+    pub fn set(key: &str, value: &OsStr) -> Self {
+        let _lock = EnvLock::acquire();
+        let previous = std::env::var_os(key);
+        // SAFETY: `EnvLock` serialises mutations.
+        unsafe { std::env::set_var(key, value) };
+        Self {
+            key: key.to_string(),
+            previous,
+        }
+    }
+
+    /// Remove `key`, returning a guard that restores the prior value.
+    pub fn unset(key: &str) -> Self {
+        let _lock = EnvLock::acquire();
+        let previous = std::env::var_os(key);
+        // SAFETY: `EnvLock` serialises mutations.
+        unsafe { std::env::remove_var(key) };
+        Self {
+            key: key.to_string(),
+            previous,
+        }
+    }
+}
+
+impl Drop for VarGuard {
+    fn drop(&mut self) {
+        let _lock = EnvLock::acquire();
+        if let Some(val) = self.previous.take() {
+            // SAFETY: `EnvLock` serialises mutations.
+            unsafe { std::env::set_var(&self.key, val) };
+        } else {
+            // SAFETY: `EnvLock` serialises mutations.
+            unsafe { std::env::remove_var(&self.key) };
+        }
+    }
+}
+
 /// Write a minimal manifest to `file`.
 ///
 /// The manifest declares a single `hello` target that prints a greeting.
