@@ -17,20 +17,27 @@ const ERR_MANIFEST_PARSE: &str = "manifest parse error";
 // Compute a narrow highlight span from a location.
 fn to_span(src: &str, loc: Location) -> SourceSpan {
     let at = loc.index();
-    let end = if src.as_bytes().get(at).is_some_and(|b| *b != b'\n') {
-        at + 1
-    } else {
-        at
+    let bytes = src.as_bytes();
+    let (start, end) = match bytes.get(at) {
+        Some(&b) if b != b'\n' => (at, at + 1),
+        _ => {
+            // Fallback: highlight the previous byte on the same line when possible.
+            let start = if at > 0 && bytes.get(at - 1).is_some_and(|p| *p != b'\n') {
+                at - 1
+            } else {
+                at
+            };
+            (start, at)
+        }
     };
-    let len = end.saturating_sub(at);
-    SourceSpan::new(at.into(), len)
+    let len = end.saturating_sub(start);
+    SourceSpan::new(start.into(), len)
 }
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
-#[doc(hidden)]
-pub struct YamlDiagnostic {
+pub(crate) struct YamlDiagnostic {
     #[source_code]
     src: NamedSource<String>,
     #[label("parse error here")]

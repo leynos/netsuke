@@ -2,6 +2,7 @@
 
 use crate::CliWorld;
 use cucumber::{given, then, when};
+use miette::IntoDiagnostic;
 use netsuke::ir::BuildGraph;
 
 fn assert_graph(world: &CliWorld) {
@@ -50,7 +51,7 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
 #[when(expr = "the manifest file {string} is compiled to IR")]
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
-        .and_then(|m| BuildGraph::from_manifest(&m).map_err(|e| miette::Report::msg(e.to_string())))
+        .and_then(|m| BuildGraph::from_manifest(&m).into_diagnostic())
     {
         Ok(graph) => {
             world.build_graph = Some(graph);

@@ -70,7 +70,12 @@ fn run_exits_with_manifest_error_on_invalid_version() {
     let result = run(&cli);
     assert!(result.is_err());
     let err = result.expect_err("should have error");
-    assert!(err.to_string().contains("manifest parse error"));
+    let chain: Vec<_> = err.chain().map(std::string::ToString::to_string).collect();
+    assert!(
+        chain.iter().any(|s| s.contains("manifest parse error")),
+        "expected error chain to include 'manifest parse error', got: {chain:?}"
+    );
+    assert!(err.to_string().contains("loading manifest at"));
 }
 
 #[rstest]
