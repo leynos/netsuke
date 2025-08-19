@@ -253,7 +253,7 @@ fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli);
     let manifest = manifest::from_path(&manifest_path)
-        .wrap_err_with(|| format!("loading manifest at {}", manifest_path.display()))?;
+        .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
     let ast_json = serde_json::to_string_pretty(&manifest)
         .into_diagnostic()
         .wrap_err("serialising manifest")?;
