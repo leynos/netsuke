@@ -64,14 +64,14 @@ fn set_env_var(world: &mut CliWorld, key: String, value: String) {
     // Central helper acquires the global lock and returns the prior value so
     // the scenario can restore it afterwards.
     let previous = set_var(&key, OsStr::new(&value));
-    world.env_vars.insert(key, previous);
+    world.env_vars.entry(key).or_insert(previous);
 }
 
 #[given(expr = "the environment variable {string} is unset")]
 fn unset_env_var(world: &mut CliWorld, key: String) {
     // Capture any previous value for restoration when the scenario ends.
     let previous = remove_var(&key);
-    world.env_vars.insert(key, previous);
+    world.env_vars.entry(key).or_insert(previous);
 }
 
 #[given(expr = "the manifest file {string} is parsed")]

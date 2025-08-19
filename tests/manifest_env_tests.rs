@@ -12,6 +12,7 @@ fn manifest_yaml(body: &str) -> String {
 
 #[rstest]
 #[case("NETSUKE_ENV_TEST", "world", "echo world")]
+#[case("NETSUKE_ENV_EMPTY", "", "echo ")]
 #[case(
     "NETSUKE_ENV_SPECIAL",
     "spaced value $with #symbols",

@@ -95,10 +95,7 @@ impl VarGuard {
     /// assert_eq!(std::env::var("HELLO").expect("HELLO"), "world");
     /// ```
     pub fn set(key: &str, value: &OsStr) -> Self {
-        let _lock = EnvLock::acquire();
-        let previous = std::env::var_os(key);
-        // SAFETY: `EnvLock` serialises mutations.
-        unsafe { std::env::set_var(key, value) };
+        let previous = set_var(key, value);
         Self {
             key: key.to_string(),
             previous,
@@ -107,10 +104,7 @@ impl VarGuard {
 
     /// Remove `key`, returning a guard that restores the prior value.
     pub fn unset(key: &str) -> Self {
-        let _lock = EnvLock::acquire();
-        let previous = std::env::var_os(key);
-        // SAFETY: `EnvLock` serialises mutations.
-        unsafe { std::env::remove_var(key) };
+        let previous = remove_var(key);
         Self {
             key: key.to_string(),
             previous,
