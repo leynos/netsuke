@@ -51,7 +51,11 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
 #[when(expr = "the manifest file {string} is compiled to IR")]
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
-        .and_then(|m| BuildGraph::from_manifest(&m).into_diagnostic())
+        .and_then(|m| {
+            BuildGraph::from_manifest(&m)
+                .into_diagnostic()
+                .wrap_err("building IR from manifest")
+        })
         .with_context(|| format!("IR generation failed for {path}"))
     {
         Ok(graph) => {
