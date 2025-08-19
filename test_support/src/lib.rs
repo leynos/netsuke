@@ -19,8 +19,8 @@ pub use path_guard::PathGuard;
 
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
-use tempfile::TempDir;
+use std::path::{Path, PathBuf};
+use tempfile::{NamedTempFile, TempDir};
 
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
@@ -95,6 +95,42 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
     }
 
     (dir, path)
+}
+
+/// Resolve `cli_file` relative to `temp_dir` and ensure it exists.
+///
+/// When `cli_file` is relative, it is joined with `temp_dir`. If the resulting
+/// path does not exist, a minimal manifest is written to that location. The
+/// resolved path is returned to allow callers to update their configuration.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::PathBuf;
+/// use tempfile::TempDir;
+/// use test_support::ensure_manifest_exists;
+///
+/// let temp = TempDir::new().expect("temp dir");
+/// let cli_file = PathBuf::from("manifest.yml");
+/// let manifest = ensure_manifest_exists(temp.path(), &cli_file);
+/// assert!(manifest.exists());
+/// ```
+pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
+    let manifest_path = if cli_file.is_absolute() {
+        cli_file.to_path_buf()
+    } else {
+        temp_dir.join(cli_file)
+    };
+
+    if !manifest_path.exists() {
+        let mut file =
+            NamedTempFile::new_in(temp_dir).expect("Failed to create temporary manifest file");
+        crate::env::write_manifest(&mut file).expect("Failed to write manifest content");
+        file.persist(&manifest_path)
+            .expect("Failed to persist manifest file");
+    }
+
+    manifest_path
 }
 
 // Additional helpers can be added here as the test suite evolves.
