@@ -92,7 +92,7 @@ impl VarGuard {
     /// use test_support::env::VarGuard;
     ///
     /// let _guard = VarGuard::set("HELLO", OsStr::new("world"));
-    /// assert_eq!(std::env::var("HELLO").unwrap(), "world");
+    /// assert_eq!(std::env::var("HELLO").expect("HELLO"), "world");
     /// ```
     pub fn set(key: &str, value: &OsStr) -> Self {
         let _lock = EnvLock::acquire();

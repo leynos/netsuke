@@ -29,11 +29,10 @@ fn env_var_renders_parameterized(
     let _guard = VarGuard::set(env_key, OsStr::new(env_value));
     let manifest = manifest::from_str(&yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
-    if let Recipe::Command { command } = &first.recipe {
-        assert_eq!(command, expected_command);
-    } else {
+    let Recipe::Command { command } = &first.recipe else {
         panic!("Expected command recipe, got: {:?}", first.recipe);
-    }
+    };
+    assert_eq!(command, expected_command);
 }
 
 #[rstest]
@@ -44,7 +43,12 @@ fn missing_env_var_errors() {
     let yaml = manifest_yaml(
         "targets:\n  - name: hello\n    command: \"echo {{ env('NETSUKE_ENV_MISSING') }}\"\n",
     );
-    assert!(manifest::from_str(&yaml).is_err());
+    let err = manifest::from_str(&yaml).expect_err("expected error for missing env var");
+    assert!(
+        err.chain()
+            .any(|e| e.to_string().to_lowercase().contains("is not set")),
+        "unexpected error: {err}",
+    );
 }
 
 #[cfg(unix)]
