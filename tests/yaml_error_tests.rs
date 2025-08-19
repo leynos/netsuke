@@ -35,6 +35,18 @@ fn normalise_report(report: &str) -> String {
     "targets:\n  - name: 'unterminated\n",
     &["YAML parse error", "line 2"],
 )]
+#[case(
+    "",
+    &[
+        "manifest parse error",
+        "missing field",
+        "netsuke_version",
+    ],
+)]
+#[case(
+    "not: yaml: at all: %$#@!",
+    &["YAML parse error", "line 1"],
+)]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
     let mut msg = String::new();
