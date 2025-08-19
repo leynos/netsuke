@@ -56,13 +56,21 @@ jobs:
 #            ext: ""
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Verify tag matches Cargo.toml
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
-          cargo_version="$(python3 -c "import tomllib; print(tomllib.load(open('Cargo.toml', 'rb'))['package']['version'])" 2>/dev/null || echo "")"
+          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
+          cargo_version="$(
+            CARGO_TOML_PATH="$toml_path" \
+            python3 -c "import os, tomllib; print(tomllib.load(open(os.environ['CARGO_TOML_PATH'],'rb'))['package']['version'])" || echo ""
+          )"
           if [ -z "${cargo_version:-}" ]; then
-            echo "::error title=Cargo.toml parse failure::Could not find package.version in Cargo.toml"
+            echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}. Ensure Python ≥3.11 (tomllib available) and that the manifest contains [package]."
             exit 1
           fi
           if [ "$tag" != "$cargo_version" ]; then
