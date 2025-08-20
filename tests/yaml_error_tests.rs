@@ -44,6 +44,22 @@ fn normalise_report(report: &str) -> String {
     ],
 )]
 #[case(
+    "    \n    ",
+    &[
+        "manifest parse error",
+        "missing field",
+        "netsuke_version",
+    ],
+)]
+#[case(
+    "# just a comment\n# another comment",
+    &[
+        "manifest parse error",
+        "missing field",
+        "netsuke_version",
+    ],
+)]
+#[case(
     "not: yaml: at all: %$#@!",
     &["YAML parse error", "line 1"],
 )]
