@@ -1,3 +1,18 @@
+//! Diagnostics utilities.
+//!
+//! Adds `.diag(...)` and `.diag_with(...)` extension methods to `Result` for
+//! converting errors into `miette` diagnostics with contextual messages.
+//!
+//! # Examples
+//! ```
+//! use miette::Result;
+//! use netsuke::diagnostics::ResultExt;
+//!
+//! fn load() -> Result<()> {
+//!     std::fs::read_to_string("Netsukefile").diag("read Netsukefile")?;
+//!     Ok(())
+//! }
+//! ```
 use miette::{Context, IntoDiagnostic, Result};
 use std::fmt::Display;
 

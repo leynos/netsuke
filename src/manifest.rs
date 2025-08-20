@@ -14,8 +14,6 @@ use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
 use thiserror::Error;
-
-const ERR_MANIFEST_PARSE: &str = "manifest parse error";
 const YAML_HINTS: &[(&str, &str)] = &[
     (
         "did not find expected '-'",
@@ -24,6 +22,18 @@ const YAML_HINTS: &[(&str, &str)] = &[
     (
         "expected ':'",
         "Ensure each key is followed by ':' separating key and value.",
+    ),
+    (
+        "mapping values are not allowed",
+        "Check for a stray ':' or add quotes around values where needed.",
+    ),
+    (
+        "found character that cannot start any token",
+        "Remove stray characters and ensure indentation uses spaces (no tabs).",
+    ),
+    (
+        "unknown escape character",
+        "Use valid YAML escape sequences or quote the string.",
     ),
 ];
 
@@ -51,7 +61,7 @@ fn to_span(src: &str, loc: Location) -> SourceSpan {
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
-pub(crate) struct YamlDiagnostic {
+pub struct YamlDiagnostic {
     #[source_code]
     src: NamedSource<String>,
     #[label("parse error here")]
@@ -94,7 +104,18 @@ fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
         .map(|(_, hint)| (*hint).into())
 }
 
-fn map_yaml_error(err: YamlError, src: &str, name: &str) -> Report {
+#[derive(Debug, Error, Diagnostic)]
+pub enum ManifestError {
+    #[error("manifest parse error")]
+    #[diagnostic(code(netsuke::manifest::parse))]
+    Parse {
+        #[source]
+        #[diagnostic_source]
+        source: YamlDiagnostic,
+    },
+}
+
+fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
     let loc = err.location();
     let (line, col, span) = loc.map_or((1, 1, None), |l| {
         (l.line(), l.column(), Some(to_span(src, l)))
@@ -103,15 +124,13 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> Report {
     let hint = hint_for(&err_str, src, loc);
     let message = format!("YAML parse error at line {line}, column {col}: {err_str}");
 
-    let diag = YamlDiagnostic {
+    YamlDiagnostic {
         src: NamedSource::new(name, src.to_string()),
         span,
         help: hint,
         source: err,
         message,
-    };
-
-    Report::new(diag)
+    }
 }
 
 /// Parse a manifest string using Jinja for value templating.
@@ -124,7 +143,7 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> Report {
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     let mut doc: YamlValue =
-        serde_yml::from_str(yaml).map_err(|e| map_yaml_error(e, yaml, name))?;
+        serde_yml::from_str(yaml).map_err(|e| Report::new(map_yaml_error(e, yaml, name)))?;
 
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -141,7 +160,11 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     expand_foreach(&mut doc, &env)?;
 
-    let manifest: NetsukeManifest = serde_yml::from_value(doc).diag(ERR_MANIFEST_PARSE)?;
+    let manifest: NetsukeManifest = serde_yml::from_value(doc).map_err(|e| {
+        Report::new(ManifestError::Parse {
+            source: map_yaml_error(e, yaml, name),
+        })
+    })?;
 
     render_manifest(manifest, &env)
 }
@@ -355,7 +378,7 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref)
-        .diag_with(|| format!("Failed to read {}", path_ref.display()))?;
+        .diag_with(|| format!("failed to read {}", path_ref.display()))?;
     from_str_named(&data, &path_ref.display().to_string())
 }
 
@@ -367,7 +390,7 @@ mod tests {
     #[test]
     fn yaml_error_without_location_defaults_to_first_line() {
         let err = YamlError::custom("boom");
-        let report = map_yaml_error(err, "", "test");
+        let report = Report::new(map_yaml_error(err, "", "test"));
         let msg = report.to_string();
         assert!(msg.contains("line 1, column 1"), "message: {msg}");
     }
