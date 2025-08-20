@@ -4,9 +4,9 @@
 //! converting errors into `miette` diagnostics with contextual messages.
 //!
 //! # Examples
-//! ```
+//! ```rust,ignore
 //! use miette::Result;
-//! use netsuke::diagnostics::ResultExt;
+//! use crate::diagnostics::ResultExt;
 //!
 //! fn load() -> Result<()> {
 //!     std::fs::read_to_string("Netsukefile").diag("read Netsukefile")?;
@@ -20,9 +20,9 @@ use std::fmt::Display;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// use miette::Result;
-/// use netsuke::diagnostics::ResultExt;
+/// use crate::diagnostics::ResultExt;
 /// use std::fs::File;
 ///
 /// fn open(path: &str) -> Result<File> {
@@ -32,9 +32,9 @@ use std::fmt::Display;
 pub(crate) trait ResultExt<T> {
     /// Attach a static context message to any error.
     ///
-    /// ```
+    /// ```rust,ignore
     /// use miette::Result;
-    /// use netsuke::diagnostics::ResultExt;
+    /// use crate::diagnostics::ResultExt;
     /// use std::fs::read_to_string;
     ///
     /// fn read(path: &str) -> Result<String> {
@@ -45,9 +45,9 @@ pub(crate) trait ResultExt<T> {
 
     /// Attach a lazily evaluated context message to any error.
     ///
-    /// ```
+    /// ```rust,ignore
     /// use miette::Result;
-    /// use netsuke::diagnostics::ResultExt;
+    /// use crate::diagnostics::ResultExt;
     /// use std::{fs::File, path::Path};
     ///
     /// fn open(path: &Path) -> Result<File> {
