@@ -677,11 +677,10 @@ targets:
     #...
 ```
 
-To extract the `vars` mapping without triggering errors for undefined
-placeholders elsewhere in the template, Netsuke first renders the manifest with
-lenient undefined behaviour. The resulting YAML is parsed to obtain the global
-variables, which are then injected into the environment before a second, strict
-render pass produces the final manifest for deserialisation.
+The `vars` mapping is read directly from the raw YAML before any Jinja is
+evaluated. This avoids a lenient rendering pass for undefined placeholders and
+keeps evaluation deterministic. The values are injected into the environment
+prior to rendering.
 
 The parser copies `vars` values into the environment using
 `Value::from_serializable`. This preserves native YAML types so Jinja's
@@ -729,7 +728,9 @@ providing a secure bridge to the underlying system.
 
 - `env(var_name: &str) -> Result<String, Error>`: A function that reads an
   environment variable from the system. This allows build configurations to be
-  influenced by the external environment (e.g., `PATH`, `CC`).
+  influenced by the external environment (e.g., `PATH`, `CC`). It returns an
+  error if the variable is undefined or contains invalid UTF-8 to ensure
+  manifests fail fast on missing inputs.
 
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: A function that performs
   file path globbing. This is a critical feature for any modern build tool,

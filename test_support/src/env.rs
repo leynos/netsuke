@@ -5,9 +5,12 @@
 
 use mockable::{DefaultEnv, Env, MockEnv};
 use ninja_env::NINJA_ENV;
-use std::ffi::{OsStr, OsString};
-use std::io::{self, Write};
-use std::path::Path;
+use std::{
+    collections::HashMap,
+    ffi::{OsStr, OsString},
+    io::{self, Write},
+    path::Path,
+};
 
 use crate::{env_lock::EnvLock, path_guard::PathGuard};
 
@@ -49,6 +52,113 @@ pub fn mocked_path_env() -> MockEnv {
         .withf(|k| k == "PATH")
         .returning(move |_| Ok(original.clone()));
     env
+}
+
+/// Set an environment variable, returning its previous value.
+///
+/// The mutation is `unsafe` in Rust 2024 as it alters process state. The
+/// unsafety is scoped by acquiring [`EnvLock`].
+pub fn set_var(key: &str, value: &OsStr) -> Option<OsString> {
+    let _lock = EnvLock::acquire();
+    let previous = std::env::var_os(key);
+    // SAFETY: `EnvLock` serialises mutations.
+    unsafe { std::env::set_var(key, value) };
+    previous
+}
+
+/// Remove an environment variable, returning its previous value.
+///
+/// The mutation is `unsafe` in Rust 2024 as it alters process state. The
+/// unsafety is scoped by acquiring [`EnvLock`].
+pub fn remove_var(key: &str) -> Option<OsString> {
+    let _lock = EnvLock::acquire();
+    let previous = std::env::var_os(key);
+    // SAFETY: `EnvLock` serialises mutations.
+    unsafe { std::env::remove_var(key) };
+    previous
+}
+
+/// Restore multiple environment variables under a single lock.
+///
+/// Each `key` is reset to its corresponding prior value or removed when
+/// `None`. Mutating process-wide state is `unsafe`; [`EnvLock`] serialises the
+/// operations to keep tests deterministic.
+///
+/// # Examples
+///
+/// ```
+/// use std::{collections::HashMap, ffi::OsStr};
+/// use test_support::env::{restore_many, set_var};
+///
+/// let mut snapshot = HashMap::new();
+/// snapshot.insert("HELLO".into(), set_var("HELLO", OsStr::new("world")));
+/// restore_many(snapshot);
+/// assert!(std::env::var("HELLO").is_err());
+/// ```
+pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
+    if vars.is_empty() {
+        return;
+    }
+    let _lock = EnvLock::acquire();
+    for (key, val) in vars {
+        if let Some(v) = val {
+            // SAFETY: `EnvLock` serialises mutations for all variables at once.
+            unsafe { std::env::set_var(key, v) };
+        } else {
+            // SAFETY: `EnvLock` serialises mutations for all variables at once.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
+}
+
+/// Guard that restores an environment variable to its prior value on drop.
+#[derive(Debug)]
+pub struct VarGuard {
+    key: String,
+    previous: Option<OsString>,
+}
+
+impl VarGuard {
+    /// Set `key` to `value`, returning a guard that resets it on drop.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::ffi::OsStr;
+    /// use test_support::env::VarGuard;
+    ///
+    /// let _guard = VarGuard::set("HELLO", OsStr::new("world"));
+    /// assert_eq!(std::env::var("HELLO").expect("HELLO"), "world");
+    /// ```
+    pub fn set(key: &str, value: &OsStr) -> Self {
+        let previous = set_var(key, value);
+        Self {
+            key: key.to_string(),
+            previous,
+        }
+    }
+
+    /// Remove `key`, returning a guard that restores the prior value.
+    pub fn unset(key: &str) -> Self {
+        let previous = remove_var(key);
+        Self {
+            key: key.to_string(),
+            previous,
+        }
+    }
+}
+
+impl Drop for VarGuard {
+    fn drop(&mut self) {
+        let _lock = EnvLock::acquire();
+        if let Some(val) = self.previous.take() {
+            // SAFETY: `EnvLock` serialises mutations.
+            unsafe { std::env::set_var(&self.key, val) };
+        } else {
+            // SAFETY: `EnvLock` serialises mutations.
+            unsafe { std::env::remove_var(&self.key) };
+        }
+    }
 }
 
 /// Write a minimal manifest to `file`.
@@ -109,7 +219,10 @@ pub struct NinjaEnvGuard {
 /// let env = SystemEnv::new();
 /// let path = std::env::temp_dir().join("ninja");
 /// let guard = override_ninja_env(&env, path.as_path());
-/// assert_eq!(std::env::var(NINJA_ENV).unwrap(), path.to_string_lossy());
+/// assert_eq!(
+///     std::env::var(NINJA_ENV).expect("NINJA_ENV"),
+///     path.to_string_lossy()
+/// );
 /// drop(guard);
 /// assert!(std::env::var(NINJA_ENV).is_err());
 /// ```

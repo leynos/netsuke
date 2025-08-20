@@ -56,6 +56,18 @@ Feature: Manifest Parsing
     When the parsing result is checked
     Then parsing the manifest fails
 
+  Scenario: Reading environment variables in a manifest
+    Given the environment variable "NETSUKE_TEST_ENV" is set to "world"
+    And the manifest file "tests/data/jinja_env.yml" is parsed
+    When the manifest is checked
+    Then the first target command is "echo world"
+
+  Scenario: Parsing fails when an environment variable is undefined
+    Given the environment variable "NETSUKE_UNDEFINED_ENV" is unset
+    And the manifest file "tests/data/jinja_env_missing.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+
   Scenario: Rendering Jinja conditionals in a manifest
     Given the manifest file "tests/data/jinja_if.yml" is parsed
     When the manifest is checked

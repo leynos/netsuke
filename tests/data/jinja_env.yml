@@ -1,0 +1,4 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: hello
+    command: "echo {{ env('NETSUKE_TEST_ENV') }}"

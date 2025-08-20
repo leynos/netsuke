@@ -2,7 +2,9 @@
 //!
 //! This module parses a `Netsukefile` without relying on a global Jinja
 //! preprocessing pass. The YAML is parsed first and Jinja expressions are
-//! evaluated only within string values or the `foreach` and `when` keys.
+//! evaluated only within string values or the `foreach` and `when` keys. It
+//! exposes an `env()` function to surface environment variables, failing fast
+//! when values are missing or invalid.
 
 use crate::{
     ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars},
@@ -133,6 +135,35 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
     }
 }
 
+/// Resolve the value of an environment variable for the `env()` Jinja helper.
+///
+/// Returns the variable's value or a structured error that mirrors Jinja's
+/// failure modes, ensuring templates halt when a variable is missing or not
+/// valid UTF-8.
+///
+/// # Examples
+///
+/// ```ignore
+/// use netsuke::manifest::env_var;
+///
+/// std::env::set_var("EXAMPLE_KEY", "value");
+/// assert_eq!(env_var("EXAMPLE_KEY").unwrap(), "value");
+/// std::env::remove_var("EXAMPLE_KEY");
+/// ```
+fn env_var(name: &str) -> std::result::Result<String, Error> {
+    match std::env::var(name) {
+        Ok(val) => Ok(val),
+        Err(std::env::VarError::NotPresent) => Err(Error::new(
+            ErrorKind::UndefinedError,
+            format!("environment variable '{name}' is not set"),
+        )),
+        Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("environment variable '{name}' is set but contains invalid UTF-8"),
+        )),
+    }
+}
+
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
@@ -147,6 +178,8 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Strict);
+
+    env.add_function("env", |name: String| env_var(&name));
 
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {

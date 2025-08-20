@@ -1,7 +1,8 @@
 //! Cucumber test runner and world state.
 
 use cucumber::World;
-use test_support::PathGuard;
+use std::{collections::HashMap, ffi::OsString};
+use test_support::{PathGuard, env::restore_many};
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
@@ -22,9 +23,20 @@ pub struct CliWorld {
     pub temp: Option<tempfile::TempDir>,
     /// Guard that restores `PATH` after each scenario.
     pub path_guard: Option<PathGuard>,
+    /// Snapshot of pre-scenario values for environment variables that were overridden.
+    /// Stores the original value (`Some`) or `None` if the variable was previously unset.
+    pub env_vars: HashMap<String, Option<OsString>>,
 }
 
 mod steps;
+
+impl Drop for CliWorld {
+    fn drop(&mut self) {
+        if !self.env_vars.is_empty() {
+            restore_many(self.env_vars.drain().collect());
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() {
