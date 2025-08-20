@@ -1,8 +1,44 @@
 use miette::{Context, IntoDiagnostic, Result};
 use std::fmt::Display;
 
+/// Extension methods for turning `Result` values into `miette` diagnostics.
+///
+/// # Examples
+///
+/// ```
+/// use miette::Result;
+/// use netsuke::diagnostics::ResultExt;
+/// use std::fs::File;
+///
+/// fn open(path: &str) -> Result<File> {
+///     File::open(path).diag("open file")
+/// }
+/// ```
 pub(crate) trait ResultExt<T> {
+    /// Attach a static context message to any error.
+    ///
+    /// ```
+    /// use miette::Result;
+    /// use netsuke::diagnostics::ResultExt;
+    /// use std::fs::read_to_string;
+    ///
+    /// fn read(path: &str) -> Result<String> {
+    ///     read_to_string(path).diag("read file")
+    /// }
+    /// ```
     fn diag(self, context: impl Display + Send + Sync + 'static) -> Result<T>;
+
+    /// Attach a lazily evaluated context message to any error.
+    ///
+    /// ```
+    /// use miette::Result;
+    /// use netsuke::diagnostics::ResultExt;
+    /// use std::{fs::File, path::Path};
+    ///
+    /// fn open(path: &Path) -> Result<File> {
+    ///     File::open(path).diag_with(|| format!("open {}", path.display()))
+    /// }
+    /// ```
     fn diag_with(self, f: impl FnOnce() -> String) -> Result<T>;
 }
 

@@ -59,9 +59,10 @@ fn normalise_report(report: &str) -> String {
         "netsuke_version",
     ],
 )]
+// No location information should default to the start of the file.
 #[case(
     "not: yaml: at all: %$#@!",
-    &["YAML parse error", "line 1"],
+    &["YAML parse error", "line 1, column 1"],
 )]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
