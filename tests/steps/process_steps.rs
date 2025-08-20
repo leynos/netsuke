@@ -80,11 +80,9 @@ fn build_dir_exists(world: &mut CliWorld) {
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
     let dir = world.temp.as_ref().expect("temp dir");
-    let cli_file = world.cli.as_ref().expect("cli").file.clone();
-    let manifest_path = ensure_manifest_exists(dir.path(), &cli_file);
-    world.cli.as_mut().expect("cli").file = manifest_path;
-
-    let cli = world.cli.as_ref().expect("cli");
+    let cli = world.cli.as_mut().expect("cli");
+    let manifest_path = ensure_manifest_exists(dir.path(), &cli.file);
+    cli.file = manifest_path;
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)
     } else {

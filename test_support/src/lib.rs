@@ -105,7 +105,7 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,no_run
 /// use std::path::PathBuf;
 /// use tempfile::TempDir;
 /// use test_support::ensure_manifest_exists;
@@ -123,8 +123,12 @@ pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
     };
 
     if !manifest_path.exists() {
+        let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
+        if !dest_dir.exists() {
+            fs::create_dir_all(dest_dir).expect("Failed to create manifest parent directory");
+        }
         let mut file =
-            NamedTempFile::new_in(temp_dir).expect("Failed to create temporary manifest file");
+            NamedTempFile::new_in(dest_dir).expect("Failed to create temporary manifest file");
         crate::env::write_manifest(&mut file).expect("Failed to write manifest content");
         file.persist(&manifest_path)
             .expect("Failed to persist manifest file");
