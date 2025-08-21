@@ -86,6 +86,23 @@ fn renders_env_function() {
 }
 
 #[rstest]
+fn renders_env_function_missing_var() {
+    unsafe {
+        std::env::remove_var("NETSUKE_TEST_ENV_MISSING");
+    }
+    let yaml = manifest_yaml(
+        "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n",
+    );
+
+    let err = manifest::from_str(&yaml).expect_err("parse should fail");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("environment variable NETSUKE_TEST_ENV_MISSING"),
+        "unexpected message: {msg}"
+    );
+}
+
+#[rstest]
 fn undefined_variable_errors() {
     let yaml = manifest_yaml("targets:\n  - name: hello\n    command: echo {{ missing }}\n");
 

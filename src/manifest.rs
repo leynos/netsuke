@@ -16,6 +16,7 @@ use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
 use thiserror::Error;
+// Needles must be lower-case for case-insensitive matching.
 const YAML_HINTS: &[(&str, &str)] = &[
     (
         "did not find expected '-'",
@@ -102,7 +103,7 @@ fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
     let lower = err_str.to_lowercase();
     YAML_HINTS
         .iter()
-        .find(|(needle, _)| lower.contains(needle))
+        .find(|(needle, _)| lower.contains(*needle))
         .map(|(_, hint)| (*hint).into())
 }
 
@@ -176,10 +177,10 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     let mut doc: YamlValue =
         serde_yml::from_str(yaml).map_err(|e| Report::new(map_yaml_error(e, yaml, name)))?;
 
-    let mut env = Environment::new();
-    env.set_undefined_behavior(UndefinedBehavior::Strict);
+    let mut jinja = Environment::new();
+    jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose a strict environment variable accessor to templates.
-    env.add_function("env", |name: String| env_var(&name));
+    jinja.add_function("env", |name: String| env_var(&name));
 
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {
@@ -187,11 +188,11 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
                 .as_str()
                 .ok_or_else(|| Report::msg(format!("non-string key in 'vars' mapping: {k:?}")))?
                 .to_string();
-            env.add_global(key, Value::from_serialize(v));
+            jinja.add_global(key, Value::from_serialize(v));
         }
     }
 
-    expand_foreach(&mut doc, &env)?;
+    expand_foreach(&mut doc, &jinja)?;
 
     let manifest: NetsukeManifest = serde_yml::from_value(doc).map_err(|e| {
         Report::new(ManifestError::Parse {
@@ -199,7 +200,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
         })
     })?;
 
-    render_manifest(manifest, &env)
+    render_manifest(manifest, &jinja)
 }
 
 /// Parse a manifest string using Jinja for value templating.
