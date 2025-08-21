@@ -5,9 +5,9 @@ use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::TempDir;
 use test_support::{
-    check_ninja,
+    check_ninja, ensure_manifest_exists,
     env::{self, EnvMut},
     fake_ninja,
 };
@@ -80,35 +80,17 @@ fn build_dir_exists(world: &mut CliWorld) {
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) {
     let dir = world.temp.as_ref().expect("temp dir");
-    let manifest_path = {
-        let cli = world.cli.as_ref().expect("cli");
-        if cli.file.is_absolute() {
-            cli.file.clone()
-        } else {
-            dir.path().join(&cli.file)
-        }
-    };
-
-    if !manifest_path.exists() {
-        let mut file =
-            NamedTempFile::new_in(dir.path()).expect("Failed to create temporary manifest file");
-        env::write_manifest(&mut file).expect("Failed to write manifest content");
-        file.persist(&manifest_path)
-            .expect("Failed to persist manifest file");
-    }
-
     {
         let cli = world.cli.as_mut().expect("cli");
-        cli.file.clone_from(&manifest_path);
+        cli.file = ensure_manifest_exists(dir.path(), &cli.file);
     }
-
-    let cli = world.cli.as_ref().expect("cli");
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)
     } else {
         Path::new(NINJA_PROGRAM)
     };
     let targets = BuildTargets::default();
+    let cli = world.cli.as_ref().expect("cli");
     match runner::run_ninja(program, cli, Path::new("build.ninja"), &targets) {
         Ok(()) => {
             world.run_status = Some(true);
