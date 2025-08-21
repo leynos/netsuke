@@ -3,6 +3,7 @@
 
 use netsuke::{ast::Recipe, manifest};
 use rstest::rstest;
+use test_support::env_lock::EnvLock;
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
@@ -67,6 +68,7 @@ fn renders_global_vars() {
 
 #[rstest]
 fn renders_env_function() {
+    let _env_lock = EnvLock::acquire();
     unsafe {
         std::env::set_var("NETSUKE_TEST_ENV", "42");
     }
@@ -87,6 +89,7 @@ fn renders_env_function() {
 
 #[rstest]
 fn renders_env_function_missing_var() {
+    let _env_lock = EnvLock::acquire();
     unsafe {
         std::env::remove_var("NETSUKE_TEST_ENV_MISSING");
     }
