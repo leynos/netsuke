@@ -130,13 +130,23 @@ pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
     if !manifest_path.exists() {
         let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
         if !dest_dir.exists() {
-            fs::create_dir_all(dest_dir).expect("Failed to create manifest parent directory");
+            fs::create_dir_all(dest_dir).expect(&format!(
+                "Failed to create manifest parent directory for {}",
+                manifest_path.display()
+            ));
         }
-        let mut file =
-            NamedTempFile::new_in(dest_dir).expect("Failed to create temporary manifest file");
-        crate::env::write_manifest(&mut file).expect("Failed to write manifest content");
-        file.persist(&manifest_path)
-            .expect("Failed to persist manifest file");
+        let mut file = NamedTempFile::new_in(dest_dir).expect(&format!(
+            "Failed to create temporary manifest file for {}",
+            manifest_path.display()
+        ));
+        crate::env::write_manifest(&mut file).expect(&format!(
+            "Failed to write manifest content to {}",
+            manifest_path.display()
+        ));
+        file.persist(&manifest_path).expect(&format!(
+            "Failed to persist manifest file to {}",
+            manifest_path.display()
+        ));
     }
 
     manifest_path
