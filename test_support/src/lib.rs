@@ -99,9 +99,14 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 
 /// Resolve `cli_file` relative to `temp_dir` and ensure it exists.
 ///
-/// When `cli_file` is relative, it is joined with `temp_dir`. If the resulting
-/// path does not exist, a minimal manifest is written to that location. The
-/// resolved path is returned to allow callers to update their configuration.
+/// When `cli_file` is relative, it is joined with `temp_dir` and the returned
+/// [`PathBuf`] is absolute. If the resulting path does not exist, a minimal
+/// manifest is written to that location.
+///
+/// # Panics
+///
+/// Panics if `temp_dir` does not exist or if any I/O error occurs while
+/// creating or persisting the manifest file.
 ///
 /// # Examples
 ///
