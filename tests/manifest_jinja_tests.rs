@@ -66,6 +66,26 @@ fn renders_global_vars() {
 }
 
 #[rstest]
+fn renders_env_function() {
+    unsafe {
+        std::env::set_var("NETSUKE_TEST_ENV", "42");
+    }
+    let yaml =
+        manifest_yaml("targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n");
+
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let first = manifest.targets.first().expect("target");
+    if let Recipe::Command { command } = &first.recipe {
+        assert_eq!(command, "echo 42");
+    } else {
+        panic!("Expected command recipe, got: {:?}", first.recipe);
+    }
+    unsafe {
+        std::env::remove_var("NETSUKE_TEST_ENV");
+    }
+}
+
+#[rstest]
 fn undefined_variable_errors() {
     let yaml = manifest_yaml("targets:\n  - name: hello\n    command: echo {{ missing }}\n");
 
