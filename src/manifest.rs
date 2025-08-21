@@ -17,7 +17,7 @@ use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
 use thiserror::Error;
 // Needles must be lower-case for case-insensitive matching.
-const YAML_HINTS: &[(&str, &str)] = &[
+const YAML_HINTS: [(&str, &str); 5] = [
     (
         "did not find expected '-'",
         "Start list items with '-' and ensure proper indentation.",
