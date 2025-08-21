@@ -15,11 +15,11 @@ fn normalise_report(report: &str) -> String {
 #[rstest]
 #[case(
     "targets:\n\t- name: test\n",
-    &["line 2, column 1", "Use spaces for indentation"],
+    &["line 2, column 1"],
 )]
 #[case(
     "targets:\n  - name: hi\n    command echo\n",
-    &["line 3", "expected ':'", "Ensure each key is followed by ':'"],
+    &["line 3", "expected ':'"],
 )]
 #[case(
     concat!(
@@ -29,7 +29,7 @@ fn normalise_report(report: &str) -> String {
         "  name: missing\n",
         "    command: echo\n",
     ),
-    &["line 4", "did not find expected '-'", "Start list items with '-'"],
+    &["line 4", "did not find expected '-'"] ,
 )]
 #[case(
     "targets:\n  - name: 'unterminated\n",

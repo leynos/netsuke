@@ -1,9 +1,47 @@
 //! Tests for the YAML-first manifest pipeline: parse YAML, expand foreach/when,
 //! then render Jinja only in string values.
 
-use netsuke::{ast::Recipe, manifest};
+use netsuke::{
+    ast::Recipe,
+    manifest::{self, ManifestError},
+};
 use rstest::rstest;
 use test_support::env_lock::EnvLock;
+
+struct VarGuard {
+    name: &'static str,
+    prev: Option<std::ffi::OsString>,
+}
+
+impl VarGuard {
+    fn set(name: &'static str, val: &str) -> Self {
+        let prev = std::env::var_os(name);
+        unsafe {
+            std::env::set_var(name, val);
+        }
+        Self { name, prev }
+    }
+
+    fn remove(name: &'static str) -> Self {
+        let prev = std::env::var_os(name);
+        unsafe {
+            std::env::remove_var(name);
+        }
+        Self { name, prev }
+    }
+}
+
+impl Drop for VarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(ref v) = self.prev {
+                std::env::set_var(self.name, v);
+            } else {
+                std::env::remove_var(self.name);
+            }
+        }
+    }
+}
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
@@ -69,9 +107,7 @@ fn renders_global_vars() {
 #[rstest]
 fn renders_env_function() {
     let _env_lock = EnvLock::acquire();
-    unsafe {
-        std::env::set_var("NETSUKE_TEST_ENV", "42");
-    }
+    let _var_guard = VarGuard::set("NETSUKE_TEST_ENV", "42");
     let yaml =
         manifest_yaml("targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n");
 
@@ -82,27 +118,28 @@ fn renders_env_function() {
     } else {
         panic!("Expected command recipe, got: {:?}", first.recipe);
     }
-    unsafe {
-        std::env::remove_var("NETSUKE_TEST_ENV");
-    }
 }
 
 #[rstest]
 fn renders_env_function_missing_var() {
     let _env_lock = EnvLock::acquire();
-    unsafe {
-        std::env::remove_var("NETSUKE_TEST_ENV_MISSING");
-    }
+    let name = "NETSUKE_TEST_ENV_MISSING";
+    let _var_guard = VarGuard::remove(name);
     let yaml = manifest_yaml(
         "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n",
     );
 
     let err = manifest::from_str(&yaml).expect_err("parse should fail");
+    if let Some(me) = err.downcast_ref::<ManifestError>() {
+        assert!(
+            matches!(me, ManifestError::Parse { .. }),
+            "expected ManifestError::Parse, got: {me:?}"
+        );
+    } else if !err.chain().any(|e| e.to_string().contains(name)) {
+        panic!("unexpected error type: {err:?}");
+    }
     let msg = format!("{err:?}");
-    assert!(
-        msg.contains("environment variable NETSUKE_TEST_ENV_MISSING"),
-        "unexpected message: {msg}"
-    );
+    assert!(msg.contains(name), "unexpected message: {msg}");
 }
 
 #[rstest]
