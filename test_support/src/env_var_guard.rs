@@ -16,12 +16,12 @@
 //! assert_eq!(std::env::var("FOO").unwrap(), "bar");
 //! // `_guard` is dropped here and restores the previous value.
 //! ```
-use std::ffi::OsString;
+use std::{borrow::Cow, ffi::OsString};
 
 /// RAII guard that resets an environment variable to its previous value on drop.
 #[derive(Debug)]
 pub struct EnvVarGuard {
-    name: &'static str,
+    name: Cow<'static, str>,
     prev: Option<OsString>,
 }
 
@@ -32,10 +32,12 @@ impl EnvVarGuard {
     ///
     /// Mutating process-global state is `unsafe` in Rust 2024. Callers must hold
     /// an [`EnvLock`](crate::env_lock::EnvLock) to serialise mutations.
-    pub fn set(name: &'static str, val: &str) -> Self {
-        let prev = std::env::var_os(name);
+    #[must_use]
+    pub fn set(name: impl Into<Cow<'static, str>>, val: &str) -> Self {
+        let name = name.into();
+        let prev = std::env::var_os(&*name);
         // SAFETY: `EnvLock` serialises mutations of the process environment.
-        unsafe { std::env::set_var(name, val) };
+        unsafe { std::env::set_var(&*name, val) };
         Self { name, prev }
     }
 
@@ -45,10 +47,12 @@ impl EnvVarGuard {
     ///
     /// Callers must hold an [`EnvLock`](crate::env_lock::EnvLock) to serialise
     /// mutations of the process environment.
-    pub fn remove(name: &'static str) -> Self {
-        let prev = std::env::var_os(name);
+    #[must_use]
+    pub fn remove(name: impl Into<Cow<'static, str>>) -> Self {
+        let name = name.into();
+        let prev = std::env::var_os(&*name);
         // SAFETY: `EnvLock` serialises mutations of the process environment.
-        unsafe { std::env::remove_var(name) };
+        unsafe { std::env::remove_var(&*name) };
         Self { name, prev }
     }
 }
@@ -59,9 +63,9 @@ impl Drop for EnvVarGuard {
         // restored.
         unsafe {
             if let Some(ref v) = self.prev {
-                std::env::set_var(self.name, v);
+                std::env::set_var(&*self.name, v);
             } else {
-                std::env::remove_var(self.name);
+                std::env::remove_var(&*self.name);
             }
         }
     }

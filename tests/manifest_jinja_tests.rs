@@ -5,7 +5,7 @@ use netsuke::{
     ast::Recipe,
     manifest::{self, ManifestError},
 };
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use test_support::{env_lock::EnvLock, env_var_guard::EnvVarGuard};
 
 // Domain types for the most frequently used string patterns
@@ -51,6 +51,11 @@ const ENV_MISSING_YAML: &str =
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
+}
+
+#[fixture]
+fn env_lock() -> EnvLock {
+    EnvLock::acquire()
 }
 
 fn assert_string_or_list_eq(actual: &netsuke::ast::StringOrList, expected: &str, field: FieldName) {
@@ -114,8 +119,8 @@ fn renders_global_vars() {
 }
 
 #[rstest]
-fn renders_env_function() {
-    let _env_lock = EnvLock::acquire();
+fn renders_env_function(env_lock: EnvLock) {
+    let _env_lock = env_lock;
     let _var_guard = EnvVarGuard::set(EnvVar::TestEnv.as_str(), "42");
     let yaml = manifest_yaml(ENV_YAML);
 
@@ -129,8 +134,8 @@ fn renders_env_function() {
 }
 
 #[rstest]
-fn renders_env_function_missing_var() {
-    let _env_lock = EnvLock::acquire();
+fn renders_env_function_missing_var(env_lock: EnvLock) {
+    let _env_lock = env_lock;
     let name = EnvVar::TestEnvMissing;
     let _var_guard = EnvVarGuard::remove(name.as_str());
     let yaml = manifest_yaml(ENV_MISSING_YAML);

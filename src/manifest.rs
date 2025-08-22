@@ -16,29 +16,9 @@ use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 use std::{fs, path::Path};
 use thiserror::Error;
-// Needles must be lower-case for case-insensitive matching.
-const YAML_HINTS: [(&str, &str); 5] = [
-    (
-        "did not find expected '-'",
-        "Start list items with '-' and ensure proper indentation.",
-    ),
-    (
-        "expected ':'",
-        "Ensure each key is followed by ':' separating key and value.",
-    ),
-    (
-        "mapping values are not allowed",
-        "Check for a stray ':' or add quotes around values where needed.",
-    ),
-    (
-        "found character that cannot start any token",
-        "Remove stray characters and ensure indentation uses spaces (no tabs).",
-    ),
-    (
-        "unknown escape character",
-        "Use valid YAML escape sequences or quote the string.",
-    ),
-];
+
+mod hints;
+use hints::YAML_HINTS;
 
 // Compute a narrow highlight span from a location.
 fn to_span(src: &str, loc: Location) -> SourceSpan {
@@ -76,8 +56,15 @@ pub struct YamlDiagnostic {
     message: String,
 }
 
-fn has_tab_indent(src: &str, _loc: Option<Location>) -> bool {
-    src.contains('\t')
+fn has_tab_indent(src: &str, loc: Option<Location>) -> bool {
+    let Some(loc) = loc else { return false };
+    let line_idx = loc.line().saturating_sub(1);
+    let line = src.lines().nth(line_idx).unwrap_or("");
+    // Inspect only leading whitespace on the error line to avoid false positives
+    // from tabs elsewhere in the file.
+    line.chars()
+        .take_while(|c| c.is_whitespace())
+        .any(|c| c == '\t')
 }
 
 fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
@@ -272,7 +259,9 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
         None => YamlMapping::new(),
         Some(YamlValue::Mapping(m)) => m,
         Some(other) => {
-            return Err(miette::miette!("target.vars must be a mapping, got: {other:?}"));
+            return Err(miette::miette!(
+                "target.vars must be a mapping, got: {other:?}"
+            ));
         }
     };
     vars.insert(
@@ -400,25 +389,4 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde::de::Error as _;
-
-    #[test]
-    fn yaml_error_without_location_defaults_to_first_line() {
-        let err = YamlError::custom("boom");
-        let msg = map_yaml_error(err, "", "test").to_string();
-        assert!(msg.contains("line 1, column 1"), "message: {msg}");
-    }
-
-    #[test]
-    fn yaml_hint_needles_are_lowercase() {
-        for (needle, _) in YAML_HINTS {
-            assert_eq!(
-                needle,
-                needle.to_lowercase(),
-                "needle not lower-case: {needle}"
-            );
-        }
-    }
-}
+mod tests;
