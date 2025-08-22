@@ -25,7 +25,7 @@ pub enum FieldName {
 }
 
 impl EnvVar {
-    fn as_str(self) -> &'static str {
+    const fn as_str(self) -> &'static str {
         match self {
             Self::TestEnv => "NETSUKE_TEST_ENV",
             Self::TestEnvMissing => "NETSUKE_TEST_ENV_MISSING",
@@ -34,7 +34,7 @@ impl EnvVar {
 }
 
 impl FieldName {
-    fn as_str(self) -> &'static str {
+    const fn as_str(self) -> &'static str {
         match self {
             Self::Name => "name",
             Self::Sources => "sources",

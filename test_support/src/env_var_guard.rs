@@ -1,9 +1,10 @@
 //! Guard for temporarily modifying environment variables in tests.
 //!
 //! `std::env::set_var` and `remove_var` are `unsafe` in Rust 2024 because they
-//! mutate process-global state. Acquire an [`EnvLock`](crate::env_lock::EnvLock)
-//! before calling the provided constructors to serialise mutations across
-//! threads. The guard restores the previous value on drop.
+//! mutate process-global state. Callers **must hold** an
+//! [`EnvLock`](crate::env_lock::EnvLock) for the entire lifetime of any
+//! [`EnvVarGuard`] to serialise mutations across threads. The guard uses RAII to
+//! restore the previous value when it is dropped.
 //!
 //! # Examples
 //!
@@ -14,7 +15,7 @@
 //! let _lock = EnvLock::acquire();
 //! let _guard = EnvVarGuard::set("FOO", "bar");
 //! assert_eq!(std::env::var("FOO").unwrap(), "bar");
-//! // `_guard` is dropped here and restores the previous value.
+//! // The guard's `Drop` restores the prior state when it goes out of scope.
 //! ```
 use std::{borrow::Cow, ffi::OsString};
 
