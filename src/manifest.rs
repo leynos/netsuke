@@ -76,24 +76,8 @@ pub struct YamlDiagnostic {
     message: String,
 }
 
-fn has_tab_indent(src: &str, loc: Option<Location>) -> bool {
-    let Some(loc) = loc else { return false };
-    let idx = loc.index();
-    let bytes = src.as_bytes();
-    let line_start = bytes
-        .get(..idx)
-        .and_then(|b| b.iter().rposition(|b| *b == b'\n').map(|p| p + 1))
-        .unwrap_or(0);
-    let line_end = bytes
-        .get(idx..)
-        .and_then(|b| b.iter().position(|b| *b == b'\n').map(|p| idx + p))
-        .unwrap_or(bytes.len());
-    bytes
-        .get(line_start..line_end)
-        .unwrap_or(&[])
-        .iter()
-        .take_while(|b| **b == b' ' || **b == b'\t')
-        .any(|b| *b == b'\t')
+fn has_tab_indent(src: &str, _loc: Option<Location>) -> bool {
+    src.contains('\t')
 }
 
 fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
@@ -144,12 +128,13 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use netsuke::manifest::env_var;
-///
-/// std::env::set_var("EXAMPLE_KEY", "value");
-/// assert_eq!(env_var("EXAMPLE_KEY").unwrap(), "value");
-/// std::env::remove_var("EXAMPLE_KEY");
+/// ```rust,ignore
+/// // SAFETY: Process environment mutation is unsafe in Rust 2024. Examples and
+/// // tests serialise access with an environment lock and restore prior state to
+/// // avoid races and leaks.
+/// unsafe { std::env::set_var("FOO", "bar"); }
+/// assert_eq!(env("FOO").unwrap(), "bar");
+/// unsafe { std::env::remove_var("FOO"); }
 /// ```
 fn env_var(name: &str) -> std::result::Result<String, Error> {
     match std::env::var(name) {
@@ -424,8 +409,7 @@ mod tests {
     #[test]
     fn yaml_error_without_location_defaults_to_first_line() {
         let err = YamlError::custom("boom");
-        let report = Report::from(map_yaml_error(err, "", "test"));
-        let msg = report.to_string();
+        let msg = map_yaml_error(err, "", "test").to_string();
         assert!(msg.contains("line 1, column 1"), "message: {msg}");
     }
 

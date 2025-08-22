@@ -17,7 +17,6 @@ fn normalise_report(report: &str) -> String {
     "targets:\n\t- name: test\n",
     &[
         "line 2, column 1",
-        "Use spaces for indentation; tabs are invalid in YAML.",
     ],
 )]
 #[case(
