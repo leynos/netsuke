@@ -9,10 +9,10 @@
 //!
 //! ```rust,ignore
 //! use test_support::env_lock::EnvLock;
-//! use test_support::env_var_guard::VarGuard;
+//! use test_support::env_var_guard::EnvVarGuard;
 //!
 //! let _lock = EnvLock::acquire();
-//! let _guard = VarGuard::set_env("FOO", "bar");
+//! let _guard = EnvVarGuard::set("FOO", "bar");
 //! assert_eq!(std::env::var("FOO").unwrap(), "bar");
 //! // `_guard` is dropped here and restores the previous value.
 //! ```
@@ -20,19 +20,19 @@ use std::ffi::OsString;
 
 /// RAII guard that resets an environment variable to its previous value on drop.
 #[derive(Debug)]
-pub struct VarGuard {
+pub struct EnvVarGuard {
     name: &'static str,
     prev: Option<OsString>,
 }
 
-impl VarGuard {
+impl EnvVarGuard {
     /// Set `name` to `val`, returning a guard that restores the prior value.
     ///
     /// # Safety
     ///
     /// Mutating process-global state is `unsafe` in Rust 2024. Callers must hold
     /// an [`EnvLock`](crate::env_lock::EnvLock) to serialise mutations.
-    pub fn set_env(name: &'static str, val: &str) -> Self {
+    pub fn set(name: &'static str, val: &str) -> Self {
         let prev = std::env::var_os(name);
         // SAFETY: `EnvLock` serialises mutations of the process environment.
         unsafe { std::env::set_var(name, val) };
@@ -45,7 +45,7 @@ impl VarGuard {
     ///
     /// Callers must hold an [`EnvLock`](crate::env_lock::EnvLock) to serialise
     /// mutations of the process environment.
-    pub fn remove_env(name: &'static str) -> Self {
+    pub fn remove(name: &'static str) -> Self {
         let prev = std::env::var_os(name);
         // SAFETY: `EnvLock` serialises mutations of the process environment.
         unsafe { std::env::remove_var(name) };
@@ -53,7 +53,7 @@ impl VarGuard {
     }
 }
 
-impl Drop for VarGuard {
+impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         // SAFETY: `EnvLock` serialises mutations while the prior value is
         // restored.

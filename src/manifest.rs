@@ -171,7 +171,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
         for (k, v) in vars {
             let key = k
                 .as_str()
-                .ok_or_else(|| miette!("non-string key in 'vars' mapping: {k:?}"))?
+                .ok_or_else(|| miette::miette!("non-string key in 'vars' mapping: {k:?}"))?
                 .to_string();
             jinja.add_global(key, Value::from_serialize(v));
         }
@@ -272,7 +272,7 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
         None => YamlMapping::new(),
         Some(YamlValue::Mapping(m)) => m,
         Some(other) => {
-            return Err(miette!("target.vars must be a mapping, got: {other:?}"));
+            return Err(miette::miette!("target.vars must be a mapping, got: {other:?}"));
         }
     };
     vars.insert(
@@ -290,7 +290,7 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
 fn as_str<'a>(value: &'a YamlValue, field: &str) -> Result<&'a str> {
     value
         .as_str()
-        .ok_or_else(|| miette!("{field} must be a string expression"))
+        .ok_or_else(|| miette::miette!("{field} must be a string expression"))
 }
 
 fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {

@@ -6,7 +6,7 @@ use netsuke::{
     manifest::{self, ManifestError},
 };
 use rstest::rstest;
-use test_support::{env_lock::EnvLock, env_var_guard::VarGuard};
+use test_support::{env_lock::EnvLock, env_var_guard::EnvVarGuard};
 
 // Domain types for the most frequently used string patterns
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -116,7 +116,7 @@ fn renders_global_vars() {
 #[rstest]
 fn renders_env_function() {
     let _env_lock = EnvLock::acquire();
-    let _var_guard = VarGuard::set_env(EnvVar::TestEnv.as_str(), "42");
+    let _var_guard = EnvVarGuard::set(EnvVar::TestEnv.as_str(), "42");
     let yaml = manifest_yaml(ENV_YAML);
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -132,7 +132,7 @@ fn renders_env_function() {
 fn renders_env_function_missing_var() {
     let _env_lock = EnvLock::acquire();
     let name = EnvVar::TestEnvMissing;
-    let _var_guard = VarGuard::remove_env(name.as_str());
+    let _var_guard = EnvVarGuard::remove(name.as_str());
     let yaml = manifest_yaml(ENV_MISSING_YAML);
 
     let err = manifest::from_str(&yaml).expect_err("parse should fail");
