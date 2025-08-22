@@ -6,7 +6,7 @@ use netsuke::{
     manifest::{self, ManifestError},
 };
 use rstest::rstest;
-use test_support::env_lock::EnvLock;
+use test_support::{env_lock::EnvLock, env_var_guard::VarGuard};
 
 // Domain types for the most frequently used string patterns
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -48,52 +48,6 @@ impl FieldName {
 const ENV_YAML: &str = "targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n";
 const ENV_MISSING_YAML: &str =
     "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n";
-
-struct VarGuard {
-    name: &'static str,
-    prev: Option<std::ffi::OsString>,
-}
-
-impl VarGuard {
-    fn set(name: &'static str, val: &str) -> Self {
-        let prev = std::env::var_os(name);
-        // SAFETY: EnvLock ensures exclusive access to process environment during tests.
-        unsafe {
-            std::env::set_var(name, val);
-        }
-        Self { name, prev }
-    }
-
-    fn remove(name: &'static str) -> Self {
-        let prev = std::env::var_os(name);
-        // SAFETY: EnvLock ensures exclusive access to process environment during tests.
-        unsafe {
-            std::env::remove_var(name);
-        }
-        Self { name, prev }
-    }
-
-    fn set_env(env_var: EnvVar, val: &str) -> Self {
-        Self::set(env_var.as_str(), val)
-    }
-
-    fn remove_env(env_var: EnvVar) -> Self {
-        Self::remove(env_var.as_str())
-    }
-}
-
-impl Drop for VarGuard {
-    fn drop(&mut self) {
-        // SAFETY: See note in set/remove. We restore the prior value under the EnvLock.
-        unsafe {
-            if let Some(ref v) = self.prev {
-                std::env::set_var(self.name, v);
-            } else {
-                std::env::remove_var(self.name);
-            }
-        }
-    }
-}
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
@@ -162,7 +116,7 @@ fn renders_global_vars() {
 #[rstest]
 fn renders_env_function() {
     let _env_lock = EnvLock::acquire();
-    let _var_guard = VarGuard::set_env(EnvVar::TestEnv, "42");
+    let _var_guard = VarGuard::set_env(EnvVar::TestEnv.as_str(), "42");
     let yaml = manifest_yaml(ENV_YAML);
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -178,7 +132,7 @@ fn renders_env_function() {
 fn renders_env_function_missing_var() {
     let _env_lock = EnvLock::acquire();
     let name = EnvVar::TestEnvMissing;
-    let _var_guard = VarGuard::remove_env(name);
+    let _var_guard = VarGuard::remove_env(name.as_str());
     let yaml = manifest_yaml(ENV_MISSING_YAML);
 
     let err = manifest::from_str(&yaml).expect_err("parse should fail");
