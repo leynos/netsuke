@@ -18,6 +18,9 @@ pub mod path_guard;
 /// Re-export of [`PathGuard`] for crate-level ergonomics in tests.
 pub use path_guard::PathGuard;
 
+/// Re-export of [`env_var_guard::EnvVarGuard`] for ergonomics in tests.
+pub use env_var_guard::EnvVarGuard;
+
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};

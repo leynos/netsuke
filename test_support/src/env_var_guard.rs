@@ -9,8 +9,7 @@
 //! # Examples
 //!
 //! ```rust,ignore
-//! use test_support::env_lock::EnvLock;
-//! use test_support::env_var_guard::EnvVarGuard;
+//! use test_support::{env_lock::EnvLock, EnvVarGuard};
 //!
 //! let _lock = EnvLock::acquire();
 //! let _guard = EnvVarGuard::set("FOO", "bar");

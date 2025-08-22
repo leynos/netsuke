@@ -6,7 +6,7 @@ use netsuke::{
     manifest::{self, ManifestError},
 };
 use rstest::{fixture, rstest};
-use test_support::{env_lock::EnvLock, env_var_guard::EnvVarGuard};
+use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 // Domain types for the most frequently used string patterns
 #[derive(Debug, Copy, Clone, PartialEq)]
