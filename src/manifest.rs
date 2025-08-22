@@ -424,7 +424,7 @@ mod tests {
     #[test]
     fn yaml_error_without_location_defaults_to_first_line() {
         let err = YamlError::custom("boom");
-        let report = Report::new(map_yaml_error(err, "", "test"));
+        let report = Report::from(map_yaml_error(err, "", "test"));
         let msg = report.to_string();
         assert!(msg.contains("line 1, column 1"), "message: {msg}");
     }

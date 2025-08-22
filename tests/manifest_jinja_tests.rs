@@ -8,6 +8,10 @@ use netsuke::{
 use rstest::rstest;
 use test_support::env_lock::EnvLock;
 
+const ENV_YAML: &str = "targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n";
+const ENV_MISSING_YAML: &str =
+    "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n";
+
 struct VarGuard {
     name: &'static str,
     prev: Option<std::ffi::OsString>,
@@ -16,6 +20,7 @@ struct VarGuard {
 impl VarGuard {
     fn set(name: &'static str, val: &str) -> Self {
         let prev = std::env::var_os(name);
+        // SAFETY: EnvLock ensures exclusive access to process environment during tests.
         unsafe {
             std::env::set_var(name, val);
         }
@@ -24,6 +29,7 @@ impl VarGuard {
 
     fn remove(name: &'static str) -> Self {
         let prev = std::env::var_os(name);
+        // SAFETY: EnvLock ensures exclusive access to process environment during tests.
         unsafe {
             std::env::remove_var(name);
         }
@@ -33,6 +39,7 @@ impl VarGuard {
 
 impl Drop for VarGuard {
     fn drop(&mut self) {
+        // SAFETY: See note in set/remove. We restore the prior value under the EnvLock.
         unsafe {
             if let Some(ref v) = self.prev {
                 std::env::set_var(self.name, v);
@@ -108,8 +115,7 @@ fn renders_global_vars() {
 fn renders_env_function() {
     let _env_lock = EnvLock::acquire();
     let _var_guard = VarGuard::set("NETSUKE_TEST_ENV", "42");
-    let yaml =
-        manifest_yaml("targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n");
+    let yaml = manifest_yaml(ENV_YAML);
 
     let manifest = manifest::from_str(&yaml).expect("parse");
     let first = manifest.targets.first().expect("target");
@@ -125,9 +131,7 @@ fn renders_env_function_missing_var() {
     let _env_lock = EnvLock::acquire();
     let name = "NETSUKE_TEST_ENV_MISSING";
     let _var_guard = VarGuard::remove(name);
-    let yaml = manifest_yaml(
-        "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n",
-    );
+    let yaml = manifest_yaml(ENV_MISSING_YAML);
 
     let err = manifest::from_str(&yaml).expect_err("parse should fail");
     if let Some(me) = err.downcast_ref::<ManifestError>() {
@@ -135,8 +139,10 @@ fn renders_env_function_missing_var() {
             matches!(me, ManifestError::Parse { .. }),
             "expected ManifestError::Parse, got: {me:?}"
         );
-    } else if !err.chain().any(|e| e.to_string().contains(name)) {
-        panic!("unexpected error type: {err:?}");
+    } else if !err.chain().any(|e| {
+        format!("{e:?}").contains("UndefinedError") && e.to_string().contains(name)
+    }) {
+        panic!("unexpected error type or message: {err:?}");
     }
     let msg = format!("{err:?}");
     assert!(msg.contains(name), "unexpected message: {msg}");
