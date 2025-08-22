@@ -96,7 +96,11 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
     });
     let err_str = err.to_string();
     let hint = hint_for(&err_str, src, loc);
-    let message = format!("YAML parse error at line {line}, column {col}: {err_str}");
+    let mut message = format!("YAML parse error at line {line}, column {col}: {err_str}");
+    if let Some(ref h) = hint {
+        message.push_str("\nhelp: ");
+        message.push_str(h);
+    }
 
     YamlDiagnostic {
         src: NamedSource::new(name, src.to_string()),
