@@ -10,7 +10,7 @@ use crate::{
     ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars},
     diagnostics::ResultExt,
 };
-use miette::{Diagnostic, NamedSource, Report, Result, SourceSpan, miette};
+use miette::{Diagnostic, NamedSource, Report, Result, SourceSpan};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, context, value::Value};
 use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
