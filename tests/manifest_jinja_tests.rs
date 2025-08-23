@@ -1,31 +1,84 @@
 //! Tests for the YAML-first manifest pipeline: parse YAML, expand foreach/when,
 //! then render Jinja only in string values.
 
-use netsuke::{ast::Recipe, manifest};
-use rstest::rstest;
+use netsuke::{
+    ast::Recipe,
+    manifest::{self, ManifestError},
+};
+use rstest::{fixture, rstest};
+use test_support::{EnvVarGuard, env_lock::EnvLock};
+
+// Domain types for the most frequently used string patterns
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum EnvVar {
+    TestEnv,
+    TestEnvMissing,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum FieldName {
+    Name,
+    Sources,
+    Deps,
+    OrderOnlyDeps,
+    Rule,
+}
+
+impl EnvVar {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::TestEnv => "NETSUKE_TEST_ENV",
+            Self::TestEnvMissing => "NETSUKE_TEST_ENV_MISSING",
+        }
+    }
+}
+
+impl FieldName {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Name => "name",
+            Self::Sources => "sources",
+            Self::Deps => "deps",
+            Self::OrderOnlyDeps => "order_only_deps",
+            Self::Rule => "rule",
+        }
+    }
+}
+
+const ENV_YAML: &str = "targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n";
+const ENV_MISSING_YAML: &str =
+    "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n";
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
 }
 
-fn assert_string_or_list_eq(actual: &netsuke::ast::StringOrList, expected: &str, field: &str) {
+#[fixture]
+fn env_lock() -> EnvLock {
+    EnvLock::acquire()
+}
+
+fn assert_string_or_list_eq(actual: &netsuke::ast::StringOrList, expected: &str, field: FieldName) {
     match actual {
         netsuke::ast::StringOrList::String(s) => assert_eq!(s, expected),
         netsuke::ast::StringOrList::List(list) if list.len() == 1 => {
             assert_eq!(list.first().expect("list"), expected);
         }
-        other => panic!("Expected String or single-item List for {field}, got: {other:?}"),
+        other => panic!(
+            "Expected String or single-item List for {}, got: {other:?}",
+            field.as_str(),
+        ),
     }
 }
 
 fn assert_string_or_list_eq_list(
     actual: &netsuke::ast::StringOrList,
     expected: &[String],
-    field: &str,
+    field: FieldName,
 ) {
     match actual {
         netsuke::ast::StringOrList::List(list) => assert_eq!(list, expected),
-        other => panic!("Expected List for {field}, got: {other:?}"),
+        other => panic!("Expected List for {}, got: {other:?}", field.as_str()),
     }
 }
 
@@ -63,6 +116,43 @@ fn renders_global_vars() {
     } else {
         panic!("Expected command recipe, got: {:?}", first.recipe);
     }
+}
+
+#[rstest]
+fn renders_env_function(env_lock: EnvLock) {
+    let _env_lock = env_lock;
+    let _var_guard = EnvVarGuard::set(EnvVar::TestEnv.as_str(), "42");
+    let yaml = manifest_yaml(ENV_YAML);
+
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let first = manifest.targets.first().expect("target");
+    if let Recipe::Command { command } = &first.recipe {
+        assert_eq!(command, "echo 42");
+    } else {
+        panic!("Expected command recipe, got: {:?}", first.recipe);
+    }
+}
+
+#[rstest]
+fn renders_env_function_missing_var(env_lock: EnvLock) {
+    let _env_lock = env_lock;
+    let name = EnvVar::TestEnvMissing;
+    let _var_guard = EnvVarGuard::remove(name.as_str());
+    let yaml = manifest_yaml(ENV_MISSING_YAML);
+
+    let err = manifest::from_str(&yaml).expect_err("parse should fail");
+    if let Some(me) = err.downcast_ref::<ManifestError>() {
+        assert!(
+            matches!(me, ManifestError::Parse { .. }),
+            "expected ManifestError::Parse, got: {me:?}"
+        );
+    } else if !err.chain().any(|e| {
+        format!("{e:?}").contains("UndefinedError") && e.to_string().contains(name.as_str())
+    }) {
+        panic!("unexpected error type or message: {err:?}");
+    }
+    let msg = format!("{err:?}");
+    assert!(msg.contains(name.as_str()), "unexpected message: {msg}");
 }
 
 #[rstest]
@@ -214,7 +304,7 @@ fn expands_single_item_foreach_targets() {
         "exactly one target should be generated for single-item foreach list"
     );
     let first = manifest.targets.first().expect("target");
-    assert_string_or_list_eq(&first.name, "only", "name");
+    assert_string_or_list_eq(&first.name, "only", FieldName::Name);
     if let Recipe::Command { command } = &first.recipe {
         assert_eq!(command, "echo 'only'");
     } else {
@@ -288,13 +378,17 @@ fn renders_target_fields_command() {
 
     let manifest = manifest::from_str(&yaml).expect("parse");
     let target = manifest.targets.first().expect("target");
-    assert_string_or_list_eq(&target.name, "base1", "name");
-    assert_string_or_list_eq_list(&target.sources, &["base1.src".to_string()], "sources");
-    assert_string_or_list_eq_list(&target.deps, &["base1.dep".to_string()], "deps");
+    assert_string_or_list_eq(&target.name, "base1", FieldName::Name);
+    assert_string_or_list_eq_list(
+        &target.sources,
+        &["base1.src".to_string()],
+        FieldName::Sources,
+    );
+    assert_string_or_list_eq_list(&target.deps, &["base1.dep".to_string()], FieldName::Deps);
     assert_string_or_list_eq_list(
         &target.order_only_deps,
         &["base1.ord".to_string()],
-        "order_only_deps",
+        FieldName::OrderOnlyDeps,
     );
     if let Recipe::Command { command } = &target.recipe {
         assert_eq!(command, "echo 'base1'");
@@ -326,7 +420,7 @@ fn renders_target_fields_recipe_types(
     match (recipe_type, &target.recipe) {
         ("script", Recipe::Script { script }) => assert_eq!(script, expected_value),
         ("rule", Recipe::Rule { rule }) => {
-            assert_string_or_list_eq(rule, expected_value, "rule");
+            assert_string_or_list_eq(rule, expected_value, FieldName::Rule);
         }
         ("script", recipe) => panic!("Expected script recipe, got: {recipe:?}"),
         ("rule", recipe) => panic!("Expected rule recipe, got: {recipe:?}"),

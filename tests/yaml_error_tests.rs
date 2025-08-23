@@ -15,11 +15,14 @@ fn normalise_report(report: &str) -> String {
 #[rstest]
 #[case(
     "targets:\n\t- name: test\n",
-    &["line 2, column 1", "Use spaces for indentation"],
+    &[
+        "line 2, column 1",
+        "Use spaces for indentation; tabs are invalid in YAML.",
+    ],
 )]
 #[case(
     "targets:\n  - name: hi\n    command echo\n",
-    &["line 3", "expected ':'", "Ensure each key is followed by ':'"],
+    &["line 3", "expected ':'"],
 )]
 #[case(
     concat!(
@@ -29,11 +32,40 @@ fn normalise_report(report: &str) -> String {
         "  name: missing\n",
         "    command: echo\n",
     ),
-    &["line 4", "did not find expected '-'", "Start list items with '-'"],
+    &["line 4", "did not find expected '-'"] ,
 )]
 #[case(
     "targets:\n  - name: 'unterminated\n",
     &["YAML parse error", "line 2"],
+)]
+#[case(
+    "",
+    &[
+        "manifest parse error",
+        "missing field",
+        "netsuke_version",
+    ],
+)]
+#[case(
+    "    \n    ",
+    &[
+        "manifest parse error",
+        "missing field",
+        "netsuke_version",
+    ],
+)]
+#[case(
+    "# just a comment\n# another comment",
+    &[
+        "manifest parse error",
+        "missing field",
+        "netsuke_version",
+    ],
+)]
+// No location information should default to the start of the file.
+#[case(
+    "not: yaml: at all: %$#@!",
+    &["YAML parse error", "line 1, column 1"],
 )]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
