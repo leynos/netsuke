@@ -10,6 +10,7 @@ jobs:
   build-test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         rust: [stable, '1.89.0']
     permissions:
@@ -17,13 +18,13 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
-      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
         with:
           toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
       - name: Show Ninja version
         run: ninja --version
       - name: Format
