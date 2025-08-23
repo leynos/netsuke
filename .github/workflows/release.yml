@@ -85,6 +85,8 @@ PY
           echo "Release tag $tag matches Cargo.toml version."
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
+      - name: Install MSRV toolchain
+        run: rustup toolchain install 1.89.0
       - name: Cache cross binary
         uses: actions/cache@v4
         with:
@@ -106,6 +108,8 @@ PY
             ${{ runner.os }}-cargo-
       - name: Add release target
         run: rustup target add ${{ matrix.target }}
+      - name: Verify MSRV build
+        run: cross +1.89.0 build --release --target ${{ matrix.target }}
       - name: Build release binary
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
