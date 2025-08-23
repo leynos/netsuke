@@ -1,0 +1,5 @@
+netsuke_version: 1.0.0
+targets:
+  - foreach: glob('tests/data/glob_files/*.txt')
+    name: "{{ item | replace('tests/data/glob_files/', '') | replace('.txt', '.out') }}"
+    command: "cat {{ item }}"

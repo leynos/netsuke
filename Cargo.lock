@@ -924,6 +924,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "cucumber",
+ "glob",
  "insta",
  "itertools 0.12.1",
  "itoa",

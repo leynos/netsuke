@@ -15,6 +15,7 @@ miette = { version = "7.6.0", features = ["fancy"] }
 sha2 = "0.10"
 itoa = "1"
 itertools = "0.12"
+glob = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 serde_json = "1"

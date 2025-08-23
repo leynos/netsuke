@@ -104,8 +104,8 @@ configurations with variables, control flow, and custom functions.
   - [x] Implement the essential custom Jinja function env(var_name) to read
     system environment variables.
 
-  - [ ] Implement the critical glob(pattern) custom function to perform file
-    path globbing, with results sorted lexicographically.
+  - [x] Implement the critical glob(pattern) custom function to perform file
+     path globbing, with results sorted lexicographically.
 
   - [ ] Support user-defined Jinja macros declared in a top-level macros list,
     registering them with the environment before rendering.
