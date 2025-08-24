@@ -150,13 +150,19 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 /// # Errors
 ///
 /// Returns an error if the glob pattern is invalid or a directory cannot be
-/// read.
+/// read. Patterns are evaluated in a case-sensitive manner, do not cross path
+/// separators, and match dotfiles. Results are returned sorted for
+/// determinism.
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
+    // Enforce shell-like semantics:
+    // - patterns are case-sensitive,
+    // - wildcards do not cross path separators,
+    // - dotfiles are matched by default.
     let opts = MatchOptions {
         case_sensitive: true,
-        require_literal_separator: false,
+        require_literal_separator: true,
         require_literal_leading_dot: false,
     };
     let entries = glob_with(pattern, opts).map_err(|e| {

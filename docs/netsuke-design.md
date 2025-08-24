@@ -735,12 +735,14 @@ providing a secure bridge to the underlying system.
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: A function that performs
   file path globbing. This is a critical feature for any modern build tool,
   allowing users to easily specify sets of source files (e.g., `src/**/*.c`).
-  The results are returned sorted lexicographically and symlinks are followed
-  to keep builds deterministic. The implementation relies on the `glob` crate,
-  which follows symlinks by default. Invalid patterns or filesystem errors
-  surface as `InvalidOperation` to match MiniJinja's error semantics. This
-  function bridges a key feature gap, as Ninja itself does not support
-  globbing.[^3]
+  Patterns are case-sensitive, match dotfiles, and do not cross path separators
+  unless the pattern explicitly includes them. Matches are returned sorted
+  lexicographically and symlinks are followed to keep builds deterministic.
+  Empty results are represented as an empty list. The implementation relies on
+  the `glob` crate, which follows symlinks by default. Invalid patterns or
+  filesystem errors surface as `InvalidOperation` to match MiniJinja's error
+  semantics. This function bridges a key feature gap, as Ninja itself does not
+  support globbing.[^3]
 
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this

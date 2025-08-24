@@ -44,11 +44,81 @@ fn glob_invalid_pattern_errors() {
     let yaml =
         manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
+    let msg = format!("{err:?}").to_lowercase();
+    assert!(msg.contains("invalid glob pattern"), "{msg}");
+}
+
+#[rstest]
+fn glob_returns_empty_when_no_matches() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let pattern = format!("{}/*.nomatch", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: none\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
     assert!(
-        err.chain().any(|e| e
-            .to_string()
-            .to_lowercase()
-            .contains("invalid glob pattern")),
-        "unexpected error: {err}"
+        manifest.targets.is_empty(),
+        "glob with no matches should yield no targets"
     );
+}
+
+#[rstest]
+fn glob_does_not_cross_separator() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::create_dir(dir.path().join("sub")).expect("create subdir");
+    std::fs::write(dir.path().join("sub").join("x.txt"), "x").expect("write file");
+    let pattern = format!("{}/*.txt", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: bad\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    assert!(manifest.targets.is_empty(), "wildcards must not cross '/'");
+}
+
+#[rstest]
+fn glob_matches_dotfiles_with_wildcards() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join(".hidden.txt"), "h").expect("write file");
+    let pattern = format!("{}/*.txt", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: ok\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    assert_eq!(manifest.targets.len(), 1, "dotfiles should match");
+}
+
+#[rstest]
+fn glob_is_case_sensitive() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join("UPPER.TXT"), "x").expect("write file");
+    let pattern = format!("{}/*.txt", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: fail\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    assert!(manifest.targets.is_empty(), "glob should be case-sensitive");
 }
