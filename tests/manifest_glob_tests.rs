@@ -1,11 +1,25 @@
 //! Tests for file globbing via the `glob()` Jinja helper.
 
-use netsuke::{ast::StringOrList, manifest};
+use netsuke::{
+    ast::{NetsukeManifest, StringOrList},
+    manifest,
+};
 use rstest::rstest;
 use std::fs;
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
+}
+
+fn target_names(manifest: &NetsukeManifest) -> Vec<String> {
+    manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            StringOrList::String(s) => s.clone(),
+            other => panic!("expected String, got {other:?}"),
+        })
+        .collect()
 }
 
 #[rstest]
@@ -28,15 +42,7 @@ fn glob_expands_sorted_matches() {
         dir = dir_str
     ));
     let manifest = manifest::from_str(&yaml).expect("parse");
-    let names: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.name {
-            StringOrList::String(s) => s.clone(),
-            other => panic!("expected String, got {other:?}"),
-        })
-        .collect();
-    assert_eq!(names, vec!["a.out", "b.out"]);
+    assert_eq!(target_names(&manifest), vec!["a.out", "b.out"]);
 }
 
 #[rstest]
@@ -71,8 +77,8 @@ fn glob_returns_empty_when_no_matches() {
 #[rstest]
 fn glob_does_not_cross_separator() {
     let dir = tempfile::tempdir().expect("temp dir");
-    std::fs::create_dir(dir.path().join("sub")).expect("create subdir");
-    std::fs::write(dir.path().join("sub").join("x.txt"), "x").expect("write file");
+    fs::create_dir(dir.path().join("sub")).expect("create subdir");
+    fs::write(dir.path().join("sub").join("x.txt"), "x").expect("write file");
     let pattern = format!("{}/*.txt", dir.path().display());
     let yaml = manifest_yaml(&format!(
         concat!(
@@ -90,7 +96,7 @@ fn glob_does_not_cross_separator() {
 #[rstest]
 fn glob_matches_dotfiles_with_wildcards() {
     let dir = tempfile::tempdir().expect("temp dir");
-    std::fs::write(dir.path().join(".hidden.txt"), "h").expect("write file");
+    fs::write(dir.path().join(".hidden.txt"), "h").expect("write file");
     let pattern = format!("{}/*.txt", dir.path().display());
     let yaml = manifest_yaml(&format!(
         concat!(
@@ -108,7 +114,7 @@ fn glob_matches_dotfiles_with_wildcards() {
 #[rstest]
 fn glob_is_case_sensitive() {
     let dir = tempfile::tempdir().expect("temp dir");
-    std::fs::write(dir.path().join("UPPER.TXT"), "x").expect("write file");
+    fs::write(dir.path().join("UPPER.TXT"), "x").expect("write file");
     let pattern = format!("{}/*.txt", dir.path().display());
     let yaml = manifest_yaml(&format!(
         concat!(
@@ -128,25 +134,27 @@ fn glob_accepts_windows_path_separators() {
     let dir = tempfile::tempdir().expect("temp dir");
     fs::write(dir.path().join("a.txt"), "a").expect("write a");
     fs::write(dir.path().join("b.txt"), "b").expect("write b");
-    let dir_win = dir.path().display().to_string().replace('/', "\\\\");
+    let dir_fwd = dir.path().display().to_string();
+    let dir_win = dir_fwd.replace('/', "\\\\");
     let pattern = format!("{dir_win}\\\\*.txt");
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
             "  - foreach: glob('{pattern}')\n",
-            "    name: \"{{{{ item | replace('{dir}/', '') | replace('.txt', '.out') }}}}\"\n",
+            "    name: \"{{{{ item }}}}\"\n",
             "    command: echo hi\n",
         ),
         pattern = pattern,
-        dir = dir.path().display()
     ));
     let manifest = manifest::from_str(&yaml).expect("parse");
-    let names: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.name {
-            StringOrList::String(s) => s.clone(),
-            other => panic!("expected String, got {other:?}"),
+    let prefix_fwd = format!("{dir_fwd}/");
+    let prefix_back = format!("{dir_win}\\");
+    let names: Vec<_> = target_names(&manifest)
+        .into_iter()
+        .map(|n| {
+            n.replace(&prefix_fwd, "")
+                .replace(&prefix_back, "")
+                .replace(".txt", ".out")
         })
         .collect();
     assert_eq!(names, vec!["a.out", "b.out"]);
@@ -157,25 +165,24 @@ fn glob_filters_directories() {
     let dir = tempfile::tempdir().expect("temp dir");
     fs::write(dir.path().join("a.txt"), "a").expect("write a");
     fs::create_dir(dir.path().join("sub")).expect("create subdir");
-    let pattern = format!("{}/*", dir.path().display());
+    let dir_fwd = dir.path().display().to_string();
+    let dir_win = dir_fwd.replace('/', "\\\\");
+    let pattern = format!("{dir_fwd}/*");
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",
             "  - foreach: glob('{pattern}')\n",
-            "    name: \"{{{{ item | replace('{dir}/', '') }}}}\"\n",
+            "    name: \"{{{{ item }}}}\"\n",
             "    command: echo hi\n",
         ),
         pattern = pattern,
-        dir = dir.path().display()
     ));
     let manifest = manifest::from_str(&yaml).expect("parse");
-    let names: Vec<_> = manifest
-        .targets
-        .iter()
-        .map(|t| match &t.name {
-            StringOrList::String(s) => s.clone(),
-            other => panic!("expected String, got {other:?}"),
-        })
+    let prefix_fwd = format!("{dir_fwd}/");
+    let prefix_back = format!("{dir_win}\\");
+    let names: Vec<_> = target_names(&manifest)
+        .into_iter()
+        .map(|n| n.replace(&prefix_fwd, "").replace(&prefix_back, ""))
         .collect();
     assert_eq!(names, vec!["a.txt"]);
 }
