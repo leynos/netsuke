@@ -122,3 +122,60 @@ fn glob_is_case_sensitive() {
     let manifest = manifest::from_str(&yaml).expect("parse");
     assert!(manifest.targets.is_empty(), "glob should be case-sensitive");
 }
+
+#[rstest]
+fn glob_accepts_windows_path_separators() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    fs::write(dir.path().join("a.txt"), "a").expect("write a");
+    fs::write(dir.path().join("b.txt"), "b").expect("write b");
+    let dir_win = dir.path().display().to_string().replace('/', "\\\\");
+    let pattern = format!("{dir_win}\\\\*.txt");
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: \"{{{{ item | replace('{dir}/', '') | replace('.txt', '.out') }}}}\"\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+        dir = dir.path().display()
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let names: Vec<_> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            StringOrList::String(s) => s.clone(),
+            other => panic!("expected String, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(names, vec!["a.out", "b.out"]);
+}
+
+#[rstest]
+fn glob_filters_directories() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    fs::write(dir.path().join("a.txt"), "a").expect("write a");
+    fs::create_dir(dir.path().join("sub")).expect("create subdir");
+    let pattern = format!("{}/*", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: \"{{{{ item | replace('{dir}/', '') }}}}\"\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+        dir = dir.path().display()
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let names: Vec<_> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            StringOrList::String(s) => s.clone(),
+            other => panic!("expected String, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(names, vec!["a.txt"]);
+}

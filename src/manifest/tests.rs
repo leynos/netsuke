@@ -18,3 +18,9 @@ fn yaml_hint_needles_are_lowercase() {
         );
     }
 }
+
+#[test]
+fn glob_paths_invalid_pattern_sets_syntax_error() {
+    let err = super::glob_paths("[").expect_err("expected pattern error");
+    assert_eq!(err.kind(), minijinja::ErrorKind::SyntaxError);
+}

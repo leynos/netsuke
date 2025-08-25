@@ -736,11 +736,14 @@ providing a secure bridge to the underlying system.
   file path globbing. This is a critical feature for any modern build tool,
   allowing users to easily specify sets of source files (e.g., `src/**/*.c`).
   Patterns are case-sensitive, match dotfiles, and do not cross path separators
-  unless the pattern explicitly includes them. Matches are returned sorted
-  lexicographically and symlinks are followed to keep builds deterministic.
-  Empty results are represented as an empty list. The implementation relies on
-  the `glob` crate, which follows symlinks by default. Invalid patterns or
-  filesystem errors surface as `InvalidOperation` to match MiniJinja's error
+  unless the pattern explicitly includes them. Callers may use either `/` or
+  `\` in patterns; these are normalised to the host platform before matching so
+  manifests behave consistently across operating systems. Results contain only
+  files (directories are ignored), are sorted lexicographically, and have path
+  separators normalised to `/` to keep builds deterministic. Empty results are
+  represented as an empty list. The implementation relies on the `glob` crate,
+  which follows symlinks by default. Invalid patterns surface as `SyntaxError`,
+  while filesystem errors use `InvalidOperation`, matching MiniJinja's error
   semantics. This function bridges a key feature gap, as Ninja itself does not
   support globbing.[^3]
 

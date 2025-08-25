@@ -165,16 +165,31 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_separator: true,
         require_literal_leading_dot: false,
     };
-    let entries = glob_with(pattern, opts).map_err(|e| {
+
+    // Normalise path separators so that callers may use either `/` or `\`
+    // regardless of platform. The `glob` crate expects the native separator.
+    let native_sep = std::path::MAIN_SEPARATOR.to_string();
+    let normalized = pattern.replace('\\', "/").replace('/', &native_sep);
+
+    let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
-            ErrorKind::InvalidOperation,
+            ErrorKind::SyntaxError,
             format!("invalid glob pattern '{pattern}': {e}"),
         )
     })?;
     let mut paths = Vec::new();
     for entry in entries {
         match entry {
-            Ok(path) => paths.push(path.to_string_lossy().into_owned()),
+            Ok(path) => match path.metadata() {
+                Ok(meta) if meta.is_file() => paths.push(path.to_string_lossy().replace('\\', "/")),
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidOperation,
+                        format!("glob failed for '{pattern}': {e}"),
+                    ));
+                }
+            },
             Err(e) => {
                 return Err(Error::new(
                     ErrorKind::InvalidOperation,
