@@ -154,6 +154,26 @@ fn glob_invalid_pattern_errors() {
 }
 
 #[rstest]
+fn glob_returns_empty_when_no_matches() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let pattern = format!("{}/*.nomatch", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: test\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse manifest");
+    assert!(
+        manifest.targets.is_empty(),
+        "expected no files to match the glob pattern",
+    );
+}
+
+#[rstest]
 fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) {
     fs::write(temp_dir.path().join("a.txt"), "a").expect("write a");
     fs::write(temp_dir.path().join("b.txt"), "b").expect("write b");
