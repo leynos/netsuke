@@ -141,6 +141,74 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
     }
 }
 
+/// Expand a glob pattern into a sorted list of matching paths.
+///
+/// Results are returned lexicographically to keep builds deterministic.
+/// Invalid patterns or filesystem errors surface as Jinja evaluation errors so
+/// manifests fail fast when input is incorrect.
+///
+/// # Errors
+///
+/// Returns an error if the glob pattern is invalid or a directory cannot be
+/// read. Patterns are case-sensitive, do not cross path separators, and match
+/// dotfiles. Results are yielded in lexicographic order by the iterator, so
+/// Netsuke returns them without further sorting.
+fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
+    use glob::{MatchOptions, glob_with};
+
+    // Enforce shell-like semantics:
+    // - patterns are case-sensitive,
+    // - wildcards do not cross path separators,
+    // - dotfiles are matched by default.
+    let opts = MatchOptions {
+        case_sensitive: true,
+        require_literal_separator: true,
+        require_literal_leading_dot: false,
+    };
+
+    // Normalise path separators so that callers may use either `/` or `\`
+    // regardless of platform. The `glob` crate expects the native separator.
+    let native_sep = std::path::MAIN_SEPARATOR.to_string();
+    let normalized = pattern.replace('\\', "/").replace('/', &native_sep);
+
+    let entries = glob_with(&normalized, opts).map_err(|e| {
+        Error::new(
+            ErrorKind::SyntaxError,
+            format!("invalid glob pattern '{pattern}': {e}"),
+        )
+    })?;
+    let mut paths = Vec::new();
+    for entry in entries {
+        match entry {
+            Ok(path) => match path.metadata() {
+                Ok(meta) if meta.is_file() => {
+                    let s = path.to_str().ok_or_else(|| {
+                        Error::new(
+                            ErrorKind::InvalidOperation,
+                            format!("glob matched a non-UTF-8 path: {}", path.display()),
+                        )
+                    })?;
+                    paths.push(s.replace('\\', "/"));
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(Error::new(
+                        ErrorKind::InvalidOperation,
+                        format!("glob failed for '{pattern}': {e}"),
+                    ));
+                }
+            },
+            Err(e) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("glob failed for '{pattern}': {e}"),
+                ));
+            }
+        }
+    }
+    Ok(paths)
+}
+
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
@@ -155,8 +223,9 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
-    // Expose a strict environment variable accessor to templates.
+    // Expose custom helpers to templates.
     jinja.add_function("env", |name: String| env_var(&name));
+    jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
 
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {
