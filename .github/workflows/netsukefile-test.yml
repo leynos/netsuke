@@ -9,22 +9,36 @@ on:
 jobs:
   netsukefile:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, '1.89.0']
     permissions:
       contents: read
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
+        uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
-      - name: Cache Cargo
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
+          toolchain: ${{ matrix.rust }}
+      - name: Show rustc version
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+      - name: Cache Cargo
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4
+        with:
+          # Do not cache build outputs when running make clean
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.rust }}-
             ${{ runner.os }}-cargo-
       - name: Clean build artefacts
         run: make clean
