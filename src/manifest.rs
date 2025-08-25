@@ -150,9 +150,9 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 /// # Errors
 ///
 /// Returns an error if the glob pattern is invalid or a directory cannot be
-/// read. Patterns are evaluated in a case-sensitive manner, do not cross path
-/// separators, and match dotfiles. Results are returned sorted for
-/// determinism.
+/// read. Patterns are case-sensitive, do not cross path separators, and match
+/// dotfiles. Results are yielded in lexicographic order by the iterator, so
+/// Netsuke returns them without further sorting.
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
@@ -181,7 +181,15 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     for entry in entries {
         match entry {
             Ok(path) => match path.metadata() {
-                Ok(meta) if meta.is_file() => paths.push(path.to_string_lossy().replace('\\', "/")),
+                Ok(meta) if meta.is_file() => {
+                    let s = path.to_str().ok_or_else(|| {
+                        Error::new(
+                            ErrorKind::InvalidOperation,
+                            format!("glob matched a non-UTF-8 path: {}", path.display()),
+                        )
+                    })?;
+                    paths.push(s.replace('\\', "/"));
+                }
                 Ok(_) => {}
                 Err(e) => {
                     return Err(Error::new(
@@ -198,7 +206,6 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
             }
         }
     }
-    paths.sort();
     Ok(paths)
 }
 
