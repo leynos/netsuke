@@ -216,30 +216,8 @@ fn normalize_separators(pattern: &str) -> String {
         let mut it = pattern.chars().peekable();
         while let Some(c) = it.next() {
             if c == '\\' {
-                if let Some(&next) = it.peek() {
-                    if matches!(next, '[' | ']' | '{' | '}') {
-                        out.push('\\');
-                        continue;
-                    }
-                    if matches!(next, '*' | '?') {
-                        let mut lookahead = it.clone();
-                        lookahead.next();
-                        if lookahead.peek().is_none() {
-                            out.push('\\');
-                        } else {
-                            out.push(native);
-                        }
-                        continue;
-                    }
-                }
-                if c == '/' || c == '\\' {
-                    out.push(native);
-                } else {
-                    out.push(c);
-                }
-                continue;
-            }
-            if c == '/' || c == '\\' {
+                handle_backslash_escape(&mut out, &mut it, native);
+            } else if c == '/' || c == '\\' {
                 out.push(native);
             } else {
                 out.push(c);
@@ -253,6 +231,126 @@ fn normalize_separators(pattern: &str) -> String {
     }
 }
 
+/// Brace depth delta for a character.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum BraceDelta { Open, Close }
+
+/// Validate that braces in a glob pattern are balanced.
+///
+/// Escaped braces are ignored when tracking depth, and braces inside character
+/// classes `[]` are treated as literals. Returns a syntax error when opening
+/// and closing braces do not match.
+fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
+    let mut depth = 0usize;
+    let mut escaped = false;
+    let mut in_class = false; // inside [...]
+    for ch in pattern.chars() {
+        let (new_escaped, new_in_class, delta) =
+            process_brace_char(ch, escaped, in_class);
+        escaped = new_escaped;
+        in_class = new_in_class;
+        if in_class { continue; }
+        let Some(delta) = delta else { continue };
+        depth = apply_brace_delta(depth, delta, pattern)?;
+    }
+    validate_final_brace_depth(depth, pattern)
+}
+
+/// Apply a brace depth change, returning the new depth or a syntax error.
+fn apply_brace_delta(
+    current_depth: usize,
+    delta: BraceDelta,
+    pattern: &str,
+) -> std::result::Result<usize, Error> {
+    match delta {
+        BraceDelta::Open => Ok(current_depth + 1),
+        BraceDelta::Close => {
+            if current_depth == 0 {
+                Err(Error::new(
+                    ErrorKind::SyntaxError,
+                    format!("invalid glob pattern '{pattern}': unmatched '}}'"),
+                ))
+            } else {
+                Ok(current_depth - 1)
+            }
+        }
+    }
+}
+
+/// Ensure the final brace depth is zero.
+fn validate_final_brace_depth(
+    depth: usize,
+    pattern: &str,
+) -> std::result::Result<(), Error> {
+    if depth != 0 {
+        return Err(Error::new(
+            ErrorKind::SyntaxError,
+            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
+        ));
+    }
+    Ok(())
+}
+
+/// Process a single character for brace and character-class state.
+///
+/// Returns the updated escape flag, character-class state and an optional
+/// brace depth delta.
+fn process_brace_char(
+    ch: char,
+    escaped: bool,
+    in_class: bool,
+) -> (bool, bool, Option<BraceDelta>) {
+    if escaped { return (false, in_class, None); }
+    if ch == '\\' { return (true, in_class, None); }
+    if in_class {
+        if ch == ']' { return (false, false, None); }
+        return (false, true, None);
+    }
+    match ch {
+        '[' => (false, true, None),
+        '{' => (false, false, Some(BraceDelta::Open)),
+        '}' => (false, false, Some(BraceDelta::Close)),
+        _ => (false, in_class, None),
+    }
+}
+
+// Preserve nuanced escape handling for normalize_separators on Unix.
+#[cfg(unix)]
+fn handle_backslash_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) {
+    if let Some(&next) = it.peek() {
+        // Keep escapes for glob metacharacters so downstream globbing sees
+        // literals, but normalise path separators.
+        if matches!(next, '[' | ']' | '{' | '}') {
+            out.push('\\');
+            return;
+        }
+        if matches!(next, '*' | '?') {
+            handle_wildcard_escape(out, it, native);
+            return;
+        }
+    }
+    out.push(native);
+}
+
+#[cfg(unix)]
+fn handle_wildcard_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) {
+    let mut lookahead = it.clone();
+    lookahead.next();
+    if lookahead.peek().is_none() {
+        // Preserve a trailing backslash so the shell-like intent is clear.
+        out.push('\\');
+    } else {
+        out.push(native);
+    }
+}
 /// Brace depth delta for a character.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum BraceDelta {
@@ -385,6 +483,40 @@ fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, O
         '{' => (false, false, Some(BraceDelta::Open)),
         '}' => (false, false, Some(BraceDelta::Close)),
         _ => (false, in_class, None),
+||||||| parent of a046980 (Refactor normalize_separators escape logic)
+=======
+#[cfg(unix)]
+fn handle_backslash_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) {
+    if let Some(&next) = it.peek() {
+        if matches!(next, '[' | ']' | '{' | '}') {
+            out.push('\\');
+            return;
+        }
+        if matches!(next, '*' | '?') {
+            handle_wildcard_escape(out, it, native);
+            return;
+        }
+    }
+    out.push(native);
+}
+
+#[cfg(unix)]
+fn handle_wildcard_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) {
+    let mut lookahead = it.clone();
+    lookahead.next();
+    if lookahead.peek().is_none() {
+        out.push('\\');
+    } else {
+        out.push(native);
+>>>>>>> a046980 (Refactor normalize_separators escape logic)
     }
 }
 
