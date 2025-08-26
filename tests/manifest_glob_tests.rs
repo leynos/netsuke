@@ -144,10 +144,11 @@ fn test_glob_behavior(
     }
 }
 
-#[rstest]
-fn glob_invalid_pattern_errors() {
-    let yaml =
-        manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
+#[rstest(pattern, case("["), case("{"))]
+fn glob_invalid_pattern_errors(pattern: &str) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n"
+    ));
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
     let msg = display_error_chain(err.as_ref());
     assert!(msg.contains("invalid glob pattern"), "{msg}");

@@ -1,5 +1,6 @@
 netsuke_version: 1.0.0  # manifest version
 targets:  # list of targets using glob patterns
-  - foreach: glob('[')  # intentional: unmatched '[' to trigger a glob parse error
+  - foreach: glob('{')  # intentional: unmatched '{' to trigger a glob parse error
     name: broken  # target name
     command: "echo hi"  # placeholder command
+

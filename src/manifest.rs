@@ -249,6 +249,37 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     // Normalize separators so `/` and `\\` behave the same on all platforms.
     let normalized = normalize_separators(pattern);
 
+    // `glob` treats braces as literals; detect unmatched braces to surface a
+    // syntax error early, aligning with bracket behaviour.
+    let mut depth = 0usize;
+    let mut last = '\0';
+    for ch in normalized.chars() {
+        if last == '\\' {
+            last = '\0';
+            continue;
+        }
+        match ch {
+            '{' => depth += 1,
+            '}' => {
+                if depth == 0 {
+                    return Err(Error::new(
+                        ErrorKind::SyntaxError,
+                        format!("invalid glob pattern '{pattern}': unmatched '}}'"),
+                    ));
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+        last = ch;
+    }
+    if depth != 0 {
+        return Err(Error::new(
+            ErrorKind::SyntaxError,
+            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
+        ));
+    }
+
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
             ErrorKind::SyntaxError,

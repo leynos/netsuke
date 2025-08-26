@@ -115,6 +115,12 @@ Feature: Manifest Parsing
     Then parsing the manifest fails
     And the error message contains "glob pattern"
 
+  Scenario: Parsing fails for an invalid glob brace pattern
+    Given the manifest file "tests/data/glob_invalid_brace.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "glob pattern"
+
 
 
   Scenario: Parsing fails when a foreach expression is not iterable
