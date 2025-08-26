@@ -27,7 +27,16 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
         }
         Err(e) => {
             world.manifest = None;
-            world.manifest_error = Some(format!("{e:#}"));
+            // Collect the error chain using `Display` to keep messages concise
+            // while retaining underlying causes for substring checks.
+            let mut msg = String::new();
+            for (idx, cause) in e.chain().enumerate() {
+                if idx > 0 {
+                    msg.push_str(": ");
+                }
+                msg.push_str(&cause.to_string());
+            }
+            world.manifest_error = Some(msg);
         }
     }
 }
