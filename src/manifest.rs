@@ -144,10 +144,10 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
     }
 }
 
-/// Process a single glob entry and normalise its output.
+/// Process a single glob entry and normalize its output.
 ///
 /// Returns the entry path when it points to a file, skipping directories.
-/// Requires matched paths to be valid UTF-8; output is normalised to use
+/// Requires matched paths to be valid UTF-8; output is normalized to use
 /// forward slashes.
 ///
 /// # Examples
@@ -208,7 +208,7 @@ fn process_glob_entry(
 /// matched by wildcards.
 /// Convert `/` and `\` to the host separator while preserving escapes for
 /// glob metacharacters on Unix.
-fn normalise_separators(pattern: &str) -> String {
+fn normalize_separators(pattern: &str) -> String {
     let native = std::path::MAIN_SEPARATOR;
     #[cfg(unix)]
     {
@@ -246,8 +246,8 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    // Normalise separators so `/` and `\\` behave the same on all platforms.
-    let normalized = normalise_separators(pattern);
+    // Normalize separators so `/` and `\\` behave the same on all platforms.
+    let normalized = normalize_separators(pattern);
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
