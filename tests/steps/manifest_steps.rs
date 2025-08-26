@@ -1,6 +1,6 @@
 //! Step definitions for manifest feature tests.
 
-use crate::CliWorld;
+use crate::{CliWorld, steps::display_error_chain};
 use cucumber::{given, then, when};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
@@ -27,16 +27,8 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
         }
         Err(e) => {
             world.manifest = None;
-            // Collect the error chain using `Display` to keep messages concise
-            // while retaining underlying causes for substring checks.
-            let mut msg = String::new();
-            for (idx, cause) in e.chain().enumerate() {
-                if idx > 0 {
-                    msg.push_str(": ");
-                }
-                msg.push_str(&cause.to_string());
-            }
-            world.manifest_error = Some(msg);
+            // Record the error chain using `Display` for stable substring checks.
+            world.manifest_error = Some(display_error_chain(&e));
         }
     }
 }
