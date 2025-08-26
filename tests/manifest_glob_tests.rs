@@ -152,6 +152,30 @@ fn glob_invalid_pattern_errors() {
     assert!(msg.contains("invalid glob pattern"), "{msg}");
 }
 
+#[cfg(windows)]
+#[rstest]
+#[case("assets/\\\\*.\\\\?")]
+#[case("src/\\\\[a\\\\].c")]
+fn glob_rejects_backslash_escapes(temp_dir: tempfile::TempDir, #[case] suffix: &str) {
+    let dir_fwd = temp_dir.path().display().to_string().replace('\\', "/");
+    let pattern = format!("{dir_fwd}/{suffix}");
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: bad\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let err = manifest::from_str(&yaml).expect_err("escapes unsupported");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("backslash escapes for glob metacharacters are not supported"),
+        "{msg}"
+    );
+}
+
 #[rstest]
 fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) {
     fs::write(temp_dir.path().join("a.txt"), "a").expect("write a");
@@ -193,4 +217,28 @@ fn glob_is_case_sensitive_on_windows(temp_dir: tempfile::TempDir) {
     ));
     let manifest = manifest::from_str(&yaml).expect("parse");
     assert!(manifest.targets.is_empty());
+}
+
+#[cfg(windows)]
+#[rstest]
+#[case("assets/\\\\*.\\\\?")]
+#[case("src/\\\\[a\\\\].c")]
+fn glob_rejects_backslash_escapes(temp_dir: tempfile::TempDir, #[case] suffix: &str) {
+    let dir_fwd = temp_dir.path().display().to_string().replace('\\', "/");
+    let pattern = format!("{dir_fwd}/{suffix}");
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: bad\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let err = manifest::from_str(&yaml).expect_err("escapes unsupported");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("backslash escapes for glob metacharacters are not supported"),
+        "{msg}"
+    );
 }

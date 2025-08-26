@@ -27,8 +27,10 @@ fn glob_paths_invalid_pattern_sets_syntax_error() {
 
 #[cfg(unix)]
 #[test]
-fn normalise_separators_preserves_bracket_escape() {
+fn normalise_separators_preserves_escapes() {
     assert_eq!(super::normalise_separators("\\["), "\\[");
+    assert_eq!(super::normalise_separators("\\*"), "\\*");
+    assert_eq!(super::normalise_separators("\\?"), "\\?");
 }
 
 #[test]

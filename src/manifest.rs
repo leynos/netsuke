@@ -207,16 +207,26 @@ fn process_glob_entry(
 /// separators (use `**` to span directories), and leading-dot entries are
 /// matched by wildcards.
 /// Convert `/` and `\` to the host separator while preserving escapes for
-/// glob metacharacters on Unix.
+/// glob metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) on Unix.
 fn normalise_separators(pattern: &str) -> String {
     let native = std::path::MAIN_SEPARATOR;
     #[cfg(unix)]
     {
         let mut out = String::with_capacity(pattern.len());
         let mut it = pattern.chars().peekable();
+        let mut prev = None;
         while let Some(c) = it.next() {
             if c == '\\' && matches!(it.peek(), Some('[' | ']' | '{' | '}')) {
                 out.push('\\');
+                prev = Some(c);
+                continue;
+            }
+            if c == '\\'
+                && matches!(it.peek(), Some('*' | '?'))
+                && (matches!(prev, Some('/' | '.')) || prev.is_none())
+            {
+                out.push('\\');
+                prev = Some(c);
                 continue;
             }
             if c == '/' || c == '\\' {
@@ -224,6 +234,7 @@ fn normalise_separators(pattern: &str) -> String {
             } else {
                 out.push(c);
             }
+            prev = Some(c);
         }
         out
     }
@@ -245,6 +256,26 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_separator: true,
         require_literal_leading_dot: false,
     };
+
+    #[cfg(windows)]
+    {
+        let mut chars = pattern.chars().peekable();
+        let mut prev = None;
+        while let Some(c) = chars.next() {
+            if c == '\\'
+                && matches!(chars.peek(), Some('[' | ']' | '{' | '}' | '*' | '?'))
+                && matches!(prev, Some('/'))
+            {
+                return Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!(
+                        "backslash escapes for glob metacharacters are not supported on Windows: '{pattern}'"
+                    ),
+                ));
+            }
+            prev = Some(c);
+        }
+    }
 
     // Normalise separators so `/` and `\\` behave the same on all platforms.
     let normalized = normalise_separators(pattern);

@@ -735,18 +735,19 @@ providing a secure bridge to the underlying system.
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: Expand filesystem
   patterns (e.g., `src/**/*.c`) into a list of matched paths. Results are
   yielded in lexicographic order by the iterator and returned unchanged.
-  Symlinks are followed by the `glob` crate by default. Matching is case-
+  Symlinks are followed by the `glob` crate by default. Matching is case
   sensitive on all platforms. `glob_with` enforces
   `require_literal_separator = true` internally, so wildcards do not cross path
   separators unless `**` is used. Callers may use `/` or `\` in patterns; these
-  are normalised to the host platform before matching. Results contain only
-  files (directories are ignored) and path separators are normalised to `/`.
-  Leading-dot entries are matched by wildcards. Empty results are represented
-  as `[]`. Invalid patterns surface as `SyntaxError`; filesystem iteration
-  errors surface as `InvalidOperation`, matching minijinja error semantics. On
-  Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`,
-  `?`) are preserved during separator normalisation. This fills a Ninja gap
-  since Ninja itself does not support globbing.[^3]
+  are normalised to the host platform before matching. On Unix, backslash
+  escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) are preserved
+  during separator normalisation, but Windows patterns do not support escape
+  sequences. Results contain only files (directories are ignored) and path
+  separators are normalised to `/`. Leading-dot entries are matched by
+  wildcards. Empty results are represented as `[]`. Invalid patterns surface as
+  `SyntaxError`; filesystem iteration errors surface as `InvalidOperation`
+  consistent with minijinja semantics. This provides globbing support not
+  available in Ninja.[^3]
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
