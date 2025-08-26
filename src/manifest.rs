@@ -144,6 +144,52 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
     }
 }
 
+/// Process a single glob entry and normalise its output.
+///
+/// Returns the entry path when it points to a file, skipping directories.
+/// Paths are converted to UTF-8 and normalised to use forward slashes.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use glob::glob;
+/// let entry = glob("Cargo.toml").unwrap().next().unwrap();
+/// let path = process_glob_entry(entry, "Cargo.toml")
+///     .unwrap()
+///     .unwrap();
+/// assert!(path.ends_with("Cargo.toml"));
+/// ```
+fn process_glob_entry(
+    entry: std::result::Result<std::path::PathBuf, glob::GlobError>,
+    pattern: &str,
+) -> std::result::Result<Option<String>, Error> {
+    match entry {
+        Ok(path) => {
+            // Query metadata early to surface filesystem errors promptly.
+            let meta = path.metadata().map_err(|e| {
+                Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("glob failed for '{pattern}': {e}"),
+                )
+            })?;
+            if !meta.is_file() {
+                return Ok(None);
+            }
+            let s = path.to_str().ok_or_else(|| {
+                Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("glob matched a non-UTF-8 path: {}", path.display()),
+                )
+            })?;
+            Ok(Some(s.replace('\\', "/")))
+        }
+        Err(e) => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("glob failed for '{pattern}': {e}"),
+        )),
+    }
+}
+
 /// Expand a glob pattern into a list of matching paths with deterministic ordering.
 ///
 /// Results are returned in lexicographic order to keep builds deterministic.
@@ -183,31 +229,8 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     })?;
     let mut paths = Vec::new();
     for entry in entries {
-        match entry {
-            Ok(path) => match path.metadata() {
-                Ok(meta) if meta.is_file() => {
-                    let s = path.to_str().ok_or_else(|| {
-                        Error::new(
-                            ErrorKind::InvalidOperation,
-                            format!("glob matched a non-UTF-8 path: {}", path.display()),
-                        )
-                    })?;
-                    paths.push(s.replace('\\', "/"));
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(Error::new(
-                        ErrorKind::InvalidOperation,
-                        format!("glob failed for '{pattern}': {e}"),
-                    ));
-                }
-            },
-            Err(e) => {
-                return Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    format!("glob failed for '{pattern}': {e}"),
-                ));
-            }
+        if let Some(p) = process_glob_entry(entry, pattern)? {
+            paths.push(p);
         }
     }
     Ok(paths)
