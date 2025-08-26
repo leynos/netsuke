@@ -91,6 +91,32 @@ Feature: Manifest Parsing
     And the target 2 command is "echo 'bar'"
     And the target 2 index is 1
 
+  Scenario: Generating targets with glob
+    Given the manifest file "tests/data/glob.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 2 targets
+    And the target 1 name is "a.out"
+    And the target 1 index is 0
+    And the target 2 name is "b.out"
+    And the target 2 index is 1
+
+  Scenario: Generating targets with glob using Windows separators
+    Given the manifest file "tests/data/glob_windows.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 2 targets
+    And the target 1 name is "a.out"
+    And the target 2 name is "b.out"
+    And the target 1 index is 0
+    And the target 2 index is 1
+
+  Scenario: Parsing fails for an invalid glob pattern
+    Given the manifest file "tests/data/glob_invalid.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "glob pattern"
+
+
+
   Scenario: Parsing fails when a foreach expression is not iterable
     Given the manifest file "tests/data/foreach_invalid.yml" is parsed
     When the parsing result is checked

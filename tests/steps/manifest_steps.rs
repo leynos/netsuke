@@ -27,7 +27,7 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
         }
         Err(e) => {
             world.manifest = None;
-            world.manifest_error = Some(e.to_string());
+            world.manifest_error = Some(format!("{e:#}"));
         }
     }
 }
@@ -158,6 +158,16 @@ fn first_action_phony(world: &mut CliWorld) {
 #[then("parsing the manifest fails")]
 fn manifest_parse_error(world: &mut CliWorld) {
     assert!(world.manifest_error.is_some(), "expected parse error");
+}
+
+#[then(expr = "the error message contains {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn manifest_error_contains(world: &mut CliWorld, text: String) {
+    let msg = world.manifest_error.as_ref().expect("expected parse error");
+    assert!(msg.contains(&text), "{msg}");
 }
 
 #[then(expr = "the first rule name is {string}")]

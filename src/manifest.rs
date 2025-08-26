@@ -3,8 +3,9 @@
 //! This module parses a `Netsukefile` without relying on a global Jinja
 //! preprocessing pass. The YAML is parsed first and Jinja expressions are
 //! evaluated only within string values or the `foreach` and `when` keys. It
-//! exposes an `env()` function to surface environment variables, failing fast
-//! when values are missing or invalid.
+//! exposes `env()` to read environment variables and `glob()` to expand
+//! filesystem patterns during template evaluation. Both helpers fail fast when
+//! inputs are missing or patterns are invalid.
 
 use crate::{
     ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars},
@@ -119,13 +120,15 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
 ///
 /// # Examples
 ///
+/// The [`EnvLock`](test_support::env_lock::EnvLock) guard serialises access to
+/// the process environment so tests do not interfere with each other.
+///
 /// ```rust,ignore
-/// // SAFETY: Process environment mutation is unsafe in Rust 2024. Examples and
-/// // tests serialise access with an environment lock and restore prior state to
-/// // avoid races and leaks.
-/// unsafe { std::env::set_var("FOO", "bar"); }
+/// use test_support::env_lock::EnvLock;
+/// let _guard = EnvLock::acquire();
+/// std::env::set_var("FOO", "bar");
 /// assert_eq!(env("FOO").unwrap(), "bar");
-/// unsafe { std::env::remove_var("FOO"); }
+/// std::env::remove_var("FOO");
 /// ```
 fn env_var(name: &str) -> std::result::Result<String, Error> {
     match std::env::var(name) {
@@ -139,6 +142,126 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
             format!("environment variable '{name}' is set but contains invalid UTF-8"),
         )),
     }
+}
+
+/// Process a single glob entry and normalise its output.
+///
+/// Returns the entry path when it points to a file, skipping directories.
+/// Requires matched paths to be valid UTF-8; output is normalised to use
+/// forward slashes.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use glob::glob;
+/// let entry = glob("Cargo.toml").unwrap().next().unwrap();
+/// let path = process_glob_entry(entry, "Cargo.toml")
+///     .unwrap()
+///     .unwrap();
+/// assert!(path.ends_with("Cargo.toml"));
+/// ```
+fn process_glob_entry(
+    entry: std::result::Result<std::path::PathBuf, glob::GlobError>,
+    pattern: &str,
+) -> std::result::Result<Option<String>, Error> {
+    match entry {
+        Ok(path) => {
+            // Query metadata early to surface filesystem errors promptly.
+            let meta = path.metadata().map_err(|e| {
+                Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("glob failed for '{pattern}': {e}"),
+                )
+            })?;
+            if !meta.is_file() {
+                return Ok(None);
+            }
+            // Reject non-UTF-8 paths to avoid lossy round-trips and ensure
+            // manifests remain deterministic.
+            let s = path.to_str().ok_or_else(|| {
+                Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("glob matched a non-UTF-8 path: {}", path.display()),
+                )
+            })?;
+            Ok(Some(s.replace('\\', "/")))
+        }
+        Err(e) => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("glob failed for '{pattern}': {e}"),
+        )),
+    }
+}
+
+/// Expand a glob pattern into a list of matching paths with deterministic ordering.
+///
+/// Results are returned in lexicographic order to keep builds deterministic.
+/// Invalid patterns or filesystem errors surface as Jinja evaluation errors so
+/// manifests fail fast when input is incorrect.
+///
+/// # Errors
+///
+/// Returns an error if the glob pattern is invalid, a directory cannot be
+/// read, or a matched path is not valid UTF-8.
+/// Matching is case-sensitive on all platforms, wildcards do not cross path
+/// separators (use `**` to span directories), and leading-dot entries are
+/// matched by wildcards.
+/// Convert `/` and `\` to the host separator while preserving escapes for
+/// glob metacharacters on Unix.
+fn normalise_separators(pattern: &str) -> String {
+    let native = std::path::MAIN_SEPARATOR;
+    #[cfg(unix)]
+    {
+        let mut out = String::with_capacity(pattern.len());
+        let mut it = pattern.chars().peekable();
+        while let Some(c) = it.next() {
+            if c == '\\' && matches!(it.peek(), Some('[' | ']' | '{' | '}')) {
+                out.push('\\');
+                continue;
+            }
+            if c == '/' || c == '\\' {
+                out.push(native);
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+    #[cfg(not(unix))]
+    {
+        pattern.replace('/', &native.to_string())
+    }
+}
+
+fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
+    use glob::{MatchOptions, glob_with};
+
+    // Enforce shell-like semantics:
+    // - patterns are case-sensitive,
+    // - wildcards do not cross path separators,
+    // - dotfiles are matched by default.
+    let opts = MatchOptions {
+        case_sensitive: true,
+        require_literal_separator: true,
+        require_literal_leading_dot: false,
+    };
+
+    // Normalise separators so `/` and `\\` behave the same on all platforms.
+    let normalized = normalise_separators(pattern);
+
+    let entries = glob_with(&normalized, opts).map_err(|e| {
+        Error::new(
+            ErrorKind::SyntaxError,
+            format!("invalid glob pattern '{pattern}': {e}"),
+        )
+    })?;
+    let mut paths = Vec::new();
+    for entry in entries {
+        if let Some(p) = process_glob_entry(entry, pattern)? {
+            paths.push(p);
+        }
+    }
+    Ok(paths)
 }
 
 /// Parse a manifest string using Jinja for value templating.
@@ -155,8 +278,9 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
-    // Expose a strict environment variable accessor to templates.
+    // Expose custom helpers to templates.
     jinja.add_function("env", |name: String| env_var(&name));
+    jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
 
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {
