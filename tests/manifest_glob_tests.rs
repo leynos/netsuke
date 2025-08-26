@@ -49,7 +49,7 @@ fn temp_dir() -> tempfile::TempDir {
     &[],
     "*.txt",
     "{{ item | replace('{dir}/', '') | replace('.txt', '.out') }}",
-    &["a.txt", "b.txt"],
+    &["a.out", "b.out"],
     "expands and sorts matches",
 )]
 #[case(
@@ -122,23 +122,13 @@ fn test_glob_behavior(
     if expected_partial.is_empty() {
         assert!(manifest.targets.is_empty(), "{description}");
     } else {
-        let names = target_names(&manifest);
-        if name_template.contains("replace") {
-            let expected: Vec<_> = expected_partial
-                .iter()
-                .map(|s| s.replace(".txt", ".out"))
-                .collect();
-            assert_eq!(names, expected, "{description}");
-        } else {
-            let prefix_fwd = format!("{dir_str}/");
-            let prefix_back = format!("{dir_str}\\");
-            let expected: Vec<_> = expected_partial.iter().map(|&s| s.to_string()).collect();
-            let normalised: Vec<_> = names
-                .into_iter()
-                .map(|n| n.replace(&prefix_fwd, "").replace(&prefix_back, ""))
-                .collect();
-            assert_eq!(normalised, expected, "{description}");
-        }
+        let prefix_fwd = format!("{dir_str}/");
+        let prefix_back = format!("{dir_str}\\");
+        let names: Vec<_> = target_names(&manifest)
+            .into_iter()
+            .map(|n| n.replace(&prefix_fwd, "").replace(&prefix_back, ""))
+            .collect();
+        assert_eq!(names, expected_partial, "{description}");
     }
 }
 
@@ -147,31 +137,8 @@ fn glob_invalid_pattern_errors() {
     let yaml =
         manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
-    assert!(
-        err.chain()
-            .any(|e| e.to_string().contains("invalid glob pattern")),
-        "unexpected error: {err}",
-    );
-}
-
-#[rstest]
-fn glob_returns_empty_when_no_matches() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let pattern = format!("{}/*.nomatch", dir.path().display());
-    let yaml = manifest_yaml(&format!(
-        concat!(
-            "targets:\n",
-            "  - foreach: glob('{pattern}')\n",
-            "    name: test\n",
-            "    command: echo hi\n",
-        ),
-        pattern = pattern,
-    ));
-    let manifest = manifest::from_str(&yaml).expect("parse manifest");
-    assert!(
-        manifest.targets.is_empty(),
-        "expected no files to match the glob pattern",
-    );
+    let msg = format!("{err:#}");
+    assert!(msg.contains("invalid glob pattern"), "{msg}");
 }
 
 #[rstest]
@@ -202,4 +169,23 @@ fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) {
         })
         .collect();
     assert_eq!(names, vec!["a.out", "b.out"]);
+}
+
+#[cfg(windows)]
+#[rstest]
+fn glob_is_case_sensitive_on_windows() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    fs::write(dir.path().join("UPPER.TXT"), "x").expect("write file");
+    let pattern = format!("{}/*.txt", dir.path().display());
+    let yaml = manifest_yaml(&format!(
+        concat!(
+            "targets:\n",
+            "  - foreach: glob('{pattern}')\n",
+            "    name: fail\n",
+            "    command: echo hi\n",
+        ),
+        pattern = pattern,
+    ));
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    assert!(manifest.targets.is_empty());
 }
