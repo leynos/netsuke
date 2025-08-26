@@ -214,13 +214,17 @@ fn normalize_separators(pattern: &str) -> String {
     {
         let mut out = String::with_capacity(pattern.len());
         let mut it = pattern.chars().peekable();
+        let mut prev_is_sep = false;
         while let Some(c) = it.next() {
             if c == '\\' {
-                handle_backslash_escape(&mut out, &mut it, native);
+                handle_backslash_escape(&mut out, &mut it, native, prev_is_sep);
+                prev_is_sep = out.chars().last().is_some_and(|ch| ch == native);
             } else if c == '/' || c == '\\' {
                 out.push(native);
+                prev_is_sep = true;
             } else {
                 out.push(c);
+                prev_is_sep = false;
             }
         }
         out
@@ -490,6 +494,7 @@ fn handle_backslash_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
+    prev_is_sep: bool,
 ) {
     if let Some(&next) = it.peek() {
         if matches!(next, '[' | ']' | '{' | '}') {
@@ -497,7 +502,7 @@ fn handle_backslash_escape(
             return;
         }
         if matches!(next, '*' | '?') {
-            handle_wildcard_escape(out, it, native);
+            handle_wildcard_escape(out, it, native, prev_is_sep);
             return;
         }
     }
@@ -509,10 +514,11 @@ fn handle_wildcard_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
+    prev_is_sep: bool,
 ) {
     let mut lookahead = it.clone();
     lookahead.next();
-    if lookahead.peek().is_none() {
+    if prev_is_sep || lookahead.peek().is_none() {
         out.push('\\');
     } else {
         out.push(native);

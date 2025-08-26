@@ -745,9 +745,10 @@ providing a secure bridge to the underlying system.
   Leading-dot entries are matched by wildcards. Empty results are represented
   as `[]`. Invalid patterns surface as `SyntaxError`; filesystem iteration
   errors surface as `InvalidOperation`, matching minijinja error semantics. On
-  Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`) are
-  preserved during separator normalization. This fills a Ninja gap since Ninja
-  itself does not support globbing.[^3]
+  Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`,
+  `?`) are preserved during separator normalisation. On Windows, backslash
+  escapes are not supported. This provides globbing support not available in
+  Ninja itself, which does not support globbing.[^3]
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or

@@ -47,6 +47,18 @@ fn normalize_separators_preserves_wildcard_escape_variants(
     assert_eq!(super::normalize_separators(pat), expected);
 }
 
+#[cfg(unix)]
+#[rstest]
+#[case("assets/\\*.\\?", "assets/\\*.\\?")]
+#[case("src/\\[a\\].c", "src/\\[a\\].c")]
+#[case("build/\\{debug,release\\}/lib", "build/\\{debug,release\\}/lib")]
+fn normalize_separators_preserves_specific_escape_patterns(
+    #[case] pat: &str,
+    #[case] expected: &str,
+) {
+    assert_eq!(super::normalize_separators(pat), expected);
+}
+
 #[test]
 fn glob_paths_ignores_directories() {
     let dir = tempfile::tempdir().expect("temp dir");
