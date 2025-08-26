@@ -36,6 +36,17 @@ fn normalize_separators_preserves_bracket_escape_variants(#[case] pat: &str) {
     assert_eq!(super::normalize_separators(pat), pat);
 }
 
+#[cfg(unix)]
+#[rstest]
+#[case("a\\b\\*", "a/b\\*")]
+#[case("a\\b\\?", "a/b\\?")]
+fn normalize_separators_preserves_wildcard_escape_variants(
+    #[case] pat: &str,
+    #[case] expected: &str,
+) {
+    assert_eq!(super::normalize_separators(pat), expected);
+}
+
 #[test]
 fn glob_paths_ignores_directories() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -46,5 +57,37 @@ fn glob_paths_ignores_directories() {
     assert_eq!(
         out,
         vec![format!("{}/a.txt", dir.path().display()).replace('\\', "/")]
+    );
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case("\\*", "*")]
+#[case("\\?", "?")]
+fn glob_paths_treats_escaped_wildcards_as_literals(
+    #[case] pattern_suffix: &str,
+    #[case] filename: &str,
+) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join(filename), "a").expect("write file");
+    std::fs::write(dir.path().join("other"), "b").expect("write file");
+    let pattern = format!("{}/{}", dir.path().display(), pattern_suffix);
+    let out = super::glob_paths(&pattern).expect("glob ok");
+    assert_eq!(
+        out,
+        vec![format!("{}/{}", dir.path().display(), filename).replace('\\', "/"),]
+    );
+}
+
+#[test]
+fn glob_paths_respects_bracket_escapes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join("[ab]"), "a").expect("write file");
+    std::fs::write(dir.path().join("b"), "b").expect("write file");
+    let pattern = format!("{}/{}", dir.path().display(), "\\[ab\\]");
+    let out = super::glob_paths(&pattern).expect("glob ok");
+    assert_eq!(
+        out,
+        vec![format!("{}/[ab]", dir.path().display()).replace('\\', "/"),]
     );
 }

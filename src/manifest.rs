@@ -215,8 +215,28 @@ fn normalize_separators(pattern: &str) -> String {
         let mut out = String::with_capacity(pattern.len());
         let mut it = pattern.chars().peekable();
         while let Some(c) = it.next() {
-            if c == '\\' && matches!(it.peek(), Some('[' | ']' | '{' | '}')) {
-                out.push('\\');
+            if c == '\\' {
+                if let Some(&next) = it.peek() {
+                    if matches!(next, '[' | ']' | '{' | '}') {
+                        out.push('\\');
+                        continue;
+                    }
+                    if matches!(next, '*' | '?') {
+                        let mut lookahead = it.clone();
+                        lookahead.next();
+                        if lookahead.peek().is_none() {
+                            out.push('\\');
+                        } else {
+                            out.push(native);
+                        }
+                        continue;
+                    }
+                }
+                if c == '/' || c == '\\' {
+                    out.push(native);
+                } else {
+                    out.push(c);
+                }
                 continue;
             }
             if c == '/' || c == '\\' {
@@ -386,7 +406,14 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     validate_brace_matching(pattern)?;
 
     // Normalize separators so `/` and `\\` behave the same on all platforms.
-    let normalized = normalize_separators(pattern);
+    let mut normalized = normalize_separators(pattern);
+    normalized = normalized
+        .replace("\\*", "[*]")
+        .replace("\\?", "[?]")
+        .replace("\\[", "[[]")
+        .replace("\\]", "[]]")
+        .replace("\\{", "[{]")
+        .replace("\\}", "[}]");
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
