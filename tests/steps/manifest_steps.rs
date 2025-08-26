@@ -27,7 +27,7 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
         }
         Err(e) => {
             world.manifest = None;
-            world.manifest_error = Some(format!("{e:?}"));
+            world.manifest_error = Some(format!("{e:#}"));
         }
     }
 }

@@ -69,6 +69,14 @@ fn temp_dir() -> tempfile::TempDir {
     "wildcards must not cross '/'",
 )]
 #[case(
+    &[("sub/x.txt", "x")],
+    &[],
+    "**/*.txt",
+    "{{ item | replace('{dir}/', '') }}",
+    &["sub/x.txt"],
+    "** spans directories",
+)]
+#[case(
     &[(".hidden.txt", "h")],
     &[],
     "*.txt",
@@ -105,6 +113,7 @@ fn test_glob_behavior(
     create_test_dirs(temp_dir.path(), dirs);
 
     let dir_str = temp_dir.path().display().to_string();
+    let dir_fwd = dir_str.replace('\\', "/");
     let pattern = format!("{dir_str}/{pattern_suffix}");
     let yaml = manifest_yaml(&format!(
         concat!(
@@ -114,7 +123,7 @@ fn test_glob_behavior(
             "    command: echo hi\n",
         ),
         pattern = pattern,
-        name_template = name_template.replace("{dir}", &dir_str)
+        name_template = name_template.replace("{dir}", &dir_fwd),
     ));
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -122,7 +131,7 @@ fn test_glob_behavior(
     if expected_partial.is_empty() {
         assert!(manifest.targets.is_empty(), "{description}");
     } else {
-        let prefix_fwd = format!("{dir_str}/");
+        let prefix_fwd = format!("{dir_fwd}/");
         let prefix_back = format!("{dir_str}\\");
         let names: Vec<_> = target_names(&manifest)
             .into_iter()
@@ -132,6 +141,7 @@ fn test_glob_behavior(
     }
 }
 
+#[rstest]
 #[rstest]
 fn glob_invalid_pattern_errors() {
     let yaml =
@@ -159,24 +169,18 @@ fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) {
     ));
     let manifest = manifest::from_str(&yaml).expect("parse");
     let prefix_fwd = format!("{dir_fwd}/");
-    let prefix_back = format!("{dir_win}\\");
     let names: Vec<_> = target_names(&manifest)
         .into_iter()
-        .map(|n| {
-            n.replace(&prefix_fwd, "")
-                .replace(&prefix_back, "")
-                .replace(".txt", ".out")
-        })
+        .map(|n| n.replace(&prefix_fwd, "").replace(".txt", ".out"))
         .collect();
     assert_eq!(names, vec!["a.out", "b.out"]);
 }
 
 #[cfg(windows)]
 #[rstest]
-fn glob_is_case_sensitive_on_windows() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    fs::write(dir.path().join("UPPER.TXT"), "x").expect("write file");
-    let pattern = format!("{}/*.txt", dir.path().display());
+fn glob_is_case_sensitive_on_windows(temp_dir: tempfile::TempDir) {
+    fs::write(temp_dir.path().join("UPPER.TXT"), "x").expect("write file");
+    let pattern = format!("{}/*.txt", temp_dir.path().display());
     let yaml = manifest_yaml(&format!(
         concat!(
             "targets:\n",

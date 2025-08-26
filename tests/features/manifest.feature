@@ -106,12 +106,15 @@ Feature: Manifest Parsing
     Then the manifest has 2 targets
     And the target 1 name is "a.out"
     And the target 2 name is "b.out"
+    And the target 1 index is 0
+    And the target 2 index is 1
 
   Scenario: Parsing fails for an invalid glob pattern
     Given the manifest file "tests/data/glob_invalid.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
     And the error message contains "glob pattern"
+
 
   Scenario: Parsing fails when a foreach expression is not iterable
     Given the manifest file "tests/data/foreach_invalid.yml" is parsed

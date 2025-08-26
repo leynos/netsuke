@@ -203,6 +203,33 @@ fn process_glob_entry(
 /// Matching is case-sensitive on all platforms, wildcards do not cross path
 /// separators (use `**` to span directories), and leading-dot entries are
 /// matched by wildcards.
+/// Convert `/` and `\` to the host separator while preserving escapes for
+/// glob metacharacters on Unix.
+fn normalise_separators(pattern: &str) -> String {
+    let native = std::path::MAIN_SEPARATOR;
+    #[cfg(unix)]
+    {
+        let mut out = String::with_capacity(pattern.len());
+        let mut it = pattern.chars().peekable();
+        while let Some(c) = it.next() {
+            if c == '\\' && matches!(it.peek(), Some('[' | ']' | '{' | '}')) {
+                out.push('\\');
+                continue;
+            }
+            if c == '/' || c == '\\' {
+                out.push(native);
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+    #[cfg(not(unix))]
+    {
+        pattern.replace('/', &native.to_string())
+    }
+}
+
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
@@ -216,10 +243,8 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    // Normalise path separators so that callers may use either `/` or `\`
-    // regardless of platform. The `glob` crate expects the native separator.
-    let native_sep = std::path::MAIN_SEPARATOR.to_string();
-    let normalized = pattern.replace('\\', "/").replace('/', &native_sep);
+    // Normalise separators so `/` and `\\` behave the same on all platforms.
+    let normalized = normalise_separators(pattern);
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
