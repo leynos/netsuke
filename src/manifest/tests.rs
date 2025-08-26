@@ -1,4 +1,5 @@
 use super::*;
+use rstest::rstest;
 use serde::de::Error as _;
 
 #[test]
@@ -26,9 +27,13 @@ fn glob_paths_invalid_pattern_sets_syntax_error() {
 }
 
 #[cfg(unix)]
-#[test]
-fn normalize_separators_preserves_bracket_escape() {
-    assert_eq!(super::normalize_separators("\\["), "\\[");
+#[rstest]
+#[case("\\[")]
+#[case("\\]")]
+#[case("\\{")]
+#[case("\\}")]
+fn normalize_separators_preserves_bracket_escape_variants(#[case] pat: &str) {
+    assert_eq!(super::normalize_separators(pat), pat);
 }
 
 #[test]
