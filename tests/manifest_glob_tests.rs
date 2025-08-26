@@ -144,14 +144,38 @@ fn test_glob_behavior(
     }
 }
 
-#[rstest(pattern, case("["), case("{"))]
-fn glob_invalid_pattern_errors(pattern: &str) {
+#[test]
+fn glob_unmatched_bracket_errors() {
+    let yaml =
+        manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
+    let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
+    let msg = format!("{err:#}");
+    assert!(msg.contains("invalid glob pattern"), "{msg}");
+}
+
+#[rstest(
+    pattern,
+    expected,
+    case("{", "unmatched '{'"),
+    case("}", "unmatched '}'")
+)]
+fn glob_unmatched_brace_errors(pattern: &str, expected: &str) {
     let yaml = manifest_yaml(&format!(
         "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n"
     ));
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
     let msg = display_error_chain(err.as_ref());
     assert!(msg.contains("invalid glob pattern"), "{msg}");
+    assert!(msg.contains(expected), "{msg}");
+}
+
+#[rstest(pattern, case("\\\\{"), case("\\\\}"))]
+fn glob_escaped_braces_are_literals(pattern: &str) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob('{pattern}')\n    name: ok\n    command: echo hi\n"
+    ));
+    let manifest = manifest::from_str(&yaml).expect("escaped brace should parse");
+    assert!(manifest.targets.is_empty());
 }
 
 #[rstest]

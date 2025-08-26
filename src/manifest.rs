@@ -251,10 +251,14 @@ fn normalize_separators(pattern: &str) -> String {
 /// characters.
 fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut depth = 0usize;
-    let mut last = '\0';
+    let mut escaped = false;
     for ch in pattern.chars() {
-        if last == '\\' {
-            last = '\0';
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
             continue;
         }
         match ch {
@@ -270,7 +274,6 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
             }
             _ => {}
         }
-        last = ch;
     }
     if depth != 0 {
         return Err(Error::new(
