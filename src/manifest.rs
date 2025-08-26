@@ -233,27 +233,26 @@ fn normalize_separators(pattern: &str) -> String {
     }
 }
 
-fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
-    use glob::{MatchOptions, glob_with};
-
-    // Enforce shell-like semantics:
-    // - patterns are case-sensitive,
-    // - wildcards do not cross path separators,
-    // - dotfiles are matched by default.
-    let opts = MatchOptions {
-        case_sensitive: true,
-        require_literal_separator: true,
-        require_literal_leading_dot: false,
-    };
-
-    // Normalize separators so `/` and `\\` behave the same on all platforms.
-    let normalized = normalize_separators(pattern);
-
-    // `glob` treats braces as literals; detect unmatched braces to surface a
-    // syntax error early, aligning with bracket behaviour.
+/// Validate that braces in a glob pattern are balanced.
+///
+/// Escaped braces are ignored when tracking depth. Returns a syntax error when
+/// opening and closing braces do not match.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert!(validate_brace_matching("src/{lib,bin}").is_ok());
+/// assert!(validate_brace_matching("src/{lib").is_err());
+/// ```
+///
+/// # Errors
+///
+/// Returns a syntax error when the pattern contains unmatched `{` or `}`
+/// characters.
+fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut depth = 0usize;
     let mut last = '\0';
-    for ch in normalized.chars() {
+    for ch in pattern.chars() {
         if last == '\\' {
             last = '\0';
             continue;
@@ -279,6 +278,26 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
             format!("invalid glob pattern '{pattern}': unmatched '{{'"),
         ));
     }
+    Ok(())
+}
+
+fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
+    use glob::{MatchOptions, glob_with};
+
+    // Enforce shell-like semantics:
+    // - patterns are case-sensitive,
+    // - wildcards do not cross path separators,
+    // - dotfiles are matched by default.
+    let opts = MatchOptions {
+        case_sensitive: true,
+        require_literal_separator: true,
+        require_literal_leading_dot: false,
+    };
+
+    // Normalize separators so `/` and `\\` behave the same on all platforms.
+    let normalized = normalize_separators(pattern);
+
+    validate_brace_matching(&normalized)?;
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
