@@ -72,7 +72,7 @@ fn temp_dir() -> tempfile::TempDir {
     &[(".hidden.txt", "h")],
     &[],
     "*.txt",
-    "ok",
+    "{{ item }}",
     &[".hidden.txt"],
     "dotfiles should match",
 )]
@@ -123,9 +123,7 @@ fn test_glob_behavior(
         assert!(manifest.targets.is_empty(), "{description}");
     } else {
         let names = target_names(&manifest);
-        if expected_partial == [".hidden.txt"] {
-            assert_eq!(manifest.targets.len(), 1, "{description}");
-        } else if name_template.contains("replace") {
+        if name_template.contains("replace") {
             let expected: Vec<_> = expected_partial
                 .iter()
                 .map(|s| s.replace(".txt", ".out"))
@@ -149,8 +147,11 @@ fn glob_invalid_pattern_errors() {
     let yaml =
         manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
-    let msg = format!("{err:?}").to_lowercase();
-    assert!(msg.contains("invalid glob pattern"), "{msg}");
+    assert!(
+        err.chain()
+            .any(|e| e.to_string().contains("invalid glob pattern")),
+        "unexpected error: {err}",
+    );
 }
 
 #[rstest]

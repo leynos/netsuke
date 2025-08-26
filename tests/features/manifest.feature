@@ -96,7 +96,9 @@ Feature: Manifest Parsing
     When the manifest is checked
     Then the manifest has 2 targets
     And the target 1 name is "a.out"
+    And the target 1 index is 0
     And the target 2 name is "b.out"
+    And the target 2 index is 1
 
   Scenario: Generating targets with glob using Windows separators
     Given the manifest file "tests/data/glob_windows.yml" is parsed

@@ -1,5 +1,5 @@
 netsuke_version: 1.0.0
 targets:
-  - foreach: glob('[')
+  - foreach: glob('[')  # intentional: unmatched '[' to trigger a glob parse error
     name: broken
     command: "echo hi"
