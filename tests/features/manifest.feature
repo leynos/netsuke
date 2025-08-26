@@ -116,6 +116,7 @@ Feature: Manifest Parsing
     And the error message contains "glob pattern"
 
 
+
   Scenario: Parsing fails when a foreach expression is not iterable
     Given the manifest file "tests/data/foreach_invalid.yml" is parsed
     When the parsing result is checked

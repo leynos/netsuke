@@ -48,7 +48,7 @@ fn temp_dir() -> tempfile::TempDir {
     &[("b.txt", "b"), ("a.txt", "a")],
     &[],
     "*.txt",
-    "{{ item | replace('{dir}/', '') | replace('.txt', '.out') }}",
+    "{{ item | replace('{dir}/', '') | replace('{dir}\\\\', '') | replace('.txt', '.out') }}",
     &["a.out", "b.out"],
     "expands and sorts matches",
 )]
@@ -123,7 +123,9 @@ fn test_glob_behavior(
             "    command: echo hi\n",
         ),
         pattern = pattern,
-        name_template = name_template.replace("{dir}", &dir_fwd),
+        name_template = name_template
+            .replace("{dir}/", &format!("{dir_fwd}/"))
+            .replace("{dir}\\\\", &format!("{dir_str}\\\\\\\\")),
     ));
 
     let manifest = manifest::from_str(&yaml).expect("parse");
@@ -141,7 +143,6 @@ fn test_glob_behavior(
     }
 }
 
-#[rstest]
 #[rstest]
 fn glob_invalid_pattern_errors() {
     let yaml =

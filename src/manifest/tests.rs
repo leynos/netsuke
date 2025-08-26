@@ -25,6 +25,12 @@ fn glob_paths_invalid_pattern_sets_syntax_error() {
     assert_eq!(err.kind(), minijinja::ErrorKind::SyntaxError);
 }
 
+#[cfg(unix)]
+#[test]
+fn normalise_separators_preserves_bracket_escape() {
+    assert_eq!(super::normalise_separators("\\["), "\\[");
+}
+
 #[test]
 fn glob_paths_ignores_directories() {
     let dir = tempfile::tempdir().expect("temp dir");

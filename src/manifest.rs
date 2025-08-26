@@ -147,7 +147,8 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 /// Process a single glob entry and normalise its output.
 ///
 /// Returns the entry path when it points to a file, skipping directories.
-/// Paths are converted to UTF-8 and normalised to use forward slashes.
+/// Requires matched paths to be valid UTF-8; output is normalised to use
+/// forward slashes.
 ///
 /// # Examples
 ///
@@ -175,6 +176,8 @@ fn process_glob_entry(
             if !meta.is_file() {
                 return Ok(None);
             }
+            // Reject non-UTF-8 paths to avoid lossy round-trips and ensure
+            // manifests remain deterministic.
             let s = path.to_str().ok_or_else(|| {
                 Error::new(
                     ErrorKind::InvalidOperation,
