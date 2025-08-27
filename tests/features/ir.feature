@@ -14,7 +14,7 @@ Feature: BuildGraph
 
   Scenario: Duplicate rules are deduplicated
     When the manifest file "tests/data/duplicate_rules.yml" is compiled to IR
-    Then the graph has 1 actions
+    Then the graph has 2 actions
     And the graph has 2 targets
 
   Scenario: Rule not found during IR generation

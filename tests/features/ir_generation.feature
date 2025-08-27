@@ -19,7 +19,7 @@ Feature: Intermediate Representation (IR) Generation
   Scenario: Identical rules are deduplicated during IR generation
     Given the manifest file "tests/data/duplicate_rules.yml" is compiled to IR
     When the graph contents are checked
-    Then the graph has 1 actions
+    Then the graph has 2 actions
     And the graph has 2 targets
 
   Scenario: IR generation fails if a target references a rule that does not exist

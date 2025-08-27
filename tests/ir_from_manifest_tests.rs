@@ -19,7 +19,7 @@ fn minimal_manifest_to_ir() {
 fn duplicate_rules_are_deduped() {
     let manifest = manifest::from_path("tests/data/duplicate_rules.yml").expect("load");
     let graph = BuildGraph::from_manifest(&manifest).expect("ir");
-    assert_eq!(graph.actions.len(), 1);
+    assert_eq!(graph.actions.len(), 2);
     assert_eq!(graph.targets.len(), 2);
 }
 

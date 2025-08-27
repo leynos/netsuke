@@ -111,16 +111,21 @@ impl Display for NamedAction<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(f, "rule {}", self.id)?;
         match &self.action.recipe {
-            Recipe::Command { command } => writeln!(f, "  command = {command}")?,
+            Recipe::Command { command } => {
+                assert!(
+                    shlex::split(command).is_some(),
+                    "invalid command: {command}"
+                );
+                writeln!(f, "  command = {command}")?;
+            }
             Recipe::Script { script } => {
                 // Ninja commands must be single-line. Encode newlines and
                 // reconstruct the original script with `printf %b` piped into
                 // a fresh shell to preserve expected expansions.
                 let escaped = escape_script(script);
-                writeln!(
-                    f,
-                    "  command = /bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\""
-                )?;
+                let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
+                assert!(shlex::split(&cmd).is_some(), "invalid command: {cmd}");
+                writeln!(f, "  command = {cmd}")?;
             }
             Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
         }

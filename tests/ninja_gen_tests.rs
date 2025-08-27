@@ -73,7 +73,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
 )]
 #[case::standard_build(
     Action {
-        recipe: Recipe::Command { command: "cc -c $in -o $out".into() },
+        recipe: Recipe::Command { command: "cc -c 'a.c' 'b.c' -o 'ab.o'".into() },
         description: None,
         depfile: None,
         deps_format: None,
@@ -92,7 +92,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
     PathBuf::from("ab.o"),
     concat!(
         "rule compile\n",
-        "  command = cc -c $in -o $out\n\n",
+        "  command = cc -c 'a.c' 'b.c' -o 'ab.o'\n\n",
         "build ab.o: compile a.c b.c\n\n",
     ),
 )]

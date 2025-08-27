@@ -74,7 +74,7 @@ pub struct BuildEdge {
     pub always: bool,
 }
 
-use crate::ast::{NetsukeManifest, Recipe, StringOrList};
+use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
 use thiserror::Error;
 
 use crate::hasher::ActionHasher;
@@ -105,6 +105,9 @@ pub enum IrGenError {
 
     #[error("failed to serialise action: {0}")]
     ActionSerialisation(#[from] serde_json::Error),
+
+    #[error("command \"{command}\" is not a valid shell command")]
+    InvalidCommand { command: String },
 }
 
 impl BuildGraph {
@@ -118,7 +121,7 @@ impl BuildGraph {
         let mut graph = Self::default();
         let mut rule_map = HashMap::new();
 
-        Self::process_rules(manifest, &mut graph.actions, &mut rule_map)?;
+        Self::process_rules(manifest, &mut rule_map);
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
         Self::process_defaults(manifest, &mut graph.default_targets);
 
@@ -127,37 +130,41 @@ impl BuildGraph {
         Ok(graph)
     }
 
-    fn process_rules(
-        manifest: &NetsukeManifest,
-        actions: &mut HashMap<String, Action>,
-        rule_map: &mut HashMap<String, String>,
-    ) -> Result<(), IrGenError> {
+    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Rule>) {
         for rule in &manifest.rules {
-            let hash = register_action(actions, rule.recipe.clone(), rule.description.clone())?;
-            rule_map.insert(rule.name.clone(), hash);
+            rule_map.insert(rule.name.clone(), rule.clone());
         }
-        Ok(())
     }
 
     fn process_targets(
         manifest: &NetsukeManifest,
         actions: &mut HashMap<String, Action>,
         targets: &mut HashMap<PathBuf, BuildEdge>,
-        rule_map: &HashMap<String, String>,
+        rule_map: &HashMap<String, Rule>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
+            let inputs = to_paths(&target.sources);
             let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
-                Recipe::Rule { rule } => resolve_rule(rule, rule_map, &target_name)?,
+                Recipe::Rule { rule } => {
+                    let tmpl = resolve_rule(rule, rule_map, &target_name)?;
+                    register_action(
+                        actions,
+                        tmpl.recipe.clone(),
+                        tmpl.description.clone(),
+                        &inputs,
+                        &outputs,
+                    )?
+                }
                 Recipe::Command { .. } | Recipe::Script { .. } => {
-                    register_action(actions, target.recipe.clone(), None)?
+                    register_action(actions, target.recipe.clone(), None, &inputs, &outputs)?
                 }
             };
 
             let edge = BuildEdge {
                 action_id,
-                inputs: to_paths(&target.sources),
+                inputs: inputs.clone(),
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
@@ -193,7 +200,37 @@ fn register_action(
     actions: &mut HashMap<String, Action>,
     recipe: Recipe,
     description: Option<String>,
+    inputs: &[PathBuf],
+    outputs: &[PathBuf],
 ) -> Result<String, IrGenError> {
+    let recipe = match recipe {
+        Recipe::Command { command } => {
+            use shell_quote::Bash;
+            let quote_paths = |paths: &[PathBuf]| -> String {
+                paths
+                    .iter()
+                    .map(|p| {
+                        let raw = p.display().to_string();
+                        String::from_utf8(Bash::quote_vec(&raw))
+                            .expect("quoted path is valid UTF-8")
+                    })
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            };
+            let ins = quote_paths(inputs);
+            let outs = quote_paths(outputs);
+            let interpolated = command.replace("$in", &ins).replace("$out", &outs);
+            if shlex::split(&interpolated).is_none() {
+                return Err(IrGenError::InvalidCommand {
+                    command: interpolated,
+                });
+            }
+            Recipe::Command {
+                command: interpolated,
+            }
+        }
+        other => other,
+    };
     let action = Action {
         recipe,
         description,
@@ -234,11 +271,11 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
     }
 }
 
-fn resolve_rule(
+fn resolve_rule<'a>(
     rule: &StringOrList,
-    rule_map: &HashMap<String, String>,
+    rule_map: &'a HashMap<String, Rule>,
     target_name: &str,
-) -> Result<String, IrGenError> {
+) -> Result<&'a Rule, IrGenError> {
     extract_single(rule).map_or_else(
         || {
             let mut rules = to_string_vec(rule);
@@ -255,13 +292,10 @@ fn resolve_rule(
             }
         },
         |name| {
-            rule_map
-                .get(name)
-                .cloned()
-                .ok_or_else(|| IrGenError::RuleNotFound {
-                    target_name: target_name.to_string(),
-                    rule_name: name.to_string(),
-                })
+            rule_map.get(name).ok_or_else(|| IrGenError::RuleNotFound {
+                target_name: target_name.to_string(),
+                rule_name: name.to_string(),
+            })
         },
     )
 }

@@ -1,0 +1,5 @@
+netsuke_version: 1.0.0
+targets:
+  - name: "out file"
+    sources: "in file"
+    command: "cat $in > $out"

@@ -240,11 +240,12 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 - `command`: A single command string to be executed. It may include the
   placeholders `{{ ins }}` and `{{ outs }}` to represent input and output
   files. Netsuke expands these placeholders to space-separated, shell-escaped
-  lists of file paths before hashing the action. When generating the Ninja
-  rule, the lists are replaced with Ninja's `$in` and `$out` macros. After
-  interpolation, the command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/). Any interpolation other than
-  `ins` or `outs` is automatically shell-escaped.
+  lists of file paths using the
+  [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate before
+  hashing the action. When generating the Ninja rule, the lists are replaced
+  with Ninja's `$in` and `$out` macros. After interpolation, the command must
+  be parsable by [shlex](https://docs.rs/shlex/latest/shlex/). Any
+  interpolation other than `ins` or `outs` is automatically shell-escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`

@@ -89,7 +89,7 @@ pub struct NetsukeManifest {
 /// targets. It may define a command line, a script block, or delegate to another
 /// named rule. Dependencies may be specified as either a single string or a
 /// list of strings.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     /// Unique identifier used by targets to reference this rule.
