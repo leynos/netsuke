@@ -253,17 +253,11 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut depth = 0usize;
     let mut escaped = false;
     for ch in pattern.chars() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' {
-            escaped = true;
-            continue;
-        }
-        match ch {
-            '{' => depth += 1,
-            '}' => {
+        let (new_escaped, depth_change) = process_brace_char(ch, escaped);
+        escaped = new_escaped;
+        match depth_change {
+            Some(1) => depth += 1,
+            Some(-1) => {
                 if depth == 0 {
                     return Err(Error::new(
                         ErrorKind::SyntaxError,
@@ -282,6 +276,33 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
         ));
     }
     Ok(())
+}
+
+/// Process a single character for brace matching state.
+///
+/// Returns the updated escape state and an optional brace depth delta:
+/// - `Some(1)` for an opening `{`
+/// - `Some(-1)` for a closing `}`
+/// - `None` for other characters
+///
+/// ```
+/// assert_eq!(process_brace_char('{', false), (false, Some(1)));
+/// assert_eq!(process_brace_char('}', false), (false, Some(-1)));
+/// assert_eq!(process_brace_char('\\', false), (true, None));
+/// assert_eq!(process_brace_char('x', false), (false, None));
+/// ```
+fn process_brace_char(ch: char, escaped: bool) -> (bool, Option<i8>) {
+    if escaped {
+        return (false, None);
+    }
+    if ch == '\\' {
+        return (true, None);
+    }
+    match ch {
+        '{' => (false, Some(1)),
+        '}' => (false, Some(-1)),
+        _ => (false, None),
+    }
 }
 
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
