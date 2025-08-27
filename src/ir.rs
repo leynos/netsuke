@@ -75,6 +75,7 @@ pub struct BuildEdge {
 }
 
 use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
+use shell_quote::{QuoteRefExt, Sh};
 use thiserror::Error;
 
 use crate::hasher::ActionHasher;
@@ -205,26 +206,7 @@ fn register_action(
 ) -> Result<String, IrGenError> {
     let recipe = match recipe {
         Recipe::Command { command } => {
-            use shell_quote::Bash;
-            let quote_paths = |paths: &[PathBuf]| -> String {
-                paths
-                    .iter()
-                    .map(|p| {
-                        let raw = p.display().to_string();
-                        String::from_utf8(Bash::quote_vec(&raw))
-                            .expect("quoted path is valid UTF-8")
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            };
-            let ins = quote_paths(inputs);
-            let outs = quote_paths(outputs);
-            let interpolated = command.replace("$in", &ins).replace("$out", &outs);
-            if shlex::split(&interpolated).is_none() {
-                return Err(IrGenError::InvalidCommand {
-                    command: interpolated,
-                });
-            }
+            let interpolated = interpolate_command(&command, inputs, outputs)?;
             Recipe::Command {
                 command: interpolated,
             }
@@ -242,6 +224,72 @@ fn register_action(
     let hash = ActionHasher::hash(&action).map_err(IrGenError::ActionSerialisation)?;
     actions.entry(hash.clone()).or_insert(action);
     Ok(hash)
+}
+
+fn interpolate_command(
+    template: &str,
+    inputs: &[PathBuf],
+    outputs: &[PathBuf],
+) -> Result<String, IrGenError> {
+    fn quote_paths(paths: &[PathBuf]) -> Vec<String> {
+        paths
+            .iter()
+            .map(|p| {
+                let raw = p.display().to_string();
+                String::from_utf8(raw.quoted(Sh)).expect("quoted path is valid UTF-8")
+            })
+            .collect()
+    }
+
+    let ins = quote_paths(inputs);
+    let outs = quote_paths(outputs);
+    let interpolated = substitute(template, &ins, &outs);
+    if shlex::split(&interpolated).is_none() {
+        return Err(IrGenError::InvalidCommand {
+            command: interpolated,
+        });
+    }
+    Ok(interpolated)
+}
+
+fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
+    fn is_ident(ch: char) -> bool {
+        ch.is_ascii_alphanumeric() || ch == '_'
+    }
+
+    let chars: Vec<char> = template.chars().collect();
+    let mut out = String::with_capacity(template.len());
+    let mut i = 0;
+    while let Some(&ch) = chars.get(i) {
+        if ch == '$' {
+            // Attempt to match $in
+            if matches!(chars.get(i + 1), Some('i')) && matches!(chars.get(i + 2), Some('n')) {
+                let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
+                let next_ok = chars.get(i + 3).is_none_or(|c| !is_ident(*c));
+                if prev_ok && next_ok {
+                    out.push_str(&ins.join(" "));
+                    i += 3;
+                    continue;
+                }
+            }
+            // Attempt to match $out
+            if matches!(chars.get(i + 1), Some('o'))
+                && matches!(chars.get(i + 2), Some('u'))
+                && matches!(chars.get(i + 3), Some('t'))
+            {
+                let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
+                let next_ok = chars.get(i + 4).is_none_or(|c| !is_ident(*c));
+                if prev_ok && next_ok {
+                    out.push_str(&outs.join(" "));
+                    i += 4;
+                    continue;
+                }
+            }
+        }
+        out.push(ch);
+        i += 1;
+    }
+    out
 }
 
 fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
