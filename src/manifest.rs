@@ -324,6 +324,7 @@ fn handle_backslash_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
+    prev_is_sep: bool,
 ) {
     if let Some(&next) = it.peek() {
         // Keep escapes for glob metacharacters so downstream globbing sees
@@ -333,7 +334,7 @@ fn handle_backslash_escape(
             return;
         }
         if matches!(next, '*' | '?') {
-            handle_wildcard_escape(out, it, native);
+            handle_wildcard_escape(out, it, native, prev_is_sep);
             return;
         }
     }
@@ -345,14 +346,14 @@ fn handle_wildcard_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
+    _prev_is_sep: bool,
 ) {
     let mut lookahead = it.clone();
     lookahead.next();
-    if lookahead.peek().is_none() {
-        // Preserve a trailing backslash so the shell-like intent is clear.
-        out.push('\\');
-    } else {
-        out.push(native);
+    match lookahead.peek() {
+        None => out.push('\\'),
+        Some(ch) if ch.is_alphanumeric() => out.push('\\'),
+        _ => out.push(native),
     }
 }
 /// Brace depth delta for a character.
@@ -441,89 +442,6 @@ fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Resul
         ));
     }
     Ok(())
-}
-
-/// Process a single character for brace and character-class state.
-///
-/// Returns the updated escape flag, character-class state and an optional
-/// brace depth delta:
-/// - `Some(BraceDelta::Open)` for an opening `{`
-/// - `Some(BraceDelta::Close)` for a closing `}`
-/// - `None` for other characters
-///
-/// ```
-/// assert_eq!(
-///     process_brace_char('{', false, false),
-///     (false, false, Some(BraceDelta::Open))
-/// );
-/// assert_eq!(
-///     process_brace_char('}', false, false),
-///     (false, false, Some(BraceDelta::Close))
-/// );
-/// assert_eq!(
-///     process_brace_char('\\', false, false),
-///     (true, false, None)
-/// );
-/// assert_eq!(
-///     process_brace_char('[', false, false),
-///     (false, true, None)
-/// );
-/// ```
-fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, Option<BraceDelta>) {
-    if escaped {
-        return (false, in_class, None);
-    }
-    if ch == '\\' {
-        return (true, in_class, None);
-    }
-    if in_class {
-        if ch == ']' {
-            return (false, false, None);
-        }
-        return (false, true, None);
-    }
-    match ch {
-        '[' => (false, true, None),
-        '{' => (false, false, Some(BraceDelta::Open)),
-        '}' => (false, false, Some(BraceDelta::Close)),
-        _ => (false, in_class, None),
-||||||| parent of a046980 (Refactor normalize_separators escape logic)
-=======
-#[cfg(unix)]
-fn handle_backslash_escape(
-    out: &mut String,
-    it: &mut std::iter::Peekable<std::str::Chars>,
-    native: char,
-    prev_is_sep: bool,
-) {
-    if let Some(&next) = it.peek() {
-        if matches!(next, '[' | ']' | '{' | '}') {
-            out.push('\\');
-            return;
-        }
-        if matches!(next, '*' | '?') {
-            handle_wildcard_escape(out, it, native, prev_is_sep);
-            return;
-        }
-    }
-    out.push(native);
-}
-
-#[cfg(unix)]
-fn handle_wildcard_escape(
-    out: &mut String,
-    it: &mut std::iter::Peekable<std::str::Chars>,
-    native: char,
-    prev_is_sep: bool,
-) {
-    let mut lookahead = it.clone();
-    lookahead.next();
-    if prev_is_sep || lookahead.peek().is_none() {
-        out.push('\\');
-    } else {
-        out.push(native);
->>>>>>> a046980 (Refactor normalize_separators escape logic)
-    }
 }
 
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {

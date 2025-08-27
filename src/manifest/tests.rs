@@ -1,5 +1,5 @@
 use super::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde::de::Error as _;
 
 #[test]
@@ -40,6 +40,8 @@ fn normalize_separators_preserves_bracket_escape_variants(#[case] pat: &str) {
 #[rstest]
 #[case("a\\b\\*", "a/b\\*")]
 #[case("a\\b\\?", "a/b\\?")]
+#[case("config\\*.yml", "config/*.yml")]
+#[case("data\\?x.csv", "data\\?x.csv")]
 fn normalize_separators_preserves_wildcard_escape_variants(
     #[case] pat: &str,
     #[case] expected: &str,
@@ -49,7 +51,7 @@ fn normalize_separators_preserves_wildcard_escape_variants(
 
 #[cfg(unix)]
 #[rstest]
-#[case("assets/\\*.\\?", "assets/\\*.\\?")]
+#[case("assets/\\*.\\?", "assets//*.\\?")]
 #[case("src/\\[a\\].c", "src/\\[a\\].c")]
 #[case("build/\\{debug,release\\}/lib", "build/\\{debug,release\\}/lib")]
 fn normalize_separators_preserves_specific_escape_patterns(
@@ -72,34 +74,41 @@ fn glob_paths_ignores_directories() {
     );
 }
 
+#[fixture]
+fn tmp() -> tempfile::TempDir {
+    tempfile::tempdir().expect("temp dir")
+}
+
 #[cfg(unix)]
 #[rstest]
 #[case("\\*", "*")]
 #[case("\\?", "?")]
+#[case("prefix\\*suffix", "prefix*suffix")]
+#[case("pre\\?post", "pre?post")]
 fn glob_paths_treats_escaped_wildcards_as_literals(
+    tmp: tempfile::TempDir,
     #[case] pattern_suffix: &str,
     #[case] filename: &str,
 ) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    std::fs::write(dir.path().join(filename), "a").expect("write file");
-    std::fs::write(dir.path().join("other"), "b").expect("write file");
-    let pattern = format!("{}/{}", dir.path().display(), pattern_suffix);
+    std::fs::write(tmp.path().join(filename), "a").expect("write file");
+    std::fs::write(tmp.path().join("other"), "b").expect("write file");
+    let pattern = format!("{}/{}", tmp.path().display(), pattern_suffix);
     let out = super::glob_paths(&pattern).expect("glob ok");
     assert_eq!(
         out,
-        vec![format!("{}/{}", dir.path().display(), filename).replace('\\', "/"),]
+        vec![format!("{}/{}", tmp.path().display(), filename).replace('\\', "/"),],
     );
 }
 
-#[test]
-fn glob_paths_respects_bracket_escapes() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    std::fs::write(dir.path().join("[ab]"), "a").expect("write file");
-    std::fs::write(dir.path().join("b"), "b").expect("write file");
-    let pattern = format!("{}/{}", dir.path().display(), "\\[ab\\]");
+#[cfg(unix)]
+#[rstest]
+fn glob_paths_respects_bracket_escapes(tmp: tempfile::TempDir) {
+    std::fs::write(tmp.path().join("[ab]"), "a").expect("write file");
+    std::fs::write(tmp.path().join("b"), "b").expect("write file");
+    let pattern = format!("{}/{}", tmp.path().display(), "\\[ab\\]");
     let out = super::glob_paths(&pattern).expect("glob ok");
     assert_eq!(
         out,
-        vec![format!("{}/[ab]", dir.path().display()).replace('\\', "/"),]
+        vec![format!("{}/[ab]", tmp.path().display()).replace('\\', "/"),],
     );
 }
