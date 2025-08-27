@@ -112,7 +112,7 @@ impl Display for NamedAction<'_> {
         writeln!(f, "rule {}", self.id)?;
         match &self.action.recipe {
             Recipe::Command { command } => {
-                assert!(
+                debug_assert!(
                     shlex::split(command).is_some(),
                     "invalid command: {command}"
                 );
@@ -124,7 +124,7 @@ impl Display for NamedAction<'_> {
                 // a fresh shell to preserve expected expansions.
                 let escaped = escape_script(script);
                 let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
-                assert!(shlex::split(&cmd).is_some(), "invalid command: {cmd}");
+                debug_assert!(shlex::split(&cmd).is_some(), "invalid command: {cmd}");
                 writeln!(f, "  command = {cmd}")?;
             }
             Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),

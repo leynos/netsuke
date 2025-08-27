@@ -107,8 +107,8 @@ pub enum IrGenError {
     #[error("failed to serialise action: {0}")]
     ActionSerialisation(#[from] serde_json::Error),
 
-    #[error("command \"{command}\" is not a valid shell command")]
-    InvalidCommand { command: String },
+    #[error("command is not a valid shell command: {snippet}")]
+    InvalidCommand { command: String, snippet: String },
 }
 
 impl BuildGraph {
@@ -244,9 +244,12 @@ fn interpolate_command(
     let ins = quote_paths(inputs);
     let outs = quote_paths(outputs);
     let interpolated = substitute(template, &ins, &outs);
-    if shlex::split(&interpolated).is_none() {
+    let unmatched_backticks = interpolated.chars().filter(|&c| c == '`').count() & 1 != 0;
+    if unmatched_backticks || shlex::split(&interpolated).is_none() {
+        let snippet = interpolated.chars().take(160).collect();
         return Err(IrGenError::InvalidCommand {
             command: interpolated,
+            snippet,
         });
     }
     Ok(interpolated)

@@ -3,3 +3,6 @@ targets:
   - name: "out file"
     sources: "in file"
     command: "cat $in > $out"
+  - name: "o'utfile"
+    sources: "-in file"
+    command: "printf %s $in > $out"
