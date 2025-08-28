@@ -252,12 +252,17 @@ fn normalize_separators(pattern: &str) -> String {
 fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut depth = 0usize;
     let mut escaped = false;
+    let mut in_class = false; // inside [...]
     for ch in pattern.chars() {
-        let (new_escaped, depth_change) = process_brace_char(ch, escaped);
+        let (new_escaped, new_in_class, depth_change) = process_brace_char(ch, escaped, in_class);
         escaped = new_escaped;
+        in_class = new_in_class;
+        if in_class {
+            continue;
+        }
         match depth_change {
-            Some(1) => depth += 1,
-            Some(-1) => {
+            Some(BraceDelta::Open) => depth += 1,
+            Some(BraceDelta::Close) => {
                 if depth == 0 {
                     return Err(Error::new(
                         ErrorKind::SyntaxError,
@@ -266,7 +271,7 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
                 }
                 depth -= 1;
             }
-            _ => {}
+            None => {}
         }
     }
     if depth != 0 {
@@ -278,30 +283,57 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     Ok(())
 }
 
-/// Process a single character for brace matching state.
+/// Brace depth delta for a character.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum BraceDelta {
+    Open,
+    Close,
+}
+
+/// Process a single character for brace and character-class state.
 ///
-/// Returns the updated escape state and an optional brace depth delta:
-/// - `Some(1)` for an opening `{`
-/// - `Some(-1)` for a closing `}`
+/// Returns the updated escape flag, character-class state and an optional
+/// brace depth delta:
+/// - `Some(BraceDelta::Open)` for an opening `{`
+/// - `Some(BraceDelta::Close)` for a closing `}`
 /// - `None` for other characters
 ///
 /// ```
-/// assert_eq!(process_brace_char('{', false), (false, Some(1)));
-/// assert_eq!(process_brace_char('}', false), (false, Some(-1)));
-/// assert_eq!(process_brace_char('\\', false), (true, None));
-/// assert_eq!(process_brace_char('x', false), (false, None));
+/// assert_eq!(
+///     process_brace_char('{', false, false),
+///     (false, false, Some(BraceDelta::Open))
+/// );
+/// assert_eq!(
+///     process_brace_char('}', false, false),
+///     (false, false, Some(BraceDelta::Close))
+/// );
+/// assert_eq!(
+///     process_brace_char('\\', false, false),
+///     (true, false, None)
+/// );
+/// assert_eq!(
+///     process_brace_char('[', false, false),
+///     (false, true, None)
+/// );
 /// ```
-fn process_brace_char(ch: char, escaped: bool) -> (bool, Option<i8>) {
+fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, Option<BraceDelta>) {
     if escaped {
-        return (false, None);
+        return (false, in_class, None);
     }
     if ch == '\\' {
-        return (true, None);
+        return (true, in_class, None);
+    }
+    if in_class {
+        if ch == ']' {
+            return (false, false, None);
+        }
+        return (false, true, None);
     }
     match ch {
-        '{' => (false, Some(1)),
-        '}' => (false, Some(-1)),
-        _ => (false, None),
+        '[' => (false, true, None),
+        '{' => (false, false, Some(BraceDelta::Open)),
+        '}' => (false, false, Some(BraceDelta::Close)),
+        _ => (false, false, None),
     }
 }
 
@@ -318,10 +350,11 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
+    // Validate brace matching (ignores braces inside character classes).
+    validate_brace_matching(pattern)?;
+
     // Normalize separators so `/` and `\\` behave the same on all platforms.
     let normalized = normalize_separators(pattern);
-
-    validate_brace_matching(&normalized)?;
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(

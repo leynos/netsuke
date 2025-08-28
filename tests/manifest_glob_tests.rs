@@ -178,6 +178,19 @@ fn glob_escaped_braces_are_literals(pattern: &str) {
     assert!(manifest.targets.is_empty());
 }
 
+#[rstest(
+    pattern,
+    case("[{}]"),           // braces as literals inside a class
+    case("[{]"),            // unmatched '{' inside class must NOT error
+    case("x{a,{b,c}}.txt"), // nested braces
+)]
+fn glob_braces_in_classes_and_nested(pattern: &str) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob('{pattern}')\n    name: ok\n    command: echo hi\n",
+    ));
+    let _ = manifest::from_str(&yaml).expect("pattern should parse");
+}
+
 #[rstest]
 fn glob_accepts_windows_path_separators(temp_dir: tempfile::TempDir) {
     fs::write(temp_dir.path().join("a.txt"), "a").expect("write a");
