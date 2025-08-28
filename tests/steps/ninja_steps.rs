@@ -56,5 +56,5 @@ fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
 )]
 #[then(expr = "shlex splitting the command yields {string}")]
 fn ninja_first_command_tokens(world: &mut CliWorld, expected: String) {
-    ninja_command_tokens(world, 1, expected);
+    ninja_command_tokens(world, 2, expected);
 }

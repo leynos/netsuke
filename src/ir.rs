@@ -137,7 +137,10 @@ impl BuildGraph {
     /// Rules are stored verbatim and expanded later when targets reference
     /// them. This allows each target's input and output paths to be embedded in
     /// the resulting command, meaning identical rule definitions may yield
-    /// distinct actions once interpolated.
+    /// distinct actions once interpolated. Should the manifest schema ever
+    /// permit targets to override recipe fields such as `command` or
+    /// `description`, those target-level values take precedence over the rule's
+    /// defaults.
     fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
@@ -244,6 +247,17 @@ fn register_action(
     Ok(hash)
 }
 
+/// Returns `true` when the command contains an odd number of backticks.
+///
+/// # Examples
+/// ```rust,ignore
+/// assert!(has_unmatched_backticks("echo`"));
+/// assert!(!has_unmatched_backticks("`echo`"));
+/// ```
+fn has_unmatched_backticks(s: &str) -> bool {
+    s.chars().filter(|&c| c == '`').count() & 1 != 0
+}
+
 fn interpolate_command(
     template: &str,
     inputs: &[PathBuf],
@@ -262,8 +276,7 @@ fn interpolate_command(
     let ins = quote_paths(inputs);
     let outs = quote_paths(outputs);
     let interpolated = substitute(template, &ins, &outs);
-    let unmatched_backticks = interpolated.chars().filter(|&c| c == '`').count() & 1 != 0;
-    if unmatched_backticks || shlex::split(&interpolated).is_none() {
+    if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
         let snippet = interpolated.chars().take(160).collect();
         return Err(IrGenError::InvalidCommand {
             command: interpolated,
@@ -318,24 +331,19 @@ fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
     prev_ok && next_ok
 }
 
-/// Attempts to substitute a placeholder with the provided values.
+/// Returns the skip length when `pattern` matches at `pos`.
 ///
 /// # Examples
 /// ```rust,ignore
 /// let chars: Vec<char> = "$in".chars().collect();
-/// let res = try_match_placeholder(&chars, 0, &['i', 'n'], &["a".into()]);
-/// assert_eq!(res, Some(("a".into(), 3)));
+/// let res = try_match_placeholder(&chars, 0, &['i', 'n']);
+/// assert_eq!(res, Some(3));
 /// ```
-fn try_match_placeholder(
-    chars: &[char],
-    pos: usize,
-    pattern: &[char],
-    values: &[String],
-) -> Option<(String, usize)> {
+fn try_match_placeholder(chars: &[char], pos: usize, pattern: &[char]) -> Option<usize> {
     if matches_pattern_at_position(chars, pos + 1, pattern)
         && has_valid_word_boundaries(chars, pos, pattern.len())
     {
-        Some((values.join(" "), pattern.len() + 1))
+        Some(pattern.len() + 1)
     } else {
         None
     }
@@ -346,28 +354,32 @@ fn try_match_placeholder(
 /// # Examples
 /// ```rust,ignore
 /// let chars: Vec<char> = "$in".chars().collect();
-/// let res = find_substitution(&chars, 0, &["a".into()], &[]);
-/// assert_eq!(res, Some(("a".into(), 3)));
+/// let res = find_substitution(&chars, 0, "a", "");
+/// assert_eq!(res, Some(("a", 3)));
 /// ```
-fn find_substitution(
+fn find_substitution<'a>(
     chars: &[char],
     pos: usize,
-    ins: &[String],
-    outs: &[String],
-) -> Option<(String, usize)> {
-    try_match_placeholder(chars, pos, &['i', 'n'], ins)
-        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't'], outs))
+    ins: &'a str,
+    outs: &'a str,
+) -> Option<(&'a str, usize)> {
+    try_match_placeholder(chars, pos, &['i', 'n'])
+        .map(|skip| (ins, skip))
+        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip)))
 }
 
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
     let chars: Vec<char> = template.chars().collect();
+    let ins_joined = ins.join(" ");
+    let outs_joined = outs.join(" ");
     let mut out = String::with_capacity(template.len());
     let mut i = 0;
     while let Some(&ch) = chars.get(i) {
         if ch == '$'
-            && let Some((replacement, skip)) = find_substitution(&chars, i, ins, outs)
+            && let Some((replacement, skip)) =
+                find_substitution(&chars, i, &ins_joined, &outs_joined)
         {
-            out.push_str(&replacement);
+            out.push_str(replacement);
             i += skip;
         } else {
             out.push(ch);

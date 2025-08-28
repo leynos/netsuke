@@ -6,3 +6,6 @@ targets:
   - name: "o'utfile"
     sources: "-in file"
     command: "printf %s $in > $out"
+  - name: "o'ut\nfile"
+    sources: "-in file"
+    command: "printf %s $in > $out"

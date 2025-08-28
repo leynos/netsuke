@@ -65,6 +65,21 @@ fn variable_name_overlap_not_rewritten() {
 }
 
 #[rstest]
+fn output_variable_overlap_not_rewritten() {
+    let yaml = manifest_yaml(
+        "targets:\n  - name: out\n    sources: in\n    command: \"echo $output_dir > $out\"\n",
+    );
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
+    let action = graph.actions.values().next().expect("action");
+    let Recipe::Command { command } = &action.recipe else {
+        panic!("expected command")
+    };
+    let words = shlex::split(command).expect("split command into words");
+    assert_eq!(words, ["echo", "$output_dir", ">", "out"]);
+}
+
+#[rstest]
 fn newline_in_paths_is_quoted() {
     let yaml = manifest_yaml(
         "targets:\n  - name: \"o'ut\\nfile\"\n    sources: \"-in file\"\n    command: \"printf %s $in > $out\"\n",

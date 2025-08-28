@@ -20,4 +20,4 @@ Feature: Ninja file generation
   Scenario: Edge-case paths are shell-quoted
     When the manifest file "tests/data/quote.yml" is compiled to IR
     And the ninja file is generated
-    Then shlex splitting command 2 yields "printf, %s, -in file, >, o'utfile"
+    Then shlex splitting command 3 yields "printf, %s, -in file, >, o'utfile"
