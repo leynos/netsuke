@@ -2,6 +2,14 @@
 use netsuke::{ast::Recipe, ir::BuildGraph, manifest};
 use rstest::rstest;
 
+/// Prefix the provided YAML body with a required `netsuke_version`.
+///
+/// # Examples
+/// ```
+/// let y = manifest_yaml("targets: []");
+/// assert!(y.starts_with("netsuke_version"));
+/// ```
+#[inline]
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
 }
@@ -38,10 +46,26 @@ fn multiple_inputs_outputs_with_special_chars_are_quoted() {
 }
 
 #[rstest]
-fn invalid_command_errors() {
+fn longer_variable_names_not_rewritten() {
     let yaml = manifest_yaml(
-        "targets:\n  - name: out\n    sources: in\n    command: \"echo 'unterminated\"\n",
+        "targets:\n  - name: out\n    sources: in\n    command: \"echo $input && cat $in > $output\"\n",
     );
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
+    let action = graph.actions.values().next().expect("action");
+    let Recipe::Command { command } = &action.recipe else {
+        panic!("expected command")
+    };
+    assert_eq!(command, "echo $input && cat in > $output");
+}
+
+#[rstest]
+#[case("echo \"unterminated")]
+#[case("echo 'unterminated")]
+fn invalid_commands_fail(#[case] cmd: &str) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - name: out\n    sources: in\n    command: |\n      {cmd}\n",
+    ));
     let manifest = manifest::from_str(&yaml).expect("parse");
     let err = BuildGraph::from_manifest(&manifest).expect_err("should fail");
     assert!(err.to_string().contains("not a valid shell command"));

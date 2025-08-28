@@ -26,6 +26,7 @@
 //
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
@@ -107,8 +108,8 @@ pub enum IrGenError {
     #[error("failed to serialise action: {0}")]
     ActionSerialisation(#[from] serde_json::Error),
 
-    #[error("command \"{command}\" is not a valid shell command")]
-    InvalidCommand { command: String },
+    #[error("command is not a valid shell command: {snippet}")]
+    InvalidCommand { command: String, snippet: String },
 }
 
 impl BuildGraph {
@@ -131,9 +132,9 @@ impl BuildGraph {
         Ok(graph)
     }
 
-    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Rule>) {
+    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
-            rule_map.insert(rule.name.clone(), rule.clone());
+            rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
         }
     }
 
@@ -141,7 +142,7 @@ impl BuildGraph {
         manifest: &NetsukeManifest,
         actions: &mut HashMap<String, Action>,
         targets: &mut HashMap<PathBuf, BuildEdge>,
-        rule_map: &HashMap<String, Rule>,
+        rule_map: &HashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
@@ -149,6 +150,9 @@ impl BuildGraph {
             let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
+                    // Rule recipe and description take precedence over any
+                    // target-level fields. Future schema changes introducing
+                    // explicit overrides should adjust this behaviour.
                     let tmpl = resolve_rule(rule, rule_map, &target_name)?;
                     register_action(
                         actions,
@@ -241,52 +245,67 @@ fn interpolate_command(
             .collect()
     }
 
-    let ins = quote_paths(inputs);
-    let outs = quote_paths(outputs);
+    let ins = quote_paths(inputs).join(" ");
+    let outs = quote_paths(outputs).join(" ");
     let interpolated = substitute(template, &ins, &outs);
     if shlex::split(&interpolated).is_none() {
+        let snippet: String = interpolated.chars().take(160).collect();
         return Err(IrGenError::InvalidCommand {
             command: interpolated,
+            snippet,
         });
     }
     Ok(interpolated)
 }
 
-fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
-    fn is_ident(ch: char) -> bool {
-        ch.is_ascii_alphanumeric() || ch == '_'
+/// Replace `$in`/`$out` tokens with pre-joined paths.
+///
+/// The scan is boundary-aware to avoid rewriting longer identifiers such as
+/// `$input` or `$output_dir`.
+fn substitute(template: &str, ins: &str, outs: &str) -> String {
+    fn is_ident_byte(b: u8) -> bool {
+        b.is_ascii_alphanumeric() || b == b'_'
     }
 
-    let chars: Vec<char> = template.chars().collect();
-    let mut out = String::with_capacity(template.len());
-    let mut i = 0;
-    while let Some(&ch) = chars.get(i) {
-        if ch == '$' {
-            // Attempt to match $in
-            if matches!(chars.get(i + 1), Some('i')) && matches!(chars.get(i + 2), Some('n')) {
-                let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
-                let next_ok = chars.get(i + 3).is_none_or(|c| !is_ident(*c));
-                if prev_ok && next_ok {
-                    out.push_str(&ins.join(" "));
-                    i += 3;
-                    continue;
-                }
-            }
-            // Attempt to match $out
-            if matches!(chars.get(i + 1), Some('o'))
-                && matches!(chars.get(i + 2), Some('u'))
-                && matches!(chars.get(i + 3), Some('t'))
-            {
-                let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
-                let next_ok = chars.get(i + 4).is_none_or(|c| !is_ident(*c));
-                if prev_ok && next_ok {
-                    out.push_str(&outs.join(" "));
-                    i += 4;
-                    continue;
-                }
-            }
+    fn match_macro<'a>(
+        bytes: &[u8],
+        i: usize,
+        ins: &'a str,
+        outs: &'a str,
+    ) -> Option<(usize, &'a str)> {
+        let prev_ok = bytes
+            .get(i.wrapping_sub(1))
+            .is_none_or(|b| !is_ident_byte(*b));
+        if bytes.get(i + 1) == Some(&b'i')
+            && bytes.get(i + 2) == Some(&b'n')
+            && bytes.get(i + 3).is_none_or(|b| !is_ident_byte(*b))
+            && prev_ok
+        {
+            return Some((3, ins));
         }
-        out.push(ch);
+        if bytes.get(i + 1) == Some(&b'o')
+            && bytes.get(i + 2) == Some(&b'u')
+            && bytes.get(i + 3) == Some(&b't')
+            && bytes.get(i + 4).is_none_or(|b| !is_ident_byte(*b))
+            && prev_ok
+        {
+            return Some((4, outs));
+        }
+        None
+    }
+
+    let bytes = template.as_bytes();
+    let mut out = String::with_capacity(template.len() + ins.len() + outs.len());
+    let mut i = 0;
+    while let Some(&b) = bytes.get(i) {
+        if b == b'$'
+            && let Some((skip, repl)) = match_macro(bytes, i, ins, outs)
+        {
+            out.push_str(repl);
+            i += skip;
+            continue;
+        }
+        out.push(b as char);
         i += 1;
     }
     out
@@ -319,11 +338,11 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
     }
 }
 
-fn resolve_rule<'a>(
+fn resolve_rule(
     rule: &StringOrList,
-    rule_map: &'a HashMap<String, Rule>,
+    rule_map: &HashMap<String, Arc<Rule>>,
     target_name: &str,
-) -> Result<&'a Rule, IrGenError> {
+) -> Result<Arc<Rule>, IrGenError> {
     extract_single(rule).map_or_else(
         || {
             let mut rules = to_string_vec(rule);
@@ -340,10 +359,13 @@ fn resolve_rule<'a>(
             }
         },
         |name| {
-            rule_map.get(name).ok_or_else(|| IrGenError::RuleNotFound {
-                target_name: target_name.to_string(),
-                rule_name: name.to_string(),
-            })
+            rule_map
+                .get(name)
+                .cloned()
+                .ok_or_else(|| IrGenError::RuleNotFound {
+                    target_name: target_name.to_string(),
+                    rule_name: name.to_string(),
+                })
         },
     )
 }
