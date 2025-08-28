@@ -119,7 +119,7 @@ Feature: Manifest Parsing
     Given the manifest file "tests/data/glob_invalid_brace.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
-    And the error message contains "glob pattern"
+    And the error message contains "unmatched '{'"
 
 
 
