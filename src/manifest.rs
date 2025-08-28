@@ -254,33 +254,14 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut escaped = false;
     let mut in_class = false; // inside [...]
     for ch in pattern.chars() {
-        let (new_escaped, new_in_class, depth_change) = process_brace_char(ch, escaped, in_class);
+        let (new_escaped, new_in_class, delta) = process_brace_char(ch, escaped, in_class);
         escaped = new_escaped;
         in_class = new_in_class;
-        if in_class {
-            continue;
-        }
-        match depth_change {
-            Some(BraceDelta::Open) => depth += 1,
-            Some(BraceDelta::Close) => {
-                if depth == 0 {
-                    return Err(Error::new(
-                        ErrorKind::SyntaxError,
-                        format!("invalid glob pattern '{pattern}': unmatched '}}'"),
-                    ));
-                }
-                depth -= 1;
-            }
-            None => {}
+        if !in_class && let Some(delta) = delta {
+            depth = apply_brace_delta(depth, delta, pattern)?;
         }
     }
-    if depth != 0 {
-        return Err(Error::new(
-            ErrorKind::SyntaxError,
-            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
-        ));
-    }
-    Ok(())
+    validate_final_brace_depth(depth, pattern)
 }
 
 /// Brace depth delta for a character.
@@ -288,6 +269,53 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
 enum BraceDelta {
     Open,
     Close,
+}
+
+/// Apply a brace depth change, returning the new depth or a syntax error.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(apply_brace_delta(0, BraceDelta::Open, "p").unwrap(), 1);
+/// assert_eq!(apply_brace_delta(1, BraceDelta::Close, "p").unwrap(), 0);
+/// assert!(apply_brace_delta(0, BraceDelta::Close, "p").is_err());
+/// ```
+fn apply_brace_delta(
+    current_depth: usize,
+    delta: BraceDelta,
+    pattern: &str,
+) -> std::result::Result<usize, Error> {
+    match delta {
+        BraceDelta::Open => Ok(current_depth + 1),
+        BraceDelta::Close => {
+            if current_depth == 0 {
+                Err(Error::new(
+                    ErrorKind::SyntaxError,
+                    format!("invalid glob pattern '{pattern}': unmatched '}}'"),
+                ))
+            } else {
+                Ok(current_depth - 1)
+            }
+        }
+    }
+}
+
+/// Ensure the final brace depth is zero.
+///
+/// # Examples
+///
+/// ```
+/// assert!(validate_final_brace_depth(0, "p").is_ok());
+/// assert!(validate_final_brace_depth(1, "p").is_err());
+/// ```
+fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Result<(), Error> {
+    if depth != 0 {
+        return Err(Error::new(
+            ErrorKind::SyntaxError,
+            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
+        ));
+    }
+    Ok(())
 }
 
 /// Process a single character for brace and character-class state.
