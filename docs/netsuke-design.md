@@ -242,11 +242,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   files. Netsuke expands these placeholders to space-separated lists of file
   paths quoted for POSIX `/bin/sh` using the
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
-  mode) before hashing the action. When generating the Ninja rule, the lists
-  are replaced with Ninja's `$in` and `$out` macros. After interpolation, the
-  command must be parsable by [shlex](https://docs.rs/shlex/latest/shlex/)
-  (POSIX mode). Any interpolation other than `ins` or `outs` is automatically
-  shell-escaped.
+  mode) before hashing the action. The IR stores the fully expanded command;
+  Ninja executes this text verbatim. After interpolation, the command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). Any
+  interpolation other than `ins` or `outs` is automatically shell-escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`
@@ -1236,12 +1235,13 @@ step by step. The placeholders `{{ ins }}` and `{{ outs }}` are expanded to
 space-separated lists of file paths within Netsuke itself, each path being
 shell-escaped using the `shell-quote` API. Netsuke uses the `Sh` quoting mode
 to emit POSIX-compliant single-quoted strings and scans the template for
-standalone `$in` and `$out` tokens to avoid rewriting unrelated variables. When
-the command is written to `build.ninja`, these lists replace Ninja's `$in` and
-`$out` macros. After substitution, the command is validated with \[`shlex`\]
-(<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly. This
-approach guarantees that every dynamic part of the command is securely quoted,
-albeit at the cost of deduplicating only actions with identical file sets.
+standalone `$in` and `$out` tokens to avoid rewriting unrelated variables.
+Substitution happens during IR generation and the fully expanded command is
+emitted to `build.ninja` unchanged. After substitution, the command is
+validated with \[`shlex`\](<https://docs.rs/shlex/latest/shlex/>) to ensure it
+parses correctly. This approach guarantees that every dynamic part of the
+command is securely quoted, albeit at the cost of deduplicating only actions
+with identical file sets.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 

@@ -76,6 +76,7 @@ pub struct BuildEdge {
 
 use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
 use shell_quote::{QuoteRefExt, Sh};
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::hasher::ActionHasher;
@@ -120,7 +121,7 @@ impl BuildGraph {
     /// are specified for a single target, or no rule is provided.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
         let mut graph = Self::default();
-        let mut rule_map = HashMap::new();
+        let mut rule_map: HashMap<String, Arc<Rule>> = HashMap::new();
 
         Self::process_rules(manifest, &mut rule_map);
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
@@ -137,9 +138,9 @@ impl BuildGraph {
     /// them. This allows each target's input and output paths to be embedded in
     /// the resulting command, meaning identical rule definitions may yield
     /// distinct actions once interpolated.
-    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Rule>) {
+    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
-            rule_map.insert(rule.name.clone(), rule.clone());
+            rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
         }
     }
 
@@ -147,7 +148,7 @@ impl BuildGraph {
         manifest: &NetsukeManifest,
         actions: &mut HashMap<String, Action>,
         targets: &mut HashMap<PathBuf, BuildEdge>,
-        rule_map: &HashMap<String, Rule>,
+        rule_map: &HashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
@@ -156,6 +157,9 @@ impl BuildGraph {
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
                     let tmpl = resolve_rule(rule, rule_map, &target_name)?;
+                    // Future schema versions may allow targets to override
+                    // recipe or description fields. If so, those values will
+                    // take precedence over the rule template.
                     register_action(
                         actions,
                         tmpl.recipe.clone(),
@@ -274,33 +278,45 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
         ch.is_ascii_alphanumeric() || ch == '_'
     }
 
+    fn try_match_in(chars: &[char], i: usize, ins: &[String]) -> Option<(String, usize)> {
+        if matches!(chars.get(i + 1), Some('i')) && matches!(chars.get(i + 2), Some('n')) {
+            let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
+            let next_ok = chars.get(i + 3).is_none_or(|c| !is_ident(*c));
+            if prev_ok && next_ok {
+                return Some((ins.join(" "), 3));
+            }
+        }
+        None
+    }
+
+    fn try_match_out(chars: &[char], i: usize, outs: &[String]) -> Option<(String, usize)> {
+        if matches!(chars.get(i + 1), Some('o'))
+            && matches!(chars.get(i + 2), Some('u'))
+            && matches!(chars.get(i + 3), Some('t'))
+        {
+            let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
+            let next_ok = chars.get(i + 4).is_none_or(|c| !is_ident(*c));
+            if prev_ok && next_ok {
+                return Some((outs.join(" "), 4));
+            }
+        }
+        None
+    }
+
     let chars: Vec<char> = template.chars().collect();
     let mut out = String::with_capacity(template.len());
     let mut i = 0;
     while let Some(&ch) = chars.get(i) {
         if ch == '$' {
-            // Attempt to match $in
-            if matches!(chars.get(i + 1), Some('i')) && matches!(chars.get(i + 2), Some('n')) {
-                let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
-                let next_ok = chars.get(i + 3).is_none_or(|c| !is_ident(*c));
-                if prev_ok && next_ok {
-                    out.push_str(&ins.join(" "));
-                    i += 3;
-                    continue;
-                }
+            if let Some((replacement, skip)) = try_match_in(&chars, i, ins) {
+                out.push_str(&replacement);
+                i += skip;
+                continue;
             }
-            // Attempt to match $out
-            if matches!(chars.get(i + 1), Some('o'))
-                && matches!(chars.get(i + 2), Some('u'))
-                && matches!(chars.get(i + 3), Some('t'))
-            {
-                let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
-                let next_ok = chars.get(i + 4).is_none_or(|c| !is_ident(*c));
-                if prev_ok && next_ok {
-                    out.push_str(&outs.join(" "));
-                    i += 4;
-                    continue;
-                }
+            if let Some((replacement, skip)) = try_match_out(&chars, i, outs) {
+                out.push_str(&replacement);
+                i += skip;
+                continue;
             }
         }
         out.push(ch);
@@ -336,11 +352,11 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
     }
 }
 
-fn resolve_rule<'a>(
+fn resolve_rule(
     rule: &StringOrList,
-    rule_map: &'a HashMap<String, Rule>,
+    rule_map: &HashMap<String, Arc<Rule>>,
     target_name: &str,
-) -> Result<&'a Rule, IrGenError> {
+) -> Result<Arc<Rule>, IrGenError> {
     extract_single(rule).map_or_else(
         || {
             let mut rules = to_string_vec(rule);
@@ -357,10 +373,13 @@ fn resolve_rule<'a>(
             }
         },
         |name| {
-            rule_map.get(name).ok_or_else(|| IrGenError::RuleNotFound {
-                target_name: target_name.to_string(),
-                rule_name: name.to_string(),
-            })
+            rule_map
+                .get(name)
+                .cloned()
+                .ok_or_else(|| IrGenError::RuleNotFound {
+                    target_name: target_name.to_string(),
+                    rule_name: name.to_string(),
+                })
         },
     )
 }

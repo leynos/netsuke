@@ -127,9 +127,9 @@ library, and CLI ergonomics.
 
   - [x] Integrate the `shell-quote` crate.
 
-  - [x] Mandate its use for $in/$out substitutions within command strings
-    during Ninja file synthesis to prevent command injection. Other
-    interpolations are validated with shlex but are not shell-quoted.
+  - [x] Mandate its use for variable substitutions within command strings
+    during IR generation to prevent command injection, and validate the final
+    command string with shlex.
 
   - [x] Emit POSIX-sh-compatible quoting (portable single-quote style)
     rather than Bash-only forms. If Bash-specific quoting is required, document

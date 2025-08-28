@@ -10,7 +10,7 @@ use rstest::rstest;
 /// assert!(y.starts_with("netsuke_version"));
 /// ```
 #[inline]
-fn manifest_yaml(body: &str) -> String {
+pub(crate) fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
 }
 
@@ -62,6 +62,21 @@ fn variable_name_overlap_not_rewritten() {
     };
     let words = shlex::split(command).expect("split command into words");
     assert_eq!(words, ["echo", "$input", ">", "out file"]);
+}
+
+#[rstest]
+fn newline_in_paths_is_quoted() {
+    let yaml = manifest_yaml(
+        "targets:\n  - name: \"o'ut\\nfile\"\n    sources: \"-in file\"\n    command: \"printf %s $in > $out\"\n",
+    );
+    let manifest = manifest::from_str(&yaml).expect("parse");
+    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
+    let action = graph.actions.values().next().expect("action");
+    let Recipe::Command { command } = &action.recipe else {
+        panic!("expected command")
+    };
+    let words = shlex::split(command).expect("split command into words");
+    assert_eq!(words, ["printf", "%s", "-in file", ">", "o'ut\nfile"]);
 }
 
 #[rstest]
