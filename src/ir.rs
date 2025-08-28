@@ -273,54 +273,106 @@ fn interpolate_command(
     Ok(interpolated)
 }
 
+/// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
+///
+/// # Examples
+/// ```rust,ignore
+/// assert!(is_identifier_char('a'));
+/// assert!(!is_identifier_char('-'));
+/// ```
+fn is_identifier_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
+}
+
+/// Checks if `pattern` matches `chars` starting at `pos`.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "in-out".chars().collect();
+/// assert!(matches_pattern_at_position(&chars, 0, &['i', 'n']));
+/// assert!(!matches_pattern_at_position(&chars, 3, &['i', 'n']));
+/// ```
+fn matches_pattern_at_position(chars: &[char], pos: usize, pattern: &[char]) -> bool {
+    pattern
+        .iter()
+        .enumerate()
+        .all(|(off, ch)| matches!(chars.get(pos + off), Some(c) if c == ch))
+}
+
+/// Ensures characters around the token are not identifier characters.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "$in".chars().collect();
+/// assert!(has_valid_word_boundaries(&chars, 0, 2));
+/// let chars: Vec<char> = "$input".chars().collect();
+/// assert!(!has_valid_word_boundaries(&chars, 0, 2));
+/// ```
+fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
+    let prev_ok = chars
+        .get(pos.wrapping_sub(1))
+        .is_none_or(|c| !is_identifier_char(*c));
+    let next_ok = chars
+        .get(pos + len + 1)
+        .is_none_or(|c| !is_identifier_char(*c));
+    prev_ok && next_ok
+}
+
+/// Attempts to substitute a placeholder with the provided values.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "$in".chars().collect();
+/// let res = try_match_placeholder(&chars, 0, &['i', 'n'], &["a".into()]);
+/// assert_eq!(res, Some(("a".into(), 3)));
+/// ```
+fn try_match_placeholder(
+    chars: &[char],
+    pos: usize,
+    pattern: &[char],
+    values: &[String],
+) -> Option<(String, usize)> {
+    if matches_pattern_at_position(chars, pos + 1, pattern)
+        && has_valid_word_boundaries(chars, pos, pattern.len())
+    {
+        Some((values.join(" "), pattern.len() + 1))
+    } else {
+        None
+    }
+}
+
+/// Finds the appropriate substitution for `$in` or `$out` at `pos`.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "$in".chars().collect();
+/// let res = find_substitution(&chars, 0, &["a".into()], &[]);
+/// assert_eq!(res, Some(("a".into(), 3)));
+/// ```
+fn find_substitution(
+    chars: &[char],
+    pos: usize,
+    ins: &[String],
+    outs: &[String],
+) -> Option<(String, usize)> {
+    try_match_placeholder(chars, pos, &['i', 'n'], ins)
+        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't'], outs))
+}
+
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
-    fn is_ident(ch: char) -> bool {
-        ch.is_ascii_alphanumeric() || ch == '_'
-    }
-
-    fn try_match_in(chars: &[char], i: usize, ins: &[String]) -> Option<(String, usize)> {
-        if matches!(chars.get(i + 1), Some('i')) && matches!(chars.get(i + 2), Some('n')) {
-            let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
-            let next_ok = chars.get(i + 3).is_none_or(|c| !is_ident(*c));
-            if prev_ok && next_ok {
-                return Some((ins.join(" "), 3));
-            }
-        }
-        None
-    }
-
-    fn try_match_out(chars: &[char], i: usize, outs: &[String]) -> Option<(String, usize)> {
-        if matches!(chars.get(i + 1), Some('o'))
-            && matches!(chars.get(i + 2), Some('u'))
-            && matches!(chars.get(i + 3), Some('t'))
-        {
-            let prev_ok = chars.get(i.wrapping_sub(1)).is_none_or(|c| !is_ident(*c));
-            let next_ok = chars.get(i + 4).is_none_or(|c| !is_ident(*c));
-            if prev_ok && next_ok {
-                return Some((outs.join(" "), 4));
-            }
-        }
-        None
-    }
-
     let chars: Vec<char> = template.chars().collect();
     let mut out = String::with_capacity(template.len());
     let mut i = 0;
     while let Some(&ch) = chars.get(i) {
-        if ch == '$' {
-            if let Some((replacement, skip)) = try_match_in(&chars, i, ins) {
-                out.push_str(&replacement);
-                i += skip;
-                continue;
-            }
-            if let Some((replacement, skip)) = try_match_out(&chars, i, outs) {
-                out.push_str(&replacement);
-                i += skip;
-                continue;
-            }
+        if ch == '$'
+            && let Some((replacement, skip)) = find_substitution(&chars, i, ins, outs)
+        {
+            out.push_str(&replacement);
+            i += skip;
+        } else {
+            out.push(ch);
+            i += 1;
         }
-        out.push(ch);
-        i += 1;
     }
     out
 }
