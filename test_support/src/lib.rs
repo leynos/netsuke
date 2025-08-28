@@ -21,6 +21,9 @@ pub use path_guard::PathGuard;
 /// Re-export of [`env_var_guard::EnvVarGuard`] for ergonomics in tests.
 pub use env_var_guard::EnvVarGuard;
 
+mod error;
+pub use error::display_error_chain;
+
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};

@@ -1,12 +1,13 @@
 //! Step definitions for manifest feature tests.
 
-use crate::{CliWorld, steps::display_error_chain};
+use crate::CliWorld;
 use cucumber::{given, then, when};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
 };
 use std::ffi::OsStr;
+use test_support::display_error_chain;
 use test_support::env::{remove_var, set_var};
 
 const INDEX_KEY: &str = "index";
