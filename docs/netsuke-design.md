@@ -1047,28 +1047,28 @@ The core logic of the validation stage is a function, `ir::from_manifest`, that
 consumes a `NetsukeManifest` (the AST) and produces a `BuildGraph` (the IR).
 This transformation involves several steps:
 
-1. **Action Consolidation:** Iterate through the `manifest.rules` from the AST.
-   For each rule, create a corresponding `ir::Action` struct. These actions are
-   stored in the `BuildGraph`'s `actions` map, keyed by a hash of their fully
-   resolved command text, interpreter, local variables, and depfile options.
-   This ensures deduplication only occurs when two actions are truly
-   interchangeable.
+1. **Rule Collection:** Insert each entry in `manifest.rules` into a
+   `HashMap` keyed by its name. Rules are stored as templates and are not
+   deduplicated at this stage.
 
 2. **Target Expansion:** Iterate through the `manifest.targets` and the optional
    `manifest.actions`. Entries in `actions` are treated identically to targets
    but with `phony` defaulting to `true`. For each item, resolve all strings
    into `PathBuf`s and resolve all dependency names against other targets.
 
-3. **Edge Creation:** For each AST target, create an `ir::BuildEdge` object.
-   This involves linking it to the appropriate `ir::Action` (by its ID),
-   transferring the `phony` and `always` flags, and populating its input and
-   output vectors.
+3. **Action Registration and Edge Creation:** For each expanded target,
+   resolve the referenced rule template, interpolate its command with the
+   target's input and output paths, and register the resulting `ir::Action` in
+   the `actions` map. Actions are hashed on the fully resolved command and file
+   set, so identical rule templates yield distinct actions when their paths
+   differ. Create a corresponding `ir::BuildEdge` linking the target to the
+   action identifier and transfer the `phony` and `always` flags.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
-   `actions` map and running a cycle detection algorithm (e.g., a depth- first
-   search maintaining a visitation state) on the dependency graph to fail
-   compilation if a circular dependency is found.
+   `actions` map and running a cycle detection algorithm (e.g., a depth-first
+   search maintaining a visitation state) on the dependency graph to fail early
+   on circular dependencies.
 
    The implemented algorithm performs a depth-first traversal of the target
    graph and maintains a recursion stack. Order-only dependencies are ignored
@@ -1144,8 +1144,9 @@ the `phony` and `always` flags verbatim from the manifest. No Ninja specific
 placeholders are stored in the IR to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
-  serialisation of their recipe and metadata. Identical commands therefore
-  share the same identifier which keeps the IR deterministic for snapshot tests.
+  serialisation of their recipe, inputs, and outputs. Because commands embed
+  shell-quoted file paths, two targets share an identifier only when both the
+  command text and file sets match exactly.
 - Multiple rule references in a single target are not yet supported. The IR
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output

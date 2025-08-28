@@ -131,6 +131,12 @@ impl BuildGraph {
         Ok(graph)
     }
 
+    /// Collect rule templates without deduplicating them.
+    ///
+    /// Rules are stored verbatim and expanded later when targets reference
+    /// them. This allows each target's input and output paths to be embedded in
+    /// the resulting command, meaning identical rule definitions may yield
+    /// distinct actions once interpolated.
     fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Rule>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), rule.clone());
@@ -197,6 +203,14 @@ impl BuildGraph {
     }
 }
 
+/// Insert an action into the graph, deduplicating on the resolved command and
+/// file set.
+///
+/// The rule template is interpolated with the target's inputs and outputs,
+/// which are shell-escaped and embedded directly in the command. The resulting
+/// [`Action`] is hashed so identical commands operating on the same file sets
+/// share an identifier, while differing paths produce distinct actions even if
+/// they originate from the same rule definition.
 fn register_action(
     actions: &mut HashMap<String, Action>,
     recipe: Recipe,
