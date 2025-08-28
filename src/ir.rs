@@ -267,28 +267,36 @@ fn substitute(template: &str, ins: &str, outs: &str) -> String {
         b.is_ascii_alphanumeric() || b == b'_'
     }
 
+    fn is_boundary_safe(bytes: &[u8], i: usize, len: usize) -> bool {
+        bytes
+            .get(i.wrapping_sub(1))
+            .is_none_or(|b| !is_ident_byte(*b))
+            && bytes.get(i + len).is_none_or(|b| !is_ident_byte(*b))
+    }
+
+    fn matches_in_token(bytes: &[u8], i: usize) -> bool {
+        bytes.get(i + 1) == Some(&b'i')
+            && bytes.get(i + 2) == Some(&b'n')
+            && is_boundary_safe(bytes, i, 3)
+    }
+
+    fn matches_out_token(bytes: &[u8], i: usize) -> bool {
+        bytes.get(i + 1) == Some(&b'o')
+            && bytes.get(i + 2) == Some(&b'u')
+            && bytes.get(i + 3) == Some(&b't')
+            && is_boundary_safe(bytes, i, 4)
+    }
+
     fn match_macro<'a>(
         bytes: &[u8],
         i: usize,
         ins: &'a str,
         outs: &'a str,
     ) -> Option<(usize, &'a str)> {
-        let prev_ok = bytes
-            .get(i.wrapping_sub(1))
-            .is_none_or(|b| !is_ident_byte(*b));
-        if bytes.get(i + 1) == Some(&b'i')
-            && bytes.get(i + 2) == Some(&b'n')
-            && bytes.get(i + 3).is_none_or(|b| !is_ident_byte(*b))
-            && prev_ok
-        {
+        if matches_in_token(bytes, i) {
             return Some((3, ins));
         }
-        if bytes.get(i + 1) == Some(&b'o')
-            && bytes.get(i + 2) == Some(&b'u')
-            && bytes.get(i + 3) == Some(&b't')
-            && bytes.get(i + 4).is_none_or(|b| !is_ident_byte(*b))
-            && prev_ok
-        {
+        if matches_out_token(bytes, i) {
             return Some((4, outs));
         }
         None
