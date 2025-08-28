@@ -29,7 +29,7 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
         Err(e) => {
             world.manifest = None;
             // Record the error chain using `Display` for stable substring checks.
-            world.manifest_error = Some(display_error_chain(&e));
+            world.manifest_error = Some(display_error_chain(e.as_ref()));
         }
     }
 }

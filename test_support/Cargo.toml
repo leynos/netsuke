@@ -9,7 +9,6 @@ publish = false
 tempfile = "3.8.0"
 mockable = { version = "0.3", features = ["mock"] }
 ninja_env = { path = "../ninja_env" }
-miette = "7.6.0"
 
 [dev-dependencies]
 rstest = "0.18.0"

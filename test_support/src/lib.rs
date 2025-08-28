@@ -22,6 +22,8 @@ pub use path_guard::PathGuard;
 pub use env_var_guard::EnvVarGuard;
 
 mod error;
+/// Format an error and its sources (outermost → root) using `Display`, joined
+/// with ": ", to produce deterministic text for test assertions.
 pub use error::display_error_chain;
 
 use std::fs::{self, File};

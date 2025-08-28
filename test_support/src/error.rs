@@ -1,20 +1,25 @@
-use miette::Report;
+//! Error formatting helpers for stable, deterministic test assertions.
+
+use std::error::Error;
 
 /// Join an error and its sources (outermost → root cause) for stable
 /// assertions.
 ///
 /// ```ignore
-/// use miette::Report;
-/// let err = Report::msg("oops");
+/// Works with any error implementing `std::error::Error`. Types like
+/// [`miette::Report`] can be passed via [`AsRef::as_ref`].
+///
+/// ```ignore
+/// let err = std::io::Error::new(std::io::ErrorKind::Other, "oops");
 /// assert_eq!(display_error_chain(&err), "oops");
 /// ```
-pub fn display_error_chain(e: &Report) -> String {
-    let mut out = String::new();
-    for (i, cause) in e.chain().enumerate() {
-        if i > 0 {
-            out.push_str(": ");
-        }
-        out.push_str(&cause.to_string());
-    }
-    out
+pub fn display_error_chain(e: &(dyn Error + 'static)) -> String {
+    let mut current: Option<&(dyn Error + 'static)> = Some(e);
+    std::iter::from_fn(|| {
+        let err = current?;
+        current = err.source();
+        Some(err.to_string())
+    })
+    .collect::<Vec<_>>()
+    .join(": ")
 }
