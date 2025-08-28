@@ -463,6 +463,7 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
     // Normalize separators so `/` and `\\` behave the same on all platforms.
     let mut normalized = normalize_separators(pattern);
+    // Force escaped meta to be treated literally by glob_with via bracket-classes.
     normalized = normalized
         .replace("\\*", "[*]")
         .replace("\\?", "[?]")

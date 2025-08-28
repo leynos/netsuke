@@ -58,6 +58,8 @@ fn normalize_separators_preserves_specific_escape_patterns(
     #[case] pat: &str,
     #[case] expected: &str,
 ) {
+    // Note: a '\\' before '*' that is followed by '.' is treated as a separator,
+    // hence the double '/' in the first case.
     assert_eq!(super::normalize_separators(pat), expected);
 }
 
@@ -110,5 +112,18 @@ fn glob_paths_respects_bracket_escapes(tmp: tempfile::TempDir) {
     assert_eq!(
         out,
         vec![format!("{}/[ab]", tmp.path().display()).replace('\\', "/"),],
+    );
+}
+
+#[cfg(unix)]
+#[rstest]
+fn glob_paths_treats_braces_as_literals(tmp: tempfile::TempDir) {
+    let filename = "{debug,release}";
+    std::fs::write(tmp.path().join(filename), "x").expect("write file");
+    let pattern = format!("{}/{}", tmp.path().display(), "\\{debug,release\\}");
+    let out = super::glob_paths(&pattern).expect("glob ok");
+    assert_eq!(
+        out,
+        vec![format!("{}/{}", tmp.path().display(), filename).replace('\\', "/"),],
     );
 }
