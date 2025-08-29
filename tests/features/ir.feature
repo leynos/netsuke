@@ -12,9 +12,9 @@ Feature: BuildGraph
     Then the graph has 1 actions
     And the graph has 1 targets
 
-  Scenario: Duplicate rules are deduplicated
+  Scenario: Duplicate rules emit distinct actions (see docs/netsuke-design.md#55-design-decisions)
     When the manifest file "tests/data/duplicate_rules.yml" is compiled to IR
-    Then the graph has 1 actions
+    Then the graph has 2 actions
     And the graph has 2 targets
 
   Scenario: Rule not found during IR generation

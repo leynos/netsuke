@@ -239,12 +239,13 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 
 - `command`: A single command string to be executed. It may include the
   placeholders `{{ ins }}` and `{{ outs }}` to represent input and output
-  files. Netsuke expands these placeholders to space-separated, shell-escaped
-  lists of file paths before hashing the action. When generating the Ninja
-  rule, the lists are replaced with Ninja's `$in` and `$out` macros. After
-  interpolation, the command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/). Any interpolation other than
-  `ins` or `outs` is automatically shell-escaped.
+  files. Netsuke expands these placeholders to space-separated lists of file
+  paths quoted for POSIX `/bin/sh` using the
+  [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
+  mode) before hashing the action. The IR stores the fully expanded command;
+  Ninja executes this text verbatim. After interpolation, the command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). Any
+  interpolation other than `ins` or `outs` is automatically shell-escaped.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`
@@ -1045,28 +1046,28 @@ The core logic of the validation stage is a function, `ir::from_manifest`, that
 consumes a `NetsukeManifest` (the AST) and produces a `BuildGraph` (the IR).
 This transformation involves several steps:
 
-1. **Action Consolidation:** Iterate through the `manifest.rules` from the AST.
-   For each rule, create a corresponding `ir::Action` struct. These actions are
-   stored in the `BuildGraph`'s `actions` map, keyed by a hash of their fully
-   resolved command text, interpreter, local variables, and depfile options.
-   This ensures deduplication only occurs when two actions are truly
-   interchangeable.
+1. **Rule Collection:** Insert each entry in `manifest.rules` into a
+   `HashMap` keyed by its name. Rules are stored as templates and are not
+   deduplicated at this stage.
 
 2. **Target Expansion:** Iterate through the `manifest.targets` and the optional
    `manifest.actions`. Entries in `actions` are treated identically to targets
    but with `phony` defaulting to `true`. For each item, resolve all strings
    into `PathBuf`s and resolve all dependency names against other targets.
 
-3. **Edge Creation:** For each AST target, create an `ir::BuildEdge` object.
-   This involves linking it to the appropriate `ir::Action` (by its ID),
-   transferring the `phony` and `always` flags, and populating its input and
-   output vectors.
+3. **Action Registration and Edge Creation:** For each expanded target,
+   resolve the referenced rule template, interpolate its command with the
+   target's input and output paths, and register the resulting `ir::Action` in
+   the `actions` map. Actions are hashed on the fully resolved command and file
+   set, so identical rule templates yield distinct actions when their paths
+   differ. Create a corresponding `ir::BuildEdge` linking the target to the
+   action identifier and transfer the `phony` and `always` flags.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
-   `actions` map and running a cycle detection algorithm (e.g., a depth- first
-   search maintaining a visitation state) on the dependency graph to fail
-   compilation if a circular dependency is found.
+   `actions` map and running a cycle detection algorithm (e.g., a depth-first
+   search maintaining a visitation state) on the dependency graph to fail early
+   on circular dependencies.
 
    The implemented algorithm performs a depth-first traversal of the target
    graph and maintains a recursion stack. Order-only dependencies are ignored
@@ -1142,8 +1143,9 @@ the `phony` and `always` flags verbatim from the manifest. No Ninja specific
 placeholders are stored in the IR to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
-  serialisation of their recipe and metadata. Identical commands therefore
-  share the same identifier which keeps the IR deterministic for snapshot tests.
+  serialisation of their recipe, inputs, and outputs. Because commands embed
+  shell-quoted file paths, two targets share an identifier only when both the
+  command text and file sets match exactly.
 - Multiple rule references in a single target are not yet supported. The IR
   generator reports `IrGenError::MultipleRules` when encountered.
 - Duplicate output files are rejected. Attempting to define the same output
@@ -1231,11 +1233,15 @@ strings. Instead, parse the Netsuke command template (e.g.,
 `{{ cc }} -c {{ ins }} -o` `{{ outs }}`) and build the final command string
 step by step. The placeholders `{{ ins }}` and `{{ outs }}` are expanded to
 space-separated lists of file paths within Netsuke itself, each path being
-shell-escaped using the `shell-quote` API. When the command is written to
-`build.ninja`, these lists replace Ninja's `$in` and `$out` macros. After
-substitution, the command is validated with \[`shlex`\]
-(<https://docs.rs/shlex/latest/shlex/>) to ensure it parses correctly. This
-approach guarantees that every dynamic part of the command is securely quoted.
+shell-escaped using the `shell-quote` API. Netsuke uses the `Sh` quoting mode
+to emit POSIX-compliant single-quoted strings and scans the template for
+standalone `$in` and `$out` tokens to avoid rewriting unrelated variables.
+Substitution happens during IR generation and the fully expanded command is
+emitted to `build.ninja` unchanged. After substitution, the command is
+validated with \[`shlex`\](<https://docs.rs/shlex/latest/shlex/>) to ensure it
+parses correctly. This approach guarantees that every dynamic part of the
+command is securely quoted, albeit at the cost of deduplicating only actions
+with identical file sets.
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 

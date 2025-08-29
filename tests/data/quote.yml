@@ -1,0 +1,11 @@
+netsuke_version: 1.0.0
+targets:
+  - name: "out file"
+    sources: "in file"
+    command: "cat $in > $out"
+  - name: "o'utfile"
+    sources: "-in file"
+    command: "printf %s $in > $out"
+  - name: "o'ut\nfile"
+    sources: "-in file"
+    command: "printf %s $in > $out"

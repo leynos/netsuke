@@ -125,12 +125,17 @@ library, and CLI ergonomics.
 
 - [ ] **Security and Shell Escaping:**
 
-  - [ ] Integrate the `shell-quote` crate.
+  - [x] Integrate the `shell-quote` crate.
 
-  - [ ] Mandate its use for all variable substitutions within command
-    strings during Ninja file synthesis to prevent command injection.
+  - [x] Mandate its use for variable substitutions within command strings
+    during IR generation to prevent command injection, and validate the final
+    command string with shlex.
 
-  - [ ] After interpolation, validate the final command string is parsable using
+  - [x] Emit POSIX-sh-compatible quoting (portable single-quote style)
+    rather than Bash-only forms. If Bash-specific quoting is required, document
+    and enforce execution under bash.
+
+  - [x] After interpolation, validate the final command string is parsable using
     the shlex crate.
 
 - [ ] **Actionable Error Reporting:**

@@ -74,7 +74,9 @@ pub struct BuildEdge {
     pub always: bool,
 }
 
-use crate::ast::{NetsukeManifest, Recipe, StringOrList};
+use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
+use shell_quote::{QuoteRefExt, Sh};
+use std::sync::Arc;
 use thiserror::Error;
 
 use crate::hasher::ActionHasher;
@@ -105,6 +107,9 @@ pub enum IrGenError {
 
     #[error("failed to serialise action: {0}")]
     ActionSerialisation(#[from] serde_json::Error),
+
+    #[error("command is not a valid shell command: {snippet}")]
+    InvalidCommand { command: String, snippet: String },
 }
 
 impl BuildGraph {
@@ -116,9 +121,9 @@ impl BuildGraph {
     /// are specified for a single target, or no rule is provided.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
         let mut graph = Self::default();
-        let mut rule_map = HashMap::new();
+        let mut rule_map: HashMap<String, Arc<Rule>> = HashMap::new();
 
-        Self::process_rules(manifest, &mut graph.actions, &mut rule_map)?;
+        Self::process_rules(manifest, &mut rule_map);
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
         Self::process_defaults(manifest, &mut graph.default_targets);
 
@@ -127,37 +132,53 @@ impl BuildGraph {
         Ok(graph)
     }
 
-    fn process_rules(
-        manifest: &NetsukeManifest,
-        actions: &mut HashMap<String, Action>,
-        rule_map: &mut HashMap<String, String>,
-    ) -> Result<(), IrGenError> {
+    /// Collect rule templates without deduplicating them.
+    ///
+    /// Rules are stored verbatim and expanded later when targets reference
+    /// them. This allows each target's input and output paths to be embedded in
+    /// the resulting command, meaning identical rule definitions may yield
+    /// distinct actions once interpolated. Should the manifest schema ever
+    /// permit targets to override recipe fields such as `command` or
+    /// `description`, those target-level values take precedence over the rule's
+    /// defaults.
+    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
-            let hash = register_action(actions, rule.recipe.clone(), rule.description.clone())?;
-            rule_map.insert(rule.name.clone(), hash);
+            rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
         }
-        Ok(())
     }
 
     fn process_targets(
         manifest: &NetsukeManifest,
         actions: &mut HashMap<String, Action>,
         targets: &mut HashMap<PathBuf, BuildEdge>,
-        rule_map: &HashMap<String, String>,
+        rule_map: &HashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
+            let inputs = to_paths(&target.sources);
             let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
-                Recipe::Rule { rule } => resolve_rule(rule, rule_map, &target_name)?,
+                Recipe::Rule { rule } => {
+                    let tmpl = resolve_rule(rule, rule_map, &target_name)?;
+                    // Future schema versions may allow targets to override
+                    // recipe or description fields. If so, those values will
+                    // take precedence over the rule template.
+                    register_action(
+                        actions,
+                        tmpl.recipe.clone(),
+                        tmpl.description.clone(),
+                        &inputs,
+                        &outputs,
+                    )?
+                }
                 Recipe::Command { .. } | Recipe::Script { .. } => {
-                    register_action(actions, target.recipe.clone(), None)?
+                    register_action(actions, target.recipe.clone(), None, &inputs, &outputs)?
                 }
             };
 
             let edge = BuildEdge {
                 action_id,
-                inputs: to_paths(&target.sources),
+                inputs: inputs.clone(),
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
@@ -189,11 +210,30 @@ impl BuildGraph {
     }
 }
 
+/// Insert an action into the graph, deduplicating on the resolved command and
+/// file set.
+///
+/// The rule template is interpolated with the target's inputs and outputs,
+/// which are shell-escaped and embedded directly in the command. The resulting
+/// [`Action`] is hashed so identical commands operating on the same file sets
+/// share an identifier, while differing paths produce distinct actions even if
+/// they originate from the same rule definition.
 fn register_action(
     actions: &mut HashMap<String, Action>,
     recipe: Recipe,
     description: Option<String>,
+    inputs: &[PathBuf],
+    outputs: &[PathBuf],
 ) -> Result<String, IrGenError> {
+    let recipe = match recipe {
+        Recipe::Command { command } => {
+            let interpolated = interpolate_command(&command, inputs, outputs)?;
+            Recipe::Command {
+                command: interpolated,
+            }
+        }
+        other => other,
+    };
     let action = Action {
         recipe,
         description,
@@ -205,6 +245,148 @@ fn register_action(
     let hash = ActionHasher::hash(&action).map_err(IrGenError::ActionSerialisation)?;
     actions.entry(hash.clone()).or_insert(action);
     Ok(hash)
+}
+
+/// Returns `true` when the command contains an odd number of backticks.
+///
+/// # Examples
+/// ```rust,ignore
+/// assert!(has_unmatched_backticks("echo`"));
+/// assert!(!has_unmatched_backticks("`echo`"));
+/// ```
+fn has_unmatched_backticks(s: &str) -> bool {
+    s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
+}
+
+fn interpolate_command(
+    template: &str,
+    inputs: &[PathBuf],
+    outputs: &[PathBuf],
+) -> Result<String, IrGenError> {
+    fn quote_paths(paths: &[PathBuf]) -> Vec<String> {
+        paths
+            .iter()
+            .map(|p| {
+                let quoted_bytes: Vec<u8> = p.as_os_str().quoted(Sh);
+                String::from_utf8_lossy(&quoted_bytes).into_owned()
+            })
+            .collect()
+    }
+
+    let ins = quote_paths(inputs);
+    let outs = quote_paths(outputs);
+    let interpolated = substitute(template, &ins, &outs);
+    if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
+        let snippet = interpolated.chars().take(160).collect();
+        return Err(IrGenError::InvalidCommand {
+            command: interpolated,
+            snippet,
+        });
+    }
+    Ok(interpolated)
+}
+
+/// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
+///
+/// # Examples
+/// ```rust,ignore
+/// assert!(is_identifier_char('a'));
+/// assert!(!is_identifier_char('-'));
+/// ```
+fn is_identifier_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
+}
+
+/// Checks if `pattern` matches `chars` starting at `pos`.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "in-out".chars().collect();
+/// assert!(matches_pattern_at_position(&chars, 0, &['i', 'n']));
+/// assert!(!matches_pattern_at_position(&chars, 3, &['i', 'n']));
+/// ```
+fn matches_pattern_at_position(chars: &[char], pos: usize, pattern: &[char]) -> bool {
+    pattern
+        .iter()
+        .enumerate()
+        .all(|(off, ch)| matches!(chars.get(pos + off), Some(c) if c == ch))
+}
+
+/// Ensures characters around the token are not identifier characters.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "$in".chars().collect();
+/// assert!(has_valid_word_boundaries(&chars, 0, 2));
+/// let chars: Vec<char> = "$input".chars().collect();
+/// assert!(!has_valid_word_boundaries(&chars, 0, 2));
+/// ```
+fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
+    let prev_ok = chars
+        .get(pos.wrapping_sub(1))
+        .is_none_or(|c| !is_identifier_char(*c));
+    let next_ok = chars
+        .get(pos + len + 1)
+        .is_none_or(|c| !is_identifier_char(*c));
+    prev_ok && next_ok
+}
+
+/// Returns the skip length when `pattern` matches at `pos`.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "$in".chars().collect();
+/// let res = try_match_placeholder(&chars, 0, &['i', 'n']);
+/// assert_eq!(res, Some(3));
+/// ```
+fn try_match_placeholder(chars: &[char], pos: usize, pattern: &[char]) -> Option<usize> {
+    if matches_pattern_at_position(chars, pos + 1, pattern)
+        && has_valid_word_boundaries(chars, pos, pattern.len())
+    {
+        Some(pattern.len() + 1)
+    } else {
+        None
+    }
+}
+
+/// Finds the appropriate substitution for `$in` or `$out` at `pos`.
+///
+/// # Examples
+/// ```rust,ignore
+/// let chars: Vec<char> = "$in".chars().collect();
+/// let res = find_substitution(&chars, 0, "a", "");
+/// assert_eq!(res, Some(("a", 3)));
+/// ```
+fn find_substitution<'a>(
+    chars: &[char],
+    pos: usize,
+    ins: &'a str,
+    outs: &'a str,
+) -> Option<(&'a str, usize)> {
+    try_match_placeholder(chars, pos, &['i', 'n'])
+        .map(|skip| (ins, skip))
+        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip)))
+}
+
+fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
+    let chars: Vec<char> = template.chars().collect();
+    let ins_joined = ins.join(" ");
+    let outs_joined = outs.join(" ");
+    let mut out = String::with_capacity(template.len());
+    let mut i = 0;
+    while let Some(&ch) = chars.get(i) {
+        if ch == '$'
+            && let Some((replacement, skip)) =
+                find_substitution(&chars, i, &ins_joined, &outs_joined)
+        {
+            out.push_str(replacement);
+            i += skip;
+        } else {
+            out.push(ch);
+            i += 1;
+        }
+    }
+    out
 }
 
 fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
@@ -236,9 +418,9 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
 
 fn resolve_rule(
     rule: &StringOrList,
-    rule_map: &HashMap<String, String>,
+    rule_map: &HashMap<String, Arc<Rule>>,
     target_name: &str,
-) -> Result<String, IrGenError> {
+) -> Result<Arc<Rule>, IrGenError> {
     extract_single(rule).map_or_else(
         || {
             let mut rules = to_string_vec(rule);
