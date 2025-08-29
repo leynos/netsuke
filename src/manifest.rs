@@ -236,7 +236,10 @@ fn normalize_separators(pattern: &str) -> String {
 
 /// Brace depth delta for a character.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum BraceDelta { Open, Close }
+enum BraceDelta {
+    Open,
+    Close,
+}
 
 /// Validate that braces in a glob pattern are balanced.
 ///
@@ -248,11 +251,12 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut escaped = false;
     let mut in_class = false; // inside [...]
     for ch in pattern.chars() {
-        let (new_escaped, new_in_class, delta) =
-            process_brace_char(ch, escaped, in_class);
+        let (new_escaped, new_in_class, delta) = process_brace_char(ch, escaped, in_class);
         escaped = new_escaped;
         in_class = new_in_class;
-        if in_class { continue; }
+        if in_class {
+            continue;
+        }
         let Some(delta) = delta else { continue };
         depth = apply_brace_delta(depth, delta, pattern)?;
     }
@@ -281,10 +285,7 @@ fn apply_brace_delta(
 }
 
 /// Ensure the final brace depth is zero.
-fn validate_final_brace_depth(
-    depth: usize,
-    pattern: &str,
-) -> std::result::Result<(), Error> {
+fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Result<(), Error> {
     if depth != 0 {
         return Err(Error::new(
             ErrorKind::SyntaxError,
@@ -298,15 +299,17 @@ fn validate_final_brace_depth(
 ///
 /// Returns the updated escape flag, character-class state and an optional
 /// brace depth delta.
-fn process_brace_char(
-    ch: char,
-    escaped: bool,
-    in_class: bool,
-) -> (bool, bool, Option<BraceDelta>) {
-    if escaped { return (false, in_class, None); }
-    if ch == '\\' { return (true, in_class, None); }
+fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, Option<BraceDelta>) {
+    if escaped {
+        return (false, in_class, None);
+    }
+    if ch == '\\' {
+        return (true, in_class, None);
+    }
     if in_class {
-        if ch == ']' { return (false, false, None); }
+        if ch == ']' {
+            return (false, false, None);
+        }
         return (false, true, None);
     }
     match ch {
