@@ -14,33 +14,39 @@ pub(crate) fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
 }
 
-#[rstest]
-fn inputs_and_outputs_are_quoted() {
-    let yaml = manifest_yaml(
-        "targets:\n  - name: 'out file'\n    sources: 'in file'\n    command: \"cat $in > $out\"\n",
-    );
+/// Extract shell words from the first target's command.
+///
+/// # Examples
+/// ```
+/// let words = command_words(
+///     "targets:\n  - name: out\n    sources: in\n    command: \"echo hi\"\n",
+/// );
+/// assert_eq!(words, ["echo", "hi"]);
+/// ```
+fn command_words(body: &str) -> Vec<String> {
+    let yaml = manifest_yaml(body);
     let manifest = manifest::from_str(&yaml).expect("parse");
     let graph = BuildGraph::from_manifest(&manifest).expect("graph");
     let action = graph.actions.values().next().expect("action");
     let Recipe::Command { command } = &action.recipe else {
-        panic!("expected command")
+        panic!("expected command");
     };
-    let words = shlex::split(command).expect("split command into words");
+    shlex::split(command).expect("split command into words")
+}
+
+#[rstest]
+fn inputs_and_outputs_are_quoted() {
+    let words = command_words(
+        "targets:\n  - name: 'out file'\n    sources: 'in file'\n    command: \"cat $in > $out\"\n",
+    );
     assert_eq!(words, ["cat", "in file", ">", "out file"]);
 }
 
 #[rstest]
 fn multiple_inputs_outputs_with_special_chars_are_quoted() {
-    let yaml = manifest_yaml(
+    let words = command_words(
         "targets:\n  - name: ['out file', 'out&2']\n    sources: ['in file', 'input$1']\n    command: \"echo $in && echo $out\"\n",
     );
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
-    let action = graph.actions.values().next().expect("action");
-    let Recipe::Command { command } = &action.recipe else {
-        panic!("expected command")
-    };
-    let words = shlex::split(command).expect("split command into words");
     assert_eq!(
         words,
         [
@@ -51,60 +57,33 @@ fn multiple_inputs_outputs_with_special_chars_are_quoted() {
 
 #[rstest]
 fn variable_name_overlap_not_rewritten() {
-    let yaml = manifest_yaml(
+    let words = command_words(
         "targets:\n  - name: 'out file'\n    sources: in\n    command: \"echo $input > $out\"\n",
     );
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
-    let action = graph.actions.values().next().expect("action");
-    let Recipe::Command { command } = &action.recipe else {
-        panic!("expected command")
-    };
-    let words = shlex::split(command).expect("split command into words");
     assert_eq!(words, ["echo", "$input", ">", "out file"]);
 }
 
 #[rstest]
 fn output_variable_overlap_not_rewritten() {
-    let yaml = manifest_yaml(
+    let words = command_words(
         "targets:\n  - name: out\n    sources: in\n    command: \"echo $output_dir > $out\"\n",
     );
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
-    let action = graph.actions.values().next().expect("action");
-    let Recipe::Command { command } = &action.recipe else {
-        panic!("expected command")
-    };
-    let words = shlex::split(command).expect("split command into words");
     assert_eq!(words, ["echo", "$output_dir", ">", "out"]);
 }
 
 #[rstest]
 fn newline_in_paths_is_quoted() {
-    let yaml = manifest_yaml(
+    let words = command_words(
         "targets:\n  - name: \"o'ut\\nfile\"\n    sources: \"-in file\"\n    command: \"printf %s $in > $out\"\n",
     );
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
-    let action = graph.actions.values().next().expect("action");
-    let Recipe::Command { command } = &action.recipe else {
-        panic!("expected command")
-    };
-    let words = shlex::split(command).expect("split command into words");
     assert_eq!(words, ["printf", "%s", "-in file", ">", "o'ut\nfile"]);
 }
 
 #[rstest]
 fn command_without_placeholders_remains_valid() {
-    let yaml =
-        manifest_yaml("targets:\n  - name: out\n    sources: in\n    command: \"echo hi\"\n");
-    let manifest = manifest::from_str(&yaml).expect("parse");
-    let graph = BuildGraph::from_manifest(&manifest).expect("graph");
-    let action = graph.actions.values().next().expect("action");
-    let Recipe::Command { command } = &action.recipe else {
-        panic!("expected command")
-    };
-    assert_eq!(command, "echo hi");
+    let words =
+        command_words("targets:\n  - name: out\n    sources: in\n    command: \"echo hi\"\n");
+    assert_eq!(words, ["echo", "hi"]);
 }
 
 #[rstest]
