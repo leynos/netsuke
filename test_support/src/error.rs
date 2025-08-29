@@ -5,9 +5,10 @@ use std::error::Error;
 /// Join an error and its sources (outermost → root cause) for stable
 /// assertions.
 ///
-/// ```ignore
-/// Works with any error implementing `std::error::Error`. Types like
+/// Works with any error implementing [`std::error::Error`]. Types like
 /// [`miette::Report`] can be passed via [`AsRef::as_ref`].
+///
+/// # Examples
 ///
 /// ```ignore
 /// let err = std::io::Error::new(std::io::ErrorKind::Other, "oops");
