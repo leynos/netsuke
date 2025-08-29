@@ -381,7 +381,8 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    // Validate brace matching (ignores braces inside character classes).
+    // Validate braces on the original input so diagnostics mirror the user's
+    // pattern verbatim. The validator ignores braces inside character classes.
     validate_brace_matching(pattern)?;
 
     // Normalize separators so `/` and `\\` behave the same on all platforms.
