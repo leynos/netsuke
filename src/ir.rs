@@ -255,7 +255,7 @@ fn register_action(
 /// assert!(!has_unmatched_backticks("`echo`"));
 /// ```
 fn has_unmatched_backticks(s: &str) -> bool {
-    s.chars().filter(|&c| c == '`').count() & 1 != 0
+    s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
 }
 
 fn interpolate_command(

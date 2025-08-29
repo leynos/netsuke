@@ -21,3 +21,4 @@ Feature: Ninja file generation
     When the manifest file "tests/data/quote.yml" is compiled to IR
     And the ninja file is generated
     Then shlex splitting command 3 yields "printf, %s, -in file, >, o'utfile"
+
