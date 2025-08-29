@@ -216,19 +216,7 @@ fn normalize_separators(pattern: &str) -> String {
         let mut it = pattern.chars().peekable();
         while let Some(c) = it.next() {
             if c == '\\' {
-                match it.peek() {
-                    Some('[' | ']' | '{' | '}') => out.push('\\'),
-                    Some('*' | '?') => {
-                        let mut lookahead = it.clone();
-                        lookahead.next();
-                        match lookahead.peek() {
-                            None => out.push('\\'),
-                            Some(&ch) if is_wildcard_continuation_char(ch) => out.push('\\'),
-                            _ => out.push(native),
-                        }
-                    }
-                    _ => out.push(native),
-                }
+                out.push(process_backslash(&mut it, native));
             } else if c == '/' || c == '\\' {
                 out.push(native);
             } else {
@@ -240,6 +228,39 @@ fn normalize_separators(pattern: &str) -> String {
     #[cfg(not(unix))]
     {
         pattern.replace('/', &native.to_string())
+    }
+}
+
+#[cfg(unix)]
+fn should_preserve_backslash_for_bracket(next: char) -> bool {
+    // Keep escapes for bracket-like characters so they remain literal.
+    matches!(next, '[' | ']' | '{' | '}')
+}
+
+#[cfg(unix)]
+fn should_preserve_backslash_for_wildcard(
+    next: char,
+    it: &std::iter::Peekable<std::str::Chars<'_>>,
+) -> bool {
+    if !matches!(next, '*' | '?') {
+        return false;
+    }
+    // Only treat as escape when the wildcard continues a word.
+    let mut lookahead = it.clone();
+    lookahead.next();
+    match lookahead.peek() {
+        None => true,
+        Some(&ch) => is_wildcard_continuation_char(ch),
+    }
+}
+
+#[cfg(unix)]
+fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: char) -> char {
+    let next = it.peek().copied();
+    match next {
+        Some(ch) if should_preserve_backslash_for_bracket(ch) => '\\',
+        Some(ch) if should_preserve_backslash_for_wildcard(ch, it) => '\\',
+        _ => native,
     }
 }
 
@@ -263,15 +284,13 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
             '[' if !in_class => in_class = true,
             ']' if in_class => in_class = false,
             '{' if !in_class => depth += 1,
-            '}' if !in_class => {
-                if depth == 0 {
-                    return Err(Error::new(
-                        ErrorKind::SyntaxError,
-                        format!("invalid glob pattern '{pattern}': unmatched '}}' at position {i}"),
-                    ));
-                }
-                depth -= 1;
+            '}' if !in_class && depth == 0 => {
+                return Err(Error::new(
+                    ErrorKind::SyntaxError,
+                    format!("invalid glob pattern '{pattern}': unmatched '}}' at position {i}"),
+                ));
             }
+            '}' if !in_class => depth -= 1,
             _ => {}
         }
     }
