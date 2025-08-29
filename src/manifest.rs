@@ -319,20 +319,59 @@ fn process_brace_char(
 
 // Preserve nuanced escape handling for normalize_separators on Unix.
 #[cfg(unix)]
+fn is_wildcard_continuation_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '-' || ch == '_'
+}
+
+#[cfg(unix)]
+/// Handle a backslash during separator normalisation on Unix.
+/// Preserves the backslash when it escapes a glob metacharacter
+/// (`[ ] { } * ?`); otherwise emits the native path separator.
+/// Returns `true` iff a separator was emitted.
 fn handle_backslash_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
 ) -> bool {
-    if it
-        .peek()
-        .is_some_and(|&next| matches!(next, '[' | ']' | '{' | '}' | '*' | '?'))
-    {
-        out.push('\\');
-        return false;
+    match it.peek() {
+        Some('[' | ']' | '{' | '}') => {
+            out.push('\\');
+            false
+        }
+        Some('*' | '?') => handle_wildcard_escape(out, it, native),
+        _ => {
+            out.push(native);
+            true
+        }
     }
-    out.push(native);
-    true
+}
+
+#[cfg(unix)]
+fn handle_wildcard_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) -> bool {
+    // Preserve '\\' before '*' or '?' when the wildcard is trailing or followed by
+    // an alphanumeric, '-' or '_'. Otherwise treat the '\\' as a path separator so
+    // Windows-style inputs like "dir\\*.ext" become "dir/*.ext". We only peek; the
+    // next rune is consumed by the outer loop.
+    let mut lookahead = it.clone();
+    lookahead.next();
+    match lookahead.peek() {
+        None => {
+            out.push('\\');
+            false
+        }
+        Some(&ch) if is_wildcard_continuation_char(ch) => {
+            out.push('\\');
+            false
+        }
+        _ => {
+            out.push(native);
+            true
+        }
+    }
 }
 
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {

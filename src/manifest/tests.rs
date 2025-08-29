@@ -40,26 +40,28 @@ fn normalize_separators_preserves_bracket_escape_variants(#[case] pat: &str) {
 #[rstest]
 #[case("a\\b\\*", "a/b\\*")]
 #[case("a\\b\\?", "a/b\\?")]
-#[case("config\\*.yml", "config\\*.yml")]
+#[case("config\\*.yml", "config/*.yml")]
 #[case("data\\?x.csv", "data\\?x.csv")]
 fn normalize_separators_preserves_wildcard_escape_variants(
     #[case] pat: &str,
     #[case] expected: &str,
 ) {
+    // Inputs like "config\\*.yml" are treated as Windows-style and turn the
+    // backslash into a separator on Unix; other cases keep '\\' to force a
+    // literal via bracket-class rewrite downstream.
     assert_eq!(super::normalize_separators(pat), expected);
 }
 
 #[cfg(unix)]
 #[rstest]
-#[case("assets/\\*.\\?", "assets/\\*.\\?")]
+#[case("assets/\\*.\\?", "assets//*.\\?")]
 #[case("src/\\[a\\].c", "src/\\[a\\].c")]
 #[case("build/\\{debug,release\\}/lib", "build/\\{debug,release\\}/lib")]
 fn normalize_separators_preserves_specific_escape_patterns(
     #[case] pat: &str,
     #[case] expected: &str,
 ) {
-    // Note: a '\\' before '*' that is followed by '.' is treated as a separator,
-    // hence the double '/' in the first case.
+    // Escaped metacharacters are preserved verbatim on Unix.
     assert_eq!(super::normalize_separators(pat), expected);
 }
 

@@ -746,9 +746,12 @@ providing a secure bridge to the underlying system.
   as `[]`. Invalid patterns surface as `SyntaxError`; filesystem iteration
   errors surface as `InvalidOperation`, matching minijinja error semantics. On
   Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`,
-  `?`) are preserved during separator normalisation. On Windows, backslash
-  escapes are not supported. This provides globbing support not available in
-  Ninja itself, which does not support globbing.[^3]
+  `?`) are preserved during separator normalisation. A backslash before `*` or
+  `?` is kept only when the wildcard is trailing or followed by an
+  alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
+  `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not
+  supported. This provides globbing support not available in Ninja itself,
+  which does not support globbing.[^3]
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
