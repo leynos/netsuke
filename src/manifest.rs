@@ -364,7 +364,7 @@ fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, O
         '[' => (false, true, None),
         '{' => (false, false, Some(BraceDelta::Open)),
         '}' => (false, false, Some(BraceDelta::Close)),
-        _ => (false, false, None),
+        _ => (false, in_class, None),
     }
 }
 
