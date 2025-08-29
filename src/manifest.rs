@@ -233,6 +233,13 @@ fn normalize_separators(pattern: &str) -> String {
     }
 }
 
+/// Brace depth delta for a character.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum BraceDelta {
+    Open,
+    Close,
+}
+
 /// Validate that braces in a glob pattern are balanced.
 ///
 /// Escaped braces are ignored when tracking depth. Returns a syntax error when
@@ -257,18 +264,13 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
         let (new_escaped, new_in_class, delta) = process_brace_char(ch, escaped, in_class);
         escaped = new_escaped;
         in_class = new_in_class;
-        if !in_class && let Some(delta) = delta {
-            depth = apply_brace_delta(depth, delta, pattern)?;
+        if in_class {
+            continue;
         }
+        let Some(delta) = delta else { continue };
+        depth = apply_brace_delta(depth, delta, pattern)?;
     }
     validate_final_brace_depth(depth, pattern)
-}
-
-/// Brace depth delta for a character.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum BraceDelta {
-    Open,
-    Close,
 }
 
 /// Apply a brace depth change, returning the new depth or a syntax error.
