@@ -1,6 +1,7 @@
 //! Step utilities shared by Cucumber step modules.
 //!
-//! Groups reusable step definitions and helpers such as `display_error_chain`.
+//! Provides helpers for stable error text (e.g., `display_error_chain`) used by
+//! step definitions.
 
 mod cli_steps;
 mod ir_steps;
