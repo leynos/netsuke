@@ -324,135 +324,15 @@ fn handle_backslash_escape(
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
 ) -> bool {
-    if let Some(&next) = it.peek() {
-        // Keep escapes for glob metacharacters so downstream globbing sees
-        // literals, but normalise path separators.
-        if matches!(next, '[' | ']' | '{' | '}') {
-            out.push('\\');
-            return false;
-        }
-        if matches!(next, '*' | '?') {
-            return handle_wildcard_escape(out, it, native);
-        }
+    if it
+        .peek()
+        .is_some_and(|&next| matches!(next, '[' | ']' | '{' | '}' | '*' | '?'))
+    {
+        out.push('\\');
+        return false;
     }
     out.push(native);
     true
-}
-
-#[cfg(unix)]
-fn is_wildcard_continuation_char(ch: char) -> bool {
-    ch.is_alphanumeric() || ch == '-' || ch == '_'
-}
-
-#[cfg(unix)]
-fn handle_wildcard_escape(
-    out: &mut String,
-    it: &mut std::iter::Peekable<std::str::Chars>,
-    native: char,
-) -> bool {
-    let mut lookahead = it.clone();
-    lookahead.next();
-    match lookahead.peek() {
-        None => {
-            out.push('\\');
-            false
-        }
-        Some(&ch) if is_wildcard_continuation_char(ch) => {
-            out.push('\\');
-            false
-        }
-        _ => {
-            out.push(native);
-            true
-        }
-    }
-}
-/// Brace depth delta for a character.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum BraceDelta {
-    Open,
-    Close,
-}
-
-/// Validate that braces in a glob pattern are balanced.
-///
-/// Escaped braces are ignored when tracking depth, and braces inside character
-/// classes `[]` are treated as literals. Returns a syntax error when opening and
-/// closing braces do not match.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(validate_brace_matching("src/{lib,bin}").is_ok());
-/// assert!(validate_brace_matching("src/{lib").is_err());
-/// ```
-///
-/// # Errors
-///
-/// Returns a syntax error when the pattern contains unmatched `{` or `}`
-/// characters.
-fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
-    let mut depth = 0usize;
-    let mut escaped = false;
-    let mut in_class = false; // inside [...]
-    for ch in pattern.chars() {
-        let (new_escaped, new_in_class, delta) = process_brace_char(ch, escaped, in_class);
-        escaped = new_escaped;
-        in_class = new_in_class;
-        if in_class {
-            continue;
-        }
-        let Some(delta) = delta else { continue };
-        depth = apply_brace_delta(depth, delta, pattern)?;
-    }
-    validate_final_brace_depth(depth, pattern)
-}
-
-/// Apply a brace depth change, returning the new depth or a syntax error.
-///
-/// # Examples
-///
-/// ```
-/// assert_eq!(apply_brace_delta(0, BraceDelta::Open, "p").unwrap(), 1);
-/// assert_eq!(apply_brace_delta(1, BraceDelta::Close, "p").unwrap(), 0);
-/// assert!(apply_brace_delta(0, BraceDelta::Close, "p").is_err());
-/// ```
-fn apply_brace_delta(
-    current_depth: usize,
-    delta: BraceDelta,
-    pattern: &str,
-) -> std::result::Result<usize, Error> {
-    match delta {
-        BraceDelta::Open => Ok(current_depth + 1),
-        BraceDelta::Close => {
-            if current_depth == 0 {
-                Err(Error::new(
-                    ErrorKind::SyntaxError,
-                    format!("invalid glob pattern '{pattern}': unmatched '}}'"),
-                ))
-            } else {
-                Ok(current_depth - 1)
-            }
-        }
-    }
-}
-
-/// Ensure the final brace depth is zero.
-///
-/// # Examples
-///
-/// ```
-/// assert!(validate_final_brace_depth(0, "p").is_ok());
-/// assert!(validate_final_brace_depth(1, "p").is_err());
-/// ```
-fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Result<(), Error> {
-    if depth != 0 {
-        return Err(Error::new(
-            ErrorKind::SyntaxError,
-            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
-        ));
-    }
-    Ok(())
 }
 
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {

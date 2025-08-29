@@ -40,7 +40,7 @@ fn normalize_separators_preserves_bracket_escape_variants(#[case] pat: &str) {
 #[rstest]
 #[case("a\\b\\*", "a/b\\*")]
 #[case("a\\b\\?", "a/b\\?")]
-#[case("config\\*.yml", "config/*.yml")]
+#[case("config\\*.yml", "config\\*.yml")]
 #[case("data\\?x.csv", "data\\?x.csv")]
 fn normalize_separators_preserves_wildcard_escape_variants(
     #[case] pat: &str,
@@ -51,7 +51,7 @@ fn normalize_separators_preserves_wildcard_escape_variants(
 
 #[cfg(unix)]
 #[rstest]
-#[case("assets/\\*.\\?", "assets//*.\\?")]
+#[case("assets/\\*.\\?", "assets/\\*.\\?")]
 #[case("src/\\[a\\].c", "src/\\[a\\].c")]
 #[case("build/\\{debug,release\\}/lib", "build/\\{debug,release\\}/lib")]
 fn normalize_separators_preserves_specific_escape_patterns(
@@ -100,6 +100,16 @@ fn glob_paths_treats_escaped_wildcards_as_literals(
     "ignores directories and matches only files"
 )]
 #[case(
+    vec![
+        ("dir", true),
+        ("dir/prefix*suffix", true),
+        ("dir/prefix*suffix/next", false),
+    ],
+    "dir/prefix\\*suffix/*",
+    vec!["dir/prefix*suffix/next"],
+    "treats escaped '*' as literal inside a segment across subsequent segments",
+)]
+#[case(
     vec![("[ab]", false), ("b", false)],
     "\\[ab\\]",
     vec!["[ab]"],
@@ -128,10 +138,12 @@ fn glob_paths_behavior_scenarios(
     }
 
     let pattern = format!("{}/{}", tmp.path().display(), pattern_suffix);
-    let result = super::glob_paths(&pattern).expect("glob ok");
-    let expected: Vec<String> = expected_matches
+    let mut result = super::glob_paths(&pattern).expect("glob ok");
+    result.sort();
+    let mut expected: Vec<String> = expected_matches
         .iter()
         .map(|name| format!("{}/{}", tmp.path().display(), name).replace('\\', "/"))
         .collect();
+    expected.sort();
     assert_eq!(result, expected, "Test case: {description}");
 }
