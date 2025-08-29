@@ -214,15 +214,16 @@ fn normalize_separators(pattern: &str) -> String {
     {
         let mut out = String::with_capacity(pattern.len());
         let mut it = pattern.chars().peekable();
+        let mut _prev_is_sep = false;
         while let Some(c) = it.next() {
-            if c == '\\' && matches!(it.peek(), Some('[' | ']' | '{' | '}')) {
-                out.push('\\');
-                continue;
-            }
-            if c == '/' || c == '\\' {
+            if c == '\\' {
+                _prev_is_sep = handle_backslash_escape(&mut out, &mut it, native);
+            } else if c == '/' || c == '\\' {
                 out.push(native);
+                _prev_is_sep = true;
             } else {
                 out.push(c);
+                _prev_is_sep = false;
             }
         }
         out
@@ -243,20 +244,8 @@ enum BraceDelta {
 /// Validate that braces in a glob pattern are balanced.
 ///
 /// Escaped braces are ignored when tracking depth, and braces inside character
-/// classes `[]` are treated as literals. Returns a syntax error when opening and
-/// closing braces do not match.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(validate_brace_matching("src/{lib,bin}").is_ok());
-/// assert!(validate_brace_matching("src/{lib").is_err());
-/// ```
-///
-/// # Errors
-///
-/// Returns a syntax error when the pattern contains unmatched `{` or `}`
-/// characters.
+/// classes `[]` are treated as literals. Returns a syntax error when opening
+/// and closing braces do not match.
 fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut depth = 0usize;
     let mut escaped = false;
@@ -275,14 +264,6 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
 }
 
 /// Apply a brace depth change, returning the new depth or a syntax error.
-///
-/// # Examples
-///
-/// ```
-/// assert_eq!(apply_brace_delta(0, BraceDelta::Open, "p").unwrap(), 1);
-/// assert_eq!(apply_brace_delta(1, BraceDelta::Close, "p").unwrap(), 0);
-/// assert!(apply_brace_delta(0, BraceDelta::Close, "p").is_err());
-/// ```
 fn apply_brace_delta(
     current_depth: usize,
     delta: BraceDelta,
@@ -304,13 +285,6 @@ fn apply_brace_delta(
 }
 
 /// Ensure the final brace depth is zero.
-///
-/// # Examples
-///
-/// ```
-/// assert!(validate_final_brace_depth(0, "p").is_ok());
-/// assert!(validate_final_brace_depth(1, "p").is_err());
-/// ```
 fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Result<(), Error> {
     if depth != 0 {
         return Err(Error::new(
@@ -324,29 +298,7 @@ fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Resul
 /// Process a single character for brace and character-class state.
 ///
 /// Returns the updated escape flag, character-class state and an optional
-/// brace depth delta:
-/// - `Some(BraceDelta::Open)` for an opening `{`
-/// - `Some(BraceDelta::Close)` for a closing `}`
-/// - `None` for other characters
-///
-/// ```
-/// assert_eq!(
-///     process_brace_char('{', false, false),
-///     (false, false, Some(BraceDelta::Open))
-/// );
-/// assert_eq!(
-///     process_brace_char('}', false, false),
-///     (false, false, Some(BraceDelta::Close))
-/// );
-/// assert_eq!(
-///     process_brace_char('\\', false, false),
-///     (true, false, None)
-/// );
-/// assert_eq!(
-///     process_brace_char('[', false, false),
-///     (false, true, None)
-/// );
-/// ```
+/// brace depth delta.
 fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, Option<BraceDelta>) {
     if escaped {
         return (false, in_class, None);
@@ -368,6 +320,63 @@ fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, O
     }
 }
 
+// Preserve nuanced escape handling for normalize_separators on Unix.
+#[cfg(unix)]
+fn is_wildcard_continuation_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '-' || ch == '_'
+}
+
+#[cfg(unix)]
+/// Handle a backslash during separator normalisation on Unix.
+/// Preserves the backslash when it escapes a glob metacharacter
+/// (`[ ] { } * ?`); otherwise emits the native path separator.
+/// Returns `true` iff a separator was emitted.
+fn handle_backslash_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) -> bool {
+    match it.peek() {
+        Some('[' | ']' | '{' | '}') => {
+            out.push('\\');
+            false
+        }
+        Some('*' | '?') => handle_wildcard_escape(out, it, native),
+        _ => {
+            out.push(native);
+            true
+        }
+    }
+}
+
+#[cfg(unix)]
+fn handle_wildcard_escape(
+    out: &mut String,
+    it: &mut std::iter::Peekable<std::str::Chars>,
+    native: char,
+) -> bool {
+    // Preserve '\\' before '*' or '?' when the wildcard is trailing or followed by
+    // an alphanumeric, '-' or '_'. Otherwise treat the '\\' as a path separator so
+    // Windows-style inputs like "dir\\*.ext" become "dir/*.ext". We only peek; the
+    // next rune is consumed by the outer loop.
+    let mut lookahead = it.clone();
+    lookahead.next();
+    match lookahead.peek() {
+        None => {
+            out.push('\\');
+            false
+        }
+        Some(&ch) if is_wildcard_continuation_char(ch) => {
+            out.push('\\');
+            false
+        }
+        _ => {
+            out.push(native);
+            true
+        }
+    }
+}
+
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
@@ -386,7 +395,19 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     validate_brace_matching(pattern)?;
 
     // Normalize separators so `/` and `\\` behave the same on all platforms.
-    let normalized = normalize_separators(pattern);
+    let mut normalized = normalize_separators(pattern);
+    // Force escaped meta to be treated literally by glob_with via bracket-classes.
+    // Only apply on Unix hosts where '\\' is not a path separator.
+    #[cfg(unix)]
+    {
+        normalized = normalized
+            .replace("\\*", "[*]")
+            .replace("\\?", "[?]")
+            .replace("\\[", "[[]")
+            .replace("\\]", "[]]")
+            .replace("\\{", "[{]")
+            .replace("\\}", "[}]");
+    }
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(
