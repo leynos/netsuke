@@ -6,6 +6,7 @@ use netsuke::{
 };
 use rstest::{fixture, rstest};
 use std::{fs, path::Path};
+use test_support::display_error_chain;
 
 fn manifest_yaml(body: &str) -> String {
     format!("netsuke_version: 1.0.0\n{body}")
@@ -148,7 +149,7 @@ fn glob_invalid_pattern_errors() {
     let yaml =
         manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
-    let msg = format!("{err:#}");
+    let msg = display_error_chain(err.as_ref());
     assert!(msg.contains("invalid glob pattern"), "{msg}");
 }
 

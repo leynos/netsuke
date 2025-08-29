@@ -7,6 +7,7 @@ use netsuke::{
     manifest,
 };
 use std::ffi::OsStr;
+use test_support::display_error_chain;
 use test_support::env::{remove_var, set_var};
 
 const INDEX_KEY: &str = "index";
@@ -27,7 +28,8 @@ fn parse_manifest_inner(world: &mut CliWorld, path: &str) {
         }
         Err(e) => {
             world.manifest = None;
-            world.manifest_error = Some(format!("{e:#}"));
+            // Record the error chain using `Display` for stable substring checks.
+            world.manifest_error = Some(display_error_chain(e.as_ref()));
         }
     }
 }
