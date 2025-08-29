@@ -267,8 +267,8 @@ fn interpolate_command(
         paths
             .iter()
             .map(|p| {
-                let raw = p.display().to_string();
-                String::from_utf8(raw.quoted(Sh)).expect("quoted path is valid UTF-8")
+                let quoted_bytes: Vec<u8> = p.as_os_str().quoted(Sh);
+                String::from_utf8_lossy(&quoted_bytes).into_owned()
             })
             .collect()
     }
