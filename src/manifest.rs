@@ -242,8 +242,9 @@ enum BraceDelta {
 
 /// Validate that braces in a glob pattern are balanced.
 ///
-/// Escaped braces are ignored when tracking depth. Returns a syntax error when
-/// opening and closing braces do not match.
+/// Escaped braces are ignored when tracking depth, and braces inside character
+/// classes `[]` are treated as literals. Returns a syntax error when opening and
+/// closing braces do not match.
 ///
 /// # Examples
 ///
