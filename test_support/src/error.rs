@@ -15,6 +15,7 @@ use std::error::Error;
 /// assert_eq!(display_error_chain(&err), "oops");
 /// ```
 pub fn display_error_chain(e: &(dyn Error + 'static)) -> String {
+    // `std::error::Error::sources` is unstable; traverse via `source` instead.
     let mut current: Option<&(dyn Error + 'static)> = Some(e);
     std::iter::from_fn(|| {
         let err = current?;
