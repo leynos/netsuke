@@ -340,6 +340,11 @@ fn handle_backslash_escape(
 }
 
 #[cfg(unix)]
+fn is_wildcard_continuation_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '-' || ch == '_'
+}
+
+#[cfg(unix)]
 fn handle_wildcard_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
@@ -352,7 +357,7 @@ fn handle_wildcard_escape(
             out.push('\\');
             false
         }
-        Some(ch) if ch.is_alphanumeric() || *ch == '-' || *ch == '_' => {
+        Some(&ch) if is_wildcard_continuation_char(ch) => {
             out.push('\\');
             false
         }
