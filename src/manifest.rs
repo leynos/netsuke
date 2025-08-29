@@ -214,17 +214,16 @@ fn normalize_separators(pattern: &str) -> String {
     {
         let mut out = String::with_capacity(pattern.len());
         let mut it = pattern.chars().peekable();
-        let mut prev_is_sep = false;
+        let mut _prev_is_sep = false;
         while let Some(c) = it.next() {
             if c == '\\' {
-                handle_backslash_escape(&mut out, &mut it, native, prev_is_sep);
-                prev_is_sep = out.chars().last().is_some_and(|ch| ch == native);
+                _prev_is_sep = handle_backslash_escape(&mut out, &mut it, native);
             } else if c == '/' || c == '\\' {
                 out.push(native);
-                prev_is_sep = true;
+                _prev_is_sep = true;
             } else {
                 out.push(c);
-                prev_is_sep = false;
+                _prev_is_sep = false;
             }
         }
         out
@@ -324,21 +323,20 @@ fn handle_backslash_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
-    prev_is_sep: bool,
-) {
+) -> bool {
     if let Some(&next) = it.peek() {
         // Keep escapes for glob metacharacters so downstream globbing sees
         // literals, but normalise path separators.
         if matches!(next, '[' | ']' | '{' | '}') {
             out.push('\\');
-            return;
+            return false;
         }
         if matches!(next, '*' | '?') {
-            handle_wildcard_escape(out, it, native, prev_is_sep);
-            return;
+            return handle_wildcard_escape(out, it, native);
         }
     }
     out.push(native);
+    true
 }
 
 #[cfg(unix)]
@@ -346,14 +344,22 @@ fn handle_wildcard_escape(
     out: &mut String,
     it: &mut std::iter::Peekable<std::str::Chars>,
     native: char,
-    _prev_is_sep: bool,
-) {
+) -> bool {
     let mut lookahead = it.clone();
     lookahead.next();
     match lookahead.peek() {
-        None => out.push('\\'),
-        Some(ch) if ch.is_alphanumeric() => out.push('\\'),
-        _ => out.push(native),
+        None => {
+            out.push('\\');
+            false
+        }
+        Some(ch) if ch.is_alphanumeric() || *ch == '-' || *ch == '_' => {
+            out.push('\\');
+            false
+        }
+        _ => {
+            out.push(native);
+            true
+        }
     }
 }
 /// Brace depth delta for a character.
@@ -464,13 +470,17 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     // Normalize separators so `/` and `\\` behave the same on all platforms.
     let mut normalized = normalize_separators(pattern);
     // Force escaped meta to be treated literally by glob_with via bracket-classes.
-    normalized = normalized
-        .replace("\\*", "[*]")
-        .replace("\\?", "[?]")
-        .replace("\\[", "[[]")
-        .replace("\\]", "[]]")
-        .replace("\\{", "[{]")
-        .replace("\\}", "[}]");
+    // Only apply on Unix hosts where '\\' is not a path separator.
+    #[cfg(unix)]
+    {
+        normalized = normalized
+            .replace("\\*", "[*]")
+            .replace("\\?", "[?]")
+            .replace("\\[", "[[]")
+            .replace("\\]", "[]]")
+            .replace("\\{", "[{]")
+            .replace("\\}", "[}]");
+    }
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
         Error::new(

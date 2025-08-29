@@ -87,6 +87,8 @@ fn tmp() -> tempfile::TempDir {
 #[case("\\?", "?")]
 #[case("prefix\\*suffix", "prefix*suffix")]
 #[case("pre\\?post", "pre?post")]
+#[case("mid\\*-", "mid*-")]
+#[case("mid\\?_", "mid?_")]
 fn glob_paths_treats_escaped_wildcards_as_literals(
     tmp: tempfile::TempDir,
     #[case] pattern_suffix: &str,
