@@ -746,7 +746,7 @@ providing a secure bridge to the underlying system.
   as `[]`. Invalid patterns surface as `SyntaxError`; filesystem iteration
   errors surface as `InvalidOperation`, matching minijinja error semantics. On
   Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`,
-  `?`) are preserved during separator normalisation. A backslash before `*` or
+  `?`) are preserved during separator normalization. A backslash before `*` or
   `?` is kept only when the wildcard is trailing or followed by an
   alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
   `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not

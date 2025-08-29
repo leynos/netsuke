@@ -157,7 +157,12 @@ fn glob_unmatched_bracket_errors() {
     pattern,
     expected,
     case("{", "unmatched '{'"),
-    case("}", "unmatched '}'")
+    case("}", "unmatched '}'"),
+    case("foo{bar{baz.txt", "unmatched '{'"),
+    case("{a,b{c,d}", "unmatched '{'"),
+    case("\\\\{foo}", "unmatched '}'"),
+    case("foo\\\\{bar}", "unmatched '}'"),
+    case("{foo\\\\}", "unmatched '{'")
 )]
 fn glob_unmatched_brace_errors(pattern: &str, expected: &str) {
     let yaml = manifest_yaml(&format!(
@@ -169,7 +174,14 @@ fn glob_unmatched_brace_errors(pattern: &str, expected: &str) {
     assert!(msg.contains(expected), "{msg}");
 }
 
-#[rstest(pattern, case("\\\\{"), case("\\\\}"))]
+#[rstest(
+    pattern,
+    case("\\\\{"),
+    case("\\\\}"),
+    case("foo\\\\}"),
+    case("foo{bar\\\\}baz}"),
+    case("foo\\\\{bar")
+)]
 fn glob_escaped_braces_are_literals(pattern: &str) {
     let yaml = manifest_yaml(&format!(
         "targets:\n  - foreach: glob('{pattern}')\n    name: ok\n    command: echo hi\n"
@@ -180,9 +192,10 @@ fn glob_escaped_braces_are_literals(pattern: &str) {
 
 #[rstest(
     pattern,
-    case("[{}]"),           // braces as literals inside a class
-    case("[{]"),            // unmatched '{' inside class must NOT error
-    case("x{a,{b,c}}.txt"), // nested braces
+    case("[{}]"),                // braces as literals inside a class
+    case("[{]"),                 // unmatched '{' inside class must NOT error
+    case("x{a,{b,c}}.txt"),      // nested braces
+    case("{a,{b,{c,{d,e}}}}"),   // deeply nested braces
 )]
 fn glob_braces_in_classes_and_nested(pattern: &str) {
     let yaml = manifest_yaml(&format!(
