@@ -271,51 +271,72 @@ fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: 
 /// when opening and closing braces do not match, including the position of
 /// the offending character for easier debugging.
 fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
-    let mut depth = 0;
-    let mut escaped = false;
-    let mut in_class = false;
-    let mut last_open_brace_pos = None;
+    let mut state = BraceValidationState {
+        depth: 0,
+        escaped: false,
+        in_class: false,
+        last_open_brace_pos: None,
+    };
     for (i, ch) in pattern.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' {
-            escaped = true;
-        } else if is_class_start(ch, in_class) {
-            in_class = true;
-        } else if is_class_end(ch, in_class) {
-            in_class = false;
-        } else if is_unmatched_closing_brace(ch, in_class, depth) {
-            return create_unmatched_brace_error(pattern, i);
-        } else if is_opening_brace(ch, in_class) {
-            depth += 1;
-            last_open_brace_pos = Some(i);
-        } else if is_closing_brace(ch, in_class) {
-            depth -= 1;
+        if let Some(err) = process_brace_char(ch, i, &mut state, pattern)? {
+            return Err(err);
         }
     }
-    validate_final_depth(pattern, depth, last_open_brace_pos)
+    validate_final_depth(pattern, state.depth, state.last_open_brace_pos)
 }
 
-fn is_class_start(ch: char, in_class: bool) -> bool {
-    ch == '[' && !in_class
+struct BraceValidationState {
+    depth: usize,
+    escaped: bool,
+    in_class: bool,
+    last_open_brace_pos: Option<usize>,
 }
 
-fn is_class_end(ch: char, in_class: bool) -> bool {
-    ch == ']' && in_class
-}
-
-fn is_opening_brace(ch: char, in_class: bool) -> bool {
-    ch == '{' && !in_class
-}
-
-fn is_closing_brace(ch: char, in_class: bool) -> bool {
-    ch == '}' && !in_class
-}
-
-fn is_unmatched_closing_brace(ch: char, in_class: bool, depth: usize) -> bool {
-    is_closing_brace(ch, in_class) && depth == 0
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "return type constrained by review request"
+)]
+fn process_brace_char(
+    ch: char,
+    pos: usize,
+    state: &mut BraceValidationState,
+    pattern: &str,
+) -> std::result::Result<Option<Error>, Error> {
+    if state.escaped {
+        state.escaped = false;
+        return Ok(None);
+    }
+    match ch {
+        '\\' => {
+            state.escaped = true;
+            Ok(None)
+        }
+        '[' if !state.in_class => {
+            state.in_class = true;
+            Ok(None)
+        }
+        ']' if state.in_class => {
+            state.in_class = false;
+            Ok(None)
+        }
+        '{' if !state.in_class => {
+            state.depth += 1;
+            state.last_open_brace_pos = Some(pos);
+            Ok(None)
+        }
+        '}' if !state.in_class => {
+            if state.depth == 0 {
+                let Err(err) = create_unmatched_brace_error(pattern, pos) else {
+                    unreachable!();
+                };
+                Ok(Some(err))
+            } else {
+                state.depth -= 1;
+                Ok(None)
+            }
+        }
+        _ => Ok(None),
+    }
 }
 
 fn create_unmatched_brace_error(pattern: &str, position: usize) -> std::result::Result<(), Error> {
