@@ -274,36 +274,74 @@ fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut depth = 0;
     let mut escaped = false;
     let mut in_class = false;
+    let mut last_open_brace_pos = None;
     for (i, ch) in pattern.char_indices() {
         if escaped {
             escaped = false;
             continue;
         }
-        match ch {
-            '\\' => escaped = true,
-            '[' if !in_class => in_class = true,
-            ']' if in_class => in_class = false,
-            '{' if !in_class => depth += 1,
-            '}' if !in_class && depth == 0 => {
-                return Err(Error::new(
-                    ErrorKind::SyntaxError,
-                    format!("invalid glob pattern '{pattern}': unmatched '}}' at position {i}"),
-                ));
-            }
-            '}' if !in_class => depth -= 1,
-            _ => {}
+        if ch == '\\' {
+            escaped = true;
+        } else if is_class_start(ch, in_class) {
+            in_class = true;
+        } else if is_class_end(ch, in_class) {
+            in_class = false;
+        } else if is_unmatched_closing_brace(ch, in_class, depth) {
+            return create_unmatched_brace_error(pattern, i);
+        } else if is_opening_brace(ch, in_class) {
+            depth += 1;
+            last_open_brace_pos = Some(i);
+        } else if is_closing_brace(ch, in_class) {
+            depth -= 1;
         }
     }
+    validate_final_depth(pattern, depth, last_open_brace_pos)
+}
+
+fn is_class_start(ch: char, in_class: bool) -> bool {
+    ch == '[' && !in_class
+}
+
+fn is_class_end(ch: char, in_class: bool) -> bool {
+    ch == ']' && in_class
+}
+
+fn is_opening_brace(ch: char, in_class: bool) -> bool {
+    ch == '{' && !in_class
+}
+
+fn is_closing_brace(ch: char, in_class: bool) -> bool {
+    ch == '}' && !in_class
+}
+
+fn is_unmatched_closing_brace(ch: char, in_class: bool, depth: usize) -> bool {
+    is_closing_brace(ch, in_class) && depth == 0
+}
+
+fn create_unmatched_brace_error(pattern: &str, position: usize) -> std::result::Result<(), Error> {
+    Err(Error::new(
+        ErrorKind::SyntaxError,
+        format!("invalid glob pattern '{pattern}': unmatched '}}' at position {position}"),
+    ))
+}
+
+fn validate_final_depth(
+    pattern: &str,
+    depth: usize,
+    last_open_brace_pos: Option<usize>,
+) -> std::result::Result<(), Error> {
     if depth != 0 {
+        let pos = last_open_brace_pos.unwrap_or(0);
         return Err(Error::new(
             ErrorKind::SyntaxError,
-            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
+            format!("invalid glob pattern '{pattern}': unmatched '{{' at position {pos}"),
         ));
     }
     Ok(())
 }
 
-// Preserve nuanced escape handling for normalize_separators on Unix.
+// Determine whether a wildcard continues an identifier when normalising
+// separators. Only used on Unix hosts where '\\' is not a path separator.
 #[cfg(unix)]
 fn is_wildcard_continuation_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '-' || ch == '_'

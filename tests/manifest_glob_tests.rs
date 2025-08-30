@@ -174,6 +174,15 @@ fn glob_unmatched_brace_errors(pattern: &str, expected: &str) {
     assert!(msg.contains(expected), "{msg}");
 }
 
+#[test]
+fn glob_unmatched_opening_brace_reports_position() {
+    let yaml =
+        manifest_yaml("targets:\n  - foreach: glob('{')\n    name: bad\n    command: echo hi\n");
+    let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
+    let msg = display_error_chain(err.as_ref());
+    assert!(msg.contains("unmatched '{' at position 0"), "{msg}");
+}
+
 #[rstest(
     pattern,
     case("\\\\{"),
