@@ -46,7 +46,7 @@ jobs:
       - name: Upload coverage data to CodeScene
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: matrix.rust == 'stable' && ${{ env.CS_ACCESS_TOKEN }}
+        if: matrix.rust == 'stable' && env.CS_ACCESS_TOKEN != ''
         uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@c6559452842af6a83b83429129dccaf910e34562
         with:
           format: lcov
