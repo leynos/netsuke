@@ -21,6 +21,18 @@ runs:
       uses: mbround18/setup-osxcross@b26146d499c54979ed3d023266865dc188881911  # v2
       with:
         osx-version: ${{ inputs.osx-version }}
+    - name: Verify osxcross toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        for wrapper in o64-clang oa64-clang; do
+          if ! command -v "$wrapper" >/dev/null 2>&1; then
+            echo "::error title=Wrapper missing::$wrapper not found on PATH"
+            exit 1
+          fi
+          echo "$wrapper -> $(command -v "$wrapper")"
+        done
+        echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}"
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -44,7 +56,14 @@ runs:
             ;;
         esac
         if [ -n "$linker" ]; then
+          if ! command -v "$linker" >/dev/null 2>&1; then
+            echo "::error title=Linker not found::$linker is not on PATH"
+            exit 1
+          fi
           echo "CARGO_TARGET_${target_env}_LINKER=$linker" >> "$GITHUB_ENV"
+          echo "CC_${target_env}=$linker" >> "$GITHUB_ENV"
+          echo "CXX_${target_env}=$linker++" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
         fi
         echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}" >> "$GITHUB_ENV"
         echo "MACOSX_DEPLOYMENT_TARGET=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
