@@ -207,6 +207,7 @@ fn glob_unmatched_opening_brace_reports_position() {
 #[case(BraceErrorTestCase { pattern: "foo\\\\}", expected: "" })]
 #[case(BraceErrorTestCase { pattern: "foo{bar\\\\}baz}", expected: "" })]
 #[case(BraceErrorTestCase { pattern: "foo\\\\{bar", expected: "" })]
+#[cfg_attr(unix, case(BraceErrorTestCase { pattern: "foo\\\\", expected: "" }))]
 fn glob_escaped_braces_are_literals(#[case] case: BraceErrorTestCase) {
     let yaml = manifest_yaml(&format!(
         "targets:\n  - foreach: glob('{pattern}')\n    name: ok\n    command: echo hi\n",

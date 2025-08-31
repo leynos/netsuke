@@ -256,11 +256,11 @@ fn should_preserve_backslash_for_wildcard(
 
 #[cfg(unix)]
 fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: char) -> char {
-    let next = it.peek().copied();
-    match next {
+    match it.peek().copied() {
         Some(ch) if should_preserve_backslash_for_bracket(ch) => '\\',
         Some(ch) if should_preserve_backslash_for_wildcard(ch, it) => '\\',
-        _ => native,
+        Some(_) => native,
+        None => '\\', // Trailing backslash has nothing to escape; keep literal.
     }
 }
 
