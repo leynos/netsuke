@@ -134,8 +134,39 @@ PY
           name: ${{ env.REPO_NAME }}-${{ matrix.os }}-${{ matrix.arch }}
           path: artifacts/${{ matrix.os }}-${{ matrix.arch }}
 
-  release:
+  build-macos:
     needs: build
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            target: x86_64-apple-darwin
+          - arch: aarch64
+            target: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - name: Build macOS
+        uses: ./.github/actions/cross-build-macos
+        with:
+          target: ${{ matrix.target }}
+      - name: Prepare artifact
+        run: |
+          mkdir -p artifacts/macos-${{ matrix.arch }}
+          cp target/${{ matrix.target }}/release/${{ env.REPO_NAME }} \
+            artifacts/macos-${{ matrix.arch }}/${{ env.REPO_NAME }}-macos-${{ matrix.arch }}
+          sha256sum artifacts/macos-${{ matrix.arch }}/${{ env.REPO_NAME }}-macos-${{ matrix.arch }} > \
+            artifacts/macos-${{ matrix.arch }}/${{ env.REPO_NAME }}-macos-${{ matrix.arch }}.sha256
+      - name: Upload release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: ${{ env.REPO_NAME }}-macos-${{ matrix.arch }}
+          path: artifacts/macos-${{ matrix.arch }}
+
+  release:
+    needs: [build, build-macos]
     permissions:
       contents: write
     runs-on: ubuntu-latest

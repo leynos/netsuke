@@ -1,0 +1,29 @@
+name: 'Build macOS target'
+description: 'Cross-compile a Rust project for macOS using osxcross'
+inputs:
+  target:
+    description: 'Rust target triple'
+    required: true
+    default: 'x86_64-apple-darwin'
+  osx-version:
+    description: 'macOS SDK version'
+    required: false
+    default: '12.3'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup osxcross
+      id: osxcross
+      uses: mbround18/setup-osxcross@b26146d499c54979ed3d023266865dc188881911  # v2
+      with:
+        osx-version: ${{ inputs.osx-version }}
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@63eb9591781c46a70274cb3ebdf190fce92702e8  # v1
+      with:
+        toolchain: stable
+        targets: ${{ inputs.target }}
+    - name: Build for macOS
+      env:
+        SDKROOT: ${{ steps.osxcross.outputs.sdk-path }}
+      run: cargo build --release --target ${{ inputs.target }}
+      shell: bash
