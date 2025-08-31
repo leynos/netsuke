@@ -159,14 +159,29 @@ fn glob_unmatched_bracket_errors() {
     case("{", "unmatched '{'"),
     case("}", "unmatched '}'"),
     case("foo{bar{baz.txt", "unmatched '{'"),
-    case("{a,b{c,d}", "unmatched '{'"),
+    case("{a,b{c,d}", "unmatched '{'")
+)]
+fn glob_unmatched_brace_errors(pattern: &str, expected: &str) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n",
+    ));
+    let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
+    let msg = display_error_chain(err.as_ref());
+    assert!(msg.contains("invalid glob pattern"), "{msg}");
+    assert!(msg.contains(expected), "{msg}");
+}
+
+#[cfg(unix)]
+#[rstest(
+    pattern,
+    expected,
     case("\\\\{foo}", "unmatched '}'"),
     case("foo\\\\{bar}", "unmatched '}'"),
     case("{foo\\\\}", "unmatched '{'")
 )]
-fn glob_unmatched_brace_errors(pattern: &str, expected: &str) {
+fn glob_unmatched_brace_errors_with_escapes(pattern: &str, expected: &str) {
     let yaml = manifest_yaml(&format!(
-        "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n"
+        "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n",
     ));
     let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
     let msg = display_error_chain(err.as_ref());
@@ -198,7 +213,22 @@ fn glob_escaped_braces_are_literals(pattern: &str) {
     let manifest = manifest::from_str(&yaml).expect("escaped brace should parse");
     assert!(manifest.targets.is_empty());
 }
-
+#[cfg(windows)]
+#[rstest(
+    pattern,
+    expected,
+    case("\\{foo", "unmatched '{'"),
+    case("foo\\}", "unmatched '}'")
+)]
+fn glob_windows_backslash_does_not_escape_braces(pattern: &str, expected: &str) {
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n",
+    ));
+    let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
+    let msg = display_error_chain(err.as_ref());
+    assert!(msg.contains("invalid glob pattern"), "{msg}");
+    assert!(msg.contains(expected), "{msg}");
+}
 #[rstest(
     pattern,
     case("[{}]"),                // braces as literals inside a class

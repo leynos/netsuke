@@ -264,93 +264,98 @@ fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: 
     }
 }
 
+#[cfg(unix)]
+/// Convert escaped glob metacharacters into bracket classes so they remain
+/// literals when passed to `glob_with`.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(force_literal_escapes(r"\*foo"), "[*]foo");
+/// ```
+fn force_literal_escapes(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let mut it = pattern.chars().peekable();
+    let mut in_class = false;
+    while let Some(c) = it.next() {
+        match c {
+            '[' if !in_class => {
+                in_class = true;
+                out.push(c);
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(c);
+            }
+            '\\' if !in_class => {
+                if let Some(&next) = it.peek() {
+                    let repl = match next {
+                        '*' => "[*]",
+                        '?' => "[?]",
+                        '[' => "[[]",
+                        ']' => "[]]",
+                        '{' => "[{]",
+                        '}' => "[}]",
+                        _ => "\\",
+                    };
+                    if repl == "\\" {
+                        out.push('\\');
+                    } else {
+                        it.next();
+                        out.push_str(repl);
+                    }
+                } else {
+                    out.push('\\');
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 /// Validate that braces in a glob pattern are balanced.
 ///
-/// Escaped braces are ignored when tracking depth, and braces inside
-/// character classes `[]` are treated as literals. Returns a syntax error
-/// when opening and closing braces do not match, including the position of
-/// the offending character for easier debugging.
+/// Escaped braces are ignored when tracking depth on Unix, and braces inside
+/// character classes `[]` are treated as literals. Returns a syntax error when
+/// opening and closing braces do not match, including the position of the
+/// offending character for easier debugging.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert!(validate_brace_matching("foo{bar}").is_ok());
+/// assert!(validate_brace_matching("{foo").is_err());
+/// ```
 fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
-    let mut state = BraceValidationState {
-        depth: 0,
-        escaped: false,
-        in_class: false,
-        last_open_brace_pos: None,
-    };
+    let mut depth = 0;
+    let mut escaped = false;
+    let mut in_class = false;
+    let mut last_open_brace_pos = None;
+    let escape_active = cfg!(unix);
     for (i, ch) in pattern.char_indices() {
-        if let Some(err) = process_brace_char(ch, i, &mut state, pattern)? {
-            return Err(err);
+        if escaped {
+            escaped = false;
+            continue;
         }
-    }
-    validate_final_depth(pattern, state.depth, state.last_open_brace_pos)
-}
-
-struct BraceValidationState {
-    depth: usize,
-    escaped: bool,
-    in_class: bool,
-    last_open_brace_pos: Option<usize>,
-}
-
-#[allow(
-    clippy::unnecessary_wraps,
-    reason = "return type constrained by review request"
-)]
-fn process_brace_char(
-    ch: char,
-    pos: usize,
-    state: &mut BraceValidationState,
-    pattern: &str,
-) -> std::result::Result<Option<Error>, Error> {
-    if state.escaped {
-        state.escaped = false;
-        return Ok(None);
-    }
-    match ch {
-        '\\' => {
-            state.escaped = true;
-            Ok(None)
-        }
-        '[' if !state.in_class => {
-            state.in_class = true;
-            Ok(None)
-        }
-        ']' if state.in_class => {
-            state.in_class = false;
-            Ok(None)
-        }
-        '{' if !state.in_class => {
-            state.depth += 1;
-            state.last_open_brace_pos = Some(pos);
-            Ok(None)
-        }
-        '}' if !state.in_class => {
-            if state.depth == 0 {
-                let Err(err) = create_unmatched_brace_error(pattern, pos) else {
-                    unreachable!();
-                };
-                Ok(Some(err))
-            } else {
-                state.depth -= 1;
-                Ok(None)
+        match ch {
+            '\\' if escape_active => escaped = true,
+            '[' if !in_class => in_class = true,
+            ']' if in_class => in_class = false,
+            '{' if !in_class => {
+                depth += 1;
+                last_open_brace_pos = Some(i);
             }
+            '}' if !in_class && depth == 0 => {
+                return Err(Error::new(
+                    ErrorKind::SyntaxError,
+                    format!("invalid glob pattern '{pattern}': unmatched '}}' at position {i}"),
+                ));
+            }
+            '}' if !in_class => depth -= 1,
+            _ => {}
         }
-        _ => Ok(None),
     }
-}
-
-fn create_unmatched_brace_error(pattern: &str, position: usize) -> std::result::Result<(), Error> {
-    Err(Error::new(
-        ErrorKind::SyntaxError,
-        format!("invalid glob pattern '{pattern}': unmatched '}}' at position {position}"),
-    ))
-}
-
-fn validate_final_depth(
-    pattern: &str,
-    depth: usize,
-    last_open_brace_pos: Option<usize>,
-) -> std::result::Result<(), Error> {
     if depth != 0 {
         let pos = last_open_brace_pos.unwrap_or(0);
         return Err(Error::new(
@@ -387,17 +392,11 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
     // Normalize separators so `/` and `\\` behave the same on all platforms.
     let mut normalized = normalize_separators(pattern);
-    // Force escaped meta to be treated literally by glob_with via bracket-classes.
-    // Only apply on Unix hosts where '\\' is not a path separator.
+    // Force escaped meta to be treated literally by `glob_with` via bracket
+    // classes. Only apply on Unix hosts where '\\' is not a path separator.
     #[cfg(unix)]
     {
-        normalized = normalized
-            .replace("\\*", "[*]")
-            .replace("\\?", "[?]")
-            .replace("\\[", "[[]")
-            .replace("\\]", "[]]")
-            .replace("\\{", "[{]")
-            .replace("\\}", "[}]");
+        normalized = force_literal_escapes(&normalized);
     }
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
