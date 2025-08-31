@@ -264,7 +264,6 @@ fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: 
     }
 }
 
-#[cfg(unix)]
 /// Convert escaped glob metacharacters into bracket classes so they remain
 /// literals when passed to `glob_with`.
 ///
@@ -273,6 +272,7 @@ fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: 
 /// ```ignore
 /// assert_eq!(force_literal_escapes(r"\*foo"), "[*]foo");
 /// ```
+#[cfg(unix)]
 fn force_literal_escapes(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len());
     let mut it = pattern.chars().peekable();
@@ -287,31 +287,88 @@ fn force_literal_escapes(pattern: &str) -> String {
                 in_class = false;
                 out.push(c);
             }
-            '\\' if !in_class => {
-                if let Some(&next) = it.peek() {
-                    let repl = match next {
-                        '*' => "[*]",
-                        '?' => "[?]",
-                        '[' => "[[]",
-                        ']' => "[]]",
-                        '{' => "[{]",
-                        '}' => "[}]",
-                        _ => "\\",
-                    };
-                    if repl == "\\" {
-                        out.push('\\');
-                    } else {
-                        it.next();
-                        out.push_str(repl);
-                    }
-                } else {
-                    out.push('\\');
-                }
-            }
+            '\\' if !in_class => process_escape_sequence(&mut it, &mut out),
             _ => out.push(c),
         }
     }
     out
+}
+
+/// Check if character opens a brace outside character class.
+fn is_opening_brace(ch: char, in_class: bool) -> bool {
+    ch == '{' && !in_class
+}
+
+/// Check if character closes a brace outside character class.
+fn is_closing_brace(ch: char, in_class: bool) -> bool {
+    ch == '}' && !in_class
+}
+
+/// Check if character is an unmatched closing brace.
+fn is_unmatched_closing_brace(ch: char, in_class: bool, depth: i32) -> bool {
+    ch == '}' && !in_class && depth == 0
+}
+
+/// Check if character starts a character class.
+fn is_class_start(ch: char, in_class: bool) -> bool {
+    ch == '[' && !in_class
+}
+
+/// Check if character ends a character class.
+fn is_class_end(ch: char, in_class: bool) -> bool {
+    ch == ']' && in_class
+}
+
+/// Create error for unmatched brace with position.
+fn create_unmatched_brace_error(pattern: &str, brace_char: char, pos: usize) -> Error {
+    Error::new(
+        ErrorKind::SyntaxError,
+        format!("invalid glob pattern '{pattern}': unmatched '{brace_char}' at position {pos}"),
+    )
+}
+
+/// Validate final brace depth and create error if unmatched.
+fn validate_final_depth(
+    pattern: &str,
+    depth: i32,
+    last_open_brace_pos: Option<usize>,
+) -> Result<(), Error> {
+    if depth != 0 {
+        let pos = last_open_brace_pos.unwrap_or(0);
+        Err(create_unmatched_brace_error(pattern, '{', pos))
+    } else {
+        Ok(())
+    }
+}
+
+/// Handle an escape sequence, pushing the appropriate replacement into `out`.
+#[cfg(unix)]
+fn process_escape_sequence(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
+    if let Some(&next) = it.peek() {
+        let repl = get_escape_replacement(next);
+        if repl == "\\" {
+            out.push('\\');
+        } else {
+            it.next();
+            out.push_str(repl);
+        }
+    } else {
+        out.push('\\');
+    }
+}
+
+/// Return the bracket-class replacement for recognised escapes.
+#[cfg(unix)]
+fn get_escape_replacement(ch: char) -> &'static str {
+    match ch {
+        '*' => "[*]",
+        '?' => "[?]",
+        '[' => "[[]",
+        ']' => "[]]",
+        '{' => "[{]",
+        '}' => "[}]",
+        _ => "\\",
+    }
 }
 
 /// Validate that braces in a glob pattern are balanced.
@@ -328,42 +385,35 @@ fn force_literal_escapes(pattern: &str) -> String {
 /// assert!(validate_brace_matching("{foo").is_err());
 /// ```
 fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
-    let mut depth = 0;
+    let mut depth: i32 = 0;
     let mut escaped = false;
     let mut in_class = false;
     let mut last_open_brace_pos = None;
     let escape_active = cfg!(unix);
+
     for (i, ch) in pattern.char_indices() {
         if escaped {
             escaped = false;
             continue;
         }
-        match ch {
-            '\\' if escape_active => escaped = true,
-            '[' if !in_class => in_class = true,
-            ']' if in_class => in_class = false,
-            '{' if !in_class => {
-                depth += 1;
-                last_open_brace_pos = Some(i);
-            }
-            '}' if !in_class && depth == 0 => {
-                return Err(Error::new(
-                    ErrorKind::SyntaxError,
-                    format!("invalid glob pattern '{pattern}': unmatched '}}' at position {i}"),
-                ));
-            }
-            '}' if !in_class => depth -= 1,
-            _ => {}
+
+        if ch == '\\' && escape_active {
+            escaped = true;
+        } else if is_class_start(ch, in_class) {
+            in_class = true;
+        } else if is_class_end(ch, in_class) {
+            in_class = false;
+        } else if is_unmatched_closing_brace(ch, in_class, depth) {
+            return Err(create_unmatched_brace_error(pattern, '}', i));
+        } else if is_opening_brace(ch, in_class) {
+            depth += 1;
+            last_open_brace_pos = Some(i);
+        } else if is_closing_brace(ch, in_class) {
+            depth -= 1;
         }
     }
-    if depth != 0 {
-        let pos = last_open_brace_pos.unwrap_or(0);
-        return Err(Error::new(
-            ErrorKind::SyntaxError,
-            format!("invalid glob pattern '{pattern}': unmatched '{{' at position {pos}"),
-        ));
-    }
-    Ok(())
+
+    validate_final_depth(pattern, depth, last_open_brace_pos)
 }
 
 // Determine whether a wildcard continues an identifier when normalising
