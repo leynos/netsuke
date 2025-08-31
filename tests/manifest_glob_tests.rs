@@ -201,13 +201,23 @@ fn glob_unmatched_opening_brace_reports_position() {
     assert!(msg.contains("unmatched '{' at position 0"), "{msg}");
 }
 
+#[test]
+fn glob_unmatched_closing_brace_reports_position() {
+    let yaml =
+        manifest_yaml("targets:\n  - foreach: glob('foo}')\n    name: bad\n    command: echo hi\n");
+    let err = manifest::from_str(&yaml).expect_err("invalid pattern should error");
+    let msg = display_error_chain(err.as_ref());
+    assert!(msg.contains("unmatched '}' at position 3"), "{msg}");
+}
+
 #[rstest]
 #[case(BraceErrorTestCase { pattern: "\\\\{", expected: "" })]
 #[case(BraceErrorTestCase { pattern: "\\\\}", expected: "" })]
 #[case(BraceErrorTestCase { pattern: "foo\\\\}", expected: "" })]
 #[case(BraceErrorTestCase { pattern: "foo{bar\\\\}baz}", expected: "" })]
 #[case(BraceErrorTestCase { pattern: "foo\\\\{bar", expected: "" })]
-#[cfg_attr(unix, case(BraceErrorTestCase { pattern: "ends-with-backslash-\\\\", expected: "" }))]
+#[cfg(unix)]
+#[case(BraceErrorTestCase { pattern: "ends-with-backslash-\\\\", expected: "" })]
 fn glob_escaped_braces_are_literals(#[case] case: BraceErrorTestCase) {
     let yaml = manifest_yaml(&format!(
         "targets:\n  - foreach: glob('{pattern}')\n    name: ok\n    command: echo hi\n",
