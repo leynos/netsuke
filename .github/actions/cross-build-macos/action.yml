@@ -9,6 +9,10 @@ inputs:
     description: 'macOS SDK version'
     required: false
     default: '12.3'
+  deployment-target:
+    description: 'MACOSX_DEPLOYMENT_TARGET (e.g. 11.0 for Apple Silicon)'
+    required: false
+    default: '11.0'
 runs:
   using: 'composite'
   steps:
@@ -18,12 +22,32 @@ runs:
       with:
         osx-version: ${{ inputs.osx-version }}
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@63eb9591781c46a70274cb3ebdf190fce92702e8  # v1
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
         targets: ${{ inputs.target }}
+    - name: Configure environment
+      shell: bash
+      run: |
+        set -euo pipefail
+        target="${{ inputs.target }}"
+        target_env=$(echo "$target" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+        case "$target" in
+          x86_64-apple-darwin)
+            linker="o64-clang"
+            ;;
+          aarch64-apple-darwin)
+            linker="oa64-clang"
+            ;;
+          *)
+            echo "::warning::Unknown target $target; no linker configured" >&2
+            linker=""
+            ;;
+        esac
+        if [ -n "$linker" ]; then
+          echo "CARGO_TARGET_${target_env}_LINKER=$linker" >> "$GITHUB_ENV"
+        fi
+        echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}" >> "$GITHUB_ENV"
+        echo "MACOSX_DEPLOYMENT_TARGET=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
     - name: Build for macOS
-      env:
-        SDKROOT: ${{ steps.osxcross.outputs.sdk-path }}
       run: cargo build --release --target ${{ inputs.target }}
       shell: bash
