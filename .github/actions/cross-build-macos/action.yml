@@ -1,0 +1,114 @@
+name: 'Build macOS target'
+description: 'Cross-compile a Rust project for macOS using osxcross'
+inputs:
+  target:
+    description: 'Rust target triple'
+    default: 'x86_64-apple-darwin'
+  osx-version:
+    description: 'macOS SDK version'
+    required: false
+    default: '12.3'
+  deployment-target:
+    description: 'MACOSX_DEPLOYMENT_TARGET (e.g. 11.0 for Apple Silicon)'
+    required: false
+    default: '11.0'
+  toolchain:
+    description: 'Rust toolchain channel or version (e.g. stable, beta, nightly, 1.79.0)'
+    required: false
+    default: 'stable'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup osxcross
+      id: osxcross
+      uses: mbround18/setup-osxcross@b26146d499c54979ed3d023266865dc188881911  # v2
+      with:
+        osx-version: ${{ inputs.osx-version }}
+    - name: Verify osxcross toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -d "${{ steps.osxcross.outputs.sdk-path }}" ]; then
+          echo "::error title=SDK not found::SDK path '${{ steps.osxcross.outputs.sdk-path }}' does not exist"
+          exit 1
+        fi
+        target="${{ inputs.target }}"
+        case "$target" in
+          x86_64-apple-darwin)   wrapper="o64-clang"  ;;
+          aarch64-apple-darwin)  wrapper="oa64-clang" ;;
+          *) echo "::warning::Unknown target $target; skipping wrapper check"; wrapper="";;
+        esac
+        if [ -n "$wrapper" ]; then
+          if ! command -v "$wrapper" >/dev/null 2>&1; then
+            echo "::error title=Wrapper missing::$wrapper not found on PATH"
+            exit 1
+          fi
+          echo "$wrapper -> $(command -v "$wrapper")"
+          "$wrapper" -v || true
+        fi
+        echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}"
+        echo "Using SDK: $(basename "${{ steps.osxcross.outputs.sdk-path }}")"
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9  # master
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        targets: ${{ inputs.target }}
+    - name: Configure environment
+      shell: bash
+      run: |
+        set -euo pipefail
+        target="${{ inputs.target }}"
+        target_env=$(echo "$target" | tr '-' '_' | tr '[:lower:]' '[:upper:]')
+        case "$target" in
+          x86_64-apple-darwin)
+            linker="o64-clang"
+            ;;
+          aarch64-apple-darwin)
+            linker="oa64-clang"
+            ;;
+          *)
+            echo "::warning::Unknown target $target; no linker configured" >&2
+            linker=""
+            ;;
+        esac
+        if [ -n "$linker" ]; then
+          if ! command -v "$linker" >/dev/null 2>&1; then
+            echo "::error title=Linker not found::$linker is not on PATH"
+            exit 1
+          fi
+          echo "CARGO_TARGET_${target_env}_LINKER=$linker" >> "$GITHUB_ENV"
+          echo "CC_${target_env}=$linker" >> "$GITHUB_ENV"
+          echo "CC=$linker" >> "$GITHUB_ENV"
+          cxx="${linker}++"
+          if command -v "$cxx" >/dev/null 2>&1; then
+            echo "CXX_${target_env}=$cxx" >> "$GITHUB_ENV"
+            echo "CXX=$cxx" >> "$GITHUB_ENV"
+          else
+            echo "::notice title=C++ wrapper missing::${cxx} not found; C++ crates will use CC as fallback"
+            echo "CXX_${target_env}=$linker" >> "$GITHUB_ENV"
+            echo "CXX=$linker" >> "$GITHUB_ENV"
+          fi
+          if command -v "${target}-ar" >/dev/null 2>&1; then
+            echo "AR_${target_env}=${target}-ar" >> "$GITHUB_ENV"
+            echo "AR=${target}-ar" >> "$GITHUB_ENV"
+          fi
+          if command -v "${target}-ranlib" >/dev/null 2>&1; then
+            echo "RANLIB_${target_env}=${target}-ranlib" >> "$GITHUB_ENV"
+            echo "RANLIB=${target}-ranlib" >> "$GITHUB_ENV"
+          fi
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
+          echo "CFLAGS_${target_env}=-isysroot ${{ steps.osxcross.outputs.sdk-path }} -mmacosx-version-min=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
+          echo "CXXFLAGS_${target_env}=-isysroot ${{ steps.osxcross.outputs.sdk-path }} -mmacosx-version-min=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
+          echo "LDFLAGS_${target_env}=-isysroot ${{ steps.osxcross.outputs.sdk-path }} -mmacosx-version-min=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
+        fi
+        echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}" >> "$GITHUB_ENV"
+        echo "MACOSX_DEPLOYMENT_TARGET=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
+    - name: Build for macOS
+      run: |
+        echo "TARGET=${{ inputs.target }}"
+        echo "SDKROOT=$SDKROOT"
+        echo "MACOSX_DEPLOYMENT_TARGET=$MACOSX_DEPLOYMENT_TARGET"
+        rustc --version
+        cargo --version
+        cargo build --locked --release --target ${{ inputs.target }}
+      shell: bash
