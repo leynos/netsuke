@@ -214,16 +214,13 @@ fn normalize_separators(pattern: &str) -> String {
     {
         let mut out = String::with_capacity(pattern.len());
         let mut it = pattern.chars().peekable();
-        let mut _prev_is_sep = false;
         while let Some(c) = it.next() {
             if c == '\\' {
-                _prev_is_sep = handle_backslash_escape(&mut out, &mut it, native);
+                out.push(process_backslash(&mut it, native));
             } else if c == '/' || c == '\\' {
                 out.push(native);
-                _prev_is_sep = true;
             } else {
                 out.push(c);
-                _prev_is_sep = false;
             }
         }
         out
@@ -234,147 +231,253 @@ fn normalize_separators(pattern: &str) -> String {
     }
 }
 
-/// Brace depth delta for a character.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum BraceDelta {
-    Open,
-    Close,
+#[cfg(unix)]
+fn should_preserve_backslash_for_bracket(next: char) -> bool {
+    // Keep escapes for bracket-like characters so they remain literal.
+    matches!(next, '[' | ']' | '{' | '}')
+}
+
+#[cfg(unix)]
+fn should_preserve_backslash_for_wildcard(
+    it: &mut std::iter::Peekable<std::str::Chars<'_>>,
+) -> bool {
+    match it.peek().copied() {
+        Some('*' | '?') => {
+            // Only treat as escape when the wildcard continues a word.
+            let mut lookahead = it.clone();
+            lookahead.next();
+            match lookahead.peek() {
+                None => true,
+                Some(&ch) => is_wildcard_continuation_char(ch),
+            }
+        }
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: char) -> char {
+    match it.peek().copied() {
+        Some(ch) if should_preserve_backslash_for_bracket(ch) => '\\',
+        Some(_) if should_preserve_backslash_for_wildcard(it) => '\\',
+        Some(_) => native,
+        None => '\\', // Trailing backslash has nothing to escape; keep literal.
+    }
+}
+
+/// Convert escaped glob metacharacters into bracket classes so they remain
+/// literals when passed to `glob_with`.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert_eq!(force_literal_escapes(r"\*foo"), "[*]foo");
+/// ```
+#[cfg(unix)]
+fn force_literal_escapes(pattern: &str) -> String {
+    let mut out = String::with_capacity(pattern.len());
+    let mut it = pattern.chars().peekable();
+    let mut in_class = false;
+    while let Some(c) = it.next() {
+        match c {
+            '[' if !in_class => {
+                in_class = true;
+                out.push(c);
+            }
+            ']' if in_class => {
+                in_class = false;
+                out.push(c);
+            }
+            '\\' if !in_class => process_escape_sequence(&mut it, &mut out),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Check if character opens a brace outside character class.
+fn is_opening_brace(ch: char, in_class: bool) -> bool {
+    ch == '{' && !in_class
+}
+
+/// Check if character closes a brace outside character class.
+fn is_closing_brace(ch: char, in_class: bool) -> bool {
+    ch == '}' && !in_class
+}
+
+/// Check if character is an unmatched closing brace.
+fn is_unmatched_closing_brace(ch: char, in_class: bool, depth: i32) -> bool {
+    ch == '}' && !in_class && depth == 0
+}
+
+/// Check if character starts a character class.
+fn is_class_start(ch: char, in_class: bool) -> bool {
+    ch == '[' && !in_class
+}
+
+/// Check if character ends a character class.
+fn is_class_end(ch: char, in_class: bool) -> bool {
+    ch == ']' && in_class
+}
+
+/// Create error for unmatched brace with position.
+fn create_unmatched_brace_error(pattern: &str, brace_char: char, pos: usize) -> Error {
+    Error::new(
+        ErrorKind::SyntaxError,
+        format!("invalid glob pattern '{pattern}': unmatched '{brace_char}' at position {pos}"),
+    )
+}
+
+/// Validate final brace depth and create error if unmatched.
+fn validate_final_depth(
+    pattern: &str,
+    depth: i32,
+    last_open_brace_pos: Option<usize>,
+) -> Result<(), Error> {
+    if depth != 0 {
+        let pos = last_open_brace_pos.unwrap_or(0);
+        Err(create_unmatched_brace_error(pattern, '{', pos))
+    } else {
+        Ok(())
+    }
+}
+
+/// Handle an escape sequence, pushing the appropriate replacement into `out`.
+#[cfg(unix)]
+fn process_escape_sequence(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
+    if let Some(&next) = it.peek() {
+        let repl = get_escape_replacement(next);
+        if repl == "\\" {
+            out.push('\\');
+        } else {
+            it.next();
+            out.push_str(repl);
+        }
+    } else {
+        out.push('\\');
+    }
+}
+
+/// Return the bracket-class replacement for recognised escapes.
+#[cfg(unix)]
+fn get_escape_replacement(ch: char) -> &'static str {
+    match ch {
+        '*' => "[*]",
+        '?' => "[?]",
+        '[' => "[[]",
+        ']' => "[]]",
+        '{' => "[{]",
+        '}' => "[}]",
+        _ => "\\",
+    }
+}
+
+/// Track brace state while validating glob patterns.
+struct BraceValidator {
+    depth: i32,
+    escaped: bool,
+    in_class: bool,
+    last_open_brace_pos: Option<usize>,
+    escape_active: bool,
+}
+
+impl BraceValidator {
+    fn new() -> Self {
+        Self {
+            depth: 0,
+            escaped: false,
+            in_class: false,
+            last_open_brace_pos: None,
+            escape_active: cfg!(unix),
+        }
+    }
+
+    fn process_character(&mut self, ch: char, pos: usize, pattern: &str) -> Result<(), Error> {
+        if self.handle_escape_sequence(ch) {
+            return Ok(());
+        }
+
+        if self.handle_character_class_transitions(ch) {
+            return Ok(());
+        }
+
+        self.handle_brace_matching(ch, pos, pattern)
+    }
+
+    fn handle_escape_sequence(&mut self, ch: char) -> bool {
+        if self.escaped {
+            self.escaped = false;
+            return true;
+        }
+
+        if ch == '\\' && self.escape_active {
+            self.escaped = true;
+            return true;
+        }
+
+        false
+    }
+
+    fn handle_character_class_transitions(&mut self, ch: char) -> bool {
+        if is_class_start(ch, self.in_class) {
+            self.in_class = true;
+            true
+        } else if is_class_end(ch, self.in_class) {
+            self.in_class = false;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn handle_brace_matching(&mut self, ch: char, pos: usize, pattern: &str) -> Result<(), Error> {
+        if is_unmatched_closing_brace(ch, self.in_class, self.depth) {
+            return Err(create_unmatched_brace_error(pattern, '}', pos));
+        }
+
+        if is_opening_brace(ch, self.in_class) {
+            self.depth += 1;
+            self.last_open_brace_pos = Some(pos);
+        } else if is_closing_brace(ch, self.in_class) {
+            self.depth -= 1;
+        }
+
+        Ok(())
+    }
+
+    fn validate_final_state(&self, pattern: &str) -> Result<(), Error> {
+        validate_final_depth(pattern, self.depth, self.last_open_brace_pos)
+    }
 }
 
 /// Validate that braces in a glob pattern are balanced.
 ///
-/// Escaped braces are ignored when tracking depth, and braces inside character
-/// classes `[]` are treated as literals. Returns a syntax error when opening
-/// and closing braces do not match.
-fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
-    let mut depth = 0usize;
-    let mut escaped = false;
-    let mut in_class = false; // inside [...]
-    for ch in pattern.chars() {
-        let (new_escaped, new_in_class, delta) = process_brace_char(ch, escaped, in_class);
-        escaped = new_escaped;
-        in_class = new_in_class;
-        if in_class {
-            continue;
-        }
-        let Some(delta) = delta else { continue };
-        depth = apply_brace_delta(depth, delta, pattern)?;
-    }
-    validate_final_brace_depth(depth, pattern)
-}
-
-/// Apply a brace depth change, returning the new depth or a syntax error.
-fn apply_brace_delta(
-    current_depth: usize,
-    delta: BraceDelta,
-    pattern: &str,
-) -> std::result::Result<usize, Error> {
-    match delta {
-        BraceDelta::Open => Ok(current_depth + 1),
-        BraceDelta::Close => {
-            if current_depth == 0 {
-                Err(Error::new(
-                    ErrorKind::SyntaxError,
-                    format!("invalid glob pattern '{pattern}': unmatched '}}'"),
-                ))
-            } else {
-                Ok(current_depth - 1)
-            }
-        }
-    }
-}
-
-/// Ensure the final brace depth is zero.
-fn validate_final_brace_depth(depth: usize, pattern: &str) -> std::result::Result<(), Error> {
-    if depth != 0 {
-        return Err(Error::new(
-            ErrorKind::SyntaxError,
-            format!("invalid glob pattern '{pattern}': unmatched '{{'"),
-        ));
-    }
-    Ok(())
-}
-
-/// Process a single character for brace and character-class state.
+/// Escaped braces are ignored when tracking depth on Unix, and braces inside
+/// character classes `[]` are treated as literals. Returns a syntax error when
+/// opening and closing braces do not match, including the position of the
+/// offending character for easier debugging.
 ///
-/// Returns the updated escape flag, character-class state and an optional
-/// brace depth delta.
-fn process_brace_char(ch: char, escaped: bool, in_class: bool) -> (bool, bool, Option<BraceDelta>) {
-    if escaped {
-        return (false, in_class, None);
+/// # Examples
+///
+/// ```ignore
+/// assert!(validate_brace_matching("foo{bar}").is_ok());
+/// assert!(validate_brace_matching("{foo").is_err());
+/// ```
+fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
+    let mut validator = BraceValidator::new();
+
+    for (i, ch) in pattern.char_indices() {
+        validator.process_character(ch, i, pattern)?;
     }
-    if ch == '\\' {
-        return (true, in_class, None);
-    }
-    if in_class {
-        if ch == ']' {
-            return (false, false, None);
-        }
-        return (false, true, None);
-    }
-    match ch {
-        '[' => (false, true, None),
-        '{' => (false, false, Some(BraceDelta::Open)),
-        '}' => (false, false, Some(BraceDelta::Close)),
-        _ => (false, in_class, None),
-    }
+
+    validator.validate_final_state(pattern)
 }
 
-// Preserve nuanced escape handling for normalize_separators on Unix.
+// Determine whether a wildcard continues an identifier when normalising
+// separators. Only used on Unix hosts where '\\' is not a path separator.
 #[cfg(unix)]
 fn is_wildcard_continuation_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '-' || ch == '_'
-}
-
-#[cfg(unix)]
-/// Handle a backslash during separator normalisation on Unix.
-/// Preserves the backslash when it escapes a glob metacharacter
-/// (`[ ] { } * ?`); otherwise emits the native path separator.
-/// Returns `true` iff a separator was emitted.
-fn handle_backslash_escape(
-    out: &mut String,
-    it: &mut std::iter::Peekable<std::str::Chars>,
-    native: char,
-) -> bool {
-    match it.peek() {
-        Some('[' | ']' | '{' | '}') => {
-            out.push('\\');
-            false
-        }
-        Some('*' | '?') => handle_wildcard_escape(out, it, native),
-        _ => {
-            out.push(native);
-            true
-        }
-    }
-}
-
-#[cfg(unix)]
-fn handle_wildcard_escape(
-    out: &mut String,
-    it: &mut std::iter::Peekable<std::str::Chars>,
-    native: char,
-) -> bool {
-    // Preserve '\\' before '*' or '?' when the wildcard is trailing or followed by
-    // an alphanumeric, '-' or '_'. Otherwise treat the '\\' as a path separator so
-    // Windows-style inputs like "dir\\*.ext" become "dir/*.ext". We only peek; the
-    // next rune is consumed by the outer loop.
-    let mut lookahead = it.clone();
-    lookahead.next();
-    match lookahead.peek() {
-        None => {
-            out.push('\\');
-            false
-        }
-        Some(&ch) if is_wildcard_continuation_char(ch) => {
-            out.push('\\');
-            false
-        }
-        _ => {
-            out.push(native);
-            true
-        }
-    }
 }
 
 fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
@@ -396,17 +499,11 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
     // Normalize separators so `/` and `\\` behave the same on all platforms.
     let mut normalized = normalize_separators(pattern);
-    // Force escaped meta to be treated literally by glob_with via bracket-classes.
-    // Only apply on Unix hosts where '\\' is not a path separator.
+    // Force escaped meta to be treated literally by `glob_with` via bracket
+    // classes. Only apply on Unix hosts where '\\' is not a path separator.
     #[cfg(unix)]
     {
-        normalized = normalized
-            .replace("\\*", "[*]")
-            .replace("\\?", "[?]")
-            .replace("\\[", "[[]")
-            .replace("\\]", "[]]")
-            .replace("\\{", "[{]")
-            .replace("\\}", "[}]");
+        normalized = force_literal_escapes(&normalized);
     }
 
     let entries = glob_with(&normalized, opts).map_err(|e| {
