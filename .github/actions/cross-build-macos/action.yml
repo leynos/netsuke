@@ -25,13 +25,20 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        for wrapper in o64-clang oa64-clang; do
+        target="${{ inputs.target }}"
+        case "$target" in
+          x86_64-apple-darwin)   wrapper="o64-clang"  ;;
+          aarch64-apple-darwin)  wrapper="oa64-clang" ;;
+          *) echo "::warning::Unknown target $target; skipping wrapper check"; wrapper="";;
+        esac
+        if [ -n "$wrapper" ]; then
           if ! command -v "$wrapper" >/dev/null 2>&1; then
             echo "::error title=Wrapper missing::$wrapper not found on PATH"
             exit 1
           fi
           echo "$wrapper -> $(command -v "$wrapper")"
-        done
+          "$wrapper" -v || true
+        fi
         echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}"
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
@@ -62,11 +69,26 @@ runs:
           fi
           echo "CARGO_TARGET_${target_env}_LINKER=$linker" >> "$GITHUB_ENV"
           echo "CC_${target_env}=$linker" >> "$GITHUB_ENV"
-          echo "CXX_${target_env}=$linker++" >> "$GITHUB_ENV"
+          cxx="${linker}++"
+          if command -v "$cxx" >/dev/null 2>&1; then
+            echo "CXX_${target_env}=$cxx" >> "$GITHUB_ENV"
+          else
+            echo "::notice title=C++ wrapper missing::${cxx} not found; C++ crates will use CC as fallback"
+            echo "CXX_${target_env}=$linker" >> "$GITHUB_ENV"
+          fi
+          if command -v "${target}-ar" >/dev/null 2>&1; then
+            echo "AR_${target_env}=${target}-ar" >> "$GITHUB_ENV"
+          fi
+          if command -v "${target}-ranlib" >/dev/null 2>&1; then
+            echo "RANLIB_${target_env}=${target}-ranlib" >> "$GITHUB_ENV"
+          fi
           echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
         fi
         echo "SDKROOT=${{ steps.osxcross.outputs.sdk-path }}" >> "$GITHUB_ENV"
         echo "MACOSX_DEPLOYMENT_TARGET=${{ inputs.deployment-target }}" >> "$GITHUB_ENV"
     - name: Build for macOS
-      run: cargo build --release --target ${{ inputs.target }}
+      run: |
+        rustc --version
+        cargo --version
+        cargo build --locked --release --target ${{ inputs.target }}
       shell: bash
