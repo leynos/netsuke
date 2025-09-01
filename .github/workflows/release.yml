@@ -234,6 +234,35 @@ PY
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - name: Download binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          path: dist
+      - name: Set up Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
+      - name: Generate man page
+        run: cargo build --release
+      - name: Prepare GoReleaser dist
+        run: |
+          set -euo pipefail
+          mkdir -p dist/netsuke_linux_amd64 dist/netsuke_linux_arm64 \
+                   dist/netsuke_darwin_amd64 dist/netsuke_darwin_arm64 \
+                   dist/netsuke_freebsd_amd64
+          mv dist/${{ env.REPO_NAME }}-linux-x86_64/${{ env.REPO_NAME }}-linux-x86_64 \
+            dist/netsuke_linux_amd64/netsuke
+          mv dist/${{ env.REPO_NAME }}-linux-aarch64/${{ env.REPO_NAME }}-linux-aarch64 \
+            dist/netsuke_linux_arm64/netsuke
+          mv dist/${{ env.REPO_NAME }}-macos-x86_64/${{ env.REPO_NAME }}-macos-x86_64 \
+            dist/netsuke_darwin_amd64/netsuke
+          mv dist/${{ env.REPO_NAME }}-macos-aarch64/${{ env.REPO_NAME }}-macos-aarch64 \
+            dist/netsuke_darwin_arm64/netsuke
+          mv dist/${{ env.REPO_NAME }}-freebsd-x86_64/${{ env.REPO_NAME }}-freebsd-x86_64 \
+            dist/netsuke_freebsd_amd64/netsuke
+          rm -rf dist/${{ env.REPO_NAME }}-linux-x86_64 \
+                 dist/${{ env.REPO_NAME }}-linux-aarch64 \
+                 dist/${{ env.REPO_NAME }}-macos-x86_64 \
+                 dist/${{ env.REPO_NAME }}-macos-aarch64 \
+                 dist/${{ env.REPO_NAME }}-freebsd-x86_64
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -244,7 +273,7 @@ PY
           distribution: goreleaser
           # Use a fixed version to ensure reproducibility
           version: v1.24.0
-          args: release --clean
+          args: release --clean --skip=build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

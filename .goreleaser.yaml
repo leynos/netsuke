@@ -11,15 +11,17 @@ before:
 builds:
   - id: netsuke
     binary: netsuke
-    main: ./crates/netsuke
-    builder: rust
-    # Add macOS + FreeBSD targets in addition to Linux
-    targets:
-      - x86_64-unknown-linux-gnu
-      - aarch64-unknown-linux-gnu
-      - x86_64-apple-darwin
-      - aarch64-apple-darwin
-      - x86_64-unknown-freebsd
+    skip: true
+    goos:
+      - linux
+      - darwin
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: freebsd
+        goarch: arm64
 
 
 archives:
