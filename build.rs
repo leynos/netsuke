@@ -15,6 +15,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Packagers expect man pages inside the crate directory under target/.
     let out_dir = PathBuf::from("target/generated-man");
+    if out_dir.exists() {
+        fs::remove_dir_all(&out_dir)?;
+    }
     fs::create_dir_all(&out_dir)?;
 
     // The top-level page documents the entire command interface.
