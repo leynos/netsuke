@@ -146,7 +146,7 @@ PY
       - name: Build release binary
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
-        run: ./scripts/package-artifact.sh "${{ matrix.os }}" "${{ matrix.arch }}" "${{ matrix.target }}" "${{ matrix.ext }}" "${BIN_NAME}"
+        run: bash ./scripts/package-artifact.sh "${{ matrix.os }}" "${{ matrix.arch }}" "${{ matrix.target }}" "${{ matrix.ext }}" "${BIN_NAME}"
       - name: Upload release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
@@ -210,7 +210,7 @@ PY
           deployment-target: '11.0'
           osx-version: '12.3'
       - name: Prepare artifact
-        run: ./scripts/package-artifact.sh macos "${{ matrix.arch }}" "${{ matrix.target }}" "" "${BIN_NAME}"
+        run: bash ./scripts/package-artifact.sh macos "${{ matrix.arch }}" "${{ matrix.target }}" "" "${BIN_NAME}"
       - name: Upload release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
