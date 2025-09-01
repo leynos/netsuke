@@ -1502,8 +1502,9 @@ enumeration in unit tests and via Cucumber steps for behavioural coverage.
 ### 8.5 Manual Pages
 
 The CLI definition doubles as the source for user documentation. A build script
-uses `clap_mangen` to emit a `netsuke.1` manual page in `target/generated-man`
-so release artefacts can ship platform-agnostic man pages.
+uses `clap_mangen` to emit a `netsuke.1` manual page in `target/generated-man`,
+so release artefacts and the published crate can ship platform-agnostic man
+pages.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 

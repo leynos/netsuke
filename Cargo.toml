@@ -10,6 +10,7 @@ include = [
     "README.md",
     "LICENSE",
     "build.rs",
+    "target/generated-man/*.1",
 ]
 
 [dependencies]
