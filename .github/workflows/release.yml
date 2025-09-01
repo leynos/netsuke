@@ -284,13 +284,22 @@ PY
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - name: Ensure release exists (draft)
+        run: |
+          set -euo pipefail
+          gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \
+            gh release create "${{ github.ref_name }}" --draft --verify-tag --notes "Automated release for ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: artifacts
       - run: |
+          set -euo pipefail
+          shopt -s nullglob
           for dir in artifacts/${{ env.REPO_NAME }}-*; do
             for file in "$dir"/*; do
-              gh release upload "${{ github.ref_name }}" "$file"
+              gh release upload "${{ github.ref_name }}" "$file" --clobber
             done
           done
         env:
