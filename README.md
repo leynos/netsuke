@@ -163,6 +163,9 @@ You can also pass:
 - `-j N` to control parallelism (passed through to Ninja)
 - `-v`, `--verbose` to enable verbose logging
 
+Release builds include a `netsuke.1` manual page generated from the Clap
+definitions, providing the same flags and subcommands documented via `--help`.
+
 ## 🚧 Status
 
 Netsuke is **under active development**. It’s not finished, but it’s buildable,

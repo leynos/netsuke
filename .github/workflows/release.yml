@@ -152,6 +152,10 @@ PY
             "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
           sha256sum "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" > \
             "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256"
+          cp "target/generated-man/${BIN_NAME}.1" \
+            "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}.1"
+          sha256sum "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}.1" > \
+            "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}.1.sha256"
       - name: Upload release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
@@ -221,6 +225,10 @@ PY
             "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}"
           sha256sum "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}" > \
             "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}.sha256"
+          cp "target/generated-man/${BIN_NAME}.1" \
+            "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}.1"
+          sha256sum "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}.1" > \
+            "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}.1.sha256"
       - name: Upload release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
