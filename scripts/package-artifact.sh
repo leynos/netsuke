@@ -21,5 +21,9 @@ sha256sum "$bin_dst" > "${bin_dst}.sha256"
 
 man_src="target/generated-man/${bin_name}.1"
 man_dst="$out_dir/${bin_name}-${os}-${arch}.1"
+if [[ ! -f "$man_src" ]]; then
+  echo "::error title=man page missing::${man_src} not found. Did build.rs run and write ${bin_name}.1?"
+  exit 1
+fi
 cp "$man_src" "$man_dst"
 sha256sum "$man_dst" > "${man_dst}.sha256"
