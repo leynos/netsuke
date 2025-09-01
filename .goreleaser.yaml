@@ -21,16 +21,6 @@ builds:
       - aarch64-apple-darwin
       - x86_64-unknown-freebsd
 
-  - id: YAML-powered Jinja/Ninja hybrid build system
-    binary: YAML-powered Jinja/Ninja hybrid build system
-    main: ./crates/YAML-powered Jinja/Ninja hybrid build system
-    builder: rust
-    targets:
-      - x86_64-unknown-linux-gnu
-      - aarch64-unknown-linux-gnu
-      - x86_64-apple-darwin
-      - aarch64-apple-darwin
-      - x86_64-unknown-freebsd
 
 archives:
   - id: default
@@ -95,7 +85,7 @@ hooks:
         VERSION="{{ .Version }}"
         ABI="$(pkg config ABI)"  # e.g., FreeBSD:14:amd64
 
-        for BIN in netsuke YAML-powered Jinja/Ninja hybrid build system; do
+        for BIN in netsuke; do
           STAGE="stage-${BIN}"
           MANPAGE="target/generated-man/${BIN}.1"
           rm -rf "$STAGE"
