@@ -67,6 +67,7 @@ hooks:
     - |
       if [ "$(uname -s)" = "FreeBSD" ]; then
         set -euo pipefail
+        trap 'rc=$?; rm -rf "$STAGE" manifest.ucl 2>/dev/null || true; exit $rc' EXIT
         VERSION="{{ .Version }}"
         ABI="$(pkg config ABI)"  # e.g., FreeBSD:14:amd64
 
@@ -100,12 +101,13 @@ www: "https://github.com/leynos/netsuke"
 maintainer: "Payton McIntosh <pmcintosh@df12.net>"
 arch: "${ABI}"
 desc: "Friendly build system that compiles structured manifests into a Ninja build graph."
-licenses: [ "MIT" ]
+licenses: ["ISC"]
 UCL
 
           mkdir -p dist
           pkg create -r "$STAGE" -M manifest.ucl -o dist
           rm -rf "$STAGE" manifest.ucl
+          trap - EXIT
         done
       fi
 
