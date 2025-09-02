@@ -263,19 +263,24 @@ PY
                  dist/${{ env.REPO_NAME }}-macos-x86_64 \
                  dist/${{ env.REPO_NAME }}-macos-aarch64 \
                  dist/${{ env.REPO_NAME }}-freebsd-x86_64
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
+        uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811  # v5
         with:
           distribution: goreleaser
           # Use a fixed version to ensure reproducibility
           version: v1.24.0
-          args: release --clean --skip=build
+          args: release --clean --skip=build,publish,announce
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload packaging artefacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: ${{ env.REPO_NAME }}-packages
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*_checksums.txt
 
   release:
     needs: [build, build-macos, package]
