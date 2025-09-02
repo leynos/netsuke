@@ -41,13 +41,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .into());
     }
+    let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION must be set");
     let date = env::var("SOURCE_DATE_EPOCH")
         .ok()
         .and_then(|v| v.parse::<i64>().ok())
         .and_then(|ts| OffsetDateTime::from_unix_timestamp(ts).ok())
         .and_then(|dt| dt.format(&Iso8601::DATE).ok())
         .unwrap_or_else(|| "1970-01-01".into());
-    let man = Man::new(cmd).date(date);
+    let man = Man::new(cmd)
+        .section("1")
+        .source(format!("{cargo_bin} {version}"))
+        .date(date);
     let mut buf = Vec::new();
     man.render(&mut buf)?;
     let out_path = out_dir.join(format!("{cargo_bin}.1"));
