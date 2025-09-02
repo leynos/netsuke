@@ -182,7 +182,8 @@ belt. It’s not the sword. It’s not the pouch. It’s the thing that connects
 That’s what this is: a tidy connector between your intent and the tool that
 gets it done.
 
-## License
+## Licence
 
-[ISC](https://opensource.org/licenses/ISC) — because you don't need a legal
+Netsuke is distributed under the
+[ISC licence](https://opensource.org/licenses/ISC). You don't need a legal
 thesis to use a build tool.
