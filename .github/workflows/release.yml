@@ -242,11 +242,19 @@ PY
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Generate man page
         run: cargo build -q --features manpage --no-default-features
+      - name: Verify man page exists
+        run: test -f target/generated-man/netsuke.1 || {
+          echo "::error title=Manpage missing::target/generated-man/netsuke.1 not found"; exit 1; }
+      - name: Setup Python 3.11
+        id: setup-python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.11'
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail
           # Resolve BIN_NAME exactly as in build jobs
-          python3 - <<'PY' > .bin_name
+          "${{ steps.setup-python.outputs.python-path }}" - <<'PY' > .bin_name
 import os, tomllib
 path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
 with open(path,'rb') as f:

@@ -1,8 +1,5 @@
 project_name: netsuke
 
-plugins:
-  - import: github.com/goreleaser/goreleaser-rust@v1.6.0
-
 # Ensure man pages exist before packaging. GoReleaser only archives files and
 # fails later if they're missing, so fail fast with a helpful message instead.
 before:
@@ -76,11 +73,10 @@ hooks:
         ABI="$(pkg config ABI)"  # e.g., FreeBSD:14:amd64
 
         for BIN in netsuke; do
-          STAGE="stage-${BIN}"
+          STAGE="$(mktemp -d -t "netsuke-${BIN}-stage.XXXXXXXX")"
           MANPAGE="target/generated-man/${BIN}.1"
           # Scope cleanup to each BIN
           trap 'rc=$?; rm -rf "$STAGE" manifest.ucl 2>/dev/null || true; exit $rc' EXIT
-          rm -rf "$STAGE"
           install -d "$STAGE/usr/local/bin" "$STAGE/usr/local/share/man/man1"
 
           # Prefer the built artefact from dist; if not found, fall back to target/release
