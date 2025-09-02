@@ -1504,7 +1504,8 @@ enumeration in unit tests and via Cucumber steps for behavioural coverage.
 The CLI definition doubles as the source for user documentation. A build script
 uses `clap_mangen` to emit a `netsuke.1` manual page in `target/generated-man`.
 Release artefacts include this platform‑agnostic man page; the published crate
-remains code‑only.
+remains code‑only. The build script honours `SOURCE_DATE_EPOCH` to produce
+reproducible dates.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
