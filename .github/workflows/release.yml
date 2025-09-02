@@ -7,6 +7,12 @@ on:
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
+  PACKAGE_PLATFORMS: |
+    linux x86_64 linux amd64
+    linux aarch64 linux arm64
+    macos x86_64 darwin amd64
+    macos aarch64 darwin arm64
+    freebsd x86_64 freebsd amd64
 
 concurrency:
   group: release-${{ github.ref }}
@@ -217,24 +223,87 @@ PY
           name: ${{ env.REPO_NAME }}-macos-${{ matrix.arch }}
           path: artifacts/macos-${{ matrix.arch }}
 
-  release:
+  package:
     needs: [build, build-macos]
     permissions:
       contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
-      - uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77  # v1
+      - name: Download binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
-          generate_release_notes: true
+          path: dist
+      - name: Set up Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
+      - name: Generate man page
+        run: cargo build -q --features manpage --no-default-features
+      - name: Verify man page exists
+        run: test -f target/generated-man/netsuke.1 || {
+          echo "::error title=Manpage missing::target/generated-man/netsuke.1 not found"; exit 1; }
+      - name: Prepare GoReleaser dist
+        run: |
+          set -euo pipefail
+          BIN_NAME="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[0].targets[] | select(.kind[]=="bin") | .name' \
+            | head -n 1)"
+          printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
+            mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
+            mv "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}" \
+               "dist/netsuke_${dst_os}_${dst_arch}/netsuke"
+            rm -rf "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}"
+          done
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811  # v5
+        with:
+          distribution: goreleaser
+          # Use a fixed version to ensure reproducibility
+          version: v1.24.0
+          args: release --clean --skip=build,publish,announce
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload packaging artefacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: ${{ env.REPO_NAME }}-packages
+          path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/*.rpm
+            dist/*_checksums.txt
+
+  release:
+    needs: [build, build-macos, package]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - name: Ensure release exists (draft)
+        run: |
+          set -euo pipefail
+          gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \
+            gh release create "${{ github.ref_name }}" --draft --verify-tag --notes "Automated release for ${{ github.ref_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: artifacts
+          pattern: ${{ env.REPO_NAME }}-*
       - run: |
+          set -euo pipefail
+          shopt -s nullglob
+          uploaded=0
           for dir in artifacts/${{ env.REPO_NAME }}-*; do
             for file in "$dir"/*; do
-              gh release upload "${{ github.ref_name }}" "$file"
+              gh release upload "${{ github.ref_name }}" "$file" --clobber && uploaded=$((uploaded+1))
             done
           done
+          if [ "$uploaded" -eq 0 ]; then
+            echo "::error title=No artefacts uploaded::No files found in artifacts/"; exit 1
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

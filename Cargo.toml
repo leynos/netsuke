@@ -11,6 +11,7 @@ include = [
     "LICENSE",
     "build.rs",
 ]
+license = "ISC"
 
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
