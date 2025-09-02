@@ -1,3 +1,5 @@
+//! Build script: generate the CLI manual page into target/generated-man for
+//! release packaging.
 use clap::CommandFactory;
 use clap_mangen::Man;
 use std::{env, fs, path::PathBuf};
@@ -20,9 +22,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Packagers expect man pages inside the crate directory under target/.
     let out_dir = PathBuf::from("target/generated-man");
-    if out_dir.exists() {
-        fs::remove_dir_all(&out_dir)?;
-    }
     fs::create_dir_all(&out_dir)?;
 
     // The top-level page documents the entire command interface.
@@ -40,7 +39,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let man = Man::new(cmd);
     let mut buf = Vec::new();
     man.render(&mut buf)?;
-    fs::write(out_dir.join(format!("{cargo_bin}.1")), buf)?;
+    let out_path = out_dir.join(format!("{cargo_bin}.1"));
+    let tmp = out_dir.join(format!("{cargo_bin}.1.tmp"));
+    fs::write(&tmp, &buf)?;
+    if out_path.exists() {
+        fs::remove_file(&out_path)?;
+    }
+    fs::rename(&tmp, &out_path)?;
 
     Ok(())
 }
