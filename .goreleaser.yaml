@@ -18,6 +18,9 @@ builds:
   - id: netsuke
     binary: netsuke
     skip_build: true
+    # The OS/arch list must mirror jobs.build and jobs.build-macos in
+    # .github/workflows/release.yml. Update PACKAGE_PLATFORMS there when
+    # adding a new target and keep this list in sync.
     goos:
       - linux
       - darwin
@@ -25,6 +28,9 @@ builds:
     goarch:
       - amd64
       - arm64
+    # freebsd/arm64 is a Rust tier 3 target and lacks prebuilt standard
+    # libraries. Ignore it until support improves.
+    # See: https://users.rust-lang.org/t/why-target-aarch64-unknown-freebsd-cannot-be-installed-on-the-debian-gnu-linux-platform/126339
     ignore:
       - goos: freebsd
         goarch: arm64

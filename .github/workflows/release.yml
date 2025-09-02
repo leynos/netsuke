@@ -7,6 +7,12 @@ on:
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
+  PACKAGE_PLATFORMS: |
+    linux x86_64 linux amd64
+    linux aarch64 linux arm64
+    macos x86_64 darwin amd64
+    macos aarch64 darwin arm64
+    freebsd x86_64 freebsd amd64
 
 concurrency:
   group: release-${{ github.ref }}
@@ -245,43 +251,18 @@ PY
       - name: Verify man page exists
         run: test -f target/generated-man/netsuke.1 || {
           echo "::error title=Manpage missing::target/generated-man/netsuke.1 not found"; exit 1; }
-      - name: Setup Python 3.11
-        id: setup-python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
-        with:
-          python-version: '3.11'
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail
-          # Resolve BIN_NAME exactly as in build jobs
-          "${{ steps.setup-python.outputs.python-path }}" - <<'PY' > .bin_name
-import os, tomllib
-path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
-with open(path,'rb') as f:
-  m=tomllib.load(f)
-name=(m.get('package') or {}).get('name')
-bins=[b.get('name') for b in m.get('bin',[]) if 'name' in b]
-print((bins[0] if bins else name) or "")
-PY
-          BIN_NAME="$(cat .bin_name)"
-          mkdir -p dist/netsuke_linux_amd64 dist/netsuke_linux_arm64 \
-                   dist/netsuke_darwin_amd64 dist/netsuke_darwin_arm64 \
-                   dist/netsuke_freebsd_amd64
-          mv dist/${{ env.REPO_NAME }}-linux-x86_64/${BIN_NAME}-linux-x86_64 \
-            dist/netsuke_linux_amd64/netsuke
-          mv dist/${{ env.REPO_NAME }}-linux-aarch64/${BIN_NAME}-linux-aarch64 \
-            dist/netsuke_linux_arm64/netsuke
-          mv dist/${{ env.REPO_NAME }}-macos-x86_64/${BIN_NAME}-macos-x86_64 \
-            dist/netsuke_darwin_amd64/netsuke
-          mv dist/${{ env.REPO_NAME }}-macos-aarch64/${BIN_NAME}-macos-aarch64 \
-            dist/netsuke_darwin_arm64/netsuke
-          mv dist/${{ env.REPO_NAME }}-freebsd-x86_64/${BIN_NAME}-freebsd-x86_64 \
-            dist/netsuke_freebsd_amd64/netsuke
-          rm -rf dist/${{ env.REPO_NAME }}-linux-x86_64 \
-                 dist/${{ env.REPO_NAME }}-linux-aarch64 \
-                 dist/${{ env.REPO_NAME }}-macos-x86_64 \
-                 dist/${{ env.REPO_NAME }}-macos-aarch64 \
-                 dist/${{ env.REPO_NAME }}-freebsd-x86_64
+          BIN_NAME="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[0].targets[] | select(.kind[]=="bin") | .name' \
+            | head -n 1)"
+          printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
+            mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
+            mv "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}" \
+               "dist/netsuke_${dst_os}_${dst_arch}/netsuke"
+            rm -rf "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}"
+          done
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811  # v5
         with:
@@ -320,14 +301,7 @@ PY
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: artifacts
-          pattern: |
-            ${{ env.REPO_NAME }}-linux-*
-            ${{ env.REPO_NAME }}-macos-*
-            ${{ env.REPO_NAME }}-freebsd-*
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
-        with:
-          name: ${{ env.REPO_NAME }}-packages
-          path: packages
+          pattern: ${{ env.REPO_NAME }}-*
       - run: |
           set -euo pipefail
           shopt -s nullglob
@@ -337,11 +311,8 @@ PY
               gh release upload "${{ github.ref_name }}" "$file" --clobber && uploaded=$((uploaded+1))
             done
           done
-          for file in packages/*; do
-            gh release upload "${{ github.ref_name }}" "$file" --clobber && uploaded=$((uploaded+1))
-          done
           if [ "$uploaded" -eq 0 ]; then
-            echo "::error title=No artefacts uploaded::No files found in artifacts/ or packages/"; exit 1
+            echo "::error title=No artefacts uploaded::No files found in artifacts/"; exit 1
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
