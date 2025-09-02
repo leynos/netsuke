@@ -5,6 +5,8 @@ use clap_mangen::Man;
 use std::{env, fs, path::PathBuf};
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
+const FALLBACK_DATE: &str = "1970-01-01";
+
 #[path = "src/cli.rs"]
 #[expect(
     dead_code,
@@ -53,10 +55,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .and_then(|dt| dt.format(&Iso8601::DATE).ok())
                 .or_else(|| {
                     println!("cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'");
-                    Some("1970-01-01".into())
+                    Some(FALLBACK_DATE.into())
                 })
         })
-        .unwrap_or_else(|| "1970-01-01".into());
+        .unwrap_or_else(|| FALLBACK_DATE.into());
     let man = Man::new(cmd)
         .section("1")
         .source(format!("{cargo_bin} {version}"))
