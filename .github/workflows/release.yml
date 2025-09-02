@@ -241,23 +241,34 @@ PY
       - name: Set up Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Generate man page
-        run: cargo build --release
+        run: cargo build -q --features manpage --no-default-features
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail
+          # Resolve BIN_NAME exactly as in build jobs
+          python3 - <<'PY' > .bin_name
+import os, tomllib
+path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
+with open(path,'rb') as f:
+  m=tomllib.load(f)
+name=(m.get('package') or {}).get('name')
+bins=[b.get('name') for b in m.get('bin',[]) if 'name' in b]
+print((bins[0] if bins else name) or "")
+PY
+          BIN_NAME="$(cat .bin_name)"
           mkdir -p dist/netsuke_linux_amd64 dist/netsuke_linux_arm64 \
                    dist/netsuke_darwin_amd64 dist/netsuke_darwin_arm64 \
                    dist/netsuke_freebsd_amd64
-          mv dist/${{ env.REPO_NAME }}-linux-x86_64/${{ env.REPO_NAME }}-linux-x86_64 \
-            dist/netsuke_linux_amd64/netsuke
-          mv dist/${{ env.REPO_NAME }}-linux-aarch64/${{ env.REPO_NAME }}-linux-aarch64 \
-            dist/netsuke_linux_arm64/netsuke
-          mv dist/${{ env.REPO_NAME }}-macos-x86_64/${{ env.REPO_NAME }}-macos-x86_64 \
-            dist/netsuke_darwin_amd64/netsuke
-          mv dist/${{ env.REPO_NAME }}-macos-aarch64/${{ env.REPO_NAME }}-macos-aarch64 \
-            dist/netsuke_darwin_arm64/netsuke
-          mv dist/${{ env.REPO_NAME }}-freebsd-x86_64/${{ env.REPO_NAME }}-freebsd-x86_64 \
-            dist/netsuke_freebsd_amd64/netsuke
+          mv dist/${{ env.REPO_NAME }}-linux-x86_64/${BIN_NAME}-linux-x86_64 \
+            dist/netsuke_linux_amd64/${BIN_NAME}
+          mv dist/${{ env.REPO_NAME }}-linux-aarch64/${BIN_NAME}-linux-aarch64 \
+            dist/netsuke_linux_arm64/${BIN_NAME}
+          mv dist/${{ env.REPO_NAME }}-macos-x86_64/${BIN_NAME}-macos-x86_64 \
+            dist/netsuke_darwin_amd64/${BIN_NAME}
+          mv dist/${{ env.REPO_NAME }}-macos-aarch64/${BIN_NAME}-macos-aarch64 \
+            dist/netsuke_darwin_arm64/${BIN_NAME}
+          mv dist/${{ env.REPO_NAME }}-freebsd-x86_64/${BIN_NAME}-freebsd-x86_64 \
+            dist/netsuke_freebsd_amd64/${BIN_NAME}
           rm -rf dist/${{ env.REPO_NAME }}-linux-x86_64 \
                  dist/${{ env.REPO_NAME }}-linux-aarch64 \
                  dist/${{ env.REPO_NAME }}-macos-x86_64 \
@@ -299,13 +310,29 @@ PY
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: artifacts
+          pattern: |
+            ${{ env.REPO_NAME }}-linux-*
+            ${{ env.REPO_NAME }}-macos-*
+            ${{ env.REPO_NAME }}-freebsd-*
+          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: ${{ env.REPO_NAME }}-packages
+          path: packages
       - run: |
           set -euo pipefail
           shopt -s nullglob
+          uploaded=0
           for dir in artifacts/${{ env.REPO_NAME }}-*; do
             for file in "$dir"/*; do
-              gh release upload "${{ github.ref_name }}" "$file" --clobber
+              gh release upload "${{ github.ref_name }}" "$file" --clobber && uploaded=$((uploaded+1))
             done
           done
+          for file in packages/*; do
+            gh release upload "${{ github.ref_name }}" "$file" --clobber && uploaded=$((uploaded+1))
+          done
+          if [ "$uploaded" -eq 0 ]; then
+            echo "::error title=No artefacts uploaded::No files found in artifacts/ or packages/"; exit 1
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
