@@ -16,7 +16,6 @@ env:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   build:
@@ -80,7 +79,7 @@ jobs:
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
             CARGO_TOML_PATH="$toml_path" \
-            "${{ steps.setup-python.outputs.python-path }}" - <<'PY' || echo ""
+            python - <<'PY' || echo ""
 import os, tomllib
 with open(os.environ['CARGO_TOML_PATH'], 'rb') as f:
     print(tomllib.load(f)['package']['version'])
@@ -100,7 +99,7 @@ PY
           set -euo pipefail
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           BIN_NAME="$(
-            "${{ steps.setup-python.outputs.python-path }}" - <<'PY' || echo ""
+            python - <<'PY' || echo ""
 import os, tomllib
 path = os.environ.get('CARGO_TOML_PATH', 'Cargo.toml')
 with open(path, 'rb') as f:
@@ -194,7 +193,7 @@ PY
           set -euo pipefail
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           BIN_NAME="$(
-            "${{ steps.bin-name.outputs.python-path }}" - <<'PY' || echo ""
+            python - <<'PY' || echo ""
 import os, tomllib, sys
 path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
 with open(path,'rb') as f:
@@ -241,6 +240,8 @@ PY
       - name: Verify man page exists
         run: test -f target/generated-man/netsuke.1 || {
           echo "::error title=Manpage missing::target/generated-man/netsuke.1 not found"; exit 1; }
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail
