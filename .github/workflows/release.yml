@@ -268,15 +268,15 @@ PY
                    dist/netsuke_darwin_amd64 dist/netsuke_darwin_arm64 \
                    dist/netsuke_freebsd_amd64
           mv dist/${{ env.REPO_NAME }}-linux-x86_64/${BIN_NAME}-linux-x86_64 \
-            dist/netsuke_linux_amd64/${BIN_NAME}
+            dist/netsuke_linux_amd64/netsuke
           mv dist/${{ env.REPO_NAME }}-linux-aarch64/${BIN_NAME}-linux-aarch64 \
-            dist/netsuke_linux_arm64/${BIN_NAME}
+            dist/netsuke_linux_arm64/netsuke
           mv dist/${{ env.REPO_NAME }}-macos-x86_64/${BIN_NAME}-macos-x86_64 \
-            dist/netsuke_darwin_amd64/${BIN_NAME}
+            dist/netsuke_darwin_amd64/netsuke
           mv dist/${{ env.REPO_NAME }}-macos-aarch64/${BIN_NAME}-macos-aarch64 \
-            dist/netsuke_darwin_arm64/${BIN_NAME}
+            dist/netsuke_darwin_arm64/netsuke
           mv dist/${{ env.REPO_NAME }}-freebsd-x86_64/${BIN_NAME}-freebsd-x86_64 \
-            dist/netsuke_freebsd_amd64/${BIN_NAME}
+            dist/netsuke_freebsd_amd64/netsuke
           rm -rf dist/${{ env.REPO_NAME }}-linux-x86_64 \
                  dist/${{ env.REPO_NAME }}-linux-aarch64 \
                  dist/${{ env.REPO_NAME }}-macos-x86_64 \
@@ -315,6 +315,7 @@ PY
             gh release create "${{ github.ref_name }}" --draft --verify-tag --notes "Automated release for ${{ github.ref_name }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: artifacts
@@ -322,7 +323,6 @@ PY
             ${{ env.REPO_NAME }}-linux-*
             ${{ env.REPO_NAME }}-macos-*
             ${{ env.REPO_NAME }}-freebsd-*
-          merge-multiple: true
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: ${{ env.REPO_NAME }}-packages
@@ -344,3 +344,4 @@ PY
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
