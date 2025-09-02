@@ -152,12 +152,7 @@ PY
       - name: Build release binary
         run: cross +stable build --release --target ${{ matrix.target }}
       - name: Prepare artifact
-        run: |
-          mkdir -p "artifacts/${{ matrix.os }}-${{ matrix.arch }}"
-          cp "target/${{ matrix.target }}/release/${BIN_NAME}${{ matrix.ext }}" \
-            "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
-          sha256sum "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" > \
-            "artifacts/${{ matrix.os }}-${{ matrix.arch }}/${BIN_NAME}-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}.sha256"
+        run: bash ./scripts/package-artifact.sh "${{ matrix.os }}" "${{ matrix.arch }}" "${{ matrix.target }}" "${{ matrix.ext }}" "${BIN_NAME}"
       - name: Upload release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
@@ -221,12 +216,7 @@ PY
           deployment-target: '11.0'
           osx-version: '12.3'
       - name: Prepare artifact
-        run: |
-          mkdir -p artifacts/macos-${{ matrix.arch }}
-          cp "target/${{ matrix.target }}/release/${BIN_NAME}" \
-            "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}"
-          sha256sum "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}" > \
-            "artifacts/macos-${{ matrix.arch }}/${BIN_NAME}-macos-${{ matrix.arch }}.sha256"
+        run: bash ./scripts/package-artifact.sh macos "${{ matrix.arch }}" "${{ matrix.target }}" "" "${BIN_NAME}"
       - name: Upload release artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:

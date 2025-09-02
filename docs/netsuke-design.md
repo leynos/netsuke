@@ -1499,6 +1499,14 @@ internally; Netsuke changes directory before spawning Ninja rather than
 forwarding the flag. Error scenarios are validated using clap's `ErrorKind`
 enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
+### 8.5 Manual Pages
+
+The CLI definition doubles as the source for user documentation. A build script
+uses `clap_mangen` to emit a `netsuke.1` manual page in `target/generated-man`.
+Release artefacts include this platform‑agnostic man page; the published crate
+remains code‑only. The build script honours `SOURCE_DATE_EPOCH` to produce
+reproducible dates.
+
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
 This final section outlines a strategic plan for implementing Netsuke, along
