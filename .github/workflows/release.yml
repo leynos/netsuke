@@ -235,28 +235,28 @@ PY
           path: dist
       - name: Set up Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
-      - name: Generate man page
-        run: cargo build -q --features manpage --no-default-features
       - name: Setup jq
         uses: vegardit/gha-setup-jq@491c577e0d5e6512cf02b06cf439b1fc4165aad1
-      - name: Verify man page exists
+      - name: Export BIN_NAME
         run: |
           set -euo pipefail
-          host=$(rustc -Vv | awk '/^host:/ {print $2}')
           BIN_NAME="$(cargo metadata --no-deps --format-version 1 \
             | jq -r '.packages[0].targets[] | select(.kind[]=="bin") | .name' \
             | head -n 1)"
-          man_src="target/generated-man/${host}/debug/${BIN_NAME}.1"
-          test -f "$man_src" || {
-            echo "::error title=Manpage missing::${man_src} not found"; exit 1; }
+          if [ -z "${BIN_NAME:-}" ]; then
+            echo "::error title=Binary name not found::No binary target in Cargo.toml"; exit 1; fi
+          echo "BIN_NAME=$BIN_NAME" >> "$GITHUB_ENV"
+      - name: Stage man page
+        run: |
+          set -euo pipefail
+          man_src=$(find dist -name "${BIN_NAME}-*.1" | head -n 1)
+          if [ -z "${man_src:-}" ]; then
+            echo "::error title=Manpage missing::${BIN_NAME}-*.1 not found in dist"; exit 1; fi
           mkdir -p target/generated-man
           cp "$man_src" "target/generated-man/${BIN_NAME}.1"
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail
-          BIN_NAME="$(cargo metadata --no-deps --format-version 1 \
-            | jq -r '.packages[0].targets[] | select(.kind[]=="bin") | .name' \
-            | head -n 1)"
           printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
             mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
             mv "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}" \
