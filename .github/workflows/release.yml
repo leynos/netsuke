@@ -236,15 +236,20 @@ PY
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Generate man page
         run: cargo build -q --features manpage --no-default-features
+      - name: Setup jq
+        uses: vegardit/gha-setup-jq@v1
       - name: Verify man page exists
         run: |
           set -euo pipefail
           host=$(rustc -Vv | awk '/^host:/ {print $2}')
-          test -f "target/generated-man/${host}/debug/netsuke.1" || {
-            echo "::error title=Manpage missing::target/generated-man/${host}/debug/netsuke.1 not found"; exit 1; }
-          cp "target/generated-man/${host}/debug/netsuke.1" target/generated-man/netsuke.1
-      - name: Setup jq
-        uses: vegardit/gha-setup-jq@v1
+          BIN_NAME="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[0].targets[] | select(.kind[]=="bin") | .name' \
+            | head -n 1)"
+          man_src="target/generated-man/${host}/debug/${BIN_NAME}.1"
+          test -f "$man_src" || {
+            echo "::error title=Manpage missing::${man_src} not found"; exit 1; }
+          mkdir -p target/generated-man
+          cp "$man_src" "target/generated-man/${BIN_NAME}.1"
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail

@@ -23,6 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
+    println!("cargo:rerun-if-env-changed=TARGET");
+    println!("cargo:rerun-if-env-changed=PROFILE");
 
     // Packagers expect man pages under target/generated-man/<target>/<profile>.
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
