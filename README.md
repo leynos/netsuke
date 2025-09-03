@@ -167,8 +167,9 @@ Release builds include a `netsuke.1` manual page generated from the Clap
 definitions, providing the same flags and subcommands documented via `--help`.
 Manual page generation honours `SOURCE_DATE_EPOCH` for reproducible dates. If
 the value is invalid, a warning is emitted and the date falls back to
-`1970-01-01`. The published crate does not include this file; packagers can
-source it from release artefacts under
+`1970-01-01`. If `SOURCE_DATE_EPOCH` is unset, the date deterministically falls
+back to `1970-01-01` without a warning. The published crate does not include
+this file; packagers can source it from release artefacts under
 `target/generated-man/<target>/<profile>/`.
 
 ## 🚧 Status

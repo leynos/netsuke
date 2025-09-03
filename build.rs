@@ -41,6 +41,12 @@ fn manual_date() -> String {
     })
 }
 
+fn out_dir_for_target_profile() -> PathBuf {
+    let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
+    PathBuf::from(format!("target/generated-man/{target}/{profile}"))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli.rs");
@@ -54,9 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=PROFILE");
 
     // Packagers expect man pages under target/generated-man/<target>/<profile>.
-    let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
-    let out_dir = PathBuf::from(format!("target/generated-man/{target}/{profile}"));
+    let out_dir = out_dir_for_target_profile();
     fs::create_dir_all(&out_dir)?;
 
     // The top-level page documents the entire command interface.
