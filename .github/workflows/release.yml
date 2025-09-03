@@ -16,8 +16,7 @@ env:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: false
-
+  cancel-in-progress: true
 jobs:
   build:
     permissions:
@@ -80,7 +79,7 @@ jobs:
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
             CARGO_TOML_PATH="$toml_path" \
-            "${{ steps.setup-python.outputs.python-path }}" - <<'PY' || echo ""
+            python3 - <<'PY' || echo ""
 import os, tomllib
 with open(os.environ['CARGO_TOML_PATH'], 'rb') as f:
     print(tomllib.load(f)['package']['version'])
@@ -100,7 +99,7 @@ PY
           set -euo pipefail
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           BIN_NAME="$(
-            "${{ steps.setup-python.outputs.python-path }}" - <<'PY' || echo ""
+            python3 - <<'PY' || echo ""
 import os, tomllib
 path = os.environ.get('CARGO_TOML_PATH', 'Cargo.toml')
 with open(path, 'rb') as f:
@@ -194,7 +193,7 @@ PY
           set -euo pipefail
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           BIN_NAME="$(
-            "${{ steps.bin-name.outputs.python-path }}" - <<'PY' || echo ""
+            python3 - <<'PY' || echo ""
 import os, tomllib, sys
 path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
 with open(path,'rb') as f:
@@ -238,9 +237,20 @@ PY
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Generate man page
         run: cargo build -q --features manpage --no-default-features
+      - name: Setup jq
+        uses: vegardit/gha-setup-jq@491c577e0d5e6512cf02b06cf439b1fc4165aad1
       - name: Verify man page exists
-        run: test -f target/generated-man/netsuke.1 || {
-          echo "::error title=Manpage missing::target/generated-man/netsuke.1 not found"; exit 1; }
+        run: |
+          set -euo pipefail
+          host=$(rustc -Vv | awk '/^host:/ {print $2}')
+          BIN_NAME="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[0].targets[] | select(.kind[]=="bin") | .name' \
+            | head -n 1)"
+          man_src="target/generated-man/${host}/debug/${BIN_NAME}.1"
+          test -f "$man_src" || {
+            echo "::error title=Manpage missing::${man_src} not found"; exit 1; }
+          mkdir -p target/generated-man
+          cp "$man_src" "target/generated-man/${BIN_NAME}.1"
       - name: Prepare GoReleaser dist
         run: |
           set -euo pipefail
