@@ -1,4 +1,4 @@
-//! Build script: generate the CLI manual page into target/generated-man for
+//! Build script: generate the CLI manual page into target/generated-man/<target>/<profile> for
 //! release packaging.
 use clap::CommandFactory;
 use clap_mangen::Man;
@@ -23,11 +23,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
-    println!("cargo:rerun-if-env-changed=TARGET");
-    println!("cargo:rerun-if-env-changed=PROFILE");
 
-    // Packagers expect man pages inside the crate directory under target/.
-    let out_dir = PathBuf::from("target/generated-man");
+    // Packagers expect man pages under target/generated-man/<target>/<profile>.
+    let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
+    let out_dir = PathBuf::from(format!("target/generated-man/{target}/{profile}"));
     fs::create_dir_all(&out_dir)?;
 
     // The top-level page documents the entire command interface.
@@ -46,19 +46,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into());
     }
     let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION must be set");
-    let date = env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|raw| {
+    let date = env::var("SOURCE_DATE_EPOCH").map_or_else(
+        |_| FALLBACK_DATE.into(),
+        |raw| {
             raw.parse::<i64>()
                 .ok()
                 .and_then(|ts| OffsetDateTime::from_unix_timestamp(ts).ok())
                 .and_then(|dt| dt.format(&Iso8601::DATE).ok())
-                .or_else(|| {
-                    println!("cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'");
-                    Some(FALLBACK_DATE.into())
+                .unwrap_or_else(|| {
+                    println!("cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; expected integer seconds since Unix epoch. Falling back to {FALLBACK_DATE}");
+                    FALLBACK_DATE.into()
                 })
-        })
-        .unwrap_or_else(|| FALLBACK_DATE.into());
+        },
+    );
     let man = Man::new(cmd)
         .section("1")
         .source(format!("{cargo_bin} {version}"))

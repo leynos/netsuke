@@ -37,7 +37,7 @@ require_file "$bin_src" "binary missing" "Did the build succeed for target=${tar
 cp "$bin_src" "$bin_dst"
 hash256 "$bin_dst" > "${bin_dst}.sha256"
 
-man_src="target/generated-man/${bin_name}.1"
+man_src="target/generated-man/${target}/release/${bin_name}.1"
 man_dst="$out_dir/${bin_name}-${os}-${arch}.1"
 require_file "$man_src" "man page missing" "Did build.rs run and write ${bin_name}.1?"
 cp "$man_src" "$man_dst"

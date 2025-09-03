@@ -167,7 +167,7 @@ Release builds include a `netsuke.1` manual page generated from the Clap
 definitions, providing the same flags and subcommands documented via `--help`.
 Manual page generation honours `SOURCE_DATE_EPOCH` for reproducible dates. The
 published crate does not include this file; packagers can source it from
-release artefacts under `target/generated-man/`.
+release artefacts under `target/generated-man/<target>/<profile>/`.
 
 ## 🚧 Status
 
