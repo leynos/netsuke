@@ -14,6 +14,33 @@ const FALLBACK_DATE: &str = "1970-01-01";
 )]
 mod cli;
 
+fn manual_date() -> String {
+    let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
+        return FALLBACK_DATE.into();
+    };
+
+    let Ok(ts) = raw.parse::<i64>() else {
+        println!(
+            "cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; expected integer seconds since Unix epoch; falling back to {FALLBACK_DATE}"
+        );
+        return FALLBACK_DATE.into();
+    };
+
+    let Ok(dt) = OffsetDateTime::from_unix_timestamp(ts) else {
+        println!(
+            "cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; not a valid Unix timestamp; falling back to {FALLBACK_DATE}"
+        );
+        return FALLBACK_DATE.into();
+    };
+
+    dt.format(&Iso8601::DATE).unwrap_or_else(|_| {
+        println!(
+            "cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; formatting failed; falling back to {FALLBACK_DATE}"
+        );
+        FALLBACK_DATE.into()
+    })
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli.rs");
@@ -49,43 +76,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION must be set");
 
-    #[allow(
-        clippy::option_if_let_else,
-        clippy::single_match_else,
-        reason = "Explicit matches make invalid SOURCE_DATE_EPOCH handling linear and readable"
-    )]
-    let date = match env::var("SOURCE_DATE_EPOCH") {
-        Ok(raw) => match raw.parse::<i64>() {
-            Ok(ts) => match OffsetDateTime::from_unix_timestamp(ts) {
-                Ok(dt) => match dt.format(&Iso8601::DATE) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        println!(
-                            "cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; formatting failed; falling back to {FALLBACK_DATE}"
-                        );
-                        FALLBACK_DATE.into()
-                    }
-                },
-                Err(_) => {
-                    println!(
-                        "cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; not a valid Unix timestamp; falling back to {FALLBACK_DATE}"
-                    );
-                    FALLBACK_DATE.into()
-                }
-            },
-            Err(_) => {
-                println!(
-                    "cargo:warning=Invalid SOURCE_DATE_EPOCH '{raw}'; expected integer seconds since Unix epoch; falling back to {FALLBACK_DATE}"
-                );
-                FALLBACK_DATE.into()
-            }
-        },
-        Err(_) => FALLBACK_DATE.into(),
-    };
     let man = Man::new(cmd)
         .section("1")
         .source(format!("{cargo_bin} {version}"))
-        .date(date);
+        .date(manual_date());
     let mut buf = Vec::new();
     man.render(&mut buf)?;
     let out_path = out_dir.join(format!("{cargo_bin}.1"));
