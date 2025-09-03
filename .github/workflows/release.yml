@@ -229,6 +229,8 @@ PY
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+        - name: Clean generated man pages
+          run: rm -rf target/generated-man
       - name: Download binaries
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
@@ -246,23 +248,19 @@ PY
           if [ -z "${BIN_NAME:-}" ]; then
             echo "::error title=Binary name not found::No binary target in Cargo.toml"; exit 1; fi
           echo "BIN_NAME=$BIN_NAME" >> "$GITHUB_ENV"
-      - name: Stage man page
-        run: |
-          set -euo pipefail
-          man_src=$(find dist -name "${BIN_NAME}-*.1" | head -n 1)
-          if [ -z "${man_src:-}" ]; then
-            echo "::error title=Manpage missing::${BIN_NAME}-*.1 not found in dist"; exit 1; fi
-          mkdir -p target/generated-man
-          cp "$man_src" "target/generated-man/${BIN_NAME}.1"
       - name: Prepare GoReleaser dist
         run: |
-          set -euo pipefail
-          printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
-            mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
-            mv "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}" \
-               "dist/netsuke_${dst_os}_${dst_arch}/netsuke"
-            rm -rf "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}"
-          done
+            set -euo pipefail
+            man_src="dist/${{ env.REPO_NAME }}-linux-x86_64/${BIN_NAME}-linux-x86_64.1"
+            if [ ! -f "$man_src" ]; then
+              echo "::error title=Manpage missing::${man_src} not found"; exit 1; fi
+            cp "$man_src" dist/netsuke.1
+            printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
+              mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
+              mv "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}" \
+                 "dist/netsuke_${dst_os}_${dst_arch}/netsuke"
+              rm -rf "dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}"
+            done
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@5742e2a039330cbb23ebf35f046f814d4c6ff811  # v5
         with:

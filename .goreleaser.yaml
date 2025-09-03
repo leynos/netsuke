@@ -5,10 +5,10 @@ project_name: netsuke
 before:
   hooks:
     - |
-      test -f target/generated-man/netsuke.1 || {
-        echo "::error title=Manpage missing::target/generated-man/netsuke.1 not found. Ensure build.rs or a dedicated step generates it before packaging.";
-        exit 1;
-      }
+        test -f dist/netsuke.1 || {
+          echo "::error title=Manpage missing::dist/netsuke.1 not found. Ensure package job staged it before packaging.";
+          exit 1;
+        }
 
 builds:
   # GoReleaser packages prebuilt Rust binaries. `skip_build: true` avoids
@@ -43,7 +43,7 @@ archives:
     files:
       - LICENSE
       - README.md
-      - target/generated-man/netsuke.1
+      - dist/netsuke.1
 
 nfpms:
   # Linux packages (deb/rpm) for netsuke
@@ -58,7 +58,7 @@ nfpms:
     builds: [netsuke]
     bindir: /usr/local/bin
     contents:
-      - src: ./target/generated-man/netsuke.1
+      - src: ./dist/netsuke.1
         dst: /usr/local/share/man/man1/netsuke.1
 
 
@@ -80,7 +80,7 @@ hooks:
 
         for BIN in netsuke; do
           STAGE="$(mktemp -d -t "netsuke-${BIN}-stage.XXXXXXXX")"
-          MANPAGE="target/generated-man/${BIN}.1"
+          MANPAGE="dist/${BIN}.1"
           # Scope cleanup to each BIN
           trap 'rc=$?; rm -rf "$STAGE" manifest.ucl 2>/dev/null || true; exit $rc' EXIT
           install -d "$STAGE/usr/local/bin" "$STAGE/usr/local/share/man/man1"
