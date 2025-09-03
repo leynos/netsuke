@@ -16,6 +16,7 @@ env:
 
 concurrency:
   group: release-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     permissions:
@@ -78,7 +79,7 @@ jobs:
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
             CARGO_TOML_PATH="$toml_path" \
-            python - <<'PY' || echo ""
+            ${{ steps.setup-python.outputs.python-path }} - <<'PY' || echo ""
 import os, tomllib
 with open(os.environ['CARGO_TOML_PATH'], 'rb') as f:
     print(tomllib.load(f)['package']['version'])
@@ -98,7 +99,7 @@ PY
           set -euo pipefail
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           BIN_NAME="$(
-            python - <<'PY' || echo ""
+            ${{ steps.setup-python.outputs.python-path }} - <<'PY' || echo ""
 import os, tomllib
 path = os.environ.get('CARGO_TOML_PATH', 'Cargo.toml')
 with open(path, 'rb') as f:
@@ -192,7 +193,7 @@ PY
           set -euo pipefail
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           BIN_NAME="$(
-            python - <<'PY' || echo ""
+            ${{ steps.bin-name.outputs.python-path }} - <<'PY' || echo ""
 import os, tomllib, sys
 path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
 with open(path,'rb') as f:
