@@ -5,7 +5,7 @@ project_name: netsuke
 before:
   hooks:
     - |
-        test -f dist/netsuke.1 || {
+        test -s dist/netsuke.1 || {
           echo "::error title=Manpage missing::dist/netsuke.1 not found. Ensure package job staged it before packaging.";
           exit 1;
         }
@@ -59,7 +59,7 @@ nfpms:
     bindir: /usr/local/bin
     contents:
       - src: ./dist/netsuke.1
-        dst: /usr/local/share/man/man1/netsuke.1
+        dst: /usr/share/man/man1/netsuke.1
 
 
 # FreeBSD native .pkg via a post hook that runs only on FreeBSD.
