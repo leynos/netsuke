@@ -94,26 +94,7 @@ PY
             exit 1
           fi
           echo "Release tag $tag matches Cargo.toml version."
-      - name: Export BIN_NAME
-        run: |
-          set -euo pipefail
-          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
-          BIN_NAME="$(
-            python3 - <<'PY' || echo ""
-import os, tomllib
-path = os.environ.get('CARGO_TOML_PATH', 'Cargo.toml')
-with open(path, 'rb') as f:
-    data = tomllib.load(f)
-name = (data.get('package') or {}).get('name')
-bins = [b.get('name') for b in data.get('bin', []) if 'name' in b]
-print((bins[0] if bins else name) or '')
-PY
-          )"
-          if [ -z "${BIN_NAME:-}" ]; then
-            echo "::error title=Binary name not found::Set package.name or [[bin]] name in ${toml_path}"
-            exit 1
-          fi
-          echo "BIN_NAME=$BIN_NAME" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/export-bin-name
       - name: Setup Rust
         uses: leynos/shared-actions/.github/actions/setup-rust@c6559452842af6a83b83429129dccaf910e34562
       - name: Install MSRV toolchain
@@ -183,31 +164,11 @@ PY
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.target }}-
             ${{ runner.os }}-cargo-
-      - name: Resolve binary name from Cargo.toml
-        id: bin-name
+      - name: Setup Python 3.11
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: '3.11'
-      - name: Export BIN_NAME
-        run: |
-          set -euo pipefail
-          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
-          BIN_NAME="$(
-            python3 - <<'PY' || echo ""
-import os, tomllib, sys
-path=os.environ.get("CARGO_TOML_PATH","Cargo.toml")
-with open(path,'rb') as f:
-  m=tomllib.load(f)
-name = (m.get('package') or {}).get('name')
-bins = [b.get('name') for b in m.get('bin',[]) if 'name' in b]
-print((bins[0] if bins else name) or "")
-PY
-          )"
-          if [ -z "${BIN_NAME:-}" ]; then
-            echo "::error title=Binary name not found::Set package.name or [[bin]] name in ${toml_path}"
-            exit 1
-          fi
-          echo "BIN_NAME=$BIN_NAME" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/export-bin-name
       - name: Build macOS
         uses: ./.github/actions/cross-build-macos
         with:
@@ -240,31 +201,12 @@ PY
         with:
           path: dist
       # (Removed) No Rust needed in packaging after switching BIN_NAME to Python tomllib.
-      - name: Export BIN_NAME
-        run: |
-          set -euo pipefail
-          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
-          BIN_NAME="$(
-            python3 - <<'PY' || echo ""
-import os, tomllib
-path = os.environ.get('CARGO_TOML_PATH', 'Cargo.toml')
-with open(path, 'rb') as f:
-    data = tomllib.load(f)
-name = (data.get('package') or {}).get('name')
-bins = [b.get('name') for b in data.get('bin', []) if 'name' in b]
-print((bins[0] if bins else name) or '')
-PY
-          )"
-          if [ -z "${BIN_NAME:-}" ]; then
-            echo "::error title=Binary name not found::Set package.name or [[bin]] name in ${toml_path}"
-            exit 1
-          fi
-          echo "BIN_NAME=$BIN_NAME" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/export-bin-name
       - name: Prepare GoReleaser dist
         run: |
             set -euo pipefail
             shopt -s nullglob
-            candidates=(dist/${{ env.REPO_NAME }}-*/*-*.1)
+            candidates=(dist/${{ env.REPO_NAME }}-*/*${BIN_NAME}-*.1{,.gz})
             count="${#candidates[@]}"
             if [ "$count" -eq 0 ]; then
               echo "::error title=Manpage missing::No prebuilt man page found under dist/${{ env.REPO_NAME }}-*/"
@@ -274,7 +216,11 @@ PY
               echo "::error title=Ambiguous manpage::Multiple candidates found. Produce a single canonical manpage or set MANPAGE_SRC."
               exit 1
             fi
-            cp "${candidates[0]}" dist/netsuke.1
+            src="${candidates[0]}"
+            case "$src" in
+              *.gz) cp "$src" dist/netsuke.1.gz ;;
+              *.1)  cp "$src" dist/netsuke.1 && gzip -n -f dist/netsuke.1 ;;
+            esac
             printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
               mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
               src="dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}"

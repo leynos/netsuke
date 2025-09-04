@@ -5,8 +5,8 @@ project_name: netsuke
 before:
   hooks:
     - |
-        test -s dist/netsuke.1 || {
-          echo "::error title=Manpage missing::dist/netsuke.1 not found. Ensure package job staged it before packaging.";
+        test -s dist/netsuke.1.gz || {
+          echo "::error title=Manpage missing::dist/netsuke.1.gz not found. Ensure package job staged it before packaging.";
           exit 1;
         }
 
@@ -43,7 +43,7 @@ archives:
     files:
       - LICENSE
       - README.md
-      - dist/netsuke.1
+      - dist/netsuke.1.gz
 
 nfpms:
   # Linux packages (deb/rpm) for netsuke
@@ -58,8 +58,8 @@ nfpms:
     builds: [netsuke]
     bindir: /usr/bin
     contents:
-      - src: ./dist/netsuke.1
-        dst: /usr/share/man/man1/netsuke.1
+      - src: ./dist/netsuke.1.gz
+        dst: /usr/share/man/man1/netsuke.1.gz
 
 
 # FreeBSD native .pkg via a post hook that runs only on FreeBSD.
@@ -80,7 +80,7 @@ hooks:
 
         for BIN in netsuke; do
           STAGE="$(mktemp -d -t "netsuke-${BIN}-stage.XXXXXXXX")"
-          MANPAGE="dist/${BIN}.1"
+          MANPAGE="dist/${BIN}.1.gz"
           # Scope cleanup to each BIN
           trap 'rc=$?; rm -rf "$STAGE" manifest.ucl 2>/dev/null || true; exit $rc' EXIT
           install -d "$STAGE/usr/local/bin" "$STAGE/usr/local/share/man/man1"
@@ -97,7 +97,7 @@ hooks:
           fi
 
           if [ -f "${MANPAGE}" ]; then
-            install -m 0644 "${MANPAGE}" "$STAGE/usr/local/share/man/man1/${BIN}.1"
+            install -m 0644 "${MANPAGE}" "$STAGE/usr/local/share/man/man1/${BIN}.1.gz"
           fi
 
           cat > manifest.ucl <<UCL
