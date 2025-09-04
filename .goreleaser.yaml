@@ -56,7 +56,7 @@ nfpms:
     license: ISC
     formats: [deb, rpm]
     builds: [netsuke]
-    bindir: /usr/local/bin
+    bindir: /usr/bin
     contents:
       - src: ./dist/netsuke.1
         dst: /usr/share/man/man1/netsuke.1

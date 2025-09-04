@@ -263,12 +263,18 @@ PY
       - name: Prepare GoReleaser dist
         run: |
             set -euo pipefail
-            man_src="$(ls dist/${{ env.REPO_NAME }}-*/*-*.1 2>/dev/null | head -n1 || true)"
-            if [ -z "${man_src:-}" ] || [ ! -f "$man_src" ]; then
+            shopt -s nullglob
+            candidates=(dist/${{ env.REPO_NAME }}-*/*-*.1)
+            count="${#candidates[@]}"
+            if [ "$count" -eq 0 ]; then
               echo "::error title=Manpage missing::No prebuilt man page found under dist/${{ env.REPO_NAME }}-*/"
               exit 1
+            elif [ "$count" -gt 1 ]; then
+              printf 'Found multiple manpages:\n%s\n' "${candidates[@]}"
+              echo "::error title=Ambiguous manpage::Multiple candidates found. Produce a single canonical manpage or set MANPAGE_SRC."
+              exit 1
             fi
-            cp "$man_src" dist/netsuke.1
+            cp "${candidates[0]}" dist/netsuke.1
             printf '%s\n' "$PACKAGE_PLATFORMS" | while read -r src_os src_arch dst_os dst_arch; do
               mkdir -p "dist/netsuke_${dst_os}_${dst_arch}"
               src="dist/${{ env.REPO_NAME }}-${src_os}-${src_arch}/${BIN_NAME}-${src_os}-${src_arch}"
