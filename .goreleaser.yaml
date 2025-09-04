@@ -96,7 +96,7 @@ hooks:
             continue
           fi
 
-          if [ -f "${MANPAGE}" ]; then
+          if [ -s "${MANPAGE}" ]; then
             install -m 0644 "${MANPAGE}" "$STAGE/usr/local/share/man/man1/${BIN}.1.gz"
           fi
 
