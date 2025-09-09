@@ -538,6 +538,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
     // Expose custom helpers to templates.
     jinja.add_function("env", |name: String| env_var(&name));
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
+    crate::stdlib::register(&mut jinja);
 
     if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
         for (k, v) in vars {
