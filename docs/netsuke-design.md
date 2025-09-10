@@ -808,18 +808,31 @@ network operations.
 
 #### File-system tests
 
-| Test                                           | True when the operand…                                           |
-| ---------------------------------------------- | ---------------------------------------------------------------- |
-| `dir` / `file` / `symlink` / `pipe` / `device` | …is that object type                                             |
-| `present`                                      | …exists (any type)                                               |
-| `owned`                                        | …is owned by the current UID                                     |
-| `readable` / `writable` / `executable`         | …has the corresponding permission bit for current user           |
-| `empty`                                        | …has size 0 bytes                                                |
-| `older_than(value)`                            | …has `mtime` < given value (seconds, `timedelta`, or file)       |
-| `newer_than(value)`                            | …has `mtime` > given value                                       |
-| `contains(substr)`                             | …file’s text contains **substr**                                 |
-| `matches(regex)`                               | …file’s text matches **regex**                                   |
-| `type(kind)`                                   | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+| Test                                                  | True when the operand…                                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `dir` / `file` / `symlink`                            | …is that object type                                             |
+| `pipe` / `block_device` / `char_device` *(Unix-only)* | …is that object type                                             |
+| `device` (legacy, Unix-only)                          | …is a block or character device                                  |
+| `present`                                             | …exists (any type)                                               |
+| `owned`                                               | …is owned by the current UID                                     |
+| `readable` / `writable` / `executable`                | …has the corresponding permission bit for current user           |
+| `empty`                                               | …has size 0 bytes                                                |
+| `older_than(value)`                                   | …has `mtime` < given value (seconds, `timedelta`, or file)       |
+| `newer_than(value)`                                   | …has `mtime` > given value                                       |
+| `contains(substr)`                                    | …file’s text contains **substr**                                 |
+| `matches(regex)`                                      | …file’s text matches **regex**                                   |
+| `type(kind)`                                          | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+
+The `dir`, `file`, and `symlink` tests use `cap_std`'s UTF-8-capable
+[`Dir::symlink_metadata`][cap-symlink] with `camino` paths to inspect the
+operand's [`FileType`][filetype]. On Unix, the `pipe`, `block_device`,
+`char_device`, and `device` tests are also available. Missing paths evaluate to
+`false`, while I/O errors raise a template error.
+
+[cap-symlink]:
+https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_metadata
+
+[filetype]: https://doc.rust-lang.org/std/fs/struct.FileType.html
 
 #### Path & file filters
 

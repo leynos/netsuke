@@ -198,6 +198,22 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     assert_eq!(manifest.targets.len(), count);
 }
 
+#[then(expr = "the manifest has targets named {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn manifest_has_targets_named(world: &mut CliWorld, names: String) {
+    let expected: Vec<String> = names.split(',').map(|s| s.trim().to_string()).collect();
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let actual: Vec<String> = manifest
+        .targets
+        .iter()
+        .map(|t| get_string_from_string_or_list(&t.name, "name"))
+        .collect();
+    assert_eq!(actual, expected);
+}
+
 fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
     let target = get_target(world, index);
     let actual = get_string_from_string_or_list(&target.name, "name");

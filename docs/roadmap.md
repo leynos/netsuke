@@ -156,8 +156,8 @@ library, and CLI ergonomics.
 
 - [ ] **Template Standard Library:**
 
-  - [ ] Implement the file-system tests (is dir, is file, is readable,
-    etc.).
+  - [x] Implement the basic file-system tests (`dir`, `file`, `symlink`,
+    `pipe`, `device`). *(done)*
 
   - [ ] Implement the path and file filters (basename, dirname, with_suffix,
     realpath, contents, hash, etc.).
