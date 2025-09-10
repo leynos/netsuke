@@ -29,6 +29,7 @@ use std::fmt::Display;
 ///     File::open(path).diag("open file")
 /// }
 /// ```
+#[allow(dead_code, reason = "unused after migration to anyhow")]
 pub(crate) trait ResultExt<T> {
     /// Attach a static context message to any error.
     ///

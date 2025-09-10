@@ -5,9 +5,8 @@
 //! subprocess, streaming its output back to the user.
 
 use crate::cli::{BuildArgs, Cli, Commands};
-use crate::diagnostics::ResultExt;
 use crate::{ir::BuildGraph, manifest, ninja_gen};
-use miette::{Context, Result};
+use anyhow::{Context, Result};
 use serde_json;
 use std::borrow::Cow;
 use std::fs;
@@ -175,7 +174,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     }
 
     let program = resolve_ninja_program();
-    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).diag("run ninja")?;
+    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).context("run ninja")?;
     drop(tmp_file);
     Ok(())
 }
@@ -197,7 +196,7 @@ fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
         .prefix("netsuke.")
         .suffix(".ninja")
         .tempfile()
-        .diag("create temp file")?;
+        .context("create temp file")?;
     write_ninja_file(tmp.path(), content)?;
     Ok(tmp)
 }
@@ -218,10 +217,10 @@ fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
     // do not attempt to create the current directory on some platforms.
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent)
-            .diag_with(|| format!("failed to create parent directory {}", parent.display()))?;
+            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
     }
     fs::write(path, content.as_str())
-        .diag_with(|| format!("failed to write Ninja file to {}", path.display()))?;
+        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
     info!("Generated Ninja file at {}", path.display());
     Ok(())
 }
@@ -250,10 +249,11 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli);
     let manifest = manifest::from_path(&manifest_path)
         .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
-    let ast_json = serde_json::to_string_pretty(&manifest).diag("serialising manifest")?;
+    let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
     debug!("AST:\n{ast_json}");
-    let graph = BuildGraph::from_manifest(&manifest).diag("building graph")?;
-    Ok(NinjaContent::new(ninja_gen::generate(&graph)))
+    let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;
+    let ninja = ninja_gen::generate(&graph).context("generating Ninja file")?;
+    Ok(NinjaContent::new(ninja))
 }
 
 /// Determine the manifest path respecting the CLI's directory option.

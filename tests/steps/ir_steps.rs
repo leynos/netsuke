@@ -2,7 +2,7 @@
 
 use crate::CliWorld;
 use cucumber::{given, then, when};
-use miette::{Context, IntoDiagnostic};
+use anyhow::Context;
 use netsuke::ir::BuildGraph;
 
 fn assert_graph(world: &CliWorld) {
@@ -52,9 +52,7 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
         .and_then(|m| {
-            BuildGraph::from_manifest(&m)
-                .into_diagnostic()
-                .wrap_err("building IR from manifest")
+            BuildGraph::from_manifest(&m).context("building IR from manifest")
         })
         .with_context(|| format!("IR generation failed for {path}"))
     {
@@ -88,6 +86,14 @@ fn generation_result_checked(world: &mut CliWorld) {
 fn ir_generation_fails(world: &mut CliWorld) {
     assert!(
         world.manifest_error.is_some(),
-        "expected IR generation error"
+        "expected IR generation error",
     );
+}
+
+#[when("an action is removed from the graph")]
+fn remove_action(world: &mut CliWorld) {
+    let graph = world.build_graph.as_mut().expect("graph");
+    if let Some(id) = graph.actions.keys().next().cloned() {
+        graph.actions.remove(&id);
+    }
 }

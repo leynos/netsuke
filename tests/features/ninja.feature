@@ -22,3 +22,9 @@ Feature: Ninja file generation
     And the ninja file is generated
     Then shlex splitting command 3 yields "printf, %s, -in file, >, o'utfile"
 
+  Scenario: Missing action is reported
+    When the manifest file "tests/data/rules.yml" is compiled to IR
+    And an action is removed from the graph
+    And the ninja file is generated
+    Then ninja generation fails with "referenced by build edge was not found"
+

@@ -10,7 +10,16 @@ fn generate_ninja(world: &mut CliWorld) {
         .build_graph
         .as_ref()
         .expect("build graph should be available");
-    world.ninja = Some(ninja_gen::generate(graph));
+    match ninja_gen::generate(graph) {
+        Ok(n) => {
+            world.ninja = Some(n);
+            world.ninja_error = None;
+        }
+        Err(e) => {
+            world.ninja = None;
+            world.ninja_error = Some(e.to_string());
+        }
+    }
 }
 
 #[allow(
@@ -57,4 +66,17 @@ fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
 #[then(expr = "shlex splitting the command yields {string}")]
 fn ninja_first_command_tokens(world: &mut CliWorld, expected: String) {
     ninja_command_tokens(world, 2, expected);
+}
+
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "ninja generation fails with {string}")]
+fn ninja_generation_fails(world: &mut CliWorld, text: String) {
+    let err = world
+        .ninja_error
+        .as_ref()
+        .expect("ninja error should be available");
+    assert!(err.contains(&text));
 }

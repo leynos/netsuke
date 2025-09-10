@@ -138,18 +138,18 @@ library, and CLI ergonomics.
   - [x] After interpolation, validate the final command string is parsable using
     the shlex crate.
 
-- [ ] **Actionable Error Reporting:**
+- [x] **Actionable Error Reporting:**
 
-  - [ ] Adopt the `anyhow` and `thiserror` error handling strategy.
+  - [x] Adopt the `anyhow` and `thiserror` error handling strategy.
 
-  - [ ] Use thiserror to define specific, structured error types within library
+  - [x] Use thiserror to define specific, structured error types within library
 
     modules (e.g., IrGenError::RuleNotFound, IrGenError::CircularDependency).
 
-  - [ ] Use anyhow in the application logic to add human-readable context to
+  - [x] Use anyhow in the application logic to add human-readable context to
     errors as they propagate (e.g., using .with_context()).
 
-  - [ ] Refactor all error-producing code to provide the clear, contextual, and
+  - [x] Refactor all error-producing code to provide the clear, contextual, and
     actionable error messages specified in the design document.
 
 - [ ] **Template Standard Library:**

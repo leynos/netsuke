@@ -8,7 +8,7 @@
 use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
-use netsuke::ninja_gen::generate;
+use netsuke::ninja_gen::{NinjaGenError, generate};
 use rstest::{fixture, rstest};
 use std::{fs, path::PathBuf, process::Command};
 use tempfile::{TempDir, tempdir};
@@ -131,14 +131,14 @@ fn generate_ninja_scenarios(
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(target_path, edge);
 
-    let ninja = generate(&graph);
+    let ninja = generate(&graph).expect("generate ninja");
     assert_eq!(ninja, expected);
 }
 
 #[rstest]
 fn generate_empty_graph() {
     let graph = BuildGraph::default();
-    let ninja = generate(&graph);
+    let ninja = generate(&graph).expect("generate ninja");
     assert!(ninja.is_empty());
 }
 
@@ -172,7 +172,7 @@ fn generate_multiline_script_snapshot() {
     );
     graph.default_targets.push(PathBuf::from("out"));
 
-    let ninja = generate(&graph);
+    let ninja = generate(&graph).expect("generate ninja");
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -299,7 +299,7 @@ fn ninja_integration_tests(
     graph.targets.insert(output.clone(), edge);
     graph.default_targets.push(output);
 
-    let ninja = generate(&graph);
+    let ninja = generate(&graph).expect("generate ninja");
     fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
     let status = Command::new("ninja")
         .args(&ninja_args)
@@ -320,4 +320,21 @@ fn ninja_integration_tests(
             assert_eq!(content.trim(), expected);
         }
     }
+}
+
+#[rstest]
+fn errors_when_action_missing() {
+    let mut graph = BuildGraph::default();
+    let edge = BuildEdge {
+        action_id: "missing".into(),
+        inputs: Vec::new(),
+        explicit_outputs: vec![PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    };
+    graph.targets.insert(PathBuf::from("out"), edge);
+    let err = generate(&graph).expect_err("missing action");
+    assert!(matches!(err, NinjaGenError::MissingAction { id } if id == "missing"));
 }

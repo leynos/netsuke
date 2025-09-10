@@ -176,7 +176,7 @@ fn simple_manifest_ninja_snapshot() {
     let build_graph = BuildGraph::from_manifest(&manifest).expect("IR generation succeeded");
 
     // Generate Ninja file content from the IR
-    let ninja_file = ninja_gen::generate_ninja(&build_graph)
+    let ninja_file = ninja_gen::generate(&build_graph)
         .expect("Ninja file generation succeeded");
 
     // The output is a multi-line Ninja build script (as a String)
@@ -196,7 +196,7 @@ Key points for Ninja snapshot tests:
   constructed directly for tests, but using the manifest→IR pipeline ensures
   realistic coverage.
 
-- Call the Ninja generation function (e.g. `ninja_gen::generate_ninja`), which
+- Call the Ninja generation function (e.g. `ninja_gen::generate`), which
   produces the Ninja file contents as a `String`. This function traverses the
   IR and outputs rules and build statements in Ninja syntax.
 

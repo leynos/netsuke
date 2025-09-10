@@ -40,7 +40,7 @@ fn touch_manifest_ninja_validation() {
 
     let manifest = manifest::from_str(manifest_yaml).expect("parse manifest");
     let ir = BuildGraph::from_manifest(&manifest).expect("ir generation");
-    let ninja_content = ninja_gen::generate(&ir);
+    let ninja_content = ninja_gen::generate(&ir).expect("generate ninja");
 
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
