@@ -42,7 +42,7 @@ fn is_file_type(path: &Utf8Path, predicate: fn(fs::FileType) -> bool) -> Result<
         Err(err) => {
             return Err(Error::new(
                 ErrorKind::InvalidOperation,
-                format!("cannot open directory for {path}"),
+                format!("cannot open directory for {path}: {err}"),
             )
             .with_source(err));
         }
@@ -52,7 +52,7 @@ fn is_file_type(path: &Utf8Path, predicate: fn(fs::FileType) -> bool) -> Result<
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(err) => Err(Error::new(
             ErrorKind::InvalidOperation,
-            format!("cannot read metadata for {path}"),
+            format!("cannot read metadata for {path}: {err}"),
         )
         .with_source(err)),
     }
