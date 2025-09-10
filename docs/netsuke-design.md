@@ -808,18 +808,31 @@ network operations.
 
 #### File-system tests
 
-| Test                                           | True when the operand…                                           |
-| ---------------------------------------------- | ---------------------------------------------------------------- |
-| `dir` / `file` / `symlink` / `pipe` / `device` | …is that object type                                             |
-| `present`                                      | …exists (any type)                                               |
-| `owned`                                        | …is owned by the current UID                                     |
-| `readable` / `writable` / `executable`         | …has the corresponding permission bit for current user           |
-| `empty`                                        | …has size 0 bytes                                                |
-| `older_than(value)`                            | …has `mtime` < given value (seconds, `timedelta`, or file)       |
-| `newer_than(value)`                            | …has `mtime` > given value                                       |
-| `contains(substr)`                             | …file’s text contains **substr**                                 |
-| `matches(regex)`                               | …file’s text matches **regex**                                   |
-| `type(kind)`                                   | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+| Test                                                  | True when the operand…                                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `dir` / `file` / `symlink`                            | …is that object type                                             |
+| `pipe` / `block_device` / `char_device` *(Unix-only)* | …is that object type                                             |
+| `device` (legacy, Unix-only)                          | …is a block or character device                                  |
+| `present`                                             | …exists (any type)                                               |
+| `owned`                                               | …is owned by the current UID                                     |
+| `readable` / `writable` / `executable`                | …has the corresponding permission bit for current user           |
+| `empty`                                               | …has size 0 bytes                                                |
+| `older_than(value)`                                   | …has `mtime` < given value (seconds, `timedelta`, or file)       |
+| `newer_than(value)`                                   | …has `mtime` > given value                                       |
+| `contains(substr)`                                    | …file’s text contains **substr**                                 |
+| `matches(regex)`                                      | …file’s text matches **regex**                                   |
+| `type(kind)`                                          | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+
+The `dir`, `file`, and `symlink` tests use `cap_std`'s UTF-8-capable
+[`Dir::symlink_metadata`][cap-symlink] with `camino` paths to inspect the
+operand's [`FileType`][filetype]. On Unix, the `pipe`, `block_device`,
+`char_device`, and `device` tests are also available. Missing paths evaluate to
+`false`, while I/O errors raise a template error.
+
+[cap-symlink]:
+https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_metadata
+
+[filetype]: https://doc.rust-lang.org/std/fs/struct.FileType.html
 
 #### Path & file filters
 
@@ -1181,17 +1194,17 @@ The command construction will follow this pattern:
 1. A new `Command` is created via `Command::new("ninja")`. Netsuke will assume
    `ninja` is available in the system's `PATH`.
 
-1. Arguments passed to Netsuke's own CLI will be translated and forwarded to
+2. Arguments passed to Netsuke's own CLI will be translated and forwarded to
    Ninja. For example, a `Netsuke build my_target` command would result in
    `Command::new("ninja").arg("my_target")`. Flags like `-j` for parallelism
    will also be passed through.[^8]
 
-1. The working directory for the Ninja process will be set using
+3. The working directory for the Ninja process will be set using
    `.current_dir()`. When the user supplies a `-C` flag, Netsuke canonicalises
    the path and applies it via `current_dir` rather than forwarding the flag to
    Ninja.
 
-1. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
+4. Standard I/O streams (`stdin`, `stdout`, `stderr`) will be configured using
    `.stdout(Stdio::piped())` and `.stderr(Stdio::piped())`.[^24] This allows
    Netsuke to capture the real-time output from Ninja, which can then be
    streamed to the user's console, potentially with additional formatting or
@@ -1279,11 +1292,11 @@ three fundamental questions:
 1. **What** went wrong? A concise summary of the failure (e.g., "YAML parsing
    failed," "Build configuration is invalid").
 
-1. **Where** did it go wrong? Precise location information, including the file,
+2. **Where** did it go wrong? Precise location information, including the file,
    line number, and column where applicable (e.g., "in `Netsukefile` at line
    15, column 3").
 
-1. **Why** did it go wrong, and what can be done about it? The underlying cause
+3. **Why** did it go wrong, and what can be done about it? The underlying cause
    of the error and a concrete suggestion for how to fix it (e.g., "Cause:
    Found a tab character, which is not allowed. Hint: Use spaces for
    indentation instead.").
@@ -1347,22 +1360,22 @@ enrichment:
 1. A specific, low-level error occurs within a module. For instance, the IR
    generator detects a missing rule and creates an `IrGenError::RuleNotFound`.
 
-1. The function where the error occurred returns
+2. The function where the error occurred returns
    `Err(IrGenError::RuleNotFound {... }.into())`. The `.into()` call converts
    the specific `thiserror` enum variant into a generic `anyhow::Error` object,
    preserving the original error as its source.
 
-1. A higher-level function in the call stack, which called the failing function,
+3. A higher-level function in the call stack, which called the failing function,
    receives this `Err` value. It uses the `.with_context()` method to wrap the
    error with more application-level context. For example:
    `ir::from_manifest(ast)`
    `.with_context(|| "Failed to build the internal build graph from the manifest")?`
     .
 
-1. This process of propagation and contextualization repeats as the error
+4. This process of propagation and contextualization repeats as the error
    bubbles up towards `main`.
 
-1. Finally, the `main` function receives the `Err` result. It prints the entire
+5. Finally, the `main` function receives the `Err` result. It prints the entire
    error chain provided by `anyhow`, which displays the highest-level context
    first, followed by a list of underlying "Caused by:" messages. This provides
    the user with a rich, layered explanation of the failure, from the general
@@ -1530,15 +1543,15 @@ goal.
 
     1. Implement the initial `clap` CLI structure for the `build` command.
 
-    1. Implement the YAML parser using `serde_yml` and the AST data structures
+    2. Implement the YAML parser using `serde_yml` and the AST data structures
        (`ast.rs`).
 
-    1. Implement the AST-to-IR transformation logic, including basic validation
+    3. Implement the AST-to-IR transformation logic, including basic validation
        like checking for rule existence.
 
-    1. Implement the IR-to-Ninja file generator (`ninja_gen.rs`).
+    4. Implement the IR-to-Ninja file generator (`ninja_gen.rs`).
 
-    1. Implement the `std::process::Command` logic to invoke `ninja`.
+    5. Implement the `std::process::Command` logic to invoke `ninja`.
 
   - **Success Criterion:** Netsuke can successfully take a `Netsukefile` file
     *without any Jinja syntax* and compile it to a `build.ninja` file, then
@@ -1554,13 +1567,13 @@ goal.
 
     1. Integrate the `minijinja` crate into the build pipeline.
 
-    1. Implement the two-pass parsing mechanism: first render the manifest with
+    2. Implement the two-pass parsing mechanism: first render the manifest with
        `minijinja`, then parse the result with `serde_yml`.
 
-    1. Populate the initial Jinja context with the global `vars` from the
+    3. Populate the initial Jinja context with the global `vars` from the
        manifest.
 
-    1. Implement basic Jinja control flow (`{% if... %}`, `{% for... %}`) and
+    4. Implement basic Jinja control flow (`{% if... %}`, `{% for... %}`) and
        variable substitution.
 
   - **Success Criterion:** Netsuke can successfully build a manifest that uses
@@ -1577,15 +1590,15 @@ goal.
     1. Implement the full suite of custom Jinja functions (`glob`, `env`, etc.)
        and filters (`shell_escape`).
 
-    1. Mandate the use of `shell-quote` for all command variable substitutions.
+    2. Mandate the use of `shell-quote` for all command variable substitutions.
 
-    1. Refactor the error handling to fully adopt the `anyhow`/`thiserror`
+    3. Refactor the error handling to fully adopt the `anyhow`/`thiserror`
        strategy, ensuring all user-facing errors are contextual and actionable
        as specified in Section 7.
 
-    1. Implement the `clean` and `graph` subcommands.
+    4. Implement the `clean` and `graph` subcommands.
 
-    1. Refine the CLI output for clarity and readability.
+    5. Refine the CLI output for clarity and readability.
 
   - **Success Criterion:** Netsuke is a feature-complete, secure, and
     user-friendly build tool that meets all the initial design goals.
@@ -1652,7 +1665,8 @@ projects.
 ### **Works cited**
 
 [^1]: Ninja, a small build system with a focus on speed. Accessed on 12 July
-      2025. <https://ninja-build.org/>
+
+      1. <https://ninja-build.org/>
 
 [^2]: "Ninja (build system)." Wikipedia. Accessed on 12 July 2025.
       <https://en.wikipedia.org/wiki/Ninja_(build_system)>
