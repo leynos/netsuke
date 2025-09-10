@@ -16,6 +16,14 @@ targets:
     when: "{{ env('PIPE_PATH') is pipe }}"
     recipe:
       command: echo pipe
+  - name: is-block-device
+    when: "{{ env('BLOCK_DEVICE_PATH') is block_device }}"
+    recipe:
+      command: echo block
+  - name: is-char-device
+    when: "{{ env('CHAR_DEVICE_PATH') is char_device }}"
+    recipe:
+      command: echo char
   - name: is-device
     when: "{{ env('DEVICE_PATH') is device }}"
     recipe:

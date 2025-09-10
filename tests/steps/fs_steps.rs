@@ -17,16 +17,42 @@ fn file_type_workspace(world: &mut CliWorld) {
     handle.write("file", b"data").expect("file");
     handle.symlink("file", "link").expect("symlink");
     #[cfg(unix)]
-    mknodat(
-        &handle,
-        "pipe",
-        FileType::Fifo,
-        Mode::RUSR | Mode::WUSR,
-        Dev::default(),
-    )
-    .expect("fifo");
+    {
+        mknodat(
+            &handle,
+            "pipe",
+            FileType::Fifo,
+            Mode::RUSR | Mode::WUSR,
+            Dev::default(),
+        )
+        .expect("fifo");
+        mknodat(
+            &handle,
+            "block",
+            FileType::BlockDevice,
+            Mode::RUSR | Mode::WUSR,
+            Dev::default(),
+        )
+        .expect("block");
+        mknodat(
+            &handle,
+            "char",
+            FileType::CharacterDevice,
+            Mode::RUSR | Mode::WUSR,
+            Dev::default(),
+        )
+        .expect("char");
+    }
     #[cfg(unix)]
-    let device = Utf8PathBuf::from("/dev/null");
+    let block = root.join("block");
+    #[cfg(not(unix))]
+    let block = Utf8PathBuf::from("NUL");
+    #[cfg(unix)]
+    let chardev = root.join("char");
+    #[cfg(not(unix))]
+    let chardev = Utf8PathBuf::from("NUL");
+    #[cfg(unix)]
+    let device = chardev.clone();
     #[cfg(not(unix))]
     let device = Utf8PathBuf::from("NUL");
     let dir = root.join("dir");
@@ -38,6 +64,8 @@ fn file_type_workspace(world: &mut CliWorld) {
         ("FILE_PATH", file),
         ("SYMLINK_PATH", link),
         ("PIPE_PATH", pipe),
+        ("BLOCK_DEVICE_PATH", block),
+        ("CHAR_DEVICE_PATH", chardev),
         ("DEVICE_PATH", device),
     ];
     for (key, path) in entries {

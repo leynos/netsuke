@@ -7,25 +7,36 @@ use cap_std::{
 use minijinja::{Environment, Error, ErrorKind};
 use std::io;
 
+fn is_dir(ft: fs::FileType) -> bool { ft.is_dir() }
+fn is_file(ft: fs::FileType) -> bool { ft.is_file() }
+fn is_symlink(ft: fs::FileType) -> bool { ft.is_symlink() }
+fn is_fifo(ft: fs::FileType) -> bool { ft.is_fifo() }
+fn is_block_device(ft: fs::FileType) -> bool { ft.is_block_device() }
+fn is_char_device(ft: fs::FileType) -> bool { ft.is_char_device() }
+fn is_device(ft: fs::FileType) -> bool {
+    is_block_device(ft) || is_char_device(ft)
+}
+
+type FileTest = (&'static str, fn(fs::FileType) -> bool);
+
 /// Register standard library helpers with the Jinja environment.
 pub fn register(env: &mut Environment<'_>) {
-    env.add_test("dir", |path: String| {
-        is_file_type(Utf8Path::new(&path), |ft| ft.is_dir())
-    });
-    env.add_test("file", |path: String| {
-        is_file_type(Utf8Path::new(&path), |ft| ft.is_file())
-    });
-    env.add_test("symlink", |path: String| {
-        is_file_type(Utf8Path::new(&path), |ft| ft.is_symlink())
-    });
-    env.add_test("pipe", |path: String| {
-        is_file_type(Utf8Path::new(&path), |ft| ft.is_fifo())
-    });
-    env.add_test("device", |path: String| {
-        is_file_type(Utf8Path::new(&path), |ft| {
-            ft.is_block_device() || ft.is_char_device()
-        })
-    });
+    const TESTS: &[FileTest] = &[
+        ("dir", is_dir),
+        ("file", is_file),
+        ("symlink", is_symlink),
+        ("pipe", is_fifo),
+        ("block_device", is_block_device),
+        ("char_device", is_char_device),
+        // Deprecated combined test; prefer block_device or char_device.
+        ("device", is_device),
+    ];
+
+    for (name, pred) in TESTS {
+        env.add_test(*name, move |path: String| {
+            is_file_type(Utf8Path::new(&path), *pred)
+        });
+    }
 }
 
 /// Determine whether `path` matches the given file type predicate.
@@ -75,6 +86,8 @@ mod tests {
         Utf8PathBuf,
         Utf8PathBuf,
         Utf8PathBuf,
+        Utf8PathBuf,
+        Utf8PathBuf,
     ) {
         let temp = tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
@@ -82,6 +95,8 @@ mod tests {
         let file = root.join("f");
         let link = root.join("s");
         let fifo = root.join("p");
+        let bdev = root.join("b");
+        let cdev = root.join("c");
         let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("ambient");
         handle.create_dir("d").expect("dir");
         handle.write("f", b"x").expect("file");
@@ -95,7 +110,25 @@ mod tests {
             Dev::default(),
         )
         .expect("fifo");
-        (temp, dir, file, link, fifo)
+        #[cfg(unix)]
+        mknodat(
+            &handle,
+            "b",
+            FileType::BlockDevice,
+            Mode::RUSR | Mode::WUSR,
+            Dev::default(),
+        )
+        .expect("block");
+        #[cfg(unix)]
+        mknodat(
+            &handle,
+            "c",
+            FileType::CharacterDevice,
+            Mode::RUSR | Mode::WUSR,
+            Dev::default(),
+        )
+        .expect("char");
+        (temp, dir, file, link, fifo, bdev, cdev)
     }
 
     #[rstest]
@@ -106,10 +139,12 @@ mod tests {
             Utf8PathBuf,
             Utf8PathBuf,
             Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
         ),
     ) {
-        let (_, dir, _, _, _) = file_paths;
-        assert!(is_file_type(&dir, |ft| ft.is_dir()).expect("dir"));
+        let (_, dir, _, _, _, _, _) = file_paths;
+        assert!(is_file_type(&dir, is_dir).expect("dir"));
     }
 
     #[rstest]
@@ -120,10 +155,12 @@ mod tests {
             Utf8PathBuf,
             Utf8PathBuf,
             Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
         ),
     ) {
-        let (_, _, file, _, _) = file_paths;
-        assert!(is_file_type(&file, |ft| ft.is_file()).expect("file"));
+        let (_, _, file, _, _, _, _) = file_paths;
+        assert!(is_file_type(&file, is_file).expect("file"));
     }
 
     #[rstest]
@@ -134,11 +171,13 @@ mod tests {
             Utf8PathBuf,
             Utf8PathBuf,
             Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
         ),
     ) {
-        let (_, _, file, link, _) = file_paths;
-        assert!(is_file_type(&link, |ft| ft.is_symlink()).expect("link"));
-        assert!(!is_file_type(&file, |ft| ft.is_symlink()).expect("file"));
+        let (_, _, file, link, _, _, _) = file_paths;
+        assert!(is_file_type(&link, is_symlink).expect("link"));
+        assert!(!is_file_type(&file, is_symlink).expect("file"));
     }
 
     #[cfg(unix)]
@@ -150,24 +189,67 @@ mod tests {
             Utf8PathBuf,
             Utf8PathBuf,
             Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
         ),
     ) {
-        let (_, _, _, _, fifo) = file_paths;
-        assert!(is_file_type(&fifo, |ft| ft.is_fifo()).expect("fifo"));
+        let (_, _, _, _, fifo, _, _) = file_paths;
+        assert!(is_file_type(&fifo, is_fifo).expect("fifo"));
     }
 
     #[cfg(unix)]
     #[rstest]
-    fn detects_device() {
-        assert!(
-            is_file_type(Utf8Path::new("/dev/null"), |ft| ft.is_block_device()
-                || ft.is_char_device(),)
-            .expect("device"),
-        );
+    fn detects_block_device(
+        file_paths: (
+            tempfile::TempDir,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+        ),
+    ) {
+        let (_, _, _, _, _, bdev, _) = file_paths;
+        assert!(is_file_type(&bdev, is_block_device).expect("block"));
+    }
+
+    #[cfg(unix)]
+    #[rstest]
+    fn detects_char_device(
+        file_paths: (
+            tempfile::TempDir,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+        ),
+    ) {
+        let (_, _, _, _, _, _, cdev) = file_paths;
+        assert!(is_file_type(&cdev, is_char_device).expect("char"));
+    }
+
+    #[cfg(unix)]
+    #[rstest]
+    fn detects_device(
+        file_paths: (
+            tempfile::TempDir,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+            Utf8PathBuf,
+        ),
+    ) {
+        let (_, _, _, _, _, _, cdev) = file_paths;
+        assert!(is_file_type(&cdev, is_device).expect("device"));
     }
 
     #[rstest]
     fn nonexistent_path_is_false() {
-        assert!(!is_file_type(Utf8Path::new("/no/such/path"), |ft| ft.is_file()).expect("missing"),);
+        assert!(!is_file_type(Utf8Path::new("/no/such/path"), is_file).expect("missing"));
     }
 }
