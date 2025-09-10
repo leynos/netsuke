@@ -26,7 +26,11 @@ fn is_file_type(path: &str, predicate: fn(fs::FileType) -> bool) -> Result<bool,
     match fs::symlink_metadata(path) {
         Ok(md) => Ok(predicate(md.file_type())),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(Error::new(ErrorKind::InvalidOperation, err.to_string())),
+        Err(err) => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("cannot read metadata for {path}"),
+        )
+        .with_source(err)),
     }
 }
 
