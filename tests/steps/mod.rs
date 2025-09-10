@@ -4,6 +4,7 @@
 //! step definitions.
 
 mod cli_steps;
+#[cfg(unix)]
 mod fs_steps;
 mod ir_steps;
 mod manifest_steps;

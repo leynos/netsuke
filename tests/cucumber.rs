@@ -41,4 +41,6 @@ impl Drop for CliWorld {
 #[tokio::main]
 async fn main() {
     CliWorld::run("tests/features").await;
+    #[cfg(unix)]
+    CliWorld::run("tests/features_unix").await;
 }

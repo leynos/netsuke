@@ -1,18 +1,32 @@
 use camino::Utf8Path;
-use cap_std::{
-    ambient_authority,
-    fs::{self, FileTypeExt},
-    fs_utf8::Dir,
-};
+#[cfg(unix)]
+use cap_std::fs::FileTypeExt;
+use cap_std::{ambient_authority, fs, fs_utf8::Dir};
 use minijinja::{Environment, Error, ErrorKind};
 use std::io;
 
-fn is_dir(ft: fs::FileType) -> bool { ft.is_dir() }
-fn is_file(ft: fs::FileType) -> bool { ft.is_file() }
-fn is_symlink(ft: fs::FileType) -> bool { ft.is_symlink() }
-fn is_fifo(ft: fs::FileType) -> bool { ft.is_fifo() }
-fn is_block_device(ft: fs::FileType) -> bool { ft.is_block_device() }
-fn is_char_device(ft: fs::FileType) -> bool { ft.is_char_device() }
+fn is_dir(ft: fs::FileType) -> bool {
+    ft.is_dir()
+}
+fn is_file(ft: fs::FileType) -> bool {
+    ft.is_file()
+}
+fn is_symlink(ft: fs::FileType) -> bool {
+    ft.is_symlink()
+}
+#[cfg(unix)]
+fn is_fifo(ft: fs::FileType) -> bool {
+    ft.is_fifo()
+}
+#[cfg(unix)]
+fn is_block_device(ft: fs::FileType) -> bool {
+    ft.is_block_device()
+}
+#[cfg(unix)]
+fn is_char_device(ft: fs::FileType) -> bool {
+    ft.is_char_device()
+}
+#[cfg(unix)]
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
 }
@@ -25,10 +39,14 @@ pub fn register(env: &mut Environment<'_>) {
         ("dir", is_dir),
         ("file", is_file),
         ("symlink", is_symlink),
+        #[cfg(unix)]
         ("pipe", is_fifo),
+        #[cfg(unix)]
         ("block_device", is_block_device),
+        #[cfg(unix)]
         ("char_device", is_char_device),
         // Deprecated combined test; prefer block_device or char_device.
+        #[cfg(unix)]
         ("device", is_device),
     ];
 

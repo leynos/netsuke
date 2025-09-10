@@ -4,7 +4,6 @@ use crate::CliWorld;
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::given;
-#[cfg(unix)]
 use rustix::fs::{Dev, FileType, Mode, mknodat};
 use test_support::env::set_var;
 
@@ -16,57 +15,38 @@ fn file_type_workspace(world: &mut CliWorld) {
     handle.create_dir("dir").expect("dir");
     handle.write("file", b"data").expect("file");
     handle.symlink("file", "link").expect("symlink");
-    #[cfg(unix)]
-    {
-        mknodat(
-            &handle,
-            "pipe",
-            FileType::Fifo,
-            Mode::RUSR | Mode::WUSR,
-            Dev::default(),
-        )
-        .expect("fifo");
-        mknodat(
-            &handle,
-            "block",
-            FileType::BlockDevice,
-            Mode::RUSR | Mode::WUSR,
-            Dev::default(),
-        )
-        .expect("block");
-        mknodat(
-            &handle,
-            "char",
-            FileType::CharacterDevice,
-            Mode::RUSR | Mode::WUSR,
-            Dev::default(),
-        )
-        .expect("char");
-    }
-    #[cfg(unix)]
-    let block = root.join("block");
-    #[cfg(not(unix))]
-    let block = Utf8PathBuf::from("NUL");
-    #[cfg(unix)]
-    let chardev = root.join("char");
-    #[cfg(not(unix))]
-    let chardev = Utf8PathBuf::from("NUL");
-    #[cfg(unix)]
-    let device = chardev.clone();
-    #[cfg(not(unix))]
-    let device = Utf8PathBuf::from("NUL");
-    let dir = root.join("dir");
-    let file = root.join("file");
-    let link = root.join("link");
-    let pipe = root.join("pipe");
+    mknodat(
+        &handle,
+        "pipe",
+        FileType::Fifo,
+        Mode::RUSR | Mode::WUSR,
+        Dev::default(),
+    )
+    .expect("fifo");
+    mknodat(
+        &handle,
+        "block",
+        FileType::BlockDevice,
+        Mode::RUSR | Mode::WUSR,
+        Dev::default(),
+    )
+    .expect("block");
+    mknodat(
+        &handle,
+        "char",
+        FileType::CharacterDevice,
+        Mode::RUSR | Mode::WUSR,
+        Dev::default(),
+    )
+    .expect("char");
     let entries = [
-        ("DIR_PATH", dir),
-        ("FILE_PATH", file),
-        ("SYMLINK_PATH", link),
-        ("PIPE_PATH", pipe),
-        ("BLOCK_DEVICE_PATH", block),
-        ("CHAR_DEVICE_PATH", chardev),
-        ("DEVICE_PATH", device),
+        ("DIR_PATH", root.join("dir")),
+        ("FILE_PATH", root.join("file")),
+        ("SYMLINK_PATH", root.join("link")),
+        ("PIPE_PATH", root.join("pipe")),
+        ("BLOCK_DEVICE_PATH", root.join("block")),
+        ("CHAR_DEVICE_PATH", root.join("char")),
+        ("DEVICE_PATH", root.join("char")),
     ];
     for (key, path) in entries {
         let previous = set_var(key, path.as_std_path().as_os_str());
