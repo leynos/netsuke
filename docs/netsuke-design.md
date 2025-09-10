@@ -821,9 +821,13 @@ network operations.
 | `matches(regex)`                               | …file’s text matches **regex**                                   |
 | `type(kind)`                                   | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
 
-The `dir`, `file`, `symlink`, `pipe`, and `device` tests use
-`std::fs::symlink_metadata` to inspect the operand's [`FileType`][filetype].
-Missing paths evaluate to `false`, while I/O errors raise a template error.
+The `dir`, `file`, `symlink`, `pipe`, and `device` tests use `cap_std`'s
+UTF-8-capable [`Dir::symlink_metadata`][cap-symlink] with `camino` paths to
+inspect the operand's [`FileType`][filetype]. Missing paths evaluate to
+`false`, while I/O errors raise a template error.
+
+[cap-symlink]:
+https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_metadata
 
 [filetype]: https://doc.rust-lang.org/std/fs/struct.FileType.html
 
