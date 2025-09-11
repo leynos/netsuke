@@ -5,6 +5,7 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::given;
 use rustix::fs::{Dev, FileType, Mode, mknodat};
+use rustix::io::Errno;
 use test_support::env::set_var;
 
 #[given("a file-type test workspace")]
@@ -18,6 +19,7 @@ fn file_type_workspace(world: &mut CliWorld) {
     handle
         .symlink("file", "link")
         .expect("create symlink fixture");
+    // FIFO creation is unprivileged and should succeed.
     mknodat(
         &handle,
         "pipe",
@@ -26,30 +28,37 @@ fn file_type_workspace(world: &mut CliWorld) {
         Dev::default(),
     )
     .expect("create fifo fixture");
-    mknodat(
+    // Creating device nodes is privileged; fall back to /dev where needed.
+    let block_path = match mknodat(
         &handle,
         "block",
         FileType::BlockDevice,
         Mode::RUSR | Mode::WUSR,
         Dev::default(),
-    )
-    .expect("create block device fixture");
-    mknodat(
+    ) {
+        Ok(()) => root.join("block"),
+        Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from("/dev/loop0"),
+        Err(e) => panic!("create block device fixture: {e}"),
+    };
+    let char_path = match mknodat(
         &handle,
         "char",
         FileType::CharacterDevice,
         Mode::RUSR | Mode::WUSR,
         Dev::default(),
-    )
-    .expect("create char device fixture");
+    ) {
+        Ok(()) => root.join("char"),
+        Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from("/dev/null"),
+        Err(e) => panic!("create char device fixture: {e}"),
+    };
     let entries = [
         ("DIR_PATH", root.join("dir")),
         ("FILE_PATH", root.join("file")),
         ("SYMLINK_PATH", root.join("link")),
         ("PIPE_PATH", root.join("pipe")),
-        ("BLOCK_DEVICE_PATH", root.join("block")),
-        ("CHAR_DEVICE_PATH", root.join("char")),
-        ("DEVICE_PATH", root.join("char")),
+        ("BLOCK_DEVICE_PATH", block_path),
+        ("CHAR_DEVICE_PATH", char_path.clone()),
+        ("DEVICE_PATH", char_path),
     ];
     for (key, path) in entries {
         let previous = set_var(key, path.as_std_path().as_os_str());
