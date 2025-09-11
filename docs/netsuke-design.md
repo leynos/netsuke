@@ -825,9 +825,11 @@ network operations.
 
 The `dir`, `file`, and `symlink` tests use `cap_std`'s UTF-8-capable
 [`Dir::symlink_metadata`][cap-symlink] with `camino` paths to inspect the
-operand's [`FileType`][filetype]. On Unix, the `pipe`, `block_device`,
-`char_device`, and `device` tests are also available. Missing paths evaluate to
-`false`, while I/O errors raise a template error.
+operand's [`FileType`][filetype]. On Unix the `pipe`, `block_device`,
+`char_device`, and legacy `device` tests also probe the metadata. On non-Unix
+targets only `pipe` and `device` are registered; both always return `false` so
+templates remain portable. Missing paths evaluate to `false`, while I/O errors
+raise a template error.
 
 [cap-symlink]:
 https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_metadata

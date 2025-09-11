@@ -55,6 +55,12 @@ pub fn register(env: &mut Environment<'_>) {
             is_file_type(Utf8Path::new(&path), *pred)
         });
     }
+
+    #[cfg(not(unix))]
+    {
+        env.add_test("pipe", |_path: String| Ok(false));
+        env.add_test("device", |_path: String| Ok(false));
+    }
 }
 
 /// Determine whether `path` matches the given file type predicate.
