@@ -549,9 +549,10 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     expand_foreach(&mut doc, &jinja)?;
 
-    let manifest: NetsukeManifest = serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(e, yaml, name),
-    })?;
+    let manifest: NetsukeManifest =
+        serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
+            source: map_yaml_error(e, yaml, name),
+        })?;
 
     render_manifest(manifest, &jinja)
 }

@@ -1,8 +1,8 @@
 //! Step definitions for `BuildGraph` scenarios.
 
 use crate::CliWorld;
-use cucumber::{given, then, when};
 use anyhow::Context;
+use cucumber::{given, then, when};
 use netsuke::ir::BuildGraph;
 
 fn assert_graph(world: &CliWorld) {
@@ -51,9 +51,7 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
 #[when(expr = "the manifest file {string} is compiled to IR")]
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
-        .and_then(|m| {
-            BuildGraph::from_manifest(&m).context("building IR from manifest")
-        })
+        .and_then(|m| BuildGraph::from_manifest(&m).context("building IR from manifest"))
         .with_context(|| format!("IR generation failed for {path}"))
     {
         Ok(graph) => {
