@@ -44,7 +44,16 @@ macro_rules! write_flag {
 /// writing to the output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
+    generate_into(graph, &mut out)?;
+    Ok(out)
+}
 
+/// Write a Ninja build file to the provided writer.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] if a build edge references an unknown action or writing to the output fails.
+pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
     for (id, action) in actions {
@@ -82,7 +91,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         writeln!(out, "default {}", join(&defs))?;
     }
 
-    Ok(out)
+    Ok(())
 }
 
 /// Convert a slice of paths into a space-separated string.
