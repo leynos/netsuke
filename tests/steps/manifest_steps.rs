@@ -6,6 +6,7 @@ use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
 };
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use test_support::display_error_chain;
 use test_support::env::{remove_var, set_var};
@@ -204,9 +205,9 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     reason = "Cucumber step requires owned String"
 )]
 fn manifest_has_targets_named(world: &mut CliWorld, names: String) {
-    let expected: Vec<String> = names.split(',').map(|s| s.trim().to_string()).collect();
+    let expected: BTreeSet<String> = names.split(',').map(|s| s.trim().to_string()).collect();
     let manifest = world.manifest.as_ref().expect("manifest");
-    let actual: Vec<String> = manifest
+    let actual: BTreeSet<String> = manifest
         .targets
         .iter()
         .map(|t| get_string_from_string_or_list(&t.name, "name"))
