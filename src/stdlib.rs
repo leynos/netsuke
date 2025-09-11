@@ -50,9 +50,9 @@ pub fn register(env: &mut Environment<'_>) {
         ("device", is_device),
     ];
 
-    for (name, pred) in TESTS {
-        env.add_test(*name, move |path: String| {
-            is_file_type(Utf8Path::new(&path), *pred)
+    for &(name, pred) in TESTS {
+        env.add_test(name, move |path: String| {
+            is_file_type(Utf8Path::new(&path), pred)
         });
     }
 
@@ -66,7 +66,10 @@ pub fn register(env: &mut Environment<'_>) {
 /// Determine whether `path` matches the given file type predicate.
 ///
 /// Returns `Ok(false)` if the path does not exist.
-fn is_file_type(path: &Utf8Path, predicate: fn(fs::FileType) -> bool) -> Result<bool, Error> {
+fn is_file_type<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
+where
+    F: Fn(fs::FileType) -> bool,
+{
     let (dir_path, file_name) = path.parent().map_or_else(
         || (Utf8Path::new("."), path.as_str()),
         |parent| (parent, path.file_name().unwrap_or("")),
