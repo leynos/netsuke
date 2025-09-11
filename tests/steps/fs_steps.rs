@@ -62,11 +62,12 @@ fn file_type_workspace(world: &mut CliWorld) {
     ];
     for (key, path) in entries {
         let previous = set_var(key, path.as_std_path().as_os_str());
-        world.env_vars.entry(key.to_string()).or_insert(previous);
+        world.env_vars.entry(key.to_string()).or_insert(previous); // restored after scenario
     }
     let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
     world.env_vars.entry("WORKSPACE".into()).or_insert(previous);
-    let missing_root = root.join("__missing__");
+    handle.create_dir(".missing").expect("create missing dir");
+    let missing_root = root.join(".missing");
     for name in ["dir", "file", "symlink", "pipe", "block", "char", "device"] {
         let path = missing_root.join(name);
         assert!(

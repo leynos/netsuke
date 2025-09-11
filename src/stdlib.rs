@@ -2,7 +2,7 @@ use camino::Utf8Path;
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
-use minijinja::{Environment, Error, ErrorKind};
+use minijinja::{value::Value, Environment, Error, ErrorKind};
 use std::io;
 
 fn is_dir(ft: fs::FileType) -> bool {
@@ -51,29 +51,38 @@ pub fn register(env: &mut Environment<'_>) {
     ];
 
     for &(name, pred) in TESTS {
-        env.add_test(name, move |path: String| {
-            is_file_type(Utf8Path::new(&path), pred)
+        env.add_test(name, move |val: Value| -> Result<bool, Error> {
+            if let Some(s) = val.as_str() {
+                return is_file_type(Utf8Path::new(s), pred);
+            }
+            Ok(false)
         });
     }
 
     #[cfg(not(unix))]
     {
-        env.add_test("pipe", |_path: String| Ok(false));
-        env.add_test("device", |_path: String| Ok(false));
+        env.add_test("pipe", |_val: Value| Ok(false));
+        env.add_test("device", |_val: Value| Ok(false));
     }
 }
 
 /// Determine whether `path` matches the given file type predicate.
+///
+/// Uses `Dir::symlink_metadata`, so symbolic links are inspected without
+/// following the target. `is_symlink` and `is_file`/`is_dir` cannot both be
+/// true for the same path.
 ///
 /// Returns `Ok(false)` if the path does not exist.
 fn is_file_type<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
 where
     F: Fn(fs::FileType) -> bool,
 {
-    let (dir_path, file_name) = path.parent().map_or_else(
-        || (Utf8Path::new("."), path.as_str()),
-        |parent| (parent, path.file_name().unwrap_or("")),
-    );
+    let (dir_path, file_name) = match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => (parent, name),
+        (Some(parent), None) => (parent, "."),
+        (None, Some(name)) => (Utf8Path::new("."), name),
+        (None, None) => (Utf8Path::new("."), "."),
+    };
     let dir = match Dir::open_ambient_dir(dir_path, ambient_authority()) {
         Ok(d) => d,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
