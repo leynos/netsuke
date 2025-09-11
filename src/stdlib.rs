@@ -99,7 +99,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use camino::{Utf8Path, Utf8PathBuf};
+    use camino::Utf8PathBuf;
     use cap_std::fs_utf8::Dir;
     use rstest::{fixture, rstest};
     #[cfg(unix)]
@@ -277,6 +277,9 @@ mod tests {
 
     #[rstest]
     fn nonexistent_path_is_false() {
-        assert!(!is_file_type(Utf8Path::new("/no/such/path"), is_file).expect("missing"));
+        let temp = tempdir().expect("tempdir");
+        let missing =
+            Utf8PathBuf::from_path_buf(temp.path().join("missing")).expect("utf8 missing path");
+        assert!(!is_file_type(&missing, is_file).expect("missing"));
     }
 }

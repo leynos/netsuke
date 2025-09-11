@@ -58,6 +58,29 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
         .unwrap_or_else(|| panic!("missing target {index}"))
 }
 
+fn expand_env(raw: &str) -> String {
+    let mut out = String::new();
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            chars.next();
+            let mut name = String::new();
+            for ch in chars.by_ref() {
+                if ch == '}' {
+                    break;
+                }
+                name.push(ch);
+            }
+            if let Ok(val) = std::env::var(&name) {
+                out.push_str(&val);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[given(expr = "the environment variable {string} is set to {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -66,7 +89,8 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
 fn set_env_var(world: &mut CliWorld, key: String, value: String) {
     // Central helper acquires the global lock and returns the prior value so
     // the scenario can restore it afterwards.
-    let previous = set_var(&key, OsStr::new(&value));
+    let expanded = expand_env(&value);
+    let previous = set_var(&key, OsStr::new(&expanded));
     world.env_vars.entry(key).or_insert(previous);
 }
 

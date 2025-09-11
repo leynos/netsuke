@@ -64,14 +64,15 @@ fn file_type_workspace(world: &mut CliWorld) {
         let previous = set_var(key, path.as_std_path().as_os_str());
         world.env_vars.entry(key.to_string()).or_insert(previous);
     }
+    let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
+    world.env_vars.entry("WORKSPACE".into()).or_insert(previous);
+    let missing_root = root.join("__missing__");
+    for name in ["dir", "file", "symlink", "pipe", "block", "char", "device"] {
+        let path = missing_root.join(name);
+        assert!(
+            !path.as_std_path().exists(),
+            "missing fixture {path} unexpectedly exists"
+        );
+    }
     world.temp = Some(temp);
-}
-
-#[given(expr = "the environment variable {string} is set to a missing path")]
-fn set_missing_env_path(world: &mut CliWorld, key: String) {
-    let temp = world.temp.as_ref().expect("file-type workspace tempdir");
-    let path = Utf8PathBuf::from_path_buf(temp.path().join("__missing__").join(key.to_lowercase()))
-        .expect("utf8 missing path");
-    let previous = set_var(&key, path.as_std_path().as_os_str());
-    world.env_vars.entry(key).or_insert(previous);
 }
