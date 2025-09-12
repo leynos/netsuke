@@ -2,7 +2,7 @@ use camino::Utf8Path;
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
-use minijinja::{value::Value, Environment, Error, ErrorKind};
+use minijinja::{Environment, Error, ErrorKind, value::Value};
 use std::io;
 
 fn is_dir(ft: fs::FileType) -> bool {
@@ -113,6 +113,8 @@ mod tests {
     use rstest::{fixture, rstest};
     #[cfg(unix)]
     use rustix::fs::{Dev, FileType, Mode, mknodat};
+    #[cfg(unix)]
+    use rustix::io::Errno;
     use tempfile::tempdir;
 
     #[fixture]
@@ -131,8 +133,6 @@ mod tests {
         let file = root.join("f");
         let link = root.join("s");
         let fifo = root.join("p");
-        let bdev = root.join("b");
-        let cdev = root.join("c");
         let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("ambient");
         handle.create_dir("d").expect("dir");
         handle.write("f", b"x").expect("file");
@@ -147,23 +147,33 @@ mod tests {
         )
         .expect("fifo");
         #[cfg(unix)]
-        mknodat(
+        let bdev = match mknodat(
             &handle,
             "b",
             FileType::BlockDevice,
             Mode::RUSR | Mode::WUSR,
             Dev::default(),
-        )
-        .expect("block");
+        ) {
+            Ok(()) => root.join("b"),
+            Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from("/dev/loop0"),
+            Err(e) => panic!("block device: {e}"),
+        };
+        #[cfg(not(unix))]
+        let bdev = Utf8PathBuf::from("/dev/loop0");
         #[cfg(unix)]
-        mknodat(
+        let cdev = match mknodat(
             &handle,
             "c",
             FileType::CharacterDevice,
             Mode::RUSR | Mode::WUSR,
             Dev::default(),
-        )
-        .expect("char");
+        ) {
+            Ok(()) => root.join("c"),
+            Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from("/dev/null"),
+            Err(e) => panic!("char device: {e}"),
+        };
+        #[cfg(not(unix))]
+        let cdev = Utf8PathBuf::from("/dev/null");
         (temp, dir, file, link, fifo, bdev, cdev)
     }
 
