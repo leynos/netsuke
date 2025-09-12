@@ -1290,16 +1290,21 @@ three fundamental questions:
 
 ### 7.2 Crate Selection and Strategy: `anyhow`, `thiserror`, and `miette`
 
-To implement this philosophy, Netsuke adopts a hybrid error handling strategy
-using the `anyhow`, `thiserror`, and `miette` crates. This is a common and
-highly effective pattern in the Rust ecosystem for creating robust applications
-and libraries.[^27] `miette` renders user-facing diagnostics, computing spans
-directly from parser locations.
+Netsuke uses a two-tier error architecture:
 
-- `thiserror`: This crate will be used *within* Netsuke's internal library
-  modules (e.g., `parser`, `ir`, `ninja_gen`) to define specific, structured
-  error types. The `#[derive(Error)]` macro reduces boilerplate and allows for
-  the creation of rich, semantic errors.[^29]
+1. `anyhow` captures internal context as errors propagate through the
+   application.
+2. `miette` renders user-facing diagnostics and **is not optional**. All
+   surface errors must implement `miette::Diagnostic` so the CLI can present
+   spans, annotated source, and helpful suggestions.
+
+This hybrid strategy is common in the Rust ecosystem and provides both rich
+context and polished user output.[^27]
+
+- `thiserror`: This crate is used *within* Netsuke's internal library modules
+  (e.g., `parser`, `ir`, `ninja_gen`) to define specific, structured error
+  types. The `#[derive(Error)]` macro reduces boilerplate and allows for the
+  creation of rich, semantic errors.[^29]
 
 Rust
 
@@ -1327,17 +1332,64 @@ pub enum IrGenError {
     ActionSerialisation(#[from] serde_json::Error), }
 ```
 
-- `anyhow`: This crate will be used in the main application logic (`main.rs`)
-  and at the boundaries between modules. `anyhow::Result` serves as a
-  convenient, dynamic error type that can wrap any underlying error that
-  implements `std::error::Error`.[^30] The primary tools used will be the
-
-  `?` operator for clean error propagation and the `.context()` and
-  `.with_context()` methods for adding high-level, human-readable context to
-  errors as they bubble up the call stack.[^31]
+- `anyhow`: Used in the main application logic (`main.rs`) and at the
+  boundaries between modules. `anyhow::Result` wraps any error implementing
+  `std::error::Error`.[^30] The `?` operator provides clean propagation, while
+  `.context()` and `.with_context()` attach high-level explanations as errors
+  bubble up.[^31]
 
 - `miette`: Presents human-friendly diagnostics, highlighting exact error
-  locations with computed spans.
+  locations with computed spans. Every diagnostic must retain `miette`'s
+  `Diagnostic` implementation as it travels through `anyhow`.
+
+#### Canonical pattern: `YamlDiagnostic`
+
+`YamlDiagnostic` is the reference implementation of a Netsuke diagnostic. It
+wraps `yaml-rust` errors with annotated source, spans, and optional help text:
+
+```rust
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(netsuke::yaml::parse))]
+pub struct YamlDiagnostic {
+    #[source_code]
+    src: NamedSource<String>,
+    #[label("parse error here")]
+    span: Option<SourceSpan>,
+    #[help]
+    help: Option<String>,
+    #[source]
+    source: YamlError,
+    message: String,
+}
+
+#[derive(Debug, Error, Diagnostic)]
+pub enum ManifestError {
+    #[error("manifest parse error")]
+    #[diagnostic(code(netsuke::manifest::parse))]
+    Parse {
+        #[source]
+        #[diagnostic_source]
+        source: YamlDiagnostic,
+    },
+}
+```
+
+`ManifestError::Parse` preserves the rich diagnostic, allowing `miette` to show
+the offending YAML snippet. All new user-facing errors with source context must
+follow this model.
+
+Common use cases requiring `miette` diagnostics include:
+
+- YAML parsing errors.
+- Jinja template rendering failures with line numbers and context.
+- Any scenario where highlighting spans or providing structured help benefits
+  the user.
+
+Although `src/diagnostics.rs` is currently unused, it contains prototypes for
+`miette` patterns and remains a valuable reference. Future diagnostics should
+mirror the `YamlDiagnostic` approach by implementing `Diagnostic`, providing a
+`NamedSource`, a `SourceSpan`, and actionable help text.
 
 ### 7.3 Error Handling Flow
 
@@ -1362,8 +1414,10 @@ enrichment:
    `.with_context(|| "Failed to build the internal build graph from the manifest")?`
     .
 
-4. This process of propagation and contextualization repeats as the error
-   bubbles up towards `main`.
+4. This process of propagation and contextualisation repeats as the error
+   bubbles up towards `main`. Use `anyhow::Context` to add detail, but never
+   convert a `miette::Diagnostic` into a plain `anyhow::Error`—doing so would
+   discard spans and help text.
 
 5. Finally, the `main` function receives the `Err` result. It prints the entire
    error chain provided by `anyhow`, which displays the highest-level context

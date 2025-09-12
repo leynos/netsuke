@@ -148,6 +148,8 @@ library, and CLI ergonomics.
 
   - [x] Use anyhow in the application logic to add human-readable context to
     errors as they propagate (e.g., using .with_context()).
+  - [x] Use `miette` to render diagnostics with source spans and helpful
+    messages.
 
   - [x] Refactor all error-producing code to provide the clear, contextual, and
     actionable error messages specified in the design document.
