@@ -38,6 +38,27 @@ macro_rules! write_flag {
 
 /// Generate a Ninja build file as a string.
 ///
+/// # Examples
+/// ```
+/// use crate::ast::Recipe;
+/// use crate::ir::{Action, BuildEdge, BuildGraph};
+/// use std::path::PathBuf;
+/// let mut graph = BuildGraph::default();
+/// graph.actions.insert("a".into(), Action {
+///     recipe: Recipe::Command { command: "true".into() },
+///     description: None, depfile: None, deps_format: None,
+///     pool: None, restat: false
+/// });
+/// graph.targets.insert(PathBuf::from("out"), BuildEdge {
+///     action_id: "a".into(), inputs: Vec::new(),
+///     explicit_outputs: vec![PathBuf::from("out")],
+///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
+///     phony: false, always: false
+/// });
+/// let text = crate::ninja_gen::generate(&graph).expect("generate ninja");
+/// assert!(text.contains("rule a"));
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`NinjaGenError`] if a build edge references an unknown action or
@@ -49,6 +70,28 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 }
 
 /// Write a Ninja build file to the provided writer.
+///
+/// # Examples
+/// ```
+/// use crate::ast::Recipe;
+/// use crate::ir::{Action, BuildEdge, BuildGraph};
+/// use std::path::PathBuf;
+/// let mut graph = BuildGraph::default();
+/// graph.actions.insert("a".into(), Action {
+///     recipe: Recipe::Command { command: "true".into() },
+///     description: None, depfile: None, deps_format: None,
+///     pool: None, restat: false
+/// });
+/// graph.targets.insert(PathBuf::from("out"), BuildEdge {
+///     action_id: "a".into(), inputs: Vec::new(),
+///     explicit_outputs: vec![PathBuf::from("out")],
+///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
+///     phony: false, always: false
+/// });
+/// let mut out = String::new();
+/// crate::ninja_gen::generate_into(&graph, &mut out).expect("format ninja");
+/// assert!(out.contains("build out: a"));
+/// ```
 ///
 /// # Errors
 ///

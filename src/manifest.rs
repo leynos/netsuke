@@ -528,8 +528,9 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue =
-        serde_yml::from_str(yaml).map_err(|e| map_yaml_error(e, yaml, name))?;
+    let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| ManifestError::Parse {
+        source: map_yaml_error(e, yaml, name),
+    })?;
 
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);

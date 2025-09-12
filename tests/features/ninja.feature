@@ -26,5 +26,5 @@ Feature: Ninja file generation
     When the manifest file "tests/data/rules.yml" is compiled to IR
     And an action is removed from the graph
     And the ninja file is generated
-    Then ninja generation fails with "referenced by build edge was not found"
+    Then ninja generation fails mentioning the removed action id
 

@@ -138,7 +138,13 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     }
 
     let program = resolve_ninja_program();
-    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).context("run ninja")?;
+    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
+        format!(
+            "running {} with build file {}",
+            program.display(),
+            build_path.display()
+        )
+    })?;
     drop(tmp_file);
     Ok(())
 }
@@ -213,8 +219,10 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli);
     let manifest = manifest::from_path(&manifest_path)
         .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
-    let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
-    debug!("AST:\n{ast_json}");
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
+        debug!("AST:\n{ast_json}");
+    }
     let graph = BuildGraph::from_manifest(&manifest).context("building graph")?;
     let ninja = ninja_gen::generate(&graph).context("generating Ninja file")?;
     Ok(NinjaContent::new(ninja))

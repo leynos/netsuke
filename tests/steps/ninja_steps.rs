@@ -80,3 +80,16 @@ fn ninja_generation_fails(world: &mut CliWorld, text: String) {
         .expect("ninja error should be available");
     assert!(err.contains(&text));
 }
+
+#[then("ninja generation fails mentioning the removed action id")]
+fn ninja_generation_fails_with_removed_action_id(world: &mut CliWorld) {
+    let err = world
+        .ninja_error
+        .as_ref()
+        .expect("ninja error should be available");
+    let id = world
+        .removed_action_id
+        .as_ref()
+        .expect("removed action id should be available");
+    assert!(err.contains(id));
+}
