@@ -29,7 +29,10 @@ use std::fmt::Display;
 ///     File::open(path).diag("open file")
 /// }
 /// ```
-#[expect(dead_code, reason = "unused after migration to anyhow")]
+#[expect(
+    dead_code,
+    reason = "temporarily retained during anyhow migration; remove when no call sites remain"
+)]
 pub(crate) trait ResultExt<T> {
     /// Attach a static context message to any error.
     ///

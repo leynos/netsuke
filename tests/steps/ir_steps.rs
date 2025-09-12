@@ -91,7 +91,8 @@ fn ir_generation_fails(world: &mut CliWorld) {
 #[when("an action is removed from the graph")]
 fn remove_action(world: &mut CliWorld) {
     let graph = world.build_graph.as_mut().expect("graph");
-    if let Some(id) = graph.actions.keys().next().cloned() {
+    let first_edge_action = graph.targets.values().next().map(|e| e.action_id.clone());
+    if let Some(id) = first_edge_action {
         graph.actions.remove(&id);
         world.removed_action_id = Some(id);
     }
