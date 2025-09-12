@@ -68,7 +68,12 @@ fn normalise_report(report: &str) -> String {
 )]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
-    let msg = normalise_report(&format!("{err:?}"));
+    let msg = normalise_report(
+        &err.chain()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
     for needle in needles {
         assert!(msg.contains(needle), "missing: {needle}\nmessage: {msg}");
     }

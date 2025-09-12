@@ -291,7 +291,7 @@ fn phony_and_always_flags() {
     true,
     true
 )]
-fn actions_behavior(
+fn actions_behaviour(
     #[case] yaml: &str,
     #[case] expected_phony: bool,
     #[case] expected_always: bool,

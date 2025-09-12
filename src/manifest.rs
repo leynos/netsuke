@@ -36,7 +36,7 @@ fn to_span(src: &str, loc: Location) -> SourceSpan {
         }
     };
     let len = end.saturating_sub(start);
-    #[allow(clippy::useless_conversion, reason = "future-proof span length type")]
+    #[expect(clippy::useless_conversion, reason = "future-proof span length type")]
     SourceSpan::new(start.into(), len.into())
 }
 
