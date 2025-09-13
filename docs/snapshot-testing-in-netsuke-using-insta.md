@@ -176,7 +176,7 @@ fn simple_manifest_ninja_snapshot() {
     let build_graph = BuildGraph::from_manifest(&manifest).expect("IR generation succeeded");
 
     // Generate Ninja file content from the IR
-    // The function returns Result
+    // The function returns `Result<String, NinjaGenError>`
     let ninja_file = ninja_gen::generate(&build_graph)
         .expect("Ninja file generation succeeded");
 
@@ -198,9 +198,9 @@ Key points for Ninja snapshot tests:
   realistic coverage.
 
 - Call the Ninja generation function (`ninja_gen::generate`), which
-  produces the Ninja file contents as a `Result`. This function traverses the
-  IR and outputs rules and build statements in Ninja syntax, returning an error
-  if any build edge references an undefined action.
+  yields a `Result<String, NinjaGenError>`. This function traverses the IR and
+  outputs rules and build statements in Ninja syntax, returning an error if any
+  build edge references an undefined action.
 
 - As with IR, **determinism is crucial**. The Ninja output should list rules,
   targets, and dependencies in a consistent order. For example, if the IR does
