@@ -22,11 +22,11 @@ fn generate_ninja(world: &mut CliWorld) {
     }
 }
 
-#[allow(
+#[then(expr = "the ninja file contains {string}")]
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-#[then(expr = "the ninja file contains {string}")]
 fn ninja_contains(world: &mut CliWorld, text: String) {
     let ninja = world
         .ninja
@@ -35,11 +35,11 @@ fn ninja_contains(world: &mut CliWorld, text: String) {
     assert!(ninja.contains(&text));
 }
 
-#[allow(
+#[then(expr = "shlex splitting command {int} yields {string}")]
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-#[then(expr = "shlex splitting command {int} yields {string}")]
 fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
     let ninja = world
         .ninja
@@ -59,20 +59,16 @@ fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
     assert_eq!(words, expected);
 }
 
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[then(expr = "shlex splitting the command yields {string}")]
 fn ninja_first_command_tokens(world: &mut CliWorld, expected: String) {
     ninja_command_tokens(world, 2, expected);
 }
 
-#[allow(
+#[then(expr = "ninja generation fails with {string}")]
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-#[then(expr = "ninja generation fails with {string}")]
 fn ninja_generation_fails(world: &mut CliWorld, text: String) {
     let err = world
         .ninja_error
