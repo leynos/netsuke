@@ -176,9 +176,11 @@ fn simple_manifest_ninja_snapshot() {
     let build_graph = BuildGraph::from_manifest(&manifest).expect("IR generation succeeded");
 
     // Generate Ninja file content from the IR
-    // The function returns `Result<String, NinjaGenError>`
-    let ninja_file = ninja_gen::generate(&build_graph)
-        .expect("Ninja file generation succeeded");
+    // `generate` returns `Result<String, NinjaGenError>`; handle errors
+    let ninja_file = match ninja_gen::generate(&build_graph) {
+        Ok(ninja) => ninja,
+        Err(e) => panic!("Ninja file generation failed: {e}"),
+    };
 
     // The output is a multi-line Ninja build script (as a String)
     // Ensure the output is deterministic
@@ -190,6 +192,10 @@ fn simple_manifest_ninja_snapshot() {
         });
 }
 ```
+
+The match explicitly handles the `Result` from `generate` so any formatting or
+missing action errors surface during tests. Production code should propagate
+the error and report it with `miette` rather than panicking.
 
 Key points for Ninja snapshot tests:
 
