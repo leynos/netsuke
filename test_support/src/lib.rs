@@ -112,10 +112,10 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 /// [`PathBuf`] is absolute. If the resulting path does not exist, a minimal
 /// manifest is written to that location.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if `temp_dir` does not exist or if any I/O error occurs while
-/// creating or persisting the manifest file.
+/// Returns an [`io::Error`] if `temp_dir` does not exist or if any I/O error
+/// occurs while creating or persisting the manifest file.
 ///
 /// # Examples
 ///
@@ -126,21 +126,29 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 ///
 /// let temp = TempDir::new().expect("temp dir");
 /// let cli_file = PathBuf::from("manifest.yml");
-/// let manifest = ensure_manifest_exists(temp.path(), &cli_file);
+/// let manifest = ensure_manifest_exists(temp.path(), &cli_file)
+///     .expect("manifest");
 /// assert!(manifest.exists());
 /// ```
-pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
+pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> io::Result<PathBuf> {
     let manifest_path = resolve_manifest_path(temp_dir, cli_file);
 
-    if manifest_path.exists() {
-        return manifest_path;
-    }
+    if manifest_path.exists() { return Ok(manifest_path); }
 
-    let dest_dir = ensure_directory_exists(&manifest_path, temp_dir);
-    let file = create_manifest_file(&dest_dir, &manifest_path);
-    persist_manifest_file(file, &manifest_path);
+    let dest_dir = ensure_directory_exists(&manifest_path, temp_dir)?;
+    let mut file = create_manifest_file(&dest_dir, &manifest_path)?;
+    crate::env::write_manifest(&mut file).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!(
+                "Failed to write manifest content to {}: {e}",
+                manifest_path.display()
+            ),
+        )
+    })?;
+    persist_manifest_file(file, &manifest_path)?;
 
-    manifest_path
+    Ok(manifest_path)
 }
 
 fn resolve_manifest_path(temp_dir: &Path, cli_file: &Path) -> PathBuf {
@@ -151,49 +159,54 @@ fn resolve_manifest_path(temp_dir: &Path, cli_file: &Path) -> PathBuf {
     }
 }
 
-fn ensure_directory_exists(manifest_path: &Path, temp_dir: &Path) -> PathBuf {
+fn ensure_directory_exists(manifest_path: &Path, temp_dir: &Path) -> io::Result<PathBuf> {
     let dest_dir = manifest_path
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| temp_dir.to_path_buf());
 
-    if dest_dir.exists() {
-        return dest_dir;
-    }
+    if dest_dir.exists() { return Ok(dest_dir); }
 
-    fs::create_dir_all(&dest_dir).expect(&format!(
-        "Failed to create manifest parent directory for {}",
-        manifest_path.display()
-    ));
+    fs::create_dir_all(&dest_dir).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!(
+                "Failed to create manifest parent directory for {}: {e}",
+                manifest_path.display()
+            ),
+        )
+    })?;
 
-    dest_dir
+    Ok(dest_dir)
 }
 
-fn create_manifest_file(dest_dir: &Path, manifest_path: &Path) -> NamedTempFile {
-    let mut file = NamedTempFile::new_in(dest_dir).expect(&format!(
-        "Failed to create temporary manifest file for {}",
-        manifest_path.display()
-    ));
-    crate::env::write_manifest(&mut file).expect(&format!(
-        "Failed to write manifest content to {}",
-        manifest_path.display()
-    ));
-    file
+fn create_manifest_file(dest_dir: &Path, manifest_path: &Path) -> io::Result<NamedTempFile> {
+    let file = NamedTempFile::new_in(dest_dir).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!(
+                "Failed to create temporary manifest file for {}: {e}",
+                manifest_path.display()
+            ),
+        )
+    })?;
+    Ok(file)
 }
 
-fn persist_manifest_file(file: NamedTempFile, manifest_path: &Path) {
+fn persist_manifest_file(file: NamedTempFile, manifest_path: &Path) -> io::Result<()> {
     // Avoid clobbering an existing manifest if concurrently created.
     // Treat AlreadyExists as success when another process creates it.
     match file.persist_noclobber(manifest_path) {
-        Ok(_) => {}
-        Err(err) if err.error.kind() == io::ErrorKind::AlreadyExists => {}
-        Err(err) => {
-            panic!(
+        Ok(_) => Ok(()),
+        Err(err) if err.error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(err) => Err(io::Error::new(
+            err.error.kind(),
+            format!(
                 "Failed to persist manifest file to {}: {}",
                 manifest_path.display(),
                 err.error
-            );
-        }
+            ),
+        )),
     }
 }
 

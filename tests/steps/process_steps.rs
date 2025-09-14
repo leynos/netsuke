@@ -82,7 +82,7 @@ fn run(world: &mut CliWorld) {
     let dir = world.temp.as_ref().expect("temp dir");
     {
         let cli = world.cli.as_mut().expect("cli");
-        cli.file = ensure_manifest_exists(dir.path(), &cli.file);
+        cli.file = ensure_manifest_exists(dir.path(), &cli.file).expect("manifest");
     }
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)
