@@ -1724,9 +1724,7 @@ projects.
 
 ### **Works cited**
 
-[^1]: Ninja, a small build system with a focus on speed. Accessed on 12 July
-
-      1. <https://ninja-build.org/>
+[^1]: Ninja, a small build system with a focus on speed. Accessed on 12 July 2025. <https://ninja-build.org/>
 
 [^2]: "Ninja (build system)." Wikipedia. Accessed on 12 July 2025.
       <https://en.wikipedia.org/wiki/Ninja_(build_system)>

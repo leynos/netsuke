@@ -92,6 +92,8 @@ serial_test = "3"
 mockall = "0.11"
 test_support = { path = "test_support" }
 strip-ansi-escapes = "0.2"
+
+[target.'cfg(unix)'.dev-dependencies]
 # Used only to construct FIFOs and device nodes in tests.
 rustix = { version = "1.0.8", features = ["fs"] }
 
