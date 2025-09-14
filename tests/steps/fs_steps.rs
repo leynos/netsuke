@@ -33,31 +33,51 @@ fn create_basic_fixtures(handle: &Dir) {
     .expect("create fifo fixture");
 }
 
+/// Configuration for a device node fixture and its fallback path.
+#[derive(Copy, Clone)]
+struct DeviceConfig<'a> {
+    name: &'a str,
+    file_type: FileType,
+    fallback_path: &'a str,
+}
+
 fn create_device_fixtures(handle: &Dir, root: &Utf8PathBuf) -> (Utf8PathBuf, Utf8PathBuf) {
-    let block_path =
-        create_device_with_fallback(handle, root, "block", FileType::BlockDevice, "/dev/loop0");
-    let char_path =
-        create_device_with_fallback(handle, root, "char", FileType::CharacterDevice, "/dev/null");
+    let block_path = create_device_with_fallback(
+        handle,
+        root,
+        DeviceConfig {
+            name: "block",
+            file_type: FileType::BlockDevice,
+            fallback_path: "/dev/loop0",
+        },
+    );
+    let char_path = create_device_with_fallback(
+        handle,
+        root,
+        DeviceConfig {
+            name: "char",
+            file_type: FileType::CharacterDevice,
+            fallback_path: "/dev/null",
+        },
+    );
     (block_path, char_path)
 }
 
 fn create_device_with_fallback(
     handle: &Dir,
     root: &Utf8PathBuf,
-    name: &str,
-    file_type: FileType,
-    fallback_path: &str,
+    config: DeviceConfig<'_>,
 ) -> Utf8PathBuf {
     match mknodat(
         handle,
-        name,
-        file_type,
+        config.name,
+        config.file_type,
         Mode::RUSR | Mode::WUSR,
         Dev::default(),
     ) {
-        Ok(()) => root.join(name),
-        Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from(fallback_path),
-        Err(e) => panic!("create {file_type:?} fixture: {e}"),
+        Ok(()) => root.join(config.name),
+        Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from(config.fallback_path),
+        Err(e) => panic!("create {:?} fixture: {e}", config.file_type),
     }
 }
 
