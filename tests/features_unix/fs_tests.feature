@@ -1,4 +1,5 @@
 # Unix-specific file tests
+@unix
 Feature: File-system tests
   Scenario: file system tests detect path types
     Given a file-type test workspace
