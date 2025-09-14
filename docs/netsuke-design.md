@@ -1724,58 +1724,59 @@ projects.
 
 ### **Works cited**
 
-[^1]: Ninja, a small build system with a focus on speed. Accessed on 12 July 2025. <https://ninja-build.org/>
+[^1]: Ninja, a small build system with a focus on speed. Accessed on 12 July
+      2025\. <https://ninja-build.org/>
 
-[^2]: "Ninja (build system)." Wikipedia. Accessed on 12 July 2025.
+[^2]: "Ninja (build system)." Wikipedia. Accessed on 12 July 2025\.
       <https://en.wikipedia.org/wiki/Ninja_(build_system)>
 
 [^3]: "A Complete Guide To The Ninja Build System." Spectra - Mathpix. Accessed
-      on 12 July 2025.
+      on 12 July 2025\.
       <https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
 
-[^4]: "semver - Rust." Accessed on 12 July 2025.
+[^4]: "semver - Rust." Accessed on 12 July 2025\.
       <https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
 
-[^7]: "How Ninja works." Fuchsia. Accessed on 12 July 2025.
+[^7]: "How Ninja works." Fuchsia. Accessed on 12 July 2025\.
       <https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
 
-[^8]: "The Ninja build system." Ninja. Accessed on 12 July 2025.
+[^8]: "The Ninja build system." Ninja. Accessed on 12 July 2025\.
       <https://ninja-build.org/manual.html>
 
-[^11]: "Saphyr libraries." crates.io. Accessed on 12 July 2025.
+[^11]: "Saphyr libraries." crates.io. Accessed on 12 July 2025\.
        <https://crates.io/crates/saphyr>
 
-[^15]: "minijinja." crates.io. Accessed on 12 July 2025.
+[^15]: "minijinja." crates.io. Accessed on 12 July 2025\.
        <https://crates.io/crates/minijinja>
 
-[^16]: "minijinja." Docs.rs. Accessed on 12 July 2025.
+[^16]: "minijinja." Docs.rs. Accessed on 12 July 2025\.
        <https://docs.rs/minijinja/>
 
-[^17]: "minijinja." wasmer-pack API docs. Accessed on 12 July 2025.
+[^17]: "minijinja." wasmer-pack API docs. Accessed on 12 July 2025\.
        <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
 [^18]: "Template engine — list of Rust libraries/crates." Lib.rs. Accessed on
-       12 July 2025. <https://lib.rs/template-engine>
+       12 July 2025\. <https://lib.rs/template-engine>
 
-[^22]: "shell_quote." Docs.rs. Accessed on 12 July 2025.
+[^22]: "shell_quote." Docs.rs. Accessed on 12 July 2025\.
        <https://docs.rs/shell-quote/latest/shell_quote/>
 
-[^24]: "std::process." Rust. Accessed on 12 July 2025.
+[^24]: "std::process." Rust. Accessed on 12 July 2025\.
        <https://doc.rust-lang.org/std/process/index.html>
 
 [^27]: "Rust Error Handling Compared: anyhow vs thiserror vs snafu." dev.to.
-       Accessed on 12 July 2025.
+       Accessed on 12 July 2025\.
        <https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
 
 [^29]: "Practical guide to Error Handling in Rust." Dev State. Accessed on 12
        July 2025. <https://dev-state.com/posts/error_handling/>
 
-[^30]: "thiserror and anyhow." Comprehensive Rust. Accessed on 12 July 2025.
+[^30]: "thiserror and anyhow." Comprehensive Rust. Accessed on 12 July 2025\.
        <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
 
 [^31]: "Simple error handling for precondition/argument checking in Rust."
-       Stack Overflow. Accessed on 12 July 2025.
+       Stack Overflow. Accessed on 12 July 2025\.
        <https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
 
 [^32]: "Nicer error reporting." Command Line Applications in Rust. Accessed on
-       12 July 2025. <https://rust-cli.github.io/book/tutorial/errors.html>
+       12 July 2025\. <https://rust-cli.github.io/book/tutorial/errors.html>
