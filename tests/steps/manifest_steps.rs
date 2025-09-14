@@ -58,27 +58,28 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
         .unwrap_or_else(|| panic!("missing target {index}"))
 }
 
+fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
+where
+    I: Iterator<Item = char>,
+{
+    // Preserve the token if the variable is unset.
+    chars.next();
+    let mut name = String::new();
+    for ch in chars.by_ref() {
+        if ch == '}' {
+            break;
+        }
+        name.push(ch);
+    }
+    std::env::var(&name).unwrap_or_else(|_| ["${", &name, "}"].concat())
+}
+
 fn expand_env(raw: &str) -> String {
     let mut out = String::new();
     let mut chars = raw.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '$' && chars.peek() == Some(&'{') {
-            chars.next();
-            let mut name = String::new();
-            for ch in chars.by_ref() {
-                if ch == '}' {
-                    break;
-                }
-                name.push(ch);
-            }
-            if let Ok(val) = std::env::var(&name) {
-                out.push_str(&val);
-            } else {
-                // Preserve the original token if unset.
-                out.push_str("${");
-                out.push_str(&name);
-                out.push('}');
-            }
+            out.push_str(&parse_env_token(&mut chars));
         } else {
             out.push(c);
         }
