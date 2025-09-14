@@ -25,7 +25,7 @@
 //! ```
 //
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
@@ -479,14 +479,14 @@ enum VisitState {
 }
 
 fn should_visit_node<'a>(
-    states: &'a mut HashMap<PathBuf, VisitState>,
-    node: &'a PathBuf,
-) -> Result<bool, &'a PathBuf> {
+    states: &mut HashMap<&'a Path, VisitState>,
+    node: &'a Path,
+) -> Result<bool, &'a Path> {
     match states.get(node) {
         Some(VisitState::Visited) => Ok(false),
         Some(VisitState::Visiting) => Err(node),
         None => {
-            states.insert(node.clone(), VisitState::Visiting);
+            states.insert(node, VisitState::Visiting);
             Ok(true)
         }
     }
@@ -495,8 +495,8 @@ fn should_visit_node<'a>(
 /// Detects cycles in a dependency graph by tracking traversal state.
 struct CycleDetector<'a> {
     targets: &'a HashMap<PathBuf, BuildEdge>,
-    stack: Vec<PathBuf>,
-    states: HashMap<PathBuf, VisitState>,
+    stack: Vec<&'a Path>,
+    states: HashMap<&'a Path, VisitState>,
 }
 
 impl<'a> CycleDetector<'a> {
@@ -508,21 +508,31 @@ impl<'a> CycleDetector<'a> {
         }
     }
 
-    fn visit_node(&mut self, node: &PathBuf) -> Option<Vec<PathBuf>> {
+    fn is_visited(&self, node: &Path) -> bool {
+        matches!(self.states.get(node), Some(VisitState::Visited))
+    }
+
+    fn visit_node(&mut self, node: &'a Path) -> Option<Vec<PathBuf>> {
         match should_visit_node(&mut self.states, node) {
             Ok(false) => return None,
             Err(path) => {
-                if let Some(idx) = self.stack.iter().position(|n| n == path) {
-                    let mut cycle = self.stack.get(idx..).expect("slice").to_vec();
-                    cycle.push(path.clone());
+                if let Some(idx) = self.stack.iter().position(|n| *n == path) {
+                    let mut cycle: Vec<PathBuf> = self
+                        .stack
+                        .get(idx..)
+                        .expect("slice")
+                        .iter()
+                        .map(|p| (*p).to_path_buf())
+                        .collect();
+                    cycle.push(path.to_path_buf());
                     return Some(canonicalize_cycle(cycle));
                 }
-                return Some(vec![path.clone(), path.clone()]);
+                return Some(vec![path.to_path_buf(), path.to_path_buf()]);
             }
             Ok(true) => {}
         }
 
-        self.stack.push(node.clone());
+        self.stack.push(node);
 
         if let Some(edge) = self.targets.get(node)
             && let Some(cycle) = self.visit_dependencies(&edge.inputs)
@@ -531,11 +541,11 @@ impl<'a> CycleDetector<'a> {
         }
 
         self.stack.pop();
-        self.states.insert(node.clone(), VisitState::Visited);
+        self.states.insert(node, VisitState::Visited);
         None
     }
 
-    fn visit_dependencies(&mut self, deps: &[PathBuf]) -> Option<Vec<PathBuf>> {
+    fn visit_dependencies(&mut self, deps: &'a [PathBuf]) -> Option<Vec<PathBuf>> {
         for dep in deps {
             if !self.targets.contains_key(dep) {
                 continue;
@@ -554,7 +564,7 @@ fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
 
     for node in targets.keys() {
         // Skip nodes we've already processed to avoid redundant traversal.
-        if detector.states.contains_key(node) {
+        if detector.is_visited(node) {
             continue;
         }
         if let Some(cycle) = detector.visit_node(node) {
