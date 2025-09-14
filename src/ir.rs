@@ -547,6 +547,12 @@ impl<'a> CycleDetector<'a> {
 
     fn visit_dependencies(&mut self, deps: &'a [PathBuf]) -> Option<Vec<PathBuf>> {
         for dep in deps {
+            if let Some(&head) = self.stack.last()
+                && head == dep.as_path()
+            {
+                return Some(canonicalize_cycle(vec![dep.clone(), dep.clone()]));
+            }
+
             if !self.targets.contains_key(dep) {
                 continue;
             }
@@ -560,6 +566,8 @@ impl<'a> CycleDetector<'a> {
 }
 
 fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
+    // CycleDetector borrows paths from `targets`; keep `targets`
+    // stable during detection.
     let mut detector = CycleDetector::new(targets);
 
     for node in targets.keys() {
@@ -585,7 +593,9 @@ fn canonicalize_cycle(mut cycle: Vec<PathBuf>) -> Vec<PathBuf> {
         .enumerate()
         .min_by(|(_, a), (_, b)| a.cmp(b))
         .map_or(0, |(idx, _)| idx);
-    cycle.rotate_left(start);
+    if let Some(slice) = cycle.get_mut(..len) {
+        slice.rotate_left(start);
+    }
     if let (Some(first), Some(slot)) = (cycle.first().cloned(), cycle.get_mut(len)) {
         slot.clone_from(&first);
     }
@@ -639,6 +649,24 @@ mod tests {
             PathBuf::from("a"),
             PathBuf::from("b"),
             PathBuf::from("c"),
+            PathBuf::from("a"),
+        ];
+        assert_eq!(canonical, expected);
+    }
+
+    #[test]
+    fn canonicalize_cycle_handles_reverse_direction() {
+        let cycle = vec![
+            PathBuf::from("c"),
+            PathBuf::from("b"),
+            PathBuf::from("a"),
+            PathBuf::from("c"),
+        ];
+        let canonical = canonicalize_cycle(cycle);
+        let expected = vec![
+            PathBuf::from("a"),
+            PathBuf::from("c"),
+            PathBuf::from("b"),
             PathBuf::from("a"),
         ];
         assert_eq!(canonical, expected);
