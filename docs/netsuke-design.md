@@ -1370,14 +1370,14 @@ pub enum ManifestError {
     Parse {
         #[source]
         #[diagnostic_source]
-        source: YamlDiagnostic,
+        source: Box<dyn Diagnostic + Send + Sync + 'static>,
     },
 }
 ```
 
-`ManifestError::Parse` preserves the rich diagnostic, allowing `miette` to show
-the offending YAML snippet. All new user-facing errors with source context must
-follow this model.
+`ManifestError::Parse` boxes the diagnostic to preserve the rich error so
+`miette` can show the offending YAML snippet. All new user-facing errors with
+source context must follow this model.
 
 Common use cases requiring `miette` diagnostics include:
 

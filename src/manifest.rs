@@ -84,11 +84,15 @@ pub enum ManifestError {
     Parse {
         #[source]
         #[diagnostic_source]
-        source: YamlDiagnostic,
+        source: Box<dyn Diagnostic + Send + Sync + 'static>,
     },
 }
 
-fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
+fn map_yaml_error(
+    err: YamlError,
+    src: &str,
+    name: &str,
+) -> Box<dyn Diagnostic + Send + Sync + 'static> {
     let loc = err.location();
     let (line, col, span) = loc.map_or((1, 1, None), |l| {
         (l.line(), l.column(), Some(to_span(src, l)))
@@ -101,13 +105,13 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
         message.push_str(h);
     }
 
-    YamlDiagnostic {
+    Box::new(YamlDiagnostic {
         src: NamedSource::new(name, src.to_string()),
         span,
         help: hint,
         source: err,
         message,
-    }
+    })
 }
 
 /// Resolve the value of an environment variable for the `env()` Jinja helper.
