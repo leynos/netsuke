@@ -235,14 +235,24 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     reason = "Cucumber step requires owned String"
 )]
 fn manifest_has_targets_named(world: &mut CliWorld, names: String) {
-    let expected: BTreeSet<String> = names.split(',').map(|s| s.trim().to_string()).collect();
+    let expected: BTreeSet<String> = names
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
     let manifest = world.manifest.as_ref().expect("manifest");
     let actual: BTreeSet<String> = manifest
         .targets
         .iter()
         .map(|t| get_string_from_string_or_list(&t.name, "name"))
         .collect();
-    assert_eq!(actual, expected);
+    let missing: BTreeSet<_> = expected.difference(&actual).cloned().collect();
+    let extra: BTreeSet<_> = actual.difference(&expected).cloned().collect();
+    assert!(
+        missing.is_empty() && extra.is_empty(),
+        "target names differ\nmissing: {missing:?}\nextra: {extra:?}",
+    );
 }
 
 fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
