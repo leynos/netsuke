@@ -5,7 +5,6 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::given;
 use rustix::fs::{Dev, FileType, Mode, mknodat};
-use rustix::io::Errno;
 use test_support::env::set_var;
 
 #[given("a file-type test workspace")]
@@ -28,29 +27,9 @@ fn file_type_workspace(world: &mut CliWorld) {
         Dev::default(),
     )
     .expect("create fifo fixture");
-    // Creating device nodes is privileged; fall back to /dev where needed.
-    let block_path = match mknodat(
-        &handle,
-        "block",
-        FileType::BlockDevice,
-        Mode::RUSR | Mode::WUSR,
-        Dev::default(),
-    ) {
-        Ok(()) => root.join("block"),
-        Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from("/dev/loop0"),
-        Err(e) => panic!("create block device fixture: {e}"),
-    };
-    let char_path = match mknodat(
-        &handle,
-        "char",
-        FileType::CharacterDevice,
-        Mode::RUSR | Mode::WUSR,
-        Dev::default(),
-    ) {
-        Ok(()) => root.join("char"),
-        Err(e) if e == Errno::PERM || e == Errno::ACCESS => Utf8PathBuf::from("/dev/null"),
-        Err(e) => panic!("create char device fixture: {e}"),
-    };
+    // Use existing device nodes to avoid requiring privileges.
+    let block_path = Utf8PathBuf::from("/dev/loop0");
+    let char_path = Utf8PathBuf::from("/dev/null");
     let entries = [
         ("DIR_PATH", root.join("dir")),
         ("FILE_PATH", root.join("file")),
