@@ -73,6 +73,11 @@ fn expand_env(raw: &str) -> String {
             }
             if let Ok(val) = std::env::var(&name) {
                 out.push_str(&val);
+            } else {
+                // Preserve the original token if unset.
+                out.push_str("${");
+                out.push_str(&name);
+                out.push('}');
             }
         } else {
             out.push(c);

@@ -86,6 +86,8 @@ pub fn register(env: &mut Environment<'_>) {
     #[cfg(not(unix))]
     {
         env.add_test("pipe", |_val: Value| Ok(false));
+        env.add_test("block_device", |_val: Value| Ok(false));
+        env.add_test("char_device", |_val: Value| Ok(false));
         env.add_test("device", |_val: Value| Ok(false));
     }
 }
