@@ -27,7 +27,7 @@ mod error;
 pub use error::display_error_chain;
 
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tempfile::{NamedTempFile, TempDir};
 
@@ -153,10 +153,16 @@ pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
             manifest_path.display()
         ));
         // Avoid clobbering an existing manifest if concurrently created.
-        file.persist_noclobber(&manifest_path).expect(&format!(
-            "Failed to persist manifest file to {}",
-            manifest_path.display()
-        ));
+        // Treat AlreadyExists as success when another process creates it.
+        if let Err(err) = file.persist_noclobber(&manifest_path) {
+            if err.error.kind() != io::ErrorKind::AlreadyExists {
+                panic!(
+                    "Failed to persist manifest file to {}: {}",
+                    manifest_path.display(),
+                    err.error
+                );
+            }
+        }
     }
 
     manifest_path
