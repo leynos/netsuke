@@ -133,6 +133,7 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> io::Result<PathBuf> {
     let manifest_path = resolve_manifest_path(temp_dir, cli_file);
 
+<<<<<<< HEAD
     if manifest_path.exists() { return Ok(manifest_path); }
 
     let dest_dir = ensure_directory_exists(&manifest_path, temp_dir)?;
@@ -147,6 +148,102 @@ pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> io::Result<Pa
         )
     })?;
     persist_manifest_file(file, &manifest_path)?;
+||||||| parent of f1ed148 (Validate manifest path and persist diagnostics)
+    if !manifest_path.exists() {
+        let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
+        if !dest_dir.exists() {
+            fs::create_dir_all(dest_dir).map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!(
+                        "Failed to create manifest parent directory for {}: {e}",
+                        manifest_path.display()
+                    ),
+                )
+            })?;
+        }
+        let mut file = NamedTempFile::new_in(dest_dir).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to create temporary manifest file for {}: {e}",
+                    manifest_path.display()
+                ),
+            )
+        })?;
+        crate::env::write_manifest(&mut file).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to write manifest content to {}: {e}",
+                    manifest_path.display()
+                ),
+            )
+        })?;
+        file.persist(&manifest_path).map_err(|e| {
+            io::Error::new(
+                e.error.kind(),
+                format!(
+                    "Failed to persist manifest file to {}: {}",
+                    manifest_path.display(),
+                    e.error
+                ),
+            )
+        })?;
+    }
+=======
+    if !manifest_path.exists() {
+        if manifest_path.file_name().is_none() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "Manifest path must include a file name: {}",
+                    manifest_path.display()
+                ),
+            ));
+        }
+
+        let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
+        fs::create_dir_all(dest_dir).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to create manifest parent directory for {}: {e}",
+                    manifest_path.display(),
+                ),
+            )
+        })?;
+        let mut file = NamedTempFile::new_in(dest_dir).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to create temporary manifest file for {}: {e}",
+                    manifest_path.display()
+                ),
+            )
+        })?;
+        crate::env::write_manifest(&mut file).map_err(|e| {
+            io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to write manifest content to {}: {e}",
+                    manifest_path.display()
+                ),
+            )
+        })?;
+        file.persist(&manifest_path).map_err(|e| {
+            io::Error::new(
+                e.error.kind(),
+                format!(
+                    "Failed to persist manifest file to {} from {}: {}",
+                    manifest_path.display(),
+                    e.file.path().display(),
+                    e.error
+                ),
+            )
+        })?;
+    }
+>>>>>>> f1ed148 (Validate manifest path and persist diagnostics)
 
     Ok(manifest_path)
 }
