@@ -1,6 +1,6 @@
 //! Unit tests for Netsuke manifest AST deserialisation.
 
-use miette::Result;
+use anyhow::Result;
 use netsuke::{ast::*, manifest};
 use rstest::rstest;
 use semver::Version;
@@ -291,7 +291,7 @@ fn phony_and_always_flags() {
     true,
     true
 )]
-fn actions_behavior(
+fn actions_behaviour(
     #[case] yaml: &str,
     #[case] expected_phony: bool,
     #[case] expected_always: bool,

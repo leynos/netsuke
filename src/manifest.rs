@@ -7,11 +7,9 @@
 //! filesystem patterns during template evaluation. Both helpers fail fast when
 //! inputs are missing or patterns are invalid.
 
-use crate::{
-    ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars},
-    diagnostics::ResultExt,
-};
-use miette::{Diagnostic, NamedSource, Report, Result, SourceSpan};
+use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
+use anyhow::{Context, Result};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, context, value::Value};
 use serde_yml::{Error as YamlError, Location};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
@@ -38,7 +36,7 @@ fn to_span(src: &str, loc: Location) -> SourceSpan {
         }
     };
     let len = end.saturating_sub(start);
-    #[allow(clippy::useless_conversion, reason = "future-proof span length type")]
+    #[expect(clippy::useless_conversion, reason = "future-proof span length type")]
     SourceSpan::new(start.into(), len.into())
 }
 
@@ -86,11 +84,15 @@ pub enum ManifestError {
     Parse {
         #[source]
         #[diagnostic_source]
-        source: YamlDiagnostic,
+        source: Box<dyn Diagnostic + Send + Sync + 'static>,
     },
 }
 
-fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
+fn map_yaml_error(
+    err: YamlError,
+    src: &str,
+    name: &str,
+) -> Box<dyn Diagnostic + Send + Sync + 'static> {
     let loc = err.location();
     let (line, col, span) = loc.map_or((1, 1, None), |l| {
         (l.line(), l.column(), Some(to_span(src, l)))
@@ -103,13 +105,13 @@ fn map_yaml_error(err: YamlError, src: &str, name: &str) -> YamlDiagnostic {
         message.push_str(h);
     }
 
-    YamlDiagnostic {
+    Box::new(YamlDiagnostic {
         src: NamedSource::new(name, src.to_string()),
         span,
         help: hint,
         source: err,
         message,
-    }
+    })
 }
 
 /// Resolve the value of an environment variable for the `env()` Jinja helper.
@@ -530,8 +532,9 @@ fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue =
-        serde_yml::from_str(yaml).map_err(|e| Report::new(map_yaml_error(e, yaml, name)))?;
+    let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| ManifestError::Parse {
+        source: map_yaml_error(e, yaml, name),
+    })?;
 
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -543,7 +546,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
         for (k, v) in vars {
             let key = k
                 .as_str()
-                .ok_or_else(|| miette::miette!("non-string key in 'vars' mapping: {k:?}"))?
+                .ok_or_else(|| anyhow::anyhow!("non-string key in vars mapping: {k:?}"))?
                 .to_string();
             jinja.add_global(key, Value::from_serialize(v));
         }
@@ -551,11 +554,10 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     expand_foreach(&mut doc, &jinja)?;
 
-    let manifest: NetsukeManifest = serde_yml::from_value(doc).map_err(|e| {
-        Report::new(ManifestError::Parse {
+    let manifest: NetsukeManifest =
+        serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
             source: map_yaml_error(e, yaml, name),
-        })
-    })?;
+        })?;
 
     render_manifest(manifest, &jinja)
 }
@@ -618,7 +620,7 @@ fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<V
     let seq = eval_expression(env, "foreach", expr, context! {})?;
     let iter = seq
         .try_iter()
-        .diag("foreach expression did not yield an iterable")?;
+        .context("foreach expression did not yield an iterable")?;
     Ok(iter.collect())
 }
 
@@ -644,14 +646,14 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
         None => YamlMapping::new(),
         Some(YamlValue::Mapping(m)) => m,
         Some(other) => {
-            return Err(miette::miette!(
+            return Err(anyhow::anyhow!(
                 "target.vars must be a mapping, got: {other:?}"
             ));
         }
     };
     vars.insert(
         YamlValue::String("item".into()),
-        serde_yml::to_value(item).diag("serialise item")?,
+        serde_yml::to_value(item).context("serialise item")?,
     );
     vars.insert(
         YamlValue::String("index".into()),
@@ -664,14 +666,14 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
 fn as_str<'a>(value: &'a YamlValue, field: &str) -> Result<&'a str> {
     value
         .as_str()
-        .ok_or_else(|| miette::miette!("{field} must be a string expression"))
+        .ok_or_else(|| anyhow::anyhow!("{field} must be a string expression"))
 }
 
 fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {
     env.compile_expression(expr)
-        .diag_with(|| format!("{name} expression parse error"))?
+        .with_context(|| format!("{name} expression parse error"))?
         .eval(ctx)
-        .diag_with(|| format!("{name} evaluation error"))
+        .with_context(|| format!("{name} evaluation error"))
 }
 
 /// Render a Jinja template and label any error with the given context.
@@ -681,7 +683,7 @@ fn render_str_with(
     ctx: &impl serde::Serialize,
     what: impl FnOnce() -> String,
 ) -> Result<String> {
-    env.render_str(tpl, ctx).diag_with(what)
+    env.render_str(tpl, ctx).with_context(what)
 }
 
 /// Render all templated strings in the manifest.
@@ -769,7 +771,7 @@ fn render_string_or_list(value: &mut StringOrList, env: &Environment, ctx: &Vars
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref)
-        .diag_with(|| format!("failed to read {}", path_ref.display()))?;
+        .with_context(|| format!("failed to read {}", path_ref.display()))?;
     from_str_named(&data, &path_ref.display().to_string())
 }
 

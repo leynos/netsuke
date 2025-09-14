@@ -176,8 +176,11 @@ fn simple_manifest_ninja_snapshot() {
     let build_graph = BuildGraph::from_manifest(&manifest).expect("IR generation succeeded");
 
     // Generate Ninja file content from the IR
-    let ninja_file = ninja_gen::generate_ninja(&build_graph)
-        .expect("Ninja file generation succeeded");
+    // `generate` returns `Result<String, NinjaGenError>`; handle errors
+    let ninja_file = match ninja_gen::generate(&build_graph) {
+        Ok(ninja) => ninja,
+        Err(e) => panic!("Ninja file generation failed: {e}"),
+    };
 
     // The output is a multi-line Ninja build script (as a String)
     // Ensure the output is deterministic
@@ -190,15 +193,20 @@ fn simple_manifest_ninja_snapshot() {
 }
 ```
 
+The match explicitly handles the `Result` from `generate` so any formatting or
+missing action errors surface during tests. Production code should propagate
+the error and report it with `miette` rather than panicking.
+
 Key points for Ninja snapshot tests:
 
 - Use a known manifest input and first derive the IR. An IR can also be
   constructed directly for tests, but using the manifest→IR pipeline ensures
   realistic coverage.
 
-- Call the Ninja generation function (e.g. `ninja_gen::generate_ninja`), which
-  produces the Ninja file contents as a `String`. This function traverses the
-  IR and outputs rules and build statements in Ninja syntax.
+- Call the Ninja generation function (`ninja_gen::generate`), which
+  yields a `Result<String, NinjaGenError>`. This function traverses the IR and
+  outputs rules and build statements in Ninja syntax, returning an error if any
+  build edge references an undefined action.
 
 - As with IR, **determinism is crucial**. The Ninja output should list rules,
   targets, and dependencies in a consistent order. For example, if the IR does

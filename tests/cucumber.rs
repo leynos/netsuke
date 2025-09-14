@@ -14,6 +14,10 @@ pub struct CliWorld {
     pub build_graph: Option<netsuke::ir::BuildGraph>,
     /// Generated Ninja file content.
     pub ninja: Option<String>,
+    /// Error message from Ninja generation.
+    pub ninja_error: Option<String>,
+    /// Identifier of the action removed for negative tests.
+    pub removed_action_id: Option<String>,
     /// Status of the last process execution (true for success, false for
     /// failure).
     pub run_status: Option<bool>,

@@ -10,6 +10,15 @@ use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use std::path::PathBuf;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum NinjaGenError {
+    #[error("action '{id}' referenced by build edge was not found")]
+    MissingAction { id: String },
+    #[error("failed to format Ninja output")]
+    Format(#[from] fmt::Error),
+}
 
 macro_rules! write_kv {
     ($f:expr, $key:expr, $opt:expr) => {
@@ -29,18 +38,69 @@ macro_rules! write_flag {
 
 /// Generate a Ninja build file as a string.
 ///
-/// # Panics
+/// # Examples
+/// ```
+/// use crate::ast::Recipe;
+/// use crate::ir::{Action, BuildEdge, BuildGraph};
+/// use std::path::PathBuf;
+/// let mut graph = BuildGraph::default();
+/// graph.actions.insert("a".into(), Action {
+///     recipe: Recipe::Command { command: "true".into() },
+///     description: None, depfile: None, deps_format: None,
+///     pool: None, restat: false
+/// });
+/// graph.targets.insert(PathBuf::from("out"), BuildEdge {
+///     action_id: "a".into(), inputs: Vec::new(),
+///     explicit_outputs: vec![PathBuf::from("out")],
+///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
+///     phony: false, always: false
+/// });
+/// let text = crate::ninja_gen::generate(&graph).expect("generate ninja");
+/// assert!(text.contains("rule a"));
+/// ```
 ///
-/// Panics if a build edge references an unknown action or if writing to the
-/// output string fails (which is unexpected under normal conditions).
-#[must_use]
-pub fn generate(graph: &BuildGraph) -> String {
+/// # Errors
+///
+/// Returns [`NinjaGenError`] if a build edge references an unknown action or
+/// writing to the output fails.
+pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
+    generate_into(graph, &mut out)?;
+    Ok(out)
+}
 
+/// Write a Ninja build file to the provided writer.
+///
+/// # Examples
+/// ```
+/// use crate::ast::Recipe;
+/// use crate::ir::{Action, BuildEdge, BuildGraph};
+/// use std::path::PathBuf;
+/// let mut graph = BuildGraph::default();
+/// graph.actions.insert("a".into(), Action {
+///     recipe: Recipe::Command { command: "true".into() },
+///     description: None, depfile: None, deps_format: None,
+///     pool: None, restat: false
+/// });
+/// graph.targets.insert(PathBuf::from("out"), BuildEdge {
+///     action_id: "a".into(), inputs: Vec::new(),
+///     explicit_outputs: vec![PathBuf::from("out")],
+///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
+///     phony: false, always: false
+/// });
+/// let mut out = String::new();
+/// crate::ninja_gen::generate_into(&graph, &mut out).expect("format ninja");
+/// assert!(out.contains("build out: a"));
+/// ```
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] if a build edge references an unknown action or writing to the output fails.
+pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     let mut actions: Vec<_> = graph.actions.iter().collect();
     actions.sort_by_key(|(id, _)| *id);
     for (id, action) in actions {
-        write!(out, "{}", NamedAction { id, action }).expect("write Ninja rule");
+        write!(out, "{}", NamedAction { id, action })?;
     }
 
     let mut edges: Vec<_> = graph.targets.values().collect();
@@ -51,7 +111,13 @@ pub fn generate(graph: &BuildGraph) -> String {
         if !seen.insert(key.clone()) {
             continue;
         }
-        let action = graph.actions.get(&edge.action_id).expect("action");
+        let action =
+            graph
+                .actions
+                .get(&edge.action_id)
+                .ok_or_else(|| NinjaGenError::MissingAction {
+                    id: edge.action_id.clone(),
+                })?;
         write!(
             out,
             "{}",
@@ -59,17 +125,16 @@ pub fn generate(graph: &BuildGraph) -> String {
                 edge,
                 action_restat: action.restat,
             }
-        )
-        .expect("write Ninja edge");
+        )?;
     }
 
     if !graph.default_targets.is_empty() {
         let mut defs = graph.default_targets.clone();
         defs.sort();
-        writeln!(out, "default {}", join(&defs)).expect("write defaults");
+        writeln!(out, "default {}", join(&defs))?;
     }
 
-    out
+    Ok(())
 }
 
 /// Convert a slice of paths into a space-separated string.
@@ -195,7 +260,7 @@ mod tests {
         graph.targets.insert(PathBuf::from("out"), edge);
         graph.default_targets.push(PathBuf::from("out"));
 
-        let ninja = generate(&graph);
+        let ninja = generate(&graph).expect("generate ninja");
         let expected = concat!(
             "rule a\n",
             "  command = echo hi\n\n",

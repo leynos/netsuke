@@ -1,8 +1,8 @@
 //! Step definitions for `BuildGraph` scenarios.
 
 use crate::CliWorld;
+use anyhow::Context;
 use cucumber::{given, then, when};
-use miette::{Context, IntoDiagnostic};
 use netsuke::ir::BuildGraph;
 
 fn assert_graph(world: &CliWorld) {
@@ -51,11 +51,7 @@ fn graph_defaults(world: &mut CliWorld, count: usize) {
 #[when(expr = "the manifest file {string} is compiled to IR")]
 fn compile_manifest(world: &mut CliWorld, path: String) {
     match netsuke::manifest::from_path(&path)
-        .and_then(|m| {
-            BuildGraph::from_manifest(&m)
-                .into_diagnostic()
-                .wrap_err("building IR from manifest")
-        })
+        .and_then(|m| BuildGraph::from_manifest(&m).context("building IR from manifest"))
         .with_context(|| format!("IR generation failed for {path}"))
     {
         Ok(graph) => {
@@ -88,6 +84,16 @@ fn generation_result_checked(world: &mut CliWorld) {
 fn ir_generation_fails(world: &mut CliWorld) {
     assert!(
         world.manifest_error.is_some(),
-        "expected IR generation error"
+        "expected IR generation error",
     );
+}
+
+#[when("an action is removed from the graph")]
+fn remove_action(world: &mut CliWorld) {
+    let graph = world.build_graph.as_mut().expect("graph");
+    let first_action = graph.targets.values().next().map(|e| e.action_id.clone());
+    if let Some(id) = first_action {
+        graph.actions.remove(&id);
+        world.removed_action_id = Some(id);
+    }
 }
