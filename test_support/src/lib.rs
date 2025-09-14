@@ -152,7 +152,8 @@ pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
             "Failed to write manifest content to {}",
             manifest_path.display()
         ));
-        file.persist(&manifest_path).expect(&format!(
+        // Avoid clobbering an existing manifest if concurrently created.
+        file.persist_noclobber(&manifest_path).expect(&format!(
             "Failed to persist manifest file to {}",
             manifest_path.display()
         ));
