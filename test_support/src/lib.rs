@@ -308,3 +308,42 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Path) -> io::Resul
 }
 
 // Additional helpers can be added here as the test suite evolves.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io;
+    use std::path::Path;
+    use tempfile::TempDir;
+
+    #[test]
+    fn directory_manifest_path_is_rejected() {
+        let temp = TempDir::new().expect("temp dir");
+        let target = temp.path().join("dir");
+        let err =
+            ensure_manifest_exists(temp.path(), Path::new("dir/")).expect_err("directory path");
+        assert_eq!(err.kind(), io::ErrorKind::NotADirectory);
+        assert!(
+            err.to_string().contains(target.to_str().expect("utf-8")),
+            "error: {err}",
+        );
+    }
+
+    #[test]
+    fn read_only_parent_reports_target_path() {
+        let temp = TempDir::new().expect("temp dir");
+        let parent = temp.path().join("parent");
+        fs::write(&parent, b"file").expect("parent file");
+        let manifest = parent.join("manifest.yml");
+
+        let err = ensure_manifest_exists(temp.path(), Path::new("parent/manifest.yml"))
+            .expect_err("non-dir parent");
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+        let msg = err.to_string();
+        assert!(
+            msg.contains(manifest.to_str().expect("utf-8")),
+            "message: {msg}"
+        );
+    }
+}
