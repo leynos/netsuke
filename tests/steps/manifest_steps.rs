@@ -6,6 +6,7 @@ use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest,
 };
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use test_support::display_error_chain;
 use test_support::env::{remove_var, set_var};
@@ -57,6 +58,35 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
         .unwrap_or_else(|| panic!("missing target {index}"))
 }
 
+fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
+where
+    I: Iterator<Item = char>,
+{
+    // Preserve the token if the variable is unset.
+    chars.next();
+    let mut name = String::new();
+    for ch in chars.by_ref() {
+        if ch == '}' {
+            break;
+        }
+        name.push(ch);
+    }
+    std::env::var(&name).unwrap_or_else(|_| ["${", &name, "}"].concat())
+}
+
+fn expand_env(raw: &str) -> String {
+    let mut out = String::new();
+    let mut chars = raw.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '$' && chars.peek() == Some(&'{') {
+            out.push_str(&parse_env_token(&mut chars));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[given(expr = "the environment variable {string} is set to {string}")]
 #[expect(
     clippy::needless_pass_by_value,
@@ -65,7 +95,8 @@ fn get_target(world: &CliWorld, index: usize) -> &Target {
 fn set_env_var(world: &mut CliWorld, key: String, value: String) {
     // Central helper acquires the global lock and returns the prior value so
     // the scenario can restore it afterwards.
-    let previous = set_var(&key, OsStr::new(&value));
+    let expanded = expand_env(&value);
+    let previous = set_var(&key, OsStr::new(&expanded));
     world.env_vars.entry(key).or_insert(previous);
 }
 
@@ -196,6 +227,32 @@ fn first_target_command(world: &mut CliWorld, command: String) {
 fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     let manifest = world.manifest.as_ref().expect("manifest");
     assert_eq!(manifest.targets.len(), count);
+}
+
+#[then(expr = "the manifest has targets named {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn manifest_has_targets_named(world: &mut CliWorld, names: String) {
+    let expected: BTreeSet<String> = names
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let actual: BTreeSet<String> = manifest
+        .targets
+        .iter()
+        .map(|t| get_string_from_string_or_list(&t.name, "name"))
+        .collect();
+    let missing: BTreeSet<_> = expected.difference(&actual).cloned().collect();
+    let extra: BTreeSet<_> = actual.difference(&expected).cloned().collect();
+    assert!(
+        missing.is_empty() && extra.is_empty(),
+        "target names differ\nmissing: {missing:?}\nextra: {extra:?}",
+    );
 }
 
 fn assert_target_name(world: &CliWorld, index: usize, name: &str) {
