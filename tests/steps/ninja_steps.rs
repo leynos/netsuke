@@ -10,14 +10,23 @@ fn generate_ninja(world: &mut CliWorld) {
         .build_graph
         .as_ref()
         .expect("build graph should be available");
-    world.ninja = Some(ninja_gen::generate(graph));
+    match ninja_gen::generate(graph) {
+        Ok(n) => {
+            world.ninja = Some(n);
+            world.ninja_error = None;
+        }
+        Err(e) => {
+            world.ninja = None;
+            world.ninja_error = Some(e.to_string());
+        }
+    }
 }
 
-#[allow(
+#[then(expr = "the ninja file contains {string}")]
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-#[then(expr = "the ninja file contains {string}")]
 fn ninja_contains(world: &mut CliWorld, text: String) {
     let ninja = world
         .ninja
@@ -26,11 +35,11 @@ fn ninja_contains(world: &mut CliWorld, text: String) {
     assert!(ninja.contains(&text));
 }
 
-#[allow(
+#[then(expr = "shlex splitting command {int} yields {string}")]
+#[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-#[then(expr = "shlex splitting command {int} yields {string}")]
 fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
     let ninja = world
         .ninja
@@ -50,11 +59,33 @@ fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
     assert_eq!(words, expected);
 }
 
-#[allow(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 #[then(expr = "shlex splitting the command yields {string}")]
 fn ninja_first_command_tokens(world: &mut CliWorld, expected: String) {
     ninja_command_tokens(world, 2, expected);
+}
+
+#[then(expr = "ninja generation fails with {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+fn ninja_generation_fails(world: &mut CliWorld, text: String) {
+    let err = world
+        .ninja_error
+        .as_ref()
+        .expect("ninja error should be available");
+    assert!(err.contains(&text));
+}
+
+#[then("ninja generation fails mentioning the removed action id")]
+fn ninja_generation_fails_with_removed_action_id(world: &mut CliWorld) {
+    let err = world
+        .ninja_error
+        .as_ref()
+        .expect("ninja error should be available");
+    let id = world
+        .removed_action_id
+        .as_ref()
+        .expect("removed action id should be available");
+    assert!(err.contains(id));
 }

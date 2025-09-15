@@ -11,3 +11,4 @@ pub mod ir;
 pub mod manifest;
 pub mod ninja_gen;
 pub mod runner;
+pub mod stdlib;

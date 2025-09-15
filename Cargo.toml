@@ -17,6 +17,8 @@ clap = { version = "4.5.0", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yml = "0.0.12"
 minijinja = "2.11.0"
+cap-std = { version = "3.4.4", features = ["fs_utf8"] }
+camino = "1.1.12"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 thiserror = "1"
@@ -81,7 +83,7 @@ float_arithmetic = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
-cucumber = "0.20.0"
+cucumber = "0.21.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.17"
@@ -90,6 +92,11 @@ serial_test = "3"
 mockall = "0.11"
 test_support = { path = "test_support" }
 strip-ansi-escapes = "0.2"
+
+# Target-specific dev-deps
+[target.'cfg(unix)'.dev-dependencies]
+# Used only to construct FIFOs and device nodes in tests.
+rustix = { version = "1.0.8", features = ["fs"] }
 
 [[test]]
 name = "cucumber"

@@ -3,7 +3,6 @@
 //! These tests ensure diagnostics include line numbers and optional hints, and
 //! that rendering is stable across terminals.
 
-use miette::GraphicalReportHandler;
 use netsuke::manifest;
 use rstest::rstest;
 use strip_ansi_escapes::strip;
@@ -69,11 +68,12 @@ fn normalise_report(report: &str) -> String {
 )]
 fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
     let err = manifest::from_str(yaml).expect_err("parse should fail");
-    let mut msg = String::new();
-    GraphicalReportHandler::new()
-        .render_report(&mut msg, err.as_ref())
-        .expect("render yaml error");
-    let msg = normalise_report(&msg);
+    let msg = normalise_report(
+        &err.chain()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
     for needle in needles {
         assert!(msg.contains(needle), "missing: {needle}\nmessage: {msg}");
     }

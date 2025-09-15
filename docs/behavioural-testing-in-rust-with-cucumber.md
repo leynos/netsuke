@@ -125,7 +125,7 @@ edition = "2021"
 [dependencies]
 
 [dev-dependencies]
-cucumber = "0.20"
+cucumber = "0.21"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 
 [[test]]

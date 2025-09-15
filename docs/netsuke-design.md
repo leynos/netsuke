@@ -808,18 +808,34 @@ network operations.
 
 #### File-system tests
 
-| Test                                           | True when the operand…                                           |
-| ---------------------------------------------- | ---------------------------------------------------------------- |
-| `dir` / `file` / `symlink` / `pipe` / `device` | …is that object type                                             |
-| `present`                                      | …exists (any type)                                               |
-| `owned`                                        | …is owned by the current UID                                     |
-| `readable` / `writable` / `executable`         | …has the corresponding permission bit for current user           |
-| `empty`                                        | …has size 0 bytes                                                |
-| `older_than(value)`                            | …has `mtime` < given value (seconds, `timedelta`, or file)       |
-| `newer_than(value)`                            | …has `mtime` > given value                                       |
-| `contains(substr)`                             | …file’s text contains **substr**                                 |
-| `matches(regex)`                               | …file’s text matches **regex**                                   |
-| `type(kind)`                                   | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+| Test                                                  | True when the operand…                                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `dir` / `file` / `symlink`                            | …is that object type                                             |
+| `pipe` / `block_device` / `char_device` *(Unix-only)* | …is that object type                                             |
+| `device` (legacy, Unix-only)                          | …is a block or character device                                  |
+| `present`                                             | …exists (any type)                                               |
+| `owned`                                               | …is owned by the current UID                                     |
+| `readable` / `writable` / `executable`                | …has the corresponding permission bit for current user           |
+| `empty`                                               | …has size 0 bytes                                                |
+| `older_than(value)`                                   | …has `mtime` < given value (seconds, `timedelta`, or file)       |
+| `newer_than(value)`                                   | …has `mtime` > given value                                       |
+| `contains(substr)`                                    | …file’s text contains **substr**                                 |
+| `matches(regex)`                                      | …file’s text matches **regex**                                   |
+| `type(kind)`                                          | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+
+The `dir`, `file`, and `symlink` tests use `cap_std`'s UTF-8-capable
+[`Dir::symlink_metadata`][cap-symlink] with `camino` paths to inspect the
+operand's [`FileType`][filetype]. Because this lookup does not follow links,
+`symlink` tests never report a file or directory for the same path. On Unix the
+`pipe`, `block_device`, `char_device`, and legacy `device` tests also probe the
+metadata. On non-Unix targets only `pipe` and `device` are registered; both
+always return `false` so templates remain portable. Missing paths evaluate to
+`false`, while I/O errors raise a template error.
+
+[cap-symlink]:
+https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_metadata
+
+[filetype]: https://doc.rust-lang.org/std/fs/struct.FileType.html
 
 #### Path & file filters
 
@@ -1297,16 +1313,21 @@ three fundamental questions:
 
 ### 7.2 Crate Selection and Strategy: `anyhow`, `thiserror`, and `miette`
 
-To implement this philosophy, Netsuke adopts a hybrid error handling strategy
-using the `anyhow`, `thiserror`, and `miette` crates. This is a common and
-highly effective pattern in the Rust ecosystem for creating robust applications
-and libraries.[^27] `miette` renders user-facing diagnostics, computing spans
-directly from parser locations.
+Netsuke uses a two-tier error architecture:
 
-- `thiserror`: This crate will be used *within* Netsuke's internal library
-  modules (e.g., `parser`, `ir`, `ninja_gen`) to define specific, structured
-  error types. The `#[derive(Error)]` macro reduces boilerplate and allows for
-  the creation of rich, semantic errors.[^29]
+1. `anyhow` captures internal context as errors propagate through the
+   application.
+2. `miette` renders user-facing diagnostics and **is not optional**. All
+   surface errors must implement `miette::Diagnostic` so the CLI can present
+   spans, annotated source, and helpful suggestions.
+
+This hybrid strategy is common in the Rust ecosystem and provides both rich
+context and polished user output.[^27]
+
+- `thiserror`: This crate is used *within* Netsuke's internal library modules
+  (e.g., `parser`, `ir`, `ninja_gen`) to define specific, structured error
+  types. The `#[derive(Error)]` macro reduces boilerplate and allows for the
+  creation of rich, semantic errors.[^29]
 
 Rust
 
@@ -1334,17 +1355,64 @@ pub enum IrGenError {
     ActionSerialisation(#[from] serde_json::Error), }
 ```
 
-- `anyhow`: This crate will be used in the main application logic (`main.rs`)
-  and at the boundaries between modules. `anyhow::Result` serves as a
-  convenient, dynamic error type that can wrap any underlying error that
-  implements `std::error::Error`.[^30] The primary tools used will be the
-
-  `?` operator for clean error propagation and the `.context()` and
-  `.with_context()` methods for adding high-level, human-readable context to
-  errors as they bubble up the call stack.[^31]
+- `anyhow`: Used in the main application logic (`main.rs`) and at the
+  boundaries between modules. `anyhow::Result` wraps any error implementing
+  `std::error::Error`.[^30] The `?` operator provides clean propagation, while
+  `.context()` and `.with_context()` attach high-level explanations as errors
+  bubble up.[^31]
 
 - `miette`: Presents human-friendly diagnostics, highlighting exact error
-  locations with computed spans.
+  locations with computed spans. Every diagnostic must retain `miette`'s
+  `Diagnostic` implementation as it travels through `anyhow`.
+
+#### Canonical pattern: `YamlDiagnostic`
+
+`YamlDiagnostic` is the reference implementation of a Netsuke diagnostic. It
+wraps `yaml-rust` errors with annotated source, spans, and optional help text:
+
+```rust
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(netsuke::yaml::parse))]
+pub struct YamlDiagnostic {
+    #[source_code]
+    src: NamedSource<String>,
+    #[label("parse error here")]
+    span: Option<SourceSpan>,
+    #[help]
+    help: Option<String>,
+    #[source]
+    source: YamlError,
+    message: String,
+}
+
+#[derive(Debug, Error, Diagnostic)]
+pub enum ManifestError {
+    #[error("manifest parse error")]
+    #[diagnostic(code(netsuke::manifest::parse))]
+    Parse {
+        #[source]
+        #[diagnostic_source]
+        source: Box<dyn Diagnostic + Send + Sync + 'static>,
+    },
+}
+```
+
+`ManifestError::Parse` boxes the diagnostic to preserve the rich error so
+`miette` can show the offending YAML snippet. All new user-facing errors with
+source context must follow this model.
+
+Common use cases requiring `miette` diagnostics include:
+
+- YAML parsing errors.
+- Jinja template rendering failures with line numbers and context.
+- Any scenario where highlighting spans or providing structured help benefits
+  the user.
+
+Although `src/diagnostics.rs` is currently unused, it contains prototypes for
+`miette` patterns and remains a valuable reference. Future diagnostics should
+mirror the `YamlDiagnostic` approach by implementing `Diagnostic`, providing a
+`NamedSource`, a `SourceSpan`, and actionable help text.
 
 ### 7.3 Error Handling Flow
 
@@ -1353,6 +1421,9 @@ enrichment:
 
 1. A specific, low-level error occurs within a module. For instance, the IR
    generator detects a missing rule and creates an `IrGenError::RuleNotFound`.
+   Likewise, the Ninja generator returns `NinjaGenError::MissingAction` when a
+   build edge references an undefined action, preventing panics during file
+   generation.
 
 2. The function where the error occurred returns
    `Err(IrGenError::RuleNotFound {... }.into())`. The `.into()` call converts
@@ -1366,8 +1437,10 @@ enrichment:
    `.with_context(|| "Failed to build the internal build graph from the manifest")?`
     .
 
-4. This process of propagation and contextualization repeats as the error
-   bubbles up towards `main`.
+4. This process of propagation and contextualisation repeats as the error
+   bubbles up towards `main`. Use `anyhow::Context` to add detail, but never
+   convert a `miette::Diagnostic` into a plain `anyhow::Error`—doing so would
+   discard spans and help text.
 
 5. Finally, the `main` function receives the `Err` result. It prints the entire
    error chain provided by `anyhow`, which displays the highest-level context
@@ -1661,56 +1734,56 @@ projects.
 [^1]: Ninja, a small build system with a focus on speed. Accessed on 12 July
       2025\. <https://ninja-build.org/>
 
-[^2]: "Ninja (build system)." Wikipedia. Accessed on 12 July 2025.
+[^2]: "Ninja (build system)." Wikipedia. Accessed on 12 July 2025\.
       <https://en.wikipedia.org/wiki/Ninja_(build_system)>
 
 [^3]: "A Complete Guide To The Ninja Build System." Spectra - Mathpix. Accessed
-      on 12 July 2025.
+      on 12 July 2025\.
       <https://spectra.mathpix.com/article/2024.01.00364/a-complete-guide-to-the-ninja-build-system>
 
-[^4]: "semver - Rust." Accessed on 12 July 2025.
+[^4]: "semver - Rust." Accessed on 12 July 2025\.
       <https://creative-coding-the-hard-way.github.io/Agents/semver/index.html>
 
-[^7]: "How Ninja works." Fuchsia. Accessed on 12 July 2025.
+[^7]: "How Ninja works." Fuchsia. Accessed on 12 July 2025\.
       <https://fuchsia.dev/fuchsia-src/development/build/ninja_how>
 
-[^8]: "The Ninja build system." Ninja. Accessed on 12 July 2025.
+[^8]: "The Ninja build system." Ninja. Accessed on 12 July 2025\.
       <https://ninja-build.org/manual.html>
 
-[^11]: "Saphyr libraries." crates.io. Accessed on 12 July 2025.
+[^11]: "Saphyr libraries." crates.io. Accessed on 12 July 2025\.
        <https://crates.io/crates/saphyr>
 
-[^15]: "minijinja." crates.io. Accessed on 12 July 2025.
+[^15]: "minijinja." crates.io. Accessed on 12 July 2025\.
        <https://crates.io/crates/minijinja>
 
-[^16]: "minijinja." Docs.rs. Accessed on 12 July 2025.
+[^16]: "minijinja." Docs.rs. Accessed on 12 July 2025\.
        <https://docs.rs/minijinja/>
 
-[^17]: "minijinja." wasmer-pack API docs. Accessed on 12 July 2025.
+[^17]: "minijinja." wasmer-pack API docs. Accessed on 12 July 2025\.
        <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
 [^18]: "Template engine — list of Rust libraries/crates." Lib.rs. Accessed on
-       12 July 2025. <https://lib.rs/template-engine>
+       12 July 2025\. <https://lib.rs/template-engine>
 
-[^22]: "shell_quote." Docs.rs. Accessed on 12 July 2025.
+[^22]: "shell_quote." Docs.rs. Accessed on 12 July 2025\.
        <https://docs.rs/shell-quote/latest/shell_quote/>
 
-[^24]: "std::process." Rust. Accessed on 12 July 2025.
+[^24]: "std::process." Rust. Accessed on 12 July 2025\.
        <https://doc.rust-lang.org/std/process/index.html>
 
 [^27]: "Rust Error Handling Compared: anyhow vs thiserror vs snafu." dev.to.
-       Accessed on 12 July 2025.
+       Accessed on 12 July 2025\.
        <https://dev.to/leapcell/rust-error-handling-compared-anyhow-vs-thiserror-vs-snafu-2003>
 
 [^29]: "Practical guide to Error Handling in Rust." Dev State. Accessed on 12
        July 2025. <https://dev-state.com/posts/error_handling/>
 
-[^30]: "thiserror and anyhow." Comprehensive Rust. Accessed on 12 July 2025.
+[^30]: "thiserror and anyhow." Comprehensive Rust. Accessed on 12 July 2025\.
        <https://comprehensive-rust.mo8it.com/error-handling/thiserror-and-anyhow.html>
 
 [^31]: "Simple error handling for precondition/argument checking in Rust."
-       Stack Overflow. Accessed on 12 July 2025.
+       Stack Overflow. Accessed on 12 July 2025\.
        <https://stackoverflow.com/questions/78217448/simple-error-handling-for-precondition-argument-checking-in-rust>
 
 [^32]: "Nicer error reporting." Command Line Applications in Rust. Accessed on
-       12 July 2025. <https://rust-cli.github.io/book/tutorial/errors.html>
+       12 July 2025\. <https://rust-cli.github.io/book/tutorial/errors.html>

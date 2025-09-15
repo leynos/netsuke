@@ -138,24 +138,26 @@ library, and CLI ergonomics.
   - [x] After interpolation, validate the final command string is parsable using
     the shlex crate.
 
-- [ ] **Actionable Error Reporting:**
+- [x] **Actionable Error Reporting:**
 
-  - [ ] Adopt the `anyhow` and `thiserror` error handling strategy.
+  - [x] Adopt the `anyhow` and `thiserror` error handling strategy.
 
-  - [ ] Use thiserror to define specific, structured error types within library
+  - [x] Use thiserror to define specific, structured error types within library
 
     modules (e.g., IrGenError::RuleNotFound, IrGenError::CircularDependency).
 
-  - [ ] Use anyhow in the application logic to add human-readable context to
+  - [x] Use anyhow in the application logic to add human-readable context to
     errors as they propagate (e.g., using .with_context()).
+  - [x] Use `miette` to render diagnostics with source spans and helpful
+    messages.
 
-  - [ ] Refactor all error-producing code to provide the clear, contextual, and
+  - [x] Refactor all error-producing code to provide the clear, contextual, and
     actionable error messages specified in the design document.
 
 - [ ] **Template Standard Library:**
 
-  - [ ] Implement the file-system tests (is dir, is file, is readable,
-    etc.).
+  - [x] Implement the basic file-system tests (`dir`, `file`, `symlink`,
+    `pipe`, `block_device`, `char_device`, legacy `device`). *(done)*
 
   - [ ] Implement the path and file filters (basename, dirname, with_suffix,
     realpath, contents, hash, etc.).
