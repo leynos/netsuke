@@ -35,16 +35,7 @@ pub(crate) struct CycleDetectionReport {
 /// for logging the reported data.
 pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
     let mut detector = CycleDetector::new(targets);
-    let mut cycle = None;
-    for node in targets.keys() {
-        if detector.is_visited(node) {
-            continue;
-        }
-        if let Some(found) = detector.visit(node.clone()) {
-            cycle = Some(found);
-            break;
-        }
-    }
+    let cycle = detector.detect();
     CycleDetectionReport {
         cycle,
         missing_dependencies: detector.missing_dependencies,
@@ -59,65 +50,25 @@ struct CycleDetector<'targets> {
 }
 
 impl CycleDetector<'_> {
-    fn new(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
-        CycleDetector {
-            targets,
-            stack: Vec::new(),
-            states: HashMap::new(),
-            missing_dependencies: Vec::new(),
-        }
-    }
-
-    fn is_visited(&self, node: &Utf8PathBuf) -> bool {
-        matches!(self.states.get(node), Some(VisitState::Visited))
-    }
-
-    fn visit(&mut self, node: Utf8PathBuf) -> Option<Vec<Utf8PathBuf>> {
-        match self.states.get(&node) {
-            Some(VisitState::Visited) => return None,
-            Some(VisitState::Visiting) => {
-                let idx = self
-                    .stack
-                    .iter()
-                    .position(|n| n == &node)
-                    .unwrap_or_else(|| {
-                        debug_assert!(false, "visiting node must be on the stack");
-                        0
-                    });
-                let mut cycle: Vec<Utf8PathBuf> = self.stack.iter().skip(idx).cloned().collect();
-                cycle.push(node);
-                return Some(canonicalize_cycle(cycle));
-            }
-            None => {
-                self.states.insert(node.clone(), VisitState::Visiting);
-            }
+    fn record_missing_dependency(&mut self, node: &Utf8PathBuf, dep: &Utf8PathBuf) -> bool {
+        if self.targets.contains_key(dep) {
+            return false;
         }
 
-        self.stack.push(node.clone());
+        self.missing_dependencies.push((node.clone(), dep.clone()));
+        true
+    }
 
-        if let Some(cycle) = self
-            .targets
-            .get(&node)
-            .into_iter()
-            .flat_map(|edge| edge.inputs.iter().chain(&edge.implicit_deps))
-            .find_map(|dep| self.visit_dependency(&node, dep))
-        {
-            return Some(cycle);
+    fn visit_dependency(
+        &mut self,
+        node: &Utf8PathBuf,
+        dep: &Utf8PathBuf,
+    ) -> Option<Vec<Utf8PathBuf>> {
+        if self.record_missing_dependency(node, dep) {
+            return None;
         }
 
-        self.stack.pop();
-        self.states.insert(node, VisitState::Visited);
-        None
-    }
-
-    #[cfg(test)]
-    fn missing_dependencies(&self) -> &[(Utf8PathBuf, Utf8PathBuf)] {
-        &self.missing_dependencies
-    }
-
-    #[cfg(test)]
-    fn find_cycle(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
-        analyse(targets).cycle
+        self.visit(dep.clone())
     }
 }
 
@@ -156,10 +107,10 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
         .enumerate()
         .min_by(|(_, a), (_, b)| a.cmp(b))
         .map_or(0, |(idx, _)| idx);
-    let (prefix, suffix) = cycle.split_at_mut(len);
-    prefix.rotate_left(start);
-    if let (Some(first), Some(last)) = (prefix.first().cloned(), suffix.first_mut()) {
-        *last = first;
+    cycle.pop();
+    cycle.rotate_left(start);
+    if let Some(first) = cycle.first().cloned() {
+        cycle.push(first);
     }
     cycle
 }
@@ -262,7 +213,7 @@ mod tests {
         targets.insert(b.clone(), build_edge(&[], &[], "b"));
 
         let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(a.clone()).is_none());
+        assert!(detector.detect().is_none());
         assert!(detector.is_visited(&a));
         assert!(detector.is_visited(&b));
         assert!(

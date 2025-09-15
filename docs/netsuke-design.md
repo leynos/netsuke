@@ -400,6 +400,7 @@ The cleaner model is:
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
+
 ### 2.5 Generated Targets and Actions with `foreach`
 
 Large sets of similar outputs or setup actions can clutter a manifest when
@@ -1882,10 +1883,11 @@ This transformation involves several steps:
    deterministic error messages.
 
    Traversal state is implemented in the dedicated `ir::cycle` module. Its
-   `CycleDetector` helper owns the recursion stack and visitation map. Keys are
-   cloned from the `targets` map so traversal leaves the input graph untouched.
-   Missing dependencies encountered during traversal are logged, collected, and
-   returned alongside any cycle to aid diagnostics.
+   `CycleDetector` helper exposes a `detect` API and owns the recursion stack
+   and visitation map. Keys are cloned from the `targets` map so traversal
+   leaves the input graph untouched. Missing dependencies encountered during
+   traversal are logged, collected, and returned alongside any cycle to aid
+   diagnostics.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
