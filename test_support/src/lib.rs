@@ -184,8 +184,10 @@ fn create_manifest_file(dest_dir: &Path, manifest_path: &Path) -> NamedTempFile 
 fn persist_manifest_file(file: NamedTempFile, manifest_path: &Path) {
     // Avoid clobbering an existing manifest if concurrently created.
     // Treat AlreadyExists as success when another process creates it.
-    if let Err(err) = file.persist_noclobber(manifest_path) {
-        if err.error.kind() != io::ErrorKind::AlreadyExists {
+    match file.persist_noclobber(manifest_path) {
+        Ok(_) => {}
+        Err(err) if err.error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(err) => {
             panic!(
                 "Failed to persist manifest file to {}: {}",
                 manifest_path.display(),
