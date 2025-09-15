@@ -566,8 +566,8 @@ impl<'a> CycleDetector<'a> {
 }
 
 fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
-    // CycleDetector borrows paths from `targets`; keep `targets`
-    // stable during detection.
+    // CycleDetector borrows paths from `targets`; `targets` must remain
+    // unmodified during detection to keep borrowed keys valid.
     let mut detector = CycleDetector::new(targets);
 
     for node in targets.keys() {
