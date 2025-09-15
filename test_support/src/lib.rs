@@ -135,57 +135,44 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 /// assert!(manifest.exists());
 /// ```
 pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    let manifest_path: Utf8PathBuf = if cli_file.is_absolute() {
+    let manifest_path = resolve_manifest_path(temp_dir, cli_file)?;
+
+    if manifest_path.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotADirectory,
+            format!(
+                "Manifest path points to a directory, expected a file: {}",
+                manifest_path
+            ),
+        ));
+    }
+
+    if manifest_path.exists() {
+        return Ok(manifest_path);
+    }
+
+    create_manifest_file(temp_dir, manifest_path.as_ref())?;
+    Ok(manifest_path)
+}
+
+fn resolve_manifest_path(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    let manifest_path = if cli_file.is_absolute() {
         cli_file.to_owned()
     } else {
         temp_dir.join(cli_file)
     };
 
-    if !manifest_path.exists() {
-        if manifest_path.file_name().is_none() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("Manifest path must include a file name: {}", manifest_path),
-            ));
-        }
-
-        let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
-        ensure_parent_directory(&manifest_path, dest_dir)?;
-        let mut file = NamedTempFile::new_in(dest_dir.as_std_path()).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!(
-                    "Failed to create temporary manifest file for {}: {e}",
-                    manifest_path
-                ),
-            )
-        })?;
-        crate::env::write_manifest(&mut file).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!("Failed to write manifest content to {}: {e}", manifest_path),
-            )
-        })?;
-        match file.persist(manifest_path.as_std_path()) {
-            Ok(_) => (),
-            Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(e) => {
-                return Err(io::Error::new(
-                    e.error.kind(),
-                    format!(
-                        "Failed to persist manifest file to {} from {}: {}",
-                        manifest_path,
-                        e.file.path().display(),
-                        e.error
-                    ),
-                ));
-            }
-        }
+    if manifest_path.file_name().is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Manifest path must include a file name: {}", manifest_path),
+        ));
     }
 
     Ok(manifest_path)
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 fn resolve_manifest_path(temp_dir: &Path, cli_file: &Path) -> PathBuf {
     if cli_file.is_absolute() {
@@ -246,6 +233,54 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Path) -> io::Resul
     }
 ||||||| parent of f009f57 (Use camino paths and cap-std in manifest helper)
 =======
+||||||| parent of 36620a6 (Refactor manifest helper error handling)
+=======
+fn create_manifest_file(temp_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result<()> {
+    let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
+    ensure_parent_directory(manifest_path, dest_dir)?;
+    let mut file = create_temp_file(dest_dir, manifest_path)?;
+    write_manifest_content(&mut file, manifest_path)?;
+    persist_manifest_file(file, manifest_path)
+}
+
+fn create_temp_file(dest_dir: &Utf8Path, manifest_path: &Utf8Path) -> io::Result<NamedTempFile> {
+    NamedTempFile::new_in(dest_dir.as_std_path()).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!(
+                "Failed to create temporary manifest file for {}: {e}",
+                manifest_path
+            ),
+        )
+    })
+}
+
+fn write_manifest_content(file: &mut NamedTempFile, manifest_path: &Utf8Path) -> io::Result<()> {
+    crate::env::write_manifest(file).map_err(|e| {
+        io::Error::new(
+            e.kind(),
+            format!("Failed to write manifest content to {}: {e}", manifest_path),
+        )
+    })
+}
+
+fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::Result<()> {
+    match file.persist(manifest_path.as_std_path()) {
+        Ok(_) => Ok(()),
+        Err(e) if e.error.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(io::Error::new(
+            e.error.kind(),
+            format!(
+                "Failed to persist manifest file to {} from {}: {}",
+                manifest_path,
+                e.file.path().display(),
+                e.error
+            ),
+        )),
+    }
+}
+
+>>>>>>> 36620a6 (Refactor manifest helper error handling)
 fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io::Result<()> {
     if dest_dir.exists() {
         return Ok(());
@@ -313,8 +348,40 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
         return Ok(());
     }
 
+<<<<<<< HEAD
     let mut ancestors = dest_dir.ancestors();
     ancestors.next();
+||||||| parent of 36620a6 (Refactor manifest helper error handling)
+    #[test]
+    fn read_only_parent_reports_target_path() {
+        let temp = TempDir::new().expect("temp dir");
+        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+        let parent = temp.path().join("parent");
+        fs::write(&parent, b"file").expect("parent file");
+        let manifest = parent.join("manifest.yml");
+=======
+    #[test]
+    fn existing_directory_manifest_path_is_rejected() {
+        let temp = TempDir::new().expect("temp dir");
+        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+        let dir = temp.path().join("dir");
+        fs::create_dir(&dir).expect("create dir");
+
+        let err = ensure_manifest_exists(temp_path, Utf8Path::new("dir"))
+            .expect_err("existing directory");
+        assert_eq!(err.kind(), io::ErrorKind::NotADirectory);
+        let msg = err.to_string();
+        assert!(msg.contains(dir.to_str().expect("utf-8")), "message: {msg}");
+    }
+
+    #[test]
+    fn read_only_parent_reports_target_path() {
+        let temp = TempDir::new().expect("temp dir");
+        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+        let parent = temp.path().join("parent");
+        fs::write(&parent, b"file").expect("parent file");
+        let manifest = parent.join("manifest.yml");
+>>>>>>> 36620a6 (Refactor manifest helper error handling)
 
     let base = ancestors
         .find(|candidate| candidate.exists())
