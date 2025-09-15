@@ -27,7 +27,7 @@ mod error;
 pub use error::display_error_chain;
 
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use tempfile::{NamedTempFile, TempDir};
 
@@ -130,35 +130,71 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 /// assert!(manifest.exists());
 /// ```
 pub fn ensure_manifest_exists(temp_dir: &Path, cli_file: &Path) -> PathBuf {
-    let manifest_path = if cli_file.is_absolute() {
+    let manifest_path = resolve_manifest_path(temp_dir, cli_file);
+
+    if manifest_path.exists() {
+        return manifest_path;
+    }
+
+    let dest_dir = ensure_directory_exists(&manifest_path, temp_dir);
+    let file = create_manifest_file(&dest_dir, &manifest_path);
+    persist_manifest_file(file, &manifest_path);
+
+    manifest_path
+}
+
+fn resolve_manifest_path(temp_dir: &Path, cli_file: &Path) -> PathBuf {
+    if cli_file.is_absolute() {
         cli_file.to_path_buf()
     } else {
         temp_dir.join(cli_file)
-    };
+    }
+}
 
-    if !manifest_path.exists() {
-        let dest_dir = manifest_path.parent().unwrap_or(temp_dir);
-        if !dest_dir.exists() {
-            fs::create_dir_all(dest_dir).expect(&format!(
-                "Failed to create manifest parent directory for {}",
-                manifest_path.display()
-            ));
-        }
-        let mut file = NamedTempFile::new_in(dest_dir).expect(&format!(
-            "Failed to create temporary manifest file for {}",
-            manifest_path.display()
-        ));
-        crate::env::write_manifest(&mut file).expect(&format!(
-            "Failed to write manifest content to {}",
-            manifest_path.display()
-        ));
-        file.persist(&manifest_path).expect(&format!(
-            "Failed to persist manifest file to {}",
-            manifest_path.display()
-        ));
+fn ensure_directory_exists(manifest_path: &Path, temp_dir: &Path) -> PathBuf {
+    let dest_dir = manifest_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| temp_dir.to_path_buf());
+
+    if dest_dir.exists() {
+        return dest_dir;
     }
 
-    manifest_path
+    fs::create_dir_all(&dest_dir).expect(&format!(
+        "Failed to create manifest parent directory for {}",
+        manifest_path.display()
+    ));
+
+    dest_dir
+}
+
+fn create_manifest_file(dest_dir: &Path, manifest_path: &Path) -> NamedTempFile {
+    let mut file = NamedTempFile::new_in(dest_dir).expect(&format!(
+        "Failed to create temporary manifest file for {}",
+        manifest_path.display()
+    ));
+    crate::env::write_manifest(&mut file).expect(&format!(
+        "Failed to write manifest content to {}",
+        manifest_path.display()
+    ));
+    file
+}
+
+fn persist_manifest_file(file: NamedTempFile, manifest_path: &Path) {
+    // Avoid clobbering an existing manifest if concurrently created.
+    // Treat AlreadyExists as success when another process creates it.
+    match file.persist_noclobber(manifest_path) {
+        Ok(_) => {}
+        Err(err) if err.error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(err) => {
+            panic!(
+                "Failed to persist manifest file to {}: {}",
+                manifest_path.display(),
+                err.error
+            );
+        }
+    }
 }
 
 // Additional helpers can be added here as the test suite evolves.
