@@ -1091,11 +1091,18 @@ This transformation involves several steps:
 
    The implemented algorithm performs a depth-first traversal of the target
    graph and maintains a recursion stack. Order-only dependencies are ignored
-   during this search. Encountering an already visiting node indicates a cycle.
-   The stack slice from the first occurrence of that node forms the cycle and
-   is returned in `IrGenError::CircularDependency` for improved debugging. The
-   cycle list is rotated so the lexicographically smallest node appears first,
-   ensuring deterministic error messages.
+   during this search. Self-edges are rejected immediately, and encountering an
+   already visiting node indicates a cycle. The stack slice from the first
+   occurrence of that node forms the cycle and is returned in
+   `IrGenError::CircularDependency` for improved debugging. The cycle list is
+   rotated so the lexicographically smallest node appears first, ensuring
+   deterministic error messages.
+
+   Traversal state is managed by a small `CycleDetector` helper struct. This
+   type holds the recursion stack and visitation map, allowing the traversal
+   functions to remain focused and easily testable. The detector borrows path
+   references from the `targets` map, so `targets` must remain unchanged during
+   detection.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
