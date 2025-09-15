@@ -90,6 +90,7 @@ assert_cmd = "2.0.17"
 mockable = { version = "0.3", features = ["mock"] }
 serial_test = "3"
 mockall = "0.11"
+camino = "1.2.0"
 test_support = { path = "test_support" }
 strip-ansi-escapes = "0.2"
 
