@@ -309,4 +309,33 @@ mod tests {
             "message: {msg}"
         );
     }
+
+    #[test]
+    fn creates_missing_parent_directory_and_manifest() {
+        let temp = TempDir::new().expect("temp dir");
+        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+
+        // Parent directory does not exist beforehand.
+        let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
+        let expected_path = temp_path.join(cli_file);
+        assert!(
+            !expected_path.exists(),
+            "precondition: path should not exist"
+        );
+
+        let manifest_path = ensure_manifest_exists(temp_path, cli_file).expect("create manifest");
+        assert_eq!(manifest_path, expected_path);
+        assert!(manifest_path.exists(), "manifest file should exist");
+        assert!(
+            manifest_path.parent().expect("has parent").exists(),
+            "parent directory should be created"
+        );
+
+        // Sanity check that content was written, not an empty file.
+        let contents = std::fs::read_to_string(manifest_path.as_std_path()).expect("read manifest");
+        assert!(
+            contents.contains("netsuke_version:"),
+            "unexpected manifest contents: {contents}"
+        );
+    }
 }
