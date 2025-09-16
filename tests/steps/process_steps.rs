@@ -1,6 +1,7 @@
 //! Step definitions for Ninja process execution.
 
 use crate::CliWorld;
+use camino::Utf8Path;
 use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use std::fs;
@@ -82,7 +83,13 @@ fn run(world: &mut CliWorld) {
     let dir = world.temp.as_ref().expect("temp dir");
     {
         let cli = world.cli.as_mut().expect("cli");
-        cli.file = ensure_manifest_exists(dir.path(), &cli.file);
+        let temp_path = Utf8Path::from_path(dir.path()).expect("utf-8 temp dir");
+        let manifest = ensure_manifest_exists(
+            temp_path,
+            Utf8Path::from_path(&cli.file).expect("utf-8 manifest path"),
+        )
+        .expect("manifest");
+        cli.file = manifest.into_std_path_buf();
     }
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)

@@ -24,7 +24,6 @@ impl CommandArg {
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
-#[cfg(doctest)]
 #[doc(hidden)]
 pub mod doc {
     pub use super::CommandArg;

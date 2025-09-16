@@ -40,8 +40,8 @@ macro_rules! write_flag {
 ///
 /// # Examples
 /// ```
-/// use crate::ast::Recipe;
-/// use crate::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ast::Recipe;
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
 /// use std::path::PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
@@ -55,7 +55,7 @@ macro_rules! write_flag {
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
 /// });
-/// let text = crate::ninja_gen::generate(&graph).expect("generate ninja");
+/// let text = netsuke::ninja_gen::generate(&graph).expect("generate ninja");
 /// assert!(text.contains("rule a"));
 /// ```
 ///
@@ -73,8 +73,8 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///
 /// # Examples
 /// ```
-/// use crate::ast::Recipe;
-/// use crate::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ast::Recipe;
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
 /// use std::path::PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
@@ -89,7 +89,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     phony: false, always: false
 /// });
 /// let mut out = String::new();
-/// crate::ninja_gen::generate_into(&graph, &mut out).expect("format ninja");
+/// netsuke::ninja_gen::generate_into(&graph, &mut out).expect("format ninja");
 /// assert!(out.contains("build out: a"));
 /// ```
 ///

@@ -227,9 +227,10 @@ behaviour.
 ## Advanced Doctest Control and Attributes
 
 Beyond basic pass/fail checks, `rustdoc` provides a suite of attributes to
-control doctest behaviour with fine-grained precision. These attributes, placed
-in the header of a code block (e.g., \`\`\`\`ignore\`), allow developers to
-handle expected failures, non-executable examples, and other complex scenarios.
+control doctest behaviour with fine-grained precision. These attributes are
+placed in the header of a code block (for example, by annotating the code fence
+with 'ignore'), and allow developers to handle expected failures,
+non-executable examples, and other complex scenarios.
 
 ### 3.1 A Comparative Analysis of Doctest Attributes
 
@@ -629,8 +630,10 @@ mastering doctests:
 [^4]: Documentation tests - - GitHub Pages, accessed on July 15, 2025,
    <https://ebarnard.github.io/2019-06-03-rust-smaller-trait-implementers-docs/rustdoc/documentation-tests.html>
    <!-- mdformat off -->
-[^5]: Documentation tests — Massachusetts Institute of Technology, accessed on July 15, 2025, <http://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
-<!-- mdformat on -->
+[^5]: Documentation tests — Massachusetts Institute of Technology, accessed on
+      July 15, 2025,
+      <http://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
+       <!-- mdformat on -->
 [^6]: How to organize your Rust tests - LogRocket Blog, accessed on July 15,
    2025, <https://blog.logrocket.com/how-to-organize-rust-tests/>
    <https://www.reddit.com/r/rust/comments/qk77iu/best_way_to_organise_tests_in_rust/>
