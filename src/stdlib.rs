@@ -52,10 +52,12 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 ///
 /// let mut env = Environment::new();
 /// stdlib::register(&mut env);
-/// let tmpl = env
-///     .compile("{% if path is dir %}yes{% endif %}")
+/// env.add_template("t", "{% if path is dir %}yes{% endif %}").unwrap();
+/// let tmpl = env.get_template("t").unwrap();
+/// let cwd = std::env::current_dir().unwrap();
+/// let rendered = tmpl
+///     .render(context!(path => cwd.to_string_lossy()))
 ///     .unwrap();
-/// let rendered = tmpl.render(context!(path => ".")).unwrap();
 /// assert_eq!(rendered, "yes");
 /// ```
 pub fn register(env: &mut Environment<'_>) {
