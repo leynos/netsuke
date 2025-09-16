@@ -26,6 +26,7 @@
 //
 use std::collections::HashMap;
 use std::path::PathBuf;
+use tracing::warn;
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
@@ -203,7 +204,7 @@ impl BuildGraph {
     }
 
     fn detect_cycles(&self) -> Result<(), IrGenError> {
-        if let Some(cycle) = find_cycle(&self.targets) {
+        if let Some(cycle) = CycleDetector::find_cycle(&self.targets) {
             return Err(IrGenError::CircularDependency { cycle });
         }
         Ok(())
@@ -494,7 +495,7 @@ impl<'a> CycleDetector<'a> {
         }
     }
 
-    fn find_cycle(targets: &'a HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
+    pub fn find_cycle(targets: &'a HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
         let mut detector = Self::new(targets);
         for node in targets.keys() {
             if detector.is_visited(node) {
@@ -534,6 +535,11 @@ impl<'a> CycleDetector<'a> {
         if let Some(edge) = self.targets.get(&node) {
             for dep in &edge.inputs {
                 if !self.targets.contains_key(dep) {
+                    warn!(
+                        missing = %dep.display(),
+                        dependent = %node.display(),
+                        "skipping dependency missing from targets during cycle detection",
+                    );
                     continue;
                 }
 
@@ -547,10 +553,6 @@ impl<'a> CycleDetector<'a> {
         self.states.insert(node, VisitState::Visited);
         None
     }
-}
-
-fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
-    CycleDetector::find_cycle(targets)
 }
 
 fn canonicalize_cycle(mut cycle: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -614,6 +616,10 @@ mod tests {
         assert!(detector.visit(a.clone()).is_none());
         assert!(detector.is_visited(&a));
         assert!(detector.is_visited(&b));
+        assert!(
+            detector.stack.is_empty(),
+            "stack should be empty after complete traversal",
+        );
     }
 
     #[test]
@@ -622,7 +628,7 @@ mod tests {
         targets.insert(path("a"), build_edge(&["b"], "a"));
         targets.insert(path("b"), build_edge(&["a"], "b"));
 
-        let cycle = find_cycle(&targets).expect("cycle");
+        let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
         assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
     }
 
