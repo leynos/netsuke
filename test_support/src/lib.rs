@@ -219,7 +219,19 @@ fn persist_manifest_file(file: NamedTempFile, manifest_path: &Utf8Path) -> io::R
 
 fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io::Result<()> {
     if dest_dir.exists() {
-        return Ok(());
+        // If the path exists but is not a directory, report a clear error that
+        // includes the final manifest path. Returning AlreadyExists mirrors the
+        // semantics that the desired directory “exists” but is unusable.
+        if dest_dir.is_dir() {
+            return Ok(());
+        }
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!(
+                "Failed to create manifest parent directory for {}: parent path exists and is not a directory",
+                manifest_path,
+            ),
+        ));
     }
 
     let mut ancestors = dest_dir.ancestors();
