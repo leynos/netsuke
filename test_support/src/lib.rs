@@ -234,20 +234,7 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
         ));
     }
 
-    let mut ancestors = dest_dir.ancestors();
-    ancestors.next();
-
-    let base = ancestors
-        .find(|candidate| candidate.exists())
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "Failed to locate an existing ancestor for manifest directory {}",
-                    manifest_path,
-                ),
-            )
-        })?;
+    let base = find_existing_ancestor(dest_dir, manifest_path)?;
 
     let relative = dest_dir.strip_prefix(base).map_err(|_| {
         io::Error::new(
@@ -278,6 +265,26 @@ fn ensure_parent_directory(manifest_path: &Utf8Path, dest_dir: &Utf8Path) -> io:
             ),
         )
     })
+}
+
+fn find_existing_ancestor<'a>(
+    dest_dir: &'a Utf8Path,
+    manifest_path: &Utf8Path,
+) -> io::Result<&'a Utf8Path> {
+    let mut ancestors = dest_dir.ancestors();
+    ancestors.next(); // Skip self
+
+    ancestors
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "Failed to locate an existing ancestor for manifest directory {}",
+                    manifest_path,
+                ),
+            )
+        })
 }
 
 // Additional helpers can be added here as the test suite evolves.
