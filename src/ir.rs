@@ -25,7 +25,7 @@
 //! ```
 //
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
@@ -472,31 +472,17 @@ fn get_target_display_name(paths: &[PathBuf]) -> String {
         .unwrap_or_default()
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum VisitState {
     Visiting,
     Visited,
 }
 
-fn should_visit_node<'a>(
-    states: &mut HashMap<&'a Path, VisitState>,
-    node: &'a Path,
-) -> Result<bool, &'a Path> {
-    match states.get(node) {
-        Some(VisitState::Visited) => Ok(false),
-        Some(VisitState::Visiting) => Err(node),
-        None => {
-            states.insert(node, VisitState::Visiting);
-            Ok(true)
-        }
-    }
-}
-
 /// Detects cycles in a dependency graph by tracking traversal state.
 struct CycleDetector<'a> {
     targets: &'a HashMap<PathBuf, BuildEdge>,
-    stack: Vec<&'a Path>,
-    states: HashMap<&'a Path, VisitState>,
+    stack: Vec<PathBuf>,
+    states: HashMap<PathBuf, VisitState>,
 }
 
 impl<'a> CycleDetector<'a> {
@@ -508,78 +494,63 @@ impl<'a> CycleDetector<'a> {
         }
     }
 
-    fn is_visited(&self, node: &Path) -> bool {
+    fn find_cycle(targets: &'a HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
+        let mut detector = Self::new(targets);
+        for node in targets.keys() {
+            if detector.is_visited(node) {
+                continue;
+            }
+            if let Some(cycle) = detector.visit(node.clone()) {
+                return Some(cycle);
+            }
+        }
+        None
+    }
+
+    fn is_visited(&self, node: &PathBuf) -> bool {
         matches!(self.states.get(node), Some(VisitState::Visited))
     }
 
-    fn visit_node(&mut self, node: &'a Path) -> Option<Vec<PathBuf>> {
-        match should_visit_node(&mut self.states, node) {
-            Ok(false) => return None,
-            Err(path) => {
-                if let Some(idx) = self.stack.iter().position(|n| *n == path) {
-                    let mut cycle: Vec<PathBuf> = self
-                        .stack
-                        .get(idx..)
-                        .expect("slice")
-                        .iter()
-                        .map(|p| (*p).to_path_buf())
-                        .collect();
-                    cycle.push(path.to_path_buf());
-                    return Some(canonicalize_cycle(cycle));
-                }
-                return Some(vec![path.to_path_buf(), path.to_path_buf()]);
+    fn visit(&mut self, node: PathBuf) -> Option<Vec<PathBuf>> {
+        match self.states.get(&node) {
+            Some(VisitState::Visited) => return None,
+            Some(VisitState::Visiting) => {
+                let idx = self
+                    .stack
+                    .iter()
+                    .position(|n| n == &node)
+                    .expect("visiting node must be on the stack");
+                let mut cycle: Vec<PathBuf> = self.stack.iter().skip(idx).cloned().collect();
+                cycle.push(node);
+                return Some(canonicalize_cycle(cycle));
             }
-            Ok(true) => {}
+            None => {
+                self.states.insert(node.clone(), VisitState::Visiting);
+            }
         }
 
-        self.stack.push(node);
+        self.stack.push(node.clone());
 
-        if let Some(edge) = self.targets.get(node)
-            && let Some(cycle) = self.visit_dependencies(&edge.inputs)
-        {
-            return Some(cycle);
+        if let Some(edge) = self.targets.get(&node) {
+            for dep in &edge.inputs {
+                if !self.targets.contains_key(dep) {
+                    continue;
+                }
+
+                if let Some(cycle) = self.visit(dep.clone()) {
+                    return Some(cycle);
+                }
+            }
         }
 
         self.stack.pop();
         self.states.insert(node, VisitState::Visited);
         None
     }
-
-    fn visit_dependencies(&mut self, deps: &'a [PathBuf]) -> Option<Vec<PathBuf>> {
-        for dep in deps {
-            if let Some(&head) = self.stack.last()
-                && head == dep.as_path()
-            {
-                return Some(canonicalize_cycle(vec![dep.clone(), dep.clone()]));
-            }
-
-            if !self.targets.contains_key(dep) {
-                continue;
-            }
-
-            if let Some(cycle) = self.visit_node(dep) {
-                return Some(cycle);
-            }
-        }
-        None
-    }
 }
 
 fn find_cycle(targets: &HashMap<PathBuf, BuildEdge>) -> Option<Vec<PathBuf>> {
-    // CycleDetector borrows paths from `targets`; `targets` must remain
-    // unmodified during detection to keep borrowed keys valid.
-    let mut detector = CycleDetector::new(targets);
-
-    for node in targets.keys() {
-        // Skip nodes we've already processed to avoid redundant traversal.
-        if detector.is_visited(node) {
-            continue;
-        }
-        if let Some(cycle) = detector.visit_node(node) {
-            return Some(cycle);
-        }
-    }
-    None
+    CycleDetector::find_cycle(targets)
 }
 
 fn canonicalize_cycle(mut cycle: Vec<PathBuf>) -> Vec<PathBuf> {
@@ -593,82 +564,81 @@ fn canonicalize_cycle(mut cycle: Vec<PathBuf>) -> Vec<PathBuf> {
         .enumerate()
         .min_by(|(_, a), (_, b)| a.cmp(b))
         .map_or(0, |(idx, _)| idx);
-    if let Some(slice) = cycle.get_mut(..len) {
-        slice.rotate_left(start);
-    }
-    if let (Some(first), Some(slot)) = (cycle.first().cloned(), cycle.get_mut(len)) {
+    let (prefix, suffix) = cycle.split_at_mut(len);
+    prefix.rotate_left(start);
+    if let (Some(first), Some(slot)) = (prefix.first().cloned(), suffix.first_mut()) {
         slot.clone_from(&first);
     }
     cycle
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    fn path(name: &str) -> PathBuf {
+        PathBuf::from(name)
+    }
+
+    fn build_edge(inputs: &[&str], output: &str) -> BuildEdge {
+        BuildEdge {
+            action_id: "id".into(),
+            inputs: inputs.iter().map(|name| path(name)).collect(),
+            explicit_outputs: vec![path(output)],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: false,
+            always: false,
+        }
+    }
+
+    #[test]
+    fn cycle_detector_detects_self_edge_cycle() {
+        let mut targets = HashMap::new();
+        targets.insert(path("a"), build_edge(&["a"], "a"));
+
+        let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+        assert_eq!(cycle, vec![path("a"), path("a")]);
+    }
+
+    #[test]
+    fn cycle_detector_marks_nodes_visited_after_traversal() {
+        let mut targets = HashMap::new();
+        let a = path("a");
+        let b = path("b");
+        targets.insert(a.clone(), build_edge(&["b"], "a"));
+        targets.insert(b.clone(), build_edge(&[], "b"));
+
+        let mut detector = CycleDetector::new(&targets);
+        assert!(detector.visit(a.clone()).is_none());
+        assert!(detector.is_visited(&a));
+        assert!(detector.is_visited(&b));
+    }
 
     #[test]
     fn find_cycle_identifies_cycle() {
         let mut targets = HashMap::new();
-        let edge_a = BuildEdge {
-            action_id: "id".into(),
-            inputs: vec![PathBuf::from("b")],
-            explicit_outputs: vec![PathBuf::from("a")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        };
-        let edge_b = BuildEdge {
-            action_id: "id".into(),
-            inputs: vec![PathBuf::from("a")],
-            explicit_outputs: vec![PathBuf::from("b")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        };
-        targets.insert(PathBuf::from("a"), edge_a);
-        targets.insert(PathBuf::from("b"), edge_b);
+        targets.insert(path("a"), build_edge(&["b"], "a"));
+        targets.insert(path("b"), build_edge(&["a"], "b"));
 
         let cycle = find_cycle(&targets).expect("cycle");
-        let option_a = vec![PathBuf::from("a"), PathBuf::from("b"), PathBuf::from("a")];
-        let option_b = vec![PathBuf::from("b"), PathBuf::from("a"), PathBuf::from("b")];
-        assert!(cycle == option_a || cycle == option_b);
+        assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
     }
 
     #[test]
     fn canonicalize_cycle_rotates_smallest_node() {
-        let cycle = vec![
-            PathBuf::from("c"),
-            PathBuf::from("a"),
-            PathBuf::from("b"),
-            PathBuf::from("c"),
-        ];
+        let cycle = vec![path("c"), path("a"), path("b"), path("c")];
         let canonical = canonicalize_cycle(cycle);
-        let expected = vec![
-            PathBuf::from("a"),
-            PathBuf::from("b"),
-            PathBuf::from("c"),
-            PathBuf::from("a"),
-        ];
+        let expected = vec![path("a"), path("b"), path("c"), path("a")];
         assert_eq!(canonical, expected);
     }
 
     #[test]
     fn canonicalize_cycle_handles_reverse_direction() {
-        let cycle = vec![
-            PathBuf::from("c"),
-            PathBuf::from("b"),
-            PathBuf::from("a"),
-            PathBuf::from("c"),
-        ];
+        let cycle = vec![path("c"), path("b"), path("a"), path("c")];
         let canonical = canonicalize_cycle(cycle);
-        let expected = vec![
-            PathBuf::from("a"),
-            PathBuf::from("c"),
-            PathBuf::from("b"),
-            PathBuf::from("a"),
-        ];
+        let expected = vec![path("a"), path("c"), path("b"), path("a")];
         assert_eq!(canonical, expected);
     }
 }
