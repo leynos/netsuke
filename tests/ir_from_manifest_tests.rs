@@ -1,11 +1,11 @@
 //! Tests for generating `BuildGraph` from a manifest.
 
+use camino::Utf8PathBuf;
 use netsuke::{
     ir::{BuildGraph, IrGenError},
     manifest,
 };
 use rstest::rstest;
-use std::path::PathBuf;
 
 #[rstest]
 fn minimal_manifest_to_ir() {
@@ -94,10 +94,17 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
             assert_eq!(rule_name, exp_rule);
         }
         (
-            IrGenError::CircularDependency { cycle },
+            IrGenError::CircularDependency {
+                cycle,
+                missing_dependencies,
+            },
             ExpectedError::CircularDependency(exp_cycle),
         ) => {
-            let mut expected: Vec<PathBuf> = exp_cycle.iter().map(PathBuf::from).collect();
+            assert!(
+                missing_dependencies.is_empty(),
+                "missing dependencies should be empty in manifest fixtures"
+            );
+            let mut expected: Vec<Utf8PathBuf> = exp_cycle.iter().map(Utf8PathBuf::from).collect();
             let mut actual = cycle;
             expected.sort();
             actual.sort();

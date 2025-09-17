@@ -1,9 +1,9 @@
 //! Unit tests for IR structures.
 
+use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use rstest::rstest;
-use std::path::PathBuf;
 
 #[rstest]
 fn build_graph_default_is_empty() {
@@ -27,8 +27,8 @@ fn create_action_and_edge() {
     };
     let edge = BuildEdge {
         action_id: "id".into(),
-        inputs: vec![PathBuf::from("in")],
-        explicit_outputs: vec![PathBuf::from("out")],
+        inputs: vec![Utf8PathBuf::from("in")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
@@ -36,7 +36,7 @@ fn create_action_and_edge() {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("id".into(), action);
-    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
     assert_eq!(graph.actions.len(), 1);
     assert_eq!(graph.targets.len(), 1);
 }
@@ -81,8 +81,8 @@ fn build_graph_duplicate_targets() {
     let mut graph = BuildGraph::default();
     let edge1 = BuildEdge {
         action_id: "a".into(),
-        inputs: vec![PathBuf::from("in")],
-        explicit_outputs: vec![PathBuf::from("out")],
+        inputs: vec![Utf8PathBuf::from("in")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
@@ -90,22 +90,22 @@ fn build_graph_duplicate_targets() {
     };
     let edge2 = BuildEdge {
         action_id: "a".into(),
-        inputs: vec![PathBuf::from("in")],
-        explicit_outputs: vec![PathBuf::from("out")],
+        inputs: vec![Utf8PathBuf::from("in")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
         always: true,
     };
-    let prev = graph.targets.insert(PathBuf::from("out"), edge1);
+    let prev = graph.targets.insert(Utf8PathBuf::from("out"), edge1);
     assert!(prev.is_none());
-    let prev = graph.targets.insert(PathBuf::from("out"), edge2);
+    let prev = graph.targets.insert(Utf8PathBuf::from("out"), edge2);
     assert!(prev.is_some());
     assert_eq!(graph.targets.len(), 1);
     assert!(
         graph
             .targets
-            .get(&PathBuf::from("out"))
+            .get(&Utf8PathBuf::from("out"))
             .expect("edge")
             .always
     );
