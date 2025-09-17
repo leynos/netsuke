@@ -632,7 +632,7 @@ mastering doctests:
    <!-- mdformat off -->
 [^5]: Documentation tests — Massachusetts Institute of Technology, accessed on
       July 15, 2025,
-      <http://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
+      <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
        <!-- mdformat on -->
 [^6]: How to organize your Rust tests - LogRocket Blog, accessed on July 15,
    2025, <https://blog.logrocket.com/how-to-organize-rust-tests/>

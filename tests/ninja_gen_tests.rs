@@ -5,12 +5,14 @@
 //! multiple inputs and outputs, complex dependency relationships, and edge
 //! cases like empty build graphs.
 
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
-use std::{fs, path::PathBuf, process::Command};
+use std::process::Command;
 use tempfile::{TempDir, tempdir};
 
 fn skip_if_ninja_unavailable() -> bool {
@@ -57,14 +59,14 @@ fn ninja_integration_setup() -> Option<TempDir> {
     },
     BuildEdge {
         action_id: "a".into(),
-        inputs: vec![PathBuf::from("in")],
-        explicit_outputs: vec![PathBuf::from("out")],
+        inputs: vec![Utf8PathBuf::from("in")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: true,
         always: false,
     },
-    PathBuf::from("out"),
+    Utf8PathBuf::from("out"),
     concat!(
         "rule a\n",
         "  command = true\n\n",
@@ -82,14 +84,14 @@ fn ninja_integration_setup() -> Option<TempDir> {
     },
     BuildEdge {
         action_id: "compile".into(),
-        inputs: vec![PathBuf::from("a.c"), PathBuf::from("b.c")],
-        explicit_outputs: vec![PathBuf::from("ab.o")],
+        inputs: vec![Utf8PathBuf::from("a.c"), Utf8PathBuf::from("b.c")],
+        explicit_outputs: vec![Utf8PathBuf::from("ab.o")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
     },
-    PathBuf::from("ab.o"),
+    Utf8PathBuf::from("ab.o"),
     concat!(
         "rule compile\n",
         "  command = cc -c 'a.c' 'b.c' -o 'ab.o'\n\n",
@@ -107,14 +109,14 @@ fn ninja_integration_setup() -> Option<TempDir> {
     },
     BuildEdge {
         action_id: "b".into(),
-        inputs: vec![PathBuf::from("in")],
-        explicit_outputs: vec![PathBuf::from("out"), PathBuf::from("log")],
-        implicit_outputs: vec![PathBuf::from("out.d")],
-        order_only_deps: vec![PathBuf::from("stamp")],
+        inputs: vec![Utf8PathBuf::from("in")],
+        explicit_outputs: vec![Utf8PathBuf::from("out"), Utf8PathBuf::from("log")],
+        implicit_outputs: vec![Utf8PathBuf::from("out.d")],
+        order_only_deps: vec![Utf8PathBuf::from("stamp")],
         phony: false,
         always: false,
     },
-    PathBuf::from("out"),
+    Utf8PathBuf::from("out"),
     concat!(
         "rule b\n",
         "  command = true\n\n",
@@ -124,7 +126,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
 fn generate_ninja_scenarios(
     #[case] action: Action,
     #[case] edge: BuildEdge,
-    #[case] target_path: PathBuf,
+    #[case] target_path: Utf8PathBuf,
     #[case] expected: &str,
 ) {
     let mut graph = BuildGraph::default();
@@ -159,18 +161,18 @@ fn generate_multiline_script_snapshot() {
         },
     );
     graph.targets.insert(
-        PathBuf::from("out"),
+        Utf8PathBuf::from("out"),
         BuildEdge {
             action_id: "script".into(),
             inputs: Vec::new(),
-            explicit_outputs: vec![PathBuf::from("out")],
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
             phony: false,
             always: false,
         },
     );
-    graph.default_targets.push(PathBuf::from("out"));
+    graph.default_targets.push(Utf8PathBuf::from("out"));
 
     let ninja = generate(&graph).expect("generate ninja");
     let mut settings = Settings::new();
@@ -201,13 +203,13 @@ fn generate_multiline_script_snapshot() {
     BuildEdge {
         action_id: "script".into(),
         inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("out")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
     },
-    PathBuf::from("out"),
+    Utf8PathBuf::from("out"),
     vec!["-n"],
     AssertionType::StatusSuccess,
 )]
@@ -223,13 +225,13 @@ fn generate_multiline_script_snapshot() {
     BuildEdge {
         action_id: "percent".into(),
         inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("out")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
     },
-    PathBuf::from("out"),
+    Utf8PathBuf::from("out"),
     vec!["out"],
     AssertionType::FileContent("100%".into()),
 )]
@@ -245,13 +247,13 @@ fn generate_multiline_script_snapshot() {
     BuildEdge {
         action_id: "tick".into(),
         inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("out")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
     },
-    PathBuf::from("out"),
+    Utf8PathBuf::from("out"),
     vec!["out"],
     AssertionType::FileContent("hi".into()),
 )]
@@ -267,13 +269,13 @@ fn generate_multiline_script_snapshot() {
     BuildEdge {
         action_id: "hello".into(),
         inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("say-hello")],
+        explicit_outputs: vec![Utf8PathBuf::from("say-hello")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: true,
         always: false,
     },
-    PathBuf::from("action-called.txt"),
+    Utf8PathBuf::from("action-called.txt"),
     vec!["say-hello"],
     AssertionType::FileExists,
 )]
@@ -281,13 +283,15 @@ fn ninja_integration_tests(
     ninja_integration_setup: Option<TempDir>,
     #[case] action: Action,
     #[case] edge: BuildEdge,
-    #[case] target_name: PathBuf,
+    #[case] target_name: Utf8PathBuf,
     #[case] ninja_args: Vec<&str>,
     #[case] assertion: AssertionType,
 ) {
     let Some(dir) = ninja_integration_setup else {
         return;
     };
+    let dir_path =
+        Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8 ninja tempdir");
 
     let output = edge
         .explicit_outputs
@@ -300,10 +304,13 @@ fn ninja_integration_tests(
     graph.default_targets.push(output);
 
     let ninja = generate(&graph).expect("generate ninja");
-    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
+    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority()).expect("open ninja tempdir");
+    handle
+        .write("build.ninja", ninja.as_bytes())
+        .expect("write ninja");
     let status = Command::new("ninja")
         .args(&ninja_args)
-        .current_dir(dir.path())
+        .current_dir(dir_path.as_std_path())
         .status()
         .expect("run ninja");
 
@@ -311,12 +318,20 @@ fn ninja_integration_tests(
         AssertionType::StatusSuccess => assert!(status.success()),
         AssertionType::FileExists => {
             assert!(status.success());
-            assert!(dir.path().join(target_name).exists());
+            let exists = handle
+                .try_exists(target_name.as_str())
+                .expect("check target existence");
+            assert!(
+                exists,
+                "expected {} to exist after ninja invocation",
+                &target_name
+            );
         }
         AssertionType::FileContent(expected) => {
             assert!(status.success());
-            let content =
-                fs::read_to_string(dir.path().join(target_name)).expect("read target file");
+            let content = handle
+                .read_to_string(target_name.as_str())
+                .expect("read target file");
             assert_eq!(content.trim(), expected);
         }
     }
@@ -328,13 +343,13 @@ fn errors_when_action_missing() {
     let edge = BuildEdge {
         action_id: "missing".into(),
         inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("out")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
     };
-    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
     let err = generate(&graph).expect_err("missing action");
     assert!(matches!(err, NinjaGenError::MissingAction { id } if id == "missing"));
 }
@@ -363,7 +378,7 @@ fn generate_format_error() {
     let edge = BuildEdge {
         action_id: "a".into(),
         inputs: Vec::new(),
-        explicit_outputs: vec![PathBuf::from("out")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
         phony: false,
@@ -371,7 +386,7 @@ fn generate_format_error() {
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
-    graph.targets.insert(PathBuf::from("out"), edge);
+    graph.targets.insert(Utf8PathBuf::from("out"), edge);
 
     let mut writer = FailWriter;
     let err = generate_into(&graph, &mut writer).expect_err("format error");

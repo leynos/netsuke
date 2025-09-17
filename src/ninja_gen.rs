@@ -6,10 +6,10 @@
 
 use crate::ast::Recipe;
 use crate::ir::{BuildEdge, BuildGraph};
+use camino::Utf8PathBuf;
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
-use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -42,16 +42,16 @@ macro_rules! write_flag {
 /// ```
 /// use netsuke::ast::Recipe;
 /// use netsuke::ir::{Action, BuildEdge, BuildGraph};
-/// use std::path::PathBuf;
+/// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
 ///     recipe: Recipe::Command { command: "true".into() },
 ///     description: None, depfile: None, deps_format: None,
 ///     pool: None, restat: false
 /// });
-/// graph.targets.insert(PathBuf::from("out"), BuildEdge {
+/// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
-///     explicit_outputs: vec![PathBuf::from("out")],
+///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
 /// });
@@ -75,16 +75,16 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// ```
 /// use netsuke::ast::Recipe;
 /// use netsuke::ir::{Action, BuildEdge, BuildGraph};
-/// use std::path::PathBuf;
+/// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
 ///     recipe: Recipe::Command { command: "true".into() },
 ///     description: None, depfile: None, deps_format: None,
 ///     pool: None, restat: false
 /// });
-/// graph.targets.insert(PathBuf::from("out"), BuildEdge {
+/// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
-///     explicit_outputs: vec![PathBuf::from("out")],
+///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
 /// });
@@ -138,15 +138,16 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 }
 
 /// Convert a slice of paths into a space-separated string.
-fn join(paths: &[PathBuf]) -> String {
-    paths.iter().map(|p| p.display()).join(" ")
+fn join(paths: &[Utf8PathBuf]) -> String {
+    paths.iter().map(|p| p.as_str()).join(" ")
 }
 
 /// Generate a stable key for a list of paths.
-fn path_key(paths: &[PathBuf]) -> String {
-    let mut parts: Vec<_> = paths.iter().map(|p| p.display().to_string()).collect();
-    parts.sort();
-    parts.join("\u{0}")
+fn path_key(paths: &[Utf8PathBuf]) -> String {
+    let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
+    parts.sort_unstable();
+    let separator = char::from(0).to_string();
+    parts.join(&separator)
 }
 
 /// Escape a script for embedding within a single-quoted `printf %b` argument.
@@ -248,8 +249,8 @@ mod tests {
         };
         let edge = BuildEdge {
             action_id: "a".into(),
-            inputs: vec![PathBuf::from("in")],
-            explicit_outputs: vec![PathBuf::from("out")],
+            inputs: vec![Utf8PathBuf::from("in")],
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
             phony: false,
@@ -257,8 +258,8 @@ mod tests {
         };
         let mut graph = BuildGraph::default();
         graph.actions.insert("a".into(), action);
-        graph.targets.insert(PathBuf::from("out"), edge);
-        graph.default_targets.push(PathBuf::from("out"));
+        graph.targets.insert(Utf8PathBuf::from("out"), edge);
+        graph.default_targets.push(Utf8PathBuf::from("out"));
 
         let ninja = generate(&graph).expect("generate ninja");
         let expected = concat!(
