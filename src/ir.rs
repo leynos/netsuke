@@ -25,8 +25,18 @@
 //! ```
 //
 use camino::Utf8PathBuf;
+use serde::Serialize;
 use std::collections::HashMap;
-use tracing::warn;
+use std::sync::Arc;
+use thiserror::Error;
+
+use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
+use crate::hasher::ActionHasher;
+
+mod cmd_interpolate;
+mod cycle;
+
+use self::{cmd_interpolate::interpolate_command, cycle::CycleDetectionReport};
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
@@ -40,7 +50,6 @@ pub struct BuildGraph {
 }
 
 /// A reusable command analogous to a Ninja rule.
-use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Action {
@@ -74,13 +83,6 @@ pub struct BuildEdge {
     /// Run the command on every invocation regardless of timestamps.
     pub always: bool,
 }
-
-use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
-use shell_quote::{QuoteRefExt, Sh};
-use std::sync::Arc;
-use thiserror::Error;
-
-use crate::hasher::ActionHasher;
 
 /// Errors produced during IR generation.
 #[derive(Debug, Error)]
@@ -210,7 +212,7 @@ impl BuildGraph {
         let CycleDetectionReport {
             cycle,
             missing_dependencies,
-        } = CycleDetector::analyse(&self.targets);
+        } = cycle::analyse(&self.targets);
         if let Some(cycle) = cycle {
             return Err(IrGenError::CircularDependency {
                 cycle,
@@ -256,148 +258,6 @@ fn register_action(
     let hash = ActionHasher::hash(&action).map_err(IrGenError::ActionSerialisation)?;
     actions.entry(hash.clone()).or_insert(action);
     Ok(hash)
-}
-
-/// Returns `true` when the command contains an odd number of backticks.
-///
-/// # Examples
-/// ```rust,ignore
-/// assert!(has_unmatched_backticks("echo`"));
-/// assert!(!has_unmatched_backticks("`echo`"));
-/// ```
-fn has_unmatched_backticks(s: &str) -> bool {
-    s.chars().filter(|&c| c == '`').count().rem_euclid(2) != 0
-}
-
-fn interpolate_command(
-    template: &str,
-    inputs: &[Utf8PathBuf],
-    outputs: &[Utf8PathBuf],
-) -> Result<String, IrGenError> {
-    fn quote_paths(paths: &[Utf8PathBuf]) -> Vec<String> {
-        paths
-            .iter()
-            .map(|p| {
-                let quoted_bytes: Vec<u8> = p.as_os_str().quoted(Sh);
-                String::from_utf8_lossy(&quoted_bytes).into_owned()
-            })
-            .collect()
-    }
-
-    let ins = quote_paths(inputs);
-    let outs = quote_paths(outputs);
-    let interpolated = substitute(template, &ins, &outs);
-    if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
-        let snippet = interpolated.chars().take(160).collect();
-        return Err(IrGenError::InvalidCommand {
-            command: interpolated,
-            snippet,
-        });
-    }
-    Ok(interpolated)
-}
-
-/// Returns whether `ch` is a valid identifier character (ASCII letter, digit, or underscore).
-///
-/// # Examples
-/// ```rust,ignore
-/// assert!(is_identifier_char('a'));
-/// assert!(!is_identifier_char('-'));
-/// ```
-fn is_identifier_char(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || ch == '_'
-}
-
-/// Checks if `pattern` matches `chars` starting at `pos`.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "in-out".chars().collect();
-/// assert!(matches_pattern_at_position(&chars, 0, &['i', 'n']));
-/// assert!(!matches_pattern_at_position(&chars, 3, &['i', 'n']));
-/// ```
-fn matches_pattern_at_position(chars: &[char], pos: usize, pattern: &[char]) -> bool {
-    pattern
-        .iter()
-        .enumerate()
-        .all(|(off, ch)| matches!(chars.get(pos + off), Some(c) if c == ch))
-}
-
-/// Ensures characters around the token are not identifier characters.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
-/// assert!(has_valid_word_boundaries(&chars, 0, 2));
-/// let chars: Vec<char> = "$input".chars().collect();
-/// assert!(!has_valid_word_boundaries(&chars, 0, 2));
-/// ```
-fn has_valid_word_boundaries(chars: &[char], pos: usize, len: usize) -> bool {
-    let prev_ok = chars
-        .get(pos.wrapping_sub(1))
-        .is_none_or(|c| !is_identifier_char(*c));
-    let next_ok = chars
-        .get(pos + len + 1)
-        .is_none_or(|c| !is_identifier_char(*c));
-    prev_ok && next_ok
-}
-
-/// Returns the skip length when `pattern` matches at `pos`.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
-/// let res = try_match_placeholder(&chars, 0, &['i', 'n']);
-/// assert_eq!(res, Some(3));
-/// ```
-fn try_match_placeholder(chars: &[char], pos: usize, pattern: &[char]) -> Option<usize> {
-    if matches_pattern_at_position(chars, pos + 1, pattern)
-        && has_valid_word_boundaries(chars, pos, pattern.len())
-    {
-        Some(pattern.len() + 1)
-    } else {
-        None
-    }
-}
-
-/// Finds the appropriate substitution for `$in` or `$out` at `pos`.
-///
-/// # Examples
-/// ```rust,ignore
-/// let chars: Vec<char> = "$in".chars().collect();
-/// let res = find_substitution(&chars, 0, "a", "");
-/// assert_eq!(res, Some(("a", 3)));
-/// ```
-fn find_substitution<'a>(
-    chars: &[char],
-    pos: usize,
-    ins: &'a str,
-    outs: &'a str,
-) -> Option<(&'a str, usize)> {
-    try_match_placeholder(chars, pos, &['i', 'n'])
-        .map(|skip| (ins, skip))
-        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip)))
-}
-
-fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
-    let chars: Vec<char> = template.chars().collect();
-    let ins_joined = ins.join(" ");
-    let outs_joined = outs.join(" ");
-    let mut out = String::with_capacity(template.len());
-    let mut i = 0;
-    while let Some(&ch) = chars.get(i) {
-        if ch == '$'
-            && let Some((replacement, skip)) =
-                find_substitution(&chars, i, &ins_joined, &outs_joined)
-        {
-            out.push_str(replacement);
-            i += skip;
-        } else {
-            out.push(ch);
-            i += 1;
-        }
-    }
-    out
 }
 
 fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
@@ -478,215 +338,4 @@ fn find_duplicates(
 
 fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
     paths.first().map(ToString::to_string).unwrap_or_default()
-}
-
-/// Tracks the visitation state of a node during cycle detection.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum VisitState {
-    Visiting,
-    Visited,
-}
-
-/// Detects cycles in a dependency graph by tracking traversal state.
-struct CycleDetector<'a> {
-    targets: &'a HashMap<Utf8PathBuf, BuildEdge>,
-    stack: Vec<Utf8PathBuf>,
-    states: HashMap<Utf8PathBuf, VisitState>,
-    missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
-}
-
-struct CycleDetectionReport {
-    cycle: Option<Vec<Utf8PathBuf>>,
-    missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
-}
-
-impl<'a> CycleDetector<'a> {
-    fn new(targets: &'a HashMap<Utf8PathBuf, BuildEdge>) -> Self {
-        Self {
-            targets,
-            stack: Vec::new(),
-            states: HashMap::new(),
-            missing_dependencies: Vec::new(),
-        }
-    }
-
-    fn analyse(targets: &'a HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
-        let mut detector = Self::new(targets);
-        let mut cycle = None;
-        for node in targets.keys() {
-            if detector.is_visited(node) {
-                continue;
-            }
-            if let Some(found) = detector.visit(node.clone()) {
-                cycle = Some(found);
-                break;
-            }
-        }
-        CycleDetectionReport {
-            cycle,
-            missing_dependencies: detector.missing_dependencies,
-        }
-    }
-
-    #[cfg(test)]
-    pub fn find_cycle(targets: &'a HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
-        Self::analyse(targets).cycle
-    }
-
-    fn is_visited(&self, node: &Utf8PathBuf) -> bool {
-        matches!(self.states.get(node), Some(VisitState::Visited))
-    }
-
-    fn visit(&mut self, node: Utf8PathBuf) -> Option<Vec<Utf8PathBuf>> {
-        match self.states.get(&node) {
-            Some(VisitState::Visited) => return None,
-            Some(VisitState::Visiting) => {
-                let idx = self
-                    .stack
-                    .iter()
-                    .position(|n| n == &node)
-                    .expect("visiting node must be on the stack");
-                let mut cycle: Vec<Utf8PathBuf> = self.stack.iter().skip(idx).cloned().collect();
-                cycle.push(node);
-                return Some(canonicalize_cycle(cycle));
-            }
-            None => {
-                self.states.insert(node.clone(), VisitState::Visiting);
-            }
-        }
-
-        self.stack.push(node.clone());
-
-        if let Some(edge) = self.targets.get(&node) {
-            for dep in &edge.inputs {
-                if !self.targets.contains_key(dep) {
-                    warn!(
-                        missing = %dep,
-                        dependent = %node,
-                        "skipping dependency missing from targets during cycle detection",
-                    );
-                    self.missing_dependencies.push((node.clone(), dep.clone()));
-                    continue;
-                }
-
-                if let Some(cycle) = self.visit(dep.clone()) {
-                    return Some(cycle);
-                }
-            }
-        }
-
-        self.stack.pop();
-        self.states.insert(node, VisitState::Visited);
-        None
-    }
-
-    #[cfg(test)]
-    fn missing_dependencies(&self) -> &[(Utf8PathBuf, Utf8PathBuf)] {
-        &self.missing_dependencies
-    }
-}
-
-fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
-    if cycle.len() < 2 {
-        return cycle;
-    }
-    let len = cycle.len() - 1;
-    let start = cycle
-        .iter()
-        .take(len)
-        .enumerate()
-        .min_by(|(_, a), (_, b)| a.cmp(b))
-        .map_or(0, |(idx, _)| idx);
-    let (prefix, suffix) = cycle.split_at_mut(len);
-    prefix.rotate_left(start);
-    if let (Some(first), Some(slot)) = (prefix.first().cloned(), suffix.first_mut()) {
-        slot.clone_from(&first);
-    }
-    cycle
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use camino::Utf8PathBuf;
-    use std::collections::HashMap;
-
-    fn path(name: &str) -> Utf8PathBuf {
-        Utf8PathBuf::from(name)
-    }
-
-    fn build_edge(inputs: &[&str], output: &str) -> BuildEdge {
-        BuildEdge {
-            action_id: "id".into(),
-            inputs: inputs.iter().map(|name| path(name)).collect(),
-            explicit_outputs: vec![path(output)],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        }
-    }
-
-    #[test]
-    fn cycle_detector_detects_self_edge_cycle() {
-        let mut targets = HashMap::new();
-        targets.insert(path("a"), build_edge(&["a"], "a"));
-
-        let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
-        assert_eq!(cycle, vec![path("a"), path("a")]);
-    }
-
-    #[test]
-    fn cycle_detector_marks_nodes_visited_after_traversal() {
-        let mut targets = HashMap::new();
-        let a = path("a");
-        let b = path("b");
-        targets.insert(a.clone(), build_edge(&["b"], "a"));
-        targets.insert(b.clone(), build_edge(&[], "b"));
-
-        let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(a.clone()).is_none());
-        assert!(detector.is_visited(&a));
-        assert!(detector.is_visited(&b));
-        assert!(
-            detector.stack.is_empty(),
-            "stack should be empty after complete traversal",
-        );
-    }
-
-    #[test]
-    fn cycle_detector_records_missing_dependencies() {
-        let mut targets = HashMap::new();
-        targets.insert(path("a"), build_edge(&["b"], "a"));
-
-        let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(path("a")).is_none());
-
-        assert_eq!(detector.missing_dependencies(), &[(path("a"), path("b"))],);
-    }
-
-    #[test]
-    fn find_cycle_identifies_cycle() {
-        let mut targets = HashMap::new();
-        targets.insert(path("a"), build_edge(&["b"], "a"));
-        targets.insert(path("b"), build_edge(&["a"], "b"));
-
-        let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
-        assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
-    }
-
-    #[test]
-    fn canonicalize_cycle_rotates_smallest_node() {
-        let cycle = vec![path("c"), path("a"), path("b"), path("c")];
-        let canonical = canonicalize_cycle(cycle);
-        let expected = vec![path("a"), path("b"), path("c"), path("a")];
-        assert_eq!(canonical, expected);
-    }
-
-    #[test]
-    fn canonicalize_cycle_handles_reverse_direction() {
-        let cycle = vec![path("c"), path("b"), path("a"), path("c")];
-        let canonical = canonicalize_cycle(cycle);
-        let expected = vec![path("a"), path("c"), path("b"), path("a")];
-        assert_eq!(canonical, expected);
-    }
 }

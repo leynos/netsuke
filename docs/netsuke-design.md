@@ -1098,12 +1098,11 @@ This transformation involves several steps:
    rotated so the lexicographically smallest node appears first, ensuring
    deterministic error messages.
 
-   Traversal state is managed by a small `CycleDetector` helper struct. This
-   type owns the recursion stack and visitation map, allowing traversal
-   functions to remain focused and easily testable. Nodes are stored as owned
-   `Utf8PathBuf`s so the detector can clone keys from `targets` without
-   mutating the map during detection. Missing dependencies are logged,
-   recorded, and surfaced alongside cycles to aid diagnostics.
+   Traversal state is implemented in the dedicated `ir::cycle` module. Its
+   `CycleDetector` helper owns the recursion stack and visitation map, cloning
+   `Utf8PathBuf` keys from `targets` so traversal leaves the input map
+   untouched. Missing dependencies encountered during traversal are logged,
+   collected, and returned alongside any cycle to aid diagnostics.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 

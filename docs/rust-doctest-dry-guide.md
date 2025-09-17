@@ -629,11 +629,9 @@ mastering doctests:
    July 15, 2025, <https://doc.rust-lang.org/rustdoc/documentation-tests.html>
 [^4]: Documentation tests - - GitHub Pages, accessed on July 15, 2025,
    <https://ebarnard.github.io/2019-06-03-rust-smaller-trait-implementers-docs/rustdoc/documentation-tests.html>
-   <!-- mdformat off -->
 [^5]: Documentation tests — Massachusetts Institute of Technology, accessed on
       July 15, 2025,
-      <http://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
-       <!-- mdformat on -->
+      <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
 [^6]: How to organize your Rust tests - LogRocket Blog, accessed on July 15,
    2025, <https://blog.logrocket.com/how-to-organize-rust-tests/>
    <https://www.reddit.com/r/rust/comments/qk77iu/best_way_to_organise_tests_in_rust/>
