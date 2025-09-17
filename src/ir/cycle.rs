@@ -115,9 +115,10 @@ impl<'a> CycleDetector<'a> {
 }
 
 fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
-    if cycle.len() < 2 {
-        return cycle;
-    }
+    debug_assert!(
+        cycle.len() >= 2,
+        "cycle detection should yield at least two nodes",
+    );
     let len = cycle.len() - 1;
     let start = cycle
         .iter()
@@ -127,8 +128,8 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
         .map_or(0, |(idx, _)| idx);
     let (prefix, suffix) = cycle.split_at_mut(len);
     prefix.rotate_left(start);
-    if let (Some(first), Some(slot)) = (prefix.first().cloned(), suffix.first_mut()) {
-        slot.clone_from(&first);
+    if let (Some(first), Some(last)) = (prefix.first().cloned(), suffix.first_mut()) {
+        *last = first;
     }
     cycle
 }
