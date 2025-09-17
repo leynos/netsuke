@@ -85,35 +85,158 @@ pub struct BuildEdge {
 }
 
 /// Errors produced during IR generation.
+///
+/// Each variant documents a distinct validation failure encountered while
+/// constructing the intermediate representation from a manifest.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::ir::IrGenError;
+///
+/// fn describe(err: IrGenError) -> String {
+///     match err {
+///         IrGenError::EmptyRule { target_name } => {
+///             format!("{target_name} missing rule")
+///         },
+///         other => other.to_string(),
+///     }
+/// }
+///
+/// assert_eq!(
+///     describe(IrGenError::EmptyRule {
+///         target_name: "app".into(),
+///     }),
+///     "app missing rule"
+/// );
+/// ```
 #[derive(Debug, Error)]
 pub enum IrGenError {
+    /// Raised when a target references a rule that is not defined in the
+    /// manifest.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let err = IrGenError::RuleNotFound {
+    ///     target_name: "app".into(),
+    ///     rule_name: "compile".into(),
+    /// };
+    /// assert!(matches!(
+    ///     err,
+    ///     IrGenError::RuleNotFound { rule_name, .. }
+    ///         if rule_name == "compile"
+    /// ));
+    /// ```
     #[error("rule '{rule_name}' referenced by target '{target_name}' was not found")]
     RuleNotFound {
         target_name: String,
         rule_name: String,
     },
 
+    /// Triggered when multiple rule names are supplied for a single target.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let err = IrGenError::MultipleRules {
+    ///     target_name: "lib".into(),
+    ///     rules: vec!["c".into(), "cpp".into()],
+    /// };
+    /// if let IrGenError::MultipleRules { rules, .. } = err {
+    ///     assert_eq!(
+    ///         rules,
+    ///         vec!["c".to_string(), "cpp".to_string()]
+    ///     );
+    /// }
+    /// ```
     #[error("multiple rules for target '{target_name}': {rules:?}")]
     MultipleRules {
         target_name: String,
         rules: Vec<String>,
     },
 
+    /// Returned when a target declares no rule at all.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let err = IrGenError::EmptyRule { target_name: "docs".into() };
+    /// assert_eq!(
+    ///     err.to_string(),
+    ///     "No rules specified for target docs"
+    /// );
+    /// ```
     #[error("No rules specified for target {target_name}")]
     EmptyRule { target_name: String },
 
+    /// Indicates that more than one build edge produces the same output file.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let err = IrGenError::DuplicateOutput {
+    ///     outputs: vec!["obj.o".into()],
+    /// };
+    /// if let IrGenError::DuplicateOutput { outputs } = err {
+    ///     assert_eq!(
+    ///         outputs,
+    ///         vec!["obj.o".to_string()]
+    ///     );
+    /// }
+    /// ```
     #[error("duplicate target outputs: {outputs:?}")]
     DuplicateOutput { outputs: Vec<String> },
 
+    /// Emitted when a cycle exists in the target graph.
+    ///
+    /// ```
+    /// use camino::Utf8PathBuf;
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let err = IrGenError::CircularDependency {
+    ///     cycle: vec![Utf8PathBuf::from("a"), Utf8PathBuf::from("a")],
+    ///     missing_dependencies: Vec::new(),
+    /// };
+    /// if let IrGenError::CircularDependency { cycle, .. } = err {
+    ///     assert_eq!(
+    ///         cycle,
+    ///         vec![Utf8PathBuf::from("a"), Utf8PathBuf::from("a")]
+    ///     );
+    /// }
+    /// ```
     #[error("circular dependency detected: {cycle:?}")]
     CircularDependency {
         cycle: Vec<Utf8PathBuf>,
         missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
     },
 
+    /// Wraps failures encountered while serialising an action to JSON.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let source = serde_json::Error::custom("invalid action");
+    /// let err = IrGenError::ActionSerialisation(source);
+    /// assert!(err.to_string().contains("invalid action"));
+    /// ```
     #[error("failed to serialise action: {0}")]
     ActionSerialisation(#[from] serde_json::Error),
 
+    /// Raised when command interpolation yields an invalid shell snippet.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    ///
+    /// let err = IrGenError::InvalidCommand {
+    ///     command: "echo $in".into(),
+    ///     snippet: "echo $in".into(),
+    /// };
+    /// assert_eq!(
+    ///     err.to_string(),
+    ///     "command is not a valid shell command: echo $in"
+    /// );
+    /// ```
     #[error("command is not a valid shell command: {snippet}")]
     InvalidCommand { command: String, snippet: String },
 }
@@ -203,9 +326,7 @@ impl BuildGraph {
     }
 
     fn process_defaults(manifest: &NetsukeManifest, defaults: &mut Vec<Utf8PathBuf>) {
-        for name in &manifest.defaults {
-            defaults.push(Utf8PathBuf::from(name));
-        }
+        defaults.extend(manifest.defaults.iter().map(Utf8PathBuf::from));
     }
 
     fn detect_cycles(&self) -> Result<(), IrGenError> {
@@ -323,10 +444,10 @@ fn find_duplicates(
     outputs: &[Utf8PathBuf],
     targets: &HashMap<Utf8PathBuf, BuildEdge>,
 ) -> Option<Vec<String>> {
-    let mut dups: Vec<_> = outputs
+    let mut dups: Vec<String> = outputs
         .iter()
         .filter(|o| targets.contains_key(*o))
-        .map(ToString::to_string)
+        .map(|p| p.as_str().to_owned())
         .collect();
     if dups.is_empty() {
         None

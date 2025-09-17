@@ -144,9 +144,10 @@ fn join(paths: &[Utf8PathBuf]) -> String {
 
 /// Generate a stable key for a list of paths.
 fn path_key(paths: &[Utf8PathBuf]) -> String {
-    let mut parts: Vec<_> = paths.iter().map(ToString::to_string).collect();
-    parts.sort();
-    parts.join("\u{0}")
+    let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
+    parts.sort_unstable();
+    let separator = char::from(0).to_string();
+    parts.join(&separator)
 }
 
 /// Escape a script for embedding within a single-quoted `printf %b` argument.

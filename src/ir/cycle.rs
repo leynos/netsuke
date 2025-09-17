@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 
 use camino::Utf8PathBuf;
-use tracing::warn;
 
 use super::BuildEdge;
 
@@ -66,7 +65,10 @@ impl<'a> CycleDetector<'a> {
                     .stack
                     .iter()
                     .position(|n| n == &node)
-                    .expect("visiting node must be on the stack");
+                    .unwrap_or_else(|| {
+                        debug_assert!(false, "visiting node must be on the stack");
+                        0
+                    });
                 let mut cycle: Vec<Utf8PathBuf> = self.stack.iter().skip(idx).cloned().collect();
                 cycle.push(node);
                 return Some(canonicalize_cycle(cycle));
@@ -81,7 +83,7 @@ impl<'a> CycleDetector<'a> {
         if let Some(edge) = self.targets.get(&node) {
             for dep in &edge.inputs {
                 if !self.targets.contains_key(dep) {
-                    warn!(
+                    tracing::debug!(
                         missing = %dep,
                         dependent = %node,
                         "skipping dependency missing from targets during cycle detection",

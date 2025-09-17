@@ -104,11 +104,12 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
                 missing_dependencies.is_empty(),
                 "missing dependencies should be empty in manifest fixtures"
             );
-            let mut expected: Vec<Utf8PathBuf> = exp_cycle.iter().map(Utf8PathBuf::from).collect();
+            let mut expected_cycle: Vec<Utf8PathBuf> =
+                exp_cycle.iter().map(Utf8PathBuf::from).collect();
             let mut actual = cycle;
-            expected.sort();
+            expected_cycle.sort();
             actual.sort();
-            assert_eq!(actual, expected);
+            assert_eq!(actual, expected_cycle);
         }
         (other, exp) => panic!("expected {exp:?} but got {other:?}"),
     }

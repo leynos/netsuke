@@ -6,12 +6,13 @@
 //! cases like empty build graphs.
 
 use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
-use std::{fs, process::Command};
+use std::process::Command;
 use tempfile::{TempDir, tempdir};
 
 fn skip_if_ninja_unavailable() -> bool {
@@ -289,6 +290,8 @@ fn ninja_integration_tests(
     let Some(dir) = ninja_integration_setup else {
         return;
     };
+    let dir_path =
+        Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8 ninja tempdir");
 
     let output = edge
         .explicit_outputs
@@ -301,10 +304,13 @@ fn ninja_integration_tests(
     graph.default_targets.push(output);
 
     let ninja = generate(&graph).expect("generate ninja");
-    fs::write(dir.path().join("build.ninja"), &ninja).expect("write ninja");
+    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority()).expect("open ninja tempdir");
+    handle
+        .write("build.ninja", ninja.as_bytes())
+        .expect("write ninja");
     let status = Command::new("ninja")
         .args(&ninja_args)
-        .current_dir(dir.path())
+        .current_dir(dir_path.as_std_path())
         .status()
         .expect("run ninja");
 
@@ -312,12 +318,20 @@ fn ninja_integration_tests(
         AssertionType::StatusSuccess => assert!(status.success()),
         AssertionType::FileExists => {
             assert!(status.success());
-            assert!(dir.path().join(target_name).exists());
+            let exists = handle
+                .try_exists(target_name.as_str())
+                .expect("check target existence");
+            assert!(
+                exists,
+                "expected {} to exist after ninja invocation",
+                &target_name
+            );
         }
         AssertionType::FileContent(expected) => {
             assert!(status.success());
-            let content =
-                fs::read_to_string(dir.path().join(target_name)).expect("read target file");
+            let content = handle
+                .read_to_string(target_name.as_str())
+                .expect("read target file");
             assert_eq!(content.trim(), expected);
         }
     }

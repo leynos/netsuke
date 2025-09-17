@@ -1099,10 +1099,10 @@ This transformation involves several steps:
    deterministic error messages.
 
    Traversal state is implemented in the dedicated `ir::cycle` module. Its
-   `CycleDetector` helper owns the recursion stack and visitation map, cloning
-   `Utf8PathBuf` keys from `targets` so traversal leaves the input map
-   untouched. Missing dependencies encountered during traversal are logged,
-   collected, and returned alongside any cycle to aid diagnostics.
+   `CycleDetector` helper owns the recursion stack and visitation map. Keys are
+   cloned from the `targets` map so traversal leaves the input graph untouched.
+   Missing dependencies encountered during traversal are logged, collected, and
+   returned alongside any cycle to aid diagnostics.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
@@ -1243,10 +1243,10 @@ For this critical task, the recommended crate is `shell-quote`.
 
 While other crates like `shlex` exist, `shell-quote` offers a more robust and
 flexible API specifically designed for this purpose.[^22] It supports quoting
-for multiple shell flavors (e.g., Bash, sh, Fish), which is vital for a cross-
-platform build tool. It also correctly handles a wide variety of input types,
-including byte strings and OS-native strings, which is essential for dealing
-with non-UTF8 file paths. The
+for multiple shell flavours (e.g., Bash, sh, Fish), which is vital for a
+cross-platform build tool. It also correctly handles a wide variety of input
+types, including byte strings and OS-native strings, which is essential for
+dealing with non-UTF8 file paths. The
 
 `QuoteExt` trait provided by the crate offers an ergonomic and safe method for
 building command strings by pushing quoted components into a buffer:

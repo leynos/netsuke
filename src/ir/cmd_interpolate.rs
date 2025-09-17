@@ -25,8 +25,9 @@ pub(crate) fn interpolate_command(
         paths
             .iter()
             .map(|p| {
-                let quoted_bytes: Vec<u8> = p.as_os_str().quoted(Sh);
-                String::from_utf8_lossy(&quoted_bytes).into_owned()
+                // Utf8PathBuf guarantees UTF-8; avoid lossy conversion.
+                let bytes: Vec<u8> = p.as_str().quoted(Sh);
+                String::from_utf8(bytes).expect("utf-8 shell quoting")
             })
             .collect()
     }
@@ -131,8 +132,22 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
     let ins_joined = ins.join(" ");
     let outs_joined = outs.join(" ");
     let mut out = String::with_capacity(template.len());
+    let mut in_backticks = false;
     let mut i = 0;
     while let Some(&ch) = chars.get(i) {
+        if ch == '`' {
+            in_backticks ^= true;
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+
+        if in_backticks {
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+
         if ch == '$'
             && let Some((replacement, skip)) =
                 find_substitution(&chars, i, &ins_joined, &outs_joined)
@@ -176,5 +191,14 @@ mod tests {
         let outs = vec![Utf8PathBuf::from("out")];
         let command = interpolate_command("cp $in $out", &ins, &outs).expect("command");
         assert_eq!(command, "cp in aux out");
+    }
+
+    #[test]
+    fn interpolate_command_preserves_backtick_tokens() {
+        let ins = vec![Utf8PathBuf::from("src")];
+        let outs = vec![Utf8PathBuf::from("out")];
+        let command =
+            interpolate_command("echo `cat $in` && echo $out", &ins, &outs).expect("command");
+        assert_eq!(command, "echo `cat $in` && echo out");
     }
 }
