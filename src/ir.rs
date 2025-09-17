@@ -473,6 +473,7 @@ fn get_target_display_name(paths: &[PathBuf]) -> String {
         .unwrap_or_default()
 }
 
+/// Tracks the visitation state of a node during cycle detection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum VisitState {
     Visiting,
@@ -484,6 +485,7 @@ struct CycleDetector<'a> {
     targets: &'a HashMap<PathBuf, BuildEdge>,
     stack: Vec<PathBuf>,
     states: HashMap<PathBuf, VisitState>,
+    missing_dependencies: Vec<(PathBuf, PathBuf)>,
 }
 
 impl<'a> CycleDetector<'a> {
@@ -492,6 +494,7 @@ impl<'a> CycleDetector<'a> {
             targets,
             stack: Vec::new(),
             states: HashMap::new(),
+            missing_dependencies: Vec::new(),
         }
     }
 
@@ -540,6 +543,7 @@ impl<'a> CycleDetector<'a> {
                         dependent = %node.display(),
                         "skipping dependency missing from targets during cycle detection",
                     );
+                    self.missing_dependencies.push((node.clone(), dep.clone()));
                     continue;
                 }
 
@@ -552,6 +556,11 @@ impl<'a> CycleDetector<'a> {
         self.stack.pop();
         self.states.insert(node, VisitState::Visited);
         None
+    }
+
+    #[cfg(test)]
+    fn missing_dependencies(&self) -> &[(PathBuf, PathBuf)] {
+        &self.missing_dependencies
     }
 }
 
@@ -620,6 +629,17 @@ mod tests {
             detector.stack.is_empty(),
             "stack should be empty after complete traversal",
         );
+    }
+
+    #[test]
+    fn cycle_detector_records_missing_dependencies() {
+        let mut targets = HashMap::new();
+        targets.insert(path("a"), build_edge(&["b"], "a"));
+
+        let mut detector = CycleDetector::new(&targets);
+        assert!(detector.visit(path("a")).is_none());
+
+        assert_eq!(detector.missing_dependencies(), &[(path("a"), path("b"))],);
     }
 
     #[test]

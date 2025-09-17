@@ -1099,10 +1099,11 @@ This transformation involves several steps:
    deterministic error messages.
 
    Traversal state is managed by a small `CycleDetector` helper struct. This
-   type owns the recursion stack and visitation map, allowing the traversal
+   type owns the recursion stack and visitation map, allowing traversal
    functions to remain focused and easily testable. Nodes are stored as owned
-   `PathBuf`s, so the detector can clone keys from `targets` without mutating
-   the map during detection.
+   `PathBuf`s, letting the detector clone keys from `targets` without mutating
+   the map during detection. Missing dependencies are logged and recorded for
+   diagnostic inspection.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
