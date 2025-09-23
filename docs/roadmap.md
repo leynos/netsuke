@@ -159,7 +159,7 @@ library, and CLI ergonomics.
   - [x] Implement the basic file-system tests (`dir`, `file`, `symlink`,
     `pipe`, `block_device`, `char_device`, legacy `device`). *(done)*
 
-  - [ ] Implement the path and file filters (basename, dirname, with_suffix,
+  - [x] Implement the path and file filters (basename, dirname, with_suffix,
     realpath, contents, hash, etc.).
 
   - [ ] Implement the generic collection filters (`uniq`, `flatten`,

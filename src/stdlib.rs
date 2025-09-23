@@ -1,45 +1,19 @@
-//! File-type predicates for Jinja templates.
+//! File-system helpers for Jinja templates.
 //!
-//! Registers `dir`, `file`, and `symlink` tests on all platforms. On Unix it
-//! also provides `pipe`, `block_device`, `char_device`, and the legacy `device`
-//! test. On other platforms `pipe` and `device` are stubbed to always return
-//! `false`.
-//!
-//! I/O errors yield [`ErrorKind::InvalidOperation`] while missing paths return
-//! `Ok(false)` rather than an error.
+//! Registers platform-aware file tests and a suite of path and file filters.
+//! Tests such as `dir`, `file`, and `symlink` inspect metadata without
+//! following symlinks, while filters expose conveniences like `basename`,
+//! `with_suffix`, `realpath`, and content hashing.
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
+use md5::{Digest as Md5Digest, Md5};
 use minijinja::{Environment, Error, ErrorKind, value::Value};
-use std::io;
-
-fn is_dir(ft: fs::FileType) -> bool {
-    ft.is_dir()
-}
-fn is_file(ft: fs::FileType) -> bool {
-    ft.is_file()
-}
-fn is_symlink(ft: fs::FileType) -> bool {
-    ft.is_symlink()
-}
-#[cfg(unix)]
-fn is_fifo(ft: fs::FileType) -> bool {
-    ft.is_fifo()
-}
-#[cfg(unix)]
-fn is_block_device(ft: fs::FileType) -> bool {
-    ft.is_block_device()
-}
-#[cfg(unix)]
-fn is_char_device(ft: fs::FileType) -> bool {
-    ft.is_char_device()
-}
-#[cfg(unix)]
-fn is_device(ft: fs::FileType) -> bool {
-    is_block_device(ft) || is_char_device(ft)
-}
+use sha1::{Digest as Sha1Digest, Sha1};
+use sha2::{Digest as Sha2Digest, Sha256, Sha512};
+use std::{env, fmt::Write as FmtWrite, io};
 
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
@@ -47,20 +21,24 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 ///
 /// # Examples
 /// ```
-/// use minijinja::{Environment, context};
+/// use minijinja::{context, Environment};
 /// use netsuke::stdlib;
 ///
 /// let mut env = Environment::new();
 /// stdlib::register(&mut env);
-/// env.add_template("t", "{% if path is dir %}yes{% endif %}").unwrap();
+/// env.add_template("t", "{{ path | basename }}").unwrap();
 /// let tmpl = env.get_template("t").unwrap();
-/// let cwd = std::env::current_dir().unwrap();
 /// let rendered = tmpl
-///     .render(context!(path => cwd.to_string_lossy()))
+///     .render(context!(path => "foo/bar.txt"))
 ///     .unwrap();
-/// assert_eq!(rendered, "yes");
+/// assert_eq!(rendered, "bar.txt");
 /// ```
 pub fn register(env: &mut Environment<'_>) {
+    register_file_tests(env);
+    register_path_filters(env);
+}
+
+fn register_file_tests(env: &mut Environment<'_>) {
     const TESTS: &[FileTest] = &[
         ("dir", is_dir),
         ("file", is_file),
@@ -71,7 +49,6 @@ pub fn register(env: &mut Environment<'_>) {
         ("block_device", is_block_device),
         #[cfg(unix)]
         ("char_device", is_char_device),
-        // Deprecated combined test; prefer block_device or char_device.
         #[cfg(unix)]
         ("device", is_device),
     ];
@@ -94,215 +71,339 @@ pub fn register(env: &mut Environment<'_>) {
     }
 }
 
-/// Determine whether `path` matches the given file type predicate.
-///
-/// Uses `Dir::symlink_metadata`, so symbolic links are inspected without
-/// following the target. `is_symlink` and `is_file`/`is_dir` cannot both be
-/// true for the same path.
-///
-/// Returns `Ok(false)` if the path does not exist.
+fn register_path_filters(env: &mut Environment<'_>) {
+    env.add_filter("basename", |raw: String| -> Result<String, Error> {
+        Ok(basename(Utf8Path::new(&raw)))
+    });
+    env.add_filter("dirname", |raw: String| -> Result<String, Error> {
+        Ok(dirname(Utf8Path::new(&raw)))
+    });
+    env.add_filter(
+        "with_suffix",
+        |raw: String,
+         suffix: String,
+         count: Option<usize>,
+         sep: Option<String>|
+         -> Result<String, Error> {
+            let count = count.unwrap_or(1);
+            let sep = sep.unwrap_or_else(|| ".".to_string());
+            with_suffix(Utf8Path::new(&raw), &suffix, count, &sep).map(Utf8PathBuf::into_string)
+        },
+    );
+    env.add_filter(
+        "relative_to",
+        |raw: String, root: String| -> Result<String, Error> {
+            relative_to(Utf8Path::new(&raw), Utf8Path::new(&root))
+        },
+    );
+    env.add_filter("realpath", |raw: String| -> Result<String, Error> {
+        canonicalize_any(Utf8Path::new(&raw)).map(Utf8PathBuf::into_string)
+    });
+    env.add_filter("expanduser", |raw: String| -> Result<String, Error> {
+        expanduser(&raw)
+    });
+    env.add_filter("size", |raw: String| -> Result<u64, Error> {
+        file_size(Utf8Path::new(&raw))
+    });
+    env.add_filter(
+        "contents",
+        |raw: String, encoding: Option<String>| -> Result<String, Error> {
+            let encoding = encoding.unwrap_or_else(|| "utf-8".to_string());
+            read_text(Utf8Path::new(&raw), &encoding)
+        },
+    );
+    env.add_filter("linecount", |raw: String| -> Result<usize, Error> {
+        linecount(Utf8Path::new(&raw))
+    });
+    env.add_filter(
+        "hash",
+        |raw: String, alg: Option<String>| -> Result<String, Error> {
+            let alg = alg.unwrap_or_else(|| "sha256".to_string());
+            compute_hash(Utf8Path::new(&raw), &alg)
+        },
+    );
+    env.add_filter(
+        "digest",
+        |raw: String, len: Option<usize>, alg: Option<String>| -> Result<String, Error> {
+            let len = len.unwrap_or(8);
+            let alg = alg.unwrap_or_else(|| "sha256".to_string());
+            compute_digest(Utf8Path::new(&raw), len, &alg)
+        },
+    );
+}
+
+fn is_dir(ft: fs::FileType) -> bool {
+    ft.is_dir()
+}
+
+fn is_file(ft: fs::FileType) -> bool {
+    ft.is_file()
+}
+
+fn is_symlink(ft: fs::FileType) -> bool {
+    ft.is_symlink()
+}
+
+#[cfg(unix)]
+fn is_fifo(ft: fs::FileType) -> bool {
+    ft.is_fifo()
+}
+
+#[cfg(unix)]
+fn is_block_device(ft: fs::FileType) -> bool {
+    ft.is_block_device()
+}
+
+#[cfg(unix)]
+fn is_char_device(ft: fs::FileType) -> bool {
+    ft.is_char_device()
+}
+
+#[cfg(unix)]
+fn is_device(ft: fs::FileType) -> bool {
+    is_block_device(ft) || is_char_device(ft)
+}
+
+fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {
+    parent
+        .filter(|p| !p.as_str().is_empty())
+        .map_or_else(|| Utf8PathBuf::from("."), Utf8Path::to_path_buf)
+}
+
+fn dir_and_basename(path: &Utf8Path) -> (Utf8PathBuf, String) {
+    let dir = normalise_parent(path.parent());
+    let name = path.file_name().map_or_else(|| ".".into(), str::to_string);
+    (dir, name)
+}
+
+fn basename(path: &Utf8Path) -> String {
+    path.file_name().unwrap_or(path.as_str()).to_string()
+}
+
+fn parent_dir(path: &Utf8Path) -> Result<(Dir, String, Utf8PathBuf), io::Error> {
+    let (dir_path, name) = dir_and_basename(path);
+    let dir = Dir::open_ambient_dir(&dir_path, ambient_authority())?;
+    Ok((dir, name, dir_path))
+}
+
+fn open_parent_dir(path: &Utf8Path) -> Result<(Dir, String, Utf8PathBuf), Error> {
+    parent_dir(path).map_err(|err| io_to_error(path, "open directory", err))
+}
+
+fn is_root(path: &Utf8Path) -> bool {
+    path.parent().is_none() && path.file_name().is_none() && !path.as_str().is_empty()
+}
+
+fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
+    let cwd = env::current_dir()?;
+    Utf8PathBuf::from_path_buf(cwd)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "current dir is not valid UTF-8"))
+}
+
+fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
+    if path.as_str().is_empty() || path == Utf8Path::new(".") {
+        return current_dir_utf8()
+            .map_err(|err| io_to_error(Utf8Path::new("."), "canonicalise", err));
+    }
+    if is_root(path) {
+        return Ok(path.to_path_buf());
+    }
+    let (dir, name, dir_path) = open_parent_dir(path)?;
+    let canonical_child = dir
+        .canonicalize(Utf8Path::new(&name))
+        .map_err(|err| io_to_error(path, "canonicalise", err))?;
+    if name == "." {
+        return canonicalize_any(&dir_path);
+    }
+    let mut parent = if dir_path.as_str() == "." {
+        current_dir_utf8().map_err(|err| io_to_error(Utf8Path::new("."), "canonicalise", err))?
+    } else {
+        canonicalize_any(&dir_path)?
+    };
+    parent.push(&canonical_child);
+    Ok(parent)
+}
+
+fn dirname(path: &Utf8Path) -> String {
+    normalise_parent(path.parent()).into_string()
+}
+
+fn with_suffix(
+    path: &Utf8Path,
+    suffix: &str,
+    count: usize,
+    sep: &str,
+) -> Result<Utf8PathBuf, Error> {
+    if sep.is_empty() {
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            "with_suffix requires a non-empty separator",
+        ));
+    }
+    let mut base = path.to_path_buf();
+    let name = base.file_name().map(str::to_owned).unwrap_or_default();
+    if !name.is_empty() {
+        base.pop();
+    }
+    let mut stem = name;
+    let mut removed = 0;
+    while removed < count {
+        if let Some(idx) = stem.rfind(sep) {
+            stem.truncate(idx);
+            removed += 1;
+        } else {
+            stem.clear();
+            break;
+        }
+    }
+    stem.push_str(suffix);
+    if stem.is_empty() {
+        return Ok(base);
+    }
+    let replacement = Utf8PathBuf::from(stem);
+    base.push(&replacement);
+    Ok(base)
+}
+
+fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Error> {
+    path.strip_prefix(root)
+        .map(|p| p.as_str().to_string())
+        .map_err(|_| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!("{path} is not relative to {root}"),
+            )
+        })
+}
+
+fn expanduser(raw: &str) -> Result<String, Error> {
+    if let Some(stripped) = raw.strip_prefix("~") {
+        if let Some(first) = stripped.chars().next()
+            && first != '/'
+            && first != std::path::MAIN_SEPARATOR
+        {
+            return Err(Error::new(
+                ErrorKind::InvalidOperation,
+                "user-specific ~ expansion is unsupported",
+            ));
+        }
+        let home = env::var("HOME").or_else(|_| env::var("USERPROFILE"));
+        home.map_or_else(
+            |_| {
+                Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    "cannot expand ~: HOME is not set",
+                ))
+            },
+            |home| Ok(format!("{home}{stripped}")),
+        )
+    } else {
+        Ok(raw.to_string())
+    }
+}
+
+fn file_size(path: &Utf8Path) -> Result<u64, Error> {
+    let (dir, name, _) = open_parent_dir(path)?;
+    dir.metadata(Utf8Path::new(&name))
+        .map(|meta| meta.len())
+        .map_err(|err| io_to_error(path, "stat", err))
+}
+
+fn read_text(path: &Utf8Path, encoding: &str) -> Result<String, Error> {
+    let encoding = encoding.to_ascii_lowercase();
+    if encoding != "utf-8" && encoding != "utf8" {
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("unsupported encoding '{encoding}'"),
+        ));
+    }
+    let (dir, name, _) = open_parent_dir(path)?;
+    dir.read_to_string(Utf8Path::new(&name))
+        .map_err(|err| io_to_error(path, "read", err))
+}
+
+fn read_bytes(path: &Utf8Path) -> Result<Vec<u8>, Error> {
+    let (dir, name, _) = open_parent_dir(path)?;
+    dir.read(Utf8Path::new(&name))
+        .map_err(|err| io_to_error(path, "read", err))
+}
+
+fn linecount(path: &Utf8Path) -> Result<usize, Error> {
+    let text = read_text(path, "utf-8")?;
+    Ok(text.lines().count())
+}
+
+fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
+    let bytes = read_bytes(path)?;
+    match alg.to_ascii_lowercase().as_str() {
+        "sha256" => {
+            let mut hasher = Sha256::new();
+            Sha2Digest::update(&mut hasher, &bytes);
+            let digest = Sha2Digest::finalize(hasher);
+            Ok(encode_hex(digest.as_slice()))
+        }
+        "sha512" => {
+            let mut hasher = Sha512::new();
+            Sha2Digest::update(&mut hasher, &bytes);
+            let digest = Sha2Digest::finalize(hasher);
+            Ok(encode_hex(digest.as_slice()))
+        }
+        "sha1" => {
+            let mut hasher = Sha1::new();
+            Sha1Digest::update(&mut hasher, &bytes);
+            let digest = Sha1Digest::finalize(hasher);
+            Ok(encode_hex(digest.as_slice()))
+        }
+        "md5" => {
+            let mut hasher = Md5::new();
+            Md5Digest::update(&mut hasher, &bytes);
+            let digest = Md5Digest::finalize(hasher);
+            Ok(encode_hex(digest.as_slice()))
+        }
+        other => Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("unsupported hash algorithm '{other}'"),
+        )),
+    }
+}
+
+fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<String, Error> {
+    let mut hash = compute_hash(path, alg)?;
+    if len < hash.len() {
+        hash.truncate(len);
+    }
+    Ok(hash)
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        let _ = write!(&mut out, "{b:02x}");
+    }
+    out
+}
+
+fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Error {
+    let message = if err.kind() == io::ErrorKind::NotFound {
+        format!("{action} failed for {path}: not found")
+    } else {
+        format!("{action} failed for {path}: {err}")
+    };
+    Error::new(ErrorKind::InvalidOperation, message).with_source(err)
+}
+
 fn is_file_type<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
 where
     F: Fn(fs::FileType) -> bool,
 {
-    let (dir_path, file_name) = match (path.parent(), path.file_name()) {
-        (Some(parent), Some(name)) => (parent, name),
-        (Some(parent), None) => (parent, "."),
-        (None, Some(name)) => (Utf8Path::new("."), name),
-        (None, None) => (Utf8Path::new("."), "."),
-    };
-    let dir = match Dir::open_ambient_dir(dir_path, ambient_authority()) {
-        Ok(d) => d,
+    let (dir, name, _) = match parent_dir(path) {
+        Ok(parts) => parts,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(err) => {
-            return Err(Error::new(
-                ErrorKind::InvalidOperation,
-                format!("cannot open directory for {path}: {err}"),
-            )
-            .with_source(err));
-        }
+        Err(err) => return Err(io_to_error(path, "open directory", err)),
     };
-    match dir.symlink_metadata(Utf8Path::new(file_name)) {
+    match dir.symlink_metadata(Utf8Path::new(&name)) {
         Ok(md) => Ok(predicate(md.file_type())),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!("cannot read metadata for {path}: {err}"),
-        )
-        .with_source(err)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use camino::Utf8PathBuf;
-    use cap_std::fs_utf8::Dir;
-    use rstest::{fixture, rstest};
-    #[cfg(unix)]
-    use rustix::fs::{Dev, FileType, Mode, mknodat};
-    use tempfile::tempdir;
-
-    #[fixture]
-    fn file_paths() -> (
-        tempfile::TempDir,
-        Utf8PathBuf,
-        Utf8PathBuf,
-        Utf8PathBuf,
-        Utf8PathBuf,
-        Utf8PathBuf,
-        Utf8PathBuf,
-    ) {
-        let temp = tempdir().expect("tempdir");
-        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
-        let dir = root.join("d");
-        let file = root.join("f");
-        let link = root.join("s");
-        let fifo = root.join("p");
-        let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("ambient");
-        handle.create_dir("d").expect("dir");
-        handle.write("f", b"x").expect("file");
-        handle.symlink("f", "s").expect("symlink");
-        #[cfg(unix)]
-        mknodat(
-            &handle,
-            "p",
-            FileType::Fifo,
-            Mode::RUSR | Mode::WUSR,
-            Dev::default(),
-        )
-        .expect("fifo");
-        let bdev = Utf8PathBuf::from("/dev/loop0");
-        let cdev = Utf8PathBuf::from("/dev/null");
-        (temp, dir, file, link, fifo, bdev, cdev)
-    }
-
-    #[rstest]
-    fn detects_dir(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, dir, _, _, _, _, _) = file_paths;
-        assert!(is_file_type(&dir, is_dir).expect("dir"));
-    }
-
-    #[rstest]
-    fn detects_file(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, _, file, _, _, _, _) = file_paths;
-        assert!(is_file_type(&file, is_file).expect("file"));
-    }
-
-    #[rstest]
-    fn detects_symlink(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, _, file, link, _, _, _) = file_paths;
-        assert!(is_file_type(&link, is_symlink).expect("link"));
-        assert!(!is_file_type(&file, is_symlink).expect("file"));
-    }
-
-    #[cfg(unix)]
-    #[rstest]
-    fn detects_pipe(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, _, _, _, fifo, _, _) = file_paths;
-        assert!(is_file_type(&fifo, is_fifo).expect("fifo"));
-    }
-
-    #[cfg(unix)]
-    #[rstest]
-    fn detects_block_device(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, _, _, _, _, bdev, _) = file_paths;
-        if !bdev.as_std_path().exists() {
-            eprintln!("block device fixture not found; skipping");
-            return;
-        }
-        assert!(is_file_type(&bdev, is_block_device).expect("block"));
-    }
-
-    #[cfg(unix)]
-    #[rstest]
-    fn detects_char_device(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, _, _, _, _, _, cdev) = file_paths;
-        assert!(is_file_type(&cdev, is_char_device).expect("char"));
-    }
-
-    #[cfg(unix)]
-    #[rstest]
-    fn detects_device(
-        file_paths: (
-            tempfile::TempDir,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-            Utf8PathBuf,
-        ),
-    ) {
-        let (_, _, _, _, _, _, cdev) = file_paths;
-        assert!(is_file_type(&cdev, is_device).expect("device"));
-    }
-
-    #[rstest]
-    fn nonexistent_path_is_false() {
-        let temp = tempdir().expect("tempdir");
-        let missing =
-            Utf8PathBuf::from_path_buf(temp.path().join("missing")).expect("utf8 missing path");
-        assert!(!is_file_type(&missing, is_file).expect("missing"));
+        Err(err) => Err(io_to_error(path, "stat", err)),
     }
 }

@@ -867,6 +867,18 @@ All built-in filters use `snake_case`. The `camel_case` helper is provided in
 place of `camelCase` so naming remains consistent with `snake_case` and
 `kebab-case`.
 
+Implementation notes:
+
+- Filters use `cap-std` directories for all filesystem work, avoiding ambient
+  authority.
+- `realpath` canonicalises the parent directory before joining the resolved
+  entry so results are absolute and symlink-free.
+- `contents` and `linecount` currently support UTF-8 input; other encodings are
+  rejected with an explicit error.
+- `hash` and `digest` accept `sha256` (default), `sha512`, `sha1`, and `md5`.
+- `with_suffix` removes dotted suffix segments (default `n = 1`) before
+  appending the provided suffix.
+
 #### Generic collection filters
 
 | Filter                            | Purpose                                      |
