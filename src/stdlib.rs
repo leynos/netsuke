@@ -276,12 +276,16 @@ fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Error> {
         })
 }
 
+fn is_user_specific_expansion(stripped: &str) -> bool {
+    matches!(
+        stripped.chars().next(),
+        Some(first) if first != '/' && first != std::path::MAIN_SEPARATOR
+    )
+}
+
 fn expanduser(raw: &str) -> Result<String, Error> {
     if let Some(stripped) = raw.strip_prefix("~") {
-        if let Some(first) = stripped.chars().next()
-            && first != '/'
-            && first != std::path::MAIN_SEPARATOR
-        {
+        if is_user_specific_expansion(stripped) {
             return Err(Error::new(
                 ErrorKind::InvalidOperation,
                 "user-specific ~ expansion is unsupported",
