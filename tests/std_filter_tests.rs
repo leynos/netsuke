@@ -1,6 +1,6 @@
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, context};
+use minijinja::{Environment, ErrorKind, context};
 use netsuke::stdlib;
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
@@ -77,6 +77,21 @@ fn with_suffix_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
 }
 
 #[rstest]
+fn with_suffix_filter_without_separator(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let file = root.join("file");
+    let output = render(
+        &mut env,
+        "suffix_plain",
+        "{{ path | with_suffix('.log') }}",
+        &file,
+    );
+    assert_eq!(output, root.join("file.log").as_str());
+}
+
+#[rstest]
 fn realpath_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let (_temp, root) = filter_workspace;
     let mut env = Environment::new();
@@ -84,6 +99,47 @@ fn realpath_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let link = root.join("link");
     let output = render(&mut env, "realpath", "{{ path | realpath }}", &link);
     assert_eq!(output, root.join("file").as_str());
+}
+
+#[rstest]
+fn realpath_filter_missing_path(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    env.add_template("realpath_missing", "{{ path | realpath }}")
+        .expect("template");
+    let template = env.get_template("realpath_missing").expect("get template");
+    let missing = root.join("missing");
+    let result = template.render(context!(path => missing.as_str()));
+    let err = result.expect_err("realpath should error for missing path");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("not found"),
+        "error should mention missing path",
+    );
+}
+
+#[rstest]
+fn realpath_filter_root_path(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let root_path = root
+        .ancestors()
+        .find(|candidate| candidate.parent().is_none())
+        .map(Utf8Path::to_path_buf)
+        .expect("root ancestor");
+    assert!(
+        !root_path.as_str().is_empty(),
+        "root path should not be empty",
+    );
+    let output = render(
+        &mut env,
+        "realpath_root",
+        "{{ path | realpath }}",
+        &root_path,
+    );
+    assert_eq!(output, root_path.as_str());
 }
 
 #[rstest]
@@ -101,6 +157,26 @@ fn contents_and_linecount_filters(filter_workspace: (tempfile::TempDir, Utf8Path
         &root.join("lines.txt"),
     );
     assert_eq!(lines.parse::<usize>().expect("usize"), 3);
+}
+
+#[rstest]
+fn contents_filter_unsupported_encoding(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    env.add_template("contents_bad_encoding", "{{ path | contents('latin-1') }}")
+        .expect("template");
+    let template = env
+        .get_template("contents_bad_encoding")
+        .expect("get template");
+    let file = root.join("file");
+    let result = template.render(context!(path => file.as_str()));
+    let err = result.expect_err("contents should error on unsupported encoding");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("unsupported encoding"),
+        "error should mention unsupported encoding",
+    );
 }
 
 #[rstest]

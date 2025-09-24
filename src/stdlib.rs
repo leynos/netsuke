@@ -1,4 +1,4 @@
-//! File-system helpers for Jinja templates.
+//! File-system helpers for `MiniJinja` templates.
 //!
 //! Registers platform-aware file tests and a suite of path and file filters.
 //! Tests such as `dir`, `file`, and `symlink` inspect metadata without
@@ -17,7 +17,7 @@ use std::{env, fmt::Write as FmtWrite, io};
 
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
-/// Register standard library helpers with the Jinja environment.
+/// Register standard library helpers with the `MiniJinja` environment.
 ///
 /// # Examples
 /// ```
@@ -252,14 +252,10 @@ fn with_suffix(
             stem.truncate(idx);
             removed += 1;
         } else {
-            stem.clear();
             break;
         }
     }
     stem.push_str(suffix);
-    if stem.is_empty() {
-        return Ok(base);
-    }
     let replacement = Utf8PathBuf::from(stem);
     base.push(&replacement);
     Ok(base)
