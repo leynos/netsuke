@@ -17,10 +17,9 @@ use minijinja::{Environment, Error, ErrorKind, value::Value};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use std::{
-    borrow::Cow,
     env,
     fmt::Write as FmtWrite,
-    io::{self, Read},
+    io::{self, ErrorKind as IoErrorKind, Read},
 };
 
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
@@ -417,58 +416,61 @@ fn encode_hex(bytes: &[u8]) -> String {
     out
 }
 
-fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Error {
-    use io::ErrorKind as IoErrorKind;
+fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
+    match kind {
+        IoErrorKind::NotFound => "not found",
+        IoErrorKind::PermissionDenied => "permission denied",
+        IoErrorKind::AlreadyExists => "already exists",
+        IoErrorKind::InvalidInput => "invalid input",
+        IoErrorKind::InvalidData => "invalid data",
+        IoErrorKind::TimedOut => "timed out",
+        IoErrorKind::Interrupted => "interrupted",
+        IoErrorKind::WouldBlock => "operation would block",
+        IoErrorKind::WriteZero => "write zero",
+        IoErrorKind::UnexpectedEof => "unexpected end of file",
+        IoErrorKind::BrokenPipe => "broken pipe",
+        IoErrorKind::ConnectionRefused => "connection refused",
+        IoErrorKind::ConnectionReset => "connection reset",
+        IoErrorKind::ConnectionAborted => "connection aborted",
+        IoErrorKind::NotConnected => "not connected",
+        IoErrorKind::AddrInUse => "address in use",
+        IoErrorKind::AddrNotAvailable => "address not available",
+        IoErrorKind::OutOfMemory => "out of memory",
+        IoErrorKind::Unsupported => "unsupported operation",
+        IoErrorKind::FileTooLarge => "file too large",
+        IoErrorKind::ResourceBusy => "resource busy",
+        IoErrorKind::ExecutableFileBusy => "executable busy",
+        IoErrorKind::Deadlock => "deadlock",
+        IoErrorKind::CrossesDevices => "cross-device link",
+        IoErrorKind::TooManyLinks => "too many links",
+        IoErrorKind::InvalidFilename => "invalid filename",
+        IoErrorKind::ArgumentListTooLong => "argument list too long",
+        IoErrorKind::StaleNetworkFileHandle => "stale network file handle",
+        IoErrorKind::StorageFull => "storage full",
+        IoErrorKind::NotSeekable => "not seekable",
+        IoErrorKind::NetworkDown => "network down",
+        IoErrorKind::NetworkUnreachable => "network unreachable",
+        IoErrorKind::HostUnreachable => "host unreachable",
+        _ => "io error",
+    }
+}
 
-    // MiniJinja exposes a coarse error kind set, so use InvalidOperation while
-    // preserving the OS classification in the message for additional context.
-    let (kind, detail): (ErrorKind, Cow<'static, str>) = match err.kind() {
-        IoErrorKind::NotFound => (ErrorKind::InvalidOperation, Cow::Borrowed("not found")),
-        IoErrorKind::PermissionDenied => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("permission denied"),
-        ),
-        IoErrorKind::AlreadyExists => {
-            (ErrorKind::InvalidOperation, Cow::Borrowed("already exists"))
-        }
-        IoErrorKind::InvalidInput | IoErrorKind::InvalidData => {
-            (ErrorKind::InvalidOperation, Cow::Borrowed("invalid input"))
-        }
-        IoErrorKind::TimedOut => (ErrorKind::InvalidOperation, Cow::Borrowed("timed out")),
-        IoErrorKind::Interrupted => (ErrorKind::InvalidOperation, Cow::Borrowed("interrupted")),
-        IoErrorKind::WouldBlock => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("operation would block"),
-        ),
-        IoErrorKind::UnexpectedEof => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("unexpected end of file"),
-        ),
-        IoErrorKind::BrokenPipe => (ErrorKind::InvalidOperation, Cow::Borrowed("broken pipe")),
-        IoErrorKind::ConnectionRefused => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("connection refused"),
-        ),
-        IoErrorKind::ConnectionReset => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("connection reset"),
-        ),
-        IoErrorKind::ConnectionAborted => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("connection aborted"),
-        ),
-        IoErrorKind::NotConnected => (ErrorKind::InvalidOperation, Cow::Borrowed("not connected")),
-        IoErrorKind::AddrInUse => (ErrorKind::InvalidOperation, Cow::Borrowed("address in use")),
-        IoErrorKind::AddrNotAvailable => (
-            ErrorKind::InvalidOperation,
-            Cow::Borrowed("address not available"),
-        ),
-        _ => (ErrorKind::InvalidOperation, Cow::Owned(err.to_string())),
+fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Error {
+    let io_kind = err.kind();
+    let label = io_error_kind_label(io_kind);
+    let detail = err.to_string();
+
+    // MiniJinja exposes a coarse error kind set, so embed the OS classification
+    // alongside the original message to aid debugging in templates.
+    let message = if detail.is_empty() {
+        format!("{action} failed for {path}: {label} [{io_kind:?}]")
+    } else if detail.to_ascii_lowercase().contains(label) {
+        format!("{action} failed for {path}: {detail} [{io_kind:?}]")
+    } else {
+        format!("{action} failed for {path}: {label} [{io_kind:?}] ({detail})")
     };
 
-    let message = format!("{action} failed for {path}: {detail}");
-
-    Error::new(kind, message).with_source(err)
+    Error::new(ErrorKind::InvalidOperation, message).with_source(err)
 }
 
 fn is_file_type<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
