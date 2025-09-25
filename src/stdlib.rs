@@ -445,6 +445,24 @@ fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Error {
             Cow::Borrowed("unexpected end of file"),
         ),
         IoErrorKind::BrokenPipe => (ErrorKind::InvalidOperation, Cow::Borrowed("broken pipe")),
+        IoErrorKind::ConnectionRefused => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("connection refused"),
+        ),
+        IoErrorKind::ConnectionReset => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("connection reset"),
+        ),
+        IoErrorKind::ConnectionAborted => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("connection aborted"),
+        ),
+        IoErrorKind::NotConnected => (ErrorKind::InvalidOperation, Cow::Borrowed("not connected")),
+        IoErrorKind::AddrInUse => (ErrorKind::InvalidOperation, Cow::Borrowed("address in use")),
+        IoErrorKind::AddrNotAvailable => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("address not available"),
+        ),
         _ => (ErrorKind::InvalidOperation, Cow::Owned(err.to_string())),
     };
 
