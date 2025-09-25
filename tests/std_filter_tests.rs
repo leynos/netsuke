@@ -92,6 +92,43 @@ fn with_suffix_filter_without_separator(filter_workspace: (tempfile::TempDir, Ut
 }
 
 #[rstest]
+fn with_suffix_filter_empty_separator(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    env.add_template(
+        "suffix_empty_sep",
+        "{{ path | with_suffix('.log', 1, '') }}",
+    )
+    .expect("template");
+    let template = env.get_template("suffix_empty_sep").expect("get template");
+    let file = root.join("file.tar.gz");
+    let result = template.render(context!(path => file.as_str()));
+    let err = result.expect_err("with_suffix should reject empty separator");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("non-empty separator"),
+        "error should mention separator requirement",
+    );
+}
+
+#[rstest]
+fn with_suffix_filter_excessive_count(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let file = root.join("file.tar.gz");
+    let output = render(
+        &mut env,
+        "suffix_excessive",
+        "{{ path | with_suffix('.bak', 5) }}",
+        &file,
+    );
+    assert_eq!(output, root.join("file.bak").as_str());
+}
+
+#[cfg(unix)]
+#[rstest]
 fn realpath_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let (_temp, root) = filter_workspace;
     let mut env = Environment::new();
@@ -101,6 +138,7 @@ fn realpath_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     assert_eq!(output, root.join("file").as_str());
 }
 
+#[cfg(unix)]
 #[rstest]
 fn realpath_filter_missing_path(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let (_temp, root) = filter_workspace;
@@ -119,6 +157,7 @@ fn realpath_filter_missing_path(filter_workspace: (tempfile::TempDir, Utf8PathBu
     );
 }
 
+#[cfg(unix)]
 #[rstest]
 fn realpath_filter_root_path(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let (_temp, root) = filter_workspace;
@@ -180,18 +219,50 @@ fn contents_filter_unsupported_encoding(filter_workspace: (tempfile::TempDir, Ut
 }
 
 #[rstest]
-fn hash_and_digest_filters(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+#[case(
+    "sha256",
+    "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+    "3a6eb079"
+)]
+#[case(
+    "sha512",
+    "77c7ce9a5d86bb386d443bb96390faa120633158699c8844c30b13ab0bf92760b7e4416aea397db91b4ac0e5dd56b8ef7e4b066162ab1fdc088319ce6defc876",
+    "77c7ce9a"
+)]
+#[case("sha1", "a17c9aaa61e80a1bf71d0d850af4e5baa9800bbd", "a17c9aaa")]
+#[case("md5", "8d777f385d3dfec8815d20f7496026dc", "8d777f38")]
+fn hash_and_digest_filters(
+    filter_workspace: (tempfile::TempDir, Utf8PathBuf),
+    #[case] alg: &str,
+    #[case] expected_hash: &str,
+    #[case] expected_digest: &str,
+) {
     let (_temp, root) = filter_workspace;
     let mut env = Environment::new();
     stdlib::register(&mut env);
     let file = root.join("file");
-    let hash = render(&mut env, "hash", "{{ path | hash }}", &file);
-    assert_eq!(
-        hash,
-        "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7"
-    );
-    let digest = render(&mut env, "digest", "{{ path | digest(8) }}", &file);
-    assert_eq!(digest, "3a6eb079");
+
+    let hash_template_name = format!("hash_{alg}");
+    let hash_template = format!("{{{{ path | hash('{alg}') }}}}");
+    env.add_template(hash_template_name.as_str(), hash_template.as_str())
+        .expect("template");
+    let hash_result = env
+        .get_template(hash_template_name.as_str())
+        .expect("get template")
+        .render(context!(path => file.as_str()))
+        .expect("render hash");
+    assert_eq!(hash_result, expected_hash);
+
+    let digest_template_name = format!("digest_{alg}");
+    let digest_template = format!("{{{{ path | digest(8, '{alg}') }}}}");
+    env.add_template(digest_template_name.as_str(), digest_template.as_str())
+        .expect("template");
+    let digest_result = env
+        .get_template(digest_template_name.as_str())
+        .expect("get template")
+        .render(context!(path => file.as_str()))
+        .expect("render digest");
+    assert_eq!(digest_result, expected_digest);
 }
 
 #[rstest]
@@ -218,4 +289,49 @@ fn expanduser_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
         &Utf8PathBuf::from("~/workspace"),
     );
     assert_eq!(home, root.join("workspace").as_str());
+}
+
+#[rstest]
+fn expanduser_filter_missing_home(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, _root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let _lock = EnvLock::acquire();
+    let _home_guard = EnvVarGuard::remove("HOME");
+    let _profile_guard = EnvVarGuard::remove("USERPROFILE");
+    env.add_template("expanduser_missing_home", "{{ path | expanduser }}")
+        .expect("template");
+    let template = env
+        .get_template("expanduser_missing_home")
+        .expect("get template");
+    let result = template.render(context!(path => "~/workspace"));
+    let err = result.expect_err("expanduser should error when HOME is unset");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("HOME is not set"),
+        "error should mention missing HOME",
+    );
+}
+
+#[rstest]
+fn expanduser_filter_user_specific(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let _lock = EnvLock::acquire();
+    let _home_guard = EnvVarGuard::set("HOME", root.as_str());
+    let _profile_guard = EnvVarGuard::remove("USERPROFILE");
+    env.add_template("expanduser_user_specific", "{{ path | expanduser }}")
+        .expect("template");
+    let template = env
+        .get_template("expanduser_user_specific")
+        .expect("get template");
+    let result = template.render(context!(path => "~otheruser/workspace"));
+    let err = result.expect_err("expanduser should reject ~user expansion");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string()
+            .contains("user-specific ~ expansion is unsupported"),
+        "error should mention unsupported user expansion",
+    );
 }
