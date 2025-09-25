@@ -875,7 +875,13 @@ Implementation notes:
   entry so results are absolute and symlink-free.
 - `contents` and `linecount` currently support UTF-8 input; other encodings are
   rejected with an explicit error.
-- `hash` and `digest` accept `sha256` (default), `sha512`, `sha1`, and `md5`.
+- `hash` and `digest` accept `sha256` (default) and `sha512`. Legacy
+  algorithms `sha1` and `md5` are cryptographically broken and are disabled by
+  default; enabling them requires the `legacy-digests` Cargo feature and should
+  only be done for compatibility with existing ecosystems.
+- `expanduser` mirrors shell semantics by requiring either `HOME` or
+  `USERPROFILE`. Platform-specific forms such as `~user` or UNC paths are not
+  expanded automatically.
 - `with_suffix` removes dotted suffix segments (default `n = 1`) before
   appending the provided suffix.
 

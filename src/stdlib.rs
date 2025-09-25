@@ -9,11 +9,18 @@ use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
-use md5::{Digest as Md5Digest, Md5};
+use digest::Digest;
+#[cfg(feature = "legacy-digests")]
+use md5::Md5;
 use minijinja::{Environment, Error, ErrorKind, value::Value};
-use sha1::{Digest as Sha1Digest, Sha1};
-use sha2::{Digest as Sha2Digest, Sha256, Sha512};
-use std::{env, fmt::Write as FmtWrite, io};
+#[cfg(feature = "legacy-digests")]
+use sha1::Sha1;
+use sha2::{Sha256, Sha512};
+use std::{
+    env,
+    fmt::Write as FmtWrite,
+    io::{self, Read},
+};
 
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
@@ -26,11 +33,11 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 ///
 /// let mut env = Environment::new();
 /// stdlib::register(&mut env);
-/// env.add_template("t", "{{ path | basename }}").unwrap();
-/// let tmpl = env.get_template("t").unwrap();
+/// env.add_template("t", "{{ path | basename }}").expect("add template");
+/// let tmpl = env.get_template("t").expect("get template");
 /// let rendered = tmpl
 ///     .render(context!(path => "foo/bar.txt"))
-///     .unwrap();
+///     .expect("render");
 /// assert_eq!(rendered, "bar.txt");
 /// ```
 pub fn register(env: &mut Environment<'_>) {
@@ -292,7 +299,7 @@ fn expanduser(raw: &str) -> Result<String, Error> {
             |_| {
                 Err(Error::new(
                     ErrorKind::InvalidOperation,
-                    "cannot expand ~: HOME is not set",
+                    "cannot expand ~: neither HOME nor USERPROFILE is set",
                 ))
             },
             |home| Ok(format!("{home}{stripped}")),
@@ -322,49 +329,75 @@ fn read_text(path: &Utf8Path, encoding: &str) -> Result<String, Error> {
         .map_err(|err| io_to_error(path, "read", err))
 }
 
-fn read_bytes(path: &Utf8Path) -> Result<Vec<u8>, Error> {
-    let (dir, name, _) = open_parent_dir(path)?;
-    dir.read(Utf8Path::new(&name))
-        .map_err(|err| io_to_error(path, "read", err))
-}
-
 fn linecount(path: &Utf8Path) -> Result<usize, Error> {
     let text = read_text(path, "utf-8")?;
     Ok(text.lines().count())
 }
 
 fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
-    let bytes = read_bytes(path)?;
     match alg.to_ascii_lowercase().as_str() {
-        "sha256" => {
-            let mut hasher = Sha256::new();
-            Sha2Digest::update(&mut hasher, &bytes);
-            let digest = Sha2Digest::finalize(hasher);
-            Ok(encode_hex(digest.as_slice()))
-        }
-        "sha512" => {
-            let mut hasher = Sha512::new();
-            Sha2Digest::update(&mut hasher, &bytes);
-            let digest = Sha2Digest::finalize(hasher);
-            Ok(encode_hex(digest.as_slice()))
-        }
+        "sha256" => hash_stream::<Sha256>(path),
+        "sha512" => hash_stream::<Sha512>(path),
         "sha1" => {
-            let mut hasher = Sha1::new();
-            Sha1Digest::update(&mut hasher, &bytes);
-            let digest = Sha1Digest::finalize(hasher);
-            Ok(encode_hex(digest.as_slice()))
+            #[cfg(feature = "legacy-digests")]
+            {
+                hash_stream::<Sha1>(path)
+            }
+            #[cfg(not(feature = "legacy-digests"))]
+            {
+                Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    "unsupported hash algorithm 'sha1' (enable feature 'legacy-digests')"
+                        .to_string(),
+                ))
+            }
         }
         "md5" => {
-            let mut hasher = Md5::new();
-            Md5Digest::update(&mut hasher, &bytes);
-            let digest = Md5Digest::finalize(hasher);
-            Ok(encode_hex(digest.as_slice()))
+            #[cfg(feature = "legacy-digests")]
+            {
+                hash_stream::<Md5>(path)
+            }
+            #[cfg(not(feature = "legacy-digests"))]
+            {
+                Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    "unsupported hash algorithm 'md5' (enable feature 'legacy-digests')"
+                        .to_string(),
+                ))
+            }
         }
         other => Err(Error::new(
             ErrorKind::InvalidOperation,
             format!("unsupported hash algorithm '{other}'"),
         )),
     }
+}
+
+fn hash_stream<H>(path: &Utf8Path) -> Result<String, Error>
+where
+    H: Digest,
+{
+    let (dir, name, _) = open_parent_dir(path)?;
+    let mut opts = fs::OpenOptions::new();
+    opts.read(true);
+    let mut file = dir
+        .open_with(Utf8Path::new(&name), &opts)
+        .map_err(|err| io_to_error(path, "open file", err))?;
+    let mut hasher = H::new();
+    // Stream in fixed-size chunks to avoid loading entire files.
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|err| io_to_error(path, "read", err))?;
+        if read == 0 {
+            break;
+        }
+        let chunk = buffer.get(..read).unwrap_or(&[]);
+        hasher.update(chunk);
+    }
+    let digest = hasher.finalize();
+    Ok(encode_hex(digest.as_slice()))
 }
 
 fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<String, Error> {
@@ -384,12 +417,20 @@ fn encode_hex(bytes: &[u8]) -> String {
 }
 
 fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Error {
-    let message = if err.kind() == io::ErrorKind::NotFound {
+    use io::ErrorKind as IoErrorKind;
+
+    // MiniJinja exposes a coarse error kind set, so attach the OS error
+    // kind in the message while mapping everything to the closest available
+    // variant.
+    let kind = ErrorKind::InvalidOperation;
+
+    let message = if err.kind() == IoErrorKind::NotFound {
         format!("{action} failed for {path}: not found")
     } else {
         format!("{action} failed for {path}: {err}")
     };
-    Error::new(ErrorKind::InvalidOperation, message).with_source(err)
+
+    Error::new(kind, message).with_source(err)
 }
 
 fn is_file_type<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>

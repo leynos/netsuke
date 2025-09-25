@@ -1029,6 +1029,7 @@ dependencies = [
  "clap",
  "clap_mangen",
  "cucumber",
+ "digest",
  "glob",
  "insta",
  "itertools 0.12.1",

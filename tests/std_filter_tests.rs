@@ -12,7 +12,10 @@ fn filter_workspace() -> (tempfile::TempDir, Utf8PathBuf) {
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
     dir.write("file", b"data").expect("file");
+    #[cfg(unix)]
     dir.symlink("file", "link").expect("symlink");
+    #[cfg(not(unix))]
+    dir.write("link", b"data").expect("link copy");
     dir.write("lines.txt", b"one\ntwo\nthree\n").expect("lines");
     (temp, root)
 }
@@ -28,6 +31,17 @@ fn render<'a>(
         .expect("get template")
         .render(context!(path => path.as_str()))
         .expect("render")
+}
+
+fn register_template(
+    env: &mut Environment<'_>,
+    name: impl Into<String>,
+    source: impl Into<String>,
+) {
+    let leaked_name = Box::leak(name.into().into_boxed_str());
+    let leaked_source = Box::leak(source.into().into_boxed_str());
+    env.add_template(leaked_name, leaked_source)
+        .expect("template");
 }
 
 #[rstest]
@@ -229,8 +243,14 @@ fn contents_filter_unsupported_encoding(filter_workspace: (tempfile::TempDir, Ut
     "77c7ce9a5d86bb386d443bb96390faa120633158699c8844c30b13ab0bf92760b7e4416aea397db91b4ac0e5dd56b8ef7e4b066162ab1fdc088319ce6defc876",
     "77c7ce9a"
 )]
-#[case("sha1", "a17c9aaa61e80a1bf71d0d850af4e5baa9800bbd", "a17c9aaa")]
-#[case("md5", "8d777f385d3dfec8815d20f7496026dc", "8d777f38")]
+#[cfg_attr(
+    feature = "legacy-digests",
+    case("sha1", "a17c9aaa61e80a1bf71d0d850af4e5baa9800bbd", "a17c9aaa",)
+)]
+#[cfg_attr(
+    feature = "legacy-digests",
+    case("md5", "8d777f385d3dfec8815d20f7496026dc", "8d777f38",)
+)]
 fn hash_and_digest_filters(
     filter_workspace: (tempfile::TempDir, Utf8PathBuf),
     #[case] alg: &str,
@@ -244,8 +264,7 @@ fn hash_and_digest_filters(
 
     let hash_template_name = format!("hash_{alg}");
     let hash_template = format!("{{{{ path | hash('{alg}') }}}}");
-    env.add_template(hash_template_name.as_str(), hash_template.as_str())
-        .expect("template");
+    register_template(&mut env, hash_template_name.as_str(), hash_template);
     let hash_result = env
         .get_template(hash_template_name.as_str())
         .expect("get template")
@@ -255,14 +274,67 @@ fn hash_and_digest_filters(
 
     let digest_template_name = format!("digest_{alg}");
     let digest_template = format!("{{{{ path | digest(8, '{alg}') }}}}");
-    env.add_template(digest_template_name.as_str(), digest_template.as_str())
-        .expect("template");
+    register_template(&mut env, digest_template_name.as_str(), digest_template);
     let digest_result = env
         .get_template(digest_template_name.as_str())
         .expect("get template")
         .render(context!(path => file.as_str()))
         .expect("render digest");
     assert_eq!(digest_result, expected_digest);
+}
+
+#[cfg(not(feature = "legacy-digests"))]
+#[rstest]
+fn hash_filter_legacy_algorithms_disabled(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+
+    register_template(&mut env, "hash_sha1", "{{ path | hash('sha1') }}");
+    let template = env.get_template("hash_sha1").expect("get template");
+    let result = template.render(context!(path => root.join("file").as_str()));
+    let err = result.expect_err("hash should require the legacy-digests feature for sha1");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("enable feature 'legacy-digests'"),
+        "error should mention legacy feature: {err}",
+    );
+}
+
+#[rstest]
+fn hash_filter_rejects_unknown_algorithm(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let file = root.join("file");
+
+    register_template(&mut env, "hash_unknown", "{{ path | hash('whirlpool') }}");
+    let hash_template = env.get_template("hash_unknown").expect("get template");
+    let hash_result = hash_template.render(context!(path => file.as_str()));
+    let hash_err = hash_result.expect_err("hash should reject unsupported algorithms");
+    assert_eq!(hash_err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        hash_err
+            .to_string()
+            .contains("unsupported hash algorithm 'whirlpool'"),
+        "error should mention unsupported algorithm: {hash_err}",
+    );
+
+    register_template(
+        &mut env,
+        "digest_unknown",
+        "{{ path | digest(8, 'whirlpool') }}",
+    );
+    let digest_template = env.get_template("digest_unknown").expect("get template");
+    let digest_result = digest_template.render(context!(path => file.as_str()));
+    let digest_err = digest_result.expect_err("digest should reject unsupported algorithms");
+    assert_eq!(digest_err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        digest_err
+            .to_string()
+            .contains("unsupported hash algorithm 'whirlpool'"),
+        "error should mention unsupported algorithm: {digest_err}",
+    );
 }
 
 #[rstest]
@@ -308,7 +380,8 @@ fn expanduser_filter_missing_home(filter_workspace: (tempfile::TempDir, Utf8Path
     let err = result.expect_err("expanduser should error when HOME is unset");
     assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     assert!(
-        err.to_string().contains("HOME is not set"),
+        err.to_string()
+            .contains("neither HOME nor USERPROFILE is set"),
         "error should mention missing HOME",
     );
 }
