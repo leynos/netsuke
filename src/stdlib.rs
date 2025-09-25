@@ -17,6 +17,7 @@ use minijinja::{Environment, Error, ErrorKind, value::Value};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 use std::{
+    borrow::Cow,
     env,
     fmt::Write as FmtWrite,
     io::{self, Read},
@@ -419,16 +420,35 @@ fn encode_hex(bytes: &[u8]) -> String {
 fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Error {
     use io::ErrorKind as IoErrorKind;
 
-    // MiniJinja exposes a coarse error kind set, so attach the OS error
-    // kind in the message while mapping everything to the closest available
-    // variant.
-    let kind = ErrorKind::InvalidOperation;
-
-    let message = if err.kind() == IoErrorKind::NotFound {
-        format!("{action} failed for {path}: not found")
-    } else {
-        format!("{action} failed for {path}: {err}")
+    // MiniJinja exposes a coarse error kind set, so use InvalidOperation while
+    // preserving the OS classification in the message for additional context.
+    let (kind, detail): (ErrorKind, Cow<'static, str>) = match err.kind() {
+        IoErrorKind::NotFound => (ErrorKind::InvalidOperation, Cow::Borrowed("not found")),
+        IoErrorKind::PermissionDenied => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("permission denied"),
+        ),
+        IoErrorKind::AlreadyExists => {
+            (ErrorKind::InvalidOperation, Cow::Borrowed("already exists"))
+        }
+        IoErrorKind::InvalidInput | IoErrorKind::InvalidData => {
+            (ErrorKind::InvalidOperation, Cow::Borrowed("invalid input"))
+        }
+        IoErrorKind::TimedOut => (ErrorKind::InvalidOperation, Cow::Borrowed("timed out")),
+        IoErrorKind::Interrupted => (ErrorKind::InvalidOperation, Cow::Borrowed("interrupted")),
+        IoErrorKind::WouldBlock => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("operation would block"),
+        ),
+        IoErrorKind::UnexpectedEof => (
+            ErrorKind::InvalidOperation,
+            Cow::Borrowed("unexpected end of file"),
+        ),
+        IoErrorKind::BrokenPipe => (ErrorKind::InvalidOperation, Cow::Borrowed("broken pipe")),
+        _ => (ErrorKind::InvalidOperation, Cow::Owned(err.to_string())),
     };
+
+    let message = format!("{action} failed for {path}: {detail}");
 
     Error::new(kind, message).with_source(err)
 }
