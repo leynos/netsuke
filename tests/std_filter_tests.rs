@@ -396,6 +396,23 @@ fn size_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
 }
 
 #[rstest]
+fn size_filter_missing_file(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    register_template(&mut env, "size_missing", "{{ path | size }}");
+    let missing = root.join("does_not_exist");
+    let template = env.get_template("size_missing").expect("get template");
+    let result = template.render(context!(path => missing.as_str()));
+    let err = result.expect_err("size should error for missing file");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("does_not_exist") || err.to_string().contains("not found"),
+        "error should mention missing file: {err}",
+    );
+}
+
+#[rstest]
 fn expanduser_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let (_temp, root) = filter_workspace;
     let mut env = Environment::new();
@@ -413,6 +430,21 @@ fn expanduser_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
         &Utf8PathBuf::from("~/workspace"),
     );
     assert_eq!(home, root.join("workspace").as_str());
+}
+
+#[rstest]
+fn expanduser_filter_non_tilde_path(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let file = root.join("file");
+    let output = render(
+        &mut env,
+        "expanduser_plain",
+        "{{ path | expanduser }}",
+        &file,
+    );
+    assert_eq!(output, file.as_str());
 }
 
 #[rstest]

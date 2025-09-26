@@ -57,3 +57,36 @@ fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
         _ => "io error",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(io::Error::new(io::ErrorKind::NotFound, ""), "not found")]
+    #[case(
+        io::Error::new(io::ErrorKind::PermissionDenied, "permission denied"),
+        "permission denied"
+    )]
+    #[case(
+        io::Error::new(io::ErrorKind::UnexpectedEof, "unexpected end of file"),
+        "unexpected end of file"
+    )]
+    fn io_to_error_includes_label(#[case] err: io::Error, #[case] expected_label: &str) {
+        let path = Utf8PathBuf::from("/tmp/example");
+        let error = io_to_error(path.as_path(), "read", err);
+        assert_eq!(error.kind(), ErrorKind::InvalidOperation);
+        let text = error.to_string();
+        assert!(text.contains("read failed for /tmp/example"));
+        assert!(text.contains(expected_label));
+    }
+
+    #[rstest]
+    #[case(io::ErrorKind::AddrInUse, "address in use")]
+    #[case(io::ErrorKind::Other, "io error")]
+    fn io_error_kind_label_matches_expected(#[case] kind: io::ErrorKind, #[case] expected: &str) {
+        assert_eq!(io_error_kind_label(kind), expected);
+    }
+}

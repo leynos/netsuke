@@ -62,6 +62,7 @@ pub struct BuildEdge {
 ///
 /// ```
 /// use netsuke::ir::IrGenError;
+/// use serde::ser::Error as _;
 ///
 /// fn describe(err: IrGenError) -> String {
 ///     match err {
@@ -86,6 +87,7 @@ pub enum IrGenError {
     ///
     /// ```
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::RuleNotFound {
     ///     target_name: "app".into(),
@@ -107,6 +109,7 @@ pub enum IrGenError {
     ///
     /// ```
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::MultipleRules {
     ///     target_name: "lib".into(),
@@ -129,6 +132,7 @@ pub enum IrGenError {
     ///
     /// ```
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::EmptyRule { target_name: "docs".into() };
     /// assert_eq!(
@@ -143,6 +147,7 @@ pub enum IrGenError {
     ///
     /// ```
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::DuplicateOutput {
     ///     outputs: vec!["obj.o".into()],
@@ -162,6 +167,7 @@ pub enum IrGenError {
     /// ```
     /// use camino::Utf8PathBuf;
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::CircularDependency {
     ///     cycle: vec![Utf8PathBuf::from("a"), Utf8PathBuf::from("a")],
@@ -184,6 +190,7 @@ pub enum IrGenError {
     ///
     /// ```
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let source = serde_json::Error::custom("invalid action");
     /// let err = IrGenError::ActionSerialisation(source);
@@ -196,6 +203,7 @@ pub enum IrGenError {
     ///
     /// ```
     /// use netsuke::ir::IrGenError;
+    /// use serde::ser::Error as _;
     ///
     /// let err = IrGenError::InvalidCommand {
     ///     command: "echo $in".into(),

@@ -1,5 +1,6 @@
 //! Cucumber test runner and world state.
 
+use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -29,6 +30,12 @@ pub struct CliWorld {
     pub temp: Option<tempfile::TempDir>,
     /// Guard that restores `PATH` after each scenario.
     pub path_guard: Option<PathGuard>,
+    /// Root directory for stdlib scenarios.
+    pub stdlib_root: Option<Utf8PathBuf>,
+    /// Captured output from the last stdlib render.
+    pub stdlib_output: Option<String>,
+    /// Error from the last stdlib render.
+    pub stdlib_error: Option<String>,
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     /// Stores the original value (`Some`) or `None` if the variable was previously unset.
     pub env_vars: HashMap<String, Option<OsString>>,
