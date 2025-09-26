@@ -88,6 +88,13 @@ fn with_suffix_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
         &file,
     );
     assert_eq!(second, root.join("file.zip").as_str());
+    let third = render(
+        &mut env,
+        "suffix_count_zero",
+        "{{ path | with_suffix('.bak', 0) }}",
+        &file,
+    );
+    assert_eq!(third, root.join("file.tar.gz.bak").as_str());
 }
 
 #[rstest]
@@ -210,6 +217,19 @@ fn contents_and_linecount_filters(filter_workspace: (tempfile::TempDir, Utf8Path
         &root.join("lines.txt"),
     );
     assert_eq!(lines.parse::<usize>().expect("usize"), 3);
+
+    Dir::open_ambient_dir(&root, ambient_authority())
+        .expect("dir")
+        .write("empty.txt", b"")
+        .expect("empty file");
+    let empty_file = root.join("empty.txt");
+    let empty_lines = render(
+        &mut env,
+        "empty_linecount",
+        "{{ path | linecount }}",
+        &empty_file,
+    );
+    assert_eq!(empty_lines.parse::<usize>().expect("usize"), 0);
 }
 
 #[rstest]
@@ -243,13 +263,31 @@ fn contents_filter_unsupported_encoding(filter_workspace: (tempfile::TempDir, Ut
     "77c7ce9a5d86bb386d443bb96390faa120633158699c8844c30b13ab0bf92760b7e4416aea397db91b4ac0e5dd56b8ef7e4b066162ab1fdc088319ce6defc876",
     "77c7ce9a"
 )]
+#[case(
+    "sha256-empty",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "e3b0c442"
+)]
+#[case(
+    "sha512-empty",
+    "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+    "cf83e135"
+)]
 #[cfg_attr(
     feature = "legacy-digests",
     case("sha1", "a17c9aaa61e80a1bf71d0d850af4e5baa9800bbd", "a17c9aaa",)
 )]
 #[cfg_attr(
     feature = "legacy-digests",
+    case("sha1-empty", "da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee",)
+)]
+#[cfg_attr(
+    feature = "legacy-digests",
     case("md5", "8d777f385d3dfec8815d20f7496026dc", "8d777f38",)
+)]
+#[cfg_attr(
+    feature = "legacy-digests",
+    case("md5-empty", "d41d8cd98f00b204e9800998ecf8427e", "d41d8cd9",)
 )]
 fn hash_and_digest_filters(
     filter_workspace: (tempfile::TempDir, Utf8PathBuf),
@@ -260,10 +298,20 @@ fn hash_and_digest_filters(
     let (_temp, root) = filter_workspace;
     let mut env = Environment::new();
     stdlib::register(&mut env);
-    let file = root.join("file");
+    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
+
+    let (file, algorithm) = alg.strip_suffix("-empty").map_or_else(
+        || (root.join("file"), alg),
+        |stripped| {
+            let relative = format!("{stripped}_empty");
+            dir.write(relative.as_str(), b"")
+                .expect("create empty file");
+            (root.join(relative.as_str()), stripped)
+        },
+    );
 
     let hash_template_name = format!("hash_{alg}");
-    let hash_template = format!("{{{{ path | hash('{alg}') }}}}");
+    let hash_template = format!("{{{{ path | hash('{algorithm}') }}}}");
     register_template(&mut env, hash_template_name.as_str(), hash_template);
     let hash_result = env
         .get_template(hash_template_name.as_str())
@@ -273,7 +321,7 @@ fn hash_and_digest_filters(
     assert_eq!(hash_result, expected_hash);
 
     let digest_template_name = format!("digest_{alg}");
-    let digest_template = format!("{{{{ path | digest(8, '{alg}') }}}}");
+    let digest_template = format!("{{{{ path | digest(8, '{algorithm}') }}}}");
     register_template(&mut env, digest_template_name.as_str(), digest_template);
     let digest_result = env
         .get_template(digest_template_name.as_str())
