@@ -4,6 +4,15 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::{given, then, when};
 use minijinja::{Environment, context};
 use netsuke::stdlib;
+use std::ffi::OsStr;
+use test_support::env::set_var;
+
+const LINES_FIXTURE: &str = concat!(
+    "one
+", "two
+", "three
+"
+);
 
 fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     if let Some(root) = &world.stdlib_root {
@@ -13,6 +22,13 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
     let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
     handle.write("file", b"data").expect("write file");
+    handle
+        .write("lines.txt", LINES_FIXTURE.as_bytes())
+        .expect("write lines fixture");
+    #[cfg(unix)]
+    handle.symlink("file", "link").expect("create symlink");
+    #[cfg(not(unix))]
+    handle.write("link", b"data").expect("write link fixture");
     world.temp = Some(temp);
     world.stdlib_root = Some(root.clone());
     root
@@ -21,12 +37,7 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
 fn render_template(world: &mut CliWorld, template: &str, path: &Utf8Path) {
     let mut env = Environment::new();
     stdlib::register(&mut env);
-    env.add_template("scenario", template)
-        .expect("add template");
-    let render = env
-        .get_template("scenario")
-        .expect("get template")
-        .render(context!(path => path.as_str()));
+    let render = env.render_str(template, context!(path => path.as_str()));
     match render {
         Ok(output) => {
             world.stdlib_output = Some(output);
@@ -42,19 +53,60 @@ fn render_template(world: &mut CliWorld, template: &str, path: &Utf8Path) {
 #[given("a stdlib workspace")]
 fn stdlib_workspace(world: &mut CliWorld) {
     let root = ensure_workspace(world);
-    // record root to reuse in subsequent steps
     world.stdlib_root = Some(root);
 }
 
-#[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
+#[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
+fn write_stdlib_file(world: &mut CliWorld, path: String, contents: String) {
+    let root = ensure_workspace(world);
+    let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let relative = Utf8Path::new(&path);
+    if let Some(parent) = relative.parent().filter(|p| !p.as_str().is_empty()) {
+        handle
+            .create_dir_all(parent)
+            .expect("create fixture directories");
+    }
+    handle
+        .write(relative, contents.as_bytes())
+        .expect("write stdlib file");
+}
+
+#[given("HOME points to the stdlib workspace root")]
+fn home_points_to_stdlib_root(world: &mut CliWorld) {
+    let root = ensure_workspace(world);
+    let os_root = OsStr::new(root.as_str());
+    let previous = set_var("HOME", os_root);
+    world.env_vars.entry("HOME".into()).or_insert(previous);
+    #[cfg(windows)]
+    {
+        let previous = set_var("USERPROFILE", os_root);
+        world
+            .env_vars
+            .entry("USERPROFILE".into())
+            .or_insert(previous);
+    }
+    world.stdlib_root = Some(root);
+}
+
+#[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
 fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) {
     let root = ensure_workspace(world);
-    let target = root.join(path);
+    let is_home_expansion = path.starts_with('~');
+    let is_absolute = Utf8Path::new(&path).is_absolute();
+    let target = if is_home_expansion || is_absolute {
+        Utf8PathBuf::from(path)
+    } else {
+        root.join(Utf8Path::new(&path))
+    };
     render_template(world, &template, &target);
+    // Cucumber supplies owned Strings, but we only need a borrowed view.
+    // Explicitly dropping satisfies clippy::needless_pass_by_value while making
+    // the ownership intent clear.
+    drop(template);
 }
 
 #[then(regex = r#"^the stdlib output is "(.+)"$"#)]
@@ -81,4 +133,35 @@ fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
         error.contains(&fragment),
         "error `{error}` should contain `{fragment}`",
     );
+}
+
+#[then("the stdlib output equals the workspace root")]
+fn assert_stdlib_output_is_root(world: &mut CliWorld) {
+    let root = world
+        .stdlib_root
+        .as_ref()
+        .expect("expected stdlib workspace root");
+    let output = world
+        .stdlib_output
+        .as_ref()
+        .expect("expected stdlib output");
+    assert_eq!(output, root.as_str());
+}
+
+#[then(regex = r#"^the stdlib output is the workspace path "(.+)"$"#)]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: String) {
+    let root = world
+        .stdlib_root
+        .as_ref()
+        .expect("expected stdlib workspace root");
+    let output = world
+        .stdlib_output
+        .as_ref()
+        .expect("expected stdlib output");
+    let expected = root.join(&relative);
+    assert_eq!(output, expected.as_str());
 }

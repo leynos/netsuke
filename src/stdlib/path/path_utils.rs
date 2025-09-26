@@ -85,6 +85,13 @@ pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
         .map_err(|err| io_to_error(path, "canonicalise", err))
 }
 
+pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
+    matches!(
+        stripped.chars().next(),
+        Some(first) if first != '/' && first != std::path::MAIN_SEPARATOR
+    )
+}
+
 pub(super) fn expanduser(raw: &str) -> Result<String, Error> {
     if let Some(stripped) = raw.strip_prefix('~') {
         if is_user_specific_expansion(stripped) {
@@ -98,13 +105,6 @@ pub(super) fn expanduser(raw: &str) -> Result<String, Error> {
     } else {
         Ok(raw.to_string())
     }
-}
-
-pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
-    matches!(
-        stripped.chars().next(),
-        Some(first) if first != '/' && first != std::path::MAIN_SEPARATOR
-    )
 }
 
 pub(super) fn normalise_parent(parent: Option<&Utf8Path>) -> Utf8PathBuf {

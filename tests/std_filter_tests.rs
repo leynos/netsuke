@@ -65,6 +65,47 @@ fn dirname_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
 }
 
 #[rstest]
+fn relative_to_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
+    dir.create_dir_all("nested").expect("create nested dir");
+    dir.write("nested/file.txt", b"data")
+        .expect("write nested file");
+    let nested = root.join("nested/file.txt");
+    let output = render(
+        &mut env,
+        "relative_to",
+        "{{ path | relative_to(path | dirname) }}",
+        &nested,
+    );
+    assert_eq!(output, "file.txt");
+}
+
+#[rstest]
+fn relative_to_filter_outside_root(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
+    let (_temp, root) = filter_workspace;
+    let mut env = Environment::new();
+    stdlib::register(&mut env);
+    register_template(
+        &mut env,
+        "relative_to_fail",
+        "{{ path | relative_to(root) }}",
+    );
+    let template = env.get_template("relative_to_fail").expect("get template");
+    let file = root.join("file");
+    let other_root = root.join("other");
+    let result = template.render(context!(path => file.as_str(), root => other_root.as_str()));
+    let err = result.expect_err("relative_to should reject unrelated paths");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("is not relative"),
+        "error should mention missing relationship: {err}"
+    );
+}
+
+#[rstest]
 fn with_suffix_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
     let (_temp, root) = filter_workspace;
     let mut env = Environment::new();
