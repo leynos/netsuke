@@ -1,7 +1,6 @@
-//! Path utilities backing stdlib filters for UTF-8 paths: basename and dirname,
-//! suffix rewriting, relative path resolution, canonical paths, and expanduser
-//! with Windows HOME fallbacks using cap-std directories and consistent
-//! template error mapping.
+//! Path utilities backing stdlib filters for UTF-8 paths: basename/dirname, `with_suffix`,
+//! `relative_to`, canonicalise/realpath, and expanduser with Windows HOME fallbacks. Uses cap-std
+//! directory handles and consistent error mapping for template errors.
 use std::{env, io};
 
 use cap_std::{ambient_authority, fs_utf8::Dir};

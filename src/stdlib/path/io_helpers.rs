@@ -1,3 +1,4 @@
+//! IO error adapters for the stdlib path filters: translate `io::Error` into `minijinja::Error`.
 use std::io::{self, ErrorKind as IoErrorKind};
 
 use camino::Utf8Path;

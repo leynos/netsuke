@@ -126,6 +126,19 @@ fn assert_stdlib_output(world: &mut CliWorld, expected: String) {
     assert_eq!(output, &expected);
 }
 
+fn stdlib_root_and_output(world: &CliWorld) -> (&Utf8Path, &str) {
+    let root = world
+        .stdlib_root
+        .as_ref()
+        .expect("expected stdlib workspace root")
+        .as_path();
+    let output = world
+        .stdlib_output
+        .as_deref()
+        .expect("expected stdlib output");
+    (root, output)
+}
+
 #[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
 #[expect(
     clippy::needless_pass_by_value,
@@ -141,14 +154,7 @@ fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
 
 #[then("the stdlib output equals the workspace root")]
 fn assert_stdlib_output_is_root(world: &mut CliWorld) {
-    let root = world
-        .stdlib_root
-        .as_ref()
-        .expect("expected stdlib workspace root");
-    let output = world
-        .stdlib_output
-        .as_ref()
-        .expect("expected stdlib output");
+    let (root, output) = stdlib_root_and_output(world);
     assert_eq!(output, root.as_str());
 }
 
@@ -158,14 +164,7 @@ fn assert_stdlib_output_is_root(world: &mut CliWorld) {
     reason = "Cucumber requires owned String arguments"
 )]
 fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: String) {
-    let root = world
-        .stdlib_root
-        .as_ref()
-        .expect("expected stdlib workspace root");
-    let output = world
-        .stdlib_output
-        .as_ref()
-        .expect("expected stdlib output");
+    let (root, output) = stdlib_root_and_output(world);
     let expected = root.join(&relative);
     assert_eq!(output, expected.as_str());
 }

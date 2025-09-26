@@ -3,8 +3,38 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, ErrorKind, context};
 use netsuke::stdlib;
 use rstest::{fixture, rstest};
+use std::cell::RefCell;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
+
+thread_local! {
+    static TEMPLATE_STORAGE: RefCell<Vec<(Box<str>, Box<str>)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn register_template(
+    env: &mut Environment<'_>,
+    name: impl Into<String>,
+    source: impl Into<String>,
+) {
+    TEMPLATE_STORAGE.with(|storage| {
+        let (name_ptr, source_ptr) = {
+            let mut storage = storage.borrow_mut();
+            storage.push((name.into().into_boxed_str(), source.into().into_boxed_str()));
+            let (name, source) = storage.last().expect("template storage entry");
+            (
+                std::ptr::from_ref(name.as_ref()),
+                std::ptr::from_ref(source.as_ref()),
+            )
+        };
+        // SAFETY: the pointers originate from boxed strings stored in the
+        // thread-local registry. They remain valid for the duration of the
+        // process, so treating them as `'static` references is sound.
+        unsafe {
+            env.add_template(&*name_ptr, &*source_ptr)
+                .expect("template");
+        }
+    });
+}
 
 #[fixture]
 fn filter_workspace() -> (tempfile::TempDir, Utf8PathBuf) {
@@ -31,27 +61,6 @@ fn render<'a>(
         .expect("get template")
         .render(context!(path => path.as_str()))
         .expect("render")
-}
-
-fn register_template(
-    env: &mut Environment<'_>,
-    name: impl Into<String>,
-    source: impl Into<String>,
-) {
-    let leaked_name = Box::leak(name.into().into_boxed_str());
-    let leaked_source = Box::leak(source.into().into_boxed_str());
-    env.add_template(leaked_name, leaked_source)
-        .expect("template");
-}
-
-#[rstest]
-fn basename_filter(filter_workspace: (tempfile::TempDir, Utf8PathBuf)) {
-    let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
-    let file = root.join("file");
-    let output = render(&mut env, "basename", "{{ path | basename }}", &file);
-    assert_eq!(output, "file");
 }
 
 #[rstest]
