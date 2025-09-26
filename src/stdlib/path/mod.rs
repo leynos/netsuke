@@ -1,3 +1,7 @@
+//! Entry point for stdlib path and file utilities.
+//!
+//! Wires up path and file filters and re-exports crate-private helpers for
+//! registration from the stdlib coordinator.
 mod filters;
 mod fs_utils;
 mod hash_utils;

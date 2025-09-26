@@ -1,4 +1,10 @@
+//! Path utilities backing stdlib filters for UTF-8 paths: basename and dirname,
+//! suffix rewriting, relative path resolution, canonical paths, and expanduser
+//! with Windows HOME fallbacks using cap-std directories and consistent
+//! template error mapping.
 use std::{env, io};
+
+use cap_std::{ambient_authority, fs_utf8::Dir};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{Error, ErrorKind};
@@ -127,9 +133,8 @@ fn is_root(path: &Utf8Path) -> bool {
 }
 
 fn current_dir_utf8() -> Result<Utf8PathBuf, io::Error> {
-    let cwd = env::current_dir()?;
-    Utf8PathBuf::from_path_buf(cwd)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "current dir is not valid UTF-8"))
+    let dir = Dir::open_ambient_dir(".", ambient_authority())?;
+    dir.canonicalize(Utf8Path::new("."))
 }
 
 #[cfg(windows)]
