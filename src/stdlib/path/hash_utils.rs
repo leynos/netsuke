@@ -24,7 +24,7 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
             {
                 Err(Error::new(
                     ErrorKind::InvalidOperation,
-                    "unsupported hash algorithm 'sha1' (enable feature legacy-digests)",
+                    "unsupported hash algorithm 'sha1' (enable feature 'legacy-digests')",
                 ))
             }
         }
@@ -37,7 +37,7 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
             {
                 Err(Error::new(
                     ErrorKind::InvalidOperation,
-                    "unsupported hash algorithm 'md5' (enable feature legacy-digests)",
+                    "unsupported hash algorithm 'md5' (enable feature 'legacy-digests')",
                 ))
             }
         }
