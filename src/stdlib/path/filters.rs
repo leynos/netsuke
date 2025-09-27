@@ -1,4 +1,8 @@
-//! Filter registration wiring for stdlib path helpers.
+//! Registration of stdlib path and file filters for `MiniJinja`.
+//!
+//! Exposes filters such as `basename`, `dirname`, `with_suffix`,
+//! `relative_to`, `realpath`, `expanduser`, `size`, `contents`,
+//! `linecount`, `hash`, and `digest`.
 use camino::Utf8Path;
 use minijinja::{Environment, Error, ErrorKind};
 

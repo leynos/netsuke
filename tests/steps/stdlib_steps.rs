@@ -1,6 +1,7 @@
-//! Behavioural steps exercising the template stdlib path and file filters.
-//! Prepare a temporary workspace, render templates with stdlib registration,
-//! and assert expected outputs or `MiniJinja` errors.
+//! Cucumber step implementations for stdlib path and file filters.
+//!
+//! Sets up a temporary workspace, renders templates with stdlib registered,
+//! and asserts outputs and errors.
 use crate::CliWorld;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};

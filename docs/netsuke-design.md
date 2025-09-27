@@ -869,12 +869,15 @@ place of `camelCase` so naming remains consistent with `snake_case` and
 
 Implementation notes:
 
-- Filters use `cap-std` directories for all filesystem work, avoiding ambient
-  authority.
+- Filters rely on `cap-std` directories opened with ambient authority for
+  file-system work. Callers must ensure that templates granted access to the
+  stdlib are trusted to read from the process' working tree.
 - `realpath` canonicalises the parent directory before joining the resolved
   entry so results are absolute and symlink-free.
 - `contents` and `linecount` currently support UTF-8 input; other encodings are
-  rejected with an explicit error.
+  rejected with an explicit error. `contents` streams data from the ambient
+  file-system, so consumers should guard access carefully when evaluating
+  untrusted templates.
 - `hash` and `digest` accept `sha256` (default) and `sha512`. Legacy
   algorithms `sha1` and `md5` are cryptographically broken and are disabled by
   default; enabling them requires the `legacy-digests` Cargo feature and should

@@ -1,4 +1,5 @@
-//! File-system helpers for stdlib path filters: open dirs and files via cap-std.
+//! UTF-8 file-system helpers for stdlib filters using cap-std Dir handles: metadata queries,
+//! opening files for streaming, and safe error translation.
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
