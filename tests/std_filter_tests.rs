@@ -1,5 +1,5 @@
-//! Unit tests for the stdlib path and file filters.
-//! Exercises success, failure, and edge cases via rstest fixtures.
+//! Unit tests covering the template stdlib path and file filters via rstest fixtures.
+//! Verifies success, failure, and edge conditions for each filter and IO helper.
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, ErrorKind, context};
