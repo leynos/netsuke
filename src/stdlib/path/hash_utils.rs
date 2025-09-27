@@ -1,4 +1,8 @@
-//! Hash utilities for stdlib path filters: stream digests with cap-std handles.
+//! Hash utilities for stdlib path filters.
+//!
+//! Streams SHA-256 and SHA-512 digests via cap-std handles,
+//! enables SHA-1 and MD5 behind the `legacy-digests` feature,
+//! and always returns lowercase hexadecimal output.
 use std::io::Read;
 
 use camino::Utf8Path;
@@ -13,42 +17,41 @@ use sha2::{Sha256, Sha512};
 use super::{fs_utils, io_helpers::io_to_error};
 
 pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
-    match alg.to_ascii_lowercase().as_str() {
-        "sha256" => hash_stream::<Sha256>(path),
-        "sha512" => hash_stream::<Sha512>(path),
-        "sha1" => {
-            #[cfg(feature = "legacy-digests")]
-            {
-                hash_stream::<Sha1>(path)
-            }
-            #[cfg(not(feature = "legacy-digests"))]
-            {
-                Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    "unsupported hash algorithm 'sha1' (enable feature 'legacy-digests')",
-                ))
-            }
+    if alg.eq_ignore_ascii_case("sha256") {
+        hash_stream::<Sha256>(path)
+    } else if alg.eq_ignore_ascii_case("sha512") {
+        hash_stream::<Sha512>(path)
+    } else if alg.eq_ignore_ascii_case("sha1") {
+        #[cfg(feature = "legacy-digests")]
+        {
+            hash_stream::<Sha1>(path)
         }
-        "md5" => {
-            #[cfg(feature = "legacy-digests")]
-            {
-                hash_stream::<Md5>(path)
-            }
-            #[cfg(not(feature = "legacy-digests"))]
-            {
-                Err(Error::new(
-                    ErrorKind::InvalidOperation,
-                    "unsupported hash algorithm 'md5' (enable feature 'legacy-digests')",
-                ))
-            }
+        #[cfg(not(feature = "legacy-digests"))]
+        {
+            Err(Error::new(
+                ErrorKind::InvalidOperation,
+                "unsupported hash algorithm 'sha1' (enable feature 'legacy-digests')",
+            ))
         }
-        other => Err(Error::new(
+    } else if alg.eq_ignore_ascii_case("md5") {
+        #[cfg(feature = "legacy-digests")]
+        {
+            hash_stream::<Md5>(path)
+        }
+        #[cfg(not(feature = "legacy-digests"))]
+        {
+            Err(Error::new(
+                ErrorKind::InvalidOperation,
+                "unsupported hash algorithm 'md5' (enable feature 'legacy-digests')",
+            ))
+        }
+    } else {
+        Err(Error::new(
             ErrorKind::InvalidOperation,
-            format!("unsupported hash algorithm '{other}'"),
-        )),
+            format!("unsupported hash algorithm '{alg}'"),
+        ))
     }
 }
-
 pub(super) fn compute_digest(path: &Utf8Path, len: usize, alg: &str) -> Result<String, Error> {
     let mut hash = compute_hash(path, alg)?;
     if len < hash.len() {
