@@ -27,10 +27,10 @@ semver = { version = "1", features = ["serde"] }
 anyhow = "1"
 thiserror = "1"
 miette = { version = "7.6.0", features = ["fancy"] }
-digest = "^0.10"
-sha2 = "^0.10"
-sha1 = { version = "^0.10", optional = true }
-md5 = { package = "md-5", version = "^0.10", optional = true }
+digest = "0.10"
+sha2 = "0.10"
+sha1 = { version = "0.10", optional = true }
+md5 = { package = "md-5", version = "0.10", optional = true }
 itoa = "1"
 itertools = "0.12"
 glob = "0.3.3"
