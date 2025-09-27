@@ -62,13 +62,13 @@ fn stdlib_workspace(world: &mut CliWorld) {
 
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
+    reason = "Cucumber requires owned capture arguments"
 )]
 #[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
-fn write_stdlib_file(world: &mut CliWorld, path: String, contents: String) {
+fn write_stdlib_file(world: &mut CliWorld, path: Utf8PathBuf, contents: String) {
     let root = ensure_workspace(world);
     let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
-    let relative = Utf8Path::new(&path);
+    let relative = path.as_path();
     if let Some(parent) = relative.parent().filter(|p| !p.as_str().is_empty()) {
         handle
             .create_dir_all(parent)
@@ -97,26 +97,24 @@ fn home_points_to_stdlib_root(world: &mut CliWorld) {
 }
 
 #[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
-fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) {
+fn render_stdlib_template(world: &mut CliWorld, template: String, path: Utf8PathBuf) {
     let root = ensure_workspace(world);
-    let is_home_expansion = path.starts_with('~');
-    let is_absolute = Utf8Path::new(&path).is_absolute();
+    let path_str = path.as_str();
+    let is_home_expansion = path_str.starts_with('~');
+    let is_absolute = path.is_absolute();
     let target = if is_home_expansion || is_absolute {
-        Utf8PathBuf::from(path)
+        path
     } else {
-        root.join(Utf8Path::new(&path))
+        root.join(path_str)
     };
-    render_template(world, &template, &target);
-    // Cucumber supplies owned Strings, but we only need a borrowed view.
-    // Explicitly dropping satisfies clippy::needless_pass_by_value while making
-    // the ownership intent clear.
+    render_template(world, template.as_str(), target.as_path());
     drop(template);
 }
 
 #[then(regex = r#"^the stdlib output is "(.+)"$"#)]
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
+    reason = "Cucumber requires owned capture arguments"
 )]
 fn assert_stdlib_output(world: &mut CliWorld, expected: String) {
     let output = world
@@ -142,7 +140,7 @@ fn stdlib_root_and_output(world: &CliWorld) -> (&Utf8Path, &str) {
 #[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
 #[expect(
     clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
+    reason = "Cucumber requires owned capture arguments"
 )]
 fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
     let error = world.stdlib_error.as_ref().expect("expected stdlib error");
@@ -159,12 +157,8 @@ fn assert_stdlib_output_is_root(world: &mut CliWorld) {
 }
 
 #[then(regex = r#"^the stdlib output is the workspace path "(.+)"$"#)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
-fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: String) {
+fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: Utf8PathBuf) {
     let (root, output) = stdlib_root_and_output(world);
-    let expected = root.join(&relative);
+    let expected = root.join(relative);
     assert_eq!(output, expected.as_str());
 }

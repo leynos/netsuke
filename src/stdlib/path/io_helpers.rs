@@ -1,5 +1,5 @@
 //! IO error adapters for the stdlib path filters.
-//! Translate `io::Error` into `minijinja::Error` diagnostics with human-readable labels.
+//! Convert `io::Error` values into `MiniJinja` `InvalidOperation` diagnostics with human-readable labels.
 use std::io::{self, ErrorKind as IoErrorKind};
 
 use camino::Utf8Path;
