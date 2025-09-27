@@ -39,6 +39,7 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter("size", |raw: String| -> Result<u64, Error> {
         fs_utils::file_size(Utf8Path::new(&raw))
     });
+    // Templates using `contents` read from the ambient file system; enable the stdlib only for trusted templates.
     env.add_filter(
         "contents",
         |raw: String, encoding: Option<String>| -> Result<String, Error> {
