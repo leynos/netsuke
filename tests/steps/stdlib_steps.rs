@@ -14,8 +14,78 @@ const LINES_FIXTURE: &str = concat!(
     "one
 ", "two
 ", "three
-"
+",
 );
+
+#[derive(Debug, Clone)]
+struct TemplatePath(Utf8PathBuf);
+
+impl TemplatePath {
+    fn as_path(&self) -> &Utf8Path {
+        &self.0
+    }
+}
+
+impl From<String> for TemplatePath {
+    fn from(value: String) -> Self {
+        Self(Utf8PathBuf::from(value))
+    }
+}
+
+impl From<Utf8PathBuf> for TemplatePath {
+    fn from(value: Utf8PathBuf) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TemplateContent(String);
+
+impl TemplateContent {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for TemplateContent {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FileContent(String);
+
+impl FileContent {
+    fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl From<String> for FileContent {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RelativePath(String);
+
+impl RelativePath {
+    fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn to_path_buf(&self) -> Utf8PathBuf {
+        Utf8PathBuf::from(self.as_str())
+    }
+}
+
+impl From<String> for RelativePath {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
 
 fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     if let Some(root) = &world.stdlib_root {
@@ -37,10 +107,10 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     root
 }
 
-fn render_template(world: &mut CliWorld, template: &str, path: &Utf8Path) {
+fn render_template(world: &mut CliWorld, template: &TemplateContent, path: &TemplatePath) {
     let mut env = Environment::new();
     stdlib::register(&mut env);
-    let render = env.render_str(template, context!(path => path.as_str()));
+    let render = env.render_str(template.as_str(), context!(path => path.as_path().as_str()));
     match render {
         Ok(output) => {
             world.stdlib_output = Some(output);
@@ -59,22 +129,23 @@ fn stdlib_workspace(world: &mut CliWorld) {
     world.stdlib_root = Some(root);
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned capture arguments"
-)]
 #[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
-fn write_stdlib_file(world: &mut CliWorld, path: Utf8PathBuf, contents: String) {
+fn write_stdlib_file(world: &mut CliWorld, path: String, contents: String) {
     let root = ensure_workspace(world);
     let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
-    let relative = path.as_path();
-    if let Some(parent) = relative.parent().filter(|p| !p.as_str().is_empty()) {
+    let relative_path = TemplatePath::from(path);
+    let file_content = FileContent::from(contents);
+    if let Some(parent) = relative_path
+        .as_path()
+        .parent()
+        .filter(|p| !p.as_str().is_empty())
+    {
         handle
             .create_dir_all(parent)
             .expect("create fixture directories");
     }
     handle
-        .write(relative, contents.as_bytes())
+        .write(relative_path.as_path(), file_content.as_bytes())
         .expect("write stdlib file");
 }
 
@@ -95,26 +166,32 @@ fn home_points_to_stdlib_root(world: &mut CliWorld) {
     world.stdlib_root = Some(root);
 }
 
-#[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
-fn render_stdlib_template(world: &mut CliWorld, template: String, path: Utf8PathBuf) {
-    let root = ensure_workspace(world);
-    let path_str = path.as_str();
-    let is_home_expansion = path_str.starts_with('~');
-    let is_absolute = path.is_absolute();
-    let target = if is_home_expansion || is_absolute {
-        path
+fn resolve_template_path(root: &Utf8Path, raw: &RelativePath) -> TemplatePath {
+    if raw.as_str().starts_with('~') {
+        return TemplatePath::from(raw.as_str().to_owned());
+    }
+    let candidate = raw.to_path_buf();
+    if candidate.is_absolute() {
+        TemplatePath::from(candidate)
     } else {
-        root.join(path_str)
-    };
-    render_template(world, template.as_str(), target.as_path());
-    drop(template);
+        TemplatePath::from(root.join(candidate))
+    }
 }
 
-#[then(regex = r#"^the stdlib output is "(.+)"$"#)]
+#[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
+fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) {
+    let root = ensure_workspace(world);
+    let template_content = TemplateContent::from(template);
+    let relative_path = RelativePath::from(path);
+    let target = resolve_template_path(root.as_path(), &relative_path);
+    render_template(world, &template_content, &target);
+}
+
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned capture arguments"
 )]
+#[then(regex = r#"^the stdlib output is "(.+)"$"#)]
 fn assert_stdlib_output(world: &mut CliWorld, expected: String) {
     let output = world
         .stdlib_output
@@ -136,11 +213,11 @@ fn stdlib_root_and_output(world: &CliWorld) -> (&Utf8Path, &str) {
     (root, output)
 }
 
-#[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned capture arguments"
 )]
+#[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
 fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
     let error = world.stdlib_error.as_ref().expect("expected stdlib error");
     assert!(
@@ -156,8 +233,9 @@ fn assert_stdlib_output_is_root(world: &mut CliWorld) {
 }
 
 #[then(regex = r#"^the stdlib output is the workspace path "(.+)"$"#)]
-fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: Utf8PathBuf) {
+fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: String) {
     let (root, output) = stdlib_root_and_output(world);
-    let expected = root.join(relative);
+    let relative_path = RelativePath::from(relative);
+    let expected = root.join(relative_path.to_path_buf());
     assert_eq!(output, expected.as_str());
 }
