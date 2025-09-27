@@ -1,18 +1,16 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, ErrorKind, context};
-use netsuke::stdlib;
+use minijinja::{ErrorKind, context};
 use rstest::rstest;
 
 use super::support::{
-    EnvLock, EnvVarGuard, Workspace, filter_workspace, register_template, render,
+    HomeEnvGuard, Workspace, filter_workspace, register_template, render, stdlib_env,
 };
 
 #[rstest]
 fn dirname_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file");
     let output = render(&mut env, "dirname", "{{ path | dirname }}", &file);
     assert_eq!(output, root.as_str());
@@ -21,8 +19,7 @@ fn dirname_filter(filter_workspace: Workspace) {
 #[rstest]
 fn relative_to_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
     dir.create_dir_all("nested").expect("create nested dir");
     dir.write("nested/file.txt", b"data")
@@ -40,8 +37,7 @@ fn relative_to_filter(filter_workspace: Workspace) {
 #[rstest]
 fn relative_to_filter_outside_root(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     register_template(
         &mut env,
         "relative_to_fail",
@@ -62,8 +58,7 @@ fn relative_to_filter_outside_root(filter_workspace: Workspace) {
 #[rstest]
 fn with_suffix_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file.tar.gz");
     Dir::open_ambient_dir(&root, ambient_authority())
         .expect("dir")
@@ -95,8 +90,7 @@ fn with_suffix_filter(filter_workspace: Workspace) {
 #[rstest]
 fn with_suffix_filter_without_separator(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file");
     let output = render(
         &mut env,
@@ -110,8 +104,7 @@ fn with_suffix_filter_without_separator(filter_workspace: Workspace) {
 #[rstest]
 fn with_suffix_filter_empty_separator(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     env.add_template(
         "suffix_empty_sep",
         "{{ path | with_suffix('.log', 1, '') }}",
@@ -131,8 +124,7 @@ fn with_suffix_filter_empty_separator(filter_workspace: Workspace) {
 #[rstest]
 fn with_suffix_filter_excessive_count(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file.tar.gz");
     let output = render(
         &mut env,
@@ -147,8 +139,7 @@ fn with_suffix_filter_excessive_count(filter_workspace: Workspace) {
 #[rstest]
 fn realpath_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let link = root.join("link");
     let output = render(&mut env, "realpath", "{{ path | realpath }}", &link);
     assert_eq!(output, root.join("file").as_str());
@@ -158,8 +149,7 @@ fn realpath_filter(filter_workspace: Workspace) {
 #[rstest]
 fn realpath_filter_missing_path(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     env.add_template("realpath_missing", "{{ path | realpath }}")
         .expect("template");
     let template = env.get_template("realpath_missing").expect("get template");
@@ -177,8 +167,7 @@ fn realpath_filter_missing_path(filter_workspace: Workspace) {
 #[rstest]
 fn realpath_filter_root_path(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let root_path = root
         .ancestors()
         .find(|candidate| candidate.parent().is_none())
@@ -200,14 +189,8 @@ fn realpath_filter_root_path(filter_workspace: Workspace) {
 #[rstest]
 fn expanduser_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
-    let _lock = EnvLock::acquire();
-    let _home_guard = EnvVarGuard::set("HOME", root.as_str());
-    let _profile_guard = EnvVarGuard::remove("USERPROFILE");
-    let _drive_guard = EnvVarGuard::remove("HOMEDRIVE");
-    let _path_guard = EnvVarGuard::remove("HOMEPATH");
-    let _share_guard = EnvVarGuard::remove("HOMESHARE");
+    let mut env = stdlib_env();
+    let _env_guard = HomeEnvGuard::home_only(&root);
     let home = render(
         &mut env,
         "expanduser",
@@ -220,8 +203,7 @@ fn expanduser_filter(filter_workspace: Workspace) {
 #[rstest]
 fn expanduser_filter_non_tilde_path(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file");
     let output = render(
         &mut env,
@@ -235,14 +217,8 @@ fn expanduser_filter_non_tilde_path(filter_workspace: Workspace) {
 #[rstest]
 fn expanduser_filter_missing_home(filter_workspace: Workspace) {
     let (_temp, _root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
-    let _lock = EnvLock::acquire();
-    let _home_guard = EnvVarGuard::remove("HOME");
-    let _profile_guard = EnvVarGuard::remove("USERPROFILE");
-    let _drive_guard = EnvVarGuard::remove("HOMEDRIVE");
-    let _path_guard = EnvVarGuard::remove("HOMEPATH");
-    let _share_guard = EnvVarGuard::remove("HOMESHARE");
+    let mut env = stdlib_env();
+    let _env_guard = HomeEnvGuard::unset();
     env.add_template("expanduser_missing_home", "{{ path | expanduser }}")
         .expect("template");
     let template = env
@@ -261,14 +237,8 @@ fn expanduser_filter_missing_home(filter_workspace: Workspace) {
 #[rstest]
 fn expanduser_filter_user_specific(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
-    let _lock = EnvLock::acquire();
-    let _home_guard = EnvVarGuard::set("HOME", root.as_str());
-    let _profile_guard = EnvVarGuard::remove("USERPROFILE");
-    let _drive_guard = EnvVarGuard::remove("HOMEDRIVE");
-    let _path_guard = EnvVarGuard::remove("HOMEPATH");
-    let _share_guard = EnvVarGuard::remove("HOMESHARE");
+    let mut env = stdlib_env();
+    let _env_guard = HomeEnvGuard::home_only(&root);
     env.add_template("expanduser_user_specific", "{{ path | expanduser }}")
         .expect("template");
     let template = env
