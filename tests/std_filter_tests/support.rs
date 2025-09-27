@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context};
 use netsuke::stdlib;
@@ -58,45 +58,6 @@ pub(crate) fn filter_workspace() -> Workspace {
     dir.write("link", b"data").expect("link copy");
     dir.write("lines.txt", b"one\ntwo\nthree\n").expect("lines");
     (temp, root)
-}
-
-pub(crate) struct HomeEnvGuard {
-    _lock: EnvLock,
-    _home: EnvVarGuard,
-    _profile: EnvVarGuard,
-    _drive: EnvVarGuard,
-    _path: EnvVarGuard,
-    _share: EnvVarGuard,
-}
-
-impl HomeEnvGuard {
-    fn new(home: Option<&str>) -> Self {
-        let lock = EnvLock::acquire();
-        let home_guard = home.map_or_else(
-            || EnvVarGuard::remove("HOME"),
-            |value| EnvVarGuard::set("HOME", value),
-        );
-        let profile_guard = EnvVarGuard::remove("USERPROFILE");
-        let drive_guard = EnvVarGuard::remove("HOMEDRIVE");
-        let path_guard = EnvVarGuard::remove("HOMEPATH");
-        let share_guard = EnvVarGuard::remove("HOMESHARE");
-        Self {
-            _lock: lock,
-            _home: home_guard,
-            _profile: profile_guard,
-            _drive: drive_guard,
-            _path: path_guard,
-            _share: share_guard,
-        }
-    }
-
-    pub(crate) fn home_only(root: &Utf8Path) -> Self {
-        Self::new(Some(root.as_str()))
-    }
-
-    pub(crate) fn unset() -> Self {
-        Self::new(None)
-    }
 }
 
 pub(crate) fn render<'a>(

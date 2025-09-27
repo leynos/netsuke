@@ -1,16 +1,59 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{ErrorKind, context};
+use minijinja::{Environment, ErrorKind, context};
 use rstest::rstest;
+use serde_json::json;
 
 use super::support::{
-    HomeEnvGuard, Workspace, filter_workspace, register_template, render, stdlib_env,
+    EnvLock, EnvVarGuard, Workspace, filter_workspace, register_template, render, stdlib_env,
 };
+
+/// Helper for tests requiring environment variable manipulation
+fn with_clean_env_vars<F, R>(home_value: Option<&str>, test_fn: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    let _lock = EnvLock::acquire();
+    let _home = home_value.map_or_else(
+        || EnvVarGuard::remove("HOME"),
+        |value| EnvVarGuard::set("HOME", value),
+    );
+    let _profile = EnvVarGuard::remove("USERPROFILE");
+    let _drive = EnvVarGuard::remove("HOMEDRIVE");
+    let _path = EnvVarGuard::remove("HOMEPATH");
+    let _share = EnvVarGuard::remove("HOMESHARE");
+    test_fn()
+}
+
+/// Helper for standard filter environment setup
+fn setup_filter_env() -> Environment<'static> {
+    stdlib_env()
+}
+
+/// Helper for error testing with custom template
+fn assert_template_error(
+    env: &mut Environment<'_>,
+    template_name: &str,
+    template_content: &str,
+    context_data: serde_json::Value,
+    expected_kind: ErrorKind,
+    error_contains: &str,
+) {
+    register_template(env, template_name, template_content);
+    let template = env.get_template(template_name).expect("get template");
+    let result = template.render(context_data);
+    let err = result.expect_err("template rendering should fail");
+    assert_eq!(err.kind(), expected_kind);
+    assert!(
+        err.to_string().contains(error_contains),
+        "error should mention {error_contains}: {err}"
+    );
+}
 
 #[rstest]
 fn dirname_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
+    let mut env = setup_filter_env();
     let file = root.join("file");
     let output = render(&mut env, "dirname", "{{ path | dirname }}", &file);
     assert_eq!(output, root.as_str());
@@ -19,7 +62,7 @@ fn dirname_filter(filter_workspace: Workspace) {
 #[rstest]
 fn relative_to_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
+    let mut env = setup_filter_env();
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
     dir.create_dir_all("nested").expect("create nested dir");
     dir.write("nested/file.txt", b"data")
@@ -37,21 +80,19 @@ fn relative_to_filter(filter_workspace: Workspace) {
 #[rstest]
 fn relative_to_filter_outside_root(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
-    register_template(
+    let mut env = setup_filter_env();
+    let file = root.join("file");
+    let other_root = root.join("other");
+    assert_template_error(
         &mut env,
         "relative_to_fail",
         "{{ path | relative_to(root) }}",
-    );
-    let template = env.get_template("relative_to_fail").expect("get template");
-    let file = root.join("file");
-    let other_root = root.join("other");
-    let result = template.render(context!(path => file.as_str(), root => other_root.as_str()));
-    let err = result.expect_err("relative_to should reject unrelated paths");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("is not relative"),
-        "error should mention missing relationship: {err}"
+        json!({
+            "path": file.as_str(),
+            "root": other_root.as_str(),
+        }),
+        ErrorKind::InvalidOperation,
+        "is not relative",
     );
 }
 
@@ -104,20 +145,17 @@ fn with_suffix_filter_without_separator(filter_workspace: Workspace) {
 #[rstest]
 fn with_suffix_filter_empty_separator(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
-    env.add_template(
+    let mut env = setup_filter_env();
+    let file = root.join("file.tar.gz");
+    assert_template_error(
+        &mut env,
         "suffix_empty_sep",
         "{{ path | with_suffix('.log', 1, '') }}",
-    )
-    .expect("template");
-    let template = env.get_template("suffix_empty_sep").expect("get template");
-    let file = root.join("file.tar.gz");
-    let result = template.render(context!(path => file.as_str()));
-    let err = result.expect_err("with_suffix should reject empty separator");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("non-empty separator"),
-        "error should mention separator requirement",
+        json!({
+            "path": file.as_str(),
+        }),
+        ErrorKind::InvalidOperation,
+        "non-empty separator",
     );
 }
 
@@ -189,21 +227,22 @@ fn realpath_filter_root_path(filter_workspace: Workspace) {
 #[rstest]
 fn expanduser_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
-    let _env_guard = HomeEnvGuard::home_only(&root);
-    let home = render(
-        &mut env,
-        "expanduser",
-        "{{ path | expanduser }}",
-        &Utf8PathBuf::from("~/workspace"),
-    );
-    assert_eq!(home, root.join("workspace").as_str());
+    with_clean_env_vars(Some(root.as_str()), || {
+        let mut env = setup_filter_env();
+        let home = render(
+            &mut env,
+            "expanduser",
+            "{{ path | expanduser }}",
+            &Utf8PathBuf::from("~/workspace"),
+        );
+        assert_eq!(home, root.join("workspace").as_str());
+    });
 }
 
 #[rstest]
 fn expanduser_filter_non_tilde_path(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
+    let mut env = setup_filter_env();
     let file = root.join("file");
     let output = render(
         &mut env,
@@ -217,39 +256,35 @@ fn expanduser_filter_non_tilde_path(filter_workspace: Workspace) {
 #[rstest]
 fn expanduser_filter_missing_home(filter_workspace: Workspace) {
     let (_temp, _root) = filter_workspace;
-    let mut env = stdlib_env();
-    let _env_guard = HomeEnvGuard::unset();
-    env.add_template("expanduser_missing_home", "{{ path | expanduser }}")
-        .expect("template");
-    let template = env
-        .get_template("expanduser_missing_home")
-        .expect("get template");
-    let result = template.render(context!(path => "~/workspace"));
-    let err = result.expect_err("expanduser should error when HOME is unset");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string()
-            .contains("no home directory environment variables are set"),
-        "error should mention missing HOME",
-    );
+    with_clean_env_vars(None, || {
+        let mut env = setup_filter_env();
+        assert_template_error(
+            &mut env,
+            "expanduser_missing_home",
+            "{{ path | expanduser }}",
+            json!({
+                "path": "~/workspace",
+            }),
+            ErrorKind::InvalidOperation,
+            "no home directory environment variables are set",
+        );
+    });
 }
 
 #[rstest]
 fn expanduser_filter_user_specific(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
-    let _env_guard = HomeEnvGuard::home_only(&root);
-    env.add_template("expanduser_user_specific", "{{ path | expanduser }}")
-        .expect("template");
-    let template = env
-        .get_template("expanduser_user_specific")
-        .expect("get template");
-    let result = template.render(context!(path => "~otheruser/workspace"));
-    let err = result.expect_err("expanduser should reject ~user expansion");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string()
-            .contains("user-specific ~ expansion is unsupported"),
-        "error should mention unsupported user expansion",
-    );
+    with_clean_env_vars(Some(root.as_str()), || {
+        let mut env = setup_filter_env();
+        assert_template_error(
+            &mut env,
+            "expanduser_user_specific",
+            "{{ path | expanduser }}",
+            json!({
+                "path": "~otheruser/workspace",
+            }),
+            ErrorKind::InvalidOperation,
+            "user-specific ~ expansion is unsupported",
+        );
+    });
 }
