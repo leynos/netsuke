@@ -828,9 +828,9 @@ The `dir`, `file`, and `symlink` tests use `cap_std`'s UTF-8-capable
 operand's [`FileType`][filetype]. Because this lookup does not follow links,
 `symlink` tests never report a file or directory for the same path. On Unix the
 `pipe`, `block_device`, `char_device`, and legacy `device` tests also probe the
-metadata. On non-Unix targets only `pipe` and `device` are registered; both
-always return `false` so templates remain portable. Missing paths evaluate to
-`false`, while I/O errors raise a template error.
+metadata. On non-Unix targets these predicates are stubbed to always return
+`false` so templates remain portable. Missing paths evaluate to `false`, while
+I/O errors raise a template error.
 
 [cap-symlink]:
 https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_metadata
@@ -866,6 +866,27 @@ https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_me
 All built-in filters use `snake_case`. The `camel_case` helper is provided in
 place of `camelCase` so naming remains consistent with `snake_case` and
 `kebab-case`.
+
+Implementation notes:
+
+- Filters rely on `cap-std` directories opened with ambient authority for
+  file-system work. Callers must ensure that templates granted access to the
+  stdlib are trusted to read from the process' working tree.
+- `realpath` canonicalises the parent directory before joining the resolved
+  entry so results are absolute and symlink-free.
+- `contents` and `linecount` currently support UTF-8 input; other encodings are
+  rejected with an explicit error. `contents` streams data from the ambient
+  file-system, so consumers should guard access carefully when evaluating
+  untrusted templates.
+- `hash` and `digest` accept `sha256` (default) and `sha512`. Legacy
+  algorithms `sha1` and `md5` are cryptographically broken and are disabled by
+  default; enabling them requires the `legacy-digests` Cargo feature and should
+  only be done for compatibility with existing ecosystems.
+- `expanduser` mirrors shell semantics by inspecting `HOME`, `USERPROFILE`,
+  and on Windows the `HOMEDRIVE`/`HOMEPATH` or `HOMESHARE` fallbacks.
+  Platform-specific forms such as `~user` remain unsupported.
+- `with_suffix` removes dotted suffix segments (default `n = 1`) before
+  appending the provided suffix.
 
 #### Generic collection filters
 
