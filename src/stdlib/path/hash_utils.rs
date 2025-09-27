@@ -1,3 +1,4 @@
+//! Hash utilities for stdlib path filters: stream digests with cap-std handles.
 use std::io::Read;
 
 use camino::Utf8Path;

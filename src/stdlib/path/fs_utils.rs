@@ -1,3 +1,4 @@
+//! File-system helpers for stdlib path filters: open dirs and files via cap-std.
 use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};

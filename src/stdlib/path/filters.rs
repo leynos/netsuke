@@ -1,3 +1,4 @@
+//! Filter registration wiring for stdlib path helpers.
 use camino::Utf8Path;
 use minijinja::{Environment, Error, ErrorKind};
 
