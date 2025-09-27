@@ -128,6 +128,70 @@ fn assert_filter_success_with_env<F>(
     });
 }
 
+/// Test data for filter error tests
+struct FilterErrorTest {
+    name: &'static str,
+    template: &'static str,
+    context: Value,
+    error_kind: ErrorKind,
+    error_contains: &'static str,
+    env_setup: Option<EnvironmentSetup>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EnvironmentSetup {
+    SetHome,
+    RemoveHome,
+}
+
+/// Unified helper for all filter error tests
+fn test_filter_error(filter_workspace: Workspace, test: FilterErrorTest) {
+    let FilterErrorTest {
+        name,
+        template,
+        context,
+        error_kind,
+        error_contains,
+        env_setup,
+    } = test;
+
+    if let Some(EnvironmentSetup::SetHome) = env_setup {
+        assert_filter_error_with_env(filter_workspace, Some(""), move |_root| TemplateErrorSpec {
+            name,
+            template,
+            context: context.clone(),
+            expectation: TemplateErrorExpectation {
+                kind: error_kind,
+                contains: error_contains,
+            },
+        });
+        return;
+    }
+
+    if let Some(EnvironmentSetup::RemoveHome) = env_setup {
+        assert_filter_error_with_env(filter_workspace, None, move |_root| TemplateErrorSpec {
+            name,
+            template,
+            context: context.clone(),
+            expectation: TemplateErrorExpectation {
+                kind: error_kind,
+                contains: error_contains,
+            },
+        });
+        return;
+    }
+
+    assert_filter_error_simple(filter_workspace, move |_root| TemplateErrorSpec {
+        name,
+        template,
+        context,
+        expectation: TemplateErrorExpectation {
+            kind: error_kind,
+            contains: error_contains,
+        },
+    });
+}
+
 #[rstest]
 fn dirname_filter(filter_workspace: Workspace) {
     with_filter_env(filter_workspace, |root, env| {
@@ -157,22 +221,20 @@ fn relative_to_filter(filter_workspace: Workspace) {
 
 #[rstest]
 fn relative_to_filter_outside_root(filter_workspace: Workspace) {
-    assert_filter_error_simple(filter_workspace, |root| {
-        let file = root.join("file");
-        let other_root = root.join("other");
-        TemplateErrorSpec {
+    test_filter_error(
+        filter_workspace,
+        FilterErrorTest {
             name: "relative_to_fail",
             template: "{{ path | relative_to(root) }}",
             context: json!({
-                "path": file.as_str(),
-                "root": other_root.as_str(),
+                "path": "/some/outside/path",
+                "root": "workspace",
             }),
-            expectation: TemplateErrorExpectation {
-                kind: ErrorKind::InvalidOperation,
-                contains: "is not relative",
-            },
-        }
-    });
+            error_kind: ErrorKind::InvalidOperation,
+            error_contains: "is not relative",
+            env_setup: None,
+        },
+    );
 }
 
 #[rstest]
@@ -218,20 +280,19 @@ fn with_suffix_filter_without_separator(filter_workspace: Workspace) {
 
 #[rstest]
 fn with_suffix_filter_empty_separator(filter_workspace: Workspace) {
-    assert_filter_error_simple(filter_workspace, |root| {
-        let file = root.join("file.tar.gz");
-        TemplateErrorSpec {
+    test_filter_error(
+        filter_workspace,
+        FilterErrorTest {
             name: "suffix_empty_sep",
             template: "{{ path | with_suffix('.log', 1, '') }}",
             context: json!({
-                "path": file.as_str(),
+                "path": "file.tar.gz",
             }),
-            expectation: TemplateErrorExpectation {
-                kind: ErrorKind::InvalidOperation,
-                contains: "non-empty separator",
-            },
-        }
-    });
+            error_kind: ErrorKind::InvalidOperation,
+            error_contains: "non-empty separator",
+            env_setup: None,
+        },
+    );
 }
 
 #[rstest]
@@ -261,20 +322,19 @@ fn realpath_filter(filter_workspace: Workspace) {
 #[cfg(unix)]
 #[rstest]
 fn realpath_filter_missing_path(filter_workspace: Workspace) {
-    assert_filter_error_simple(filter_workspace, |root| {
-        let missing = root.join("missing");
-        TemplateErrorSpec {
+    test_filter_error(
+        filter_workspace,
+        FilterErrorTest {
             name: "realpath_missing",
             template: "{{ path | realpath }}",
             context: json!({
-                "path": missing.as_str(),
+                "path": "missing_file.txt",
             }),
-            expectation: TemplateErrorExpectation {
-                kind: ErrorKind::InvalidOperation,
-                contains: "not found",
-            },
-        }
-    });
+            error_kind: ErrorKind::InvalidOperation,
+            error_contains: "not found",
+            env_setup: None,
+        },
+    );
 }
 
 #[cfg(unix)]
@@ -319,30 +379,34 @@ fn expanduser_filter_non_tilde_path(filter_workspace: Workspace) {
 
 #[rstest]
 fn expanduser_filter_missing_home(filter_workspace: Workspace) {
-    assert_filter_error_with_env(filter_workspace, None, |_root| TemplateErrorSpec {
-        name: "expanduser_missing_home",
-        template: "{{ path | expanduser }}",
-        context: json!({
-            "path": "~/workspace",
-        }),
-        expectation: TemplateErrorExpectation {
-            kind: ErrorKind::InvalidOperation,
-            contains: "no home directory environment variables are set",
+    test_filter_error(
+        filter_workspace,
+        FilterErrorTest {
+            name: "expanduser_missing_home",
+            template: "{{ path | expanduser }}",
+            context: json!({
+                "path": "~/workspace",
+            }),
+            error_kind: ErrorKind::InvalidOperation,
+            error_contains: "no home directory environment variables are set",
+            env_setup: Some(EnvironmentSetup::RemoveHome),
         },
-    });
+    );
 }
 
 #[rstest]
 fn expanduser_filter_user_specific(filter_workspace: Workspace) {
-    assert_filter_error_with_env(filter_workspace, Some(""), |_root| TemplateErrorSpec {
-        name: "expanduser_user_specific",
-        template: "{{ path | expanduser }}",
-        context: json!({
-            "path": "~otheruser/workspace",
-        }),
-        expectation: TemplateErrorExpectation {
-            kind: ErrorKind::InvalidOperation,
-            contains: "user-specific ~ expansion is unsupported",
+    test_filter_error(
+        filter_workspace,
+        FilterErrorTest {
+            name: "expanduser_user_specific",
+            template: "{{ path | expanduser }}",
+            context: json!({
+                "path": "~otheruser/workspace",
+            }),
+            error_kind: ErrorKind::InvalidOperation,
+            error_contains: "user-specific ~ expansion is unsupported",
+            env_setup: Some(EnvironmentSetup::SetHome),
         },
-    });
+    );
 }
