@@ -13,7 +13,7 @@ import typing as typ
 from pathlib import Path
 
 from cyclopts import App, Parameter
-from stage_common import StageConfig, stage_artifacts
+from stage_common import StagingConfig, stage_artifacts
 
 app = App()
 
@@ -53,18 +53,17 @@ def stage_windows(
     workspace : Path, optional
         Workspace root to resolve build outputs when staging artefacts.
     """
-    config = StageConfig(
+    config = StagingConfig(
         bin_name=bin_name,
         target=target,
         platform=platform,
         arch=arch,
         workspace=workspace,
-        github_output=github_output,
         bin_ext=".exe",
     )
 
     try:
-        stage_artifacts(config=config)
+        stage_artifacts(config, github_output)
     except RuntimeError as exc:
         print(f"::error title=Packaging failure::{exc}")
         raise SystemExit(1) from exc
