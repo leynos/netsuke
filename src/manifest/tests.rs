@@ -68,6 +68,13 @@ fn normalize_separators_preserves_specific_escape_patterns(
     assert_eq!(normalize_separators(pat), expected);
 }
 
+#[cfg(unix)]
+#[test]
+fn normalize_separators_handles_mixed_slashes() {
+    let input = r"dir\sub/leaf";
+    assert_eq!(normalize_separators(input), "dir/sub/leaf");
+}
+
 #[fixture]
 fn tmp() -> tempfile::TempDir {
     tempfile::tempdir().expect("temp dir")
@@ -151,4 +158,18 @@ fn glob_paths_behavior_scenarios(
         .collect();
     expected.sort();
     assert_eq!(result, expected, "Test case: {description}");
+}
+
+#[rstest]
+fn glob_paths_returns_empty_for_no_matches(tmp: tempfile::TempDir) {
+    let pattern = format!("{}/missing*", tmp.path().display());
+    let result = glob_paths(&pattern).expect("glob ok");
+    assert!(result.is_empty());
+}
+
+#[test]
+fn glob_paths_reports_unmatched_brace() {
+    let err = glob_paths("foo/{bar").expect_err("expected brace error");
+    assert_eq!(err.kind(), minijinja::ErrorKind::SyntaxError);
+    assert!(err.to_string().contains("unmatched '{'"));
 }

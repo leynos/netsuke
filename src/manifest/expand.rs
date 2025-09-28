@@ -1,3 +1,4 @@
+//! Expands manifest foreach directives into concrete targets.
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
@@ -101,4 +102,86 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
         .with_context(|| format!("{name} expression parse error"))?
         .eval(ctx)
         .with_context(|| format!("{name} evaluation error"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use minijinja::Environment;
+
+    #[test]
+    fn expand_foreach_expands_sequence_values() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: YamlValue = serde_yml::from_str(
+            "targets:
+  - name: literal
+    foreach:
+      - 1
+      - 2
+    vars:
+      static: keep",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = doc
+            .get("targets")
+            .and_then(|v| v.as_sequence())
+            .expect("targets sequence");
+        assert_eq!(targets.len(), 2);
+        for (idx, target) in targets.iter().enumerate() {
+            let map = target.as_mapping().expect("target map");
+            let vars_key = YamlValue::String("vars".into());
+            let vars = map
+                .get(&vars_key)
+                .and_then(|v| v.as_mapping())
+                .expect("vars map");
+            let index_key = YamlValue::String("index".into());
+            let index_val = vars.get(&index_key).expect("index value");
+            let item_key = YamlValue::String("item".into());
+            let item_val = vars.get(&item_key).expect("item value");
+            let YamlValue::Number(index_num) = index_val else {
+                panic!("index should be numeric: {index_val:?}");
+            };
+            assert_eq!(index_num.as_u64().expect("u64"), idx as u64);
+            let YamlValue::Number(item_num) = item_val else {
+                panic!("item should be numeric: {item_val:?}");
+            };
+            assert_eq!(item_num.as_u64().expect("u64"), (idx + 1) as u64);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn expand_foreach_applies_when_expression() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: YamlValue = serde_yml::from_str(
+            "targets:
+  - name: literal
+    foreach: '[1, 2, 3]'
+    when: 'item > 1'",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = doc
+            .get("targets")
+            .and_then(|v| v.as_sequence())
+            .expect("targets sequence");
+        assert_eq!(targets.len(), 2);
+        let indexes: Vec<u64> = targets
+            .iter()
+            .map(|target| {
+                let map = target.as_mapping().expect("target map");
+                let vars_key = YamlValue::String("vars".into());
+                let vars = map
+                    .get(&vars_key)
+                    .and_then(|v| v.as_mapping())
+                    .expect("vars map");
+                let index_key = YamlValue::String("index".into());
+                let YamlValue::Number(num) = vars.get(&index_key).expect("index value") else {
+                    panic!("index missing");
+                };
+                num.as_u64().expect("u64")
+            })
+            .collect();
+        assert_eq!(indexes, vec![1, 2]);
+        Ok(())
+    }
 }

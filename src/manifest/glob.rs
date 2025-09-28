@@ -1,3 +1,4 @@
+//! Utilities for normalising and validating manifest glob patterns.
 use minijinja::{Error, ErrorKind};
 
 /// Represents a character being processed with its context
@@ -197,26 +198,6 @@ fn force_literal_escapes(pattern: &str) -> String {
     out
 }
 
-fn is_opening_brace(context: CharContext) -> bool {
-    context.ch == '{' && !context.in_class
-}
-
-fn is_closing_brace(context: CharContext) -> bool {
-    context.ch == '}' && !context.in_class
-}
-
-fn is_unmatched_closing_brace(context: CharContext, depth: i32) -> bool {
-    context.ch == '}' && !context.in_class && depth == 0
-}
-
-fn is_class_start(context: CharContext) -> bool {
-    context.ch == '[' && !context.in_class
-}
-
-fn is_class_end(context: CharContext) -> bool {
-    context.ch == ']' && context.in_class
-}
-
 #[cfg(unix)]
 fn process_escape_sequence(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
     if let Some(&next) = it.peek() {
@@ -276,49 +257,27 @@ impl BraceValidator {
             escaped: self.escaped,
         };
 
-        if self.handle_escape_sequence(context) {
-            return Ok(());
-        }
-
-        if self.handle_character_class_transitions(context) {
-            return Ok(());
-        }
-
-        self.handle_brace_matching(context, pattern)
-    }
-
-    fn handle_escape_sequence(&mut self, context: CharContext) -> bool {
         if context.escaped {
             self.escaped = false;
-            return true;
+            return Ok(());
         }
 
-        if context.ch == '\\' && self.state.escape_active {
+        if context.ch == char::from(0x5c) && self.state.escape_active {
             self.escaped = true;
-            return true;
+            return Ok(());
         }
 
-        false
-    }
-
-    fn handle_character_class_transitions(&mut self, context: CharContext) -> bool {
-        if is_class_start(context) {
+        if context.ch == '[' && !context.in_class {
             self.state.in_class = true;
-            true
-        } else if is_class_end(context) {
-            self.state.in_class = false;
-            true
-        } else {
-            false
+            return Ok(());
         }
-    }
 
-    fn handle_brace_matching(
-        &mut self,
-        context: CharContext,
-        pattern: &GlobPattern,
-    ) -> std::result::Result<(), Error> {
-        if is_unmatched_closing_brace(context, self.state.depth) {
+        if context.ch == ']' && context.in_class {
+            self.state.in_class = false;
+            return Ok(());
+        }
+
+        if context.ch == '}' && !context.in_class && self.state.depth == 0 {
             return Err(create_unmatched_brace_error(&GlobErrorContext {
                 pattern: pattern.raw.clone(),
                 error_char: context.ch,
@@ -327,10 +286,10 @@ impl BraceValidator {
             }));
         }
 
-        if is_opening_brace(context) {
+        if context.ch == '{' && !context.in_class {
             self.state.depth += 1;
             self.state.last_open_pos = Some(context.position);
-        } else if is_closing_brace(context) {
+        } else if context.ch == '}' && !context.in_class {
             self.state.depth -= 1;
         }
 
@@ -413,4 +372,43 @@ pub(crate) fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Erro
         }
     }
     Ok(paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_brace_matching_accepts_balanced_braces() {
+        let pattern = GlobPattern {
+            raw: "{foo,bar}".into(),
+            normalized: None,
+        };
+        assert!(validate_brace_matching(&pattern).is_ok());
+    }
+
+    #[test]
+    fn validate_brace_matching_rejects_unmatched_closing() {
+        let pattern = GlobPattern {
+            raw: "foo}".into(),
+            normalized: None,
+        };
+        let err = validate_brace_matching(&pattern).expect_err("expected error");
+        assert_eq!(err.kind(), ErrorKind::SyntaxError);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_glob_entry_errors_on_non_utf8_path() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let path = std::path::PathBuf::from(OsString::from_vec(b"bad\xFF".to_vec()));
+        let pattern = GlobPattern {
+            raw: "pattern".into(),
+            normalized: None,
+        };
+        let err = process_glob_entry(Ok(path), pattern).expect_err("expected non-UTF-8 error");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    }
 }

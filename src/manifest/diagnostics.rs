@@ -1,3 +1,4 @@
+//! Translates manifest parsing errors into actionable diagnostics.
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde_yml::{Error as YamlError, Location};
 use thiserror::Error;
@@ -93,4 +94,26 @@ pub(crate) fn map_yaml_error(
         source: err,
         message,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn map_yaml_error_includes_tab_hint() {
+        let src = "\tkey: value\n";
+        let err = serde_yml::from_str::<serde_yml::Value>(src).expect_err("expected parse error");
+        let diag = map_yaml_error(err, src, "test");
+        let msg = diag.to_string();
+        assert!(msg.contains("Use spaces for indentation"), "message: {msg}");
+    }
+
+    #[test]
+    fn map_yaml_error_defaults_location_when_missing() {
+        let src = ":";
+        let err = serde_yml::from_str::<serde_yml::Value>(src).expect_err("expected parse error");
+        let diag = map_yaml_error(err, src, "test");
+        assert!(diag.to_string().contains("line 1, column 1"));
+    }
 }

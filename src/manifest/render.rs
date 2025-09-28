@@ -1,6 +1,7 @@
+//! Renders manifest templates using `MiniJinja` before execution.
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
-use minijinja::{Environment, context};
+use minijinja::Environment;
 use serde_yml::Value as YamlValue;
 
 pub(crate) fn render_manifest(
@@ -13,26 +14,26 @@ pub(crate) fn render_manifest(
     for target in &mut manifest.targets {
         render_target(target, env)?;
     }
+    let rule_vars = manifest.vars.clone();
     for rule in &mut manifest.rules {
-        render_rule(rule, env)?;
+        render_rule(rule, env, &rule_vars)?;
     }
     Ok(manifest)
 }
 
-fn render_rule(rule: &mut crate::ast::Rule, env: &Environment) -> Result<()> {
+fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> Result<()> {
     if let Some(desc) = &mut rule.description {
-        *desc = render_str_with(env, desc, &context! {}, || "render rule description".into())?;
+        *desc = render_str_with(env, desc, vars, || "render rule description".into())?;
     }
-    render_string_or_list(&mut rule.deps, env, &Vars::new())?;
+    render_string_or_list(&mut rule.deps, env, vars)?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command =
-                render_str_with(env, command, &context! {}, || "render rule command".into())?;
+            *command = render_str_with(env, command, vars, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
-            *script = render_str_with(env, script, &context! {}, || "render rule script".into())?;
+            *script = render_str_with(env, script, vars, || "render rule script".into())?;
         }
-        Recipe::Rule { rule: r } => render_string_or_list(r, env, &Vars::new())?,
+        Recipe::Rule { rule: r } => render_string_or_list(r, env, vars)?,
     }
     Ok(())
 }
@@ -89,4 +90,94 @@ fn render_str_with(
     what: impl FnOnce() -> String,
 ) -> Result<String> {
     env.render_str(tpl, ctx).with_context(what)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::Rule;
+    use minijinja::Environment;
+    use semver::Version;
+
+    #[test]
+    fn render_manifest_renders_targets_and_rules() -> Result<()> {
+        let env = Environment::new();
+        let mut target_vars = Vars::new();
+        target_vars.insert("greet".into(), YamlValue::String("hello".into()));
+        target_vars.insert("subject".into(), YamlValue::String("world".into()));
+        target_vars.insert(
+            "message".into(),
+            YamlValue::String("{{ greet }} {{ subject }}".into()),
+        );
+        let target = Target {
+            name: StringOrList::String("{{ message }}!".into()),
+            recipe: Recipe::Command {
+                command: "{{ message }}".into(),
+            },
+            sources: StringOrList::List(vec!["{{ subject }}.txt".into()]),
+            deps: StringOrList::Empty,
+            order_only_deps: StringOrList::List(vec!["{{ subject }}.meta".into()]),
+            vars: target_vars,
+            phony: false,
+            always: false,
+        };
+        let rule = Rule {
+            name: "example".into(),
+            recipe: Recipe::Command {
+                command: "{{ 2 + 2 }}".into(),
+            },
+            description: Some("{{ 1 + 1 }}".into()),
+            deps: StringOrList::List(vec!["{{ message }}".into()]),
+        };
+        let mut manifest_vars = Vars::new();
+        manifest_vars.insert("message".into(), YamlValue::String("hello world".into()));
+
+        let manifest = NetsukeManifest {
+            netsuke_version: Version::parse("1.0.0")?,
+            vars: manifest_vars,
+            rules: vec![rule],
+            actions: Vec::new(),
+            targets: vec![target],
+            defaults: Vec::new(),
+        };
+
+        let rendered = render_manifest(manifest, &env)?;
+        let rendered_target = rendered.targets.first().expect("rendered target");
+        let vars = &rendered_target.vars;
+        let message = vars
+            .get("message")
+            .and_then(|v| v.as_str())
+            .expect("rendered message");
+        assert_eq!(message, "hello world");
+        match &rendered_target.name {
+            StringOrList::String(s) => assert_eq!(s, "hello world!"),
+            other => panic!("expected string name, got {other:?}"),
+        }
+        let rendered_sources = match &rendered_target.sources {
+            StringOrList::List(items) => items.clone(),
+            other => panic!("expected list sources, got {other:?}"),
+        };
+        assert_eq!(rendered_sources, vec!["world.txt".to_string()]);
+        match &rendered_target.recipe {
+            Recipe::Command { command } => assert_eq!(command, "hello world"),
+            other => panic!("expected command recipe, got {other:?}"),
+        }
+        match &rendered_target.order_only_deps {
+            StringOrList::List(items) => assert_eq!(items, &["world.meta".to_string()]),
+            other => panic!("expected order-only deps list, got {other:?}"),
+        }
+
+        let rendered_rule = rendered.rules.first().expect("rendered rule");
+        assert_eq!(rendered_rule.description.as_deref(), Some("2"));
+        match &rendered_rule.recipe {
+            Recipe::Command { command } => assert_eq!(command, "4"),
+            other => panic!("expected command recipe, got {other:?}"),
+        }
+        match &rendered_rule.deps {
+            StringOrList::List(items) => assert_eq!(items, &["hello world".to_string()]),
+            other => panic!("expected deps list, got {other:?}"),
+        }
+
+        Ok(())
+    }
 }
