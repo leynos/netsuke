@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import os
 import typing as typ
 from pathlib import Path
 
@@ -24,17 +25,6 @@ def stage_windows(
     target: typ.Annotated[str, Parameter(env_var="TARGET")],
     platform: typ.Annotated[str, Parameter(env_var="PLATFORM")],
     arch: typ.Annotated[str, Parameter(env_var="ARCH")],
-    github_output: typ.Annotated[
-        Path,
-        Parameter(
-            env_var="GITHUB_OUTPUT",
-            converter=Path,
-            required=True,
-        ),
-    ],
-    workspace: typ.Annotated[
-        Path, Parameter(env_var="GITHUB_WORKSPACE", converter=Path)
-    ] = Path(),
 ) -> None:
     """Stage Windows artefacts and expose their paths via workflow outputs.
 
@@ -48,22 +38,34 @@ def stage_windows(
         Display label for the operating system flavour.
     arch : str
         CPU architecture string for packaging (for example ``"x86_64"``).
-    github_output : Path
-        File that receives workflow output key-value pairs.
-    workspace : Path, optional
-        Workspace root to resolve build outputs when staging artefacts.
+
+    Notes
+    -----
+    The ``GITHUB_OUTPUT`` environment variable must point to the workflow output
+    file. ``GITHUB_WORKSPACE`` may optionally redefine the workspace root when
+    locating artefacts.
     """
+    github_output_env = os.environ.get("GITHUB_OUTPUT")
+    if github_output_env is None:
+        print(
+            "::error title=Configuration Error::"
+            "GITHUB_OUTPUT environment variable is required."
+        )
+        raise SystemExit(1)
+
+    workspace_env = os.environ.get("GITHUB_WORKSPACE", ".")
+
     config = StagingConfig(
         bin_name=bin_name,
         target=target,
         platform=platform,
         arch=arch,
-        workspace=workspace,
+        workspace=Path(workspace_env),
         bin_ext=".exe",
     )
 
     try:
-        stage_artifacts(config, github_output)
+        stage_artifacts(config, Path(github_output_env))
     except RuntimeError as exc:
         print(f"::error title=Packaging failure::{exc}")
         raise SystemExit(1) from exc
