@@ -15,7 +15,7 @@ import shutil
 import typing as typ
 from pathlib import Path
 
-__all__ = ["StagingConfig", "StageResult", "stage_artifacts"]
+__all__ = ["StageResult", "StagingConfig", "stage_artifacts"]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,7 +32,6 @@ class StagingConfig:
     @property
     def artifact_dir_name(self) -> str:
         """Return the directory name used for the staged artefacts."""
-
         return f"{self.bin_name}_{self.platform}_{self.arch}"
 
 
