@@ -1,31 +1,121 @@
 use minijinja::{Error, ErrorKind};
 
+/// Represents a character being processed with its context
+#[derive(Debug, Clone, Copy)]
+pub struct CharContext {
+    pub ch: char,
+    pub position: usize,
+    pub in_class: bool,
+    pub escaped: bool,
+}
+
+/// Configuration for brace validation
+#[derive(Debug, Clone)]
+pub struct BraceValidationState {
+    pub depth: i32,
+    pub in_class: bool,
+    pub last_open_pos: Option<usize>,
+    pub escape_active: bool,
+}
+
+/// Represents a glob pattern with processing state
+#[derive(Debug, Clone)]
+pub struct GlobPattern {
+    pub raw: String,
+    pub normalized: Option<String>,
+}
+
+/// Error context for glob operations
+#[derive(Debug)]
+pub struct GlobErrorContext {
+    pub pattern: String,
+    pub error_char: char,
+    pub position: usize,
+    pub error_type: GlobErrorType,
+}
+
+#[derive(Debug)]
+pub enum GlobErrorType {
+    UnmatchedBrace,
+    InvalidPattern,
+    IoError,
+}
+
+pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
+
+fn create_glob_error(context: &GlobErrorContext, details: Option<String>) -> Error {
+    match context.error_type {
+        GlobErrorType::UnmatchedBrace => Error::new(
+            ErrorKind::SyntaxError,
+            format!(
+                "invalid glob pattern '{}': unmatched '{}' at position {}",
+                context.pattern, context.error_char, context.position
+            ),
+        ),
+        GlobErrorType::InvalidPattern => {
+            let detail = details.unwrap_or_else(|| "unknown pattern error".to_string());
+            Error::new(
+                ErrorKind::SyntaxError,
+                format!("invalid glob pattern '{}': {detail}", context.pattern),
+            )
+        }
+        GlobErrorType::IoError => {
+            let detail = details.unwrap_or_else(|| "unknown IO error".to_string());
+            let message = if detail.starts_with("glob ") {
+                detail
+            } else {
+                format!("glob failed for '{}': {detail}", context.pattern)
+            };
+            Error::new(ErrorKind::InvalidOperation, message)
+        }
+    }
+}
+
+fn create_unmatched_brace_error(context: &GlobErrorContext) -> Error {
+    create_glob_error(context, None)
+}
+
 fn process_glob_entry(
-    entry: std::result::Result<std::path::PathBuf, glob::GlobError>,
-    pattern: &str,
+    entry: GlobEntryResult,
+    pattern: GlobPattern,
 ) -> std::result::Result<Option<String>, Error> {
     match entry {
         Ok(path) => {
             let meta = path.metadata().map_err(|e| {
-                Error::new(
-                    ErrorKind::InvalidOperation,
-                    format!("glob failed for '{pattern}': {e}"),
+                create_glob_error(
+                    &GlobErrorContext {
+                        pattern: pattern.raw.clone(),
+                        error_char: '\0',
+                        position: pattern.raw.len(),
+                        error_type: GlobErrorType::IoError,
+                    },
+                    Some(e.to_string()),
                 )
             })?;
             if !meta.is_file() {
                 return Ok(None);
             }
             let s = path.to_str().ok_or_else(|| {
-                Error::new(
-                    ErrorKind::InvalidOperation,
-                    format!("glob matched a non-UTF-8 path: {}", path.display()),
+                create_glob_error(
+                    &GlobErrorContext {
+                        pattern: pattern.raw.clone(),
+                        error_char: '\0',
+                        position: pattern.raw.len(),
+                        error_type: GlobErrorType::IoError,
+                    },
+                    Some(format!("glob matched a non-UTF-8 path: {}", path.display())),
                 )
             })?;
             Ok(Some(s.replace('\\', "/")))
         }
-        Err(e) => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!("glob failed for '{pattern}': {e}"),
+        Err(e) => Err(create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern.raw,
+                error_char: '\0',
+                position: 0,
+                error_type: GlobErrorType::IoError,
+            },
+            Some(e.to_string()),
         )),
     }
 }
@@ -107,44 +197,24 @@ fn force_literal_escapes(pattern: &str) -> String {
     out
 }
 
-fn is_opening_brace(ch: char, in_class: bool) -> bool {
-    ch == '{' && !in_class
+fn is_opening_brace(context: CharContext) -> bool {
+    context.ch == '{' && !context.in_class
 }
 
-fn is_closing_brace(ch: char, in_class: bool) -> bool {
-    ch == '}' && !in_class
+fn is_closing_brace(context: CharContext) -> bool {
+    context.ch == '}' && !context.in_class
 }
 
-fn is_unmatched_closing_brace(ch: char, in_class: bool, depth: i32) -> bool {
-    ch == '}' && !in_class && depth == 0
+fn is_unmatched_closing_brace(context: CharContext, depth: i32) -> bool {
+    context.ch == '}' && !context.in_class && depth == 0
 }
 
-fn is_class_start(ch: char, in_class: bool) -> bool {
-    ch == '[' && !in_class
+fn is_class_start(context: CharContext) -> bool {
+    context.ch == '[' && !context.in_class
 }
 
-fn is_class_end(ch: char, in_class: bool) -> bool {
-    ch == ']' && in_class
-}
-
-fn create_unmatched_brace_error(pattern: &str, brace_char: char, pos: usize) -> Error {
-    Error::new(
-        ErrorKind::SyntaxError,
-        format!("invalid glob pattern '{pattern}': unmatched '{brace_char}' at position {pos}"),
-    )
-}
-
-fn validate_final_depth(
-    pattern: &str,
-    depth: i32,
-    last_open_brace_pos: Option<usize>,
-) -> std::result::Result<(), Error> {
-    if depth != 0 {
-        let pos = last_open_brace_pos.unwrap_or(0);
-        Err(create_unmatched_brace_error(pattern, '{', pos))
-    } else {
-        Ok(())
-    }
+fn is_class_end(context: CharContext) -> bool {
+    context.ch == ']' && context.in_class
 }
 
 #[cfg(unix)]
@@ -176,21 +246,20 @@ fn get_escape_replacement(ch: char) -> &'static str {
 }
 
 struct BraceValidator {
-    depth: i32,
+    state: BraceValidationState,
     escaped: bool,
-    in_class: bool,
-    last_open_brace_pos: Option<usize>,
-    escape_active: bool,
 }
 
 impl BraceValidator {
     fn new() -> Self {
         Self {
-            depth: 0,
+            state: BraceValidationState {
+                depth: 0,
+                in_class: false,
+                last_open_pos: None,
+                escape_active: cfg!(unix),
+            },
             escaped: false,
-            in_class: false,
-            last_open_brace_pos: None,
-            escape_active: cfg!(unix),
         }
     }
 
@@ -198,26 +267,33 @@ impl BraceValidator {
         &mut self,
         ch: char,
         pos: usize,
-        pattern: &str,
+        pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
-        if self.handle_escape_sequence(ch) {
+        let context = CharContext {
+            ch,
+            position: pos,
+            in_class: self.state.in_class,
+            escaped: self.escaped,
+        };
+
+        if self.handle_escape_sequence(context) {
             return Ok(());
         }
 
-        if self.handle_character_class_transitions(ch) {
+        if self.handle_character_class_transitions(context) {
             return Ok(());
         }
 
-        self.handle_brace_matching(ch, pos, pattern)
+        self.handle_brace_matching(context, pattern)
     }
 
-    fn handle_escape_sequence(&mut self, ch: char) -> bool {
-        if self.escaped {
+    fn handle_escape_sequence(&mut self, context: CharContext) -> bool {
+        if context.escaped {
             self.escaped = false;
             return true;
         }
 
-        if ch == '\\' && self.escape_active {
+        if context.ch == '\\' && self.state.escape_active {
             self.escaped = true;
             return true;
         }
@@ -225,12 +301,12 @@ impl BraceValidator {
         false
     }
 
-    fn handle_character_class_transitions(&mut self, ch: char) -> bool {
-        if is_class_start(ch, self.in_class) {
-            self.in_class = true;
+    fn handle_character_class_transitions(&mut self, context: CharContext) -> bool {
+        if is_class_start(context) {
+            self.state.in_class = true;
             true
-        } else if is_class_end(ch, self.in_class) {
-            self.in_class = false;
+        } else if is_class_end(context) {
+            self.state.in_class = false;
             true
         } else {
             false
@@ -239,33 +315,47 @@ impl BraceValidator {
 
     fn handle_brace_matching(
         &mut self,
-        ch: char,
-        pos: usize,
-        pattern: &str,
+        context: CharContext,
+        pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
-        if is_unmatched_closing_brace(ch, self.in_class, self.depth) {
-            return Err(create_unmatched_brace_error(pattern, '}', pos));
+        if is_unmatched_closing_brace(context, self.state.depth) {
+            return Err(create_unmatched_brace_error(&GlobErrorContext {
+                pattern: pattern.raw.clone(),
+                error_char: context.ch,
+                position: context.position,
+                error_type: GlobErrorType::UnmatchedBrace,
+            }));
         }
 
-        if is_opening_brace(ch, self.in_class) {
-            self.depth += 1;
-            self.last_open_brace_pos = Some(pos);
-        } else if is_closing_brace(ch, self.in_class) {
-            self.depth -= 1;
+        if is_opening_brace(context) {
+            self.state.depth += 1;
+            self.state.last_open_pos = Some(context.position);
+        } else if is_closing_brace(context) {
+            self.state.depth -= 1;
         }
 
         Ok(())
     }
 
-    fn validate_final_state(&self, pattern: &str) -> std::result::Result<(), Error> {
-        validate_final_depth(pattern, self.depth, self.last_open_brace_pos)
+    fn validate_final_state(&self, pattern: &GlobPattern) -> std::result::Result<(), Error> {
+        if self.state.depth != 0 {
+            let pos = self.state.last_open_pos.unwrap_or(0);
+            Err(create_unmatched_brace_error(&GlobErrorContext {
+                pattern: pattern.raw.clone(),
+                error_char: '{',
+                position: pos,
+                error_type: GlobErrorType::UnmatchedBrace,
+            }))
+        } else {
+            Ok(())
+        }
     }
 }
 
-fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
+fn validate_brace_matching(pattern: &GlobPattern) -> std::result::Result<(), Error> {
     let mut validator = BraceValidator::new();
 
-    for (i, ch) in pattern.char_indices() {
+    for (i, ch) in pattern.raw.char_indices() {
         validator.process_character(ch, i, pattern)?;
     }
 
@@ -286,23 +376,39 @@ pub(crate) fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Erro
         require_literal_leading_dot: false,
     };
 
-    validate_brace_matching(pattern)?;
+    let mut pattern_state = GlobPattern {
+        raw: pattern.to_string(),
+        normalized: None,
+    };
 
-    let mut normalized = normalize_separators(pattern);
+    validate_brace_matching(&pattern_state)?;
+
+    let mut normalized = normalize_separators(&pattern_state.raw);
     #[cfg(unix)]
     {
         normalized = force_literal_escapes(&normalized);
     }
 
-    let entries = glob_with(&normalized, opts).map_err(|e| {
-        Error::new(
-            ErrorKind::SyntaxError,
-            format!("invalid glob pattern '{pattern}': {e}"),
+    pattern_state.normalized = Some(normalized);
+    let normalized_pattern = pattern_state
+        .normalized
+        .as_deref()
+        .expect("normalized pattern must be present");
+
+    let entries = glob_with(normalized_pattern, opts).map_err(|e| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern_state.raw.clone(),
+                error_char: '\0',
+                position: 0,
+                error_type: GlobErrorType::InvalidPattern,
+            },
+            Some(e.to_string()),
         )
     })?;
     let mut paths = Vec::new();
     for entry in entries {
-        if let Some(p) = process_glob_entry(entry, pattern)? {
+        if let Some(p) = process_glob_entry(entry, pattern_state.clone())? {
             paths.push(p);
         }
     }
