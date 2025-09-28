@@ -1621,14 +1621,15 @@ Release engineering is delegated to GitHub Actions workflows built on the
 Git ref matches `Cargo.toml` and records the crate's binary name once so all
 subsequent jobs operate on consistent metadata. Linux builds invoke the
 `rust-build-release` composite action to cross-compile for `x86_64` and
-`aarch64`, generate the staged binary + man page directory, and drive `nfpm`
-through the bundled `linux-packages` action to emit `.deb` and `.rpm` archives.
-Windows builds reuse the same action for compilation and then run the `uv`
-script `stage-windows`. The helper lives under `.github/workflows/scripts/` and
-uses Cyclopts to ingest GitHub-provided environment variables, copy the binary,
-mirror the man page, and write SHA-256 sums ready for publishing. Dependencies
-are tracked in the repository `pyproject.toml` so `setup-uv` can provision them
-without ad-hoc pip calls.
+`aarch64`, generate the staged binary + man page directory, and then call the
+shared `linux-packages` composite a second time with explicit metadata so the
+resulting `.deb` and `.rpm` archives both declare a runtime dependency on
+`ninja-build`. Windows builds reuse the same action for compilation and then
+run the `uv` script `stage-windows`. The helper lives under
+`.github/workflows/scripts/` and uses Cyclopts to ingest GitHub-provided
+environment variables, copy the binary, mirror the man page, and write SHA-256
+sums ready for publishing. Each staging script embeds a `uv` script block so
+`setup-uv` can resolve Cyclopts without a central `pyproject.toml` manifest.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. They invoke `uv run stage-macos` to prepare artefacts

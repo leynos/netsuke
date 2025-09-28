@@ -63,8 +63,10 @@ PY
         include:
           - target: x86_64-unknown-linux-gnu
             artifact: linux-amd64
+            package_arch: amd64
           - target: aarch64-unknown-linux-gnu
             artifact: linux-arm64
+            package_arch: arm64
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Build Linux release
@@ -74,6 +76,23 @@ PY
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           version: ${{ needs.metadata.outputs.version }}
           formats: deb,rpm
+      - name: Remove previously generated Linux packages
+        run: |
+          set -euo pipefail
+          rm -f dist/*.deb dist/*.rpm
+      - name: Package Linux artefacts with dependencies
+        uses: leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
+        with:
+          project-dir: .
+          package-name: ${{ needs.metadata.outputs.bin_name }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+          target: ${{ matrix.target }}
+          version: ${{ needs.metadata.outputs.version }}
+          formats: deb,rpm
+          man-paths: dist/${{ needs.metadata.outputs.bin_name }}_linux_${{ matrix.package_arch }}/${{ needs.metadata.outputs.bin_name }}.1
+          outdir: dist
+          deb-depends: ninja-build
+          rpm-depends: ninja-build
       - name: Prune packaging metadata
         run: rm -rf dist/.man dist/nfpm.yaml
       - name: Upload Linux artefacts
