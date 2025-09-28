@@ -5,12 +5,13 @@
 
 use mockall::{Sequence, mock};
 use std::ffi::OsStr;
-use test_support::{PathGuard, path_guard::Env};
+use test_support::{Environment, PathGuard};
 
 mock! {
     pub Env {}
-    impl Env for Env {
+    impl Environment for Env {
         unsafe fn set_var(&mut self, key: &str, val: &OsStr);
+        unsafe fn remove_var(&mut self, key: &str);
     }
 }
 

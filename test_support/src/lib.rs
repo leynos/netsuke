@@ -12,6 +12,7 @@
 
 pub mod check_ninja;
 pub mod env;
+pub mod env_guard;
 pub mod env_lock;
 pub mod env_var_guard;
 pub mod path_guard;
@@ -20,6 +21,9 @@ pub use path_guard::PathGuard;
 
 /// Re-export of [`env_var_guard::EnvVarGuard`] for ergonomics in tests.
 pub use env_var_guard::EnvVarGuard;
+
+/// Re-export of the generic environment guard utilities.
+pub use env_guard::{EnvGuard, Environment, StdEnv};
 
 mod error;
 /// Format an error and its sources (outermost → root) using `Display`, joined
