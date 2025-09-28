@@ -1,9 +1,13 @@
-use super::BuildTargets;
+use super::{BuildTargets, NinjaContent, NINJA_PROGRAM};
 use crate::cli::Cli;
+use anyhow::{Context, Result as AnyResult};
+use ninja_env::NINJA_ENV;
+use tempfile::{Builder, NamedTempFile};
 use std::{
+    env,
     fs,
     io::{self, BufRead, BufReader, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
 };
@@ -43,6 +47,19 @@ pub mod doc {
     #[must_use]
     pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
         super::redact_sensitive_args(args)
+    }
+
+    pub fn create_temp_ninja_file(
+        content: &super::NinjaContent,
+    ) -> super::AnyResult<super::NamedTempFile> {
+        super::create_temp_ninja_file(content)
+    }
+
+    pub fn write_ninja_file(
+        path: &super::Path,
+        content: &super::NinjaContent,
+    ) -> super::AnyResult<()> {
+        super::write_ninja_file(path, content)
     }
 }
 
@@ -110,6 +127,60 @@ pub(crate) fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// ```
 pub(crate) fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
     args.iter().map(redact_argument).collect()
+}
+
+/// Create a temporary Ninja file on disk containing `content`.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be created or written.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::runner::doc::create_temp_ninja_file;
+/// use netsuke::runner::NinjaContent;
+/// let tmp = create_temp_ninja_file(&NinjaContent::new("".into())).unwrap();
+/// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
+/// ```
+pub(super) fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
+    let tmp = Builder::new()
+        .prefix("netsuke.")
+        .suffix(".ninja")
+        .tempfile()
+        .context("create temp file")?;
+    write_ninja_file(tmp.path(), content)?;
+    Ok(tmp)
+}
+
+/// Write `content` to `path` and log the file's location.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be written.
+///
+/// # Examples
+/// ```ignore
+/// use std::path::Path;
+/// use netsuke::runner::doc::write_ninja_file;
+/// use netsuke::runner::NinjaContent;
+/// let content = NinjaContent::new("rule cc\n".to_string());
+/// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
+/// ```
+pub(super) fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
+    }
+    fs::write(path, content.as_str())
+        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
+    info!("Generated Ninja file at {}", path.display());
+    Ok(())
+}
+
+/// Determine which Ninja executable to invoke.
+#[must_use]
+pub(super) fn resolve_ninja_program() -> PathBuf {
+    env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.

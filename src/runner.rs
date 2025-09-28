@@ -9,9 +9,8 @@ use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use serde_json;
 use std::borrow::Cow;
-use std::fs;
-use std::path::{Path, PathBuf};
-use tempfile::{Builder, NamedTempFile};
+use std::path::Path;
+use tempfile::NamedTempFile;
 use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
@@ -85,7 +84,7 @@ pub fn run(cli: &Cli) -> Result<()> {
         Commands::Build(args) => handle_build(cli, &args),
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
-            write_ninja_file(&file, &ninja)?;
+            process::write_ninja_file(&file, &ninja)?;
             Ok(())
         }
         Commands::Clean => {
@@ -123,10 +122,10 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let build_path: Cow<Path>;
     let mut tmp_file: Option<NamedTempFile> = None;
     if let Some(path) = &args.emit {
-        write_ninja_file(path, &ninja)?;
+        process::write_ninja_file(path, &ninja)?;
         build_path = Cow::Borrowed(path.as_path());
     } else {
-        let tmp = create_temp_ninja_file(&ninja)?;
+        let tmp = process::create_temp_ninja_file(&ninja)?;
         tmp_file = Some(tmp);
         build_path = Cow::Borrowed(
             tmp_file
@@ -136,7 +135,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
         );
     }
 
-    let program = resolve_ninja_program();
+    let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
             "running {} with build file {}",
@@ -145,52 +144,6 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
         )
     })?;
     drop(tmp_file);
-    Ok(())
-}
-
-/// Create a temporary Ninja file on disk containing `content`.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be created or written.
-///
-/// # Examples
-/// ```ignore
-/// use netsuke::runner::{create_temp_ninja_file, NinjaContent};
-/// let tmp = create_temp_ninja_file(&NinjaContent::new("".into())).unwrap();
-/// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
-/// ```
-fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
-    let tmp = Builder::new()
-        .prefix("netsuke.")
-        .suffix(".ninja")
-        .tempfile()
-        .context("create temp file")?;
-    write_ninja_file(tmp.path(), content)?;
-    Ok(tmp)
-}
-
-/// Write `content` to `path` and log the file's location.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be written.
-///
-/// # Examples
-/// ```ignore
-/// let content = NinjaContent::new("rule cc\n".to_string());
-/// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
-/// ```
-fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
-    // Ensure the parent directory exists; guard against empty components so we
-    // do not attempt to create the current directory on some platforms.
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
-    }
-    fs::write(path, content.as_str())
-        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
-    info!("Generated Ninja file at {}", path.display());
     Ok(())
 }
 
@@ -241,10 +194,4 @@ fn resolve_manifest_path(cli: &Cli) -> std::path::PathBuf {
     cli.directory
         .as_ref()
         .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file))
-}
-
-/// Determine which Ninja executable to invoke.
-#[must_use]
-fn resolve_ninja_program() -> PathBuf {
-    std::env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
 }
