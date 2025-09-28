@@ -13,7 +13,7 @@ import typing as typ
 from pathlib import Path
 
 from cyclopts import App, Parameter
-from stage_common import stage_artifacts
+from stage_common import StageConfig, stage_artifacts
 
 app = App()
 
@@ -56,16 +56,18 @@ def stage_macos(
     workspace : Path, optional
         Workspace root to resolve build outputs when staging artefacts.
     """
+    config = StageConfig(
+        bin_name=bin_name,
+        target=target,
+        platform=platform,
+        arch=arch,
+        workspace=workspace,
+        github_output=github_output,
+        bin_ext=bin_ext,
+    )
+
     try:
-        stage_artifacts(
-            bin_name=bin_name,
-            target=target,
-            platform=platform,
-            arch=arch,
-            workspace=workspace,
-            bin_ext=bin_ext,
-            github_output=github_output,
-        )
+        stage_artifacts(config=config)
     except RuntimeError as exc:
         print(f"::error title=Packaging failure::{exc}")
         raise SystemExit(1) from exc

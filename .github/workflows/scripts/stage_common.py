@@ -17,6 +17,44 @@ from pathlib import Path
 
 
 @dataclasses.dataclass(frozen=True)
+class BinaryConfig:
+    """Configuration describing the staged binary."""
+
+    name: str
+    extension: str = ""
+
+
+@dataclasses.dataclass(frozen=True)
+class BuildConfig:
+    """Compilation metadata for locating build outputs."""
+
+    target: str
+    platform: str
+    arch: str
+
+
+@dataclasses.dataclass(frozen=True)
+class PathConfig:
+    """Filesystem locations used during staging."""
+
+    workspace: Path
+    github_output: Path
+
+
+@dataclasses.dataclass(frozen=True)
+class StageConfig:
+    """Aggregate configuration required to stage release artefacts."""
+
+    bin_name: str
+    target: str
+    platform: str
+    arch: str
+    workspace: Path
+    github_output: Path
+    bin_ext: str = ""
+
+
+@dataclasses.dataclass(frozen=True)
 class StageResult:
     """Immutable summary of staged artefacts.
 
@@ -35,34 +73,15 @@ class StageResult:
     man_path: Path
 
 
-def stage_artifacts(
-    *,
-    bin_name: str,
-    target: str,
-    platform: str,
-    arch: str,
-    workspace: Path,
-    bin_ext: str,
-    github_output: Path,
-) -> StageResult:
+def stage_artifacts(*, config: StageConfig) -> StageResult:
     """Copy artefacts, emit checksums, and record metadata.
 
     Parameters
     ----------
-    bin_name : str
-        Name of the release binary.
-    target : str
-        Rust compilation target triple for the artefact.
-    platform : str
-        Human-readable platform label used in output directory naming.
-    arch : str
-        CPU architecture identifier included in output directory naming.
-    workspace : Path
-        Repository workspace root that contains build outputs.
-    bin_ext : str
-        Binary filename extension, such as ``".exe"`` on Windows.
-    github_output : Path
-        File path where workflow outputs should be appended.
+    config : StageConfig
+        Aggregated configuration describing the binary, build target, and
+        required filesystem locations. ``config.bin_ext`` is optional and may
+        be used to append platform-specific suffixes such as ``".exe"``.
 
     Returns
     -------
@@ -74,21 +93,35 @@ def stage_artifacts(
     RuntimeError
         If the binary or manual page cannot be located uniquely.
     """
-    workspace = workspace.resolve()
+    binary_config = BinaryConfig(config.bin_name, config.bin_ext)
+    build_config = BuildConfig(config.target, config.platform, config.arch)
+    path_config = PathConfig(config.workspace, config.github_output)
+
+    workspace = path_config.workspace.resolve()
     dist_dir = workspace / "dist"
     dist_dir.mkdir(parents=True, exist_ok=True)
 
-    bin_src = workspace / "target" / target / "release" / f"{bin_name}{bin_ext}"
+    bin_src = (
+        workspace
+        / "target"
+        / build_config.target
+        / "release"
+        / f"{binary_config.name}{binary_config.extension}"
+    )
     if not bin_src.is_file():
         message = f"Binary not found at {bin_src}"
         raise RuntimeError(message)
 
     man_candidates = _collect_manpage_candidates(
-        workspace=workspace, target=target, bin_name=bin_name
+        workspace=workspace,
+        target=build_config.target,
+        bin_name=binary_config.name,
     )
-    man_src = _select_single_candidate(man_candidates, target)
+    man_src = _select_single_candidate(man_candidates, build_config.target)
 
-    artifact_dir = dist_dir / f"{bin_name}_{platform}_{arch}"
+    artifact_dir = (
+        dist_dir / f"{binary_config.name}_{build_config.platform}_{build_config.arch}"
+    )
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
     bin_dest = artifact_dir / bin_src.name
@@ -99,7 +132,7 @@ def stage_artifacts(
     for path in (bin_dest, man_dest):
         _write_checksum(path)
 
-    with github_output.open("a", encoding="utf-8") as handle:
+    with path_config.github_output.open("a", encoding="utf-8") as handle:
         handle.write(f"artifact_dir={artifact_dir.as_posix()}\n")
         handle.write(f"binary_path={bin_dest.as_posix()}\n")
         handle.write(f"man_path={man_dest.as_posix()}\n")
