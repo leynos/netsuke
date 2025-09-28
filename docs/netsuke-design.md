@@ -1607,10 +1607,37 @@ enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
 The CLI definition doubles as the source for user documentation. A build script
 uses `clap_mangen` to emit a `netsuke.1` manual page in
-`target/generated-man/<target>/<profile>`. Release artefacts include this
-platform‑agnostic man page; the published crate remains code‑only. The build
-script honours `SOURCE_DATE_EPOCH` to produce reproducible dates, emitting a
-warning and falling back to `1970-01-01` when the environment value is invalid.
+`target/generated-man/<target>/<profile>` and mirrors the page into Cargo's
+`OUT_DIR` so release automation can discover it without additional tooling.
+Release artefacts include this platform‑agnostic man page; the published crate
+remains code‑only. The build script honours `SOURCE_DATE_EPOCH` to produce
+reproducible dates, emitting a warning and falling back to `1970-01-01` when
+the environment value is invalid.
+
+### 8.6 Release Automation
+
+Release engineering is delegated to GitHub Actions workflows built on the
+`leynos/shared-actions` toolchain. The tagging workflow first verifies that the
+Git ref matches `Cargo.toml` and records the crate's binary name once so all
+subsequent jobs operate on consistent metadata. Linux builds invoke the
+`rust-build-release` composite action to cross-compile for `x86_64` and
+`aarch64`, generate the staged binary + man page directory, and drive `nfpm`
+through the bundled `linux-packages` action to emit `.deb` and `.rpm` archives.
+Windows builds reuse the same action for compilation and then run the `uv`
+script `stage-windows`. The helper lives under `.github/workflows/scripts/` and
+uses Cyclopts to ingest GitHub-provided environment variables, copy the binary,
+mirror the man page, and write SHA-256 sums ready for publishing. Dependencies
+are tracked in the repository `pyproject.toml` so `setup-uv` can provision them
+without ad-hoc pip calls.
+
+macOS releases execute the shared action twice: once on an Intel runner and
+again on Apple Silicon. They invoke `uv run stage-macos` to prepare artefacts
+before feeding the resulting paths into the `macos-package` action, which wraps
+the binary and documentation into signed `.pkg` installers. Each job uploads
+its products as workflow artefacts, and the final release job downloads every
+file and attaches it to the GitHub release draft. This automated pipeline
+guarantees parity across Windows, Linux, and macOS without custom GoReleaser
+logic.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 

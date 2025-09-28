@@ -1,0 +1,16 @@
+[project]
+name = "netsuke-release-automation"
+version = "0.0.0"
+description = "Release automation helpers for Netsuke"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cyclopts>=3.24,<4",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.scripts]
+stage-windows = { path = ".github/workflows/scripts/stage_windows.py" }
+stage-macos = { path = ".github/workflows/scripts/stage_macos.py" }

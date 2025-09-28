@@ -2,7 +2,10 @@
 //! release packaging.
 use clap::CommandFactory;
 use clap_mangen::Man;
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
@@ -47,6 +50,18 @@ fn out_dir_for_target_profile() -> PathBuf {
     PathBuf::from(format!("target/generated-man/{target}/{profile}"))
 }
 
+fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<PathBuf> {
+    fs::create_dir_all(dir)?;
+    let destination = dir.join(page_name);
+    let tmp = dir.join(format!("{page_name}.tmp"));
+    fs::write(&tmp, data)?;
+    if destination.exists() {
+        fs::remove_file(&destination)?;
+    }
+    fs::rename(&tmp, &destination)?;
+    Ok(destination)
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli.rs");
@@ -61,7 +76,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Packagers expect man pages under target/generated-man/<target>/<profile>.
     let out_dir = out_dir_for_target_profile();
-    fs::create_dir_all(&out_dir)?;
 
     // The top-level page documents the entire command interface.
     let cmd = cli::Cli::command();
@@ -74,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| name.clone());
     if name != cargo_bin {
         return Err(format!(
-            "CLI name '{name}' differs from Cargo bin/package name '{cargo_bin}'; packaging expects {cargo_bin}.1"
+            "CLI name {name} differs from Cargo bin/package name {cargo_bin}; packaging expects {cargo_bin}.1"
         )
         .into());
     }
@@ -86,13 +100,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .date(manual_date());
     let mut buf = Vec::new();
     man.render(&mut buf)?;
-    let out_path = out_dir.join(format!("{cargo_bin}.1"));
-    let tmp = out_dir.join(format!("{cargo_bin}.1.tmp"));
-    fs::write(&tmp, &buf)?;
-    if out_path.exists() {
-        fs::remove_file(&out_path)?;
+    let page_name = format!("{cargo_bin}.1");
+    write_man_page(&buf, &out_dir, &page_name)?;
+    if let Some(extra_dir) = env::var_os("OUT_DIR") {
+        let extra_dir = PathBuf::from(extra_dir);
+        if let Err(err) = write_man_page(&buf, &extra_dir, &page_name) {
+            println!(
+                "cargo:warning=Failed to stage manual page in OUT_DIR ({}): {err}",
+                extra_dir.display()
+            );
+        }
     }
-    fs::rename(&tmp, &out_path)?;
 
     Ok(())
 }
