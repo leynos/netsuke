@@ -93,8 +93,8 @@ impl<E: Environment> EnvGuard<E> {
     }
 
     /// Consume the guard returning the captured original value.
-    pub fn into_original(mut self) -> Option<OsString> {
-        self.original.take()
+    pub fn into_original(self) -> Option<OsString> {
+        self.original.clone()
     }
 
     fn restore(&mut self) {

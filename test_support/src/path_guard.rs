@@ -33,9 +33,9 @@ impl PathGuard {
 
 impl<E: Env> PathGuard<E> {
     /// Create a guard that uses `env` to restore `PATH`.
-    pub fn with_env(original: OsString, env: E) -> Self {
+    pub fn with_env(original: Option<OsString>, env: E) -> Self {
         Self {
-            inner: EnvGuard::with_env_and_lock("PATH", Some(original), env, true),
+            inner: EnvGuard::with_env_and_lock("PATH", original, env, true),
         }
     }
 

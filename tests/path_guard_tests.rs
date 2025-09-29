@@ -30,7 +30,7 @@ fn restores_path_without_touching_real_env() {
         .in_sequence(&mut seq)
         .return_const(());
     {
-        let mut guard = PathGuard::with_env("/orig".into(), env);
+        let mut guard = PathGuard::with_env(Some("/orig".into()), env);
         unsafe {
             guard.env_mut().set_var("PATH", OsStr::new("/tmp"));
         }
