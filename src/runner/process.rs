@@ -1,6 +1,8 @@
 use super::{BuildTargets, NINJA_PROGRAM, NinjaContent};
 use crate::cli::Cli;
-use anyhow::{Context, Result as AnyResult};
+use anyhow::{Context, Result as AnyResult, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs as cap_fs};
 use ninja_env::NINJA_ENV;
 use std::{
     env, fs,
@@ -31,8 +33,24 @@ impl CommandArg {
 pub mod doc {
     pub use super::{
         CommandArg, contains_sensitive_keyword, create_temp_ninja_file, is_sensitive_arg,
-        redact_argument, redact_sensitive_args, resolve_ninja_program, write_ninja_file,
+        redact_argument, redact_sensitive_args, resolve_ninja_program, resolve_ninja_program_utf8,
+        write_ninja_file, write_ninja_file_utf8,
     };
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    const SENSITIVE_KEYS: [&str; 7] = [
+        "password",
+        "token",
+        "secret",
+        "api_key",
+        "apikey",
+        "auth",
+        "authorization",
+    ];
+    SENSITIVE_KEYS
+        .iter()
+        .any(|candidate| key.eq_ignore_ascii_case(candidate))
 }
 
 /// Check if `arg` contains a sensitive keyword.
@@ -45,8 +63,9 @@ pub mod doc {
 /// ```
 #[must_use]
 pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
-    let lower = arg.as_str().to_lowercase();
-    lower.contains("password") || lower.contains("token") || lower.contains("secret")
+    arg.as_str()
+        .split_once('=')
+        .is_some_and(|(key, _)| is_sensitive_key(key.trim()))
 }
 
 /// Determine whether the argument should be redacted.
@@ -77,14 +96,13 @@ pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
 #[must_use]
 pub fn redact_argument(arg: &CommandArg) -> CommandArg {
     if is_sensitive_arg(arg) {
-        let redacted = arg.as_str().split_once('=').map_or_else(
-            || "***REDACTED***".to_string(),
-            |(key, _)| format!("{key}=***REDACTED***"),
-        );
-        CommandArg::new(redacted)
-    } else {
-        arg.clone()
+        if let Some((key, _)) = arg.as_str().split_once('=') {
+            let trimmed = key.trim();
+            return CommandArg::new(format!("{trimmed}=***REDACTED***"));
+        }
+        return CommandArg::new(String::from("***REDACTED***"));
     }
+    arg.clone()
 }
 
 /// Redact sensitive information from all `args`.
@@ -127,6 +145,49 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
     Ok(tmp)
 }
 
+/// Write `content` to `path` within `dir`.
+///
+/// # Errors
+///
+/// Returns an error if the parent directories cannot be created or the file cannot be written.
+pub fn write_ninja_file_utf8(
+    dir: &cap_fs::Dir,
+    path: &Utf8Path,
+    content: &NinjaContent,
+) -> AnyResult<()> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {
+        dir.create_dir_all(parent.as_str())
+            .with_context(|| format!("failed to create parent directory {parent}"))?;
+    }
+    let mut file = dir
+        .create(path.as_str())
+        .with_context(|| format!("failed to create Ninja file at {path}"))?;
+    file.write_all(content.as_str().as_bytes())
+        .with_context(|| format!("failed to write Ninja file to {path}"))?;
+    Ok(())
+}
+
+fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathBuf)> {
+    if path.is_relative() {
+        let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())
+            .context("open ambient directory")?;
+        return Ok((dir, path.to_owned()));
+    }
+
+    let mut ancestors = path.ancestors();
+    ancestors.next();
+    let base = ancestors
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| anyhow!("no existing ancestor for {path}"))?;
+    let relative = path
+        .strip_prefix(base)
+        .context("derive relative Ninja path")?
+        .to_owned();
+    let dir = cap_fs::Dir::open_ambient_dir(base.as_std_path(), ambient_authority())
+        .with_context(|| format!("open ancestor directory {base}"))?;
+    Ok((dir, relative))
+}
+
 /// Write `content` to `path` and log the file's location.
 ///
 /// # Errors
@@ -142,20 +203,28 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
 /// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
 /// ```
 pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
-    }
-    fs::write(path, content.as_str())
-        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
-    info!("Generated Ninja file at {}", path.display());
+    let utf8_path =
+        Utf8Path::from_path(path).ok_or_else(|| anyhow!("non-UTF-8 path is not supported"))?;
+    let (dir, relative) = derive_dir_and_relative(utf8_path)?;
+    write_ninja_file_utf8(&dir, &relative, content)?;
+    info!("Generated Ninja file at {utf8_path}");
     Ok(())
+}
+
+#[must_use]
+pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
+    env::var_os(NINJA_ENV)
+        .and_then(|value| {
+            let path = PathBuf::from(value);
+            Utf8PathBuf::from_path_buf(path).ok()
+        })
+        .unwrap_or_else(|| Utf8PathBuf::from(NINJA_PROGRAM))
 }
 
 /// Determine which Ninja executable to invoke.
 #[must_use]
 pub fn resolve_ninja_program() -> PathBuf {
-    env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
+    resolve_ninja_program_utf8().into()
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -245,6 +314,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn contains_sensitive_keyword_only_flags_known_keys() {
+        let token = CommandArg::new(String::from("token=abc"));
+        assert!(contains_sensitive_keyword(&token));
+
+        let positional = CommandArg::new(String::from("secrets.yml"));
+        assert!(!contains_sensitive_keyword(&positional));
+
+        let path_arg = CommandArg::new(String::from("path=/tmp/secrets.yml"));
+        assert!(!contains_sensitive_keyword(&path_arg));
+
+        let spaced = CommandArg::new(String::from("  PASSWORD = value "));
+        assert!(contains_sensitive_keyword(&spaced));
+    }
+
+    #[test]
+    fn redact_argument_preserves_non_sensitive_pairs() {
+        let redacted = redact_argument(&CommandArg::new(String::from("auth = token123")));
+        assert_eq!(redacted.as_str(), "auth=***REDACTED***");
+
+        let untouched = redact_argument(&CommandArg::new(String::from("path=/var/secrets")));
+        assert_eq!(untouched.as_str(), "path=/var/secrets");
+
+        let positional = redact_argument(&CommandArg::new(String::from("secret")));
+        assert_eq!(positional.as_str(), "secret");
+    }
+
+    #[test]
     fn create_temp_ninja_file_persists_contents() {
         let content = NinjaContent::new(String::from("rule cc"));
         let file = create_temp_ninja_file(&content).expect("create temp file");
@@ -254,7 +350,23 @@ mod tests {
     }
 
     #[test]
-    fn write_ninja_file_creates_parent_directories() {
+    fn write_ninja_file_utf8_creates_parent_directories() {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let dir =
+            cap_fs::Dir::open_ambient_dir(temp.path(), ambient_authority()).expect("open temp dir");
+        let nested = Utf8PathBuf::from("nested/build.ninja");
+        let content = NinjaContent::new(String::from("build all: phony"));
+
+        write_ninja_file_utf8(&dir, &nested, &content).expect("write ninja file");
+
+        let nested_path = temp.path().join("nested").join("build.ninja");
+        let written = std::fs::read_to_string(&nested_path).expect("read nested file");
+        assert_eq!(written, content.as_str());
+        assert!(nested_path.parent().expect("parent path").exists());
+    }
+
+    #[test]
+    fn write_ninja_file_handles_absolute_paths() {
         let temp = tempfile::tempdir().expect("create temp dir");
         let nested = temp.path().join("nested").join("build.ninja");
         let content = NinjaContent::new(String::from("build all: phony"));
