@@ -12,7 +12,7 @@ use std::{
     path::Path,
 };
 
-use crate::{env_lock::EnvLock, path_guard::PathGuard};
+use crate::{env_guard::EnvGuard, env_lock::EnvLock, path_guard::PathGuard};
 
 /// Alias for the real process environment.
 pub type SystemEnv = DefaultEnv;
@@ -114,8 +114,7 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
 /// Guard that restores an environment variable to its prior value on drop.
 #[derive(Debug)]
 pub struct VarGuard {
-    key: String,
-    previous: Option<OsString>,
+    inner: EnvGuard,
 }
 
 impl VarGuard {
@@ -133,8 +132,7 @@ impl VarGuard {
     pub fn set(key: &str, value: &OsStr) -> Self {
         let previous = set_var(key, value);
         Self {
-            key: key.to_string(),
-            previous,
+            inner: EnvGuard::new(key.to_string(), previous),
         }
     }
 
@@ -142,22 +140,13 @@ impl VarGuard {
     pub fn unset(key: &str) -> Self {
         let previous = remove_var(key);
         Self {
-            key: key.to_string(),
-            previous,
+            inner: EnvGuard::new(key.to_string(), previous),
         }
     }
-}
 
-impl Drop for VarGuard {
-    fn drop(&mut self) {
-        let _lock = EnvLock::acquire();
-        if let Some(val) = self.previous.take() {
-            // SAFETY: `EnvLock` serialises mutations.
-            unsafe { std::env::set_var(&self.key, val) };
-        } else {
-            // SAFETY: `EnvLock` serialises mutations.
-            unsafe { std::env::remove_var(&self.key) };
-        }
+    /// Access the captured original value.
+    pub fn original(self) -> Option<OsString> {
+        self.inner.into_original()
     }
 }
 
@@ -201,7 +190,7 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
 /// Guard that restores `NINJA_ENV` to its previous value on drop.
 #[derive(Debug)]
 pub struct NinjaEnvGuard {
-    original: Option<OsString>,
+    inner: EnvGuard,
 }
 
 /// Override the `NINJA_ENV` variable with `path`, returning a guard that resets it.
@@ -231,18 +220,14 @@ pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
     let original = env.raw(NINJA_ENV).ok().map(OsString::from);
     // SAFETY: `EnvLock` serialises the mutation and the guard restores on drop.
     unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
-    NinjaEnvGuard { original }
+    NinjaEnvGuard {
+        inner: EnvGuard::new(NINJA_ENV, original),
+    }
 }
 
-impl Drop for NinjaEnvGuard {
-    fn drop(&mut self) {
-        let _lock = EnvLock::acquire();
-        if let Some(val) = self.original.take() {
-            // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
-            unsafe { std::env::set_var(NINJA_ENV, val) };
-        } else {
-            // SAFETY: `EnvLock` ensures exclusive access while the variable is reset.
-            unsafe { std::env::remove_var(NINJA_ENV) };
-        }
+impl NinjaEnvGuard {
+    /// Access the captured original value.
+    pub fn original(self) -> Option<OsString> {
+        self.inner.into_original()
     }
 }

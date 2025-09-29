@@ -5,12 +5,13 @@
 
 use mockall::{Sequence, mock};
 use std::ffi::OsStr;
-use test_support::{PathGuard, path_guard::Env};
+use test_support::{Environment, PathGuard};
 
 mock! {
     pub Env {}
-    impl Env for Env {
+    impl Environment for Env {
         unsafe fn set_var(&mut self, key: &str, val: &OsStr);
+        unsafe fn remove_var(&mut self, key: &str);
     }
 }
 
@@ -29,7 +30,7 @@ fn restores_path_without_touching_real_env() {
         .in_sequence(&mut seq)
         .return_const(());
     {
-        let mut guard = PathGuard::with_env("/orig".into(), env);
+        let mut guard = PathGuard::with_env(Some("/orig".into()), env);
         unsafe {
             guard.env_mut().set_var("PATH", OsStr::new("/tmp"));
         }
