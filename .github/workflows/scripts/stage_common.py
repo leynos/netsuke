@@ -12,8 +12,8 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import shutil
-import typing as typ
 from pathlib import Path
+from typing import NamedTuple
 
 __all__ = ["StageResult", "StagingConfig", "stage_artifacts"]
 
@@ -35,8 +35,7 @@ class StagingConfig:
         return f"{self.bin_name}_{self.platform}_{self.arch}"
 
 
-@dataclasses.dataclass(frozen=True)
-class StageResult:
+class StageResult(NamedTuple):
     """Immutable summary of staged artefacts.
 
     Attributes
@@ -91,12 +90,7 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
         message = f"Binary not found at {bin_src}"
         raise RuntimeError(message)
 
-    man_candidates = _collect_manpage_candidates(
-        workspace=workspace,
-        target=config.target,
-        bin_name=config.bin_name,
-    )
-    man_src = _select_single_candidate(man_candidates, config.target)
+    man_src = _find_manpage(workspace, config.target, config.bin_name)
 
     artifact_dir = dist_dir / config.artifact_dir_name
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -117,39 +111,29 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
     return StageResult(artifact_dir, bin_dest, man_dest)
 
 
-def _collect_manpage_candidates(
-    *, workspace: Path, target: str, bin_name: str
-) -> list[Path]:
-    candidates: list[Path] = []
+def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
+    """Locate exactly one man page candidate under generated-man or build/out."""
 
     generated = (
         workspace / "target" / "generated-man" / target / "release" / f"{bin_name}.1"
     )
     if generated.is_file():
-        candidates.append(generated)
+        return generated
 
     build_root = workspace / "target" / target / "release" / "build"
     if build_root.is_dir():
-        matches = [
-            candidate
-            for candidate in build_root.glob("*/out/*.1")
-            if candidate.name == f"{bin_name}.1"
-        ]
-        candidates.extend(matches)
+        matches = list(build_root.glob(f"*/out/{bin_name}.1"))
+        if not matches:
+            message = f"Man page not found for target {target}"
+            raise RuntimeError(message)
+        if len(matches) > 1:
+            locations = "\n".join(str(path) for path in matches)
+            message = "Multiple man page candidates found:\n" + locations
+            raise RuntimeError(message)
+        return matches[0]
 
-    return list(dict.fromkeys(candidates))
-
-
-def _select_single_candidate(candidates: typ.Iterable[Path], target: str) -> Path:
-    unique = list(candidates)
-    if not unique:
-        message = f"Man page not found for target {target}"
-        raise RuntimeError(message)
-    if len(unique) > 1:
-        locations = "\n".join(str(path) for path in unique)
-        message = "Multiple man page candidates found:\n" + locations
-        raise RuntimeError(message)
-    return unique[0]
+    message = f"Man page not found for target {target}"
+    raise RuntimeError(message)
 
 
 def _write_checksum(path: Path) -> None:
