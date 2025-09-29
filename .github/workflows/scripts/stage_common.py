@@ -112,7 +112,7 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
 
 def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
-    """Locate exactly one man page candidate under generated-man or build/out."""
+    """Locate exactly one man page under generated-man or build/out."""
     generated = (
         workspace / "target" / "generated-man" / target / "release" / f"{bin_name}.1"
     )
@@ -120,24 +120,17 @@ def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
         return generated
 
     build_root = workspace / "target" / target / "release" / "build"
-    if not build_root.is_dir():
-        message = f"Man page not found for target {target}"
-        raise RuntimeError(message)
+    if build_root.is_dir():
+        matches = list(build_root.glob(f"*/out/{bin_name}.1"))
+        if matches:
+            if len(matches) > 1:
+                locations = "\n".join(str(path) for path in matches)
+                message = f"Multiple man page candidates found:\n{locations}"
+                raise RuntimeError(message)
+            return matches[0]
 
-    matches = list(build_root.glob(f"*/out/{bin_name}.1"))
-    return _select_single_match(matches, target)
-
-
-def _select_single_match(candidates: list[Path], target: str) -> Path:
-    """Return exactly one candidate path or raise if the list is invalid."""
-    if not candidates:
-        message = f"Man page not found for target {target}"
-        raise RuntimeError(message)
-    if len(candidates) > 1:
-        locations = "\n".join(str(path) for path in candidates)
-        message = "Multiple man page candidates found:\n" + locations
-        raise RuntimeError(message)
-    return candidates[0]
+    message = f"Man page not found for target {target}"
+    raise RuntimeError(message)
 
 
 def _write_checksum(path: Path) -> None:

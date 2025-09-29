@@ -31,12 +31,7 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
-            python3 -c 'import os, sys, tomllib
-path = os.environ.get("CARGO_TOML_PATH", "Cargo.toml")
-with open(path, "rb") as fh:
-    data = tomllib.load(fh)
-package = data.get("package") or {}
-sys.stdout.write(package.get("version", ""))' || echo ""
+            python3 -c 'import os, sys, tomllib; path = os.environ.get("CARGO_TOML_PATH", "Cargo.toml"); with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("package") or {}; sys.stdout.write(package.get("version", ""))' || echo ""
           )"
           if [ -z "${cargo_version:-}" ]; then
             echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}."
@@ -69,7 +64,7 @@ sys.stdout.write(package.get("version", ""))' || echo ""
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Build Linux release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: leynos/shared-actions/.github/actions/rust-build-release@1479e2ffbbf1053bb0205357dfe965299b7493ed
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -80,7 +75,7 @@ sys.stdout.write(package.get("version", ""))' || echo ""
           set -euo pipefail
           rm -f dist/*.deb dist/*.rpm
       - name: Package Linux artefacts with dependencies
-        uses: leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: leynos/shared-actions/.github/actions/linux-packages@1479e2ffbbf1053bb0205357dfe965299b7493ed
         with:
           project-dir: .
           package-name: ${{ needs.metadata.outputs.bin_name }}
@@ -117,7 +112,7 @@ sys.stdout.write(package.get("version", ""))' || echo ""
         with:
           python-version: '3.11'
       - name: Build Windows release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: leynos/shared-actions/.github/actions/rust-build-release@1479e2ffbbf1053bb0205357dfe965299b7493ed
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -160,7 +155,7 @@ sys.stdout.write(package.get("version", ""))' || echo ""
         with:
           python-version: '3.11'
       - name: Build macOS release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: leynos/shared-actions/.github/actions/rust-build-release@1479e2ffbbf1053bb0205357dfe965299b7493ed
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -178,7 +173,7 @@ sys.stdout.write(package.get("version", ""))' || echo ""
           uv run .github/workflows/scripts/stage.py
       - id: pkg
         name: Build macOS installer package
-        uses: leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: leynos/shared-actions/.github/actions/macos-package@1479e2ffbbf1053bb0205357dfe965299b7493ed
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
           identifier: com.leynos.netsuke
@@ -234,7 +229,11 @@ sys.stdout.write(package.get("version", ""))' || echo ""
           for file in "${files[@]}"; do
             dir_name="$(basename "$(dirname "$file")")"
             base_name="$(basename "$file")"
-            asset_name="${dir_name}-${base_name}"
+            if [[ "$base_name" =~ \.(deb|rpm|pkg)$ ]]; then
+              asset_name="$base_name"
+            else
+              asset_name="${dir_name}-${base_name}"
+            fi
             gh release upload "${{ github.ref_name }}" "$file#${asset_name}" --clobber \
               && uploaded=$((uploaded+1))
           done

@@ -1617,28 +1617,31 @@ the environment value is invalid.
 ### 8.6 Release Automation
 
 Release engineering is delegated to GitHub Actions workflows built on the
-`leynos/shared-actions` toolchain. The tagging workflow first verifies that the
-Git ref matches `Cargo.toml` and records the crate's binary name once so all
-subsequent jobs operate on consistent metadata. Linux builds invoke the
-`rust-build-release` composite action to cross-compile for `x86_64` and
-`aarch64`, generate the staged binary + man page directory, and then call the
-shared `linux-packages` composite a second time with explicit metadata so the
-resulting `.deb` and `.rpm` archives both declare a runtime dependency on
-`ninja-build`. Windows builds reuse the same action for compilation and then
-run the unified `uv` script `.github/workflows/scripts/stage.py`. The helper
-consumes Cyclopts parameters for the build metadata, resolves GitHub-provided
-environment variables for workspace details, mirrors the man page, and writes
-SHA-256 sums ready for publishing. The script embeds a `uv` metadata block so
-`setup-uv` can resolve Cyclopts without a central `pyproject.toml` manifest.
+`leynos/shared-actions` toolchain. The actions are pinned to
+`1479e2ffbbf1053bb0205357dfe965299b7493ed` so release automation remains
+reproducible. The tagging workflow first verifies that the Git ref matches
+`Cargo.toml` and records the crate's binary name once so all subsequent jobs
+operate on consistent metadata. Linux builds invoke the `rust-build-release`
+composite action to cross-compile for `x86_64` and `aarch64`, generate the
+staged binary + man page directory, and then call the shared `linux-packages`
+composite a second time with explicit metadata so the resulting `.deb` and
+`.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
+builds reuse the same action for compilation and then run the unified `uv`
+script `.github/workflows/scripts/stage.py`. The helper consumes Cyclopts
+parameters for the build metadata, resolves GitHub-provided environment
+variables for workspace details, mirrors the man page, and writes SHA-256 sums
+ready for publishing. The script embeds a `uv` metadata block so `setup-uv` can
+resolve Cyclopts without a central `pyproject.toml` manifest.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. They invoke the same staging script with platform and
 architecture overrides before feeding the resulting paths into the
 `macos-package` action, which wraps the binary and documentation into signed
 `.pkg` installers. Each job uploads its products as workflow artefacts, and the
-final release job downloads every file and attaches it to the GitHub release
-draft. This automated pipeline guarantees parity across Windows, Linux, and
-macOS without custom GoReleaser logic.
+final release job downloads every file, prefixes asset names with their staging
+directories to avoid collisions, and attaches them to the GitHub release draft.
+This automated pipeline guarantees parity across Windows, Linux, and macOS
+without custom GoReleaser logic.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
