@@ -257,45 +257,34 @@ impl BraceValidator {
             escaped: self.escaped,
         };
 
-        if let Some(result) = self.handle_escape_sequence(&context) {
-            return result;
-        }
-
-        self.handle_character_class(&context);
-
-        self.handle_braces(&context, pattern)
+        self.handle_special(&context, pattern)
     }
 
-    fn handle_escape_sequence(
-        &mut self,
-        context: &CharContext,
-    ) -> Option<std::result::Result<(), Error>> {
-        if context.escaped {
-            self.escaped = false;
-            return Some(Ok(()));
-        }
-
-        if context.ch == char::from(0x5c) && self.state.escape_active {
-            self.escaped = true;
-            return Some(Ok(()));
-        }
-
-        None
-    }
-
-    fn handle_character_class(&mut self, context: &CharContext) {
-        match context.ch {
-            '[' if !context.in_class => self.state.in_class = true,
-            ']' if context.in_class => self.state.in_class = false,
-            _ => {}
-        }
-    }
-
-    fn handle_braces(
+    fn handle_special(
         &mut self,
         context: &CharContext,
         pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
+        if context.escaped {
+            self.escaped = false;
+            return Ok(());
+        }
+
+        if context.ch == char::from(0x5c) && self.state.escape_active {
+            self.escaped = true;
+            return Ok(());
+        }
+
+        if context.ch == '[' && !context.in_class {
+            self.state.in_class = true;
+            return Ok(());
+        }
+
+        if context.ch == ']' && context.in_class {
+            self.state.in_class = false;
+            return Ok(());
+        }
+
         if context.in_class {
             return Ok(());
         }
