@@ -4,23 +4,20 @@
 #   "cyclopts>=3.24.0,<4.0.0",
 # ]
 # ///
-
-"""Stage release artefacts for GitHub workflows.
+"""Stage Windows artefacts while reading GitHub paths from the environment.
 
 Examples
 --------
-Run within a GitHub Actions step:
-
 >>> import os
 >>> from pathlib import Path
 >>> os.environ.update(
 ...     {
 ...         "BIN_NAME": "netsuke",
-...         "TARGET": "x86_64-unknown-linux-gnu",
-...         "PLATFORM": "linux",
+...         "TARGET": "x86_64-pc-windows-msvc",
+...         "PLATFORM": "windows",
 ...         "ARCH": "amd64",
 ...         "GITHUB_OUTPUT": str(Path("/tmp") / "out"),
-...         "GITHUB_WORKSPACE": ".",
+...         "GITHUB_WORKSPACE": str(Path("/tmp") / "workspace"),
 ...     }
 ... )
 >>> stage()  # doctest: +SKIP
@@ -39,31 +36,6 @@ from stage_common import StagingConfig, stage_artifacts
 app = App()
 
 
-def _infer_bin_ext(platform: str) -> str:
-    """Infer the binary extension for the provided platform string.
-
-    Parameters
-    ----------
-    platform : str
-        Value from the ``PLATFORM`` environment variable.
-
-    Returns
-    -------
-    str
-        ``".exe"`` for Windows platforms, otherwise an empty string.
-
-    Examples
-    --------
-    >>> _infer_bin_ext("windows")
-    '.exe'
-    >>> _infer_bin_ext("linux")
-    ''
-    """
-    if platform.lower().startswith("win"):
-        return ".exe"
-    return ""
-
-
 @app.default
 def stage(
     bin_name: typ.Annotated[str, Parameter(env_var="BIN_NAME")],
@@ -71,7 +43,7 @@ def stage(
     platform: typ.Annotated[str, Parameter(env_var="PLATFORM")],
     arch: typ.Annotated[str, Parameter(env_var="ARCH")],
 ) -> None:
-    """Stage artefacts and expose their paths via workflow outputs.
+    """Stage Windows artefacts and emit GitHub Actions outputs.
 
     Parameters
     ----------
@@ -82,32 +54,18 @@ def stage(
     platform : str
         Display label for the operating system flavour.
     arch : str
-        CPU architecture string for packaging (for example ``"x86_64"``).
+        CPU architecture string for packaging (for example ``"amd64"``).
 
     Notes
     -----
     Reads the following environment variables set by GitHub Actions:
 
     - ``GITHUB_OUTPUT``: Required path that records workflow outputs.
-    - ``GITHUB_WORKSPACE``: Optional checkout root. Defaults to ``Path()``
+    - ``GITHUB_WORKSPACE``: Optional checkout root. Defaults to ``Path('.')``
       when absent.
-    - ``BIN_EXT``: Optional binary suffix override. Falls back to
-      ``platform``-based inference when unset.
 
-    Examples
-    --------
-    >>> import os
-    >>> from pathlib import Path
-    >>> os.environ.update(
-    ...     {
-    ...         "BIN_NAME": "netsuke",
-    ...         "TARGET": "x86_64-unknown-linux-gnu",
-    ...         "PLATFORM": "linux",
-    ...         "ARCH": "amd64",
-    ...         "GITHUB_OUTPUT": str(Path("/tmp") / "out"),
-    ...     }
-    ... )
-    >>> stage()  # doctest: +SKIP
+    The binary extension is forced to ``".exe"`` because Windows artefacts are
+    always PE executables.
     """
     github_output_env = os.environ.get("GITHUB_OUTPUT")
     if not github_output_env:
@@ -118,12 +76,7 @@ def stage(
         )
         raise SystemExit(1)
 
-    workspace_env = os.environ.get("GITHUB_WORKSPACE")
-    workspace = Path(workspace_env) if workspace_env else Path()
-
-    bin_ext = os.environ.get("BIN_EXT", "")
-    if not bin_ext:
-        bin_ext = _infer_bin_ext(platform)
+    workspace = Path(os.environ.get("GITHUB_WORKSPACE", "."))
 
     config = StagingConfig(
         bin_name=bin_name,
@@ -131,7 +84,7 @@ def stage(
         platform=platform,
         arch=arch,
         workspace=workspace,
-        bin_ext=bin_ext,
+        bin_ext=".exe",
     )
 
     try:

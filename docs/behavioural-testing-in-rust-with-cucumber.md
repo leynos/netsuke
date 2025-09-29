@@ -1128,7 +1128,7 @@ aligned with what is needed.
     <https://cucumber-rs.github.io/cucumber/main/quickstart.html>
 
 [^21]: Common Pitfalls and Troubleshooting in Cucumber - GeeksforGeeks, accessed
-    on July 14, 2025,
+    on 14 July 2025,
     <https://www.geeksforgeeks.org/software-testing/common-pitfalls-and-troubleshooting-in-cucumber/>
 
 [^22]: How to do error handling in Rust and what are the common pitfalls? -
@@ -1161,7 +1161,7 @@ aligned with what is needed.
        <https://www.browserstack.com/guide/cucumber-best-practices-for-testing>
 
 [^30]: Common Challenges in Cucumber Testing and How to Overcome Them - Medium,
-    accessed on July 14, 2025,
+    accessed on 14 July 2025,
     <https://medium.com/@realtalkdev/common-challenges-in-cucumber-testing-and-how-to-overcome-them-dc95fffb43c8>
 
 [^31]: Cucumber in cucumber - [Docs.rs](http://Docs.rs) - accessed on

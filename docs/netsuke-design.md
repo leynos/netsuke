@@ -1629,22 +1629,26 @@ composite action to cross-compile for `x86_64` and `aarch64`, generate the
 staged binary + man page directory, and then call the shared `linux-packages`
 composite a second time with explicit metadata so the resulting `.deb` and
 `.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
-builds reuse the same action for compilation and then run the unified `uv`
-script `.github/workflows/scripts/stage.py`. The helper consumes Cyclopts
+builds reuse the same action for compilation and then run the uv staging
+wrapper `.github/workflows/scripts/stage_windows.py`, which delegates to
+`.github/workflows/scripts/stage_common.py`. The helper consumes Cyclopts
 parameters for the build metadata, resolves GitHub-provided environment
 variables for workspace details, mirrors the man page, and writes SHA-256 sums
-ready for publishing. The script embeds a `uv` metadata block so `setup-uv` can
-resolve Cyclopts without a central `pyproject.toml` manifest.
+ready for publishing while enforcing a Windows-specific binary suffix.
 
 macOS releases execute the shared action twice: once on an Intel runner and
-again on Apple Silicon. They invoke the same staging script with platform and
-architecture overrides before feeding the resulting paths into the
-`macos-package` action, which wraps the binary and documentation into signed
-`.pkg` installers. Each job uploads its products as workflow artefacts, and the
-final release job downloads every file, filters out unrelated downloads, and
-prefixes asset names with their staging directories to avoid collisions before
-attaching them to the GitHub release draft. This automated pipeline guarantees
-parity across Windows, Linux, and macOS without custom GoReleaser logic.
+again on Apple Silicon. They invoke the uv staging wrapper
+`.github/workflows/scripts/stage_macos.py`, which in turn calls the shared
+module to mirror documentation and emit checksums before feeding the resulting
+paths into the `macos-package` action. Each script embeds a `uv` metadata block
+so `setup-uv` can resolve Cyclopts dependencies without a repository-level
+`pyproject.toml`; the wrappers remain self-contained for workflow execution.
+
+Each job uploads its products as workflow artefacts, and the final release job
+downloads every file, filters out unrelated downloads, and prefixes asset names
+with their staging directories to avoid collisions before attaching them to the
+GitHub release draft. This automated pipeline guarantees parity across Windows,
+Linux, and macOS without custom GoReleaser logic.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
