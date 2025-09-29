@@ -1,4 +1,6 @@
 //! Utilities for normalising and validating manifest glob patterns.
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs::Dir};
 use minijinja::{Error, ErrorKind};
 
 /// Represents a character being processed with its context
@@ -82,43 +84,50 @@ fn process_glob_entry(
 ) -> std::result::Result<Option<String>, Error> {
     match entry {
         Ok(path) => {
-            let meta = path.metadata().map_err(|e| {
+            let utf_path = Utf8PathBuf::try_from(path).map_err(|_| {
                 create_glob_error(
                     &GlobErrorContext {
                         pattern: pattern.raw.clone(),
-                        error_char: '\0',
+                        error_char: char::from(0),
                         position: pattern.raw.len(),
                         error_type: GlobErrorType::IoError,
                     },
-                    Some(e.to_string()),
+                    Some("glob matched a non-UTF-8 path".to_string()),
                 )
             })?;
-            if !meta.is_file() {
+            let metadata = fetch_metadata(&utf_path).map_err(|err| {
+                create_glob_error(
+                    &GlobErrorContext {
+                        pattern: pattern.raw.clone(),
+                        error_char: char::from(0),
+                        position: pattern.raw.len(),
+                        error_type: GlobErrorType::IoError,
+                    },
+                    Some(err.to_string()),
+                )
+            })?;
+            if !metadata.is_file() {
                 return Ok(None);
             }
-            let s = path.to_str().ok_or_else(|| {
-                create_glob_error(
-                    &GlobErrorContext {
-                        pattern: pattern.raw.clone(),
-                        error_char: '\0',
-                        position: pattern.raw.len(),
-                        error_type: GlobErrorType::IoError,
-                    },
-                    Some(format!("glob matched a non-UTF-8 path: {}", path.display())),
-                )
-            })?;
-            Ok(Some(s.replace('\\', "/")))
+            Ok(Some(utf_path.as_str().replace(char::from(0x5c), "/")))
         }
         Err(e) => Err(create_glob_error(
             &GlobErrorContext {
                 pattern: pattern.raw,
-                error_char: '\0',
+                error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::IoError,
             },
             Some(e.to_string()),
         )),
     }
+}
+
+fn fetch_metadata(path: &Utf8Path) -> std::io::Result<cap_std::fs::Metadata> {
+    let parent = path.parent().unwrap_or_else(|| Utf8Path::new("."));
+    let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
+    let entry = path.file_name().unwrap_or(".");
+    dir.metadata(Utf8Path::new(entry))
 }
 
 pub(crate) fn normalize_separators(pattern: &str) -> String {
@@ -257,34 +266,45 @@ impl BraceValidator {
             escaped: self.escaped,
         };
 
-        self.handle_special(&context, pattern)
+        if let Some(result) = self.handle_escape_sequence(&context) {
+            return result;
+        }
+
+        self.handle_character_class(&context);
+
+        self.handle_braces(&context, pattern)
     }
 
-    fn handle_special(
+    fn handle_escape_sequence(
         &mut self,
         context: &CharContext,
-        pattern: &GlobPattern,
-    ) -> std::result::Result<(), Error> {
+    ) -> Option<std::result::Result<(), Error>> {
         if context.escaped {
             self.escaped = false;
-            return Ok(());
+            return Some(Ok(()));
         }
 
         if context.ch == char::from(0x5c) && self.state.escape_active {
             self.escaped = true;
-            return Ok(());
+            return Some(Ok(()));
         }
 
-        if context.ch == '[' && !context.in_class {
-            self.state.in_class = true;
-            return Ok(());
-        }
+        None
+    }
 
-        if context.ch == ']' && context.in_class {
-            self.state.in_class = false;
-            return Ok(());
+    fn handle_character_class(&mut self, context: &CharContext) {
+        match context.ch {
+            '[' if !context.in_class => self.state.in_class = true,
+            ']' if context.in_class => self.state.in_class = false,
+            _ => {}
         }
+    }
 
+    fn handle_braces(
+        &mut self,
+        context: &CharContext,
+        pattern: &GlobPattern,
+    ) -> std::result::Result<(), Error> {
         if context.in_class {
             return Ok(());
         }
@@ -412,7 +432,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn process_glob_entry_errors_on_non_utf8_path() {
+    fn process_glob_entry_rejects_non_utf8_paths() {
         use std::ffi::OsString;
         use std::os::unix::ffi::OsStringExt;
 

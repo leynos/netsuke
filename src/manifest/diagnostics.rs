@@ -60,6 +60,16 @@ fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
 }
 
 #[derive(Debug, Error, Diagnostic)]
+/// Error raised when manifest parsing fails.
+///
+/// # Examples
+/// ```rust
+/// use miette::miette;
+/// use netsuke::manifest::ManifestError;
+///
+/// let err = ManifestError::Parse { source: Box::new(miette!("bad manifest")) };
+/// assert_eq!(format!("{err}"), "manifest parse error");
+/// ```
 pub enum ManifestError {
     #[error("manifest parse error")]
     #[diagnostic(code(netsuke::manifest::parse))]

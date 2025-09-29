@@ -99,9 +99,7 @@ mod tests {
     use minijinja::Environment;
     use semver::Version;
 
-    #[test]
-    fn render_manifest_renders_targets_and_rules() -> Result<()> {
-        let env = Environment::new();
+    fn sample_manifest() -> Result<NetsukeManifest> {
         let mut target_vars = Vars::new();
         target_vars.insert("greet".into(), YamlValue::String("hello".into()));
         target_vars.insert("subject".into(), YamlValue::String("world".into()));
@@ -109,6 +107,7 @@ mod tests {
             "message".into(),
             YamlValue::String("{{ greet }} {{ subject }}".into()),
         );
+
         let target = Target {
             name: StringOrList::String("{{ message }}!".into()),
             recipe: Recipe::Command {
@@ -121,6 +120,7 @@ mod tests {
             phony: false,
             always: false,
         };
+
         let rule = Rule {
             name: "example".into(),
             recipe: Recipe::Command {
@@ -129,55 +129,67 @@ mod tests {
             description: Some("{{ 1 + 1 }}".into()),
             deps: StringOrList::List(vec!["{{ message }}".into()]),
         };
+
         let mut manifest_vars = Vars::new();
         manifest_vars.insert("message".into(), YamlValue::String("hello world".into()));
 
-        let manifest = NetsukeManifest {
+        Ok(NetsukeManifest {
             netsuke_version: Version::parse("1.0.0")?,
             vars: manifest_vars,
             rules: vec![rule],
             actions: Vec::new(),
             targets: vec![target],
             defaults: Vec::new(),
-        };
+        })
+    }
 
-        let rendered = render_manifest(manifest, &env)?;
-        let rendered_target = rendered.targets.first().expect("rendered target");
-        let vars = &rendered_target.vars;
+    fn assert_rendered_target(target: &Target) {
+        let vars = &target.vars;
         let message = vars
             .get("message")
             .and_then(|v| v.as_str())
             .expect("rendered message");
         assert_eq!(message, "hello world");
-        match &rendered_target.name {
+        match &target.name {
             StringOrList::String(s) => assert_eq!(s, "hello world!"),
             other => panic!("expected string name, got {other:?}"),
         }
-        let rendered_sources = match &rendered_target.sources {
+        let rendered_sources = match &target.sources {
             StringOrList::List(items) => items.clone(),
             other => panic!("expected list sources, got {other:?}"),
         };
         assert_eq!(rendered_sources, vec!["world.txt".to_string()]);
-        match &rendered_target.recipe {
+        match &target.recipe {
             Recipe::Command { command } => assert_eq!(command, "hello world"),
             other => panic!("expected command recipe, got {other:?}"),
         }
-        match &rendered_target.order_only_deps {
+        match &target.order_only_deps {
             StringOrList::List(items) => assert_eq!(items, &["world.meta".to_string()]),
             other => panic!("expected order-only deps list, got {other:?}"),
         }
+    }
 
-        let rendered_rule = rendered.rules.first().expect("rendered rule");
-        assert_eq!(rendered_rule.description.as_deref(), Some("2"));
-        match &rendered_rule.recipe {
+    fn assert_rendered_rule(rule: &Rule) {
+        assert_eq!(rule.description.as_deref(), Some("2"));
+        match &rule.recipe {
             Recipe::Command { command } => assert_eq!(command, "4"),
             other => panic!("expected command recipe, got {other:?}"),
         }
-        match &rendered_rule.deps {
+        match &rule.deps {
             StringOrList::List(items) => assert_eq!(items, &["hello world".to_string()]),
             other => panic!("expected deps list, got {other:?}"),
         }
+    }
 
+    #[test]
+    fn render_manifest_renders_targets_and_rules() -> Result<()> {
+        let env = Environment::new();
+        let manifest = sample_manifest()?;
+        let rendered = render_manifest(manifest, &env)?;
+        let rendered_target = rendered.targets.first().expect("rendered target");
+        assert_rendered_target(rendered_target);
+        let rendered_rule = rendered.rules.first().expect("rendered rule");
+        assert_rendered_rule(rendered_rule);
         Ok(())
     }
 }
