@@ -1,6 +1,9 @@
-use super::*;
+use super::diagnostics::map_yaml_error;
+use super::glob::{glob_paths, normalize_separators};
+use super::hints::YAML_HINTS;
 use rstest::{fixture, rstest};
 use serde::de::Error as _;
+use serde_yml::Error as YamlError;
 
 #[test]
 fn yaml_error_without_location_defaults_to_first_line() {
@@ -22,7 +25,7 @@ fn yaml_hint_needles_are_lowercase() {
 
 #[test]
 fn glob_paths_invalid_pattern_sets_syntax_error() {
-    let err = super::glob_paths("[").expect_err("expected pattern error");
+    let err = glob_paths("[").expect_err("expected pattern error");
     assert_eq!(err.kind(), minijinja::ErrorKind::SyntaxError);
 }
 
@@ -33,7 +36,7 @@ fn glob_paths_invalid_pattern_sets_syntax_error() {
 #[case("\\{")]
 #[case("\\}")]
 fn normalize_separators_preserves_bracket_escape_variants(#[case] pat: &str) {
-    assert_eq!(super::normalize_separators(pat), pat);
+    assert_eq!(normalize_separators(pat), pat);
 }
 
 #[cfg(unix)]
@@ -49,7 +52,7 @@ fn normalize_separators_preserves_wildcard_escape_variants(
     // Inputs like "config\\*.yml" are treated as Windows-style and turn the
     // backslash into a separator on Unix; other cases keep '\\' to force a
     // literal via bracket-class rewrite downstream.
-    assert_eq!(super::normalize_separators(pat), expected);
+    assert_eq!(normalize_separators(pat), expected);
 }
 
 #[cfg(unix)]
@@ -62,7 +65,14 @@ fn normalize_separators_preserves_specific_escape_patterns(
     #[case] expected: &str,
 ) {
     // Escaped metacharacters are preserved verbatim on Unix.
-    assert_eq!(super::normalize_separators(pat), expected);
+    assert_eq!(normalize_separators(pat), expected);
+}
+
+#[cfg(unix)]
+#[test]
+fn normalize_separators_handles_mixed_slashes() {
+    let input = r"dir\sub/leaf";
+    assert_eq!(normalize_separators(input), "dir/sub/leaf");
 }
 
 #[fixture]
@@ -86,7 +96,7 @@ fn glob_paths_treats_escaped_wildcards_as_literals(
     std::fs::write(tmp.path().join(filename), "a").expect("write file");
     std::fs::write(tmp.path().join("other"), "b").expect("write file");
     let pattern = format!("{}/{}", tmp.path().display(), pattern_suffix);
-    let out = super::glob_paths(&pattern).expect("glob ok");
+    let out = glob_paths(&pattern).expect("glob ok");
     assert_eq!(
         out,
         vec![format!("{}/{}", tmp.path().display(), filename).replace('\\', "/"),],
@@ -140,7 +150,7 @@ fn glob_paths_behavior_scenarios(
     }
 
     let pattern = format!("{}/{}", tmp.path().display(), pattern_suffix);
-    let mut result = super::glob_paths(&pattern).expect("glob ok");
+    let mut result = glob_paths(&pattern).expect("glob ok");
     result.sort();
     let mut expected: Vec<String> = expected_matches
         .iter()
@@ -148,4 +158,18 @@ fn glob_paths_behavior_scenarios(
         .collect();
     expected.sort();
     assert_eq!(result, expected, "Test case: {description}");
+}
+
+#[rstest]
+fn glob_paths_returns_empty_for_no_matches(tmp: tempfile::TempDir) {
+    let pattern = format!("{}/missing*", tmp.path().display());
+    let result = glob_paths(&pattern).expect("glob ok");
+    assert!(result.is_empty());
+}
+
+#[test]
+fn glob_paths_reports_unmatched_brace() {
+    let err = glob_paths("foo/{bar").expect_err("expected brace error");
+    assert_eq!(err.kind(), minijinja::ErrorKind::SyntaxError);
+    assert!(err.to_string().contains("unmatched '{'"));
 }
