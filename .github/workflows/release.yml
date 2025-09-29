@@ -32,11 +32,14 @@ jobs:
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
             python3 - <<'PY' || echo ""
-import os, tomllib
-with open(os.environ.get("CARGO_TOML_PATH", "Cargo.toml"), "rb") as fh:
-    data = tomllib.load(fh)
-package = data.get("package") or {}
-print(package.get("version", ""))
+              import os, tomllib
+
+              with open(
+                  os.environ.get("CARGO_TOML_PATH", "Cargo.toml"), "rb"
+              ) as fh:
+                  data = tomllib.load(fh)
+              package = data.get("package") or {}
+              print(package.get("version", ""))
 PY
           )"
           if [ -z "${cargo_version:-}" ]; then
@@ -133,7 +136,7 @@ PY
           ARCH: ${{ matrix.package_arch }}
         run: |
           set -euo pipefail
-          uv run stage-windows
+          uv run .github/workflows/scripts/stage.py
       - name: Upload Windows artefacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
@@ -176,7 +179,7 @@ PY
           ARCH: ${{ matrix.package_arch }}
         run: |
           set -euo pipefail
-          uv run stage-macos
+          uv run .github/workflows/scripts/stage.py
       - id: pkg
         name: Build macOS installer package
         uses: leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
@@ -233,7 +236,11 @@ PY
           fi
           uploaded=0
           for file in "${files[@]}"; do
-            gh release upload "${{ github.ref_name }}" "$file" --clobber && uploaded=$((uploaded+1))
+            dir_name="$(basename "$(dirname "$file")")"
+            base_name="$(basename "$file")"
+            asset_name="${dir_name}-${base_name}"
+            gh release upload "${{ github.ref_name }}" "$file#${asset_name}" --clobber \
+              && uploaded=$((uploaded+1))
           done
           if [ "$uploaded" -eq 0 ]; then
             echo "::error title=No artefacts uploaded::No files were published to the release"

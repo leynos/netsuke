@@ -1625,20 +1625,20 @@ subsequent jobs operate on consistent metadata. Linux builds invoke the
 shared `linux-packages` composite a second time with explicit metadata so the
 resulting `.deb` and `.rpm` archives both declare a runtime dependency on
 `ninja-build`. Windows builds reuse the same action for compilation and then
-run the `uv` script `stage-windows`. The helper lives under
-`.github/workflows/scripts/` and uses Cyclopts to ingest GitHub-provided
-environment variables, copy the binary, mirror the man page, and write SHA-256
-sums ready for publishing. Each staging script embeds a `uv` script block so
+run the unified `uv` script `.github/workflows/scripts/stage.py`. The helper
+consumes Cyclopts parameters for the build metadata, resolves GitHub-provided
+environment variables for workspace details, mirrors the man page, and writes
+SHA-256 sums ready for publishing. The script embeds a `uv` metadata block so
 `setup-uv` can resolve Cyclopts without a central `pyproject.toml` manifest.
 
 macOS releases execute the shared action twice: once on an Intel runner and
-again on Apple Silicon. They invoke `uv run stage-macos` to prepare artefacts
-before feeding the resulting paths into the `macos-package` action, which wraps
-the binary and documentation into signed `.pkg` installers. Each job uploads
-its products as workflow artefacts, and the final release job downloads every
-file and attaches it to the GitHub release draft. This automated pipeline
-guarantees parity across Windows, Linux, and macOS without custom GoReleaser
-logic.
+again on Apple Silicon. They invoke the same staging script with platform and
+architecture overrides before feeding the resulting paths into the
+`macos-package` action, which wraps the binary and documentation into signed
+`.pkg` installers. Each job uploads its products as workflow artefacts, and the
+final release job downloads every file and attaches it to the GitHub release
+draft. This automated pipeline guarantees parity across Windows, Linux, and
+macOS without custom GoReleaser logic.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
