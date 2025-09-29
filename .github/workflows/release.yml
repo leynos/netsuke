@@ -217,6 +217,7 @@ jobs:
           path: artifacts
           pattern: ${{ env.REPO_NAME }}-*
       - name: Upload artefacts to release
+        shell: bash
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -231,6 +232,7 @@ jobs:
             echo "::error title=No artefacts uploaded::No files found in artifacts/"
             exit 1
           fi
+          declare -A seen=()
           uploaded=0
           for file in "${files[@]}"; do
             dir_name="$(basename "$(dirname "$file")")"
@@ -240,6 +242,11 @@ jobs:
             else
               asset_name="${dir_name}-${base_name}"
             fi
+            if [[ -n "${seen[$asset_name]:-}" ]]; then
+              echo "::error title=Duplicate release asset::Asset name '$asset_name' would be uploaded more than once"
+              exit 1
+            fi
+            seen[$asset_name]=1
             gh release upload "${{ github.ref_name }}" "$file#${asset_name}" --clobber \
               && uploaded=$((uploaded+1))
           done
