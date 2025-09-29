@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Build Linux release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@1479e2ffbbf1053bb0205357dfe965299b7493ed
+        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -75,7 +75,7 @@ jobs:
           set -euo pipefail
           rm -f dist/*.deb dist/*.rpm
       - name: Package Linux artefacts with dependencies
-        uses: leynos/shared-actions/.github/actions/linux-packages@1479e2ffbbf1053bb0205357dfe965299b7493ed
+        uses: leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           project-dir: .
           package-name: ${{ needs.metadata.outputs.bin_name }}
@@ -112,7 +112,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Build Windows release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@1479e2ffbbf1053bb0205357dfe965299b7493ed
+        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -155,7 +155,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Build macOS release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@1479e2ffbbf1053bb0205357dfe965299b7493ed
+        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -173,7 +173,7 @@ jobs:
           uv run .github/workflows/scripts/stage.py
       - id: pkg
         name: Build macOS installer package
-        uses: leynos/shared-actions/.github/actions/macos-package@1479e2ffbbf1053bb0205357dfe965299b7493ed
+        uses: leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
           identifier: com.leynos.netsuke
@@ -220,7 +220,13 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          mapfile -t files < <(find artifacts -type f -print)
+          bin_name="${BIN_NAME:?BIN_NAME must be provided}"
+          mapfile -t files < <(
+            find artifacts -type f \
+              \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" \
+              -o -name "${bin_name}" -o -name "${bin_name}.exe" \
+              -o -name "${bin_name}.1" -o -name "*.sha256" \) -print
+          )
           if [ "${#files[@]}" -eq 0 ]; then
             echo "::error title=No artefacts uploaded::No files found in artifacts/"
             exit 1
@@ -244,3 +250,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}

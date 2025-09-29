@@ -1608,17 +1608,20 @@ enumeration in unit tests and via Cucumber steps for behavioural coverage.
 The CLI definition doubles as the source for user documentation. A build script
 uses `clap_mangen` to emit a `netsuke.1` manual page in
 `target/generated-man/<target>/<profile>` and mirrors the page into Cargo's
-`OUT_DIR` so release automation can discover it without additional tooling.
-Release artefacts include this platform‑agnostic man page; the published crate
-remains code‑only. The build script honours `SOURCE_DATE_EPOCH` to produce
-reproducible dates, emitting a warning and falling back to `1970-01-01` when
-the environment value is invalid.
+`OUT_DIR` so release automation can discover it without additional tooling. The
+staging helper always prefers the deterministic `generated-man` copy and falls
+back to the most recent `OUT_DIR` candidate only when necessary, avoiding false
+positives when several historical build directories remain on disk. Release
+artefacts include this platform‑agnostic man page; the published crate remains
+code‑only. The build script honours `SOURCE_DATE_EPOCH` to produce reproducible
+dates, emitting a warning and falling back to `1970-01-01` when the environment
+value is invalid.
 
 ### 8.6 Release Automation
 
 Release engineering is delegated to GitHub Actions workflows built on the
 `leynos/shared-actions` toolchain. The actions are pinned to
-`1479e2ffbbf1053bb0205357dfe965299b7493ed` so release automation remains
+`7bc9b6c15964ef98733aa647b76d402146284ba3` so release automation remains
 reproducible. The tagging workflow first verifies that the Git ref matches
 `Cargo.toml` and records the crate's binary name once so all subsequent jobs
 operate on consistent metadata. Linux builds invoke the `rust-build-release`
@@ -1638,10 +1641,10 @@ again on Apple Silicon. They invoke the same staging script with platform and
 architecture overrides before feeding the resulting paths into the
 `macos-package` action, which wraps the binary and documentation into signed
 `.pkg` installers. Each job uploads its products as workflow artefacts, and the
-final release job downloads every file, prefixes asset names with their staging
-directories to avoid collisions, and attaches them to the GitHub release draft.
-This automated pipeline guarantees parity across Windows, Linux, and macOS
-without custom GoReleaser logic.
+final release job downloads every file, filters out unrelated downloads, and
+prefixes asset names with their staging directories to avoid collisions before
+attaching them to the GitHub release draft. This automated pipeline guarantees
+parity across Windows, Linux, and macOS without custom GoReleaser logic.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 

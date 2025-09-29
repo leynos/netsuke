@@ -121,13 +121,23 @@ def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
 
     build_root = workspace / "target" / target / "release" / "build"
     if build_root.is_dir():
-        matches = list(build_root.glob(f"*/out/{bin_name}.1"))
+        matches = [
+            candidate
+            for candidate in build_root.glob(f"*/out/{bin_name}.1")
+            if candidate.is_file()
+        ]
         if matches:
-            if len(matches) > 1:
-                locations = "\n".join(str(path) for path in matches)
-                message = f"Multiple man page candidates found:\n{locations}"
-                raise RuntimeError(message)
-            return matches[0]
+            if len(matches) == 1:
+                return matches[0]
+
+            def _sort_key(path: Path) -> tuple[int, str]:
+                try:
+                    return (int(path.stat().st_mtime_ns), path.as_posix())
+                except OSError:
+                    return (0, path.as_posix())
+
+            matches.sort(key=_sort_key)
+            return matches[-1]
 
     message = f"Man page not found for target {target}"
     raise RuntimeError(message)
