@@ -28,7 +28,6 @@ Run within a GitHub Actions step:
 
 from __future__ import annotations
 
-import os
 import sys
 import typing as typ
 from pathlib import Path
@@ -37,30 +36,6 @@ from cyclopts import App, Parameter
 from stage_common import StagingConfig, stage_artifacts
 
 app = App()
-
-
-def _resolve_output_path() -> Path:
-    """Return the GitHub output file path or terminate early.
-
-    Examples
-    --------
-    >>> import os
-    >>> os.environ.pop("GITHUB_OUTPUT", None)
-    >>> try:
-    ...     _ = _resolve_output_path()
-    ... except SystemExit:
-    ...     print("halted")
-    halted
-    """
-    github_output_env = os.environ.get("GITHUB_OUTPUT")
-    if github_output_env is None:
-        print(
-            "::error title=Configuration Error::",
-            "GITHUB_OUTPUT environment variable is required.",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
-    return Path(github_output_env)
 
 
 def _infer_bin_ext(platform: str) -> str:
@@ -94,6 +69,13 @@ def stage(
     target: typ.Annotated[str, Parameter(env_var="TARGET")],
     platform: typ.Annotated[str, Parameter(env_var="PLATFORM")],
     arch: typ.Annotated[str, Parameter(env_var="ARCH")],
+    github_output: typ.Annotated[
+        Path, Parameter(env_var="GITHUB_OUTPUT", converter=Path, required=True)
+    ],
+    workspace: typ.Annotated[
+        Path, Parameter(env_var="GITHUB_WORKSPACE", converter=Path)
+    ] = Path(),
+    bin_ext: typ.Annotated[str, Parameter(env_var="BIN_EXT")] = "",
 ) -> None:
     """Stage artefacts and expose their paths via workflow outputs.
 
@@ -107,12 +89,14 @@ def stage(
         Display label for the operating system flavour.
     arch : str
         CPU architecture string for packaging (for example ``"x86_64"``).
-
-    Notes
-    -----
-    ``GITHUB_OUTPUT`` must point to the workflow output file. Optionally set
-    ``GITHUB_WORKSPACE`` to override the working directory or ``BIN_EXT`` to
-    force an extension.
+    github_output : pathlib.Path
+        Workflow output file written by GitHub Actions.
+    workspace : pathlib.Path, optional
+        Root of the repository checkout. Defaults to the current directory when
+        ``GITHUB_WORKSPACE`` is unset.
+    bin_ext : str, optional
+        Optional binary suffix override, inferred from ``platform`` when
+        missing.
 
     Examples
     --------
@@ -129,16 +113,15 @@ def stage(
     ... )
     >>> stage()  # doctest: +SKIP
     """
-    github_output = _resolve_output_path()
-    workspace_env = os.environ.get("GITHUB_WORKSPACE", ".")
-    bin_ext = os.environ.get("BIN_EXT") or _infer_bin_ext(platform)
+    if not bin_ext:
+        bin_ext = _infer_bin_ext(platform)
 
     config = StagingConfig(
         bin_name=bin_name,
         target=target,
         platform=platform,
         arch=arch,
-        workspace=Path(workspace_env),
+        workspace=workspace,
         bin_ext=bin_ext,
     )
 

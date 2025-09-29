@@ -12,8 +12,8 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import shutil
+import typing as typ
 from pathlib import Path
-from typing import NamedTuple
 
 __all__ = ["StageResult", "StagingConfig", "stage_artifacts"]
 
@@ -35,7 +35,7 @@ class StagingConfig:
         return f"{self.bin_name}_{self.platform}_{self.arch}"
 
 
-class StageResult(NamedTuple):
+class StageResult(typ.NamedTuple):
     """Immutable summary of staged artefacts.
 
     Attributes
@@ -113,7 +113,6 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
 def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
     """Locate exactly one man page candidate under generated-man or build/out."""
-
     generated = (
         workspace / "target" / "generated-man" / target / "release" / f"{bin_name}.1"
     )
