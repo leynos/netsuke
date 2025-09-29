@@ -112,7 +112,20 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
 
 def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
-    """Locate exactly one man page under generated-man or build/out."""
+    """Locate exactly one man page.
+
+    Precedence:
+
+    1) ``target/generated-man/<target>/release/{bin}.1`` (preferred).
+    2) ``target/<target>/release/build/*/out/{bin}.1``; when several matches
+       exist, prefer the newest by modification time and fall back to
+       lexicographic ordering for ties.
+
+    Raises
+    ------
+    RuntimeError
+        If no candidate exists for ``target``.
+    """
     generated = (
         workspace / "target" / "generated-man" / target / "release" / f"{bin_name}.1"
     )

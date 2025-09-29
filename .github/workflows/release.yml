@@ -43,11 +43,21 @@ jobs:
           fi
           echo "Release tag $tag matches Cargo.toml version."
           echo "value=$tag" >> "$GITHUB_OUTPUT"
-      - uses: ./.github/actions/export-bin-name
       - id: bin_name
-        name: Capture binary name
+        name: Extract binary name from Cargo.toml
         shell: bash
-        run: echo "value=${BIN_NAME}" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
+          name="$(
+            python3 -c 'import os, sys, tomllib; path = os.environ.get("CARGO_TOML_PATH", "Cargo.toml");
+with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("package") or {}; sys.stdout.write(package.get("name", ""))' || echo ""
+          )"
+          if [ -z "$name" ]; then
+            echo "::error title=Cargo.toml parse failure::Could not read package.name from ${toml_path}."
+            exit 1
+          fi
+          echo "value=$name" >> "$GITHUB_OUTPUT"
 
   build-linux:
     needs: metadata
@@ -69,11 +79,7 @@ jobs:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           version: ${{ needs.metadata.outputs.version }}
-          formats: deb,rpm
-      - name: Remove previously generated Linux packages
-        run: |
-          set -euo pipefail
-          rm -f dist/*.deb dist/*.rpm
+          # Package formats are produced by linux-packages below
       - name: Package Linux artefacts with dependencies
         uses: leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:

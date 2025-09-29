@@ -272,7 +272,7 @@ accept these new snapshots:
 - As an alternative, when confident in the outputs, run `cargo insta accept
   --all` to accept all changes in one go.
 
-Once accepted, re-run `cargo test` – it should pass because the recorded
+Once accepted, re-run `cargo test` - it should pass because the recorded
 snapshots now match the output. Commit the new/updated `.snap` files to version
 control. **Always include the snapshot files** so that CI can validate against
 them.
@@ -344,7 +344,7 @@ jobs:
   default `auto` mode already treats CI specially (it will not auto-accept in
   CI), but setting `no` is an explicit safeguard.
 
-- Install `cargo-insta` mainly for completeness – running `cargo test` does not
+- Install `cargo-insta` mainly for completeness - running `cargo test` does not
   strictly require the CLI tool, but its presence enables `cargo insta`
   subcommands in CI if needed (for example, to print a summary or ensure no
   unused snapshots with `cargo insta test --unreferenced=reject`).
@@ -361,7 +361,7 @@ tests and either pass or fail:
   output), the CI job will not succeed. Developers should pull the changes
   locally, run `cargo insta review`, accept the new snapshot if it is intended,
   and commit the updated snapshot file. **Do not automatically accept snapshots
-  in CI** – reviewing changes is essential to catch unintended alterations.
+  in CI** - reviewing changes is essential to catch unintended alterations.
 
 The CI process can be enhanced to make snapshot reviews easier:
 
@@ -385,7 +385,7 @@ Ninja snapshot tests then verify that the IR-to-Ninja translation is correct.
 Both sets of tests use deterministic outputs to ensure consistent, meaningful
 snapshots.
 
-With the `insta` crate, adding new test cases is straightforward – simply
+With the `insta` crate, adding new test cases is straightforward - simply
 create a manifest (or multiple variants) and assert that the IR or Ninja output
 matches the snapshot. The snapshot files serve as living documentation of the
 expected build graph and build script for given scenarios. Integrated into
@@ -399,7 +399,7 @@ pipeline.
 
 **Sources:**
 
-- Netsuke Design/Roadmap – separation of IR and Ninja generation
+- Netsuke Design/Roadmap - separation of IR and Ninja generation
 
-- Insta crate documentation – usage of snapshot assertions and CI integration
+- Insta crate documentation - usage of snapshot assertions and CI integration
   guidelines

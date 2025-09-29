@@ -24,11 +24,11 @@ This design choice by Ninja's authors necessitates the existence of a higher-
 
 level generator tool. Netsuke fulfills this role. It provides a rich,
 user-friendly language (YAML with Jinja) for describing the *what* and *why* of
-a build—the project's structure, its logical rules, and its configurable
+a build--the project's structure, its logical rules, and its configurable
 parameters. Netsuke's primary responsibility is to compile this high-level
 description into a low-level, highly optimized execution plan that Ninja can
-understand and execute. This separation of concerns—Netsuke managing build
-logic and Ninja managing execution—is the foundational principle of the entire
+understand and execute. This separation of concerns--Netsuke managing build
+logic and Ninja managing execution--is the foundational principle of the entire
 architecture.
 
 ### 1.2 The Six Stages of a Netsuke Build
@@ -140,7 +140,7 @@ best practices.
   and implicit rules of Makefiles.
 
 - **Declarative Style:** Users should declare the desired state of their
-  project—the targets they want to build and the rules to build them—rather
+  project--the targets they want to build and the rules to build them--rather
   than writing imperative scripts. Netsuke is responsible for determining the
   necessary steps to achieve that state.
 
@@ -963,8 +963,8 @@ logic untouched.
 Importantly, the IR contains **no Ninja-isms**. Placeholders such as `$in` and
 `$out` are resolved to plain lists of file paths, and command strings are
 expanded before hashing. This deliberate absence of Ninja-specific syntax makes
-the IR a stable contract that future back-ends—distributed builders, remote
-executors, or otherwise—can consume without modification.
+the IR a stable contract that future back-ends--distributed builders, remote
+executors, or otherwise--can consume without modification.
 
 Furthermore, the IR is the ideal stage at which to perform graph-level analysis
 and optimizations, such as detecting circular dependencies, pruning unused
@@ -1463,7 +1463,7 @@ enrichment:
 
 4. This process of propagation and contextualisation repeats as the error
    bubbles up towards `main`. Use `anyhow::Context` to add detail, but never
-   convert a `miette::Diagnostic` into a plain `anyhow::Error`—doing so would
+   convert a `miette::Diagnostic` into a plain `anyhow::Error`--doing so would
    discard spans and help text.
 
 5. Finally, the `main` function receives the `Err` result. It prints the entire
@@ -1612,8 +1612,8 @@ uses `clap_mangen` to emit a `netsuke.1` manual page in
 staging helper always prefers the deterministic `generated-man` copy and falls
 back to the most recent `OUT_DIR` candidate only when necessary, avoiding false
 positives when several historical build directories remain on disk. Release
-artefacts include this platform‑agnostic man page; the published crate remains
-code‑only. The build script honours `SOURCE_DATE_EPOCH` to produce reproducible
+artefacts include this platform-agnostic man page; the published crate remains
+code-only. The build script honours `SOURCE_DATE_EPOCH` to produce reproducible
 dates, emitting a warning and falling back to `1970-01-01` when the environment
 value is invalid.
 
@@ -1820,7 +1820,7 @@ projects.
 [^17]: "minijinja." wasmer-pack API docs. Accessed on 12 July 2025\.
        <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
-[^18]: "Template engine — list of Rust libraries/crates." Lib.rs. Accessed on
+[^18]: "Template engine - list of Rust libraries/crates." Lib.rs. Accessed on
        12 July 2025\. <https://lib.rs/template-engine>
 
 [^22]: "shell_quote." Docs.rs. Accessed on 12 July 2025\.
