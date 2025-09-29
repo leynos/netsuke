@@ -19,7 +19,7 @@ pub const NINJA_PROGRAM: &str = "ninja";
 pub use ninja_env::NINJA_ENV;
 
 mod process;
-#[doc(hidden)]
+#[cfg(any(test, doctest))]
 pub use process::doc;
 pub use process::run_ninja;
 
@@ -120,19 +120,15 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     // duration of the Ninja invocation. Borrow the emitted path when provided
     // to avoid unnecessary allocation.
     let build_path: Cow<Path>;
-    let mut tmp_file: Option<NamedTempFile> = None;
+    let _tmp_file_guard: Option<NamedTempFile>;
     if let Some(path) = &args.emit {
         process::write_ninja_file(path, &ninja)?;
         build_path = Cow::Borrowed(path.as_path());
+        _tmp_file_guard = None;
     } else {
         let tmp = process::create_temp_ninja_file(&ninja)?;
-        tmp_file = Some(tmp);
-        build_path = Cow::Borrowed(
-            tmp_file
-                .as_ref()
-                .expect("temporary Ninja file should exist")
-                .path(),
-        );
+        build_path = Cow::Owned(tmp.path().to_path_buf());
+        _tmp_file_guard = Some(tmp);
     }
 
     let program = process::resolve_ninja_program();
@@ -143,7 +139,6 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
             build_path.display()
         )
     })?;
-    drop(tmp_file);
     Ok(())
 }
 

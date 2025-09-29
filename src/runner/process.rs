@@ -27,7 +27,7 @@ impl CommandArg {
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
-#[doc(hidden)]
+#[cfg(any(test, doctest))]
 pub mod doc {
     pub use super::{
         CommandArg, contains_sensitive_keyword, create_temp_ninja_file, is_sensitive_arg,
