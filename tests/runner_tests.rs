@@ -1,5 +1,5 @@
 use netsuke::cli::{BuildArgs, Cli, Commands};
-use netsuke::runner::{BuildTargets, run, run_ninja};
+use netsuke::runner::{BuildTargets, NinjaContent, doc, run, run_ninja};
 use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::{Path, PathBuf};
@@ -49,6 +49,29 @@ fn test_manifest() -> (tempfile::TempDir, PathBuf) {
     let manifest_path = temp.path().join("Netsukefile");
     std::fs::copy("tests/data/minimal.yml", &manifest_path).expect("copy manifest");
     (temp, manifest_path)
+}
+
+#[test]
+fn create_temp_ninja_file_writes_contents() {
+    let content = NinjaContent::new(String::from("rule cc"));
+    let file = doc::create_temp_ninja_file(&content).expect("create temp file");
+
+    let written = std::fs::read_to_string(file.path()).expect("read temp file");
+    assert_eq!(written, content.as_str());
+    assert!(file.path().to_string_lossy().ends_with(".ninja"));
+}
+
+#[test]
+fn write_ninja_file_creates_directories() {
+    let temp = tempfile::tempdir().expect("create temp dir");
+    let nested = temp.path().join("nested").join("build.ninja");
+    let content = NinjaContent::new(String::from("build all: phony"));
+
+    doc::write_ninja_file(&nested, &content).expect("write ninja file");
+
+    let written = std::fs::read_to_string(&nested).expect("read nested file");
+    assert_eq!(written, content.as_str());
+    assert!(nested.parent().expect("parent path").exists());
 }
 
 #[test]

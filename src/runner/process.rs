@@ -1,16 +1,15 @@
-use super::{BuildTargets, NinjaContent, NINJA_PROGRAM};
+use super::{BuildTargets, NINJA_PROGRAM, NinjaContent};
 use crate::cli::Cli;
 use anyhow::{Context, Result as AnyResult};
 use ninja_env::NINJA_ENV;
-use tempfile::{Builder, NamedTempFile};
 use std::{
-    env,
-    fs,
+    env, fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
 };
+use tempfile::{Builder, NamedTempFile};
 use tracing::info;
 
 #[derive(Debug, Clone)]
@@ -30,37 +29,10 @@ impl CommandArg {
 // testing surface without exporting them in release builds.
 #[doc(hidden)]
 pub mod doc {
-    pub use super::CommandArg;
-
-    #[must_use]
-    pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
-        super::contains_sensitive_keyword(arg)
-    }
-    #[must_use]
-    pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
-        super::is_sensitive_arg(arg)
-    }
-    #[must_use]
-    pub fn redact_argument(arg: &CommandArg) -> CommandArg {
-        super::redact_argument(arg)
-    }
-    #[must_use]
-    pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
-        super::redact_sensitive_args(args)
-    }
-
-    pub fn create_temp_ninja_file(
-        content: &super::NinjaContent,
-    ) -> super::AnyResult<super::NamedTempFile> {
-        super::create_temp_ninja_file(content)
-    }
-
-    pub fn write_ninja_file(
-        path: &super::Path,
-        content: &super::NinjaContent,
-    ) -> super::AnyResult<()> {
-        super::write_ninja_file(path, content)
-    }
+    pub use super::{
+        CommandArg, contains_sensitive_keyword, create_temp_ninja_file, is_sensitive_arg,
+        redact_argument, redact_sensitive_args, resolve_ninja_program, write_ninja_file,
+    };
 }
 
 /// Check if `arg` contains a sensitive keyword.
@@ -71,12 +43,12 @@ pub mod doc {
 /// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
 /// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
 /// ```
-pub(crate) fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
+#[must_use]
+pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
     let lower = arg.as_str().to_lowercase();
     lower.contains("password") || lower.contains("token") || lower.contains("secret")
 }
 
-/// Determine whether the argument should be redacted.
 /// Determine whether the argument should be redacted.
 ///
 /// # Examples
@@ -85,7 +57,8 @@ pub(crate) fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
 /// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
 /// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
 /// ```
-pub(crate) fn is_sensitive_arg(arg: &CommandArg) -> bool {
+#[must_use]
+pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
     contains_sensitive_keyword(arg)
 }
 
@@ -101,7 +74,8 @@ pub(crate) fn is_sensitive_arg(arg: &CommandArg) -> bool {
 /// let arg = CommandArg::new("path=/tmp".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
 /// ```
-pub(crate) fn redact_argument(arg: &CommandArg) -> CommandArg {
+#[must_use]
+pub fn redact_argument(arg: &CommandArg) -> CommandArg {
     if is_sensitive_arg(arg) {
         let redacted = arg.as_str().split_once('=').map_or_else(
             || "***REDACTED***".to_string(),
@@ -125,7 +99,8 @@ pub(crate) fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// let redacted = redact_sensitive_args(&args);
 /// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
 /// ```
-pub(crate) fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
+#[must_use]
+pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
     args.iter().map(redact_argument).collect()
 }
 
@@ -142,7 +117,7 @@ pub(crate) fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
 /// let tmp = create_temp_ninja_file(&NinjaContent::new("".into())).unwrap();
 /// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
 /// ```
-pub(super) fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
+pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
     let tmp = Builder::new()
         .prefix("netsuke.")
         .suffix(".ninja")
@@ -166,7 +141,7 @@ pub(super) fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedT
 /// let content = NinjaContent::new("rule cc\n".to_string());
 /// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
 /// ```
-pub(super) fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
+pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
@@ -179,7 +154,7 @@ pub(super) fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult
 
 /// Determine which Ninja executable to invoke.
 #[must_use]
-pub(super) fn resolve_ninja_program() -> PathBuf {
+pub fn resolve_ninja_program() -> PathBuf {
     env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
 }
 
@@ -262,5 +237,32 @@ pub fn run_ninja(
             io::ErrorKind::Other,
             format!("ninja exited with {status}"),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_temp_ninja_file_persists_contents() {
+        let content = NinjaContent::new(String::from("rule cc"));
+        let file = create_temp_ninja_file(&content).expect("create temp file");
+        let written = std::fs::read_to_string(file.path()).expect("read temp file");
+        assert_eq!(written, content.as_str());
+        assert!(file.path().to_string_lossy().ends_with(".ninja"));
+    }
+
+    #[test]
+    fn write_ninja_file_creates_parent_directories() {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let nested = temp.path().join("nested").join("build.ninja");
+        let content = NinjaContent::new(String::from("build all: phony"));
+
+        write_ninja_file(&nested, &content).expect("write ninja file");
+
+        let written = std::fs::read_to_string(&nested).expect("read nested file");
+        assert_eq!(written, content.as_str());
+        assert!(nested.parent().expect("parent path").exists());
     }
 }
