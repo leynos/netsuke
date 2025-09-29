@@ -120,19 +120,24 @@ def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
         return generated
 
     build_root = workspace / "target" / target / "release" / "build"
-    if build_root.is_dir():
-        matches = list(build_root.glob(f"*/out/{bin_name}.1"))
-        if not matches:
-            message = f"Man page not found for target {target}"
-            raise RuntimeError(message)
-        if len(matches) > 1:
-            locations = "\n".join(str(path) for path in matches)
-            message = "Multiple man page candidates found:\n" + locations
-            raise RuntimeError(message)
-        return matches[0]
+    if not build_root.is_dir():
+        message = f"Man page not found for target {target}"
+        raise RuntimeError(message)
 
-    message = f"Man page not found for target {target}"
-    raise RuntimeError(message)
+    matches = list(build_root.glob(f"*/out/{bin_name}.1"))
+    return _select_single_match(matches, target)
+
+
+def _select_single_match(candidates: list[Path], target: str) -> Path:
+    """Return exactly one candidate path or raise if the list is invalid."""
+    if not candidates:
+        message = f"Man page not found for target {target}"
+        raise RuntimeError(message)
+    if len(candidates) > 1:
+        locations = "\n".join(str(path) for path in candidates)
+        message = "Multiple man page candidates found:\n" + locations
+        raise RuntimeError(message)
+    return candidates[0]
 
 
 def _write_checksum(path: Path) -> None:

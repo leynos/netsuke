@@ -28,6 +28,7 @@ Run within a GitHub Actions step:
 
 from __future__ import annotations
 
+import os
 import sys
 import typing as typ
 from pathlib import Path
@@ -69,13 +70,6 @@ def stage(
     target: typ.Annotated[str, Parameter(env_var="TARGET")],
     platform: typ.Annotated[str, Parameter(env_var="PLATFORM")],
     arch: typ.Annotated[str, Parameter(env_var="ARCH")],
-    github_output: typ.Annotated[
-        Path, Parameter(env_var="GITHUB_OUTPUT", converter=Path, required=True)
-    ],
-    workspace: typ.Annotated[
-        Path, Parameter(env_var="GITHUB_WORKSPACE", converter=Path)
-    ] = Path(),
-    bin_ext: typ.Annotated[str, Parameter(env_var="BIN_EXT")] = "",
 ) -> None:
     """Stage artefacts and expose their paths via workflow outputs.
 
@@ -89,14 +83,16 @@ def stage(
         Display label for the operating system flavour.
     arch : str
         CPU architecture string for packaging (for example ``"x86_64"``).
-    github_output : pathlib.Path
-        Workflow output file written by GitHub Actions.
-    workspace : pathlib.Path, optional
-        Root of the repository checkout. Defaults to the current directory when
-        ``GITHUB_WORKSPACE`` is unset.
-    bin_ext : str, optional
-        Optional binary suffix override, inferred from ``platform`` when
-        missing.
+
+    Notes
+    -----
+    Reads the following environment variables set by GitHub Actions:
+
+    - ``GITHUB_OUTPUT``: Required path that records workflow outputs.
+    - ``GITHUB_WORKSPACE``: Optional checkout root. Defaults to ``Path()``
+      when absent.
+    - ``BIN_EXT``: Optional binary suffix override. Falls back to
+      ``platform``-based inference when unset.
 
     Examples
     --------
@@ -113,6 +109,19 @@ def stage(
     ... )
     >>> stage()  # doctest: +SKIP
     """
+    github_output_env = os.environ.get("GITHUB_OUTPUT")
+    if not github_output_env:
+        print(
+            "::error title=Configuration Error::"
+            "GITHUB_OUTPUT environment variable is missing",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    workspace_env = os.environ.get("GITHUB_WORKSPACE")
+    workspace = Path(workspace_env) if workspace_env else Path()
+
+    bin_ext = os.environ.get("BIN_EXT", "")
     if not bin_ext:
         bin_ext = _infer_bin_ext(platform)
 
@@ -126,7 +135,7 @@ def stage(
     )
 
     try:
-        stage_artifacts(config, github_output)
+        stage_artifacts(config, Path(github_output_env))
     except RuntimeError as exc:
         print(f"::error title=Packaging failure::{exc}", file=sys.stderr)
         raise SystemExit(1) from exc

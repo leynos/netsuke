@@ -31,16 +31,12 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
           cargo_version="$(
-            python3 - <<'PY' || echo ""
-              import os, tomllib
-
-              with open(
-                  os.environ.get("CARGO_TOML_PATH", "Cargo.toml"), "rb"
-              ) as fh:
-                  data = tomllib.load(fh)
-              package = data.get("package") or {}
-              print(package.get("version", ""))
-PY
+            python3 -c 'import os, sys, tomllib
+path = os.environ.get("CARGO_TOML_PATH", "Cargo.toml")
+with open(path, "rb") as fh:
+    data = tomllib.load(fh)
+package = data.get("package") or {}
+sys.stdout.write(package.get("version", ""))' || echo ""
           )"
           if [ -z "${cargo_version:-}" ]; then
             echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}."
