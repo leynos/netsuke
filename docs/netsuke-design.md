@@ -1640,9 +1640,12 @@ macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. They invoke the uv staging wrapper
 `.github/workflows/scripts/stage_macos.py`, which in turn calls the shared
 module to mirror documentation and emit checksums before feeding the resulting
-paths into the `macos-package` action. Each script embeds a `uv` metadata block
-so `setup-uv` can resolve Cyclopts dependencies without a repository-level
-`pyproject.toml`; the wrappers remain self-contained for workflow execution.
+paths into the `macos-package` action. The macOS and Windows wrappers continue
+to embed `uv` metadata blocks, keeping Cyclopts dependencies discoverable
+without a repository-level `pyproject.toml`; that file is intentionally omitted
+as unnecessary for the release flow. Python linting lives in the top-level
+`ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
+broader helper suite stays consistently linted.
 
 Each job uploads its products as workflow artefacts, and the final release job
 downloads every file, filters out unrelated downloads, and prefixes asset names
