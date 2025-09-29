@@ -381,7 +381,19 @@ fn is_wildcard_continuation_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '-' || ch == '_'
 }
 
-pub(crate) fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
+/// Expand a glob pattern and collect the matching UTF-8 file paths.
+///
+/// # Errors
+///
+/// Returns an error when the pattern is syntactically invalid, when
+/// capability-restricted filesystem access fails, or when a match contains
+/// non-UTF-8 data.
+///
+/// # Panics
+///
+/// Panics if pattern normalisation fails to record the derived pattern, which
+/// indicates a logic error in the validator.
+pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
     let opts = MatchOptions {

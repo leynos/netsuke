@@ -4,7 +4,13 @@ use anyhow::{Context, Result};
 use minijinja::Environment;
 use serde_yml::Value as YamlValue;
 
-pub(crate) fn render_manifest(
+/// Render manifest targets and rules by evaluating template expressions.
+///
+/// # Errors
+///
+/// Returns an error when a template evaluation fails or when rendered
+/// values cannot be serialised back into the manifest structure.
+pub fn render_manifest(
     mut manifest: NetsukeManifest,
     env: &Environment,
 ) -> Result<NetsukeManifest> {

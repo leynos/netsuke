@@ -80,7 +80,8 @@ pub enum ManifestError {
     },
 }
 
-pub(crate) fn map_yaml_error(
+#[must_use]
+pub fn map_yaml_error(
     err: YamlError,
     src: &str,
     name: &str,

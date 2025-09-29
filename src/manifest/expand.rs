@@ -3,7 +3,13 @@ use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_yml::{Mapping as YamlMapping, Value as YamlValue};
 
-pub(crate) fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
+/// Expand manifest targets defined with the `foreach` key.
+///
+/// # Errors
+///
+/// Returns an error when evaluating `foreach` or `when` expressions, when
+/// iteration values fail to serialise, or when target metadata is malformed.
+pub fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
     let Some(targets) = doc.get_mut("targets").and_then(|v| v.as_sequence_mut()) else {
         return Ok(());
     };

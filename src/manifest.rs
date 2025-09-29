@@ -19,12 +19,11 @@ mod glob;
 mod hints;
 mod render;
 
-pub use diagnostics::ManifestError;
-use diagnostics::map_yaml_error;
-use glob::glob_paths;
+pub use diagnostics::{ManifestError, map_yaml_error};
+pub use glob::glob_paths;
 
-use expand::expand_foreach;
-use render::render_manifest;
+pub use expand::expand_foreach;
+pub use render::render_manifest;
 
 /// Resolve the value of an environment variable for the `env()` Jinja helper.
 ///
