@@ -1,3 +1,5 @@
+//! Process helpers for Ninja file lifecycle, argument redaction, and subprocess I/O.
+//! Internal to `runner`; public API is defined in `runner.rs`.
 use super::{BuildTargets, NINJA_PROGRAM, NinjaContent};
 use crate::cli::Cli;
 use anyhow::{Context, Result as AnyResult, anyhow};

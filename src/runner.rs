@@ -7,7 +7,6 @@
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
-use serde_json;
 use std::borrow::Cow;
 use std::path::Path;
 use tempfile::NamedTempFile;
