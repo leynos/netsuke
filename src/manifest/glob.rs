@@ -81,6 +81,7 @@ fn create_unmatched_brace_error(context: &GlobErrorContext) -> Error {
 fn process_glob_entry(
     entry: GlobEntryResult,
     pattern: GlobPattern,
+    root: &Dir,
 ) -> std::result::Result<Option<String>, Error> {
     match entry {
         Ok(path) => {
@@ -95,7 +96,7 @@ fn process_glob_entry(
                     Some("glob matched a non-UTF-8 path".to_string()),
                 )
             })?;
-            let metadata = fetch_metadata(&utf_path).map_err(|err| {
+            let metadata = fetch_metadata(root, &utf_path).map_err(|err| {
                 create_glob_error(
                     &GlobErrorContext {
                         pattern: pattern.raw.clone(),
@@ -123,11 +124,32 @@ fn process_glob_entry(
     }
 }
 
-fn fetch_metadata(path: &Utf8Path) -> std::io::Result<cap_std::fs::Metadata> {
-    let parent = path.parent().unwrap_or_else(|| Utf8Path::new("."));
-    let dir = Dir::open_ambient_dir(parent, ambient_authority())?;
-    let entry = path.file_name().unwrap_or(".");
-    dir.metadata(Utf8Path::new(entry))
+fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::Metadata> {
+    if path.is_absolute() {
+        let stripped = path
+            .as_str()
+            .trim_start_matches(|c| c == char::from(0x2f) || c == char::from(0x5c));
+        if stripped.is_empty() {
+            root.metadata(Utf8Path::new("."))
+        } else {
+            root.metadata(stripped)
+        }
+    } else {
+        root.metadata(path)
+    }
+}
+
+fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
+    let candidate = pattern
+        .normalized
+        .as_deref()
+        .unwrap_or(pattern.raw.as_str());
+    let path = Utf8Path::new(candidate);
+    if path.is_absolute() {
+        Dir::open_ambient_dir("/", ambient_authority())
+    } else {
+        Dir::open_ambient_dir(".", ambient_authority())
+    }
 }
 
 pub(crate) fn normalize_separators(pattern: &str) -> String {
@@ -387,11 +409,23 @@ pub(crate) fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Erro
         .as_deref()
         .expect("normalized pattern must be present");
 
+    let root = open_root_dir(&pattern_state).map_err(|e| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern_state.raw.clone(),
+                error_char: char::from(0),
+                position: 0,
+                error_type: GlobErrorType::IoError,
+            },
+            Some(e.to_string()),
+        )
+    })?;
+
     let entries = glob_with(normalized_pattern, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw.clone(),
-                error_char: '\0',
+                error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::InvalidPattern,
             },
@@ -400,7 +434,7 @@ pub(crate) fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Erro
     })?;
     let mut paths = Vec::new();
     for entry in entries {
-        if let Some(p) = process_glob_entry(entry, pattern_state.clone())? {
+        if let Some(p) = process_glob_entry(entry, pattern_state.clone(), &root)? {
             paths.push(p);
         }
     }
@@ -432,16 +466,20 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+
     fn process_glob_entry_rejects_non_utf8_paths() {
+        use cap_std::{ambient_authority, fs::Dir};
         use std::ffi::OsString;
         use std::os::unix::ffi::OsStringExt;
 
+        let root = Dir::open_ambient_dir("/", ambient_authority()).expect("open root dir");
         let path = std::path::PathBuf::from(OsString::from_vec(b"bad\xFF".to_vec()));
         let pattern = GlobPattern {
             raw: "pattern".into(),
             normalized: None,
         };
-        let err = process_glob_entry(Ok(path), pattern).expect_err("expected non-UTF-8 error");
+        let err =
+            process_glob_entry(Ok(path), pattern, &root).expect_err("expected non-UTF-8 error");
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     }
 }
