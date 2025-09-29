@@ -18,7 +18,7 @@ pub const NINJA_PROGRAM: &str = "ninja";
 pub use ninja_env::NINJA_ENV;
 
 mod process;
-#[cfg(any(test, doctest))]
+#[cfg(doctest)]
 pub use process::doc;
 pub use process::run_ninja;
 

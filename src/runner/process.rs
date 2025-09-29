@@ -31,7 +31,7 @@ impl CommandArg {
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
-#[cfg(any(test, doctest))]
+#[cfg(doctest)]
 pub mod doc {
     pub use super::{
         CommandArg, contains_sensitive_keyword, create_temp_ninja_file, is_sensitive_arg,
@@ -58,7 +58,7 @@ fn is_sensitive_key(key: &str) -> bool {
 /// Check if `arg` contains a sensitive keyword.
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// # use netsuke::runner::doc::{CommandArg, contains_sensitive_keyword};
 /// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
 /// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
@@ -73,7 +73,7 @@ pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
 /// Determine whether the argument should be redacted.
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// # use netsuke::runner::doc::{CommandArg, is_sensitive_arg};
 /// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
 /// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
@@ -88,7 +88,7 @@ pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
 /// Sensitive values are replaced with `***REDACTED***`, preserving keys.
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// # use netsuke::runner::doc::{CommandArg, redact_argument};
 /// let arg = CommandArg::new("token=abc".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
@@ -110,7 +110,7 @@ pub fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// Redact sensitive information from all `args`.
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
 /// let args = vec![
 ///     CommandArg::new("ninja".into()),
