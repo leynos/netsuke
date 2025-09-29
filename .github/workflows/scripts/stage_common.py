@@ -103,9 +103,9 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
         _write_checksum(path)
 
     with github_output.open("a", encoding="utf-8") as handle:
-        handle.write(f"artifact_dir={artifact_dir.as_posix()}\n")
-        handle.write(f"binary_path={bin_dest.as_posix()}\n")
-        handle.write(f"man_path={man_dest.as_posix()}\n")
+        handle.write(f"artifact_dir={_escape_output_value(artifact_dir)}\n")
+        handle.write(f"binary_path={_escape_output_value(bin_dest)}\n")
+        handle.write(f"man_path={_escape_output_value(man_dest)}\n")
 
     return StageResult(artifact_dir, bin_dest, man_dest)
 
@@ -159,3 +159,9 @@ def _write_checksum(path: Path) -> None:
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     checksum_path = Path(f"{path}.sha256")
     checksum_path.write_text(f"{digest}  {path.name}\n", encoding="utf-8")
+
+
+def _escape_output_value(value: Path | str) -> str:
+    """Escape workflow output values per GitHub recommendations."""
+    text = value.as_posix() if isinstance(value, Path) else str(value)
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")

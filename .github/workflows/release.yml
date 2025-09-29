@@ -26,6 +26,7 @@ jobs:
           python-version: '3.11'
       - id: version
         name: Verify tag matches Cargo.toml
+        shell: bash
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
@@ -94,6 +95,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           deb-depends: ninja-build
           rpm-depends: ninja-build
       - name: Prune packaging metadata
+        shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
       - name: Upload Linux artefacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -215,6 +217,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Ensure release exists (draft)
+        shell: bash
         run: |
           set -euo pipefail
           gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \
@@ -224,7 +227,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
-          path: artifacts
+          path: dist
           pattern: ${{ env.REPO_NAME }}-*
       - name: Upload artefacts to release
         shell: bash
@@ -233,13 +236,13 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           shopt -s nullglob
           bin_name="${BIN_NAME:?BIN_NAME must be provided}"
           mapfile -t files < <(
-            find artifacts -type f \
+            find dist -type f \
               \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" \
               -o -name "${bin_name}" -o -name "${bin_name}.exe" \
               -o -name "${bin_name}.1" -o -name "*.sha256" \) -print
           )
           if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error title=No artefacts uploaded::No files found in artifacts/"
+            echo "::error title=No artefacts uploaded::No files found in dist/"
             exit 1
           fi
           declare -A seen=()
