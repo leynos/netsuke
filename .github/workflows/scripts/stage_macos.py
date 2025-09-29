@@ -41,10 +41,6 @@ def stage(
     target: typ.Annotated[str, Parameter(env_var="TARGET")],
     platform: typ.Annotated[str, Parameter(env_var="PLATFORM")],
     arch: typ.Annotated[str, Parameter(env_var="ARCH")],
-    workspace: typ.Annotated[
-        Path, Parameter(env_var="GITHUB_WORKSPACE", converter=Path)
-    ] = Path(),
-    bin_ext: typ.Annotated[str, Parameter(env_var="BIN_EXT")] = "",
 ) -> None:
     """Stage macOS artefacts and emit GitHub Actions outputs.
 
@@ -58,26 +54,28 @@ def stage(
         Display label for the operating system flavour.
     arch : str
         CPU architecture string for packaging (for example ``"arm64"``).
-    workspace : Path, optional
-        GitHub workspace directory. Defaults to ``Path()`` when the
-        ``GITHUB_WORKSPACE`` variable is not provided.
-    bin_ext : str, optional
-        Optional binary suffix override. macOS artefacts typically omit this
-        value, but the parameter remains for parity with other platforms.
 
     Notes
     -----
-    Reads the ``GITHUB_OUTPUT`` environment variable provided by GitHub Actions
-    and raises a configuration error when it is absent.
+    Reads environment variables provided by GitHub Actions and raises a
+    configuration error when required values are absent:
+
+    - ``GITHUB_OUTPUT``: Required path receiving workflow outputs.
+    - ``GITHUB_WORKSPACE``: Optional checkout root. Defaults to ``Path('.')``
+      when absent.
+    - ``BIN_EXT``: Optional binary suffix override for non-standard bundles.
     """
     github_output_env = os.environ.get("GITHUB_OUTPUT")
     if not github_output_env:
         print(
-            "::error title=Configuration Error::"
+            "::error title=Configuration Error::",
             "GITHUB_OUTPUT environment variable is missing",
             file=sys.stderr,
         )
         raise SystemExit(1)
+
+    workspace = Path(os.environ.get("GITHUB_WORKSPACE", "."))
+    bin_ext = os.environ.get("BIN_EXT", "")
 
     config = StagingConfig(
         bin_name=bin_name,
