@@ -193,6 +193,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           set -euo pipefail
           pkg="${{ steps.pkg.outputs.pkg-path }}"
           dest="dist/${{ needs.metadata.outputs.bin_name }}-${{ needs.metadata.outputs.version }}-${{ matrix.archive_suffix }}.pkg"
+          mkdir -p "$(dirname "$dest")"
           mv "$pkg" "$dest"
       - name: Upload macOS artefacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -204,6 +205,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
 
   release:
     needs:
+      - metadata
       - build-linux
       - build-windows
       - build-macos

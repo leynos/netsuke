@@ -1,8 +1,5 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = [
-#   "cyclopts>=3.24.0,<4.0.0",
-# ]
 # ///
 
 """Shared helpers for staging release artefacts."""
@@ -93,7 +90,9 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
     man_src = _find_manpage(workspace, config.target, config.bin_name)
 
     artifact_dir = dist_dir / config.artifact_dir_name
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    if artifact_dir.exists():
+        shutil.rmtree(artifact_dir)
+    artifact_dir.mkdir(parents=True)
 
     bin_dest = artifact_dir / bin_src.name
     man_dest = artifact_dir / man_src.name
