@@ -257,43 +257,67 @@ impl BraceValidator {
             escaped: self.escaped,
         };
 
+        if let Some(result) = self.handle_escape_sequence(&context) {
+            return result;
+        }
+
+        self.handle_character_class(&context);
+
+        self.handle_braces(&context, pattern)
+    }
+
+    fn handle_escape_sequence(
+        &mut self,
+        context: &CharContext,
+    ) -> Option<std::result::Result<(), Error>> {
         if context.escaped {
             self.escaped = false;
-            return Ok(());
+            return Some(Ok(()));
         }
 
         if context.ch == char::from(0x5c) && self.state.escape_active {
             self.escaped = true;
+            return Some(Ok(()));
+        }
+
+        None
+    }
+
+    fn handle_character_class(&mut self, context: &CharContext) {
+        match context.ch {
+            '[' if !context.in_class => self.state.in_class = true,
+            ']' if context.in_class => self.state.in_class = false,
+            _ => {}
+        }
+    }
+
+    fn handle_braces(
+        &mut self,
+        context: &CharContext,
+        pattern: &GlobPattern,
+    ) -> std::result::Result<(), Error> {
+        if context.in_class {
             return Ok(());
         }
 
-        if context.ch == '[' && !context.in_class {
-            self.state.in_class = true;
-            return Ok(());
-        }
-
-        if context.ch == ']' && context.in_class {
-            self.state.in_class = false;
-            return Ok(());
-        }
-
-        if context.ch == '}' && !context.in_class && self.state.depth == 0 {
-            return Err(create_unmatched_brace_error(&GlobErrorContext {
+        match context.ch {
+            '}' if self.state.depth == 0 => Err(create_unmatched_brace_error(&GlobErrorContext {
                 pattern: pattern.raw.clone(),
                 error_char: context.ch,
                 position: context.position,
                 error_type: GlobErrorType::UnmatchedBrace,
-            }));
+            })),
+            '{' => {
+                self.state.depth += 1;
+                self.state.last_open_pos = Some(context.position);
+                Ok(())
+            }
+            '}' => {
+                self.state.depth -= 1;
+                Ok(())
+            }
+            _ => Ok(()),
         }
-
-        if context.ch == '{' && !context.in_class {
-            self.state.depth += 1;
-            self.state.last_open_pos = Some(context.position);
-        } else if context.ch == '}' && !context.in_class {
-            self.state.depth -= 1;
-        }
-
-        Ok(())
     }
 
     fn validate_final_state(&self, pattern: &GlobPattern) -> std::result::Result<(), Error> {
