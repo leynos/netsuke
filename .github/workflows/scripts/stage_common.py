@@ -1,7 +1,3 @@
-# /// script
-# requires-python = ">=3.11"
-# ///
-
 """Shared helpers for staging release artefacts."""
 
 from __future__ import annotations
