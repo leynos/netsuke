@@ -11,7 +11,7 @@ use std::{
     ffi::OsString,
     io::{self, BufRead, BufReader, ErrorKind, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
 };
 use tempfile::{Builder, NamedTempFile};
@@ -256,13 +256,12 @@ pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
 }
 
-fn build_ninja_command(
-    program: &Path,
+fn configure_ninja_command(
+    cmd: &mut Command,
     cli: &Cli,
     build_file: &Path,
     targets: &BuildTargets<'_>,
-) -> io::Result<Command> {
-    let mut cmd = Command::new(program);
+) -> io::Result<()> {
     if let Some(dir) = &cli.directory {
         let canonical = canonicalize_utf8_path(dir.as_path())?;
         cmd.current_dir(canonical.as_std_path());
@@ -283,10 +282,12 @@ fn build_ninja_command(
     })?;
     cmd.arg("-f").arg(build_file_path.as_std_path());
     cmd.args(targets.as_slice());
-    Ok(cmd)
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    Ok(())
 }
 
-fn log_ninja_command(cmd: &Command) {
+fn log_command_execution(cmd: &Command) {
     let program_path = PathBuf::from(cmd.get_program());
     let program_display = Utf8PathBuf::from_path_buf(program_path.clone()).map_or_else(
         |_| program_path.to_string_lossy().into_owned(),
@@ -325,13 +326,15 @@ pub fn run_ninja(
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
-    let mut cmd = build_ninja_command(program, cli, build_file, targets)?;
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    let mut cmd = Command::new(program);
+    configure_ninja_command(&mut cmd, cli, build_file, targets)?;
+    log_command_execution(&cmd);
+    let child = cmd.spawn()?;
+    let status = spawn_and_stream_output(child)?;
+    check_exit_status(status)
+}
 
-    log_ninja_command(&cmd);
-
-    let mut child = cmd.spawn()?;
+fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
     let stdout = child.stdout.take().expect("child stdout");
     let stderr = child.stderr.take().expect("child stderr");
 
@@ -353,7 +356,10 @@ pub fn run_ninja(
     let status = child.wait()?;
     let _ = out_handle.join();
     let _ = err_handle.join();
+    Ok(status)
+}
 
+fn check_exit_status(status: ExitStatus) -> io::Result<()> {
     if status.success() {
         Ok(())
     } else {
