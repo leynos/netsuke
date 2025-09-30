@@ -437,11 +437,13 @@ the doctest itself.
 /// This example only runs if the "serde" feature is enabled.
 ///
 /// ```
+/// # use std::error::Error;
 /// # #[cfg(feature = "serde")]
-/// # {
+/// # fn main() -> Result<(), Box<dyn Error>> {
 /// #   let my_struct = MyStruct::new();
-/// #   let json = serde_json::to_string(&my_struct).unwrap();
+/// #   let json = serde_json::to_string(&my_struct)?;
 /// #   assert_eq!(json, "{}");
+/// #   Ok(())
 /// # }
 /// ```
 ```
@@ -462,8 +464,9 @@ done with inner doc comments (//!).
 //! #![cfg_attr(feature = "serde", doc = "```")]
 //! // Example code that requires the "serde" feature.
 //! let my_struct = MyStruct::new();
-//! let json = serde_json::to_string(&my_struct).unwrap();
+//! let json = serde_json::to_string(&my_struct)?;
 //! assert_eq!(json, "{}");
+//! (())
 //! ```
 ```
 

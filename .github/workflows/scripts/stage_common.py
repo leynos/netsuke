@@ -152,7 +152,11 @@ def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
 
 
 def _write_checksum(path: Path) -> None:
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    digest = h.hexdigest()
     checksum_path = Path(f"{path}.sha256")
     checksum_path.write_text(f"{digest}  {path.name}\n", encoding="utf-8")
 

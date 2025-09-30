@@ -755,14 +755,10 @@ providing a secure bridge to the underlying system.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
-  `python3 --version` using `std::process::Command` 19, parse the output using
-  the
-
-  `semver` crate 4, and compare it against a user-provided SemVer requirement
-  string (e.g.,
-
-  `">=3.8"`). This allows for conditional logic in the build based on toolchain
-  versions.
+  `python3 --version` using `std::process::Command`,[^24] parse the output
+  using the `semver` crate,[^4] and compare it against a user-provided SemVer
+  requirement string (e.g., `">=3.8"`). This allows for conditional logic in
+  the build based on toolchain versions.
 
 ### 4.5 Essential Custom Filters
 
@@ -1217,8 +1213,8 @@ securely.
 ### 6.1 Invoking Ninja
 
 Netsuke will use Rust's standard library `std::process::Command` API to
-configure and spawn the `ninja` process.19 This provides fine-grained control
-over the child process's execution environment.
+configure and spawn the `ninja` process.[^24] This provides fine-grained
+control over the child process's execution environment.
 
 The command construction will follow this pattern:
 
