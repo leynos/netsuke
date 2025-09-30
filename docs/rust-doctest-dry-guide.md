@@ -68,8 +68,8 @@ However, for large libraries with hundreds of doctests, the cumulative
 compilation time can become a significant bottleneck in the development and
 CI/CD cycle, a common pain point in the Rust community.[^2]
 
-The architectural purity of the `rustdoc` model—its insistence on simulating an
-external user—creates a fundamental trade-off. On one hand, it provides an
+The architectural purity of the `rustdoc` model--its insistence on simulating
+an external user--creates a fundamental trade-off. On one hand, it provides an
 unparalleled guarantee that the public documentation is accurate and that the
 examples work as advertised, creating true "living documentation".[^7] On the
 other hand, this same purity prevents the use of doctests for verifying
@@ -124,8 +124,8 @@ purpose. For instance, an example for
 a scenario where ownership rules necessitate creating a copy.[^9]
 
 To achieve this, examples must be clear and concise. Any code that is not
-directly relevant to the point being made—such as complex setup, boilerplate,
-or unrelated logic—should be hidden to avoid distracting the reader.[^3]
+directly relevant to the point being made--such as complex setup, boilerplate,
+or unrelated logic--should be hidden to avoid distracting the reader.[^3]
 
 ### 2.3 Ergonomic Error Handling: Taming the `?` Operator
 
@@ -204,9 +204,9 @@ primary use cases include:
    scaffolding can be hidden, presenting the user with only the relevant
    code.[^9]
 
-2. **Hiding Setup Code**: If an example requires some preliminary setup—like
+2. **Hiding Setup Code**: If an example requires some preliminary setup--like
    creating a temporary file, defining a helper struct for the test, or
-   initializing a server—this logic can be hidden to keep the example focused
+   initializing a server--this logic can be hidden to keep the example focused
    on the API item being documented.[^3]
 
 3. **Hiding** `use` **Statements**: While often useful to show which types are
@@ -437,11 +437,13 @@ the doctest itself.
 /// This example only runs if the "serde" feature is enabled.
 ///
 /// ```
+/// # use std::error::Error;
 /// # #[cfg(feature = "serde")]
-/// # {
+/// # fn main() -> Result<(), Box<dyn Error>> {
 /// #   let my_struct = MyStruct::new();
-/// #   let json = serde_json::to_string(&my_struct).unwrap();
+/// #   let json = serde_json::to_string(&my_struct)?;
 /// #   assert_eq!(json, "{}");
+/// #   Ok(())
 /// # }
 /// ```
 ```
@@ -462,8 +464,9 @@ done with inner doc comments (//!).
 //! #![cfg_attr(feature = "serde", doc = "```")]
 //! // Example code that requires the "serde" feature.
 //! let my_struct = MyStruct::new();
-//! let json = serde_json::to_string(&my_struct).unwrap();
+//! let json = serde_json::to_string(&my_struct)?;
 //! assert_eq!(json, "{}");
+//! (())
 //! ```
 ```
 
@@ -549,7 +552,7 @@ workarounds, but each comes with significant trade-offs[^1]:
 
 The expert recommendation is to acknowledge this limitation and not fight the
 tool. Do not compromise a clean API design for the sake of doctests. Use
-doctests for their intended purpose—verifying public API examples—and rely on
+doctests for their intended purpose--verifying public API examples--and rely on
 dedicated unit tests for verifying private logic. The lack of a clean solution
 for test-verifying private documentation is a known and accepted trade-off
 within the Rust ecosystem.
@@ -627,10 +630,10 @@ mastering doctests:
    <https://swatinem.de/blog/fix-rustdoc/>
 [^3]: Documentation tests - The rustdoc boOK - Rust Documentation, accessed on
    July 15, 2025, <https://doc.rust-lang.org/rustdoc/documentation-tests.html>
-[^4]: Documentation tests - - GitHub Pages, accessed on July 15, 2025,
+[^4]: Documentation tests - GitHub Pages, accessed on July 15, 2025,
    <https://ebarnard.github.io/2019-06-03-rust-smaller-trait-implementers-docs/rustdoc/documentation-tests.html>
    <!-- mdformat off -->
-[^5]: Documentation tests — Massachusetts Institute of Technology, accessed on
+[^5]: Documentation tests - Massachusetts Institute of Technology, accessed on
       July 15, 2025,
       <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>
        <!-- mdformat on -->

@@ -58,8 +58,8 @@ define `.PHONY` or remember what `$@` means. This is 2025. You deserve better.
 
 Rules are reusable command templates. Each one has exactly one of:
 
-- `command:` — a single shell string
-- `script:` — a multi-line block
+- `command:` - a single shell string
+- `script:` - a multi-line block
 - (or) can be declared inline on a target
 
 ```yaml

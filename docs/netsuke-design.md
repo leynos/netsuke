@@ -24,11 +24,11 @@ This design choice by Ninja's authors necessitates the existence of a higher-
 
 level generator tool. Netsuke fulfills this role. It provides a rich,
 user-friendly language (YAML with Jinja) for describing the *what* and *why* of
-a build—the project's structure, its logical rules, and its configurable
+a build--the project's structure, its logical rules, and its configurable
 parameters. Netsuke's primary responsibility is to compile this high-level
 description into a low-level, highly optimized execution plan that Ninja can
-understand and execute. This separation of concerns—Netsuke managing build
-logic and Ninja managing execution—is the foundational principle of the entire
+understand and execute. This separation of concerns--Netsuke managing build
+logic and Ninja managing execution--is the foundational principle of the entire
 architecture.
 
 ### 1.2 The Six Stages of a Netsuke Build
@@ -140,7 +140,7 @@ best practices.
   and implicit rules of Makefiles.
 
 - **Declarative Style:** Users should declare the desired state of their
-  project—the targets they want to build and the rules to build them—rather
+  project--the targets they want to build and the rules to build them--rather
   than writing imperative scripts. Netsuke is responsible for determining the
   necessary steps to achieve that state.
 
@@ -755,14 +755,10 @@ providing a secure bridge to the underlying system.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
-  `python3 --version` using `std::process::Command` 19, parse the output using
-  the
-
-  `semver` crate 4, and compare it against a user-provided SemVer requirement
-  string (e.g.,
-
-  `">=3.8"`). This allows for conditional logic in the build based on toolchain
-  versions.
+  `python3 --version` using `std::process::Command`,[^24] parse the output
+  using the `semver` crate,[^4] and compare it against a user-provided SemVer
+  requirement string (e.g., `">=3.8"`). This allows for conditional logic in
+  the build based on toolchain versions.
 
 ### 4.5 Essential Custom Filters
 
@@ -963,8 +959,8 @@ logic untouched.
 Importantly, the IR contains **no Ninja-isms**. Placeholders such as `$in` and
 `$out` are resolved to plain lists of file paths, and command strings are
 expanded before hashing. This deliberate absence of Ninja-specific syntax makes
-the IR a stable contract that future back-ends—distributed builders, remote
-executors, or otherwise—can consume without modification.
+the IR a stable contract that future back-ends--distributed builders, remote
+executors, or otherwise--can consume without modification.
 
 Furthermore, the IR is the ideal stage at which to perform graph-level analysis
 and optimizations, such as detecting circular dependencies, pruning unused
@@ -1217,8 +1213,8 @@ securely.
 ### 6.1 Invoking Ninja
 
 Netsuke will use Rust's standard library `std::process::Command` API to
-configure and spawn the `ninja` process.19 This provides fine-grained control
-over the child process's execution environment.
+configure and spawn the `ninja` process.[^24] This provides fine-grained
+control over the child process's execution environment.
 
 The command construction will follow this pattern:
 
@@ -1463,7 +1459,7 @@ enrichment:
 
 4. This process of propagation and contextualisation repeats as the error
    bubbles up towards `main`. Use `anyhow::Context` to add detail, but never
-   convert a `miette::Diagnostic` into a plain `anyhow::Error`—doing so would
+   convert a `miette::Diagnostic` into a plain `anyhow::Error`--doing so would
    discard spans and help text.
 
 5. Finally, the `main` function receives the `Err` result. It prints the entire
@@ -1607,10 +1603,51 @@ enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
 The CLI definition doubles as the source for user documentation. A build script
 uses `clap_mangen` to emit a `netsuke.1` manual page in
-`target/generated-man/<target>/<profile>`. Release artefacts include this
-platform‑agnostic man page; the published crate remains code‑only. The build
-script honours `SOURCE_DATE_EPOCH` to produce reproducible dates, emitting a
-warning and falling back to `1970-01-01` when the environment value is invalid.
+`target/generated-man/<target>/<profile>` and mirrors the page into Cargo's
+`OUT_DIR` so release automation can discover it without additional tooling. The
+staging helper always prefers the deterministic `generated-man` copy and falls
+back to the most recent `OUT_DIR` candidate only when necessary, avoiding false
+positives when several historical build directories remain on disk. Release
+artefacts include this platform-agnostic man page; the published crate remains
+code-only. The build script honours `SOURCE_DATE_EPOCH` to produce reproducible
+dates, emitting a warning and falling back to `1970-01-01` when the environment
+value is invalid.
+
+### 8.6 Release Automation
+
+Release engineering is delegated to GitHub Actions workflows built on the
+`leynos/shared-actions` toolchain. The actions are pinned to
+`7bc9b6c15964ef98733aa647b76d402146284ba3` so release automation remains
+reproducible. The tagging workflow first verifies that the Git ref matches
+`Cargo.toml` and records the crate's binary name once so all subsequent jobs
+operate on consistent metadata. Linux builds invoke the `rust-build-release`
+composite action to cross-compile for `x86_64` and `aarch64`, generate the
+staged binary + man page directory, and then call the shared `linux-packages`
+composite a second time with explicit metadata so the resulting `.deb` and
+`.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
+builds reuse the same action for compilation and then run the uv staging
+wrapper `.github/workflows/scripts/stage_windows.py`, which delegates to
+`.github/workflows/scripts/stage_common.py`. The helper consumes Cyclopts
+parameters for the build metadata, resolves GitHub-provided environment
+variables for workspace details, mirrors the man page, and writes SHA-256 sums
+ready for publishing while enforcing a Windows-specific binary suffix.
+
+macOS releases execute the shared action twice: once on an Intel runner and
+again on Apple Silicon. They invoke the uv staging wrapper
+`.github/workflows/scripts/stage_macos.py`, which in turn calls the shared
+module to mirror documentation and emit checksums before feeding the resulting
+paths into the `macos-package` action. The macOS and Windows wrappers continue
+to embed `uv` metadata blocks, keeping Cyclopts dependencies discoverable
+without a repository-level `pyproject.toml`; that file is intentionally omitted
+as unnecessary for the release flow. Python linting lives in the top-level
+`ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
+broader helper suite stays consistently linted.
+
+Each job uploads its products as workflow artefacts, and the final release job
+downloads every file, filters out unrelated downloads, and prefixes asset names
+with their staging directories to avoid collisions before attaching them to the
+GitHub release draft. This automated pipeline guarantees parity across Windows,
+Linux, and macOS without custom GoReleaser logic.
 
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
@@ -1786,7 +1823,7 @@ projects.
 [^17]: "minijinja." wasmer-pack API docs. Accessed on 12 July 2025\.
        <https://wasmerio.github.io/wasmer-pack/api-docs/minijinja/index.html>
 
-[^18]: "Template engine — list of Rust libraries/crates." Lib.rs. Accessed on
+[^18]: "Template engine - list of Rust libraries/crates." Lib.rs. Accessed on
        12 July 2025\. <https://lib.rs/template-engine>
 
 [^22]: "shell_quote." Docs.rs. Accessed on 12 July 2025\.

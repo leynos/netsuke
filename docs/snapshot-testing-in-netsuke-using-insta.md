@@ -67,8 +67,7 @@ use insta::Settings;
 use netsuke::NetsukeManifest;      // assumed struct for parsed manifest
 use netsuke::ir::BuildGraph;       // assumed IR data structure
 
-#[test]
-fn simple_manifest_ir_snapshot() {
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example Netsuke manifest in YAML (string literal for test)
     let manifest_yaml = r#"
         netsuke_version: "0.1"
@@ -82,12 +81,10 @@ fn simple_manifest_ir_snapshot() {
     "#;
 
     // 1. Parse manifest YAML into AST/manifest struct
-    let manifest = NetsukeManifest::from_yaml_str(manifest_yaml)
-        .expect("Manifest parsed");
+    let manifest = NetsukeManifest::from_yaml_str(manifest_yaml)?;
 
     // 2. Generate the IR (BuildGraph) from the manifest
-    let build_graph = BuildGraph::from_manifest(&manifest)
-        .expect("IR generation succeeded");
+    let build_graph = BuildGraph::from_manifest(&manifest)?;
 
     // 3. Convert IR to a deterministic string representation
     // For example, use Debug trait or implement a custom Display/serialization
@@ -99,7 +96,8 @@ fn simple_manifest_ir_snapshot() {
         .bind(|| {
             assert_snapshot!("simple_manifest_ir", ir_pretty);
         });
-}
+    Ok(())
+# }
 ```
 
 This test involves:
@@ -159,8 +157,7 @@ use netsuke::NetsukeManifest;
 use netsuke::ir::BuildGraph;
 use netsuke::ninja_gen;          // module for Ninja file generation
 
-#[test]
-fn simple_manifest_ninja_snapshot() {
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
     // (Re-use the same manifest YAML as before)
     let manifest_yaml = r#"
         netsuke_version: "0.1"
@@ -172,15 +169,12 @@ fn simple_manifest_ninja_snapshot() {
             deps: ["hello.c"]
             rule: "compile"
     "#;
-    let manifest = NetsukeManifest::from_yaml_str(manifest_yaml).expect("Manifest parsed");
-    let build_graph = BuildGraph::from_manifest(&manifest).expect("IR generation succeeded");
+    let manifest = NetsukeManifest::from_yaml_str(manifest_yaml)?;
+    let build_graph = BuildGraph::from_manifest(&manifest)?;
 
     // Generate Ninja file content from the IR
     // `generate` returns `Result<String, NinjaGenError>`; handle errors
-    let ninja_file = match ninja_gen::generate(&build_graph) {
-        Ok(ninja) => ninja,
-        Err(e) => panic!("Ninja file generation failed: {e}"),
-    };
+    let ninja_file = ninja_gen::generate(&build_graph)?;
 
     // The output is a multi-line Ninja build script (as a String)
     // Ensure the output is deterministic
@@ -190,7 +184,8 @@ fn simple_manifest_ninja_snapshot() {
         .bind(|| {
             assert_snapshot!("simple_manifest_ninja", ninja_file);
         });
-}
+    Ok(())
+# }
 ```
 
 The match explicitly handles the `Result` from `generate` so any formatting or
@@ -272,7 +267,7 @@ accept these new snapshots:
 - As an alternative, when confident in the outputs, run `cargo insta accept
   --all` to accept all changes in one go.
 
-Once accepted, re-run `cargo test` – it should pass because the recorded
+Once accepted, re-run `cargo test` - it should pass because the recorded
 snapshots now match the output. Commit the new/updated `.snap` files to version
 control. **Always include the snapshot files** so that CI can validate against
 them.
@@ -344,7 +339,7 @@ jobs:
   default `auto` mode already treats CI specially (it will not auto-accept in
   CI), but setting `no` is an explicit safeguard.
 
-- Install `cargo-insta` mainly for completeness – running `cargo test` does not
+- Install `cargo-insta` mainly for completeness - running `cargo test` does not
   strictly require the CLI tool, but its presence enables `cargo insta`
   subcommands in CI if needed (for example, to print a summary or ensure no
   unused snapshots with `cargo insta test --unreferenced=reject`).
@@ -361,7 +356,7 @@ tests and either pass or fail:
   output), the CI job will not succeed. Developers should pull the changes
   locally, run `cargo insta review`, accept the new snapshot if it is intended,
   and commit the updated snapshot file. **Do not automatically accept snapshots
-  in CI** – reviewing changes is essential to catch unintended alterations.
+  in CI** - reviewing changes is essential to catch unintended alterations.
 
 The CI process can be enhanced to make snapshot reviews easier:
 
@@ -385,7 +380,7 @@ Ninja snapshot tests then verify that the IR-to-Ninja translation is correct.
 Both sets of tests use deterministic outputs to ensure consistent, meaningful
 snapshots.
 
-With the `insta` crate, adding new test cases is straightforward – simply
+With the `insta` crate, adding new test cases is straightforward - simply
 create a manifest (or multiple variants) and assert that the IR or Ninja output
 matches the snapshot. The snapshot files serve as living documentation of the
 expected build graph and build script for given scenarios. Integrated into
@@ -395,11 +390,9 @@ prompting careful review.
 
 This structured snapshot testing approach enables confident evolution of the
 Netsuke project while preserving the correctness of its core compilation
-pipeline.
+pipeline. These guidelines draw on the Netsuke design roadmap[^1] and the insta
+crate documentation.[^2]
 
-**Sources:**
-
-- Netsuke Design/Roadmap – separation of IR and Ninja generation
-
-- Insta crate documentation – usage of snapshot assertions and CI integration
-  guidelines
+[^1]: Netsuke Design/Roadmap – separation of IR and Ninja generation.
+[^2]: Insta crate documentation – usage of snapshot assertions and CI
+    integration guidelines.
