@@ -354,7 +354,7 @@ fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
     }
 
     if utf8.parent().is_none() && utf8.file_name().is_none() {
-        return canonicalize_root_path(utf8);
+        return Ok(canonicalize_root_path(utf8));
     }
 
     if utf8.is_relative() {
@@ -370,8 +370,8 @@ fn canonicalize_current_dir() -> io::Result<Utf8PathBuf> {
     convert_path_to_utf8(resolved, Utf8Path::new("."))
 }
 
-fn canonicalize_root_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    Ok(utf8.to_path_buf())
+fn canonicalize_root_path(utf8: &Utf8Path) -> Utf8PathBuf {
+    utf8.to_path_buf()
 }
 
 fn canonicalize_relative_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
