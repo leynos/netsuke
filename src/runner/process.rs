@@ -420,18 +420,33 @@ mod tests {
     }
 
     #[test]
-    fn create_temp_ninja_file_persists_contents() {
-        use std::io::Read;
+    fn create_temp_ninja_file_supports_reopen() {
+        use std::io::{Read, Seek, SeekFrom};
 
         let content = NinjaContent::new(String::from("rule cc"));
         let file = create_temp_ninja_file(&content).expect("create temp file");
+
         let mut reopened = file.reopen().expect("reopen temp file");
         let mut written = String::new();
         reopened
             .read_to_string(&mut written)
-            .expect("read temp file");
+            .expect("read reopened temp file");
         assert_eq!(written, content.as_str());
+
+        // Metadata queries must succeed while the original handle is alive so
+        // Windows-style sharing semantics remain intact.
+        let metadata = std::fs::metadata(file.path()).expect("query temp file metadata");
+        assert_eq!(metadata.len(), content.as_str().len() as u64);
         assert!(file.path().to_string_lossy().ends_with(".ninja"));
+
+        reopened
+            .seek(SeekFrom::Start(0))
+            .expect("rewind reopened temp file");
+        written.clear();
+        reopened
+            .read_to_string(&mut written)
+            .expect("re-read reopened temp file");
+        assert_eq!(written, content.as_str());
     }
 
     #[test]
