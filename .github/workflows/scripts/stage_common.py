@@ -87,6 +87,8 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
     artifact_dir = dist_dir / config.artifact_dir_name
     if artifact_dir.exists():
+        # Previous runs may leave artefacts behind; start from a clean slate so
+        # releases never mix binaries or manuals from different builds.
         shutil.rmtree(artifact_dir)
     artifact_dir.mkdir(parents=True)
 
