@@ -139,12 +139,19 @@ pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
 /// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
 /// ```
 pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
-    let tmp = Builder::new()
+    let mut tmp = Builder::new()
         .prefix("netsuke.")
         .suffix(".ninja")
         .tempfile()
         .context("create temp file")?;
-    write_ninja_file(tmp.path(), content)?;
+    tmp.as_file_mut()
+        .write_all(content.as_str().as_bytes())
+        .context("write temp Ninja file")?;
+    tmp.as_file_mut().flush().context("flush temp Ninja file")?;
+    tmp.as_file_mut()
+        .sync_all()
+        .context("sync temp Ninja file")?;
+    info!("Generated temporary Ninja file at {}", tmp.path().display());
     Ok(tmp)
 }
 
@@ -243,26 +250,12 @@ pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
 }
 
-/// Invoke the Ninja executable with the provided CLI settings.
-///
-/// The function forwards the job count and working directory to Ninja,
-/// specifies the temporary build file, and streams its standard output and
-/// error back to the user.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn or reports a
-/// non-zero exit status.
-///
-/// # Panics
-///
-/// Panics if the child's output streams cannot be captured.
-pub fn run_ninja(
+fn build_ninja_command(
     program: &Path,
     cli: &Cli,
     build_file: &Path,
     targets: &BuildTargets<'_>,
-) -> io::Result<()> {
+) -> io::Result<Command> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
         let canonical = canonicalize_utf8_path(dir.as_path())?;
@@ -284,9 +277,10 @@ pub fn run_ninja(
     })?;
     cmd.arg("-f").arg(build_file_path.as_std_path());
     cmd.args(targets.as_slice());
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    Ok(cmd)
+}
 
+fn log_ninja_command(cmd: &Command) {
     let program_path = PathBuf::from(cmd.get_program());
     let program_display = Utf8PathBuf::from_path_buf(program_path.clone()).map_or_else(
         |_| program_path.to_string_lossy().into_owned(),
@@ -303,6 +297,33 @@ pub fn run_ninja(
         program_display,
         arg_strings.join(" ")
     );
+}
+
+/// Invoke the Ninja executable with the provided CLI settings.
+///
+/// The function forwards the job count and working directory to Ninja,
+/// specifies the temporary build file, and streams its standard output and
+/// error back to the user.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn or reports a
+/// non-zero exit status.
+///
+/// # Panics
+///
+/// Panics if the child's output streams cannot be captured.
+pub fn run_ninja(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets<'_>,
+) -> io::Result<()> {
+    let mut cmd = build_ninja_command(program, cli, build_file, targets)?;
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    log_ninja_command(&cmd);
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");
