@@ -16,7 +16,7 @@ jobs:
   metadata:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.value }}
+      version: ${{ steps.version.outputs.version }}
       bin_name: ${{ steps.bin_name.outputs.value }}
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
@@ -26,24 +26,7 @@ jobs:
           python-version: '3.11'
       - id: version
         name: Verify tag matches Cargo.toml
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
-          cargo_version="$(
-            python3 -c 'import os, sys, tomllib; path = os.environ.get("CARGO_TOML_PATH", "Cargo.toml"); with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("package") or {}; sys.stdout.write(package.get("version", ""))' || echo ""
-          )"
-          if [ -z "${cargo_version:-}" ]; then
-            echo "::error title=Cargo.toml parse failure::Could not read package.version from ${toml_path}."
-            exit 1
-          fi
-          if [ "$tag" != "$cargo_version" ]; then
-            echo "::error title=Tag/Cargo.toml mismatch::Tag version $tag does not match Cargo.toml version $cargo_version"
-            exit 1
-          fi
-          echo "Release tag $tag matches Cargo.toml version."
-          echo "value=$tag" >> "$GITHUB_OUTPUT"
+        uses: leynos/shared-actions/.github/actions/ensure-cargo-version@5f276592fc649268327339d48a56fac3a23b49f0
       - id: bin_name
         name: Extract binary name from Cargo.toml
         shell: bash
