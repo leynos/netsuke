@@ -119,11 +119,29 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
         run: |
           set -euo pipefail
           uv run .github/workflows/scripts/stage_windows.py
+      - id: package
+        name: Build Windows installer package
+        uses: leynos/shared-actions/.github/actions/windows-package@7bc9b6c15964ef98733aa647b76d402146284ba3
+        env:
+          PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
+          MANUFACTURER: Leynos
+          BINARY_PATH: ${{ replace(steps.stage.outputs.binary_path, '/', '\\') }}
+          MAN_PATH: ${{ replace(steps.stage.outputs.man_path, '/', '\\') }}
+        with:
+          architecture: ${{ matrix.package_arch == 'amd64' && 'x64' || 'arm64' }}
+          version: ${{ needs.metadata.outputs.version }}
+          output-basename: ${{ needs.metadata.outputs.bin_name }}
+          output-directory: dist
+          license-plaintext-path: LICENSE
+          license-rtf-path: dist\\${{ needs.metadata.outputs.bin_name }}-license.rtf
+          upload-artifact: 'false'
       - name: Upload Windows artefacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: ${{ env.REPO_NAME }}-windows-${{ matrix.package_arch }}
-          path: ${{ steps.stage.outputs.artifact_dir }}
+          path: |
+            ${{ steps.stage.outputs.artifact_dir }}
+            ${{ steps.package.outputs.msi-path }}
 
   build-macos:
     needs: metadata
@@ -220,7 +238,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           bin_name="${BIN_NAME:?BIN_NAME must be provided}"
           mapfile -t files < <(
             find dist -type f \
-              \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" \
+              \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" -o -name "*.msi" \
               -o -name "${bin_name}" -o -name "${bin_name}.exe" \
               -o -name "${bin_name}.1" -o -name "*.sha256" \) -print
           )

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="$(env.PRODUCT_NAME) $(var.Version)"
+      Version="$(var.Version)"
+      Manufacturer="$(env.MANUFACTURER)"
+      UpgradeCode="{870359C0-A975-4DCB-992A-AD67D97292DD}"
+      Language="1033"
+      Description="$(env.PRODUCT_NAME) command line interface"
+      InstallScope="perMachine">
+    <MediaTemplate EmbedCab="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(env.LICENSE_RTF_PATH)" />
+    <UI Id="WixUI_Minimal" />
+    <Feature Id="MainApplication" Title="$(env.PRODUCT_NAME)" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="$(env.PRODUCT_NAME)" />
+    </StandardDirectory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents">
+      <Component Id="BinaryComponent" Guid="{8A7AA941-A8C3-4314-8A7D-3195B4806511}" Directory="INSTALLFOLDER">
+        <File Id="Executable" Source="$(env.BINARY_PATH)" KeyPath="yes" />
+      </Component>
+      <Component Id="ManualComponent" Guid="{EFF49296-93FA-482D-802F-12D8333309A9}" Directory="INSTALLFOLDER">
+        <File Id="Manual" Source="$(env.MAN_PATH)" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>
