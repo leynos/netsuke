@@ -1,10 +1,9 @@
 //! Process helpers for Ninja file lifecycle, argument redaction, and subprocess I/O.
 //! Internal to `runner`; public API is defined in `runner.rs`.
-use super::{BuildTargets, NINJA_PROGRAM, NinjaContent};
+
+use super::{BuildTargets, NINJA_PROGRAM};
 use crate::cli::Cli;
-use anyhow::{Context, Result as AnyResult, anyhow};
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs as cap_fs};
+use camino::Utf8PathBuf;
 use ninja_env::NINJA_ENV;
 use std::{
     env,
@@ -14,21 +13,22 @@ use std::{
     process::{Child, Command, ExitStatus, Stdio},
     thread,
 };
-use tempfile::{Builder, NamedTempFile};
 use tracing::info;
 
-#[derive(Debug, Clone)]
-pub struct CommandArg(String);
-impl CommandArg {
-    #[must_use]
-    pub fn new(arg: String) -> Self {
-        Self(arg)
-    }
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
+mod file_io;
+mod paths;
+mod redaction;
+
+pub use file_io::*;
+pub use paths::*;
+// Re-export redaction helpers for doctests without leaking unused imports in release builds.
+#[cfg_attr(
+    not(doctest),
+    allow(unused_imports, reason = "retain doctest re-exports")
+)]
+pub use redaction::*;
+
+use redaction::{CommandArg, redact_sensitive_args};
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
@@ -39,198 +39,6 @@ pub mod doc {
         redact_argument, redact_sensitive_args, resolve_ninja_program, resolve_ninja_program_utf8,
         write_ninja_file, write_ninja_file_utf8,
     };
-}
-
-fn is_sensitive_key(key: &str) -> bool {
-    const SENSITIVE_KEYS: [&str; 7] = [
-        "password",
-        "token",
-        "secret",
-        "api_key",
-        "apikey",
-        "auth",
-        "authorization",
-    ];
-    SENSITIVE_KEYS
-        .iter()
-        .any(|candidate| key.eq_ignore_ascii_case(candidate))
-}
-
-/// Check if `arg` contains a sensitive keyword.
-///
-/// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, contains_sensitive_keyword};
-/// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
-/// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
-/// ```
-#[must_use]
-pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
-    arg.as_str()
-        .split_once('=')
-        .is_some_and(|(key, _)| is_sensitive_key(key.trim()))
-}
-
-/// Determine whether the argument should be redacted.
-///
-/// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, is_sensitive_arg};
-/// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
-/// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
-/// ```
-#[must_use]
-pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
-    contains_sensitive_keyword(arg)
-}
-
-/// Redact sensitive information in a single argument.
-///
-/// Sensitive values are replaced with `***REDACTED***`, preserving keys.
-///
-/// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, redact_argument};
-/// let arg = CommandArg::new("token=abc".into());
-/// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
-/// let arg = CommandArg::new("path=/tmp".into());
-/// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
-/// ```
-#[must_use]
-pub fn redact_argument(arg: &CommandArg) -> CommandArg {
-    if is_sensitive_arg(arg) {
-        if let Some((key, _)) = arg.as_str().split_once('=') {
-            let trimmed = key.trim();
-            return CommandArg::new(format!("{trimmed}=***REDACTED***"));
-        }
-        return CommandArg::new(String::from("***REDACTED***"));
-    }
-    arg.clone()
-}
-
-/// Redact sensitive information from all `args`.
-///
-/// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
-/// let args = vec![
-///     CommandArg::new("ninja".into()),
-///     CommandArg::new("token=abc".into()),
-/// ];
-/// let redacted = redact_sensitive_args(&args);
-/// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
-/// ```
-#[must_use]
-pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
-    args.iter().map(redact_argument).collect()
-}
-
-/// Create a temporary Ninja file on disk containing `content`.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be created or written.
-///
-/// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// use netsuke::runner::doc::create_temp_ninja_file;
-/// use netsuke::runner::NinjaContent;
-/// let tmp = create_temp_ninja_file(&NinjaContent::new("".into())).unwrap();
-/// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
-/// ```
-pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
-    let mut tmp = Builder::new()
-        .prefix("netsuke.")
-        .suffix(".ninja")
-        .tempfile()
-        .context("create temp file")?;
-    {
-        let handle = tmp.as_file_mut();
-        handle
-            .write_all(content.as_str().as_bytes())
-            .context("write temp ninja file")?;
-        handle.flush().context("flush temp ninja file")?;
-        handle.sync_all().context("sync temp ninja file")?;
-    }
-    info!("Generated temporary Ninja file at {}", tmp.path().display());
-    Ok(tmp)
-}
-
-/// Write `content` to `path` within `dir`.
-///
-/// # Errors
-///
-/// Returns an error if the parent directories cannot be created or the file cannot be written.
-pub fn write_ninja_file_utf8(
-    dir: &cap_fs::Dir,
-    path: &Utf8Path,
-    content: &NinjaContent,
-) -> AnyResult<()> {
-    if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {
-        dir.create_dir_all(parent.as_str())
-            .with_context(|| format!("failed to create parent directory {parent}"))?;
-    }
-    let mut file = dir
-        .create(path.as_str())
-        .with_context(|| format!("failed to create Ninja file at {path}"))?;
-    file.write_all(content.as_str().as_bytes())
-        .with_context(|| format!("failed to write Ninja file to {path}"))?;
-    file.flush()
-        .with_context(|| format!("failed to flush Ninja file at {path}"))?;
-    file.sync_all()
-        .with_context(|| format!("failed to sync Ninja file at {path}"))?;
-    Ok(())
-}
-
-fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathBuf)> {
-    if path.is_relative() {
-        let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())
-            .context("open ambient directory")?;
-        return Ok((dir, path.to_owned()));
-    }
-
-    let mut ancestors = path.ancestors();
-    ancestors.next(); // skip the full path
-    let (base, dir) = ancestors
-        .find_map(|candidate| {
-            cap_fs::Dir::open_ambient_dir(candidate.as_str(), ambient_authority())
-                .ok()
-                .map(|dir| (candidate.to_owned(), dir))
-        })
-        .ok_or_else(|| anyhow!("no existing ancestor for {path}"))?;
-    let relative = path
-        .strip_prefix(&base)
-        .context("derive relative Ninja path")?
-        .to_owned();
-    Ok((dir, relative))
-}
-
-/// Write `content` to `path` and log the file's location.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be written.
-///
-/// # Examples
-/// ```
-/// use std::path::Path;
-/// use netsuke::runner::doc::write_ninja_file;
-/// use netsuke::runner::NinjaContent;
-/// let content = NinjaContent::new("rule cc\n".to_string());
-/// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
-/// ```
-pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
-    let utf8_path =
-        Utf8Path::from_path(path).ok_or_else(|| anyhow!("non-UTF-8 path is not supported"))?;
-    let (dir, relative) = derive_dir_and_relative(utf8_path)?;
-    write_ninja_file_utf8(&dir, &relative, content)?;
-    info!("Generated Ninja file at {utf8_path}");
-    Ok(())
 }
 
 fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
@@ -250,7 +58,6 @@ pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
     resolve_ninja_program_utf8_with(|key| env::var_os(key))
 }
 
-/// Determine which Ninja executable to invoke.
 #[must_use]
 pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
@@ -374,158 +181,11 @@ fn check_exit_status(status: ExitStatus) -> io::Result<()> {
     }
 }
 
-fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
-    let utf8 = Utf8Path::from_path(path).ok_or_else(|| {
-        io::Error::new(
-            ErrorKind::InvalidData,
-            format!("path {} is not valid UTF-8", path.display()),
-        )
-    })?;
-
-    if utf8.as_str().is_empty() || utf8 == Utf8Path::new(".") {
-        return canonicalize_current_dir();
-    }
-
-    if utf8.parent().is_none() && utf8.file_name().is_none() {
-        return Ok(canonicalize_root_path(utf8));
-    }
-
-    if utf8.is_relative() {
-        return canonicalize_relative_path(utf8);
-    }
-
-    canonicalize_absolute_path(utf8)
-}
-
-fn canonicalize_current_dir() -> io::Result<Utf8PathBuf> {
-    let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
-    let resolved = dir.canonicalize(Path::new("."))?;
-    convert_path_to_utf8(resolved, Utf8Path::new("."))
-}
-
-fn canonicalize_root_path(utf8: &Utf8Path) -> Utf8PathBuf {
-    utf8.to_path_buf()
-}
-
-fn canonicalize_relative_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
-    let resolved = dir.canonicalize(utf8.as_std_path())?;
-    convert_path_to_utf8(resolved, utf8)
-}
-
-fn canonicalize_absolute_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    let parent = utf8.parent().unwrap_or_else(|| Utf8Path::new("/"));
-    let handle = cap_fs::Dir::open_ambient_dir(parent.as_std_path(), ambient_authority())?;
-    let relative = utf8.strip_prefix(parent).unwrap_or(utf8);
-    let resolved = handle.canonicalize(relative.as_std_path())?;
-    let canonical = convert_path_to_utf8(resolved, relative)?;
-    if canonical.is_absolute() {
-        Ok(canonical)
-    } else {
-        let mut absolute = parent.to_path_buf();
-        absolute.push(&canonical);
-        Ok(absolute)
-    }
-}
-
-fn convert_path_to_utf8(buf: PathBuf, reference: &Utf8Path) -> io::Result<Utf8PathBuf> {
-    Utf8PathBuf::from_path_buf(buf).map_err(|_| {
-        io::Error::new(
-            ErrorKind::InvalidData,
-            format!("canonical path for {reference} is not valid UTF-8"),
-        )
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn contains_sensitive_keyword_only_flags_known_keys() {
-        let token = CommandArg::new(String::from("token=abc"));
-        assert!(contains_sensitive_keyword(&token));
-
-        let positional = CommandArg::new(String::from("secrets.yml"));
-        assert!(!contains_sensitive_keyword(&positional));
-
-        let path_arg = CommandArg::new(String::from("path=/tmp/secrets.yml"));
-        assert!(!contains_sensitive_keyword(&path_arg));
-
-        let spaced = CommandArg::new(String::from("  PASSWORD = value "));
-        assert!(contains_sensitive_keyword(&spaced));
-    }
-
-    #[test]
-    fn redact_argument_preserves_non_sensitive_pairs() {
-        let redacted = redact_argument(&CommandArg::new(String::from("auth = token123")));
-        assert_eq!(redacted.as_str(), "auth=***REDACTED***");
-
-        let untouched = redact_argument(&CommandArg::new(String::from("path=/var/secrets")));
-        assert_eq!(untouched.as_str(), "path=/var/secrets");
-
-        let positional = redact_argument(&CommandArg::new(String::from("secret")));
-        assert_eq!(positional.as_str(), "secret");
-    }
-
-    #[test]
-    fn create_temp_ninja_file_supports_reopen() {
-        use std::io::{Read, Seek, SeekFrom};
-
-        let content = NinjaContent::new(String::from("rule cc"));
-        let file = create_temp_ninja_file(&content).expect("create temp file");
-
-        let mut reopened = file.reopen().expect("reopen temp file");
-        let mut written = String::new();
-        reopened
-            .read_to_string(&mut written)
-            .expect("read reopened temp file");
-        assert_eq!(written, content.as_str());
-
-        // Metadata queries must succeed while the original handle is alive so
-        // Windows-style sharing semantics remain intact.
-        let metadata = std::fs::metadata(file.path()).expect("query temp file metadata");
-        assert_eq!(metadata.len(), content.as_str().len() as u64);
-        assert!(file.path().to_string_lossy().ends_with(".ninja"));
-
-        reopened
-            .seek(SeekFrom::Start(0))
-            .expect("rewind reopened temp file");
-        written.clear();
-        reopened
-            .read_to_string(&mut written)
-            .expect("re-read reopened temp file");
-        assert_eq!(written, content.as_str());
-    }
-
-    #[test]
-    fn write_ninja_file_utf8_creates_parent_directories() {
-        let temp = tempfile::tempdir().expect("create temp dir");
-        let dir =
-            cap_fs::Dir::open_ambient_dir(temp.path(), ambient_authority()).expect("open temp dir");
-        let nested = Utf8PathBuf::from("nested/build.ninja");
-        let content = NinjaContent::new(String::from("build all: phony"));
-
-        write_ninja_file_utf8(&dir, &nested, &content).expect("write ninja file");
-
-        let nested_path = temp.path().join("nested").join("build.ninja");
-        let written = std::fs::read_to_string(&nested_path).expect("read nested file");
-        assert_eq!(written, content.as_str());
-        assert!(nested_path.parent().expect("parent path").exists());
-    }
-
-    #[test]
-    fn write_ninja_file_handles_absolute_paths() {
-        let temp = tempfile::tempdir().expect("create temp dir");
-        let nested = temp.path().join("nested").join("build.ninja");
-        let content = NinjaContent::new(String::from("build all: phony"));
-
-        write_ninja_file(&nested, &content).expect("write ninja file");
-
-        let written = std::fs::read_to_string(&nested).expect("read nested file");
-        assert_eq!(written, content.as_str());
-        assert!(nested.parent().expect("parent path").exists());
-    }
+    use camino::Utf8PathBuf;
+    use std::ffi::OsString;
 
     #[test]
     fn resolve_ninja_program_utf8_prefers_env_override() {
