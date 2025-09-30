@@ -114,7 +114,8 @@ pub fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// Redact sensitive information from all `args`.
 ///
 /// # Examples
-/// ```ignore
+/// ```
+/// # #[cfg(doctest)]
 /// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
 /// let args = vec![
 ///     CommandArg::new("ninja".into()),
@@ -148,13 +149,14 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
         .suffix(".ninja")
         .tempfile()
         .context("create temp file")?;
-    tmp.as_file_mut()
-        .write_all(content.as_str().as_bytes())
-        .context("write temp Ninja file")?;
-    tmp.as_file_mut().flush().context("flush temp Ninja file")?;
-    tmp.as_file_mut()
-        .sync_all()
-        .context("sync temp Ninja file")?;
+    {
+        let handle = tmp.as_file_mut();
+        handle
+            .write_all(content.as_str().as_bytes())
+            .context("write temp ninja file")?;
+        handle.flush().context("flush temp ninja file")?;
+        handle.sync_all().context("sync temp ninja file")?;
+    }
     info!("Generated temporary Ninja file at {}", tmp.path().display());
     Ok(tmp)
 }
@@ -215,7 +217,7 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
 /// Returns an error if the file cannot be written.
 ///
 /// # Examples
-/// ```ignore
+/// ```
 /// use std::path::Path;
 /// use netsuke::runner::doc::write_ninja_file;
 /// use netsuke::runner::NinjaContent;
