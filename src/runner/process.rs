@@ -349,36 +349,43 @@ fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
         )
     })?;
 
-    let convert = |buf: PathBuf, reference: &Utf8Path| {
-        Utf8PathBuf::from_path_buf(buf).map_err(|_| {
-            io::Error::new(
-                ErrorKind::InvalidData,
-                format!("canonical path for {reference} is not valid UTF-8"),
-            )
-        })
-    };
-
     if utf8.as_str().is_empty() || utf8 == Utf8Path::new(".") {
-        let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
-        let resolved = dir.canonicalize(Path::new("."))?;
-        return convert(resolved, Utf8Path::new("."));
+        return canonicalize_current_dir();
     }
 
     if utf8.parent().is_none() && utf8.file_name().is_none() {
-        return Ok(utf8.to_path_buf());
+        return canonicalize_root_path(utf8);
     }
 
     if utf8.is_relative() {
-        let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
-        let resolved = dir.canonicalize(utf8.as_std_path())?;
-        return convert(resolved, utf8);
+        return canonicalize_relative_path(utf8);
     }
 
+    canonicalize_absolute_path(utf8)
+}
+
+fn canonicalize_current_dir() -> io::Result<Utf8PathBuf> {
+    let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
+    let resolved = dir.canonicalize(Path::new("."))?;
+    convert_path_to_utf8(resolved, Utf8Path::new("."))
+}
+
+fn canonicalize_root_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    Ok(utf8.to_path_buf())
+}
+
+fn canonicalize_relative_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
+    let resolved = dir.canonicalize(utf8.as_std_path())?;
+    convert_path_to_utf8(resolved, utf8)
+}
+
+fn canonicalize_absolute_path(utf8: &Utf8Path) -> io::Result<Utf8PathBuf> {
     let parent = utf8.parent().unwrap_or_else(|| Utf8Path::new("/"));
     let handle = cap_fs::Dir::open_ambient_dir(parent.as_std_path(), ambient_authority())?;
     let relative = utf8.strip_prefix(parent).unwrap_or(utf8);
     let resolved = handle.canonicalize(relative.as_std_path())?;
-    let canonical = convert(resolved, relative)?;
+    let canonical = convert_path_to_utf8(resolved, relative)?;
     if canonical.is_absolute() {
         Ok(canonical)
     } else {
@@ -386,6 +393,15 @@ fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
         absolute.push(&canonical);
         Ok(absolute)
     }
+}
+
+fn convert_path_to_utf8(buf: PathBuf, reference: &Utf8Path) -> io::Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(buf).map_err(|_| {
+        io::Error::new(
+            ErrorKind::InvalidData,
+            format!("canonical path for {reference} is not valid UTF-8"),
+        )
+    })
 }
 
 #[cfg(test)]
