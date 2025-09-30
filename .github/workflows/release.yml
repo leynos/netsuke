@@ -132,11 +132,11 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
         include:
           - target: x86_64-apple-darwin
             runner: macos-13
-            archive_suffix: macos-x86_64
+            artifact_suffix: macos-x86_64
             package_arch: x86_64
           - target: aarch64-apple-darwin
             runner: macos-14
-            archive_suffix: macos-arm64
+            artifact_suffix: macos-arm64
             package_arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
@@ -167,26 +167,30 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
         uses: leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
-          identifier: com.leynos.netsuke
+          identifier: com.leynos.${{ needs.metadata.outputs.bin_name }}
           binary: ${{ steps.stage.outputs.binary_path }}
           manpage: ${{ steps.stage.outputs.man_path }}
           license-file: LICENSE
           version: ${{ needs.metadata.outputs.version }}
       - name: Stamp architecture into package name
         shell: bash
+        env:
+          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+          ARCHIVE_SUFFIX: ${{ matrix.artifact_suffix }}
+          PKG_PATH: ${{ steps.pkg.outputs.pkg-path }}
         run: |
           set -euo pipefail
-          pkg="${{ steps.pkg.outputs.pkg-path }}"
-          dest="dist/${{ needs.metadata.outputs.bin_name }}-${{ needs.metadata.outputs.version }}-${{ matrix.archive_suffix }}.pkg"
+          dest="dist/${BIN_NAME}-${VERSION}-${ARCHIVE_SUFFIX}.pkg"
           mkdir -p "$(dirname "$dest")"
-          mv "$pkg" "$dest"
+          mv "$PKG_PATH" "$dest"
       - name: Upload macOS artefacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
-          name: ${{ env.REPO_NAME }}-${{ matrix.archive_suffix }}
+          name: ${{ env.REPO_NAME }}-${{ matrix.artifact_suffix }}
           path: |
             ${{ steps.stage.outputs.artifact_dir }}
-            dist/${{ needs.metadata.outputs.bin_name }}-${{ needs.metadata.outputs.version }}-${{ matrix.archive_suffix }}.pkg
+            dist/${{ needs.metadata.outputs.bin_name }}-${{ needs.metadata.outputs.version }}-${{ matrix.artifact_suffix }}.pkg
 
   release:
     permissions:
