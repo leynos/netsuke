@@ -7,7 +7,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs as cap_fs};
 use ninja_env::NINJA_ENV;
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     io::{self, BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -166,6 +168,10 @@ pub fn write_ninja_file_utf8(
         .with_context(|| format!("failed to create Ninja file at {path}"))?;
     file.write_all(content.as_str().as_bytes())
         .with_context(|| format!("failed to write Ninja file to {path}"))?;
+    file.flush()
+        .with_context(|| format!("failed to flush Ninja file at {path}"))?;
+    file.sync_all()
+        .with_context(|| format!("failed to sync Ninja file at {path}"))?;
     Ok(())
 }
 
@@ -177,16 +183,18 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
     }
 
     let mut ancestors = path.ancestors();
-    ancestors.next();
-    let base = ancestors
-        .find(|candidate| candidate.exists())
+    ancestors.next(); // skip the full path
+    let (base, dir) = ancestors
+        .find_map(|candidate| {
+            cap_fs::Dir::open_ambient_dir(candidate.as_str(), ambient_authority())
+                .ok()
+                .map(|dir| (candidate.to_owned(), dir))
+        })
         .ok_or_else(|| anyhow!("no existing ancestor for {path}"))?;
     let relative = path
-        .strip_prefix(base)
+        .strip_prefix(&base)
         .context("derive relative Ninja path")?
         .to_owned();
-    let dir = cap_fs::Dir::open_ambient_dir(base.as_std_path(), ambient_authority())
-        .with_context(|| format!("open ancestor directory {base}"))?;
     Ok((dir, relative))
 }
 
@@ -213,14 +221,21 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     Ok(())
 }
 
-#[must_use]
-pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
-    env::var_os(NINJA_ENV)
+fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
+where
+    F: FnMut(&str) -> Option<OsString>,
+{
+    read_env(NINJA_ENV)
         .and_then(|value| {
             let path = PathBuf::from(value);
             Utf8PathBuf::from_path_buf(path).ok()
         })
         .unwrap_or_else(|| Utf8PathBuf::from(NINJA_PROGRAM))
+}
+
+#[must_use]
+pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
+    resolve_ninja_program_utf8_with(|key| env::var_os(key))
 }
 
 /// Determine which Ninja executable to invoke.
@@ -344,9 +359,15 @@ mod tests {
 
     #[test]
     fn create_temp_ninja_file_persists_contents() {
+        use std::io::Read;
+
         let content = NinjaContent::new(String::from("rule cc"));
         let file = create_temp_ninja_file(&content).expect("create temp file");
-        let written = std::fs::read_to_string(file.path()).expect("read temp file");
+        let mut reopened = file.reopen().expect("reopen temp file");
+        let mut written = String::new();
+        reopened
+            .read_to_string(&mut written)
+            .expect("read temp file");
         assert_eq!(written, content.as_str());
         assert!(file.path().to_string_lossy().ends_with(".ninja"));
     }
@@ -378,5 +399,28 @@ mod tests {
         let written = std::fs::read_to_string(&nested).expect("read nested file");
         assert_eq!(written, content.as_str());
         assert!(nested.parent().expect("parent path").exists());
+    }
+
+    #[test]
+    fn resolve_ninja_program_utf8_prefers_env_override() {
+        let resolved = resolve_ninja_program_utf8_with(|_| Some(OsString::from("/opt/ninja")));
+        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
+    }
+
+    #[test]
+    fn resolve_ninja_program_utf8_defaults_without_override() {
+        let resolved = resolve_ninja_program_utf8_with(|_| None);
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_ninja_program_utf8_ignores_invalid_utf8_override() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let resolved = resolve_ninja_program_utf8_with(|_| {
+            Some(OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a']))
+        });
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
     }
 }

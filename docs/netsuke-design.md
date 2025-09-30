@@ -1606,6 +1606,11 @@ before spawning Ninja rather than forwarding the flag. Error scenarios are
 validated using clap's `ErrorKind` enumeration in unit tests and via Cucumber
 steps for behavioural coverage.
 
+The Ninja executable may be overridden via the `NINJA_ENV` environment
+variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces
+Netsuke to execute the specified binary while preserving the default when the
+variable is unset or invalid.
+
 ### 8.5 Manual Pages
 
 The CLI definition doubles as the source for user documentation. A build script
