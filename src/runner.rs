@@ -7,6 +7,7 @@
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
+use camino::Utf8PathBuf;
 use std::borrow::Cow;
 use std::path::Path;
 use tempfile::NamedTempFile;
@@ -163,8 +164,8 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli);
-    let manifest = manifest::from_path(&manifest_path)
-        .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
+    let manifest = manifest::from_path(manifest_path.as_std_path())
+        .with_context(|| format!("loading manifest at {manifest_path}"))?;
     if tracing::enabled!(tracing::Level::DEBUG) {
         let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
         debug!("AST:\n{ast_json}");
@@ -181,11 +182,17 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 /// use crate::cli::Cli;
 /// use crate::runner::resolve_manifest_path;
 /// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
-/// assert!(resolve_manifest_path(&cli).ends_with("Netsukefile"));
+/// assert!(resolve_manifest_path(&cli).as_str().ends_with("Netsukefile"));
 /// ```
 #[must_use]
-fn resolve_manifest_path(cli: &Cli) -> std::path::PathBuf {
-    cli.directory
-        .as_ref()
-        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file))
+fn resolve_manifest_path(cli: &Cli) -> Utf8PathBuf {
+    let file =
+        Utf8PathBuf::from_path_buf(cli.file.clone()).expect("manifest path must be valid UTF-8");
+    if let Some(dir) = &cli.directory {
+        let base = Utf8PathBuf::from_path_buf(dir.clone())
+            .expect("manifest directory must be valid UTF-8");
+        base.join(file)
+    } else {
+        file
+    }
 }

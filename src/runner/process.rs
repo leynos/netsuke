@@ -9,8 +9,7 @@ use ninja_env::NINJA_ENV;
 use std::{
     env,
     ffi::OsString,
-    fs,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, ErrorKind, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -266,28 +265,44 @@ pub fn run_ninja(
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
     if let Some(dir) = &cli.directory {
-        let dir = fs::canonicalize(dir)?;
-        cmd.current_dir(dir);
+        let canonical = canonicalize_utf8_path(dir.as_path())?;
+        cmd.current_dir(canonical.as_std_path());
     }
     if let Some(jobs) = cli.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
-    let build_file_path = build_file
-        .canonicalize()
-        .unwrap_or_else(|_| build_file.to_path_buf());
-    cmd.arg("-f").arg(&build_file_path);
+    let build_file_path = canonicalize_utf8_path(build_file).or_else(|_| {
+        Utf8PathBuf::from_path_buf(build_file.to_path_buf()).map_err(|_| {
+            io::Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "build file path {} is not valid UTF-8",
+                    build_file.display()
+                ),
+            )
+        })
+    })?;
+    cmd.arg("-f").arg(build_file_path.as_std_path());
     cmd.args(targets.as_slice());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let program = cmd.get_program().to_string_lossy().into_owned();
+    let program_path = PathBuf::from(cmd.get_program());
+    let program_display = Utf8PathBuf::from_path_buf(program_path.clone()).map_or_else(
+        |_| program_path.to_string_lossy().into_owned(),
+        Utf8PathBuf::into_string,
+    );
     let args: Vec<CommandArg> = cmd
         .get_args()
         .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
         .collect();
     let redacted_args = redact_sensitive_args(&args);
     let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
-    info!("Running command: {} {}", program, arg_strings.join(" "));
+    info!(
+        "Running command: {} {}",
+        program_display,
+        arg_strings.join(" ")
+    );
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("child stdout");
@@ -323,6 +338,53 @@ pub fn run_ninja(
             io::ErrorKind::Other,
             format!("ninja exited with {status}"),
         ))
+    }
+}
+
+fn canonicalize_utf8_path(path: &Path) -> io::Result<Utf8PathBuf> {
+    let utf8 = Utf8Path::from_path(path).ok_or_else(|| {
+        io::Error::new(
+            ErrorKind::InvalidData,
+            format!("path {} is not valid UTF-8", path.display()),
+        )
+    })?;
+
+    let convert = |buf: PathBuf, reference: &Utf8Path| {
+        Utf8PathBuf::from_path_buf(buf).map_err(|_| {
+            io::Error::new(
+                ErrorKind::InvalidData,
+                format!("canonical path for {reference} is not valid UTF-8"),
+            )
+        })
+    };
+
+    if utf8.as_str().is_empty() || utf8 == Utf8Path::new(".") {
+        let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
+        let resolved = dir.canonicalize(Path::new("."))?;
+        return convert(resolved, Utf8Path::new("."));
+    }
+
+    if utf8.parent().is_none() && utf8.file_name().is_none() {
+        return Ok(utf8.to_path_buf());
+    }
+
+    if utf8.is_relative() {
+        let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())?;
+        let resolved = dir.canonicalize(utf8.as_std_path())?;
+        return convert(resolved, utf8);
+    }
+
+    let parent = utf8.parent().unwrap_or_else(|| Utf8Path::new("/"));
+    let handle = cap_fs::Dir::open_ambient_dir(parent.as_std_path(), ambient_authority())?;
+    let relative = utf8.strip_prefix(parent).unwrap_or(utf8);
+    let resolved = handle.canonicalize(relative.as_std_path())?;
+    let canonical = convert(resolved, relative)?;
+    if canonical.is_absolute() {
+        Ok(canonical)
+    } else {
+        let mut absolute = parent.to_path_buf();
+        absolute.push(&canonical);
+        Ok(absolute)
     }
 }
 
