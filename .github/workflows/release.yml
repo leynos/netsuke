@@ -206,14 +206,14 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
             dist/${{ needs.metadata.outputs.bin_name }}-${{ needs.metadata.outputs.version }}-${{ matrix.archive_suffix }}.pkg
 
   release:
+    permissions:
+      contents: write
     needs:
       - metadata
       - build-linux
       - build-windows
       - build-macos
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Ensure release exists (draft)
