@@ -126,7 +126,7 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
           BINARY_PATH: ${{ replace(steps.stage.outputs.binary_path, '/', '\\') }}
-          LICENSE_RTF_PATH: ${{ format('dist\\{0}-license.rtf', needs.metadata.outputs.bin_name) }}
+          LICENSE_RTF_PATH: ${{ replace(format('dist/{0}-license.rtf', needs.metadata.outputs.bin_name), '/', '\\') }}
         with:
           architecture: ${{ matrix.package_arch == 'amd64' && 'x64' || 'arm64' }}
           version: ${{ needs.metadata.outputs.version }}
