@@ -27,9 +27,6 @@
       <Component Id="BinaryComponent" Guid="{8A7AA941-A8C3-4314-8A7D-3195B4806511}" Directory="INSTALLFOLDER">
         <File Id="Executable" Source="$(env.BINARY_PATH)" KeyPath="yes" />
       </Component>
-      <Component Id="ManualComponent" Guid="{EFF49296-93FA-482D-802F-12D8333309A9}" Directory="INSTALLFOLDER">
-        <File Id="Manual" Source="$(env.MAN_PATH)" />
-      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>
