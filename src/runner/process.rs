@@ -1,115 +1,116 @@
-use super::BuildTargets;
+//! Process helpers for Ninja file lifecycle, argument redaction, and subprocess I/O.
+//! Internal to `runner`; public API is defined in `runner.rs`.
+
+use super::{BuildTargets, NINJA_PROGRAM};
 use crate::cli::Cli;
+use camino::Utf8PathBuf;
+use ninja_env::NINJA_ENV;
 use std::{
-    fs,
-    io::{self, BufRead, BufReader, Write},
-    path::Path,
-    process::{Command, Stdio},
+    env,
+    ffi::OsString,
+    io::{self, BufRead, BufReader, ErrorKind, Write},
+    path::{Path, PathBuf},
+    process::{Child, Command, ExitStatus, Stdio},
     thread,
 };
 use tracing::info;
 
-#[derive(Debug, Clone)]
-pub struct CommandArg(String);
-impl CommandArg {
-    #[must_use]
-    pub fn new(arg: String) -> Self {
-        Self(arg)
-    }
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
+mod file_io;
+mod paths;
+mod redaction;
+
+pub use file_io::*;
+pub use paths::*;
+// Re-export redaction helpers for doctests without leaking unused imports in release builds.
+#[cfg_attr(
+    not(doctest),
+    allow(unused_imports, reason = "retain doctest re-exports")
+)]
+pub use redaction::*;
+
+use redaction::{CommandArg, redact_sensitive_args};
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
-#[doc(hidden)]
+#[cfg(doctest)]
 pub mod doc {
-    pub use super::CommandArg;
-
-    #[must_use]
-    pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
-        super::contains_sensitive_keyword(arg)
-    }
-    #[must_use]
-    pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
-        super::is_sensitive_arg(arg)
-    }
-    #[must_use]
-    pub fn redact_argument(arg: &CommandArg) -> CommandArg {
-        super::redact_argument(arg)
-    }
-    #[must_use]
-    pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
-        super::redact_sensitive_args(args)
-    }
+    pub use super::{
+        CommandArg, contains_sensitive_keyword, create_temp_ninja_file, is_sensitive_arg,
+        redact_argument, redact_sensitive_args, resolve_ninja_program, resolve_ninja_program_utf8,
+        write_ninja_file, write_ninja_file_utf8,
+    };
 }
 
-/// Check if `arg` contains a sensitive keyword.
-///
-/// # Examples
-/// ```
-/// # use netsuke::runner::doc::{CommandArg, contains_sensitive_keyword};
-/// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
-/// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
-/// ```
-pub(crate) fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
-    let lower = arg.as_str().to_lowercase();
-    lower.contains("password") || lower.contains("token") || lower.contains("secret")
+fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
+where
+    F: FnMut(&str) -> Option<OsString>,
+{
+    read_env(NINJA_ENV)
+        .and_then(|value| {
+            let path = PathBuf::from(value);
+            Utf8PathBuf::from_path_buf(path).ok()
+        })
+        .unwrap_or_else(|| Utf8PathBuf::from(NINJA_PROGRAM))
 }
 
-/// Determine whether the argument should be redacted.
-/// Determine whether the argument should be redacted.
-///
-/// # Examples
-/// ```
-/// # use netsuke::runner::doc::{CommandArg, is_sensitive_arg};
-/// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
-/// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
-/// ```
-pub(crate) fn is_sensitive_arg(arg: &CommandArg) -> bool {
-    contains_sensitive_keyword(arg)
+#[must_use]
+pub fn resolve_ninja_program_utf8() -> Utf8PathBuf {
+    resolve_ninja_program_utf8_with(|key| env::var_os(key))
 }
 
-/// Redact sensitive information in a single argument.
-///
-/// Sensitive values are replaced with `***REDACTED***`, preserving keys.
-///
-/// # Examples
-/// ```
-/// # use netsuke::runner::doc::{CommandArg, redact_argument};
-/// let arg = CommandArg::new("token=abc".into());
-/// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
-/// let arg = CommandArg::new("path=/tmp".into());
-/// assert_eq!(redact_argument(&arg).as_str(), "path=/tmp");
-/// ```
-pub(crate) fn redact_argument(arg: &CommandArg) -> CommandArg {
-    if is_sensitive_arg(arg) {
-        let redacted = arg.as_str().split_once('=').map_or_else(
-            || "***REDACTED***".to_string(),
-            |(key, _)| format!("{key}=***REDACTED***"),
-        );
-        CommandArg::new(redacted)
-    } else {
-        arg.clone()
+#[must_use]
+pub fn resolve_ninja_program() -> PathBuf {
+    resolve_ninja_program_utf8().into()
+}
+
+fn configure_ninja_command(
+    cmd: &mut Command,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets<'_>,
+) -> io::Result<()> {
+    if let Some(dir) = &cli.directory {
+        let canonical = canonicalize_utf8_path(dir.as_path())?;
+        cmd.current_dir(canonical.as_std_path());
     }
+    if let Some(jobs) = cli.jobs {
+        cmd.arg("-j").arg(jobs.to_string());
+    }
+    let build_file_path = canonicalize_utf8_path(build_file).or_else(|_| {
+        Utf8PathBuf::from_path_buf(build_file.to_path_buf()).map_err(|_| {
+            io::Error::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "build file path {} is not valid UTF-8",
+                    build_file.display()
+                ),
+            )
+        })
+    })?;
+    cmd.arg("-f").arg(build_file_path.as_std_path());
+    cmd.args(targets.as_slice());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    Ok(())
 }
 
-/// Redact sensitive information from all `args`.
-///
-/// # Examples
-/// ```
-/// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
-/// let args = vec![
-///     CommandArg::new("ninja".into()),
-///     CommandArg::new("token=abc".into()),
-/// ];
-/// let redacted = redact_sensitive_args(&args);
-/// assert_eq!(redacted[1].as_str(), "token=***REDACTED***");
-/// ```
-pub(crate) fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
-    args.iter().map(redact_argument).collect()
+fn log_command_execution(cmd: &Command) {
+    let program_path = PathBuf::from(cmd.get_program());
+    let program_display = Utf8PathBuf::from_path_buf(program_path.clone()).map_or_else(
+        |_| program_path.to_string_lossy().into_owned(),
+        Utf8PathBuf::into_string,
+    );
+    let args: Vec<CommandArg> = cmd
+        .get_args()
+        .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
+        .collect();
+    let redacted_args = redact_sensitive_args(&args);
+    let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
+    info!(
+        "Running command: {} {}",
+        program_display,
+        arg_strings.join(" ")
+    );
 }
 
 /// Invoke the Ninja executable with the provided CLI settings.
@@ -133,31 +134,14 @@ pub fn run_ninja(
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
-    if let Some(dir) = &cli.directory {
-        let dir = fs::canonicalize(dir)?;
-        cmd.current_dir(dir);
-    }
-    if let Some(jobs) = cli.jobs {
-        cmd.arg("-j").arg(jobs.to_string());
-    }
-    let build_file_path = build_file
-        .canonicalize()
-        .unwrap_or_else(|_| build_file.to_path_buf());
-    cmd.arg("-f").arg(&build_file_path);
-    cmd.args(targets.as_slice());
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    configure_ninja_command(&mut cmd, cli, build_file, targets)?;
+    log_command_execution(&cmd);
+    let child = cmd.spawn()?;
+    let status = spawn_and_stream_output(child)?;
+    check_exit_status(status)
+}
 
-    let program = cmd.get_program().to_string_lossy().into_owned();
-    let args: Vec<CommandArg> = cmd
-        .get_args()
-        .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
-        .collect();
-    let redacted_args = redact_sensitive_args(&args);
-    let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
-    info!("Running command: {} {}", program, arg_strings.join(" "));
-
-    let mut child = cmd.spawn()?;
+fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
     let stdout = child.stdout.take().expect("child stdout");
     let stderr = child.stderr.take().expect("child stderr");
 
@@ -179,7 +163,10 @@ pub fn run_ninja(
     let status = child.wait()?;
     let _ = out_handle.join();
     let _ = err_handle.join();
+    Ok(status)
+}
 
+fn check_exit_status(status: ExitStatus) -> io::Result<()> {
     if status.success() {
         Ok(())
     } else {
@@ -191,5 +178,35 @@ pub fn run_ninja(
             io::ErrorKind::Other,
             format!("ninja exited with {status}"),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+    use std::ffi::OsString;
+
+    #[test]
+    fn resolve_ninja_program_utf8_prefers_env_override() {
+        let resolved = resolve_ninja_program_utf8_with(|_| Some(OsString::from("/opt/ninja")));
+        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
+    }
+
+    #[test]
+    fn resolve_ninja_program_utf8_defaults_without_override() {
+        let resolved = resolve_ninja_program_utf8_with(|_| None);
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_ninja_program_utf8_ignores_invalid_utf8_override() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let resolved = resolve_ninja_program_utf8_with(|_| {
+            Some(OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a']))
+        });
+        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
     }
 }

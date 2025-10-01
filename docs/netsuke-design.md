@@ -1594,10 +1594,18 @@ The CLI is implemented using clap's derive API in `src/cli.rs`. Clap's
 `default_value_t` attribute marks `Build` as the default subcommand, so
 invoking `netsuke` with no explicit command still triggers a build. CLI
 execution and dispatch live in `src/runner.rs`, keeping `main.rs` focused on
-parsing. The working directory flag mirrors Ninja's `-C` option but is resolved
-internally; Netsuke changes directory before spawning Ninja rather than
-forwarding the flag. Error scenarios are validated using clap's `ErrorKind`
-enumeration in unit tests and via Cucumber steps for behavioural coverage.
+parsing. Process management, Ninja invocation, argument redaction, and the
+temporary file helpers reside in `src/runner/process.rs`, allowing the runner
+entry point to delegate low-level concerns. The working directory flag mirrors
+Ninja's `-C` option but is resolved internally; Netsuke changes directory
+before spawning Ninja rather than forwarding the flag. Error scenarios are
+validated using clap's `ErrorKind` enumeration in unit tests and via Cucumber
+steps for behavioural coverage.
+
+The Ninja executable may be overridden via the `NINJA_ENV` environment
+variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces
+Netsuke to execute the specified binary while preserving the default when the
+variable is unset or invalid.
 
 ### 8.5 Manual Pages
 

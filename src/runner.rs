@@ -7,11 +7,10 @@
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
-use serde_json;
+use camino::Utf8PathBuf;
 use std::borrow::Cow;
-use std::fs;
-use std::path::{Path, PathBuf};
-use tempfile::{Builder, NamedTempFile};
+use std::path::Path;
+use tempfile::NamedTempFile;
 use tracing::{debug, info};
 
 /// Default Ninja executable to invoke.
@@ -20,7 +19,7 @@ pub const NINJA_PROGRAM: &str = "ninja";
 pub use ninja_env::NINJA_ENV;
 
 mod process;
-#[doc(hidden)]
+#[cfg(doctest)]
 pub use process::doc;
 pub use process::run_ninja;
 
@@ -85,7 +84,7 @@ pub fn run(cli: &Cli) -> Result<()> {
         Commands::Build(args) => handle_build(cli, &args),
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
-            write_ninja_file(&file, &ninja)?;
+            process::write_ninja_file(&file, &ninja)?;
             Ok(())
         }
         Commands::Clean => {
@@ -121,22 +120,18 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     // duration of the Ninja invocation. Borrow the emitted path when provided
     // to avoid unnecessary allocation.
     let build_path: Cow<Path>;
-    let mut tmp_file: Option<NamedTempFile> = None;
+    let _tmp_file_guard: Option<NamedTempFile>;
     if let Some(path) = &args.emit {
-        write_ninja_file(path, &ninja)?;
+        process::write_ninja_file(path, &ninja)?;
         build_path = Cow::Borrowed(path.as_path());
+        _tmp_file_guard = None;
     } else {
-        let tmp = create_temp_ninja_file(&ninja)?;
-        tmp_file = Some(tmp);
-        build_path = Cow::Borrowed(
-            tmp_file
-                .as_ref()
-                .expect("temporary Ninja file should exist")
-                .path(),
-        );
+        let tmp = process::create_temp_ninja_file(&ninja)?;
+        build_path = Cow::Owned(tmp.path().to_path_buf());
+        _tmp_file_guard = Some(tmp);
     }
 
-    let program = resolve_ninja_program();
+    let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
             "running {} with build file {}",
@@ -144,53 +139,6 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
             build_path.display()
         )
     })?;
-    drop(tmp_file);
-    Ok(())
-}
-
-/// Create a temporary Ninja file on disk containing `content`.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be created or written.
-///
-/// # Examples
-/// ```ignore
-/// use netsuke::runner::{create_temp_ninja_file, NinjaContent};
-/// let tmp = create_temp_ninja_file(&NinjaContent::new("".into())).unwrap();
-/// assert!(tmp.path().to_string_lossy().ends_with(".ninja"));
-/// ```
-fn create_temp_ninja_file(content: &NinjaContent) -> Result<NamedTempFile> {
-    let tmp = Builder::new()
-        .prefix("netsuke.")
-        .suffix(".ninja")
-        .tempfile()
-        .context("create temp file")?;
-    write_ninja_file(tmp.path(), content)?;
-    Ok(tmp)
-}
-
-/// Write `content` to `path` and log the file's location.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be written.
-///
-/// # Examples
-/// ```ignore
-/// let content = NinjaContent::new("rule cc\n".to_string());
-/// write_ninja_file(Path::new("out.ninja"), &content).unwrap();
-/// ```
-fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
-    // Ensure the parent directory exists; guard against empty components so we
-    // do not attempt to create the current directory on some platforms.
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create parent directory {}", parent.display()))?;
-    }
-    fs::write(path, content.as_str())
-        .with_context(|| format!("failed to write Ninja file to {}", path.display()))?;
-    info!("Generated Ninja file at {}", path.display());
     Ok(())
 }
 
@@ -216,8 +164,8 @@ fn write_ninja_file(path: &Path, content: &NinjaContent) -> Result<()> {
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli);
-    let manifest = manifest::from_path(&manifest_path)
-        .with_context(|| format!("loading manifest at {}", manifest_path.display()))?;
+    let manifest = manifest::from_path(manifest_path.as_std_path())
+        .with_context(|| format!("loading manifest at {manifest_path}"))?;
     if tracing::enabled!(tracing::Level::DEBUG) {
         let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
         debug!("AST:\n{ast_json}");
@@ -234,17 +182,17 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 /// use crate::cli::Cli;
 /// use crate::runner::resolve_manifest_path;
 /// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
-/// assert!(resolve_manifest_path(&cli).ends_with("Netsukefile"));
+/// assert!(resolve_manifest_path(&cli).as_str().ends_with("Netsukefile"));
 /// ```
 #[must_use]
-fn resolve_manifest_path(cli: &Cli) -> std::path::PathBuf {
-    cli.directory
-        .as_ref()
-        .map_or_else(|| cli.file.clone(), |dir| dir.join(&cli.file))
-}
-
-/// Determine which Ninja executable to invoke.
-#[must_use]
-fn resolve_ninja_program() -> PathBuf {
-    std::env::var_os(NINJA_ENV).map_or_else(|| PathBuf::from(NINJA_PROGRAM), PathBuf::from)
+fn resolve_manifest_path(cli: &Cli) -> Utf8PathBuf {
+    let file =
+        Utf8PathBuf::from_path_buf(cli.file.clone()).expect("manifest path must be valid UTF-8");
+    if let Some(dir) = &cli.directory {
+        let base = Utf8PathBuf::from_path_buf(dir.clone())
+            .expect("manifest directory must be valid UTF-8");
+        base.join(file)
+    } else {
+        file
+    }
 }
