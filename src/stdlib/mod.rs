@@ -5,6 +5,7 @@
 //! following symlinks, while filters expose conveniences like `basename`,
 //! `with_suffix`, `realpath`, and content hashing.
 
+mod collections;
 mod path;
 
 use camino::Utf8Path;
@@ -34,6 +35,7 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 pub fn register(env: &mut Environment<'_>) {
     register_file_tests(env);
     path::register_filters(env);
+    collections::register_filters(env);
 }
 
 fn register_file_tests(env: &mut Environment<'_>) {

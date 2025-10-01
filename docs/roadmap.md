@@ -162,8 +162,8 @@ library, and CLI ergonomics.
   - [x] Implement the path and file filters (basename, dirname, with_suffix,
     realpath, contents, hash, etc.).
 
-  - [ ] Implement the generic collection filters (`uniq`, `flatten`,
-    `group_by`).
+  - [x] Implement the generic collection filters (`uniq`, `flatten`,
+    `group_by`). *(done)*
 
   - [ ] Implement the network and command functions/filters (fetch, shell,
     grep), ensuring shell marks templates as impure to disable caching.
