@@ -133,7 +133,6 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           output-basename: ${{ needs.metadata.outputs.bin_name }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          license-rtf-path: dist\\${{ needs.metadata.outputs.bin_name }}-license.rtf
           upload-artifact: 'false'
       - name: Upload Windows artefacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
