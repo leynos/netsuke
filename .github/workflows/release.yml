@@ -27,7 +27,7 @@ jobs:
   metadata:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.read_version.outputs.version }}
+      version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs.value }}
       should_publish: ${{ steps.publish.outputs.value }}
     steps:
@@ -54,26 +54,12 @@ jobs:
           else
             echo "value=true" >>"$GITHUB_OUTPUT"
           fi
-      - id: read_version
-        name: Read package version from Cargo.toml
-        shell: bash
-        run: |
-          set -euo pipefail
-          manifest_path="${CARGO_TOML_PATH:-Cargo.toml}"
-          version="$(python3 .github/workflows/scripts/read_manifest.py \
-            --manifest-path "$manifest_path" version 2>/tmp/version.err)"
-          if [ -z "$version" ]; then
-            printf '::error title=Version parse failure::Could not read '
-            printf 'package.version from %s.\n' "$manifest_path"
-            cat /tmp/version.err >&2 || true
-            exit 1
-          fi
-          echo "version=$version" >>"$GITHUB_OUTPUT"
       - id: ensure_version
-        if: steps.publish.outputs.value == 'true'
-        name: Verify tag matches Cargo.toml
+        name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@5f276592fc649268327339d48a56fac3a23b49f0
+          leynos/shared-actions/.github/actions/ensure-cargo-version@0ac4b6ec81dbef45594b37bc2afaaa60e30b5b20
+        with:
+          check-tag: ${{ steps.publish.outputs.value == 'true' }}
       - id: bin_name
         name: Extract binary name from Cargo.toml
         shell: bash
@@ -324,10 +310,14 @@ jobs:
             find dist -type f \
               \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" -o -name "*.msi" \
               -o -name "${bin_name}" -o -name "${bin_name}.exe" \
-              -o -name "${bin_name}.1" -o -name "*.sha256" \) -print
+              -o -name "${bin_name}.1" -o -name "*.sha256" \)
+              -print
           )
           if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error title=No artefacts uploaded::No files found in dist/"
+            printf -v message '%s%s' \
+              '::error title=No artefacts uploaded::No files found in ' \
+              'dist/'
+            printf '%s\n' "$message"
             exit 1
           fi
           declare -A seen=()
@@ -341,15 +331,21 @@ jobs:
               asset_name="${dir_name}-${base_name}"
             fi
             if [[ -n "${seen[$asset_name]:-}" ]]; then
-              echo "::error title=Duplicate release asset::Asset name '$asset_name' would be uploaded more than once"
+              printf '%s' '::error title=Duplicate release asset::Asset name '
+              printf '%s\n' "'${asset_name}' would be uploaded more than once"
               exit 1
             fi
             seen[$asset_name]=1
-            gh release upload "${{ github.ref_name }}" "$file#${asset_name}" --clobber \
+            gh release upload "${{ github.ref_name }}" \
+              "$file#${asset_name}" --clobber \
               && uploaded=$((uploaded + 1))
           done
           if [ "$uploaded" -eq 0 ]; then
-            echo "::error title=No artefacts uploaded::No files were published to the release"
+            printf -v message '%s%s%s' \
+              '::error title=No artefacts uploaded::No files were ' \
+              'published to the ' \
+              'release'
+            printf '%s\n' "$message"
             exit 1
           fi
         env:
