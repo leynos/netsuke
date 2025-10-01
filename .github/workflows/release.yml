@@ -65,8 +65,10 @@ jobs:
           name="$(python3 .github/workflows/scripts/read_manifest.py \
             --manifest-path "$manifest_path" name 2>/tmp/name.err)"
           if [ -z "$name" ]; then
-            echo '::error title=Cargo.toml parse failure::Could not read '
-            echo "package.name from ${manifest_path}."
+            message='::error title=Cargo.toml parse failure::Could not read '
+            message+='package.name from '
+            message+="${manifest_path}."
+            echo "$message"
             cat /tmp/name.err >&2 || true
             exit 1
           fi
@@ -310,10 +312,9 @@ jobs:
               -print
           )
           if [ "${#files[@]}" -eq 0 ]; then
-            printf -v message '%s%s' \
-              '::error title=No artefacts uploaded::No files found in ' \
-              'dist/'
-            printf '%s\n' "$message"
+            message='::error title=No artefacts uploaded::No files found in '
+            message+='dist/'
+            echo "$message"
             exit 1
           fi
           declare -A seen=()
@@ -337,11 +338,9 @@ jobs:
               && uploaded=$((uploaded + 1))
           done
           if [ "$uploaded" -eq 0 ]; then
-            printf -v message '%s%s%s' \
-              '::error title=No artefacts uploaded::No files were ' \
-              'published to the ' \
-              'release'
-            printf '%s\n' "$message"
+            message='::error title=No artefacts uploaded::No files were '
+            message+='published to the release'
+            echo "$message"
             exit 1
           fi
         env:
