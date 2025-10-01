@@ -34,8 +34,7 @@ jobs:
           shopt -s nullglob
           mapfile -t files < <(find dist -type f)
           if [ "${#files[@]}" -eq 0 ]; then
-            echo '::error title=Missing artefacts::No files downloaded from'
-            echo 'reusable release workflow'
+            echo '::error title=Missing artefacts::No artefacts downloaded'
             exit 1
           fi
           printf 'Found %s artefact(s) in dist/\n' "${#files[@]}"

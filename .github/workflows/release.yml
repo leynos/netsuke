@@ -46,11 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = 'workflow_call' ]; then
-            if [ "${{ inputs.publish }}" = 'true' ]; then
-              echo "value=true" >>"$GITHUB_OUTPUT"
-            else
-              echo "value=false" >>"$GITHUB_OUTPUT"
-            fi
+            echo "value=${{ inputs.publish }}" >>"$GITHUB_OUTPUT"
           else
             echo "value=true" >>"$GITHUB_OUTPUT"
           fi

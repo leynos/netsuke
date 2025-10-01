@@ -57,8 +57,8 @@ def main() -> int:
     manifest_path = args.manifest_path or os.environ.get(
         "CARGO_TOML_PATH", "Cargo.toml"
     )
-    manifest = read_manifest(Path(manifest_path))
     try:
+        manifest = read_manifest(Path(manifest_path))
         value = get_field(manifest, args.field)
     except (KeyError, FileNotFoundError) as exc:
         print(exc, file=sys.stderr)
