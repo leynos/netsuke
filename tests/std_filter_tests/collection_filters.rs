@@ -139,27 +139,27 @@ fn group_by_supports_non_string_keys() {
 }
 
 #[rstest]
-#[case("''", "non-empty attribute", "group_by should reject empty attribute")]
+#[case("", "non-empty attribute", "group_by should reject empty attribute")]
 #[case(
-    "'missing'",
+    "missing",
     "could not resolve",
     "group_by should reject missing attribute"
 )]
 fn group_by_errors_for_invalid_attributes(
     #[case] attribute: &str,
-    #[case] expected_error_text: &str,
-    #[case] error_description: &str,
+    #[case] expected_fragment: &str,
+    #[case] description: &str,
 ) {
     let env = stdlib_env();
-    let template = format!("{{{{ values | group_by({attribute}) }}}}");
+    let template = format!("{{{{ values | group_by('{attribute}') }}}}");
     let result = env.render_str(
         &template,
         context!(values => vec![Item { class: "a", name: "alpha" }]),
     );
-    let err = result.expect_err(error_description);
+    let err = result.expect_err(description);
     assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     assert!(
-        err.to_string().contains(expected_error_text),
-        "error should contain '{expected_error_text}': {err}",
+        err.to_string().contains(expected_fragment),
+        "error should contain fragment `{expected_fragment}` but was: {err}",
     );
 }

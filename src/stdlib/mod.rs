@@ -1,9 +1,12 @@
-//! File-system helpers for `MiniJinja` templates.
+//! Standard library registration for `MiniJinja` templates.
 //!
-//! Registers platform-aware file tests and a suite of path and file filters.
-//! Tests such as `dir`, `file`, and `symlink` inspect metadata without
-//! following symlinks, while filters expose conveniences like `basename`,
-//! `with_suffix`, `realpath`, and content hashing.
+//! The module wires the platform-aware file tests, the path manipulation
+//! filters, and the collection filters into a single entrypoint so template
+//! authors can rely on consistent behaviour across projects. Tests such as
+//! `dir`, `file`, and `symlink` inspect metadata without following symlinks,
+//! while filters expose conveniences like `basename`, `with_suffix`,
+//! `realpath`, content hashing, and collection utilities including
+//! `flatten`, `group_by`, and `uniq`.
 
 mod collections;
 mod path;
