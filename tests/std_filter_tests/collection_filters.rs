@@ -1,3 +1,9 @@
+//! Behavioural coverage for the `MiniJinja` collection filters exposed by the
+//! Netsuke stdlib.
+//!
+//! These tests exercise the filters end-to-end through a configured template
+//! environment to ensure we keep parity between unit expectations and rendered
+//! output, especially across error handling scenarios.
 use minijinja::{ErrorKind, context, value::Value};
 use rstest::rstest;
 use serde::Serialize;
