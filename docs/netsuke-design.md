@@ -1638,7 +1638,17 @@ wrapper `.github/workflows/scripts/stage_windows.py`, which delegates to
 `.github/workflows/scripts/stage_common.py`. The helper consumes Cyclopts
 parameters for the build metadata, resolves GitHub-provided environment
 variables for workspace details, mirrors the man page, and writes SHA-256 sums
-ready for publishing while enforcing a Windows-specific binary suffix.
+ready for publishing while enforcing a Windows-specific binary suffix. The
+staged artefacts feed a WiX v4 authoring template stored in
+`installer/Package.wxs`; the workflow invokes the shared
+`windows-package@7bc9b6c15964ef98733aa647b76d402146284ba3` composite to convert
+the repository licence into RTF, embed the binary, and output a signed MSI
+installer alongside the staged directory. The installer uses WiX v4 syntax,
+installs per-machine, and presents the minimal UI appropriate for a CLI tool.
+Windows does not modify the PATH, so users must add the installation directory
+manually if they want global command resolution. The Unix manual page remains
+in the staged artefacts for parity with the other platforms but is not bundled
+into the installer to avoid shipping an inaccessible help format.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. They invoke the uv staging wrapper
