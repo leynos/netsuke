@@ -1,9 +1,20 @@
+---
 name: Release Binary
 
-on:
+'on':
   push:
     tags:
       - 'v*.*.*'
+  workflow_call:
+    inputs:
+      publish:
+        description: >-
+          Whether the workflow should publish artefacts to the GitHub release
+          associated with the tag. Defaults to `false` when invoked as a
+          reusable workflow.
+        required: false
+        type: boolean
+        default: false
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
@@ -16,32 +27,52 @@ jobs:
   metadata:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.version.outputs.version }}
+      version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs.value }}
+      should_publish: ${{ steps.publish.outputs.value }}
     steps:
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - uses: >-
+          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        # v4.1.2
       - name: Setup Python 3.11
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        uses: >-
+          actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        # v5
         with:
           python-version: '3.11'
-      - id: version
-        name: Verify tag matches Cargo.toml
-        uses: leynos/shared-actions/.github/actions/ensure-cargo-version@5f276592fc649268327339d48a56fac3a23b49f0
+      - id: publish
+        name: Determine publish mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = 'workflow_call' ]; then
+            echo "value=${{ inputs.publish }}" >>"$GITHUB_OUTPUT"
+          else
+            echo "value=true" >>"$GITHUB_OUTPUT"
+          fi
+      - id: ensure_version
+        name: Read package version from Cargo.toml
+        uses: >-
+          leynos/shared-actions/.github/actions/ensure-cargo-version@0ac4b6ec81dbef45594b37bc2afaaa60e30b5b20
+        with:
+          check-tag: ${{ steps.publish.outputs.value == 'true' }}
       - id: bin_name
         name: Extract binary name from Cargo.toml
         shell: bash
         run: |
           set -euo pipefail
-          toml_path="${CARGO_TOML_PATH:-Cargo.toml}"
-          name="$(
-            python3 -c 'import os, sys, tomllib; path = os.environ.get("CARGO_TOML_PATH", "Cargo.toml");
-with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("package") or {}; sys.stdout.write(package.get("name", ""))' || echo ""
-          )"
+          manifest_path="${CARGO_TOML_PATH:-Cargo.toml}"
+          name="$(python3 .github/workflows/scripts/read_manifest.py \
+            --manifest-path "$manifest_path" name 2>/tmp/name.err)"
           if [ -z "$name" ]; then
-            echo "::error title=Cargo.toml parse failure::Could not read package.name from ${toml_path}."
+            message='::error title=Cargo.toml parse failure::Could not read '
+            message+='package.name from '
+            message+="${manifest_path}."
+            echo "$message"
+            cat /tmp/name.err >&2 || true
             exit 1
           fi
-          echo "value=$name" >> "$GITHUB_OUTPUT"
+          echo "value=$name" >>"$GITHUB_OUTPUT"
 
   build-linux:
     needs: metadata
@@ -56,16 +87,20 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
             artifact: linux-arm64
             package_arch: arm64
     steps:
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - uses: >-
+          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        # v4.1.2
       - name: Build Linux release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: >-
+          leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           version: ${{ needs.metadata.outputs.version }}
           # Package formats are produced by linux-packages below
       - name: Package Linux artefacts with dependencies
-        uses: leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: >-
+          leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           project-dir: .
           package-name: ${{ needs.metadata.outputs.bin_name }}
@@ -73,7 +108,9 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           target: ${{ matrix.target }}
           version: ${{ needs.metadata.outputs.version }}
           formats: deb,rpm
-          man-paths: dist/${{ needs.metadata.outputs.bin_name }}_linux_${{ matrix.package_arch }}/${{ needs.metadata.outputs.bin_name }}.1
+          man-paths: >-
+            dist/${{ needs.metadata.outputs.bin_name }}_linux_${{
+            matrix.package_arch }}/${{ needs.metadata.outputs.bin_name }}.1
           outdir: dist
           deb-depends: ninja-build
           rpm-depends: ninja-build
@@ -81,7 +118,9 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
       - name: Upload Linux artefacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: >-
+          actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
         with:
           name: ${{ env.REPO_NAME }}-${{ matrix.artifact }}
           path: dist
@@ -97,13 +136,18 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           - target: aarch64-pc-windows-msvc
             package_arch: arm64
     steps:
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - uses: >-
+          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        # v4.1.2
       - name: Install uv
-        uses: astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7  # v3.1.2
+        uses: >-
+          astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7
+        # v3.1.2
         with:
           python-version: '3.11'
       - name: Build Windows release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: >-
+          leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -121,7 +165,8 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           uv run .github/workflows/scripts/stage_windows.py
       - id: package
         name: Build Windows installer package
-        uses: leynos/shared-actions/.github/actions/windows-package@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: >-
+          leynos/shared-actions/.github/actions/windows-package@7bc9b6c15964ef98733aa647b76d402146284ba3
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
@@ -135,7 +180,9 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           license-plaintext-path: LICENSE
           upload-artifact: 'false'
       - name: Upload Windows artefacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: >-
+          actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
         with:
           name: ${{ env.REPO_NAME }}-windows-${{ matrix.package_arch }}
           path: |
@@ -157,13 +204,18 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
             package_arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - uses: >-
+          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        # v4.1.2
       - name: Install uv
-        uses: astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7  # v3.1.2
+        uses: >-
+          astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7
+        # v3.1.2
         with:
           python-version: '3.11'
       - name: Build macOS release
-        uses: leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: >-
+          leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -181,7 +233,8 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           uv run .github/workflows/scripts/stage_macos.py
       - id: pkg
         name: Build macOS installer package
-        uses: leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
+        uses: >-
+          leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
           identifier: com.leynos.${{ needs.metadata.outputs.bin_name }}
@@ -202,14 +255,19 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
           mkdir -p "$(dirname "$dest")"
           mv "$PKG_PATH" "$dest"
       - name: Upload macOS artefacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: >-
+          actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
         with:
           name: ${{ env.REPO_NAME }}-${{ matrix.artifact_suffix }}
           path: |
             ${{ steps.stage.outputs.artifact_dir }}
-            dist/${{ needs.metadata.outputs.bin_name }}-${{ needs.metadata.outputs.version }}-${{ matrix.artifact_suffix }}.pkg
+            dist/${{ needs.metadata.outputs.bin_name }}-${{
+              needs.metadata.outputs.version }}-${{
+              matrix.artifact_suffix }}.pkg
 
   release:
+    if: needs.metadata.outputs.should_publish == 'true'
     permissions:
       contents: write
     needs:
@@ -219,17 +277,24 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
       - build-macos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - uses: >-
+          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        # v4.1.2
       - name: Ensure release exists (draft)
         shell: bash
         run: |
           set -euo pipefail
           gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \
-            gh release create "${{ github.ref_name }}" --draft --verify-tag --notes "Automated release for ${{ github.ref_name }}"
+            gh release create "${{ github.ref_name }}" \
+              --draft \
+              --verify-tag \
+              --notes "Automated release for ${{ github.ref_name }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      - uses: >-
+          actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        # v4
         with:
           path: dist
           pattern: ${{ env.REPO_NAME }}-*
@@ -243,10 +308,13 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
             find dist -type f \
               \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" -o -name "*.msi" \
               -o -name "${bin_name}" -o -name "${bin_name}.exe" \
-              -o -name "${bin_name}.1" -o -name "*.sha256" \) -print
+              -o -name "${bin_name}.1" -o -name "*.sha256" \)
+              -print
           )
           if [ "${#files[@]}" -eq 0 ]; then
-            echo "::error title=No artefacts uploaded::No files found in dist/"
+            message='::error title=No artefacts uploaded::No files found in '
+            message+='dist/'
+            echo "$message"
             exit 1
           fi
           declare -A seen=()
@@ -260,15 +328,19 @@ with open(path, "rb") as fh: data = tomllib.load(fh); package = data.get("packag
               asset_name="${dir_name}-${base_name}"
             fi
             if [[ -n "${seen[$asset_name]:-}" ]]; then
-              echo "::error title=Duplicate release asset::Asset name '$asset_name' would be uploaded more than once"
+              printf '::error title=Duplicate release asset::Asset name '\''%s'\'' would be uploaded more than once\n' \
+                "${asset_name}"
               exit 1
             fi
             seen[$asset_name]=1
-            gh release upload "${{ github.ref_name }}" "$file#${asset_name}" --clobber \
-              && uploaded=$((uploaded+1))
+            gh release upload "${{ github.ref_name }}" \
+              "$file#${asset_name}" --clobber \
+              && uploaded=$((uploaded + 1))
           done
           if [ "$uploaded" -eq 0 ]; then
-            echo "::error title=No artefacts uploaded::No files were published to the release"
+            message='::error title=No artefacts uploaded::No files were '
+            message+='published to the release'
+            echo "$message"
             exit 1
           fi
         env:
