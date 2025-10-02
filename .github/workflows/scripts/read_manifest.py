@@ -60,7 +60,7 @@ def main() -> int:
     try:
         manifest = read_manifest(Path(manifest_path))
         value = get_field(manifest, args.field)
-    except (KeyError, FileNotFoundError) as exc:
+    except (KeyError, FileNotFoundError, tomllib.TOMLDecodeError) as exc:
         print(exc, file=sys.stderr)
         return 1
     print(value, end="")
