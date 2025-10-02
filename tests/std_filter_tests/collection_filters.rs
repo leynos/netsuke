@@ -4,21 +4,6 @@ use serde::Serialize;
 
 use super::support::{register_template, stdlib_env};
 
-fn expect_group_by_error(attribute: &str, expected_fragment: &str) {
-    let env = stdlib_env();
-    let template = format!("{{{{ values | group_by('{attribute}') }}}}");
-    let result = env.render_str(
-        &template,
-        context!(values => vec![Item { class: "a", name: "alpha" }]),
-    );
-    let err = result.expect_err("group_by should reject invalid attribute");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains(expected_fragment),
-        "error should contain fragment `{expected_fragment}` but was: {err}",
-    );
-}
-
 #[rstest]
 fn uniq_removes_duplicate_strings() {
     let mut env = stdlib_env();
@@ -148,11 +133,27 @@ fn group_by_supports_non_string_keys() {
 }
 
 #[rstest]
-fn group_by_errors_when_attribute_missing() {
-    expect_group_by_error("missing", "could not resolve");
-}
-
-#[rstest]
-fn group_by_errors_for_empty_attribute() {
-    expect_group_by_error("", "non-empty attribute");
+#[case("''", "non-empty attribute", "group_by should reject empty attribute")]
+#[case(
+    "'missing'",
+    "could not resolve",
+    "group_by should reject missing attribute"
+)]
+fn group_by_errors_for_invalid_attributes(
+    #[case] attribute: &str,
+    #[case] expected_error_text: &str,
+    #[case] error_description: &str,
+) {
+    let env = stdlib_env();
+    let template = format!("{{{{ values | group_by({attribute}) }}}}");
+    let result = env.render_str(
+        &template,
+        context!(values => vec![Item { class: "a", name: "alpha" }]),
+    );
+    let err = result.expect_err(error_description);
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains(expected_error_text),
+        "error should contain '{expected_error_text}': {err}",
+    );
 }
