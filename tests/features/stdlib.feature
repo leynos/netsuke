@@ -52,12 +52,20 @@ Feature: Template stdlib filters
     When I render "{{ ['a', 'a', 'b'] | uniq | join(',') }}" with stdlib path "file"
     Then the stdlib output is "a,b"
 
-  Scenario: flatten merges nested lists
-    When I render "{{ [['a'], ['b', 'c']] | flatten | join(',') }}" with stdlib path "file"
+  Scenario: flatten merges deeply nested lists
+    When I render "{{ [[['a']], [['b']], [['c']]] | flatten | join(',') }}" with stdlib path "file"
     Then the stdlib output is "a,b,c"
+
+  Scenario: flatten reports errors for scalar items
+    When I render "{{ [['a'], 'b'] | flatten }}" with stdlib path "file"
+    Then the stdlib error contains "flatten expected sequence items"
 
   Scenario: group_by clusters items by attribute
     When I render "{{ ([{'name': 'one', 'kind': 'tool'}, {'name': 'two', 'kind': 'tool'}, {'name': 'three', 'kind': 'material'}] | group_by('kind')).tool | length }}" with stdlib path "file"
+    Then the stdlib output is "2"
+
+  Scenario: group_by clusters items with non-string keys
+    When I render "{{ ([{'kind': 1}, {'kind': 1}, {'kind': 2}] | group_by('kind'))[1] | length }}" with stdlib path "file"
     Then the stdlib output is "2"
 
   Scenario: group_by reports errors for missing attributes

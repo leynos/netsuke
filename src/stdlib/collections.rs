@@ -1,4 +1,6 @@
-use indexmap::IndexMap;
+//! Collection filters available in the `MiniJinja` standard library.
+
+use indexmap::{IndexMap, IndexSet};
 use std::sync::Arc;
 
 use minijinja::{
@@ -16,12 +18,24 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
 
 #[derive(Debug)]
 struct GroupedValues {
-    groups: IndexMap<String, Vec<Value>>,
+    groups: IndexMap<Value, Vec<Value>>,
+    string_keys: IndexMap<String, Value>,
 }
 
 impl GroupedValues {
-    fn new(groups: IndexMap<String, Vec<Value>>) -> Self {
-        Self { groups }
+    fn new(groups: IndexMap<Value, Vec<Value>>) -> Self {
+        let mut string_keys = IndexMap::new();
+        for key in groups.keys() {
+            if let Some(label) = key.as_str() {
+                string_keys
+                    .entry(label.to_string())
+                    .or_insert_with(|| key.clone());
+            }
+        }
+        Self {
+            groups,
+            string_keys,
+        }
     }
 }
 
@@ -31,29 +45,36 @@ impl Object for GroupedValues {
     }
 
     fn enumerate(self: &Arc<Self>) -> Enumerator {
-        let keys: Vec<Value> = self.groups.keys().cloned().map(Value::from).collect();
+        let keys: Vec<Value> = self.groups.keys().cloned().collect();
         Enumerator::Values(keys)
     }
 
     fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
-        let name = key.as_str()?;
+        if let Some(name) = key.as_str()
+            && let Some(actual_key) = self.string_keys.get(name)
+        {
+            return self
+                .groups
+                .get(actual_key)
+                .map(|items| Value::from_serialize(items.clone()));
+        }
+
         self.groups
-            .get(name)
+            .get(key)
             .map(|items| Value::from_serialize(items.clone()))
     }
 }
 
 fn uniq_filter(values: &Value) -> Result<Value, Error> {
     let iter = values.try_iter()?;
-    let mut uniques = Vec::new();
+    let mut uniques: IndexSet<Value> = IndexSet::new();
 
     for item in iter {
-        if uniques.iter().all(|existing| existing != &item) {
-            uniques.push(item);
-        }
+        uniques.insert(item);
     }
 
-    Ok(Value::from_serialize(uniques))
+    let items: Vec<_> = uniques.into_iter().collect();
+    Ok(Value::from_serialize(items))
 }
 
 fn flatten_filter(values: &Value) -> Result<Value, Error> {
@@ -63,8 +84,7 @@ fn flatten_filter(values: &Value) -> Result<Value, Error> {
     for item in iter {
         match item.kind() {
             ValueKind::Seq | ValueKind::Iterable => {
-                let nested = item.try_iter()?;
-                flattened.extend(nested);
+                collect_flattened_values(item, &mut flattened)?;
             }
             kind => {
                 return Err(Error::new(
@@ -78,6 +98,21 @@ fn flatten_filter(values: &Value) -> Result<Value, Error> {
     Ok(Value::from_serialize(flattened))
 }
 
+fn collect_flattened_values(value: Value, output: &mut Vec<Value>) -> Result<(), Error> {
+    match value.kind() {
+        ValueKind::Seq | ValueKind::Iterable => {
+            for nested in value.try_iter()? {
+                collect_flattened_values(nested, output)?;
+            }
+            Ok(())
+        }
+        _ => {
+            output.push(value);
+            Ok(())
+        }
+    }
+}
+
 fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
     if attr.trim().is_empty() {
         return Err(Error::new(
@@ -86,16 +121,12 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
         ));
     }
 
-    let mut groups: IndexMap<String, Vec<Value>> = IndexMap::new();
+    let mut groups: IndexMap<Value, Vec<Value>> = IndexMap::new();
     let iter = values.try_iter()?;
 
     for item in iter {
         let key_value = resolve_group_key(&item, attr)?;
-        let fallback = key_value.to_string();
-        let key = key_value
-            .to_str()
-            .map_or_else(|| fallback, |s| s.to_string());
-        groups.entry(key).or_default().push(item);
+        groups.entry(key_value.clone()).or_default().push(item);
     }
 
     Ok(Value::from_object(GroupedValues::new(groups)))
@@ -140,7 +171,7 @@ mod tests {
 
     #[rstest]
     fn uniq_filter_removes_duplicates() {
-        let ctx = context! { values => vec![1, 1, 2, 2, 3] };
+        let ctx = context! { values => vec![1, 1, 2, 2, 3, 1] };
         let result = render_filter("values | uniq", ctx).expect("uniq result");
         let iter = result.try_iter().expect("iter");
         let collected: Vec<_> = iter.map(|value| value.to_string()).collect();
@@ -148,8 +179,8 @@ mod tests {
     }
 
     #[rstest]
-    fn flatten_filter_joins_nested_sequences() {
-        let ctx = context! { values => vec![vec![1, 2], vec![3], Vec::<u8>::new()] };
+    fn flatten_filter_flattens_deeply_nested_sequences() {
+        let ctx = context! { values => vec![vec![vec![1], vec![2]], vec![vec![3]]] };
         let result = render_filter("values | flatten", ctx).expect("flatten result");
         let iter = result.try_iter().expect("iter");
         let collected: Vec<_> = iter.map(|value| value.to_string()).collect();
@@ -157,32 +188,48 @@ mod tests {
     }
 
     #[rstest]
-    fn group_by_filter_clusters_items() {
+    fn flatten_filter_rejects_scalars() {
+        let ctx = context! { values => vec!["a", "b"] };
+        let err = render_filter("values | flatten", ctx).expect_err("flatten error");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    }
+
+    #[rstest]
+    fn group_by_filter_clusters_items_and_preserves_key_types() {
         #[derive(serde::Serialize)]
         struct Item {
-            class: &'static str,
-            value: u8,
+            kind: Value,
+            value: &'static str,
         }
 
         let ctx = context! { values => vec![
-            Item { class: "a", value: 1 },
-            Item { class: "a", value: 2 },
-            Item { class: "b", value: 3 },
+            Item { kind: Value::from(1), value: "one" },
+            Item { kind: Value::from(1), value: "two" },
+            Item { kind: Value::from("label"), value: "three" },
         ]};
-        let result = render_filter("values | group_by('class')", ctx).expect("group_by result");
-        let group_a = result
-            .get_attr("a")
-            .expect("group a")
+        let result = render_filter("values | group_by('kind')", ctx).expect("group_by result");
+
+        let numeric_group = result
+            .get_item(&Value::from(1))
+            .expect("numeric group")
             .try_iter()
             .expect("iter")
             .count();
-        let group_b = result
-            .get_attr("b")
-            .expect("group b")
+        let labelled_group = result
+            .get_attr("label")
+            .expect("labelled group")
             .try_iter()
             .expect("iter")
             .count();
-        assert_eq!(group_a, 2);
-        assert_eq!(group_b, 1);
+
+        assert_eq!(numeric_group, 2);
+        assert_eq!(labelled_group, 1);
+    }
+
+    #[rstest]
+    fn group_by_filter_rejects_empty_attribute() {
+        let ctx = context! { values => vec![context!(kind => "tool")] };
+        let err = render_filter("values | group_by('')", ctx).expect_err("group_by error");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     }
 }

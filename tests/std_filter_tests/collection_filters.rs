@@ -1,4 +1,4 @@
-use minijinja::{ErrorKind, context};
+use minijinja::{ErrorKind, context, value::Value};
 use rstest::rstest;
 use serde::Serialize;
 
@@ -28,12 +28,12 @@ fn uniq_rejects_non_iterables() {
 }
 
 #[rstest]
-fn flatten_merges_nested_lists() {
+fn flatten_flattens_deeply_nested_lists() {
     let mut env = stdlib_env();
     register_template(&mut env, "flatten", "{{ values | flatten | join(',') }}");
     let template = env.get_template("flatten").expect("template");
     let output = template
-        .render(context!(values => vec![vec!["one", "two"], vec!["three"], Vec::<&str>::new()]))
+        .render(context!(values => vec![vec![vec!["one"], vec!["two"]], vec![vec!["three"]]]))
         .expect("render flatten");
     assert_eq!(output, "one,two,three");
 }
@@ -99,11 +99,37 @@ fn group_by_reads_mapping_entries() {
 fn group_by_preserves_insertion_order() {
     let env = stdlib_env();
     let template = "{{ values | group_by('kind') | list | join(',') }}";
-    let values = vec![context!(kind => "second"), context!(kind => "first")];
+    let values = vec![context!(kind => 1), context!(kind => 2)];
     let output = env
         .render_str(template, context!(values => values))
         .expect("render group_by ordering");
-    assert_eq!(output, "second,first");
+    assert_eq!(output, "1,2");
+}
+
+#[rstest]
+fn group_by_supports_non_string_keys() {
+    #[derive(Serialize)]
+    struct Item {
+        kind: Value,
+    }
+
+    let env = stdlib_env();
+    let template = "{{ (values | group_by('kind'))[1] | length }}";
+    let values = vec![
+        Item {
+            kind: Value::from(1),
+        },
+        Item {
+            kind: Value::from(1),
+        },
+        Item {
+            kind: Value::from(2),
+        },
+    ];
+    let output = env
+        .render_str(template, context!(values => values))
+        .expect("render group_by non-string keys");
+    assert_eq!(output, "2");
 }
 
 #[rstest]
