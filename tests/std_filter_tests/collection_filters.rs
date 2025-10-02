@@ -4,6 +4,21 @@ use serde::Serialize;
 
 use super::support::{register_template, stdlib_env};
 
+fn expect_group_by_error(attribute: &str, expected_fragment: &str) {
+    let env = stdlib_env();
+    let template = format!("{{{{ values | group_by('{attribute}') }}}}");
+    let result = env.render_str(
+        &template,
+        context!(values => vec![Item { class: "a", name: "alpha" }]),
+    );
+    let err = result.expect_err("group_by should reject invalid attribute");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains(expected_fragment),
+        "error should contain fragment `{expected_fragment}` but was: {err}",
+    );
+}
+
 #[rstest]
 fn uniq_removes_duplicate_strings() {
     let mut env = stdlib_env();
@@ -134,30 +149,10 @@ fn group_by_supports_non_string_keys() {
 
 #[rstest]
 fn group_by_errors_when_attribute_missing() {
-    let env = stdlib_env();
-    let result = env.render_str(
-        "{{ values | group_by('missing') }}",
-        context!(values => vec![Item { class: "a", name: "alpha" }]),
-    );
-    let err = result.expect_err("group_by should reject missing attribute");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("could not resolve"),
-        "error should mention resolution failure: {err}",
-    );
+    expect_group_by_error("missing", "could not resolve");
 }
 
 #[rstest]
 fn group_by_errors_for_empty_attribute() {
-    let env = stdlib_env();
-    let result = env.render_str(
-        "{{ values | group_by('') }}",
-        context!(values => vec![Item { class: "a", name: "alpha" }]),
-    );
-    let err = result.expect_err("group_by should reject empty attribute");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("non-empty attribute"),
-        "error should describe the invalid attribute name: {err}",
-    );
+    expect_group_by_error("", "non-empty attribute");
 }
