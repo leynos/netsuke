@@ -328,8 +328,8 @@ jobs:
               asset_name="${dir_name}-${base_name}"
             fi
             if [[ -n "${seen[$asset_name]:-}" ]]; then
-              printf '%s' '::error title=Duplicate release asset::Asset name '
-              printf '%s\n' "'${asset_name}' would be uploaded more than once"
+              printf '::error title=Duplicate release asset::Asset name '\''%s'\'' would be uploaded more than once\n' \
+                "${asset_name}"
               exit 1
             fi
             seen[$asset_name]=1
