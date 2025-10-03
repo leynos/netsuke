@@ -299,51 +299,11 @@ jobs:
           path: dist
           pattern: ${{ env.REPO_NAME }}-*
       - name: Upload artefacts to release
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          bin_name="${BIN_NAME:?BIN_NAME must be provided}"
-          mapfile -t files < <(
-            find dist -type f \
-              \( -name "*.deb" -o -name "*.rpm" -o -name "*.pkg" -o -name "*.msi" \
-              -o -name "${bin_name}" -o -name "${bin_name}.exe" \
-              -o -name "${bin_name}.1" -o -name "*.sha256" \)
-              -print
-          )
-          if [ "${#files[@]}" -eq 0 ]; then
-            message='::error title=No artefacts uploaded::No files found in '
-            message+='dist/'
-            echo "$message"
-            exit 1
-          fi
-          declare -A seen=()
-          uploaded=0
-          for file in "${files[@]}"; do
-            dir_name="$(basename "$(dirname "$file")")"
-            base_name="$(basename "$file")"
-            if [[ "$base_name" =~ \.(deb|rpm|pkg)$ ]]; then
-              asset_name="$base_name"
-            else
-              asset_name="${dir_name}-${base_name}"
-            fi
-            if [[ -n "${seen[$asset_name]:-}" ]]; then
-              printf '::error title=Duplicate release asset::Asset name '\''%s'\'' would be uploaded more than once\n' \
-                "${asset_name}"
-              exit 1
-            fi
-            seen[$asset_name]=1
-            gh release upload "${{ github.ref_name }}" \
-              "$file#${asset_name}" --clobber \
-              && uploaded=$((uploaded + 1))
-          done
-          if [ "$uploaded" -eq 0 ]; then
-            message='::error title=No artefacts uploaded::No files were '
-            message+='published to the release'
-            echo "$message"
-            exit 1
-          fi
+        uses: ./.github/actions/upload-release-assets
+        with:
+          release-tag: ${{ github.ref_name }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+          dist-dir: dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
