@@ -150,16 +150,21 @@ def read_manifest_tests(
     return ReadManifestTests(module=read_manifest_module, temp_path=tmp_path)
 
 
-def test_get_field_returns_name(read_manifest_module: types.ModuleType) -> None:
-    """It returns the package name from the manifest."""
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    (
+        ("name", "netsuke"),
+        ("version", "1.2.3"),
+    ),
+)
+def test_get_field_returns_value(
+    read_manifest_module: types.ModuleType,
+    field: str,
+    expected: str,
+) -> None:
+    """It returns the requested package metadata from the manifest."""
     manifest = {"package": {"name": "netsuke", "version": "1.2.3"}}
-    assert read_manifest_module.get_field(manifest, "name") == "netsuke"
-
-
-def test_get_field_returns_version(read_manifest_module: types.ModuleType) -> None:
-    """It returns the package version from the manifest."""
-    manifest = {"package": {"name": "netsuke", "version": "1.2.3"}}
-    assert read_manifest_module.get_field(manifest, "version") == "1.2.3"
+    assert read_manifest_module.get_field(manifest, field) == expected
 
 
 def test_get_field_raises_when_missing(read_manifest_module: types.ModuleType) -> None:
