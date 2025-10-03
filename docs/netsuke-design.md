@@ -889,10 +889,24 @@ Implementation notes:
 | Filter                            | Purpose                                      |
 | --------------------------------- | -------------------------------------------- |
 | `uniq`                            | De-duplicate list (preserve order)           |
-| `flatten`                         | One-level flatten of nested lists            |
+| `flatten`                         | Deep flatten of arbitrarily nested lists     |
 | `group_by(attr)`                  | Dict keyed on `attr` of list items           |
 | `zip(other)`                      | Pairwise tuples of two lists                 |
 | `version_compare(other, op='>=')` | SemVer comparison (`'<'`, `'<=', '==', …`)   |
+
+Implementation notes for collection filters:
+
+- `uniq` stores values in an `IndexSet` so duplicates are removed with `O(n)`
+  complexity while preserving the original order according to MiniJinja's
+  equality semantics.
+- `flatten` recurses through nested sequences and iterables; scalars raise an
+  `InvalidOperation` error to avoid silently iterating over strings or other
+  unintended inputs.
+- `group_by` returns an insertion-order-preserving mapping keyed by the
+  original value so lookups via attribute names and bracket syntax remain in
+  sync. Empty attribute names and items without the attribute surface an
+  `InvalidOperation` error so templates fail loudly rather than mis-grouping
+  data.
 
 #### Network & command functions / filters
 

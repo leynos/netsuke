@@ -1,3 +1,5 @@
+#[path = "std_filter_tests/collection_filters.rs"]
+mod collection_filters;
 #[path = "std_filter_tests/hash_filters.rs"]
 mod hash_filters;
 #[path = "std_filter_tests/io_filters.rs"]
