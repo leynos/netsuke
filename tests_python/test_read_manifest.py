@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import importlib.util
 from io import StringIO
 import os
+import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -88,6 +89,24 @@ class ReadManifestTests(unittest.TestCase):
             exit_code = self.module.main()
         return CLIResult(exit_code=exit_code, stdout=stdout.getvalue(), stderr=stderr.getvalue())
 
+    def _assert_manifest_error(
+        self,
+        manifest_path: Path,
+        expected_stderr_fragment: str | None = None,
+    ) -> None:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT_PATH), "name", "--manifest-path", str(manifest_path)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        if expected_stderr_fragment is not None:
+            self.assertIn(expected_stderr_fragment, result.stderr)
+        else:
+            self.assertTrue(result.stderr)
+        self.assertEqual(result.stdout, "")
+
     def test_get_field_returns_name(self) -> None:
         manifest = {"package": {"name": "netsuke", "version": "1.2.3"}}
         self.assertEqual(self.module.get_field(manifest, "name"), "netsuke")
@@ -146,17 +165,11 @@ class ReadManifestTests(unittest.TestCase):
 
     def test_main_reports_missing_manifest(self) -> None:
         missing = self.temp_path / "missing.toml"
-        result = self._invoke_cli("name", "--manifest-path", str(missing))
-        self.assertNotEqual(result.exit_code, 0)
-        self.assertIn("does not exist", result.stderr)
-        self.assertEqual(result.stdout, "")
+        self._assert_manifest_error(missing, "does not exist")
 
     def test_main_reports_invalid_toml(self) -> None:
         manifest = self._write_manifest("not = [valid")
-        result = self._invoke_cli("name", "--manifest-path", str(manifest))
-        self.assertNotEqual(result.exit_code, 0)
-        self.assertTrue(result.stderr)
-        self.assertEqual(result.stdout, "")
+        self._assert_manifest_error(manifest)
 
     def test_main_reports_valid_toml_with_unexpected_structure(self) -> None:
         manifest = self._write_manifest(
