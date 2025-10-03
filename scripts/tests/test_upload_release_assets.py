@@ -19,10 +19,10 @@ def module():
     spec = importlib.util.spec_from_file_location(
         "upload_release_assets", SCRIPT_PATH
     )
-    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type] # FIXME: stdlib typing lacks precise module_from_spec signature
+    assert spec and spec.loader, "Failed to load upload_release_assets module spec"
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)  # type: ignore[assignment]
+    spec.loader.exec_module(module)  # type: ignore[assignment] # FIXME: Loader.exec_module typing incomplete upstream
     return module
 
 
@@ -32,6 +32,7 @@ def create_file(path: Path, content: bytes = b"data") -> None:
 
 
 def test_discover_assets_collects_expected_files(module, tmp_path: Path) -> None:
+    """Verify that asset discovery preserves expected ordering and names."""
     dist = tmp_path / "dist"
     create_file(dist / "linux" / "netsuke", b"binary")
     create_file(dist / "linux" / "netsuke.sha256", b"checksum")
@@ -53,6 +54,7 @@ def test_discover_assets_collects_expected_files(module, tmp_path: Path) -> None
 
 
 def test_discover_assets_rejects_duplicates(module, tmp_path: Path) -> None:
+    """It surfaces collisions when multiple files resolve to the same asset."""
     dist = tmp_path / "dist"
     create_file(dist / "a" / "netsuke.pkg", b"pkg-a")
     create_file(dist / "b" / "netsuke.pkg", b"pkg-b")
@@ -64,6 +66,7 @@ def test_discover_assets_rejects_duplicates(module, tmp_path: Path) -> None:
 
 
 def test_discover_assets_rejects_empty_files(module, tmp_path: Path) -> None:
+    """It refuses to publish zero-byte artefacts."""
     dist = tmp_path / "dist"
     create_file(dist / "linux" / "netsuke", b"")
 
@@ -74,6 +77,7 @@ def test_discover_assets_rejects_empty_files(module, tmp_path: Path) -> None:
 
 
 def test_cli_dry_run_outputs_summary(module, tmp_path: Path) -> None:
+    """It prints the planned gh commands instead of uploading during dry runs."""
     dist = tmp_path / "dist"
     create_file(dist / "linux" / "netsuke", b"binary")
     create_file(dist / "linux" / "netsuke.sha256", b"checksum")

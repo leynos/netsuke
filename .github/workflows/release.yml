@@ -15,6 +15,13 @@ name: Release Binary
         required: false
         type: boolean
         default: false
+    outputs:
+      bin_name:
+        description: Binary name derived from Cargo metadata.
+        value: ${{ jobs.metadata.outputs.bin_name }}
+      version:
+        description: Crate version resolved from Cargo.toml.
+        value: ${{ jobs.metadata.outputs.version }}
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}

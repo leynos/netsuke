@@ -30,6 +30,15 @@ class CLIResult:
     stderr: str
 
 
+@dataclasses.dataclass(slots=True)
+class CLIInvocationConfig:
+    """Configuration for invoking the CLI when reading manifest fields."""
+
+    cli_args: tuple[str, ...] | None = None
+    env: dict[str, str] | None = None
+    cwd: Path | None = None
+
+
 @contextmanager
 def change_directory(path: Path) -> typ.Iterator[None]:
     """Temporarily change the working directory for the current process."""
@@ -44,10 +53,10 @@ def change_directory(path: Path) -> typ.Iterator[None]:
 def load_script_module() -> types.ModuleType:
     """Import the read_manifest script as a module for reuse in tests."""
     spec = importlib.util.spec_from_file_location("read_manifest", SCRIPT_PATH)
-    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type] # FIXME: stdlib typing lacks precise module_from_spec signature
     assert spec is not None
     assert spec.loader is not None
-    spec.loader.exec_module(module)  # type: ignore[assignment]
+    spec.loader.exec_module(module)  # type: ignore[assignment] # FIXME: Loader.exec_module missing precise type hints
     assert isinstance(module, types.ModuleType)
     return module
 
@@ -122,14 +131,13 @@ class ReadManifestTests:
         field: str,
         expected_value: str,
         *,
-        cli_args: tuple[str, ...] | None = None,
-        env: dict[str, str] | None = None,
-        cwd: Path | None = None,
+        config: CLIInvocationConfig | None = None,
     ) -> None:
         """Assert that the CLI prints ``expected_value`` for ``field``."""
+        config = config or CLIInvocationConfig()
         manifest = self._write_manifest(manifest_content)
-        args = cli_args or (field, "--manifest-path", str(manifest))
-        result = self._invoke_cli(*args, env=env, cwd=cwd)
+        args = config.cli_args or (field, "--manifest-path", str(manifest))
+        result = self._invoke_cli(*args, env=config.env, cwd=config.cwd)
         assert result.exit_code == 0
         assert result.stdout == expected_value
         assert result.stderr == ""

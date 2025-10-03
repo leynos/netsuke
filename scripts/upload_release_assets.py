@@ -26,12 +26,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Iterable
+from typing import Annotated, Iterable, Iterator
 import sys
 
 import cyclopts
 from cyclopts import App, Parameter
 from plumbum import local
+from plumbum.commands import CommandNotFound, ProcessExecutionError
+from plumbum.commands.base import BoundCommand
 
 
 class AssetError(RuntimeError):
@@ -66,6 +68,29 @@ def _resolve_asset_name(path: Path) -> str:
     return f"{path.parent.name}-{path.name}"
 
 
+def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> Iterator[Path]:
+    for path in sorted(dist_dir.rglob("*")):
+        if path.is_file() and _is_candidate(path, bin_name):
+            yield path
+
+
+def _require_non_empty(path: Path) -> int:
+    size = path.stat().st_size
+    if size <= 0:
+        raise AssetError(f"Artefact {path} is empty")
+    return size
+
+
+def _register_asset(asset_name: str, path: Path, seen: dict[str, Path]) -> None:
+    previous = seen.get(asset_name)
+    if previous:
+        raise AssetError(
+            "Asset name collision: "
+            f"{asset_name} would upload both {previous} and {path}"
+        )
+    seen[asset_name] = path
+
+
 def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
     """Return the artefacts that should be published.
 
@@ -94,20 +119,10 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
     assets: list[ReleaseAsset] = []
     seen: dict[str, Path] = {}
 
-    for path in sorted(p for p in dist_dir.rglob("*") if p.is_file()):
-        if not _is_candidate(path, bin_name):
-            continue
-        size = path.stat().st_size
-        if size <= 0:
-            raise AssetError(f"Artefact {path} is empty")
+    for path in _iter_candidate_paths(dist_dir, bin_name):
+        size = _require_non_empty(path)
         asset_name = _resolve_asset_name(path)
-        previous = seen.get(asset_name)
-        if previous:
-            raise AssetError(
-                "Asset name collision: "
-                f"{asset_name} would upload both {previous} and {path}"
-            )
-        seen[asset_name] = path
+        _register_asset(asset_name, path, seen)
         assets.append(ReleaseAsset(path=path, asset_name=asset_name, size=size))
 
     if not assets:
@@ -128,9 +143,27 @@ def _render_summary(assets: Iterable[ReleaseAsset]) -> str:
 def upload_assets(
     *, release_tag: str, assets: Iterable[ReleaseAsset], dry_run: bool = False
 ) -> None:
-    """Upload artefacts to GitHub using the ``gh`` CLI."""
+    """Upload artefacts to GitHub using the ``gh`` CLI.
 
-    gh_cmd = None
+    Parameters
+    ----------
+    release_tag:
+        Git tag identifying the release that should receive the artefacts.
+    assets:
+        Iterable of artefacts to publish.
+    dry_run:
+        When ``True``, print the planned ``gh`` invocations without executing
+        them.
+
+    Raises
+    ------
+    ProcessExecutionError
+        If ``gh`` returns a non-zero status while uploading.
+    CommandNotFound
+        If the ``gh`` executable is not available in ``PATH``.
+    """
+
+    gh_cmd: BoundCommand | None = None
     for asset in assets:
         descriptor = f"{asset.path}#{asset.asset_name}"
         if dry_run:
@@ -154,7 +187,26 @@ def main(
     dist_dir: Path = Path("dist"),
     dry_run: bool = False,
 ) -> int:
-    """Entry point shared by the CLI and tests."""
+    """Entry point shared by the CLI and tests.
+
+    Parameters
+    ----------
+    release_tag:
+        Git tag identifying the release to publish to.
+    bin_name:
+        Binary name used to derive artefact names during discovery.
+    dist_dir:
+        Directory containing staged artefacts.
+    dry_run:
+        When ``True``, validate artefacts and print the upload plan without
+        uploading.
+
+    Returns
+    -------
+    int
+        Exit code: ``0`` on success, ``1`` when artefact discovery or upload
+        fails.
+    """
 
     try:
         assets = discover_assets(dist_dir, bin_name=bin_name)
@@ -167,7 +219,7 @@ def main(
 
     try:
         upload_assets(release_tag=release_tag, assets=assets, dry_run=dry_run)
-    except Exception as exc:  # pragma: no cover - surfaced by plumbum
+    except (ProcessExecutionError, CommandNotFound) as exc:  # pragma: no cover
         print(exc, file=sys.stderr)
         return 1
 
