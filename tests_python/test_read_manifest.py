@@ -107,6 +107,23 @@ class ReadManifestTests(unittest.TestCase):
             self.assertTrue(result.stderr)
         self.assertEqual(result.stdout, "")
 
+    def _assert_successful_field_read(
+        self,
+        manifest_content: str,
+        field: str,
+        expected_value: str,
+        *,
+        cli_args: tuple[str, ...] | None = None,
+        env: dict[str, str] | None = None,
+        cwd: Path | None = None,
+    ) -> None:
+        manifest = self._write_manifest(manifest_content)
+        args = cli_args or (field, "--manifest-path", str(manifest))
+        result = self._invoke_cli(*args, env=env, cwd=cwd)
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.stdout, expected_value)
+        self.assertEqual(result.stderr, "")
+
     def test_get_field_returns_name(self) -> None:
         manifest = {"package": {"name": "netsuke", "version": "1.2.3"}}
         self.assertEqual(self.module.get_field(manifest, "name"), "netsuke")
@@ -137,17 +154,15 @@ class ReadManifestTests(unittest.TestCase):
             self.module.get_field(manifest, "metadata")
 
     def test_main_reads_manifest_path_argument(self) -> None:
-        manifest = self._write_manifest(
+        self._assert_successful_field_read(
             """
             [package]
             name = "netsuke"
             version = "1.2.3"
-            """
+            """,
+            field="name",
+            expected_value="netsuke",
         )
-        result = self._invoke_cli("name", "--manifest-path", str(manifest))
-        self.assertEqual(result.exit_code, 0)
-        self.assertEqual(result.stdout, "netsuke")
-        self.assertEqual(result.stderr, "")
 
     def test_main_prefers_environment_manifest_path(self) -> None:
         manifest = self._write_manifest(
