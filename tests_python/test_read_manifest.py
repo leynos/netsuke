@@ -1,4 +1,5 @@
-"""
+"""Comprehensive tests for the read_manifest helper script.
+
 Summary
 -------
 Tests for the ``read_manifest`` helper script that interrogates Cargo
@@ -132,10 +133,14 @@ def load_script_module() -> types.ModuleType:
     'foo'
     """
     spec = importlib.util.spec_from_file_location("read_manifest", SCRIPT_PATH)
-    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type] # FIXME: stdlib typing lacks precise module_from_spec signature
-    assert spec is not None
-    assert spec.loader is not None
-    spec.loader.exec_module(module)  # type: ignore[assignment] # FIXME: Loader.exec_module missing precise type hints
+    if spec is None:
+        message = "Failed to create module spec for read_manifest"
+        raise RuntimeError(message)
+    if spec.loader is None:
+        message = "Module spec missing loader for read_manifest"
+        raise RuntimeError(message)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
     assert isinstance(module, types.ModuleType)
     return module
 
@@ -200,7 +205,7 @@ class ReadManifestTests:
         expected_stderr_fragment: str | None = None,
     ) -> None:
         """Assert that invoking the CLI fails for ``manifest_path``."""
-        result = subprocess.run(  # noqa: S603 # FIXME: executed with trusted inputs in tests
+        result = subprocess.run(  # noqa: S603  # Security: executed with trusted inputs in tests.
             [
                 sys.executable,
                 str(SCRIPT_PATH),
@@ -254,10 +259,10 @@ def read_manifest_tests(
 
 @pytest.mark.parametrize(
     ("field", "expected"),
-    (
+    [
         ("name", "netsuke"),
         ("version", "1.2.3"),
-    ),
+    ],
 )
 def test_get_field_returns_value(
     read_manifest_module: types.ModuleType,

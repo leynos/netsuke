@@ -5,24 +5,34 @@ from __future__ import annotations
 import importlib.util
 import subprocess
 import sys
+import typing as typ
 from pathlib import Path
 
 import pytest
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "upload_release_assets.py"
 
 
+if typ.TYPE_CHECKING:
+    from types import ModuleType
+else:
+    ModuleType = type(sys)
+
+
 @pytest.fixture(scope="session")
-def module():
-    spec = importlib.util.spec_from_file_location(
-        "upload_release_assets", SCRIPT_PATH
-    )
-    module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type] # FIXME: stdlib typing lacks precise module_from_spec signature
-    assert spec and spec.loader, "Failed to load upload_release_assets module spec"
+def module() -> ModuleType:
+    """Load the upload_release_assets script once for reuse across tests."""
+    spec = importlib.util.spec_from_file_location("upload_release_assets", SCRIPT_PATH)
+    if spec is None:
+        message = "Failed to create module spec for upload_release_assets"
+        raise RuntimeError(message)
+    if spec.loader is None:
+        message = "Module spec missing loader for upload_release_assets"
+        raise RuntimeError(message)
+    module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    spec.loader.exec_module(module)  # type: ignore[assignment] # FIXME: Loader.exec_module typing incomplete upstream
+    spec.loader.exec_module(module)
     return module
 
 
@@ -32,7 +42,9 @@ def create_file(path: Path, content: bytes = b"data") -> None:
     path.write_bytes(content)
 
 
-def test_discover_assets_collects_expected_files(module, tmp_path: Path) -> None:
+def test_discover_assets_collects_expected_files(
+    module: ModuleType, tmp_path: Path
+) -> None:
     """Verify that asset discovery preserves expected ordering and names."""
     dist = tmp_path / "dist"
     create_file(dist / "linux" / "netsuke", b"binary")
@@ -51,10 +63,10 @@ def test_discover_assets_collects_expected_files(module, tmp_path: Path) -> None
         "man-netsuke.1",
         "windows-netsuke.exe",
         "windows-netsuke.msi",
-    ]
+    ], "Asset discovery order does not match expected sequence"
 
 
-def test_discover_assets_rejects_duplicates(module, tmp_path: Path) -> None:
+def test_discover_assets_rejects_duplicates(module: ModuleType, tmp_path: Path) -> None:
     """It surfaces collisions when multiple files resolve to the same asset."""
     dist = tmp_path / "dist"
     create_file(dist / "a" / "netsuke.pkg", b"pkg-a")
@@ -66,7 +78,9 @@ def test_discover_assets_rejects_duplicates(module, tmp_path: Path) -> None:
     assert "Asset name collision" in str(exc.value)
 
 
-def test_discover_assets_rejects_empty_files(module, tmp_path: Path) -> None:
+def test_discover_assets_rejects_empty_files(
+    module: ModuleType, tmp_path: Path
+) -> None:
     """It refuses to publish zero-byte artefacts."""
     dist = tmp_path / "dist"
     create_file(dist / "linux" / "netsuke", b"")
@@ -77,13 +91,13 @@ def test_discover_assets_rejects_empty_files(module, tmp_path: Path) -> None:
     assert "is empty" in str(exc.value)
 
 
-def test_cli_dry_run_outputs_summary(module, tmp_path: Path) -> None:
+def test_cli_dry_run_outputs_summary(module: ModuleType, tmp_path: Path) -> None:
     """It prints the planned gh commands instead of uploading during dry runs."""
     dist = tmp_path / "dist"
     create_file(dist / "linux" / "netsuke", b"binary")
     create_file(dist / "linux" / "netsuke.sha256", b"checksum")
 
-    result = subprocess.run(  # noqa: S603 # FIXME: subprocess required for CLI integration test with trusted arguments
+    result = subprocess.run(  # noqa: S603  # Security: CLI invocation uses trusted arguments in tests.
         [
             sys.executable,
             str(SCRIPT_PATH),
@@ -100,8 +114,14 @@ def test_cli_dry_run_outputs_summary(module, tmp_path: Path) -> None:
         check=False,
     )
 
-    assert result.returncode == 0
-    assert "Planned uploads:" in result.stdout
-    assert "linux-netsuke" in result.stdout
-    assert "linux-netsuke.sha256" in result.stdout
-    assert "[dry-run] gh release upload v1.2.3" in result.stdout
+    assert result.returncode == 0, "CLI dry-run should exit successfully"
+    assert "Planned uploads:" in result.stdout, (
+        "Dry-run output should include upload summary"
+    )
+    assert "linux-netsuke" in result.stdout, "Dry-run output should list linux binary"
+    assert "linux-netsuke.sha256" in result.stdout, (
+        "Dry-run output should list checksum file"
+    )
+    assert "[dry-run] gh release upload v1.2.3" in result.stdout, (
+        "Dry-run output should show gh command"
+    )

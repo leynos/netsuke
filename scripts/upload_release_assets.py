@@ -24,23 +24,27 @@ Inspect the planned uploads without publishing anything::
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Annotated, Iterable, Iterator
+import dataclasses as dc
 import sys
+import typing as typ
+from pathlib import Path
 
 import cyclopts
 from cyclopts import App, Parameter
 from plumbum import local
 from plumbum.commands import CommandNotFound, ProcessExecutionError
-from plumbum.commands.base import BoundCommand
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
+    from plumbum.commands.base import BoundCommand
 
 
 class AssetError(RuntimeError):
     """Raised when the staged artefacts are invalid."""
 
 
-@dataclass(frozen=True)
+@dc.dataclass(frozen=True)
 class ReleaseAsset:
     """Artefact staged for upload to a GitHub release."""
 
@@ -68,7 +72,7 @@ def _resolve_asset_name(path: Path) -> str:
     return f"{path.parent.name}-{path.name}"
 
 
-def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> Iterator[Path]:
+def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> cabc.Iterator[Path]:
     for path in sorted(dist_dir.rglob("*")):
         if path.is_file() and _is_candidate(path, bin_name):
             yield path
@@ -77,17 +81,19 @@ def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> Iterator[Path]:
 def _require_non_empty(path: Path) -> int:
     size = path.stat().st_size
     if size <= 0:
-        raise AssetError(f"Artefact {path} is empty")
+        message = f"Artefact {path} is empty"
+        raise AssetError(message)
     return size
 
 
 def _register_asset(asset_name: str, path: Path, seen: dict[str, Path]) -> None:
     previous = seen.get(asset_name)
     if previous:
-        raise AssetError(
+        message = (
             "Asset name collision: "
             f"{asset_name} would upload both {previous} and {path}"
         )
+        raise AssetError(message)
     seen[asset_name] = path
 
 
@@ -112,9 +118,9 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
         If no artefacts are found, an artefact is empty, or multiple files would
         upload with the same asset name.
     """
-
     if not dist_dir.exists():
-        raise AssetError(f"Artefact directory {dist_dir} does not exist")
+        message = f"Artefact directory {dist_dir} does not exist"
+        raise AssetError(message)
 
     assets: list[ReleaseAsset] = []
     seen: dict[str, Path] = {}
@@ -126,22 +132,23 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
         assets.append(ReleaseAsset(path=path, asset_name=asset_name, size=size))
 
     if not assets:
-        raise AssetError(f"No artefacts discovered in {dist_dir}")
+        message = f"No artefacts discovered in {dist_dir}"
+        raise AssetError(message)
 
     return assets
 
 
-def _render_summary(assets: Iterable[ReleaseAsset]) -> str:
+def _render_summary(assets: cabc.Iterable[ReleaseAsset]) -> str:
     lines = ["Planned uploads:"]
-    for asset in assets:
-        lines.append(
-            f"  - {asset.asset_name} ({asset.size} bytes) -> {asset.path}"
-        )
+    lines.extend(
+        f"  - {asset.asset_name} ({asset.size} bytes) -> {asset.path}"
+        for asset in assets
+    )
     return "\n".join(lines)
 
 
 def upload_assets(
-    *, release_tag: str, assets: Iterable[ReleaseAsset], dry_run: bool = False
+    *, release_tag: str, assets: cabc.Iterable[ReleaseAsset], dry_run: bool = False
 ) -> None:
     """Upload artefacts to GitHub using the ``gh`` CLI.
 
@@ -162,7 +169,6 @@ def upload_assets(
     CommandNotFound
         If the ``gh`` executable is not available in ``PATH``.
     """
-
     gh_cmd: BoundCommand | None = None
     for asset in assets:
         descriptor = f"{asset.path}#{asset.asset_name}"
@@ -207,7 +213,6 @@ def main(
         Exit code: ``0`` on success, ``1`` when artefact discovery or upload
         fails.
     """
-
     try:
         assets = discover_assets(dist_dir, bin_name=bin_name)
     except AssetError as exc:
@@ -229,13 +234,12 @@ def main(
 @app.default
 def cli(
     *,
-    release_tag: Annotated[str, Parameter(required=True)],
-    bin_name: Annotated[str, Parameter(required=True)],
+    release_tag: typ.Annotated[str, Parameter(required=True)],
+    bin_name: typ.Annotated[str, Parameter(required=True)],
     dist_dir: Path = Path("dist"),
     dry_run: bool = False,
 ) -> int:
     """Cyclopts-bound CLI entry point."""
-
     return main(
         release_tag=release_tag,
         bin_name=bin_name,
