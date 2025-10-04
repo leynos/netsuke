@@ -32,11 +32,11 @@ Create a minimal manifest and query the package name::
 
     path = Path("/tmp/Cargo.toml")
     path.write_text(dedent(
-        """
+        '''
         [package]
         name = "netsuke"
         version = "1.2.3"
-        """
+        '''
     ), encoding="utf-8")
 
     completed = subprocess.run(
@@ -92,12 +92,11 @@ class CLIInvocationConfig:
     Attributes
     ----------
     cli_args : tuple[str, ...] | None
-        Optional CLI arguments to pass; defaults to the field and manifest
-        path pair used by the helpers.
+        Optional CLI arguments to pass; defaults to field and manifest path.
     env : dict[str, str] | None
-        Optional environment overrides provided to the subprocess.
+        Optional environment variables to set during invocation.
     cwd : Path | None
-        Optional working directory applied during invocation.
+        Optional working directory for the invocation.
     """
 
     cli_args: tuple[str, ...] | None = None
@@ -135,15 +134,15 @@ class ReadManifestTests:
     Methods
     -------
     _write_manifest(content: str) -> Path
-        Persist TOML content to ``Cargo.toml`` within the temporary
-        workspace.
+        Write TOML content to a temporary ``Cargo.toml``.
     _invoke_cli(*args, env=None, cwd=None) -> CLIResult
-        Execute the CLI in-process while capturing output and exit status.
+        Execute the CLI in-process and capture output.
     _assert_manifest_error(manifest_path, expected_stderr_fragment=None) -> None
-        Assert the CLI fails for a given manifest path and examine stderr.
-    _assert_successful_field_read(manifest_content, field, expected_value,
-                                  *, config=None) -> None
-        Assert the CLI surfaces the expected field value without errors.
+        Assert the CLI fails for the given manifest path.
+    _assert_successful_field_read(
+        manifest_content, field, expected_value, *, config=None
+    ) -> None
+        Assert the CLI prints the expected value for the field.
     """
 
     module: types.ModuleType

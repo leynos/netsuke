@@ -27,7 +27,7 @@ def module():
 
 
 def create_file(path: Path, content: bytes = b"data") -> None:
-    """Create a file with ``content``, creating parent directories as needed."""
+    """Create a file with the given content, ensuring parent directories exist."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
 
@@ -83,7 +83,7 @@ def test_cli_dry_run_outputs_summary(module, tmp_path: Path) -> None:
     create_file(dist / "linux" / "netsuke", b"binary")
     create_file(dist / "linux" / "netsuke.sha256", b"checksum")
 
-    result = subprocess.run(
+    result = subprocess.run(  # noqa: S603 - trusted arguments within tests
         [
             sys.executable,
             str(SCRIPT_PATH),
