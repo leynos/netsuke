@@ -116,7 +116,21 @@ def change_directory(path: Path) -> typ.Iterator[None]:
 
 
 def load_script_module() -> types.ModuleType:
-    """Import the read_manifest script as a module for reuse in tests."""
+    """
+    Import the read_manifest script as a module for reuse in tests.
+
+    Returns
+    -------
+    types.ModuleType
+        The loaded ``read_manifest`` module exposing its helper functions.
+
+    Examples
+    --------
+    >>> module = load_script_module()
+    >>> manifest = {"package": {"name": "foo"}}
+    >>> module.get_field(manifest, "name")
+    'foo'
+    """
     spec = importlib.util.spec_from_file_location("read_manifest", SCRIPT_PATH)
     module = importlib.util.module_from_spec(spec)  # type: ignore[arg-type] # FIXME: stdlib typing lacks precise module_from_spec signature
     assert spec is not None
@@ -186,7 +200,7 @@ class ReadManifestTests:
         expected_stderr_fragment: str | None = None,
     ) -> None:
         """Assert that invoking the CLI fails for ``manifest_path``."""
-        result = subprocess.run(  # noqa: S603 - executed with trusted inputs in tests
+        result = subprocess.run(  # noqa: S603 # FIXME: executed with trusted inputs in tests
             [
                 sys.executable,
                 str(SCRIPT_PATH),

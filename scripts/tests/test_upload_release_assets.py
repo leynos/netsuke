@@ -83,7 +83,7 @@ def test_cli_dry_run_outputs_summary(module, tmp_path: Path) -> None:
     create_file(dist / "linux" / "netsuke", b"binary")
     create_file(dist / "linux" / "netsuke.sha256", b"checksum")
 
-    result = subprocess.run(  # noqa: S603 - trusted arguments within tests
+    result = subprocess.run(  # noqa: S603 # FIXME: subprocess required for CLI integration test with trusted arguments
         [
             sys.executable,
             str(SCRIPT_PATH),
