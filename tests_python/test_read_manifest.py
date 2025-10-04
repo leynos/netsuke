@@ -107,7 +107,26 @@ class CLIInvocationConfig:
 
 @contextmanager
 def change_directory(path: Path) -> typ.Iterator[None]:
-    """Temporarily change the working directory for the current process."""
+    """
+    Temporarily change the working directory for the current process.
+
+    Parameters
+    ----------
+    path : Path
+        Target directory that should become the working directory.
+
+    Yields
+    ------
+    None
+        Control to the caller while the working directory is set to ``path``.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> with change_directory(Path("/tmp")):
+    ...     Path.cwd().as_posix()
+    '/tmp'
+    """
     original = Path.cwd()
     os.chdir(path)
     try:

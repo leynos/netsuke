@@ -37,7 +37,34 @@ def parse_args() -> argparse.Namespace:
 
 
 def read_manifest(path: Path) -> dict[str, object]:
-    """Load and return the parsed Cargo manifest as a dictionary."""
+    """
+    Load and return the parsed Cargo manifest as a dictionary.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the ``Cargo.toml`` file.
+
+    Returns
+    -------
+    dict[str, object]
+        Parsed manifest fields keyed by section.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the manifest file does not exist.
+    tomllib.TOMLDecodeError
+        If the manifest contains invalid TOML syntax.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> manifest_path = Path("Cargo.toml")
+    >>> data = read_manifest(manifest_path)
+    >>> "package" in data
+    True
+    """
     if not path.is_file():
         message = f"Manifest {path} does not exist"
         raise FileNotFoundError(message)
@@ -46,7 +73,32 @@ def read_manifest(path: Path) -> dict[str, object]:
 
 
 def get_field(manifest: dict[str, object], field: str) -> str:
-    """Extract a package field from the manifest, raising if it is missing."""
+    """
+    Extract a package field from the manifest, raising if it is missing.
+
+    Parameters
+    ----------
+    manifest : dict[str, object]
+        The parsed Cargo manifest dictionary.
+    field : str
+        The package field to extract, such as ``"name"`` or ``"version"``.
+
+    Returns
+    -------
+    str
+        The non-empty field value from the package section.
+
+    Raises
+    ------
+    KeyError
+        If the package table is missing or the field is absent or blank.
+
+    Examples
+    --------
+    >>> manifest = {"package": {"name": "netsuke", "version": "1.2.3"}}
+    >>> get_field(manifest, "name")
+    'netsuke'
+    """
     package = manifest.get("package") or {}
     if not isinstance(package, dict):
         message = "package table missing from manifest"
