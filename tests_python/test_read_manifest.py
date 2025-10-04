@@ -122,7 +122,7 @@ def load_script_module() -> types.ModuleType:
     Returns
     -------
     types.ModuleType
-        The loaded ``read_manifest`` module exposing its helper functions.
+        The loaded read_manifest module with all its functions and constants.
 
     Examples
     --------

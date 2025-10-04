@@ -22,6 +22,9 @@ name: Release Binary
       version:
         description: Crate version resolved from Cargo.toml
         value: ${{ jobs.metadata.outputs.version }}
+      should_publish:
+        description: Whether artefacts should be published to the release
+        value: ${{ jobs.metadata.outputs.should_publish }}
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
