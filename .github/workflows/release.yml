@@ -17,7 +17,7 @@ name: Release Binary
         default: false
     outputs:
       bin_name:
-        description: Binary name derived from Cargo metadata.
+        description: Binary name extracted from Cargo.toml.
         value: ${{ jobs.metadata.outputs.bin_name }}
       version:
         description: Crate version resolved from Cargo.toml.

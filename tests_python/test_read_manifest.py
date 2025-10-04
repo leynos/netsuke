@@ -1,4 +1,58 @@
-"""Tests for the read_manifest helper script."""
+"""
+Summary
+-------
+Tests for the ``read_manifest`` helper script that interrogates Cargo
+metadata.
+
+Purpose
+-------
+Exercise ``.github/workflows/scripts/read_manifest.py`` to confirm it
+extracts package fields, honours CLI arguments and environment overrides,
+and surfaces descriptive errors for missing manifests, invalid TOML, and
+unexpected structure.
+
+Usage
+-----
+Run the full suite::
+
+    python -m pytest tests_python/test_read_manifest.py
+
+Execute a targeted test::
+
+    python -m pytest tests_python/test_read_manifest.py::test_get_field_returns_value
+
+Examples
+--------
+Create a minimal manifest and query the package name::
+
+    from pathlib import Path
+    from textwrap import dedent
+    import subprocess
+    import sys
+
+    path = Path("/tmp/Cargo.toml")
+    path.write_text(dedent(
+        """
+        [package]
+        name = "netsuke"
+        version = "1.2.3"
+        """
+    ), encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            ".github/workflows/scripts/read_manifest.py",
+            "name",
+            "--manifest-path",
+            str(path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.stdout == "netsuke"
+"""
 
 from __future__ import annotations
 
@@ -32,7 +86,19 @@ class CLIResult:
 
 @dataclasses.dataclass(slots=True)
 class CLIInvocationConfig:
-    """Configuration for invoking the CLI when reading manifest fields."""
+    """
+    Configuration for invoking the CLI when reading manifest fields.
+
+    Attributes
+    ----------
+    cli_args : tuple[str, ...] | None
+        Optional CLI arguments to pass; defaults to the field and manifest
+        path pair used by the helpers.
+    env : dict[str, str] | None
+        Optional environment overrides provided to the subprocess.
+    cwd : Path | None
+        Optional working directory applied during invocation.
+    """
 
     cli_args: tuple[str, ...] | None = None
     env: dict[str, str] | None = None
@@ -63,7 +129,22 @@ def load_script_module() -> types.ModuleType:
 
 @dataclasses.dataclass(slots=True)
 class ReadManifestTests:
-    """Helpers that exercise the manifest-reading CLI in different scenarios."""
+    """
+    Helpers that exercise the manifest-reading CLI in different scenarios.
+
+    Methods
+    -------
+    _write_manifest(content: str) -> Path
+        Persist TOML content to ``Cargo.toml`` within the temporary
+        workspace.
+    _invoke_cli(*args, env=None, cwd=None) -> CLIResult
+        Execute the CLI in-process while capturing output and exit status.
+    _assert_manifest_error(manifest_path, expected_stderr_fragment=None) -> None
+        Assert the CLI fails for a given manifest path and examine stderr.
+    _assert_successful_field_read(manifest_content, field, expected_value,
+                                  *, config=None) -> None
+        Assert the CLI surfaces the expected field value without errors.
+    """
 
     module: types.ModuleType
     temp_path: Path

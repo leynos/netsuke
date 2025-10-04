@@ -27,6 +27,7 @@ def module():
 
 
 def create_file(path: Path, content: bytes = b"data") -> None:
+    """Create a file with ``content``, creating parent directories as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
 
