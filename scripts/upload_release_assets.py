@@ -119,9 +119,9 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
 
     Parameters
     ----------
-    dist_dir:
+    dist_dir : Path
         Root directory that contains the staged artefacts.
-    bin_name:
+    bin_name : str
         Binary name used to match platform-specific artefacts.
 
     Returns
@@ -134,6 +134,11 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
     AssetError
         If no artefacts are found, an artefact is empty, or multiple files would
         upload with the same asset name.
+
+    Examples
+    --------
+    >>> discover_assets(Path("dist"), bin_name="netsuke")  # doctest: +SKIP
+    [ReleaseAsset(path=PosixPath('dist/netsuke'), ...)]
     """
     if not dist_dir.exists():
         message = f"Artefact directory {dist_dir} does not exist"
@@ -171,11 +176,11 @@ def upload_assets(
 
     Parameters
     ----------
-    release_tag:
+    release_tag : str
         Git tag identifying the release that should receive the artefacts.
-    assets:
+    assets : Iterable[ReleaseAsset]
         Iterable of artefacts to publish.
-    dry_run:
+    dry_run : bool
         When ``True``, print the planned ``gh`` invocations without executing
         them.
 
@@ -185,6 +190,14 @@ def upload_assets(
         If ``gh`` returns a non-zero status while uploading.
     CommandNotFound
         If the ``gh`` executable is not available in ``PATH``.
+
+    Examples
+    --------
+    >>> upload_assets(  # doctest: +SKIP
+    ...     release_tag="v1.2.3",
+    ...     assets=[ReleaseAsset(Path("dist/netsuke"), "netsuke", 1024)],
+    ...     dry_run=True,
+    ... )
     """
     gh_cmd: BoundCommand | None = None
     for asset in assets:
@@ -214,13 +227,13 @@ def main(
 
     Parameters
     ----------
-    release_tag:
+    release_tag : str
         Git tag identifying the release to publish to.
-    bin_name:
+    bin_name : str
         Binary name used to derive artefact names during discovery.
-    dist_dir:
+    dist_dir : Path
         Directory containing staged artefacts.
-    dry_run:
+    dry_run : bool
         When ``True``, validate artefacts and print the upload plan without
         uploading.
 
@@ -229,6 +242,16 @@ def main(
     int
         Exit code: ``0`` on success, ``1`` when artefact discovery or upload
         fails.
+
+    Examples
+    --------
+    >>> main(  # doctest: +SKIP
+    ...     release_tag="v1.2.3",
+    ...     bin_name="netsuke",
+    ...     dist_dir=Path("dist"),
+    ...     dry_run=True,
+    ... )
+    0
     """
     try:
         assets = discover_assets(dist_dir, bin_name=bin_name)
