@@ -308,7 +308,8 @@ jobs:
         with:
           path: dist
           pattern: ${{ env.REPO_NAME }}-*
-      - name: Upload artefacts to release
+      - id: upload_assets
+        name: Upload artefacts to release
         uses: ./.github/actions/upload-release-assets
         with:
           release-tag: ${{ github.ref_name }}
@@ -317,3 +318,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check asset upload errors
+        if: steps.upload_assets.outputs.upload-error == 'true'
+        run: |
+          echo "Error uploading release assets:"
+          printf '%s\n' "${{ steps.upload_assets.outputs.error-message }}"
+          exit 1

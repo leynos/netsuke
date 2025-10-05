@@ -58,7 +58,7 @@ def test_discover_assets_collects_expected_files(
 
     assert [asset.asset_name for asset in assets] == [
         "linux-netsuke",
-        "netsuke.deb",
+        "linux-netsuke.deb",
         "linux-netsuke.sha256",
         "man-netsuke.1",
         "windows-netsuke.exe",
@@ -66,16 +66,22 @@ def test_discover_assets_collects_expected_files(
     ], "Asset discovery order does not match expected sequence"
 
 
-def test_discover_assets_rejects_duplicates(module: ModuleType, tmp_path: Path) -> None:
-    """It surfaces collisions when multiple files resolve to the same asset."""
+def test_discover_assets_disambiguates_duplicate_filenames(
+    module: ModuleType, tmp_path: Path
+) -> None:
+    """It prefixes nested directories to avoid collisions for package files."""
     dist = tmp_path / "dist"
-    create_file(dist / "a" / "netsuke.pkg", b"pkg-a")
-    create_file(dist / "b" / "netsuke.pkg", b"pkg-b")
+    create_file(dist / "linux" / "pkg" / "netsuke.pkg", b"pkg-linux")
+    create_file(dist / "windows" / "pkg" / "netsuke.pkg", b"pkg-windows")
 
-    with pytest.raises(module.AssetError) as exc:
-        module.discover_assets(dist, bin_name="netsuke")
+    assets = module.discover_assets(dist, bin_name="netsuke")
 
-    assert "Asset name collision" in str(exc.value)
+    assert [
+        asset.asset_name for asset in assets if asset.asset_name.endswith(".pkg")
+    ] == [
+        "linux__pkg-netsuke.pkg",
+        "windows__pkg-netsuke.pkg",
+    ]
 
 
 def test_discover_assets_rejects_empty_files(
@@ -89,6 +95,35 @@ def test_discover_assets_rejects_empty_files(
         module.discover_assets(dist, bin_name="netsuke")
 
     assert "is empty" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        ("true", True),
+        ("false", False),
+        ("YES", True),
+        ("no", False),
+        ("1", True),
+        ("0", False),
+        (" on ", True),
+        (" off ", False),
+        ("", False),
+    ],
+)
+def test_coerce_bool_handles_common_inputs(
+    module: ModuleType, value: object, expected: object
+) -> None:
+    """The coercion helper accepts boolean strings in various casings."""
+    assert module._coerce_bool(value) is expected
+
+
+def test_coerce_bool_rejects_unknown_input(module: ModuleType) -> None:
+    """Unexpected values surface a descriptive error."""
+    with pytest.raises(ValueError, match="Cannot interpret 'maybe'"):
+        module._coerce_bool("maybe")
 
 
 def test_cli_dry_run_outputs_summary(module: ModuleType, tmp_path: Path) -> None:

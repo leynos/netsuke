@@ -65,11 +65,29 @@ def _is_candidate(path: Path, bin_name: str) -> bool:
     return path.suffix in {".deb", ".rpm", ".pkg", ".msi"}
 
 
-def _resolve_asset_name(path: Path) -> str:
-    suffix = path.suffix.lower()
-    if suffix in {".deb", ".rpm", ".pkg"}:
-        return path.name
-    return f"{path.parent.name}-{path.name}"
+def _coerce_bool(value: object) -> bool:
+    """Return ``value`` as a strict boolean."""
+    if isinstance(value, bool):
+        return value
+    if not isinstance(value, str):
+        message = f"Cannot interpret {value!r} as a boolean"
+        raise TypeError(message)
+    normalised = value.strip().lower()
+    if normalised in {"", "false", "0", "no", "off"}:
+        return False
+    if normalised in {"true", "1", "yes", "on"}:
+        return True
+    message = f"Cannot interpret {value!r} as a boolean"
+    raise ValueError(message)
+
+
+def _resolve_asset_name(path: Path, *, dist_dir: Path) -> str:
+    """Return a unique asset name derived from ``path`` within ``dist_dir``."""
+    relative_path = path.relative_to(dist_dir)
+    if relative_path.parent == Path():
+        return relative_path.name
+    prefix = relative_path.parent.as_posix().replace("/", "__")
+    return f"{prefix}-{relative_path.name}"
 
 
 def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> cabc.Iterator[Path]:
@@ -126,7 +144,7 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
 
     for path in _iter_candidate_paths(dist_dir, bin_name):
         size = _require_non_empty(path)
-        asset_name = _resolve_asset_name(path)
+        asset_name = _resolve_asset_name(path, dist_dir=dist_dir)
         _register_asset(asset_name, path, seen)
         assets.append(ReleaseAsset(path=path, asset_name=asset_name, size=size))
 
@@ -236,14 +254,14 @@ def cli(
     release_tag: typ.Annotated[str, Parameter(required=True)],
     bin_name: typ.Annotated[str, Parameter(required=True)],
     dist_dir: Path = Path("dist"),
-    dry_run: bool = False,
+    dry_run: bool | str = False,
 ) -> int:
     """Cyclopts-bound CLI entry point."""
     return main(
         release_tag=release_tag,
         bin_name=bin_name,
         dist_dir=dist_dir,
-        dry_run=dry_run,
+        dry_run=_coerce_bool(dry_run),
     )
 
 

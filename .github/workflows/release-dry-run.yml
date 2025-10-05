@@ -27,10 +27,17 @@ jobs:
         with:
           path: dist
           pattern: ${{ env.REPO_NAME }}-*
-      - name: Validate artefacts
+      - id: validate
+        name: Validate artefacts
         uses: ./.github/actions/upload-release-assets
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.release.outputs.bin_name }}
           dist-dir: dist
           dry-run: "true"
+      - name: Check validation errors
+        if: steps.validate.outputs.upload-error == 'true'
+        run: |
+          echo "Error validating release assets:"
+          printf '%s\n' "${{ steps.validate.outputs.error-message }}"
+          exit 1
