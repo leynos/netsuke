@@ -87,8 +87,7 @@ def _require_non_empty(path: Path) -> int:
 
 
 def _register_asset(asset_name: str, path: Path, seen: dict[str, Path]) -> None:
-    previous = seen.get(asset_name)
-    if previous:
+    if previous := seen.get(asset_name):
         message = (
             "Asset name collision: "
             f"{asset_name} would upload both {previous} and {path}"
