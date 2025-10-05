@@ -1,7 +1,7 @@
 ---
 name: Release Binary
 
-'on':
+on:
   push:
     tags:
       - 'v*.*.*'
