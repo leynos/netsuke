@@ -27,14 +27,10 @@ jobs:
         with:
           path: dist
           pattern: ${{ env.REPO_NAME }}-*
-      - name: Ensure artefacts exist
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          mapfile -t files < <(find dist -type f)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo '::error title=Missing artefacts::No artefacts downloaded'
-            exit 1
-          fi
-          printf 'Found %s artefact(s) in dist/\n' "${#files[@]}"
+      - name: Validate artefacts
+        uses: ./.github/actions/upload-release-assets
+        with:
+          release-tag: ${{ github.ref_name }}
+          bin-name: ${{ needs.release.outputs.bin_name }}
+          dist-dir: dist
+          dry-run: "true"
