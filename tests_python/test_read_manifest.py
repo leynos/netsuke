@@ -78,7 +78,8 @@ SCRIPT_PATH = REPO_ROOT / ".github" / "workflows" / "scripts" / "read_manifest.p
 
 @dataclasses.dataclass(slots=True)
 class CLIResult:
-    """CLI invocation outcome.
+    """
+    Result container returned by ReadManifestTests._invoke_cli.
 
     Attributes
     ----------

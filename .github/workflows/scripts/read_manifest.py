@@ -1,5 +1,43 @@
 #!/usr/bin/env python3
-"""Utility helpers for extracting fields from Cargo.toml."""
+"""
+Utility helpers for extracting fields from Cargo.toml.
+
+Summary
+-------
+Parse and extract package metadata fields from Cargo manifest files.
+
+Purpose
+-------
+Provide both a CLI tool and programmatic API for reading ``name`` and
+``version`` fields from Cargo.toml manifests, with robust error handling
+for missing files, invalid TOML, and unexpected structure.
+
+Usage
+-----
+CLI invocation::
+
+    python read_manifest.py name --manifest-path /path/to/Cargo.toml
+    python read_manifest.py version
+
+Programmatic usage::
+
+    from pathlib import Path
+    manifest = read_manifest(Path("Cargo.toml"))
+    name = get_field(manifest, "name")
+
+Examples
+--------
+Extract the package name from a manifest::
+
+    $ python read_manifest.py name --manifest-path Cargo.toml
+    netsuke
+
+Use the CARGO_TOML_PATH environment variable::
+
+    $ export CARGO_TOML_PATH=/path/to/Cargo.toml
+    $ python read_manifest.py version
+    1.2.3
+"""
 
 from __future__ import annotations
 
@@ -19,7 +57,21 @@ PARSER_DESCRIPTION = " ".join(
 
 
 def parse_args() -> argparse.Namespace:
-    """Return the parsed CLI arguments for manifest field extraction."""
+    """
+    Return the parsed CLI arguments for manifest field extraction.
+
+    Returns
+    -------
+    argparse.Namespace
+        Parsed arguments containing ``field`` (str) and optional
+        ``manifest_path`` (str or None).
+
+    Examples
+    --------
+    >>> args = parse_args()  # With sys.argv = ["script.py", "name"]
+    >>> args.field
+    'name'
+    """
     parser = argparse.ArgumentParser(description=PARSER_DESCRIPTION)
     parser.add_argument(
         "field", choices=("name", "version"), help="The manifest field to print."
@@ -111,7 +163,22 @@ def get_field(manifest: dict[str, object], field: str) -> str:
 
 
 def main() -> int:
-    """Entry point for the manifest reader CLI."""
+    """
+    Entry point for the manifest reader CLI.
+
+    Returns
+    -------
+    int
+        Exit code: 0 for success, 1 for errors (missing file, invalid
+        TOML, or missing fields).
+
+    Examples
+    --------
+    Typical CLI invocation::
+
+        $ python read_manifest.py name --manifest-path Cargo.toml
+        netsuke
+    """
     args = parse_args()
     manifest_path = args.manifest_path or os.environ.get(
         "CARGO_TOML_PATH", "Cargo.toml"
