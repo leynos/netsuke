@@ -235,6 +235,7 @@ class ReadManifestTests:
         expected_stderr_fragment: str | None = None,
     ) -> None:
         """Assert that invoking the CLI fails for ``manifest_path``."""
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit.dangerous-subprocess-use-audit -- test-only; argv fully controlled  # noqa: E501
         result = subprocess.run(  # noqa: S603  # TODO(release-ci): FIXME: Security false positive; executed with trusted inputs in tests. https://github.com/leynos/netsuke/pull/179#discussion_r2404108802
             [
                 sys.executable,
