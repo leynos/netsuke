@@ -6,10 +6,11 @@ use crate::CliWorld;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::{given, then, when};
-use minijinja::{Environment, context};
+use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib;
 use std::ffi::OsStr;
 use test_support::env::set_var;
+use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
 const LINES_FIXTURE: &str = concat!(
     "one
@@ -108,10 +109,10 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     root
 }
 
-fn render_template(world: &mut CliWorld, template: &TemplateContent, path: &TemplatePath) {
+fn render_template_with_context(world: &mut CliWorld, template: &TemplateContent, ctx: Value) {
     let mut env = Environment::new();
     stdlib::register(&mut env);
-    let render = env.render_str(template.as_str(), context!(path => path.as_path().as_str()));
+    let render = env.render_str(template.as_str(), ctx);
     match render {
         Ok(output) => {
             world.stdlib_output = Some(output);
@@ -122,6 +123,11 @@ fn render_template(world: &mut CliWorld, template: &TemplateContent, path: &Temp
             world.stdlib_error = Some(err.to_string());
         }
     }
+}
+
+fn render_template(world: &mut CliWorld, template: &TemplateContent, path: &TemplatePath) {
+    let ctx = context!(path => path.as_path().as_str());
+    render_template_with_context(world, template, ctx);
 }
 
 #[given("a stdlib workspace")]
@@ -188,6 +194,12 @@ fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) 
     render_template(world, &template_content, &target);
 }
 
+#[when(regex = r#"^I render the stdlib template "(.+)"$"#)]
+fn render_stdlib_template_without_path(world: &mut CliWorld, template: String) {
+    let template_content = TemplateContent::from(template);
+    render_template_with_context(world, &template_content, context! {});
+}
+
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned capture arguments"
@@ -212,6 +224,49 @@ fn stdlib_root_and_output(world: &CliWorld) -> (&Utf8Path, &str) {
         .as_deref()
         .expect("expected stdlib output");
     (root, output)
+}
+
+fn stdlib_output(world: &CliWorld) -> &str {
+    world
+        .stdlib_output
+        .as_deref()
+        .expect("expected stdlib output")
+}
+
+fn parse_iso_timestamp(raw: &str) -> OffsetDateTime {
+    OffsetDateTime::parse(raw, &Iso8601::DEFAULT).expect("valid ISO8601 timestamp")
+}
+
+fn parse_expected_offset(raw: &str) -> UtcOffset {
+    if raw.eq_ignore_ascii_case("z") {
+        return UtcOffset::UTC;
+    }
+
+    let mut chars = raw.chars();
+    let first = chars
+        .next()
+        .unwrap_or_else(|| panic!("unsupported offset format: {raw}"));
+    let rest = chars.as_str();
+    let (sign, rest) = match first {
+        '+' => (1, rest),
+        '-' => (-1, rest),
+        _ => panic!("unsupported offset format: {raw}"),
+    };
+
+    let mut parts = rest.split(':');
+    let hours: i8 = parts
+        .next()
+        .expect("hour component")
+        .parse()
+        .expect("valid hour");
+    let minutes: i8 = parts
+        .next()
+        .map_or(0, |value| value.parse().expect("valid minute"));
+    let seconds: i8 = parts
+        .next()
+        .map_or(0, |value| value.parse().expect("valid second"));
+
+    UtcOffset::from_hms(sign * hours, sign * minutes, sign * seconds).expect("offset within range")
 }
 
 #[expect(
@@ -239,4 +294,29 @@ fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: String
     let relative_path = RelativePath::from(relative);
     let expected = root.join(relative_path.to_path_buf());
     assert_eq!(output, expected.as_str());
+}
+
+#[then("the stdlib output is an ISO8601 UTC timestamp")]
+fn assert_stdlib_output_is_utc_timestamp(world: &mut CliWorld) {
+    let output = stdlib_output(world);
+    let parsed = parse_iso_timestamp(output);
+    let now = OffsetDateTime::now_utc();
+    let delta = (now - parsed).abs();
+    assert!(
+        delta <= Duration::seconds(5),
+        "timestamp `{output}` should be within five seconds of now",
+    );
+    assert_eq!(parsed.offset(), UtcOffset::UTC);
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
+#[then(regex = r#"^the stdlib output offset is "(.+)"$"#)]
+fn assert_stdlib_output_offset(world: &mut CliWorld, expected: String) {
+    let output = stdlib_output(world);
+    let parsed = parse_iso_timestamp(output);
+    let expected_offset = parse_expected_offset(&expected);
+    assert_eq!(parsed.offset(), expected_offset);
 }

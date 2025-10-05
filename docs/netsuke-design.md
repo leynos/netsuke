@@ -932,6 +932,22 @@ be marked `pure` if safe for caching or `impure` otherwise.
 | `now()`               | function | Current `datetime` (UTC by default)       |
 | `timedelta(**kwargs)` | function | Convenience creator for `age` comparisons |
 
+The `now()` helper produces an object that renders as an ISO&nbsp;8601
+timestamp and exposes `iso8601`, `unix_timestamp`, and `offset` accessors so
+templates can serialise or compare values without string parsing. It defaults
+to UTC but accepts an `offset="+HH:MM"` keyword argument that re-bases the
+captured time on another fixed offset. Time is captured lazily when the helper
+executes so behaviour remains deterministic during a render.
+
+`timedelta(**kwargs)` constructs a duration object that renders using the
+ISO&nbsp;8601 duration grammar (for example, `P1DT2H30M5.75025S`). The helper
+accepts integer keyword arguments `weeks`, `days`, `hours`, `minutes`,
+`seconds`, `milliseconds`, `microseconds`, and `nanoseconds`, allowing callers
+to describe durations at nanosecond precision. Arguments may be negative, but
+overflow or non-integer inputs raise `InvalidOperation` errors so templates
+cannot silently wrap. The resulting object exposes `.iso8601`, `.seconds`, and
+`.nanoseconds` attributes for downstream predicates.
+
 ##### Example usage
 
 ```jinja
