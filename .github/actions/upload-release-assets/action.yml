@@ -1,0 +1,55 @@
+name: Upload release artefacts
+description: Upload staged artefacts to a GitHub release or validate them in dry-run mode.
+inputs:
+  release-tag:
+    description: Git tag identifying the release to publish to.
+    required: true
+  bin-name:
+    description: Binary name used to derive artefact names.
+    required: true
+  dist-dir:
+    description: Directory containing staged artefacts.
+    required: false
+    default: dist
+  dry-run:
+    description: When true, only validate artefacts and print the upload plan.
+    required: false
+    default: "false"
+outputs:
+  upload-error:
+    description: Whether the invocation detected an error.
+    value: ${{ steps.invoke.outputs.upload-error }}
+  error-message:
+    description: Summary of the error when ``upload-error`` is ``true``.
+    value: ${{ steps.invoke.outputs.error-message }}
+runs:
+  using: composite
+  steps:
+    - id: invoke
+      name: Upload release artefacts
+      shell: bash
+      env:
+        INPUT_RELEASE_TAG: ${{ inputs.release-tag }}
+        INPUT_BIN_NAME: ${{ inputs.bin-name }}
+        INPUT_DIST_DIR: ${{ inputs.dist-dir }}
+        INPUT_DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -uo pipefail
+        log_file="$(mktemp)"
+        if "$GITHUB_WORKSPACE/scripts/upload_release_assets.py" >"$log_file" 2>&1; then
+          cat "$log_file"
+          {
+            echo "upload-error=false"
+            echo "error-message="
+          } >>"$GITHUB_OUTPUT"
+        else
+          status=$?
+          cat "$log_file"
+          {
+            echo "upload-error=true"
+            echo "error-message<<'EOF'"
+            cat "$log_file"
+            printf 'Exit code: %s\n' "$status"
+            echo 'EOF'
+          } >>"$GITHUB_OUTPUT"
+        fi
