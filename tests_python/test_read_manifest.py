@@ -78,7 +78,17 @@ SCRIPT_PATH = REPO_ROOT / ".github" / "workflows" / "scripts" / "read_manifest.p
 
 @dataclasses.dataclass(slots=True)
 class CLIResult:
-    """Result container returned by :func:`ReadManifestTests._invoke_cli`."""
+    """CLI invocation outcome.
+
+    Attributes
+    ----------
+    exit_code : int
+        Exit status returned by the CLI process.
+    stdout : str
+        Captured standard output emitted by the CLI.
+    stderr : str
+        Captured standard error emitted by the CLI.
+    """
 
     exit_code: int
     stdout: str
