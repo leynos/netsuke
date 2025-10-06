@@ -102,7 +102,7 @@ jobs:
         # v4.1.2
       - name: Build Linux release
         uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+          leynos/shared-actions/.github/actions/rust-build-release@6c69b7715a6420c409af6fd56f1d6e566da42a46
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -110,7 +110,7 @@ jobs:
           # Package formats are produced by linux-packages below
       - name: Package Linux artefacts with dependencies
         uses: >-
-          leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
+          leynos/shared-actions/.github/actions/linux-packages@6c69b7715a6420c409af6fd56f1d6e566da42a46
         with:
           project-dir: .
           package-name: ${{ needs.metadata.outputs.bin_name }}
@@ -159,7 +159,7 @@ jobs:
           python-version: '3.11'
       - name: Build Windows release
         uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+          leynos/shared-actions/.github/actions/rust-build-release@6c69b7715a6420c409af6fd56f1d6e566da42a46
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -206,7 +206,7 @@ jobs:
       - id: package
         name: Build Windows installer package
         uses: >-
-          leynos/shared-actions/.github/actions/windows-package@7bc9b6c15964ef98733aa647b76d402146284ba3
+          leynos/shared-actions/.github/actions/windows-package@6c69b7715a6420c409af6fd56f1d6e566da42a46
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
@@ -257,7 +257,7 @@ jobs:
           python-version: '3.11'
       - name: Build macOS release
         uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@7bc9b6c15964ef98733aa647b76d402146284ba3
+          leynos/shared-actions/.github/actions/rust-build-release@6c69b7715a6420c409af6fd56f1d6e566da42a46
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -276,7 +276,7 @@ jobs:
       - id: pkg
         name: Build macOS installer package
         uses: >-
-          leynos/shared-actions/.github/actions/macos-package@7bc9b6c15964ef98733aa647b76d402146284ba3
+          leynos/shared-actions/.github/actions/macos-package@6c69b7715a6420c409af6fd56f1d6e566da42a46
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
           identifier: com.leynos.${{ needs.metadata.outputs.bin_name }}
