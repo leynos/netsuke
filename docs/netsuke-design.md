@@ -934,7 +934,7 @@ be marked `pure` if safe for caching or `impure` otherwise.
 
 The `now()` helper produces an object that renders as an ISO&nbsp;8601
 timestamp and exposes `iso8601`, `unix_timestamp`, and `offset` accessors so
-templates can serialise or compare values without string parsing. It defaults
+templates can serialize or compare values without string parsing. It defaults
 to UTC but accepts an `offset="+HH:MM"` keyword argument that re-bases the
 captured time on another fixed offset. Time is captured lazily when the helper
 executes so behaviour remains deterministic during a render.

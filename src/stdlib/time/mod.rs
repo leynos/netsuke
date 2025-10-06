@@ -11,7 +11,11 @@ use minijinja::{
     Environment, Error, ErrorKind,
     value::{Kwargs, Object, ObjectRepr, Value},
 };
-use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
+use time::{
+    Duration, OffsetDateTime, UtcOffset,
+    format_description::{FormatItem, well_known::Iso8601},
+    macros::format_description,
+};
 
 const SECONDS_PER_MINUTE: i64 = 60;
 const SECONDS_PER_HOUR: i64 = 60 * SECONDS_PER_MINUTE;
@@ -21,6 +25,10 @@ const NANOS_PER_MICROSECOND: i64 = 1_000;
 const NANOS_PER_MILLISECOND: i64 = 1_000 * NANOS_PER_MICROSECOND;
 const SECONDS_PER_MINUTE_I32: i32 = 60;
 const SECONDS_PER_HOUR_I32: i32 = 3_600;
+
+const OFFSET_FORMAT: &[FormatItem<'static>] = format_description!(
+    "[offset_hour sign:mandatory]:[offset_minute][optional [:[offset_second]]]"
+);
 
 /// Register time helpers with the environment.
 pub(crate) fn register_functions(env: &mut Environment<'_>) {
@@ -53,14 +61,32 @@ fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
     kwargs.assert_all_used()?;
 
     let mut total = Duration::ZERO;
-    total = add_seconds_component(total, weeks, SECONDS_PER_WEEK, "weeks")?;
-    total = add_seconds_component(total, days, SECONDS_PER_DAY, "days")?;
-    total = add_seconds_component(total, hours, SECONDS_PER_HOUR, "hours")?;
-    total = add_seconds_component(total, minutes, SECONDS_PER_MINUTE, "minutes")?;
-    total = add_seconds_component(total, seconds, 1, "seconds")?;
-    total = add_nanoseconds_component(total, milliseconds, NANOS_PER_MILLISECOND, "milliseconds")?;
-    total = add_nanoseconds_component(total, microseconds, NANOS_PER_MICROSECOND, "microseconds")?;
-    total = add_nanoseconds_component(total, nanoseconds, 1, "nanoseconds")?;
+    total = add_component(total, weeks, SECONDS_PER_WEEK, Duration::seconds, "weeks")?;
+    total = add_component(total, days, SECONDS_PER_DAY, Duration::seconds, "days")?;
+    total = add_component(total, hours, SECONDS_PER_HOUR, Duration::seconds, "hours")?;
+    total = add_component(
+        total,
+        minutes,
+        SECONDS_PER_MINUTE,
+        Duration::seconds,
+        "minutes",
+    )?;
+    total = add_component(total, seconds, 1, Duration::seconds, "seconds")?;
+    total = add_component(
+        total,
+        milliseconds,
+        NANOS_PER_MILLISECOND,
+        Duration::nanoseconds,
+        "milliseconds",
+    )?;
+    total = add_component(
+        total,
+        microseconds,
+        NANOS_PER_MICROSECOND,
+        Duration::nanoseconds,
+        "microseconds",
+    )?;
+    total = add_component(total, nanoseconds, 1, Duration::nanoseconds, "nanoseconds")?;
 
     Ok(Value::from_object(TimeDeltaValue::new(total)))
 }
@@ -71,118 +97,28 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
         return Ok(UtcOffset::UTC);
     }
 
-    let (sign, rest) = extract_sign(trimmed, raw)?;
-    let (hours, minutes, seconds) = parse_offset_components(rest, raw)?;
-    validate_offset_ranges(hours, minutes, seconds, raw)?;
-
-    let total_seconds = calculate_total_seconds(sign, hours, minutes, seconds);
-    let total_seconds = i32::try_from(total_seconds).map_err(|_| invalid_offset(raw))?;
-
-    UtcOffset::from_whole_seconds(total_seconds).map_err(|err| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            format!("now offset '{raw}' is invalid: {err}"),
-        )
-    })
-}
-
-fn extract_sign<'a>(trimmed: &'a str, raw: &str) -> Result<(i64, &'a str), Error> {
-    if let Some(remaining) = trimmed.strip_prefix('+') {
-        return Ok((1_i64, remaining));
-    }
-
-    trimmed
-        .strip_prefix('-')
-        .map(|remaining| (-1_i64, remaining))
-        .ok_or_else(|| invalid_offset(raw))
-}
-
-fn parse_offset_components(rest: &str, raw: &str) -> Result<(i32, i32, i32), Error> {
-    let (hours_part, remaining) = rest.split_once(':').ok_or_else(|| invalid_offset(raw))?;
-    if hours_part.contains(':') {
-        return Err(invalid_offset(raw));
-    }
-
-    let (minutes_part, seconds_part) = match remaining.split_once(':') {
-        Some((mins, secs)) if !secs.contains(':') => (mins, Some(secs)),
-        Some(_) => return Err(invalid_offset(raw)),
-        None => (remaining, None),
-    };
-
-    if minutes_part.contains(':') {
-        return Err(invalid_offset(raw));
-    }
-
-    let hours = parse_component(hours_part, raw)?;
-    let minutes = parse_component(minutes_part, raw)?;
-    let seconds = seconds_part
-        .map(|value| parse_component(value, raw))
-        .transpose()?;
-
-    Ok((hours, minutes, seconds.unwrap_or_default()))
-}
-
-fn validate_offset_ranges(hours: i32, minutes: i32, seconds: i32, raw: &str) -> Result<(), Error> {
-    if !(0..=23).contains(&hours) || !(0..=59).contains(&minutes) {
-        return Err(invalid_offset(raw));
-    }
-
-    if !(0..=59).contains(&seconds) {
-        return Err(invalid_offset(raw));
-    }
-
-    Ok(())
-}
-
-fn calculate_total_seconds(sign: i64, hours: i32, minutes: i32, seconds: i32) -> i64 {
-    sign * (i64::from(hours) * SECONDS_PER_HOUR
-        + i64::from(minutes) * SECONDS_PER_MINUTE
-        + i64::from(seconds))
-}
-
-fn parse_component(component: &str, original: &str) -> Result<i32, Error> {
-    component
-        .trim()
-        .parse::<i32>()
-        .map_err(|_| invalid_offset(original))
+    UtcOffset::parse(trimmed, OFFSET_FORMAT).map_err(|_| invalid_offset(raw))
 }
 
 fn invalid_offset(raw: &str) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
-        format!("now offset '{raw}' is invalid: expected '+HH:MM' or 'Z'"),
+        format!("now offset '{raw}' is invalid: expected '+HH:MM[:SS]' or 'Z'"),
     )
 }
 
-fn add_seconds_component(
+fn add_component(
     mut total: Duration,
     amount: Option<i64>,
     multiplier: i64,
+    constructor: fn(i64) -> Duration,
     label: &str,
 ) -> Result<Duration, Error> {
     if let Some(value) = amount {
-        let seconds = value
+        let scaled = value
             .checked_mul(multiplier)
             .ok_or_else(|| overflow_error(label))?;
-        let component = Duration::seconds(seconds);
-        total = total
-            .checked_add(component)
-            .ok_or_else(|| overflow_error(label))?;
-    }
-    Ok(total)
-}
-
-fn add_nanoseconds_component(
-    mut total: Duration,
-    amount: Option<i64>,
-    multiplier: i64,
-    label: &str,
-) -> Result<Duration, Error> {
-    if let Some(value) = amount {
-        let nanos = value
-            .checked_mul(multiplier)
-            .ok_or_else(|| overflow_error(label))?;
-        let component = Duration::nanoseconds(nanos);
+        let component = constructor(scaled);
         total = total
             .checked_add(component)
             .ok_or_else(|| overflow_error(label))?;

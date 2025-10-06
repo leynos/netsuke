@@ -62,10 +62,17 @@ fn now_applies_custom_offset() {
 }
 
 #[rstest]
-fn now_rejects_invalid_offset() {
+#[case::nonsense("bogus")]
+#[case::missing_sign("01:00")]
+#[case::hours_out_of_range("+25:00")]
+#[case::minutes_out_of_range("+01:60")]
+#[case::seconds_out_of_range("+01:01:61")]
+#[case::empty("")]
+fn now_rejects_invalid_offset(#[case] offset: &str) {
     let env = build_env();
+    let expr = format!("now(offset='{offset}')");
     let err = env
-        .compile_expression("now(offset='bogus')")
+        .compile_expression(&expr)
         .expect("compile expression")
         .eval(context! {});
     let err = err.expect_err("invalid offset should error");
@@ -99,11 +106,25 @@ fn timedelta_accumulates_components() {
 }
 
 #[rstest]
-fn timedelta_supports_negative_values() {
+#[case("timedelta(weeks=-1)", Duration::seconds(-SECONDS_PER_WEEK))]
+#[case("timedelta(days=-1)", Duration::seconds(-SECONDS_PER_DAY))]
+#[case("timedelta(hours=-1)", Duration::seconds(-SECONDS_PER_HOUR))]
+#[case("timedelta(minutes=-1)", Duration::seconds(-SECONDS_PER_MINUTE))]
+#[case("timedelta(seconds=-1)", Duration::seconds(-1))]
+#[case(
+    "timedelta(milliseconds=-1)",
+    Duration::nanoseconds(-NANOS_PER_MILLISECOND),
+)]
+#[case(
+    "timedelta(microseconds=-1)",
+    Duration::nanoseconds(-NANOS_PER_MICROSECOND),
+)]
+#[case("timedelta(nanoseconds=-1)", Duration::nanoseconds(-1))]
+fn timedelta_supports_negative_values(#[case] expr: &str, #[case] expected: Duration) {
     let env = build_env();
-    let value = eval_expression(&env, "timedelta(hours=-1, seconds=-30)");
+    let value = eval_expression(&env, expr);
     let duration = value_as_duration(&value);
-    assert_eq!(duration, Duration::seconds(-SECONDS_PER_HOUR - 30));
+    assert_eq!(duration, expected);
 }
 
 #[rstest]
@@ -118,17 +139,44 @@ fn timedelta_detects_overflow() {
 }
 
 #[rstest]
-fn timestamp_iso8601_property() {
-    let reference = datetime!(2024-05-21 10:30:00 +00:00);
+#[case(
+    datetime!(2024-05-21 10:30:00 +00:00),
+    "2024-05-21T10:30:00Z",
+)]
+#[case(
+    datetime!(2024-05-21 10:30:00 +05:45),
+    "2024-05-21T10:30:00+05:45",
+)]
+#[case(
+    datetime!(2024-05-21 10:30:00.123456789 +00:00),
+    "2024-05-21T10:30:00.123456789Z",
+)]
+#[case(
+    datetime!(2024-05-21 10:30:00.5 -03:30),
+    "2024-05-21T10:30:00.500000000-03:30",
+)]
+fn timestamp_iso8601_property(#[case] reference: OffsetDateTime, #[case] expected: &str) {
     let value = Value::from_object(TimestampValue::new(reference));
     let iso = get_iso8601_property(&value);
-    assert_eq!(iso, "2024-05-21T10:30:00Z");
+    assert_eq!(iso, expected);
 }
 
 #[rstest]
-fn timedelta_iso8601_property() {
-    let duration = Duration::seconds(SECONDS_PER_DAY + 30) + Duration::nanoseconds(500_000_000);
+#[case(
+    Duration::seconds(SECONDS_PER_DAY + 30) + Duration::nanoseconds(500_000_000),
+    "P1DT30.5S",
+)]
+#[case(Duration::ZERO, "PT0S")]
+#[case(
+    Duration::seconds(-SECONDS_PER_DAY - 90),
+    "-P1DT1M30S",
+)]
+#[case(
+    Duration::seconds(-30) + Duration::nanoseconds(-250_000_000),
+    "-PT30.25S",
+)]
+fn timedelta_iso8601_property(#[case] duration: Duration, #[case] expected: &str) {
     let value = Value::from_object(TimeDeltaValue::new(duration));
     let iso = get_iso8601_property(&value);
-    assert_eq!(iso, "P1DT30.5S");
+    assert_eq!(iso, expected);
 }
