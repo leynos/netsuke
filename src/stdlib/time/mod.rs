@@ -71,14 +71,33 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
         return Ok(UtcOffset::UTC);
     }
 
-    let (sign, rest) = if let Some(remaining) = trimmed.strip_prefix('+') {
-        (1_i64, remaining)
-    } else if let Some(remaining) = trimmed.strip_prefix('-') {
-        (-1_i64, remaining)
-    } else {
-        return Err(invalid_offset(raw));
-    };
+    let (sign, rest) = extract_sign(trimmed, raw)?;
+    let (hours, minutes, seconds) = parse_offset_components(rest, raw)?;
+    validate_offset_ranges(hours, minutes, seconds, raw)?;
 
+    let total_seconds = calculate_total_seconds(sign, hours, minutes, seconds);
+    let total_seconds = i32::try_from(total_seconds).map_err(|_| invalid_offset(raw))?;
+
+    UtcOffset::from_whole_seconds(total_seconds).map_err(|err| {
+        Error::new(
+            ErrorKind::InvalidOperation,
+            format!("now offset '{raw}' is invalid: {err}"),
+        )
+    })
+}
+
+fn extract_sign<'a>(trimmed: &'a str, raw: &str) -> Result<(i64, &'a str), Error> {
+    if let Some(remaining) = trimmed.strip_prefix('+') {
+        return Ok((1_i64, remaining));
+    }
+
+    trimmed
+        .strip_prefix('-')
+        .map(|remaining| (-1_i64, remaining))
+        .ok_or_else(|| invalid_offset(raw))
+}
+
+fn parse_offset_components(rest: &str, raw: &str) -> Result<(i32, i32, i32), Error> {
     let (hours_part, remaining) = rest.split_once(':').ok_or_else(|| invalid_offset(raw))?;
     if hours_part.contains(':') {
         return Err(invalid_offset(raw));
@@ -100,28 +119,25 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
         .map(|value| parse_component(value, raw))
         .transpose()?;
 
+    Ok((hours, minutes, seconds.unwrap_or_default()))
+}
+
+fn validate_offset_ranges(hours: i32, minutes: i32, seconds: i32, raw: &str) -> Result<(), Error> {
     if !(0..=23).contains(&hours) || !(0..=59).contains(&minutes) {
         return Err(invalid_offset(raw));
     }
 
-    let seconds_value = seconds.unwrap_or_default();
-    if !(0..=59).contains(&seconds_value) {
+    if !(0..=59).contains(&seconds) {
         return Err(invalid_offset(raw));
     }
 
-    let total_seconds = sign
-        * (i64::from(hours) * SECONDS_PER_HOUR
-            + i64::from(minutes) * SECONDS_PER_MINUTE
-            + i64::from(seconds_value));
+    Ok(())
+}
 
-    let total_seconds = i32::try_from(total_seconds).map_err(|_| invalid_offset(raw))?;
-
-    UtcOffset::from_whole_seconds(total_seconds).map_err(|err| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            format!("now offset '{raw}' is invalid: {err}"),
-        )
-    })
+fn calculate_total_seconds(sign: i64, hours: i32, minutes: i32, seconds: i32) -> i64 {
+    sign * (i64::from(hours) * SECONDS_PER_HOUR
+        + i64::from(minutes) * SECONDS_PER_MINUTE
+        + i64::from(seconds))
 }
 
 fn parse_component(component: &str, original: &str) -> Result<i32, Error> {
