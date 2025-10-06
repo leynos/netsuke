@@ -1,7 +1,7 @@
 ---
 name: Release Binary
 
-on:
+'on':
   push:
     tags:
       - 'v*.*.*'
@@ -65,7 +65,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/ensure-cargo-version@0ac4b6ec81dbef45594b37bc2afaaa60e30b5b20
         with:
-          check-tag: ${{ steps.publish.outputs.value == 'true' }}
+          check-tag: ${{ fromJSON(steps.publish.outputs.value) }}
       - id: bin_name
         name: Extract binary name from Cargo.toml
         shell: bash
@@ -143,8 +143,10 @@ jobs:
         include:
           - target: x86_64-pc-windows-msvc
             package_arch: amd64
+            msi_arch: x64
           - target: aarch64-pc-windows-msvc
             package_arch: arm64
+            msi_arch: arm64
     steps:
       - uses: >-
           actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
@@ -182,20 +184,16 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${BIN_PATH:-}" ]]; then
-            echo '::error title=Stage output missing::binary_path output is empty'
+            echo '::error title=Stage output missing::binary_path output empty'
             exit 1
           fi
           if [[ -z "${LICENSE_PATH:-}" ]]; then
-            echo '::error title=Stage output missing::license_path output is empty'
+            echo '::error title=Stage output missing::license_path output empty'
             exit 1
           fi
           normalise_path() {
-            python - "$1" <<'PY'
-import sys
-from pathlib import PureWindowsPath
-
-print(PureWindowsPath(sys.argv[1]))
-PY
+            python -c 'from pathlib import PureWindowsPath; import sys; \
+              print(PureWindowsPath(sys.argv[1]))' "$1"
           }
 
           binary_path="$(normalise_path "${BIN_PATH}")"
@@ -212,10 +210,12 @@ PY
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
-          BINARY_PATH: ${{ steps.normalize_windows_paths.outputs.binary_path }}
-          LICENSE_RTF_PATH: ${{ steps.normalize_windows_paths.outputs.license_path }}
+          BINARY_PATH: >-
+            ${{ steps.normalize_windows_paths.outputs.binary_path }}
+          LICENSE_RTF_PATH: >-
+            ${{ steps.normalize_windows_paths.outputs.license_path }}
         with:
-          architecture: ${{ matrix.package_arch == 'amd64' && 'x64' || 'arm64' }}
+          architecture: ${{ matrix.msi_arch }}
           version: ${{ needs.metadata.outputs.version }}
           output-basename: ${{ needs.metadata.outputs.bin_name }}
           output-directory: dist
