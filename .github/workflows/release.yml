@@ -173,20 +173,37 @@ jobs:
         run: |
           set -euo pipefail
           uv run .github/workflows/scripts/stage_windows.py
-      - id: windows_paths
+      - id: normalize_windows_paths
         name: Normalise Windows paths
         shell: bash
         env:
           BIN_PATH: ${{ steps.stage.outputs.binary_path }}
-          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
+          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
         run: |
           set -euo pipefail
-          binary_path="${BIN_PATH//\//\\\\}"
-          license_path="dist/${BIN_NAME}-license.rtf"
-          license_path="${license_path//\//\\\\}"
+          if [[ -z "${BIN_PATH:-}" ]]; then
+            echo '::error title=Stage output missing::binary_path output is empty'
+            exit 1
+          fi
+          if [[ -z "${LICENSE_PATH:-}" ]]; then
+            echo '::error title=Stage output missing::license_path output is empty'
+            exit 1
+          fi
+          normalise_path() {
+            python - "$1" <<'PY'
+import sys
+from pathlib import PureWindowsPath
+
+print(PureWindowsPath(sys.argv[1]))
+PY
+          }
+
+          binary_path="$(normalise_path "${BIN_PATH}")"
+          license_path="$(normalise_path "${LICENSE_PATH}")"
+
           {
-            echo "binary_path=$binary_path"
-            echo "license_path=$license_path"
+            printf 'binary_path=%s\n' "$binary_path"
+            printf 'license_path=%s\n' "$license_path"
           } >>"$GITHUB_OUTPUT"
       - id: package
         name: Build Windows installer package
@@ -195,8 +212,8 @@ jobs:
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
-          BINARY_PATH: ${{ steps.windows_paths.outputs.binary_path }}
-          LICENSE_RTF_PATH: ${{ steps.windows_paths.outputs.license_path }}
+          BINARY_PATH: ${{ steps.normalize_windows_paths.outputs.binary_path }}
+          LICENSE_RTF_PATH: ${{ steps.normalize_windows_paths.outputs.license_path }}
         with:
           architecture: ${{ matrix.package_arch == 'amd64' && 'x64' || 'arm64' }}
           version: ${{ needs.metadata.outputs.version }}
