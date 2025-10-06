@@ -32,6 +32,15 @@ fn value_as_duration(value: &Value) -> Duration {
         .expect("duration object")
 }
 
+fn get_iso8601_property(value: &Value) -> String {
+    value
+        .as_object()
+        .expect("object")
+        .get_value(&Value::from("iso8601"))
+        .expect("iso8601 attr")
+        .to_string()
+}
+
 #[rstest]
 fn now_defaults_to_utc() {
     let env = build_env();
@@ -112,11 +121,7 @@ fn timedelta_detects_overflow() {
 fn timestamp_iso8601_property() {
     let reference = datetime!(2024-05-21 10:30:00 +00:00);
     let value = Value::from_object(TimestampValue::new(reference));
-    let object = value.as_object().expect("object");
-    let iso = object
-        .get_value(&Value::from("iso8601"))
-        .expect("iso8601 attr")
-        .to_string();
+    let iso = get_iso8601_property(&value);
     assert_eq!(iso, "2024-05-21T10:30:00Z");
 }
 
@@ -124,10 +129,6 @@ fn timestamp_iso8601_property() {
 fn timedelta_iso8601_property() {
     let duration = Duration::seconds(SECONDS_PER_DAY + 30) + Duration::nanoseconds(500_000_000);
     let value = Value::from_object(TimeDeltaValue::new(duration));
-    let object = value.as_object().expect("object");
-    let iso = object
-        .get_value(&Value::from("iso8601"))
-        .expect("iso8601 attr")
-        .to_string();
+    let iso = get_iso8601_property(&value);
     assert_eq!(iso, "P1DT30.5S");
 }
