@@ -108,78 +108,22 @@ jobs:
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           version: ${{ needs.metadata.outputs.version }}
           # Package formats are produced by linux-packages below
-      - name: Install nfpm
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="v2.39.0"
-            case "$(uname -s)" in
-              Linux) asset_os="Linux" ;;
-              *)
-                printf '%s%s\n' \
-                  "::error title=Unsupported OS::nfpm install requires" \
-                  " Linux runners"
-                exit 1
-                ;;
-            esac
-            case "$(uname -m)" in
-              x86_64) asset_arch="x86_64" ;;
-              aarch64 | arm64) asset_arch="arm64" ;;
-              *)
-                printf '%s%s\n' \
-                  "::error title=Unsupported architecture::Unknown arch" \
-                  " '$(uname -m)'"
-                exit 1
-                ;;
-            esac
-          asset="nfpm_${version#v}_${asset_os}_${asset_arch}.tar.gz"
-          base_url="https://github.com/goreleaser/nfpm/releases/download/${version}"
-          tmp_dir="$(mktemp -d)"
-          trap 'rm -rf "${tmp_dir}"' EXIT
-          curl -fsSL "${base_url}/${asset}" -o "${tmp_dir}/${asset}"
-          curl -fsSL "${base_url}/checksums.txt" -o "${tmp_dir}/checksums.txt"
-          checksum_line="$(
-            grep "  ${asset}$" "${tmp_dir}/checksums.txt" || true
-          )"
-          if [ -z "${checksum_line}" ]; then
-            printf '%s%s\n' \
-              "::error title=Checksum missing::No checksum entry for" \
-              " ${asset}"
-            exit 1
-          fi
-          if command -v sha256sum >/dev/null 2>&1; then
-            (
-              cd "${tmp_dir}"
-              printf '%s\n' "${checksum_line}" | sha256sum --check -
-            )
-          else
-            expected="$(printf '%s\n' "${checksum_line}" | awk '{print $1}')"
-            echo "${expected}  ${tmp_dir}/${asset}" | shasum -a 256 --check -
-          fi
-          tar -xzf "${tmp_dir}/${asset}" -C "${tmp_dir}" nfpm
-          install -m 0755 "${tmp_dir}/nfpm" "${RUNNER_TEMP}/nfpm"
-          echo "${RUNNER_TEMP}" >>"${GITHUB_PATH}"
       - name: Package Linux artefacts with dependencies
-        shell: bash
-        env:
-          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
-          TARGET: ${{ matrix.target }}
-          VERSION: ${{ needs.metadata.outputs.version }}
-          MAN_PATH: >-
+        uses: >-
+          leynos/shared-actions/.github/actions/linux-packages@7bc9b6c15964ef98733aa647b76d402146284ba3
+        with:
+          project-dir: .
+          package-name: ${{ needs.metadata.outputs.bin_name }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+          target: ${{ matrix.target }}
+          version: ${{ needs.metadata.outputs.version }}
+          formats: deb,rpm
+          man-paths: >-
             dist/${{ needs.metadata.outputs.bin_name }}_linux_${{
             matrix.package_arch }}/${{ needs.metadata.outputs.bin_name }}.1
-        run: |
-          set -euo pipefail
-          python3 .github/workflows/scripts/package_linux.py \
-            --project-dir . \
-            --bin-name "${BIN_NAME}" \
-            --package-name "${BIN_NAME}" \
-            --target "${TARGET}" \
-            --version "${VERSION}" \
-            --formats deb rpm \
-            --man-path "${MAN_PATH}" \
-            --deb-depends ninja-build \
-            --rpm-depends ninja-build
+          outdir: dist
+          deb-depends: ninja-build
+          rpm-depends: ninja-build
       - name: Prune packaging metadata
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
