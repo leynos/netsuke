@@ -227,13 +227,18 @@ fn format_duration_iso8601(duration: Duration) -> String {
 
     let absolute = duration.abs();
     let days = absolute.whole_days();
-    let mut remainder = absolute - Duration::days(days);
+    let remainder = absolute - Duration::days(days);
 
     if days != 0 {
         buffer.push_str(&days.to_string());
         buffer.push('D');
     }
 
+    let time_section = format_time_components(remainder);
+    finalize_duration_buffer(buffer, &time_section)
+}
+
+fn format_time_components(mut remainder: Duration) -> String {
     let mut time_section = String::new();
 
     let hours = remainder.whole_hours();
@@ -256,13 +261,17 @@ fn format_duration_iso8601(duration: Duration) -> String {
         time_section.push_str(&format_seconds_with_fraction(seconds, nanos));
     }
 
+    time_section
+}
+
+fn finalize_duration_buffer(mut buffer: String, time_section: &str) -> String {
     if time_section.is_empty() {
         if buffer.ends_with('P') {
             buffer.push_str("T0S");
         }
     } else {
         buffer.push('T');
-        buffer.push_str(&time_section);
+        buffer.push_str(time_section);
     }
 
     buffer
