@@ -58,7 +58,8 @@ jobs:
           if [ "${{ github.event_name }}" = 'push' ]; then
             echo "value=true" >>"$GITHUB_OUTPUT"
           else
-            echo "value=${{ inputs.publish }}" >>"$GITHUB_OUTPUT"
+            publish="$(jq -r '.inputs.publish // false' "$GITHUB_EVENT_PATH")"
+            echo "value=$publish" >>"$GITHUB_OUTPUT"
           fi
       - id: ensure_version
         name: Read package version from Cargo.toml
