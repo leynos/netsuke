@@ -61,32 +61,78 @@ fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
     kwargs.assert_all_used()?;
 
     let mut total = Duration::ZERO;
-    total = add_component(total, weeks, SECONDS_PER_WEEK, Duration::seconds, "weeks")?;
-    total = add_component(total, days, SECONDS_PER_DAY, Duration::seconds, "days")?;
-    total = add_component(total, hours, SECONDS_PER_HOUR, Duration::seconds, "hours")?;
+    total = add_component(
+        total,
+        weeks,
+        ComponentSpec {
+            multiplier: SECONDS_PER_WEEK,
+            constructor: Duration::seconds,
+            label: "weeks",
+        },
+    )?;
+    total = add_component(
+        total,
+        days,
+        ComponentSpec {
+            multiplier: SECONDS_PER_DAY,
+            constructor: Duration::seconds,
+            label: "days",
+        },
+    )?;
+    total = add_component(
+        total,
+        hours,
+        ComponentSpec {
+            multiplier: SECONDS_PER_HOUR,
+            constructor: Duration::seconds,
+            label: "hours",
+        },
+    )?;
     total = add_component(
         total,
         minutes,
-        SECONDS_PER_MINUTE,
-        Duration::seconds,
-        "minutes",
+        ComponentSpec {
+            multiplier: SECONDS_PER_MINUTE,
+            constructor: Duration::seconds,
+            label: "minutes",
+        },
     )?;
-    total = add_component(total, seconds, 1, Duration::seconds, "seconds")?;
+    total = add_component(
+        total,
+        seconds,
+        ComponentSpec {
+            multiplier: 1,
+            constructor: Duration::seconds,
+            label: "seconds",
+        },
+    )?;
     total = add_component(
         total,
         milliseconds,
-        NANOS_PER_MILLISECOND,
-        Duration::nanoseconds,
-        "milliseconds",
+        ComponentSpec {
+            multiplier: NANOS_PER_MILLISECOND,
+            constructor: Duration::nanoseconds,
+            label: "milliseconds",
+        },
     )?;
     total = add_component(
         total,
         microseconds,
-        NANOS_PER_MICROSECOND,
-        Duration::nanoseconds,
-        "microseconds",
+        ComponentSpec {
+            multiplier: NANOS_PER_MICROSECOND,
+            constructor: Duration::nanoseconds,
+            label: "microseconds",
+        },
     )?;
-    total = add_component(total, nanoseconds, 1, Duration::nanoseconds, "nanoseconds")?;
+    total = add_component(
+        total,
+        nanoseconds,
+        ComponentSpec {
+            multiplier: 1,
+            constructor: Duration::nanoseconds,
+            label: "nanoseconds",
+        },
+    )?;
 
     Ok(Value::from_object(TimeDeltaValue::new(total)))
 }
@@ -107,21 +153,26 @@ fn invalid_offset(raw: &str) -> Error {
     )
 }
 
+#[derive(Clone, Copy)]
+struct ComponentSpec {
+    multiplier: i64,
+    constructor: fn(i64) -> Duration,
+    label: &'static str,
+}
+
 fn add_component(
     mut total: Duration,
     amount: Option<i64>,
-    multiplier: i64,
-    constructor: fn(i64) -> Duration,
-    label: &str,
+    spec: ComponentSpec,
 ) -> Result<Duration, Error> {
     if let Some(value) = amount {
         let scaled = value
-            .checked_mul(multiplier)
-            .ok_or_else(|| overflow_error(label))?;
-        let component = constructor(scaled);
+            .checked_mul(spec.multiplier)
+            .ok_or_else(|| overflow_error(spec.label))?;
+        let component = (spec.constructor)(scaled);
         total = total
             .checked_add(component)
-            .ok_or_else(|| overflow_error(label))?;
+            .ok_or_else(|| overflow_error(spec.label))?;
     }
     Ok(total)
 }
