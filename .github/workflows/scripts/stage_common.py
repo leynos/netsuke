@@ -73,31 +73,12 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
     """
     workspace = config.workspace.resolve()
     dist_dir = workspace / "dist"
-    dist_dir.mkdir(parents=True, exist_ok=True)
 
-    bin_src = (
-        workspace
-        / "target"
-        / config.target
-        / "release"
-        / f"{config.bin_name}{config.bin_ext}"
+    bin_src, man_src, licence_src = _validate_and_locate_sources(
+        workspace, config.target, config.bin_name, config.bin_ext
     )
-    if not bin_src.is_file():
-        message = f"Binary not found at {bin_src}"
-        raise RuntimeError(message)
 
-    man_src = _find_manpage(workspace, config.target, config.bin_name)
-    licence_src = workspace / "LICENSE"
-    if not licence_src.is_file():
-        message = f"Licence file not found at {licence_src}"
-        raise RuntimeError(message)
-
-    artifact_dir = dist_dir / config.artifact_dir_name
-    if artifact_dir.exists():
-        # Previous runs may leave artefacts behind; start from a clean slate so
-        # releases never mix binaries or manuals from different builds.
-        shutil.rmtree(artifact_dir)
-    artifact_dir.mkdir(parents=True)
+    artifact_dir = _prepare_artifact_directory(dist_dir, config.artifact_dir_name)
 
     bin_dest = artifact_dir / bin_src.name
     man_dest = artifact_dir / man_src.name
@@ -108,6 +89,63 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
     for path in (bin_dest, man_dest):
         _write_checksum(path)
+
+    _write_github_outputs(
+        github_output,
+        artifact_dir,
+        bin_dest,
+        man_dest,
+        licence_dest,
+    )
+
+    return StageResult(artifact_dir, bin_dest, man_dest, licence_dest)
+
+
+def _validate_and_locate_sources(
+    workspace: Path, target: str, bin_name: str, bin_ext: str
+) -> tuple[Path, Path, Path]:
+    """Resolve the source artefacts and ensure they exist."""
+
+    bin_src = (
+        workspace / "target" / target / "release" / f"{bin_name}{bin_ext}"
+    )
+    if not bin_src.is_file():
+        message = f"Binary not found at {bin_src}"
+        raise RuntimeError(message)
+
+    man_src = _find_manpage(workspace, target, bin_name)
+
+    licence_src = workspace / "LICENSE"
+    if not licence_src.is_file():
+        message = f"Licence file not found at {licence_src}"
+        raise RuntimeError(message)
+
+    return bin_src, man_src, licence_src
+
+
+def _prepare_artifact_directory(dist_dir: Path, artifact_dir_name: str) -> Path:
+    """Return a clean artefact directory within the distribution workspace."""
+
+    dist_dir.mkdir(parents=True, exist_ok=True)
+
+    artifact_dir = dist_dir / artifact_dir_name
+    if artifact_dir.exists():
+        # Previous runs may leave artefacts behind; start from a clean slate so
+        # releases never mix binaries or manuals from different builds.
+        shutil.rmtree(artifact_dir)
+    artifact_dir.mkdir(parents=True)
+
+    return artifact_dir
+
+
+def _write_github_outputs(
+    github_output: Path,
+    artifact_dir: Path,
+    bin_dest: Path,
+    man_dest: Path,
+    licence_dest: Path,
+) -> None:
+    """Emit the staged artefact metadata for downstream workflow steps."""
 
     outputs = {
         "artifact_dir": artifact_dir,
@@ -125,8 +163,6 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
     with github_output.open("a", encoding="utf-8") as handle:
         handle.writelines(output_lines)
-
-    return StageResult(artifact_dir, bin_dest, man_dest, licence_dest)
 
 
 def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
