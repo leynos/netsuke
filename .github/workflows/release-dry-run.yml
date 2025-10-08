@@ -13,6 +13,7 @@ jobs:
     uses: ./.github/workflows/release.yml
     with:
       publish: false
+      wix-extension-version: '6'
     secrets: inherit
 
   validate-artifacts:

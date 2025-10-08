@@ -1639,7 +1639,7 @@ value is invalid.
 
 Release engineering is delegated to GitHub Actions workflows built on the
 `leynos/shared-actions` toolchain. The actions are pinned to
-`192d871588cc83c25e8188638bb2e8b1c592c75b` so release automation remains
+`61340852250fe0c3cf1a06a16443629fccce746e` so release automation remains
 reproducible. The tagging workflow first verifies that the Git ref matches
 `Cargo.toml` and records the crate's binary name once so all subsequent jobs
 operate on consistent metadata. Linux builds invoke the `rust-build-release`
@@ -1655,14 +1655,17 @@ variables for workspace details, mirrors the man page, and writes SHA-256 sums
 ready for publishing while enforcing a Windows-specific binary suffix. The
 staged artefacts feed a WiX v4 authoring template stored in
 `installer/Package.wxs`; the workflow invokes the shared
-`windows-package@192d871588cc83c25e8188638bb2e8b1c592c75b` composite to convert
+`windows-package@61340852250fe0c3cf1a06a16443629fccce746e` composite to convert
 the repository licence into RTF, embed the binary, and output a signed MSI
-installer alongside the staged directory. The installer uses WiX v4 syntax,
-installs per-machine, and presents the minimal UI appropriate for a CLI tool.
-Windows does not modify the PATH, so users must add the installation directory
-manually if they want global command resolution. The Unix manual page remains
-in the staged artefacts for parity with the other platforms but is not bundled
-into the installer to avoid shipping an inaccessible help format.
+installer alongside the staged directory. The composite pins the
+`WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
+`WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
+WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
+for a CLI tool. Windows does not modify the PATH, so users must add the
+installation directory manually if they want global command resolution. The
+Unix manual page remains in the staged artefacts for parity with the other
+platforms but is not bundled into the installer to avoid shipping an
+inaccessible help format.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. They invoke the uv staging wrapper
