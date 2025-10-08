@@ -12,7 +12,7 @@ use minijinja::{
     value::{Kwargs, Object, ObjectRepr, Value},
 };
 use time::{
-    Duration, OffsetDateTime, Time, UtcOffset,
+    Duration, OffsetDateTime, UtcOffset,
     format_description::{FormatItem, well_known::Iso8601},
     macros::format_description,
 };
@@ -26,8 +26,8 @@ const NANOS_PER_MILLISECOND: i64 = 1_000 * NANOS_PER_MICROSECOND;
 const SECONDS_PER_MINUTE_I32: i32 = 60;
 const SECONDS_PER_HOUR_I32: i32 = 3_600;
 
-const OFFSET_FORMAT: &[FormatItem<'static>] = format_description!(
-    "[hour padding:zero]:[minute padding:zero][optional [:[second padding:zero]]]"
+const OFFSET_FMT: &[FormatItem<'static>] = format_description!(
+    "[offset_hour sign:mandatory]:[offset_minute][optional [:[offset_second]]]"
 );
 
 /// Register time helpers with the environment.
@@ -55,26 +55,7 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
         return Ok(UtcOffset::UTC);
     }
 
-    let mut chars = trimmed.chars();
-    let sign_char = chars.next().ok_or_else(|| invalid_offset(raw))?;
-    let sign: i8 = match sign_char {
-        '+' => 1,
-        '-' => -1,
-        _ => return Err(invalid_offset(raw)),
-    };
-
-    let digits = chars.as_str();
-    if digits.is_empty() {
-        return Err(invalid_offset(raw));
-    }
-
-    let parsed = Time::parse(digits, OFFSET_FORMAT).map_err(|_| invalid_offset(raw))?;
-    let hours = i8::try_from(parsed.hour()).map_err(|_| invalid_offset(raw))?;
-    let minutes = i8::try_from(parsed.minute()).map_err(|_| invalid_offset(raw))?;
-    let seconds = i8::try_from(parsed.second()).map_err(|_| invalid_offset(raw))?;
-
-    UtcOffset::from_hms(hours * sign, minutes * sign, seconds * sign)
-        .map_err(|_| invalid_offset(raw))
+    UtcOffset::parse(trimmed, OFFSET_FMT).map_err(|_| invalid_offset(raw))
 }
 
 fn invalid_offset(raw: &str) -> Error {
