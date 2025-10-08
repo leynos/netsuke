@@ -409,7 +409,10 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
     validate_brace_matching(&pattern_state)?;
 
+    #[cfg(unix)]
     let mut normalized = normalize_separators(&pattern_state.raw);
+    #[cfg(not(unix))]
+    let normalized = normalize_separators(&pattern_state.raw);
     #[cfg(unix)]
     {
         normalized = force_literal_escapes(&normalized);
