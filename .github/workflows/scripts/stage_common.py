@@ -39,11 +39,14 @@ class StageResult(typ.NamedTuple):
         File system path to the staged binary.
     man_path : Path
         File system path to the staged manual page.
+    license_path : Path
+        File system path to the bundled licence text.
     """
 
     artifact_dir: Path
     binary_path: Path
     man_path: Path
+    license_path: Path
 
 
 def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
@@ -84,6 +87,10 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
         raise RuntimeError(message)
 
     man_src = _find_manpage(workspace, config.target, config.bin_name)
+    licence_src = workspace / "LICENSE"
+    if not licence_src.is_file():
+        message = f"Licence file not found at {licence_src}"
+        raise RuntimeError(message)
 
     artifact_dir = dist_dir / config.artifact_dir_name
     if artifact_dir.exists():
@@ -94,8 +101,10 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
 
     bin_dest = artifact_dir / bin_src.name
     man_dest = artifact_dir / man_src.name
+    licence_dest = artifact_dir / licence_src.name
     shutil.copy2(bin_src, bin_dest)
     shutil.copy2(man_src, man_dest)
+    shutil.copy2(licence_src, licence_dest)
 
     for path in (bin_dest, man_dest):
         _write_checksum(path)
@@ -104,8 +113,9 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
         handle.write(f"artifact_dir={_escape_output_value(artifact_dir)}\n")
         handle.write(f"binary_path={_escape_output_value(bin_dest)}\n")
         handle.write(f"man_path={_escape_output_value(man_dest)}\n")
+        handle.write(f"license_path={_escape_output_value(licence_dest)}\n")
 
-    return StageResult(artifact_dir, bin_dest, man_dest)
+    return StageResult(artifact_dir, bin_dest, man_dest, licence_dest)
 
 
 def _find_manpage(workspace: Path, target: str, bin_name: str) -> Path:
