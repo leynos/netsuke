@@ -10,6 +10,7 @@
 
 mod collections;
 mod path;
+mod time;
 
 use camino::Utf8Path;
 use cap_std::fs;
@@ -39,6 +40,7 @@ pub fn register(env: &mut Environment<'_>) {
     register_file_tests(env);
     path::register_filters(env);
     collections::register_filters(env);
+    time::register_functions(env);
 }
 
 fn register_file_tests(env: &mut Environment<'_>) {

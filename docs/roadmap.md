@@ -168,7 +168,7 @@ library, and CLI ergonomics.
   - [ ] Implement the network and command functions/filters (fetch, shell,
     grep), ensuring shell marks templates as impure to disable caching.
 
-  - [ ] Implement the time helpers (`now`, `timedelta`).
+  - [x] Implement the time helpers (`now`, `timedelta`).
 
 - [ ] **CLI and Feature Completeness:**
 
