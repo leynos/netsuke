@@ -47,6 +47,7 @@ jobs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs.value }}
       should_publish: ${{ steps.publish.outputs.value }}
+      wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
     steps:
       - uses: >-
           actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
@@ -74,6 +75,20 @@ jobs:
           leynos/shared-actions/.github/actions/ensure-cargo-version@192d871588cc83c25e8188638bb2e8b1c592c75b
         with:
           check-tag: ${{ fromJSON(steps.publish.outputs.value) }}
+      - id: wix_extension_version
+        name: Resolve WiX extension version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=''
+          if [ "${{ github.event_name }}" = 'workflow_call' ]; then
+            version="$(jq -r '.inputs["wix-extension-version"] // empty' \
+              "$GITHUB_EVENT_PATH")"
+          fi
+          if [ -z "$version" ] || [ "$version" = 'null' ]; then
+            version='6'
+          fi
+          echo "value=$version" >>"$GITHUB_OUTPUT"
       - id: bin_name
         name: Extract binary name from Cargo.toml
         shell: bash
@@ -229,7 +244,7 @@ jobs:
           output-directory: dist
           license-plaintext-path: LICENSE
           upload-artifact: 'false'
-          wix-extension-version: ${{ inputs.wix-extension-version }}
+          wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
       - name: Upload Windows artefacts
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
