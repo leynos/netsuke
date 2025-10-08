@@ -214,7 +214,7 @@ jobs:
       - id: package
         name: Build Windows installer package
         uses: >-
-          leynos/shared-actions/.github/actions/windows-package@192d871588cc83c25e8188638bb2e8b1c592c75b
+          leynos/shared-actions/.github/actions/windows-package@61340852250fe0c3cf1a06a16443629fccce746e
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
