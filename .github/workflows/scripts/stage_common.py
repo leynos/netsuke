@@ -109,11 +109,22 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
     for path in (bin_dest, man_dest):
         _write_checksum(path)
 
+    outputs = {
+        "artifact_dir": artifact_dir,
+        "binary_path": bin_dest,
+        "man_path": man_dest,
+        "license_path": licence_dest,
+    }
+    output_lines: list[str] = []
+    for key, path in outputs.items():
+        value = _escape_output_value(path)
+        if not value:
+            message = f"Resolved {key} output is unexpectedly empty"
+            raise RuntimeError(message)
+        output_lines.append(f"{key}={value}\n")
+
     with github_output.open("a", encoding="utf-8") as handle:
-        handle.write(f"artifact_dir={_escape_output_value(artifact_dir)}\n")
-        handle.write(f"binary_path={_escape_output_value(bin_dest)}\n")
-        handle.write(f"man_path={_escape_output_value(man_dest)}\n")
-        handle.write(f"license_path={_escape_output_value(licence_dest)}\n")
+        handle.writelines(output_lines)
 
     return StageResult(artifact_dir, bin_dest, man_dest, licence_dest)
 

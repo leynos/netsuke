@@ -136,9 +136,11 @@ def test_stage_artifacts_records_license(stage_common: ModuleType, tmp_path: Pat
     assert expected_license.read_text(encoding="utf-8") == "Copyright Netsuke"
 
     outputs = github_output.read_text(encoding="utf-8").splitlines()
-    assert any(line.startswith("license_path=") for line in outputs), (
-        "license_path output should be emitted"
-    )
+    output_map = dict(line.split("=", 1) for line in outputs if line)
+    assert output_map["artifact_dir"] == expected_dir.as_posix()
+    assert output_map["binary_path"] == result.binary_path.as_posix()
+    assert output_map["man_path"] == result.man_path.as_posix()
+    assert output_map["license_path"] == expected_license.as_posix()
 
 
 def test_stage_artifacts_requires_license(stage_common: ModuleType, tmp_path: Path) -> None:

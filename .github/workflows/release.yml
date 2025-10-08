@@ -64,7 +64,7 @@ jobs:
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@0ac4b6ec81dbef45594b37bc2afaaa60e30b5b20
+          leynos/shared-actions/.github/actions/ensure-cargo-version@d17b90de97b49bc9309b4335774f1df3fd495c4b
         with:
           check-tag: ${{ fromJSON(steps.publish.outputs.value) }}
       - id: bin_name
@@ -103,7 +103,7 @@ jobs:
         # v4.1.2
       - name: Build Linux release
         uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@57a93b14d76ebfacca8a92966b4adc5b4b037238
+          leynos/shared-actions/.github/actions/rust-build-release@d17b90de97b49bc9309b4335774f1df3fd495c4b
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -111,7 +111,7 @@ jobs:
           # Package formats are produced by linux-packages below
       - name: Package Linux artefacts with dependencies
         uses: >-
-          leynos/shared-actions/.github/actions/linux-packages@57a93b14d76ebfacca8a92966b4adc5b4b037238
+          leynos/shared-actions/.github/actions/linux-packages@d17b90de97b49bc9309b4335774f1df3fd495c4b
         with:
           project-dir: .
           package-name: ${{ needs.metadata.outputs.bin_name }}
@@ -160,7 +160,7 @@ jobs:
           python-version: '3.11'
       - name: Build Windows release
         uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@57a93b14d76ebfacca8a92966b4adc5b4b037238
+          leynos/shared-actions/.github/actions/rust-build-release@d17b90de97b49bc9309b4335774f1df3fd495c4b
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -207,7 +207,7 @@ jobs:
       - id: package
         name: Build Windows installer package
         uses: >-
-          leynos/shared-actions/.github/actions/windows-package@57a93b14d76ebfacca8a92966b4adc5b4b037238
+          leynos/shared-actions/.github/actions/windows-package@d17b90de97b49bc9309b4335774f1df3fd495c4b
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
@@ -258,7 +258,7 @@ jobs:
           python-version: '3.11'
       - name: Build macOS release
         uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@57a93b14d76ebfacca8a92966b4adc5b4b037238
+          leynos/shared-actions/.github/actions/rust-build-release@d17b90de97b49bc9309b4335774f1df3fd495c4b
         with:
           target: ${{ matrix.target }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -277,7 +277,7 @@ jobs:
       - id: pkg
         name: Build macOS installer package
         uses: >-
-          leynos/shared-actions/.github/actions/macos-package@57a93b14d76ebfacca8a92966b4adc5b4b037238
+          leynos/shared-actions/.github/actions/macos-package@d17b90de97b49bc9309b4335774f1df3fd495c4b
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
           identifier: com.leynos.${{ needs.metadata.outputs.bin_name }}
