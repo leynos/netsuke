@@ -1639,7 +1639,7 @@ value is invalid.
 
 Release engineering is delegated to GitHub Actions workflows built on the
 `leynos/shared-actions` toolchain. The actions are pinned to
-`7bc9b6c15964ef98733aa647b76d402146284ba3` so release automation remains
+`192d871588cc83c25e8188638bb2e8b1c592c75b` so release automation remains
 reproducible. The tagging workflow first verifies that the Git ref matches
 `Cargo.toml` and records the crate's binary name once so all subsequent jobs
 operate on consistent metadata. Linux builds invoke the `rust-build-release`
@@ -1655,7 +1655,7 @@ variables for workspace details, mirrors the man page, and writes SHA-256 sums
 ready for publishing while enforcing a Windows-specific binary suffix. The
 staged artefacts feed a WiX v4 authoring template stored in
 `installer/Package.wxs`; the workflow invokes the shared
-`windows-package@7bc9b6c15964ef98733aa647b76d402146284ba3` composite to convert
+`windows-package@192d871588cc83c25e8188638bb2e8b1c592c75b` composite to convert
 the repository licence into RTF, embed the binary, and output a signed MSI
 installer alongside the staged directory. The installer uses WiX v4 syntax,
 installs per-machine, and presents the minimal UI appropriate for a CLI tool.
