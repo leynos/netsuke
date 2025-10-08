@@ -26,9 +26,8 @@ const NANOS_PER_MILLISECOND: i64 = 1_000 * NANOS_PER_MICROSECOND;
 const SECONDS_PER_MINUTE_I32: i32 = 60;
 const SECONDS_PER_HOUR_I32: i32 = 3_600;
 
-const OFFSET_FMT: &[FormatItem<'static>] = format_description!(
-    "[offset_hour sign:mandatory]:[offset_minute][optional [:[offset_second]]]"
-);
+const OFFSET_FMT: &[FormatItem<'static>] =
+    format_description!("[offset_hour]:[offset_minute][optional [:[offset_second]]]");
 
 /// Register time helpers with the environment.
 pub(crate) fn register_functions(env: &mut Environment<'_>) {
@@ -53,6 +52,10 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
     let trimmed = raw.trim();
     if trimmed.eq_ignore_ascii_case("z") {
         return Ok(UtcOffset::UTC);
+    }
+
+    if !trimmed.starts_with(['+', '-']) {
+        return Err(invalid_offset(raw));
     }
 
     UtcOffset::parse(trimmed, OFFSET_FMT).map_err(|_| invalid_offset(raw))
@@ -175,15 +178,19 @@ fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
     Ok(Value::from_object(TimeDeltaValue::new(total)))
 }
 
+fn has_timezone_after(formatted: &str, pos: usize) -> bool {
+    formatted
+        .get(pos + 10..)
+        .and_then(|rest| rest.chars().next())
+        .is_some_and(|next| matches!(next, 'Z' | '+' | '-'))
+}
+
 fn format_offset_datetime(datetime: OffsetDateTime) -> String {
     datetime.format(&Iso8601::DEFAULT).map_or_else(
         |_| datetime.to_string(),
         |mut formatted| {
             if let Some(pos) = formatted.find(".000000000")
-                && formatted
-                    .get(pos + 10..)
-                    .and_then(|rest| rest.chars().next())
-                    .is_some_and(|next| matches!(next, 'Z' | '+' | '-'))
+                && has_timezone_after(&formatted, pos)
             {
                 formatted.replace_range(pos..pos + 10, "");
             }
@@ -272,7 +279,8 @@ fn finalize_duration_buffer(mut buffer: String, time_section: &str) -> String {
 }
 
 fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
-    let seconds = u64::try_from(seconds).expect("seconds must be non-negative");
+    let seconds = u64::try_from(seconds)
+        .expect("seconds must be non-negative when formatting from absolute duration remainder");
     if nanos == 0 {
         return format!("{seconds}S");
     }
