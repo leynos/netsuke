@@ -87,7 +87,7 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
     shutil.copy2(man_src, man_dest)
     shutil.copy2(licence_src, licence_dest)
 
-    for path in (bin_dest, man_dest):
+    for path in (bin_dest, man_dest, licence_dest):
         _write_checksum(path)
 
     _write_github_outputs(
@@ -161,7 +161,7 @@ def _write_github_outputs(
             raise RuntimeError(message)
         output_lines.append(f"{key}={value}\n")
 
-    with github_output.open("a", encoding="utf-8") as handle:
+    with github_output.open("w", encoding="utf-8") as handle:
         handle.writelines(output_lines)
 
 
