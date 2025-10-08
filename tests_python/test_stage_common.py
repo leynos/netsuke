@@ -235,10 +235,12 @@ def test_write_github_outputs_overwrites_existing_content(
 
     stage_common._write_github_outputs(
         github_output,
-        artifact_dir,
-        bin_path,
-        man_path,
-        licence_path,
+        stage_common.StageResult(
+            artifact_dir=artifact_dir,
+            binary_path=bin_path,
+            man_path=man_path,
+            license_path=licence_path,
+        ),
     )
 
     contents = github_output.read_text(encoding="utf-8").splitlines()
@@ -265,8 +267,10 @@ def test_write_github_outputs_errors_on_empty_value(
     with pytest.raises(RuntimeError, match="unexpectedly empty"):
         stage_common._write_github_outputs(
             github_output,
-            artifact_dir,
-            artifact_dir / "bin",
-            artifact_dir / "man",
-            artifact_dir / "license",
+            stage_common.StageResult(
+                artifact_dir=artifact_dir,
+                binary_path=artifact_dir / "bin",
+                man_path=artifact_dir / "man",
+                license_path=artifact_dir / "license",
+            ),
         )

@@ -90,15 +90,10 @@ def stage_artifacts(config: StagingConfig, github_output: Path) -> StageResult:
     for path in (bin_dest, man_dest, licence_dest):
         _write_checksum(path)
 
-    _write_github_outputs(
-        github_output,
-        artifact_dir,
-        bin_dest,
-        man_dest,
-        licence_dest,
-    )
+    stage_result = StageResult(artifact_dir, bin_dest, man_dest, licence_dest)
+    _write_github_outputs(github_output, stage_result)
 
-    return StageResult(artifact_dir, bin_dest, man_dest, licence_dest)
+    return stage_result
 
 
 def _validate_and_locate_sources(
@@ -138,20 +133,14 @@ def _prepare_artifact_directory(dist_dir: Path, artifact_dir_name: str) -> Path:
     return artifact_dir
 
 
-def _write_github_outputs(
-    github_output: Path,
-    artifact_dir: Path,
-    bin_dest: Path,
-    man_dest: Path,
-    licence_dest: Path,
-) -> None:
+def _write_github_outputs(github_output: Path, stage_result: StageResult) -> None:
     """Emit the staged artefact metadata for downstream workflow steps."""
 
     outputs = {
-        "artifact_dir": artifact_dir,
-        "binary_path": bin_dest,
-        "man_path": man_dest,
-        "license_path": licence_dest,
+        "artifact_dir": stage_result.artifact_dir,
+        "binary_path": stage_result.binary_path,
+        "man_path": stage_result.man_path,
+        "license_path": stage_result.license_path,
     }
     output_lines: list[str] = []
     for key, path in outputs.items():
