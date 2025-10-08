@@ -32,6 +32,11 @@ name: Release Binary
       should_publish:
         description: Whether artefacts should be published to the release
         value: ${{ jobs.metadata.outputs.should_publish }}
+      wix_extension_version:
+        description: >-
+          Resolved WixToolset.UI.wixext version compatible with the configured
+          WiX CLI toolchain
+        value: ${{ jobs.metadata.outputs.wix_extension_version }}
 
 env:
   REPO_NAME: ${{ github.event.repository.name }}
