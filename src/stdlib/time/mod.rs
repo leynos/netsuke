@@ -12,7 +12,7 @@ use minijinja::{
     value::{Kwargs, Object, ObjectRepr, Value},
 };
 use time::{
-    Duration, OffsetDateTime, UtcOffset,
+    Duration, OffsetDateTime, Time, UtcOffset,
     format_description::{FormatItem, well_known::Iso8601},
     macros::format_description,
 };
@@ -27,7 +27,7 @@ const SECONDS_PER_MINUTE_I32: i32 = 60;
 const SECONDS_PER_HOUR_I32: i32 = 3_600;
 
 const OFFSET_FORMAT: &[FormatItem<'static>] = format_description!(
-    "[offset_hour sign:mandatory]:[offset_minute][optional [:[offset_second]]]"
+    "[hour padding:zero]:[minute padding:zero][optional [:[second padding:zero]]]"
 );
 
 /// Register time helpers with the environment.
@@ -49,101 +49,32 @@ fn now(kwargs: &Kwargs) -> Result<Value, Error> {
     Ok(Value::from_object(TimestampValue::new(timestamp)))
 }
 
-fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
-    let weeks: Option<i64> = kwargs.get("weeks")?;
-    let days: Option<i64> = kwargs.get("days")?;
-    let hours: Option<i64> = kwargs.get("hours")?;
-    let minutes: Option<i64> = kwargs.get("minutes")?;
-    let seconds: Option<i64> = kwargs.get("seconds")?;
-    let milliseconds: Option<i64> = kwargs.get("milliseconds")?;
-    let microseconds: Option<i64> = kwargs.get("microseconds")?;
-    let nanoseconds: Option<i64> = kwargs.get("nanoseconds")?;
-    kwargs.assert_all_used()?;
-
-    let mut total = Duration::ZERO;
-    total = add_component(
-        total,
-        weeks,
-        ComponentSpec {
-            multiplier: SECONDS_PER_WEEK,
-            constructor: Duration::seconds,
-            label: "weeks",
-        },
-    )?;
-    total = add_component(
-        total,
-        days,
-        ComponentSpec {
-            multiplier: SECONDS_PER_DAY,
-            constructor: Duration::seconds,
-            label: "days",
-        },
-    )?;
-    total = add_component(
-        total,
-        hours,
-        ComponentSpec {
-            multiplier: SECONDS_PER_HOUR,
-            constructor: Duration::seconds,
-            label: "hours",
-        },
-    )?;
-    total = add_component(
-        total,
-        minutes,
-        ComponentSpec {
-            multiplier: SECONDS_PER_MINUTE,
-            constructor: Duration::seconds,
-            label: "minutes",
-        },
-    )?;
-    total = add_component(
-        total,
-        seconds,
-        ComponentSpec {
-            multiplier: 1,
-            constructor: Duration::seconds,
-            label: "seconds",
-        },
-    )?;
-    total = add_component(
-        total,
-        milliseconds,
-        ComponentSpec {
-            multiplier: NANOS_PER_MILLISECOND,
-            constructor: Duration::nanoseconds,
-            label: "milliseconds",
-        },
-    )?;
-    total = add_component(
-        total,
-        microseconds,
-        ComponentSpec {
-            multiplier: NANOS_PER_MICROSECOND,
-            constructor: Duration::nanoseconds,
-            label: "microseconds",
-        },
-    )?;
-    total = add_component(
-        total,
-        nanoseconds,
-        ComponentSpec {
-            multiplier: 1,
-            constructor: Duration::nanoseconds,
-            label: "nanoseconds",
-        },
-    )?;
-
-    Ok(Value::from_object(TimeDeltaValue::new(total)))
-}
-
 fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
     let trimmed = raw.trim();
     if trimmed.eq_ignore_ascii_case("z") {
         return Ok(UtcOffset::UTC);
     }
 
-    UtcOffset::parse(trimmed, OFFSET_FORMAT).map_err(|_| invalid_offset(raw))
+    let mut chars = trimmed.chars();
+    let sign_char = chars.next().ok_or_else(|| invalid_offset(raw))?;
+    let sign: i8 = match sign_char {
+        '+' => 1,
+        '-' => -1,
+        _ => return Err(invalid_offset(raw)),
+    };
+
+    let digits = chars.as_str();
+    if digits.is_empty() {
+        return Err(invalid_offset(raw));
+    }
+
+    let parsed = Time::parse(digits, OFFSET_FORMAT).map_err(|_| invalid_offset(raw))?;
+    let hours = i8::try_from(parsed.hour()).map_err(|_| invalid_offset(raw))?;
+    let minutes = i8::try_from(parsed.minute()).map_err(|_| invalid_offset(raw))?;
+    let seconds = i8::try_from(parsed.second()).map_err(|_| invalid_offset(raw))?;
+
+    UtcOffset::from_hms(hours * sign, minutes * sign, seconds * sign)
+        .map_err(|_| invalid_offset(raw))
 }
 
 fn invalid_offset(raw: &str) -> Error {
@@ -152,6 +83,73 @@ fn invalid_offset(raw: &str) -> Error {
         format!("now offset '{raw}' is invalid: expected '+HH:MM[:SS]' or 'Z'"),
     )
 }
+
+const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
+    (
+        "weeks",
+        ComponentSpec {
+            multiplier: SECONDS_PER_WEEK,
+            constructor: Duration::seconds,
+            label: "weeks",
+        },
+    ),
+    (
+        "days",
+        ComponentSpec {
+            multiplier: SECONDS_PER_DAY,
+            constructor: Duration::seconds,
+            label: "days",
+        },
+    ),
+    (
+        "hours",
+        ComponentSpec {
+            multiplier: SECONDS_PER_HOUR,
+            constructor: Duration::seconds,
+            label: "hours",
+        },
+    ),
+    (
+        "minutes",
+        ComponentSpec {
+            multiplier: SECONDS_PER_MINUTE,
+            constructor: Duration::seconds,
+            label: "minutes",
+        },
+    ),
+    (
+        "seconds",
+        ComponentSpec {
+            multiplier: 1,
+            constructor: Duration::seconds,
+            label: "seconds",
+        },
+    ),
+    (
+        "milliseconds",
+        ComponentSpec {
+            multiplier: NANOS_PER_MILLISECOND,
+            constructor: Duration::nanoseconds,
+            label: "milliseconds",
+        },
+    ),
+    (
+        "microseconds",
+        ComponentSpec {
+            multiplier: NANOS_PER_MICROSECOND,
+            constructor: Duration::nanoseconds,
+            label: "microseconds",
+        },
+    ),
+    (
+        "nanoseconds",
+        ComponentSpec {
+            multiplier: 1,
+            constructor: Duration::nanoseconds,
+            label: "nanoseconds",
+        },
+    ),
+];
 
 #[derive(Clone, Copy)]
 struct ComponentSpec {
@@ -182,6 +180,18 @@ fn overflow_error(label: &str) -> Error {
         ErrorKind::InvalidOperation,
         format!("timedelta overflow when adding {label}"),
     )
+}
+
+fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
+    let mut total = Duration::ZERO;
+
+    for (name, spec) in COMPONENT_SPECS {
+        let amount: Option<i64> = kwargs.get(name)?;
+        total = add_component(total, amount, *spec)?;
+    }
+
+    kwargs.assert_all_used()?;
+    Ok(Value::from_object(TimeDeltaValue::new(total)))
 }
 
 fn format_offset_datetime(datetime: OffsetDateTime) -> String {
