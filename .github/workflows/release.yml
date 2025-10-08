@@ -206,8 +206,7 @@ jobs:
           } >>"$GITHUB_OUTPUT"
       - id: package
         name: Build Windows installer package
-        uses: >-
-          leynos/shared-actions/.github/actions/windows-package@d17b90de97b49bc9309b4335774f1df3fd495c4b
+        uses: ./.github/actions/windows-package
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos

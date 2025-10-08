@@ -1,0 +1,119 @@
+name: Windows package
+description: Build a WiX v4 MSI from prebuilt application assets on Windows runners
+inputs:
+  wxs-path:
+    description: Path to the WiX authoring (.wxs) file that defines the installer.
+    required: false
+    default: installer/Package.wxs
+  architecture:
+    description: Target architecture passed to `wix build` (for example `x64` or `x86`).
+    required: false
+    default: x64
+  version:
+    description: >
+      Version string to embed in the MSI. If omitted the action strips a leading
+      `v` from `GITHUB_REF_NAME` and falls back to `0.0.0` when no tag is
+      available.
+    required: false
+  dotnet-version:
+    description: The .NET SDK version installed before invoking the WiX CLI.
+    required: false
+    default: 8.0.x
+  wix-tool-version:
+    description: Optional version constraint for the `wix` .NET global tool.
+    required: false
+  wix-extension:
+    description: WiX extension to install and load during the build.
+    required: false
+    default: WixToolset.UI.wixext
+  wix-extension-version:
+    description: Version of the WiX extension to install via `wix extension add`.
+    required: false
+    default: '4'
+  output-basename:
+    description: Base filename for the generated MSI without extension.
+    required: false
+    default: MyApp
+  output-directory:
+    description: Directory where the MSI will be written.
+    required: false
+    default: out
+  license-plaintext-path:
+    description: Optional UTF-8 plain text license file converted to RTF before building.
+    required: false
+    default: ''
+  license-rtf-path:
+    description: Destination path for the generated license RTF when converting from plain text.
+    required: false
+    default: ''
+  upload-artifact:
+    description: Upload the generated MSI with `actions/upload-artifact`.
+    required: false
+    default: 'true'
+  artifact-name:
+    description: Artifact name when `upload-artifact` is enabled.
+    required: false
+    default: msi
+outputs:
+  version:
+    description: Version string resolved for the MSI build.
+    value: ${{ steps.resolve-version.outputs.version }}
+  msi-path:
+    description: Absolute path to the generated MSI file.
+    value: ${{ steps.build-msi.outputs.msi-path }}
+runs:
+  using: composite
+  steps:
+    - name: Ensure Windows runner
+      shell: pwsh
+      run: |
+        & "${{ github.action_path }}\scripts\ensure_windows_runner.ps1"
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+    - name: Setup Python
+      if: ${{ inputs.license-plaintext-path != '' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: '>=3.11'
+    - name: Install WiX CLI and extensions
+      shell: pwsh
+      env:
+        WIX_TOOL_VERSION: ${{ inputs.wix-tool-version }}
+        WIX_EXTENSION: ${{ inputs.wix-extension }}
+        WIX_EXTENSION_VERSION: ${{ inputs.wix-extension-version }}
+      run: |
+        & "${{ github.action_path }}\scripts\install_wix_cli.ps1"
+    - id: resolve-version
+      name: Resolve package version
+      shell: pwsh
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REF_TYPE: ${{ github.ref_type }}
+      run: |
+        & "${{ github.action_path }}\scripts\resolve_version.ps1"
+    - id: build-msi
+      name: Build MSI
+      shell: pwsh
+      env:
+        WXS_PATH: ${{ inputs.wxs-path }}
+        ARCHITECTURE: ${{ inputs.architecture }}
+        OUTPUT_BASENAME: ${{ inputs.output-basename }}
+        OUTPUT_DIRECTORY: ${{ inputs.output-directory }}
+        VERSION: ${{ steps.resolve-version.outputs.version }}
+        WIX_EXTENSION: ${{ inputs.wix-extension }}
+        LICENSE_TEXT_PATH: ${{ inputs.license-plaintext-path }}
+        LICENSE_RTF_PATH: ${{ inputs.license-rtf-path }}
+      run: |
+        & "${{ github.action_path }}\scripts\build_msi.ps1"
+    - name: Upload MSI artifact
+      if: ${{ fromJSON(inputs.upload-artifact) }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.build-msi.outputs.msi-path }}
+branding:
+  icon: package
+  color: blue
