@@ -15,6 +15,13 @@ name: Release Binary
         required: false
         type: boolean
         default: false
+      wix-extension-version:
+        description: >-
+          Version of the WixToolset.UI.wixext extension to install alongside
+          the WiX CLI.
+        required: false
+        type: string
+        default: '6'
     outputs:
       bin_name:
         description: Binary name extracted from Cargo.toml
@@ -222,6 +229,7 @@ jobs:
           output-directory: dist
           license-plaintext-path: LICENSE
           upload-artifact: 'false'
+          wix-extension-version: ${{ inputs.wix-extension-version }}
       - name: Upload Windows artefacts
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
