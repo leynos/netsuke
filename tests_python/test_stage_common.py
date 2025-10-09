@@ -134,6 +134,9 @@ def test_stage_artifacts_records_license(stage_common: ModuleType, tmp_path: Pat
     assert result.man_path.name.endswith(".1")
     assert result.license_path == expected_license
     assert expected_license.read_text(encoding="utf-8") == "Copyright Netsuke"
+    license_checksum = Path(f"{expected_license}.sha256")
+    assert license_checksum.exists()
+    assert "LICENSE" in license_checksum.read_text(encoding="utf-8")
 
     outputs = github_output.read_text(encoding="utf-8").splitlines()
     output_map = dict(line.split("=", 1) for line in outputs if line)
@@ -161,3 +164,113 @@ def test_stage_artifacts_requires_license(stage_common: ModuleType, tmp_path: Pa
 
     with pytest.raises(RuntimeError, match="Licence file not found"):
         stage_common.stage_artifacts(config, workspace / "outputs.txt")
+
+
+def test_validate_and_locate_sources_success(
+    stage_common: ModuleType, tmp_path: Path
+) -> None:
+    """Helper should resolve the binary, manual, and licence paths."""
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    bin_name, target = _prepare_workspace(workspace)
+
+    bin_src, man_src, licence_src = stage_common._validate_and_locate_sources(
+        workspace, target, bin_name, ""
+    )
+
+    assert bin_src.name == bin_name
+    assert man_src.name == f"{bin_name}.1"
+    assert licence_src.name == "LICENSE"
+
+
+def test_validate_and_locate_sources_requires_binary(
+    stage_common: ModuleType, tmp_path: Path
+) -> None:
+    """Helper should fail fast when the compiled binary is missing."""
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    bin_name, target = _prepare_workspace(workspace)
+    (workspace / "target" / target / "release" / bin_name).unlink()
+
+    with pytest.raises(RuntimeError, match="Binary not found"):
+        stage_common._validate_and_locate_sources(workspace, target, bin_name, "")
+
+
+def test_prepare_artifact_directory_cleans_previous(
+    stage_common: ModuleType, tmp_path: Path
+) -> None:
+    """Existing artefacts should be cleared so stale files never leak."""
+
+    dist_dir = tmp_path / "workspace" / "dist"
+    artifact_dir = dist_dir / "bundle"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    stale = artifact_dir / "old.txt"
+    stale.write_text("stale", encoding="utf-8")
+
+    result = stage_common._prepare_artifact_directory(dist_dir, "bundle")
+
+    assert result == artifact_dir
+    assert result.is_dir()
+    assert not stale.exists()
+
+
+def test_write_github_outputs_overwrites_existing_content(
+    stage_common: ModuleType, tmp_path: Path
+) -> None:
+    """Outputs file should be rewritten each run to avoid duplicate keys."""
+
+    workspace = tmp_path / "workspace"
+    artifact_dir = workspace / "dist" / "bundle"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    bin_path = artifact_dir / "netsuke"
+    man_path = artifact_dir / "netsuke.1"
+    licence_path = artifact_dir / "LICENSE"
+    for file in (bin_path, man_path, licence_path):
+        file.write_text(file.name, encoding="utf-8")
+
+    github_output = workspace / "outputs.txt"
+    github_output.write_text("stale", encoding="utf-8")
+
+    stage_common._write_github_outputs(
+        github_output,
+        stage_common.StageResult(
+            artifact_dir=artifact_dir,
+            binary_path=bin_path,
+            man_path=man_path,
+            license_path=licence_path,
+        ),
+    )
+
+    contents = github_output.read_text(encoding="utf-8").splitlines()
+    keys = [line.split("=", 1)[0] for line in contents if line]
+    assert keys == ["artifact_dir", "binary_path", "man_path", "license_path"]
+    assert all("stale" not in line for line in contents)
+
+
+def test_write_github_outputs_errors_on_empty_value(
+    stage_common: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard against empty outputs by surfacing a descriptive error."""
+
+    workspace = tmp_path / "workspace"
+    artifact_dir = workspace / "dist"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    github_output = workspace / "outputs.txt"
+
+    def _always_empty(_: Path) -> str:
+        return ""
+
+    monkeypatch.setattr(stage_common, "_escape_output_value", _always_empty)
+
+    with pytest.raises(RuntimeError, match="unexpectedly empty"):
+        stage_common._write_github_outputs(
+            github_output,
+            stage_common.StageResult(
+                artifact_dir=artifact_dir,
+                binary_path=artifact_dir / "bin",
+                man_path=artifact_dir / "man",
+                license_path=artifact_dir / "license",
+            ),
+        )
