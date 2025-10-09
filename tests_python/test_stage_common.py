@@ -19,7 +19,7 @@ import importlib
 import json
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
@@ -466,3 +466,14 @@ def test_stage_artefacts_fails_with_attempt_context(
     assert (
         "missing-x86_64-unknown-linux-gnu" in message
     ), "Rendered path missing from error"
+
+
+def test_glob_root_and_pattern_handles_windows_drive(stage_common: object) -> None:
+    """Absolute Windows globs should strip the drive before globbing."""
+
+    staging = importlib.import_module("stage_common.staging")
+    helper = staging._glob_root_and_pattern
+
+    root, pattern = helper(PureWindowsPath("C:/dist/*.zip"))
+    assert root == "C:\\"
+    assert pattern == "dist/*.zip"

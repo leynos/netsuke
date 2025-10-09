@@ -8,7 +8,7 @@ import json
 import shutil
 import sys
 import typing as typ
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath
 
 from .errors import StageError
 
@@ -165,8 +165,8 @@ def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
     base = candidate if candidate.is_absolute() else workspace / candidate
     if any(ch in rendered for ch in "*?[]"):
         if candidate.is_absolute():
-            root = Path(candidate.anchor or "/")
-            pattern = rendered.lstrip("/")
+            root_text, pattern = _glob_root_and_pattern(candidate)
+            root = Path(root_text)
             candidates = [path for path in root.glob(pattern) if path.is_file()]
         else:
             candidates = [path for path in workspace.glob(rendered) if path.is_file()]
@@ -216,3 +216,25 @@ def _write_to_github_output(file: Path, values: dict[str, str | list[str]]) -> N
                     value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
                 )
                 handle.write(f"{key}={escaped}\n")
+
+
+def _glob_root_and_pattern(candidate: PurePath) -> tuple[str, str]:
+    """Return the filesystem root and relative glob pattern for ``candidate``.
+
+    Windows globbing treats drive letters as part of the anchor. The relative
+    pattern therefore needs to drop the ``C:\\`` prefix before invoking
+    :meth:`Path.glob`. ``pathlib`` exposes the anchor and path parts so we can
+    slice off the leading entry regardless of the host platform.
+    """
+
+    anchor = candidate.anchor
+    if not anchor:
+        message = f"Expected absolute path, received '{candidate}'"
+        raise ValueError(message)
+
+    root_text = (candidate.drive + candidate.root) or anchor or "/"
+    relative_parts = candidate.parts[1:]
+    pattern = (
+        PurePosixPath(*relative_parts).as_posix() if relative_parts else "."
+    )
+    return root_text, pattern
