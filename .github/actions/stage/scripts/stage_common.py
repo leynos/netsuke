@@ -6,6 +6,7 @@ Actions outputs. They are designed for reuse across projects so long as the
 consumer provides a configuration file that follows the schema described in
 ``load_config``.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -31,6 +32,7 @@ __all__ = [
 
 class StageError(RuntimeError):
     """Raised when the staging pipeline cannot continue."""
+
 
 @dataclasses.dataclass(slots=True)
 class ArtefactConfig:

@@ -22,35 +22,26 @@ from __future__ import annotations
 
 import os
 import sys
-import typing as typ
 from pathlib import Path
 
-import cyclopts
 from stage_common import StageError, load_config, stage_artefacts
+
+import cyclopts
 
 app = cyclopts.App(help="Stage release artefacts using a TOML configuration file.")
 
 
 @app.default
-def main(
-    config_file: typ.Annotated[
-        Path,
-        cyclopts.Parameter(
-            ...,
-            help="Path to the project-specific TOML configuration file.",
-            show_default=False,
-        ),
-    ],
-    target: typ.Annotated[
-        str,
-        cyclopts.Parameter(
-            ...,
-            help="Target key in the configuration file (for example 'linux-x86_64').",
-            show_default=False,
-        ),
-    ],
-) -> None:
-    """Stage artefacts for ``target`` using ``config_file``."""
+def main(config_file: Path, target: str) -> None:
+    """Stage artefacts for ``target`` using ``config_file``.
+
+    Parameters
+    ----------
+    config_file:
+        Path to the project-specific TOML configuration file.
+    target:
+        Target key in the configuration file (for example ``"linux-x86_64"``).
+    """
     try:
         github_output = Path(os.environ["GITHUB_OUTPUT"])
     except KeyError as exc:
