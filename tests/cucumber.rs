@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::{collections::HashMap, ffi::OsString};
+use std::{collections::HashMap, ffi::OsString, thread::JoinHandle};
 use test_support::{PathGuard, env::restore_many};
 
 /// Shared state for Cucumber scenarios.
@@ -36,6 +36,12 @@ pub struct CliWorld {
     pub stdlib_output: Option<String>,
     /// Error from the last stdlib render.
     pub stdlib_error: Option<String>,
+    /// Stdlib impurity state captured for the last render.
+    pub stdlib_state: Option<netsuke::stdlib::StdlibState>,
+    /// Last HTTP server fixture started by stdlib steps.
+    pub http_server: Option<JoinHandle<()>>,
+    /// URL exposed by the active HTTP server fixture.
+    pub stdlib_url: Option<String>,
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     /// Stores the original value (`Some`) or `None` if the variable was previously unset.
     pub env_vars: HashMap<String, Option<OsString>>,
@@ -58,6 +64,9 @@ fn block_device_exists() -> bool {
 
 impl Drop for CliWorld {
     fn drop(&mut self) {
+        if let Some(handle) = self.http_server.take() {
+            let _ = handle.join();
+        }
         if !self.env_vars.is_empty() {
             restore_many(self.env_vars.drain().collect());
         }

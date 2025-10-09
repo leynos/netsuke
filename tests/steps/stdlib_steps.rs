@@ -9,6 +9,11 @@ use cucumber::{given, then, when};
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib;
 use std::ffi::OsStr;
+use std::{
+    io::{Read, Write},
+    net::TcpListener,
+    thread,
+};
 use test_support::env::set_var;
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
@@ -89,6 +94,27 @@ impl From<String> for RelativePath {
     }
 }
 
+fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind http listener");
+    let addr = listener.local_addr().expect("local addr");
+    let url = format!("http://{addr}");
+    let handle = thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 512];
+            let _ = stream.read(&mut buf);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write http response");
+        }
+    });
+    (url, handle)
+}
+
 fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     if let Some(root) = &world.stdlib_root {
         return root.clone();
@@ -111,7 +137,9 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
 
 fn render_template_with_context(world: &mut CliWorld, template: &TemplateContent, ctx: Value) {
     let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let state = stdlib::register(&mut env);
+    state.reset_impure();
+    world.stdlib_state = Some(state.clone());
     let render = env.render_str(template.as_str(), ctx);
     match render {
         Ok(output) => {
@@ -134,6 +162,16 @@ fn render_template(world: &mut CliWorld, template: &TemplateContent, path: &Temp
 fn stdlib_workspace(world: &mut CliWorld) {
     let root = ensure_workspace(world);
     world.stdlib_root = Some(root);
+}
+
+#[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
+fn http_server_returning(world: &mut CliWorld, body: String) {
+    if let Some(handle) = world.http_server.take() {
+        let _ = handle.join();
+    }
+    let (url, handle) = spawn_http_server(body);
+    world.stdlib_url = Some(url);
+    world.http_server = Some(handle);
 }
 
 #[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
@@ -198,6 +236,16 @@ fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) 
 fn render_stdlib_template_without_path(world: &mut CliWorld, template: String) {
     let template_content = TemplateContent::from(template);
     render_template_with_context(world, &template_content, context! {});
+}
+
+#[when(regex = r#"^I render "(.+)" with stdlib url$"#)]
+fn render_stdlib_template_with_url(world: &mut CliWorld, template: String) {
+    let url = world
+        .stdlib_url
+        .clone()
+        .expect("expected HTTP server to be initialised");
+    let template_content = TemplateContent::from(template);
+    render_template_with_context(world, &template_content, context!(url => url));
 }
 
 #[expect(
@@ -280,6 +328,24 @@ fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
         error.contains(&fragment),
         "error `{error}` should contain `{fragment}`",
     );
+}
+
+#[then("the stdlib template is impure")]
+fn assert_stdlib_impure(world: &mut CliWorld) {
+    let state = world
+        .stdlib_state
+        .as_ref()
+        .expect("stdlib state should be initialised");
+    assert!(state.is_impure(), "expected template to be impure");
+}
+
+#[then("the stdlib template is pure")]
+fn assert_stdlib_pure(world: &mut CliWorld) {
+    let state = world
+        .stdlib_state
+        .as_ref()
+        .expect("stdlib state should be initialised");
+    assert!(!state.is_impure(), "expected template to remain pure");
 }
 
 #[then("the stdlib output equals the workspace root")]

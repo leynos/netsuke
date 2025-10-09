@@ -154,7 +154,7 @@ library, and CLI ergonomics.
   - [x] Refactor all error-producing code to provide the clear, contextual, and
     actionable error messages specified in the design document.
 
-- [ ] **Template Standard Library:**
+- [x] **Template Standard Library:**
 
   - [x] Implement the basic file-system tests (`dir`, `file`, `symlink`,
     `pipe`, `block_device`, `char_device`, legacy `device`). *(done)*
@@ -165,7 +165,7 @@ library, and CLI ergonomics.
   - [x] Implement the generic collection filters (`uniq`, `flatten`,
     `group_by`). *(done)*
 
-  - [ ] Implement the network and command functions/filters (fetch, shell,
+  - [x] Implement the network and command functions/filters (fetch, shell,
     grep), ensuring shell marks templates as impure to disable caching.
 
   - [x] Implement the time helpers (`now`, `timedelta`).

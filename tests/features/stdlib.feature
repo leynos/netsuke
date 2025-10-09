@@ -72,3 +72,29 @@ Feature: Template stdlib filters
     When I render "{{ ([{'name': 'one'}] | group_by('kind')) }}" with stdlib path "file"
     Then the stdlib error contains "could not resolve"
 
+  Scenario: shell filter transforms text and marks templates impure
+    When I render the stdlib template "{{ 'hello' | shell('tr a-z A-Z') | trim }}"
+    Then the stdlib output is "HELLO"
+    And the stdlib template is impure
+
+  Scenario: shell filter reports command failures
+    When I render the stdlib template "{{ 'data' | shell('false') }}"
+    Then the stdlib error contains "exited"
+    And the stdlib template is impure
+
+  Scenario: grep filter extracts matching lines
+    When I render the stdlib template "{{ 'alpha\nbeta\n' | grep('beta') | trim }}"
+    Then the stdlib output is "beta"
+    And the stdlib template is impure
+
+  Scenario: fetch retrieves remote content without marking templates impure
+    Given an HTTP server returning "payload"
+    When I render "{{ fetch(url) }}" with stdlib url
+    Then the stdlib output is "payload"
+    And the stdlib template is pure
+
+  Scenario: fetch reports network errors
+    When I render the stdlib template "{{ fetch('http://127.0.0.1:9') }}"
+    Then the stdlib error contains "fetch failed"
+    And the stdlib template is pure
+

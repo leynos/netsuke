@@ -922,6 +922,18 @@ Using `shell()` marks the template as *impure* and disables caching of the
 rendered YAML between Stage 2 and Stage 3. This avoids accidental reuse of
 results that depend on external commands.
 
+Implementation details:
+
+- `fetch` issues HTTP requests through the `ureq` client. When caching is
+  enabled a SHA-256 digest of the URL becomes the cache key and responses are
+  written beneath `.netsuke/fetch` (or a user-provided directory) using
+  capability-restricted file handles.
+- `shell` and `grep` spawn the platform shell (`sh` or `cmd.exe`) with POSIX
+  single-quoted arguments emitted via `shell-quote`. The stdlib registers a
+  shared `StdlibState` that flips an `impure` flag whenever these helpers
+  execute so callers can detect templates that interacted with the outside
+  world.
+
 Custom external commands can be registered as additional filters. Those should
 be marked `pure` if safe for caching or `impure` otherwise.
 
