@@ -87,14 +87,14 @@ Feature: Template stdlib filters
     Then the stdlib output is "beta"
     And the stdlib template is impure
 
-  Scenario: fetch retrieves remote content without marking templates impure
+  Scenario: fetch retrieves remote content and marks templates impure
     Given an HTTP server returning "payload"
     When I render "{{ fetch(url) }}" with stdlib url
     Then the stdlib output is "payload"
-    And the stdlib template is pure
+    And the stdlib template is impure
 
   Scenario: fetch reports network errors
     When I render the stdlib template "{{ fetch('http://127.0.0.1:9') }}"
     Then the stdlib error contains "fetch failed"
-    And the stdlib template is pure
+    And the stdlib template is impure
 

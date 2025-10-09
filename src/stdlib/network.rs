@@ -3,9 +3,15 @@
 //! Currently this module provides the `fetch` function that retrieves remote
 //! resources with optional on-disk caching.
 
-use std::io::{self, Read};
+use std::{
+    io::{self, Read},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
-use camino::Utf8Path;
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{
     Environment, Error, ErrorKind,
@@ -15,11 +21,13 @@ use sha2::{Digest, Sha256};
 
 const DEFAULT_CACHE_DIR: &str = ".netsuke/fetch";
 
-pub(crate) fn register_functions(env: &mut Environment<'_>) {
-    env.add_function("fetch", |url: String, kwargs: Kwargs| fetch(&url, &kwargs));
+pub(crate) fn register_functions(env: &mut Environment<'_>, impure: Arc<AtomicBool>) {
+    env.add_function("fetch", move |url: String, kwargs: Kwargs| {
+        fetch(&url, &kwargs, &impure)
+    });
 }
 
-fn fetch(url: &str, kwargs: &Kwargs) -> Result<Value, Error> {
+fn fetch(url: &str, kwargs: &Kwargs, impure: &Arc<AtomicBool>) -> Result<Value, Error> {
     let use_cache = kwargs.get::<Option<bool>>("cache")?.unwrap_or(false);
     let cache_dir = kwargs.get::<Option<String>>("cache_dir")?;
     kwargs.assert_all_used()?;
@@ -30,18 +38,19 @@ fn fetch(url: &str, kwargs: &Kwargs) -> Result<Value, Error> {
         if let Some(cached) = read_cached(&dir, &key)? {
             cached
         } else {
-            let data = fetch_remote(url)?;
-            write_cache(&dir, &key, &data)?;
+            let data = fetch_remote(url, impure)?;
+            write_cache(&dir, &key, &data, impure)?;
             data
         }
     } else {
-        fetch_remote(url)?
+        fetch_remote(url, impure)?
     };
 
     Ok(to_value(bytes))
 }
 
-fn fetch_remote(url: &str) -> Result<Vec<u8>, Error> {
+fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
+    impure.store(true, Ordering::Relaxed);
     let response = ureq::get(url).call().map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,
@@ -69,21 +78,45 @@ fn open_cache_dir(path: &str) -> Result<Dir, Error> {
     }
 
     if utf_path.is_absolute() {
-        let root = Dir::open_ambient_dir("/", ambient_authority())
-            .map_err(|err| io_error("open root cache dir", utf_path, &err))?;
-        let rel = utf_path.strip_prefix("/").unwrap_or(utf_path);
-        root.create_dir_all(rel)
+        let mut root = String::new();
+        for component in utf_path.components() {
+            match component {
+                Utf8Component::Prefix(prefix) => root.push_str(prefix.as_str()),
+                Utf8Component::RootDir => {
+                    root.push('/');
+                    break;
+                }
+                _ => break,
+            }
+        }
+        if root.is_empty() {
+            root.push('/');
+        }
+        let root_path = Utf8PathBuf::from(root);
+
+        let root_dir = Dir::open_ambient_dir(&root_path, ambient_authority())
+            .map_err(|err| io_error("open root cache dir", &root_path, &err))?;
+        let rel = utf_path
+            .strip_prefix(&root_path)
+            .expect("absolute path must contain its root prefix");
+        if rel.as_str().is_empty() {
+            return Ok(root_dir);
+        }
+
+        root_dir
+            .create_dir_all(rel)
             .map_err(|err| io_error("create cache dir", utf_path, &err))?;
-        root.open_dir(rel)
-            .map_err(|err| io_error("open cache dir", utf_path, &err))
-    } else {
-        let cwd = Dir::open_ambient_dir(".", ambient_authority())
-            .map_err(|err| io_error("open working dir", utf_path, &err))?;
-        cwd.create_dir_all(utf_path)
-            .map_err(|err| io_error("create cache dir", utf_path, &err))?;
-        cwd.open_dir(utf_path)
-            .map_err(|err| io_error("open cache dir", utf_path, &err))
+        return root_dir
+            .open_dir(rel)
+            .map_err(|err| io_error("open cache dir", utf_path, &err));
     }
+
+    let cwd = Dir::open_ambient_dir(".", ambient_authority())
+        .map_err(|err| io_error("open working dir", utf_path, &err))?;
+    cwd.create_dir_all(utf_path)
+        .map_err(|err| io_error("create cache dir", utf_path, &err))?;
+    cwd.open_dir(utf_path)
+        .map_err(|err| io_error("open cache dir", utf_path, &err))
 }
 
 fn read_cached(dir: &Dir, name: &str) -> Result<Option<Vec<u8>>, Error> {
@@ -106,7 +139,8 @@ fn read_cached(dir: &Dir, name: &str) -> Result<Option<Vec<u8>>, Error> {
     }
 }
 
-fn write_cache(dir: &Dir, name: &str, data: &[u8]) -> Result<(), Error> {
+fn write_cache(dir: &Dir, name: &str, data: &[u8], impure: &Arc<AtomicBool>) -> Result<(), Error> {
+    impure.store(true, Ordering::Relaxed);
     dir.write(name, data).map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,

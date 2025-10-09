@@ -43,7 +43,10 @@ fn fetch_function_downloads_content() {
         .render(context!(url => url.clone()))
         .expect("render fetch");
     assert_eq!(rendered, "payload");
-    assert!(!state.is_impure(), "fetch should not mark template impure");
+    assert!(
+        state.is_impure(),
+        "network fetch should mark template impure"
+    );
     handle.join().expect("join server");
 }
 
@@ -53,7 +56,8 @@ fn fetch_function_respects_cache() {
     let cache_dir = temp.path().join("cache");
     let cache_str = cache_dir.to_str().expect("utf8 cache dir").to_owned();
     let (url, handle) = start_server("cached");
-    let (mut env, _) = stdlib_env_with_state();
+    let (mut env, state) = stdlib_env_with_state();
+    state.reset_impure();
     env.add_template(
         "fetch_cache",
         "{{ fetch(url, cache=True, cache_dir=cache_dir) }}",
@@ -64,6 +68,11 @@ fn fetch_function_respects_cache() {
         .render(context!(url => url.clone(), cache_dir => cache_str.clone()))
         .expect("render fetch");
     assert_eq!(rendered, "cached");
+    assert!(
+        state.is_impure(),
+        "network-backed cache fill should mark template impure"
+    );
+    state.reset_impure();
     handle.join().expect("join server");
 
     // Drop the listener and verify the cached response is returned.
@@ -71,6 +80,10 @@ fn fetch_function_respects_cache() {
         .render(context!(url => url, cache_dir => cache_str))
         .expect("render cached fetch");
     assert_eq!(rendered_again, "cached");
+    assert!(
+        !state.is_impure(),
+        "cached responses should not mark template impure",
+    );
 }
 
 #[rstest]

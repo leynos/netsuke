@@ -927,7 +927,10 @@ Implementation details:
 - `fetch` issues HTTP requests through the `ureq` client. When caching is
   enabled a SHA-256 digest of the URL becomes the cache key and responses are
   written beneath `.netsuke/fetch` (or a user-provided directory) using
-  capability-restricted file handles.
+  capability-restricted file handles. Any remote fetch or cache write marks the
+  stdlib state as impure so callers can discard memoised renders, and absolute
+  cache directories open with ambient authority so Windows drive prefixes work
+  correctly.
 - `shell` and `grep` spawn the platform shell (`sh` or `cmd.exe`) with POSIX
   single-quoted arguments emitted via `shell-quote`. The stdlib registers a
   shared `StdlibState` that flips an `impure` flag whenever these helpers

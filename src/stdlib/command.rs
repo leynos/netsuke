@@ -4,6 +4,13 @@
 //! behaviour predictable across platforms. All helpers mark the stdlib state as
 //! impure so the caller can invalidate any caching layer that depends on pure
 //! template evaluation.
+//!
+//! # Security
+//!
+//! The `shell` and `grep` filters execute external commands based on template
+//! content. Templates using these filters must come from trusted sources only.
+//! Never allow untrusted input to control command strings or patterns, as this
+//! enables arbitrary code execution.
 
 use std::{
     io::{self, Write},

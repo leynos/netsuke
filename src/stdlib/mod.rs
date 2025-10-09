@@ -71,8 +71,9 @@ pub fn register(env: &mut Environment<'_>) -> StdlibState {
     register_file_tests(env);
     path::register_filters(env);
     collections::register_filters(env);
-    network::register_functions(env);
-    command::register(env, state.impure_flag());
+    let impure = state.impure_flag();
+    network::register_functions(env, Arc::clone(&impure));
+    command::register(env, impure);
     time::register_functions(env);
     state
 }
