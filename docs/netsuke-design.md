@@ -1677,11 +1677,11 @@ operate on consistent metadata. Linux builds invoke the `rust-build-release`
 composite action to cross-compile for `x86_64` and `aarch64`, generate the
 staged binary + man page directory, and then call the shared `linux-packages`
 composite a second time with explicit metadata so the resulting `.deb` and
-`.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
-builds reuse the same action for compilation and now invoke the generic staging
-composite defined in `.github/actions/stage`. The composite shells out to a
-Cyclopts-driven script that reads `.github/release-staging.toml`, merges the
-`[common]` configuration with the target-specific overrides, and copies the
+`.rpm` archives both declare a runtime dependency on `ninja-build`.
+Windows builds reuse the same action for compilation and now invoke the generic
+staging composite defined in `.github/actions/stage`. The composite shells out
+to a Cyclopts-driven script that reads `.github/release-staging.toml`, merges
+the `[common]` configuration with the target-specific overrides, and copies the
 configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. The
 helper writes SHA-256 sums for every staged file and exports a JSON map of the
 artefact outputs, allowing the workflow to hydrate downstream steps without

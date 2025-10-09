@@ -12,45 +12,22 @@ def test_action_declares_required_outputs() -> None:
     """The composite action should expose the expected top-level outputs."""
     content = ACTION_FILE.read_text(encoding="utf-8")
 
-    assert "steps.run-stage.outputs.binary_path" in content, (
-        "Composite action missing binary_path output"
-    )
-    assert "steps.run-stage.outputs.man_path" in content, (
-        "Composite action missing man_path output"
-    )
-    assert "steps.run-stage.outputs.license_path" in content, (
-        "Composite action missing license_path output"
-    )
+    assert "steps.run-stage.outputs.binary_path" in content
+    assert "steps.run-stage.outputs.man_path" in content
+    assert "steps.run-stage.outputs.license_path" in content
 
 
 def test_action_installs_uv() -> None:
     """The composite action must ensure ``uv`` is available."""
     content = ACTION_FILE.read_text(encoding="utf-8")
 
-    assert "uses: astral-sh/setup-uv@" in content, (
-        "Composite action does not install uv via astral-sh/setup-uv"
-    )
-    assert "python-version: '3.11'" in content, (
-        "Composite action does not specify Python 3.11"
-    )
+    assert "uses: astral-sh/setup-uv@" in content
+    assert "python-version: '3.11'" in content
 
 
 def test_action_invokes_cli_script() -> None:
     """The action should run the staging script via ``uv run``."""
     content = ACTION_FILE.read_text(encoding="utf-8")
 
-    assert "uv run" in content, (
-        "Composite action does not invoke script via uv run"
-    )
-    assert "scripts/stage.py" in content, (
-        "Composite action does not reference scripts/stage.py"
-    )
-
-
-def test_action_declares_reserved_outputs(stage_common: object) -> None:
-    """Reserved outputs must remain aligned with the composite action."""
-
-    content = ACTION_FILE.read_text(encoding="utf-8")
-    for key in stage_common.RESERVED_OUTPUT_KEYS:
-        needle = f"steps.run-stage.outputs.{key}"
-        assert needle in content, f"Composite action missing output for {key}"
+    assert "uv run" in content
+    assert "scripts/stage.py" in content

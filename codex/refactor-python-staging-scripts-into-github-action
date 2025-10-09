@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure we're running from the repository root
-if [[ ! -f ".github/workflows/ci.yml" ]] && [[ ! -d ".github/actions" ]]; then
-  echo "Error: This script must be run from the repository root" >&2
-  exit 1
-fi
-
 # Aggregate the quality gates enforced during review feedback.
 uvx ruff format --check
 uvx ruff check
