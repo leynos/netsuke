@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from stage_test_helpers import decode_output_file, write_workspace_inputs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MODULE_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
@@ -30,11 +31,13 @@ MODULE_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 @pytest.fixture(scope="session")
 def stage_common() -> object:
     """Load the staging helper package once for reuse across tests."""
-    sys.path.insert(0, str(MODULE_DIR))
+    sys_path = str(MODULE_DIR)
+
+    sys.path.insert(0, sys_path)
     try:
         return importlib.import_module("stage_common")
     finally:
-        sys.path.remove(str(MODULE_DIR))
+        sys.path.remove(sys_path)
 
 
 @pytest.fixture
@@ -46,28 +49,41 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
-def _decode_output_file(path: Path) -> dict[str, str]:
-    """Parse the key-value pairs written to ``GITHUB_OUTPUT``."""
-    lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-    values: dict[str, str] = {}
-    for line in lines:
-        key, value = line.split("=", 1)
-        decoded = value.replace("%0A", "\n").replace("%0D", "\r").replace("%25", "%")
-        values[key] = decoded
-    return values
+def test_public_interface(stage_common: object) -> None:
+    """The package should expose the documented public API."""
+    expected = {
+        "ArtefactConfig",
+        "StageError",
+        "StageResult",
+        "StagingConfig",
+        "load_config",
+        "require_env_path",
+        "stage_artefacts",
+    }
+    assert set(stage_common.__all__) == expected
 
 
-def _write_workspace_inputs(root: Path, target: str) -> None:
-    bin_path = root / "target" / target / "release" / "netsuke"
-    bin_path.parent.mkdir(parents=True, exist_ok=True)
-    bin_path.write_bytes(b"binary")
+def test_stage_error_is_runtime_error(stage_common: object) -> None:
+    """``StageError`` should subclass :class:`RuntimeError`."""
+    error = stage_common.StageError("boom")
+    assert isinstance(error, RuntimeError)
+    assert str(error) == "boom"
 
-    man_path = root / "target" / "generated-man" / target / "release" / "netsuke.1"
-    man_path.parent.mkdir(parents=True, exist_ok=True)
-    man_path.write_text(".TH NETSUKE 1", encoding="utf-8")
 
-    licence = root / "LICENSE"
-    licence.write_text("Copyright Netsuke", encoding="utf-8")
+def test_require_env_path_returns_path(stage_common: object, workspace: Path) -> None:
+    """The environment helper should return a ``Path`` when set."""
+    path = stage_common.require_env_path("GITHUB_WORKSPACE")
+    assert path == workspace
+
+
+def test_require_env_path_missing_env(
+    stage_common: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing environment variable should raise ``StageError``."""
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.require_env_path("GITHUB_WORKSPACE")
+    assert "Environment variable 'GITHUB_WORKSPACE' is not set" in str(exc.value)
 
 
 def test_staging_config_template_context(stage_common: object, workspace: Path) -> None:
@@ -154,12 +170,95 @@ def test_load_config_reads_repository_file(
     }
 
 
+def test_load_config_requires_workspace_env(
+    stage_common: object, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``load_config`` should fail when ``GITHUB_WORKSPACE`` is unset."""
+    config_file = tmp_path / "release-staging.toml"
+    config_file.write_text(
+        "\n".join(
+            [
+                "[common]",
+                'bin_name = "netsuke"',
+                'checksum_algorithm = "sha256"',
+                'artefacts = [ { source = "LICENSE" } ]',
+                "",
+                "[targets.test]",
+                'platform = "linux"',
+                'arch = "amd64"',
+                'target = "x86_64-unknown-linux-gnu"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.load_config(config_file, "test")
+    assert "Environment variable 'GITHUB_WORKSPACE' is not set" in str(exc.value)
+
+
+def test_load_config_rejects_unknown_checksum(
+    stage_common: object, workspace: Path
+) -> None:
+    """Unsupported checksum algorithms should raise ``StageError``."""
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(
+        "\n".join(
+            [
+                "[common]",
+                'bin_name = "netsuke"',
+                'checksum_algorithm = "unknown"',
+                'artefacts = [ { source = "LICENSE" } ]',
+                "",
+                "[targets.test]",
+                'platform = "linux"',
+                'arch = "amd64"',
+                'target = "x86_64-unknown-linux-gnu"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.load_config(config_file, "test")
+    assert "Unsupported checksum algorithm" in str(exc.value)
+
+
+def test_load_config_requires_target_section(
+    stage_common: object, workspace: Path
+) -> None:
+    """Missing target sections should raise ``StageError``."""
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(
+        "\n".join(
+            [
+                "[common]",
+                'bin_name = "netsuke"',
+                'checksum_algorithm = "sha256"',
+                'artefacts = [ { source = "LICENSE" } ]',
+                "",
+                "[targets.other]",
+                'platform = "linux"',
+                'arch = "amd64"',
+                'target = "x86_64-unknown-linux-gnu"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.load_config(config_file, "test")
+    assert "Missing configuration key" in str(exc.value)
+
+
 def test_stage_artefacts_exports_metadata(
     stage_common: object, workspace: Path
 ) -> None:
     """The staging pipeline should copy inputs, hash them, and export outputs."""
     target = "x86_64-unknown-linux-gnu"
-    _write_workspace_inputs(workspace, target)
+    write_workspace_inputs(workspace, target)
 
     config = stage_common.StagingConfig(
         workspace=workspace,
@@ -207,7 +306,7 @@ def test_stage_artefacts_exports_metadata(
     for path in expected_checksums.values():
         assert path.exists()
 
-    outputs = _decode_output_file(github_output)
+    outputs = decode_output_file(github_output)
     assert outputs["artifact_dir"] == staging_dir.as_posix()
     assert outputs["binary_path"].endswith("netsuke")
     assert outputs["license_path"].endswith("LICENSE")
@@ -222,8 +321,7 @@ def test_stage_artefacts_uses_alternative_glob(
 ) -> None:
     """Fallback paths should be used when the preferred template is absent."""
     target = "x86_64-unknown-linux-gnu"
-    _write_workspace_inputs(workspace, target)
-    # Remove the generated man page so only the glob match remains.
+    write_workspace_inputs(workspace, target)
     generated = (
         workspace / "target" / "generated-man" / target / "release" / "netsuke.1"
     )
@@ -262,12 +360,59 @@ def test_stage_artefacts_uses_alternative_glob(
     assert staged_path.read_text(encoding="utf-8") == ".TH 2"
 
 
+def test_stage_artefacts_glob_selects_newest_candidate(
+    stage_common: object, workspace: Path
+) -> None:
+    """Glob matches should resolve to the most recently modified file."""
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+    generated = (
+        workspace / "target" / "generated-man" / target / "release" / "netsuke.1"
+    )
+    generated.unlink()
+
+    build_dir = workspace / "target" / target / "release" / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    candidates = []
+    for idx in range(3):
+        candidate = build_dir / f"{idx}" / "out" / "netsuke.1"
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_text(f".TH {idx}", encoding="utf-8")
+        os.utime(candidate, (100 + idx, 100 + idx))
+        candidates.append(candidate)
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="target/generated-man/{target}/release/{bin_name}.1",
+                required=True,
+                output="man_path",
+                alternatives=["target/{target}/release/build/*/out/{bin_name}.1"],
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target=target,
+    )
+
+    github_output = workspace / "outputs.txt"
+    result = stage_common.stage_artefacts(config, github_output)
+    staged_path = result.outputs["man_path"]
+    assert staged_path.read_text(encoding="utf-8") == ".TH 2"
+    latest = max(candidates, key=lambda f: f.stat().st_mtime_ns)
+    assert latest.read_text(encoding="utf-8") == staged_path.read_text(encoding="utf-8")
+
+
 def test_stage_artefacts_warns_for_optional(
     stage_common: object, workspace: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
     """Optional artefacts should emit a warning when absent but not abort."""
     target = "x86_64-unknown-linux-gnu"
-    _write_workspace_inputs(workspace, target)
+    write_workspace_inputs(workspace, target)
 
     config = stage_common.StagingConfig(
         workspace=workspace,
@@ -293,3 +438,32 @@ def test_stage_artefacts_warns_for_optional(
     stage_common.stage_artefacts(config, workspace / "out.txt")
     captured = capfd.readouterr()
     assert "::warning title=Artefact Skipped::Optional artefact missing" in captured.err
+
+
+def test_stage_artefacts_fails_with_attempt_context(
+    stage_common: object, workspace: Path
+) -> None:
+    """Missing required artefacts should include context in the error message."""
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="missing-{target}",
+                required=True,
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target="x86_64-unknown-linux-gnu",
+    )
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.stage_artefacts(config, workspace / "outputs.txt")
+
+    message = str(exc.value)
+    assert "Workspace=" in message
+    assert "missing-{target}" in message
+    assert "missing-x86_64-unknown-linux-gnu" in message

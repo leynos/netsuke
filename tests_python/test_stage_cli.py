@@ -10,7 +10,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from test_stage_common import _decode_output_file  # reuse helper
+from stage_test_helpers import decode_output_file, write_workspace_inputs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
@@ -20,7 +20,7 @@ class _StubCycloptsApp:
     """Minimal stand-in for :mod:`cyclopts` used during testing."""
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        self._handler = None
+        self._handler: typ.Callable[..., object] | None = None
 
     def default(self, func: typ.Callable[..., object]) -> typ.Callable[..., object]:
         self._handler = func
@@ -48,24 +48,10 @@ def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
     cyclopts_module = sys.modules["cyclopts"]
     cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
-    module = importlib.import_module("stage")
-    yield module
+    yield importlib.import_module("stage")
     sys.path.remove(str(SCRIPTS_DIR))
     sys.modules.pop("stage", None)
     sys.modules.pop("cyclopts", None)
-
-
-def _write_inputs(root: Path, target: str) -> None:
-    bin_path = root / "target" / target / "release" / "netsuke"
-    bin_path.parent.mkdir(parents=True, exist_ok=True)
-    bin_path.write_bytes(b"binary")
-
-    man_path = root / "target" / "generated-man" / target / "release" / "netsuke.1"
-    man_path.parent.mkdir(parents=True, exist_ok=True)
-    man_path.write_text(".TH NETSUKE 1", encoding="utf-8")
-
-    licence = root / "LICENSE"
-    licence.write_text("Copyright Netsuke", encoding="utf-8")
 
 
 def test_stage_cli_stages_and_reports(
@@ -77,14 +63,14 @@ def test_stage_cli_stages_and_reports(
     config_copy.write_text(config_src.read_text(encoding="utf-8"), encoding="utf-8")
 
     target = "linux-x86_64"
-    _write_inputs(workspace, "x86_64-unknown-linux-gnu")
+    write_workspace_inputs(workspace, "x86_64-unknown-linux-gnu")
 
     github_output = workspace / "outputs.txt"
     monkeypatch.setenv("GITHUB_OUTPUT", str(github_output))
 
     stage_cli.main(config_copy, target)
 
-    outputs = _decode_output_file(github_output)
+    outputs = decode_output_file(github_output)
     artefact_map = json.loads(outputs["artefact_map"])
     assert artefact_map["binary_path"].endswith("netsuke")
     assert outputs["binary_path"].endswith("netsuke")

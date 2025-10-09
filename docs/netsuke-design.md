@@ -1662,18 +1662,17 @@ operate on consistent metadata. Linux builds invoke the `rust-build-release`
 composite action to cross-compile for `x86_64` and `aarch64`, generate the
 staged binary + man page directory, and then call the shared `linux-packages`
 composite a second time with explicit metadata so the resulting `.deb` and
-`.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
-builds reuse the same action for compilation and now invoke the generic
+`.rpm` archives both declare a runtime dependency on `ninja-build`.
+Windows builds reuse the same action for compilation and now invoke the generic
 staging composite defined in `.github/actions/stage`. The composite shells out
-to a Cyclopts-driven script that reads
-`.github/release-staging.toml`, merges the `[common]` configuration with the
-target-specific overrides, and copies the configured artefacts into a fresh
-`dist/{bin}_{platform}_{arch}` directory. The helper writes SHA-256 sums for
-every staged file and exports a JSON map of the artefact outputs, allowing the
-workflow to hydrate downstream steps without hard-coded path logic. Figure 8.1
-summarises the configuration entities, including optional keys reserved for
-templated directories and explicit artefact destinations that the helper can
-adopt without breaking compatibility.
+to a Cyclopts-driven script that reads `.github/release-staging.toml`, merges
+the `[common]` configuration with the target-specific overrides, and copies the
+configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. The
+helper writes SHA-256 sums for every staged file and exports a JSON map of the
+artefact outputs, allowing the workflow to hydrate downstream steps without
+hard-coded path logic. Figure 8.1 summarises the configuration entities,
+including optional keys reserved for templated directories and explicit
+artefact destinations that the helper can adopt without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 
@@ -1723,11 +1722,11 @@ inaccessible help format.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML
-configuration, emits checksums, and exposes artefact metadata via JSON
-outputs before feeding the resulting paths into the `macos-package` action.
-Embedding the PEP 723 metadata keeps Cyclopts discoverable without a
-repository-level `pyproject.toml`, maintaining the existing approach where uv
-resolves dependencies on demand. Python linting still lives in the top-level
+configuration, emits checksums, and exposes artefact metadata via JSON outputs
+before feeding the resulting paths into the `macos-package` action. Embedding
+the PEP 723 metadata keeps Cyclopts discoverable without a repository-level
+`pyproject.toml`, maintaining the existing approach where uv resolves
+dependencies on demand. Python linting still lives in the top-level
 `ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
 broader helper suite stays consistently linted.
 

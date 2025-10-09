@@ -19,6 +19,12 @@ __all__ = ["StageResult", "stage_artefacts"]
 
 
 @dataclasses.dataclass(slots=True)
+class _RenderAttempt:
+    template: str
+    rendered: str
+
+
+@dataclasses.dataclass(slots=True)
 class StageResult:
     """Outcome of :func:`stage_artefacts`."""
 
@@ -42,10 +48,20 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
     checksums: dict[str, str] = {}
 
     for artefact in config.artefacts:
-        source_path = _resolve_artefact_source(config.workspace, artefact, context)
+        source_path, attempts = _resolve_artefact_source(
+            config.workspace, artefact, context
+        )
         if source_path is None:
             if artefact.required:
-                message = f"Required artefact not found for template: {artefact.source}"
+                attempt_lines = ", ".join(
+                    f"{attempt.template!r} -> {attempt.rendered!r}"
+                    for attempt in attempts
+                )
+                message = (
+                    "Required artefact not found. "
+                    f"Workspace={config.workspace.as_posix()} "
+                    f"Attempts=[{attempt_lines}]"
+                )
                 raise StageError(message)
             warning = (
                 "::warning title=Artefact Skipped::Optional artefact missing: "
@@ -113,14 +129,16 @@ def _render_template(template: str, context: dict[str, typ.Any]) -> str:
 
 def _resolve_artefact_source(
     workspace: Path, artefact: ArtefactConfig, context: dict[str, typ.Any]
-) -> Path | None:
+) -> tuple[Path | None, list[_RenderAttempt]]:
+    attempts: list[_RenderAttempt] = []
     patterns = [artefact.source, *artefact.alternatives]
     for pattern in patterns:
         rendered = _render_template(pattern, context)
+        attempts.append(_RenderAttempt(pattern, rendered))
         candidate = _match_candidate_path(workspace, rendered)
         if candidate is not None:
-            return candidate
-    return None
+            return candidate, attempts
+    return None, attempts
 
 
 def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
@@ -133,9 +151,7 @@ def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
             candidates = [path for path in root.glob(pattern) if path.is_file()]
         else:
             candidates = [path for path in workspace.glob(rendered) if path.is_file()]
-        if not candidates:
-            return None
-        return max(candidates, key=_mtime_key)
+        return None if not candidates else max(candidates, key=_mtime_key)
     return base if base.is_file() else None
 
 
