@@ -15,38 +15,27 @@ Run the tests directly::
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import os
 import sys
-import typing as typ
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MODULE_PATH = (
-    REPO_ROOT / ".github" / "actions" / "stage" / "scripts" / "stage_common.py"
-)
-
-if typ.TYPE_CHECKING:
-    from types import ModuleType
-else:
-    ModuleType = type(sys)
+MODULE_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 
 
 @pytest.fixture(scope="session")
-def stage_common() -> ModuleType:
-    """Load the staging helper once for reuse across tests."""
-    spec = importlib.util.spec_from_file_location("stage_common", MODULE_PATH)
-    if spec is None or spec.loader is None:
-        message = "Failed to load stage_common module"
-        raise RuntimeError(message)
+def stage_common() -> object:
+    """Load the staging helper package once for reuse across tests."""
 
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    sys.path.insert(0, str(MODULE_DIR))
+    try:
+        return importlib.import_module("stage_common")
+    finally:
+        sys.path.remove(str(MODULE_DIR))
 
 
 @pytest.fixture
@@ -82,8 +71,32 @@ def _write_workspace_inputs(root: Path, target: str) -> None:
     licence.write_text("Copyright Netsuke", encoding="utf-8")
 
 
+def test_staging_config_template_context(stage_common: object, workspace: Path) -> None:
+    """The configuration should expose a rich template context."""
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[],
+        platform="linux",
+        arch="amd64",
+        target="x86_64-unknown-linux-gnu",
+        bin_ext=".exe",
+        target_key="linux-x86_64",
+    )
+
+    context = config.as_template_context()
+
+    assert context["workspace"] == workspace.as_posix()
+    assert context["staging_dir_name"] == "netsuke_linux_amd64"
+    assert context["staging_dir_template"] == "{bin_name}_{platform}_{arch}"
+    assert context["target_key"] == "linux-x86_64"
+
+
 def test_load_config_merges_common_and_target(
-    stage_common: ModuleType, workspace: Path
+    stage_common: object, workspace: Path
 ) -> None:
     """``load_config`` should merge common values with the requested target."""
     config_file = workspace / "release-staging.toml"
@@ -122,8 +135,30 @@ def test_load_config_merges_common_and_target(
     assert [item.output for item in config.artefacts] == ["binary_path", "license_path"]
 
 
+def test_load_config_reads_repository_file(
+    stage_common: object, workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The repository TOML configuration should parse without modification."""
+
+    config_source = REPO_ROOT / ".github" / "release-staging.toml"
+    config_copy = workspace / "release-staging.toml"
+    config_copy.write_text(config_source.read_text(encoding="utf-8"), encoding="utf-8")
+
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(workspace))
+
+    config = stage_common.load_config(config_copy, "linux-x86_64")
+
+    assert config.bin_name == "netsuke"
+    assert config.staging_dir().name == "netsuke_linux_amd64"
+    assert {item.output for item in config.artefacts} >= {
+        "binary_path",
+        "man_path",
+        "license_path",
+    }
+
+
 def test_stage_artefacts_exports_metadata(
-    stage_common: ModuleType, workspace: Path
+    stage_common: object, workspace: Path
 ) -> None:
     """The staging pipeline should copy inputs, hash them, and export outputs."""
     target = "x86_64-unknown-linux-gnu"
@@ -177,6 +212,8 @@ def test_stage_artefacts_exports_metadata(
 
     outputs = _decode_output_file(github_output)
     assert outputs["artifact_dir"] == staging_dir.as_posix()
+    assert outputs["binary_path"].endswith("netsuke")
+    assert outputs["license_path"].endswith("LICENSE")
     artefact_map = json.loads(outputs["artefact_map"])
     assert artefact_map["binary_path"].endswith("netsuke")
     checksum_map = json.loads(outputs["checksum_map"])
@@ -184,7 +221,7 @@ def test_stage_artefacts_exports_metadata(
 
 
 def test_stage_artefacts_uses_alternative_glob(
-    stage_common: ModuleType, workspace: Path
+    stage_common: object, workspace: Path
 ) -> None:
     """Fallback paths should be used when the preferred template is absent."""
     target = "x86_64-unknown-linux-gnu"
@@ -229,7 +266,7 @@ def test_stage_artefacts_uses_alternative_glob(
 
 
 def test_stage_artefacts_warns_for_optional(
-    stage_common: ModuleType, workspace: Path, capfd: pytest.CaptureFixture[str]
+    stage_common: object, workspace: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
     """Optional artefacts should emit a warning when absent but not abort."""
     target = "x86_64-unknown-linux-gnu"

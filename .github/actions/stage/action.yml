@@ -25,10 +25,23 @@ outputs:
   checksum_map:
     description: JSON map of staged file names to their checksum digests.
     value: ${{ steps.run-stage.outputs.checksum_map }}
+  binary_path:
+    description: Absolute path to the staged binary artefact, when available.
+    value: ${{ steps.run-stage.outputs.binary_path }}
+  man_path:
+    description: Absolute path to the staged manual page artefact, when available.
+    value: ${{ steps.run-stage.outputs.man_path }}
+  license_path:
+    description: Absolute path to the staged licence artefact, when available.
+    value: ${{ steps.run-stage.outputs.license_path }}
 
 runs:
   using: composite
   steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        python-version: '3.11'
     - id: run-stage
       name: Run staging script
       shell: bash
