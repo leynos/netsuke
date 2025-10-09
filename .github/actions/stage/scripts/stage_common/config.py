@@ -57,7 +57,7 @@ class StagingConfig:
 
     def as_template_context(self) -> dict[str, typ.Any]:
         """Return a mapping suitable for rendering ``str.format`` templates."""
-        ctx: dict[str, typ.Any] = {
+        base_context: dict[str, typ.Any] = {
             "workspace": self.workspace.as_posix(),
             "bin_name": self.bin_name,
             "dist_dir": self.dist_dir,
@@ -68,13 +68,34 @@ class StagingConfig:
             "bin_ext": self.bin_ext or "",
             "target_key": self.target_key or "",
         }
-        ctx["staging_dir_template"] = self.staging_dir_template
-        ctx["staging_dir_name"] = self.staging_dir_template.format(**ctx)
-        return ctx
+        template_context = base_context | {"staging_dir_template": self.staging_dir_template}
+        return template_context | {
+            "staging_dir_name": self.staging_dir_template.format(**template_context)
+        }
 
 
 def load_config(config_file: Path, target_key: str) -> StagingConfig:
-    """Load staging configuration from ``config_file`` for ``target_key``."""
+    """Load staging configuration from ``config_file`` for ``target_key``.
+
+    Parameters
+    ----------
+    config_file : Path
+        Path to the TOML configuration file describing staging inputs.
+    target_key : str
+        Key identifying the target-specific configuration section to load.
+
+    Returns
+    -------
+    StagingConfig
+        Fully realised configuration containing resolved paths and artefacts.
+
+    Raises
+    ------
+    FileNotFoundError
+        Raised when the configuration file is absent at ``config_file``.
+    StageError
+        Raised when required configuration keys are missing or invalid.
+    """
     config_file = Path(config_file)
     if not config_file.is_file():
         message = f"Configuration file not found at {config_file}"

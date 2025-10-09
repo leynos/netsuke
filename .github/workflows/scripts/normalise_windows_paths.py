@@ -1,0 +1,63 @@
+"""Normalise Windows paths from stage action outputs."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import PureWindowsPath
+
+
+def main() -> int:
+    """Read ``ARTEFACT_MAP`` and write normalised paths to ``GITHUB_OUTPUT``."""
+    try:
+        mapping = json.loads(os.environ["ARTEFACT_MAP"])
+    except KeyError as exc:  # pragma: no cover - exercised in workflow runtime
+        print(
+            f"::error title=Stage output missing::Missing env {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        binary = mapping["binary_path"]
+        licence = mapping["license_path"]
+    except KeyError as exc:  # pragma: no cover - exercised in workflow runtime
+        print(
+            f"::error title=Stage output missing::Missing artefact {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not binary:
+        print(
+            "::error title=Stage output missing::binary_path output empty",
+            file=sys.stderr,
+        )
+        return 1
+    if not licence:
+        print(
+            "::error title=Stage output missing::license_path output empty",
+            file=sys.stderr,
+        )
+        return 1
+
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    if not github_output:
+        print(
+            "::error title=Missing GITHUB_OUTPUT::Environment variable unset",
+            file=sys.stderr,
+        )
+        return 1
+
+    binary_path = PureWindowsPath(binary)
+    license_path = PureWindowsPath(licence)
+
+    with open(github_output, "a", encoding="utf-8") as handle:
+        handle.write(f"binary_path={binary_path}\n")
+        handle.write(f"license_path={license_path}\n")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - invoked by GitHub Actions
+    raise SystemExit(main())

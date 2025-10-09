@@ -28,6 +28,10 @@ import dataclasses as dc
 import sys
 import typing as typ
 from pathlib import Path
+from typing import ParamSpec, TypeVar
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 try:
     import cyclopts as _cyclopts
@@ -39,9 +43,7 @@ except ModuleNotFoundError:  # pragma: no cover - executed in lean test envs.
         """Fallback placeholder that preserves ``typing.Annotated`` usage."""
 
         def __init__(self, *args: object, **kwargs: object) -> None:
-            """Store arguments for debugging; behaviour is irrelevant."""
-            self.args = args
-            self.kwargs = kwargs
+            """Accept arguments for compatibility; behaviour is irrelevant."""
 
     class App:
         """Minimal shim to surface a descriptive error when Cyclopts is absent."""
@@ -51,12 +53,14 @@ except ModuleNotFoundError:  # pragma: no cover - executed in lean test envs.
             self._error = RuntimeError(message)
 
         def default(
-            self, func: typ.Callable[..., int]
-        ) -> typ.Callable[..., int]:  # pragma: no cover - trivial stub
+            self, func: typ.Callable[P, T]
+        ) -> typ.Callable[P, T]:  # pragma: no cover - trivial stub
             """Return ``func`` unchanged in fallback mode."""
             return func
 
-        def __call__(self) -> int:  # pragma: no cover - trivial stub
+        def __call__(
+            self, *args: P.args, **kwargs: P.kwargs
+        ) -> typ.NoReturn:  # pragma: no cover - trivial stub
             """Raise because the CLI requires Cyclopts."""
             raise self._error
 else:

@@ -35,7 +35,27 @@ class StageResult:
 
 
 def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageResult:
-    """Copy artefacts into ``config``'s staging directory."""
+    """Copy artefacts into ``config``'s staging directory.
+
+    Parameters
+    ----------
+    config : StagingConfig
+        Fully resolved configuration describing the artefacts to stage.
+    github_output_file : Path
+        Path to the ``GITHUB_OUTPUT`` file used to export workflow outputs.
+
+    Returns
+    -------
+    StageResult
+        Summary object describing the staging directory, staged artefacts,
+        exported outputs, and checksum digests.
+
+    Raises
+    ------
+    StageError
+        Raised when required artefacts are missing or configuration templates
+        render invalid destinations.
+    """
     staging_dir = config.staging_dir()
     context = config.as_template_context()
 
@@ -135,8 +155,7 @@ def _resolve_artefact_source(
     for pattern in patterns:
         rendered = _render_template(pattern, context)
         attempts.append(_RenderAttempt(pattern, rendered))
-        candidate = _match_candidate_path(workspace, rendered)
-        if candidate is not None:
+        if (candidate := _match_candidate_path(workspace, rendered)) is not None:
             return candidate, attempts
     return None, attempts
 
