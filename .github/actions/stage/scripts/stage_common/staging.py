@@ -235,6 +235,6 @@ def _glob_root_and_pattern(candidate: PurePath) -> tuple[str, str]:
     root_text = (candidate.drive + candidate.root) or anchor or "/"
     relative_parts = candidate.parts[1:]
     pattern = (
-        PurePosixPath(*relative_parts).as_posix() if relative_parts else "."
+        PurePosixPath(*relative_parts).as_posix() if relative_parts else "*"
     )
     return root_text, pattern

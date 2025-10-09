@@ -19,7 +19,7 @@ import importlib
 import json
 import os
 import sys
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
@@ -477,3 +477,72 @@ def test_glob_root_and_pattern_handles_windows_drive(stage_common: object) -> No
     root, pattern = helper(PureWindowsPath("C:/dist/*.zip"))
     assert root == "C:\\"
     assert pattern == "dist/*.zip"
+
+
+def test_glob_root_and_pattern_returns_wildcard_for_root_only(
+    stage_common: object,
+) -> None:
+    """Root-only absolute paths should glob all children."""
+
+    staging = importlib.import_module("stage_common.staging")
+    helper = staging._glob_root_and_pattern
+
+    root, pattern = helper(PureWindowsPath("C:/"))
+    assert root == "C:\\"
+    assert pattern == "*"
+
+
+def test_glob_root_and_pattern_handles_posix_absolute(stage_common: object) -> None:
+    """POSIX absolute paths should preserve relative segments for globbing."""
+
+    staging = importlib.import_module("stage_common.staging")
+    helper = staging._glob_root_and_pattern
+
+    root, pattern = helper(PurePosixPath("/tmp/dist/*.zip"))
+    assert root == "/"
+    assert pattern.endswith("dist/*.zip"), pattern
+
+
+def test_glob_root_and_pattern_rejects_relative_paths(stage_common: object) -> None:
+    """Relative globs should be rejected to avoid ambiguous anchors."""
+
+    staging = importlib.import_module("stage_common.staging")
+    helper = staging._glob_root_and_pattern
+
+    with pytest.raises(ValueError):
+        helper(PurePosixPath("dist/*.zip"))
+
+
+def test_stage_artefacts_matches_absolute_glob(
+    stage_common: object, workspace: Path
+) -> None:
+    """Absolute glob patterns should allow staging artefacts."""
+
+    absolute_root = workspace / "absolute" / "1.2.3"
+    absolute_root.mkdir(parents=True, exist_ok=True)
+    source_path = absolute_root / "netsuke.txt"
+    source_path.write_text("payload", encoding="utf-8")
+
+    artefact = stage_common.ArtefactConfig(
+        source=f"{workspace.as_posix()}/absolute/*/netsuke.txt",
+        required=True,
+        output="absolute_path",
+    )
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[artefact],
+        platform="linux",
+        arch="amd64",
+        target="x86_64-unknown-linux-gnu",
+    )
+
+    github_output = workspace / "github_output.txt"
+    result = stage_common.stage_artefacts(config, github_output)
+
+    assert result.staged_artefacts, "Expected artefact to be staged from absolute glob"
+    staged_path = result.staged_artefacts[0]
+    assert staged_path.read_text(encoding="utf-8") == "payload"
+    assert result.outputs["absolute_path"] == staged_path
