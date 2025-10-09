@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::{collections::HashMap, ffi::OsString, thread::JoinHandle};
+use std::{collections::HashMap, ffi::OsString, net::TcpStream, thread::JoinHandle};
 use test_support::{PathGuard, env::restore_many};
 
 /// Shared state for Cucumber scenarios.
@@ -65,6 +65,14 @@ fn block_device_exists() -> bool {
 impl Drop for CliWorld {
     fn drop(&mut self) {
         if let Some(handle) = self.http_server.take() {
+            if let Some(url) = self.stdlib_url.as_ref()
+                && let Some(addr) = url
+                    .strip_prefix("http://")
+                    .or_else(|| url.strip_prefix("https://"))
+                && let Some(host) = addr.split('/').next()
+            {
+                let _ = TcpStream::connect(host);
+            }
             let _ = handle.join();
         }
         if !self.env_vars.is_empty() {

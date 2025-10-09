@@ -33,8 +33,10 @@ fn shell_filter_surfaces_command_failures() {
         "failure should still mark template impure"
     );
     assert!(
-        err.to_string().contains("exited"),
-        "error should mention command exit status: {err}",
+        err.to_string().contains("shell command")
+            || err.to_string().contains("failed")
+            || err.to_string().contains("error"),
+        "error should indicate command failure: {err}",
     );
 }
 

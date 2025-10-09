@@ -81,8 +81,15 @@ fn execute_grep(
     args.push(pattern.to_owned());
     let command = format_command("grep", &args);
     let input = to_bytes(value)?;
+
+    #[cfg(windows)]
+    let output = run_program("grep", &args, &input)
+        .map_err(|err| command_error(err, state.name(), &command))?;
+
+    #[cfg(not(windows))]
     let output =
         run_command(&command, &input).map_err(|err| command_error(err, state.name(), &command))?;
+
     Ok(value_from_bytes(output))
 }
 
@@ -150,7 +157,22 @@ fn run_command(command: &str, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(CommandFailure::Spawn)?;
+    run_child(cmd, input)
+}
+
+#[cfg(windows)]
+fn run_program(program: &str, args: &[String], input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
+    let mut cmd = Command::new(program);
+    cmd.args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    run_child(cmd, input)
+}
+
+fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
+    let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
     if let Some(mut stdin) = child.stdin.take() {
         stdin.write_all(input).map_err(CommandFailure::Io)?;
     }
@@ -166,7 +188,10 @@ fn run_command(command: &str, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
 }
 
 fn value_from_bytes(bytes: Vec<u8>) -> Value {
-    String::from_utf8(bytes.clone()).map_or_else(|_| Value::from_bytes(bytes), Value::from)
+    match String::from_utf8(bytes) {
+        Ok(text) => Value::from(text),
+        Err(err) => Value::from_bytes(err.into_bytes()),
+    }
 }
 
 fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {

@@ -130,7 +130,10 @@ fn hex_string(bytes: &[u8]) -> String {
 }
 
 fn to_value(bytes: Vec<u8>) -> Value {
-    String::from_utf8(bytes.clone()).map_or_else(|_| Value::from_bytes(bytes), Value::from)
+    match String::from_utf8(bytes) {
+        Ok(text) => Value::from(text),
+        Err(err) => Value::from_bytes(err.into_bytes()),
+    }
 }
 
 fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
