@@ -18,6 +18,9 @@ use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
 };
+#[cfg(windows)]
+use shell_quote::windows::quote as windows_quote;
+#[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
 
 #[cfg(windows)]
@@ -129,6 +132,12 @@ fn format_command(base: &str, args: &[String]) -> String {
     command
 }
 
+#[cfg(windows)]
+fn quote(arg: &str) -> String {
+    windows_quote(arg)
+}
+
+#[cfg(not(windows))]
 fn quote(arg: &str) -> String {
     let bytes = arg.quoted(Sh);
     String::from_utf8(bytes).expect("quoted args are valid UTF-8")
