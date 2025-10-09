@@ -20,11 +20,10 @@ variables::
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
-from stage_common import StageError, load_config, stage_artefacts
+from stage_common import StageError, load_config, require_env_path, stage_artefacts
 
 import cyclopts
 
@@ -43,17 +42,9 @@ def main(config_file: Path, target: str) -> None:
         Target key in the configuration file (for example ``"linux-x86_64"``).
     """
     try:
-        github_output = Path(os.environ["GITHUB_OUTPUT"])
-    except KeyError as exc:
-        message = (
-            "::error title=Configuration Error::Missing environment variable "
-            "'GITHUB_OUTPUT'"
-        )
-        print(message, file=sys.stderr)
-        raise SystemExit(1) from exc
-
-    try:
-        config = load_config(config_file, target)
+        config_path = Path(config_file)
+        github_output = require_env_path("GITHUB_OUTPUT")
+        config = load_config(config_path, target)
         result = stage_artefacts(config, github_output)
     except (FileNotFoundError, StageError) as exc:
         print(f"::error title=Staging Failure::{exc}", file=sys.stderr)
