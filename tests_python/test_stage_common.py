@@ -115,26 +115,21 @@ def test_load_config_merges_common_and_target(
     """``load_config`` should merge common values with the requested target."""
     config_file = workspace / "release-staging.toml"
     config_file.write_text(
-        "\n".join(
-            [
-                "[common]",
-                'bin_name = "netsuke"',
-                'dist_dir = "dist"',
-                'checksum_algorithm = "sha256"',
-                "artefacts = [",
-                (
-                    '  { source = "target/{target}/release/{bin_name}{bin_ext}",'
-                    ' required = true, output = "binary_path" },'
-                ),
-                '  { source = "LICENSE", required = true, output = "license_path" },',
-                "]",
-                "",
-                "[targets.test]",
-                'platform = "linux"',
-                'arch = "amd64"',
-                'target = "x86_64-unknown-linux-gnu"',
-            ]
-        ),
+        """\
+[common]
+bin_name = "netsuke"
+dist_dir = "dist"
+checksum_algorithm = "sha256"
+artefacts = [
+  { source = "target/{target}/release/{bin_name}{bin_ext}", required = true, output = "binary_path" },
+  { source = "LICENSE", required = true, output = "license_path" },
+]
+
+[targets.test]
+platform = "linux"
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+""",
         encoding="utf-8",
     )
 
@@ -176,19 +171,17 @@ def test_load_config_requires_workspace_env(
     """``load_config`` should fail when ``GITHUB_WORKSPACE`` is unset."""
     config_file = tmp_path / "release-staging.toml"
     config_file.write_text(
-        "\n".join(
-            [
-                "[common]",
-                'bin_name = "netsuke"',
-                'checksum_algorithm = "sha256"',
-                'artefacts = [ { source = "LICENSE" } ]',
-                "",
-                "[targets.test]",
-                'platform = "linux"',
-                'arch = "amd64"',
-                'target = "x86_64-unknown-linux-gnu"',
-            ]
-        ),
+        """\
+[common]
+bin_name = "netsuke"
+checksum_algorithm = "sha256"
+artefacts = [ { source = "LICENSE" } ]
+
+[targets.test]
+platform = "linux"
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+""",
         encoding="utf-8",
     )
 
@@ -205,19 +198,17 @@ def test_load_config_rejects_unknown_checksum(
     """Unsupported checksum algorithms should raise ``StageError``."""
     config_file = workspace / "release-staging.toml"
     config_file.write_text(
-        "\n".join(
-            [
-                "[common]",
-                'bin_name = "netsuke"',
-                'checksum_algorithm = "unknown"',
-                'artefacts = [ { source = "LICENSE" } ]',
-                "",
-                "[targets.test]",
-                'platform = "linux"',
-                'arch = "amd64"',
-                'target = "x86_64-unknown-linux-gnu"',
-            ]
-        ),
+        """\
+[common]
+bin_name = "netsuke"
+checksum_algorithm = "unknown"
+artefacts = [ { source = "LICENSE" } ]
+
+[targets.test]
+platform = "linux"
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+""",
         encoding="utf-8",
     )
 
@@ -232,19 +223,17 @@ def test_load_config_requires_target_section(
     """Missing target sections should raise ``StageError``."""
     config_file = workspace / "release-staging.toml"
     config_file.write_text(
-        "\n".join(
-            [
-                "[common]",
-                'bin_name = "netsuke"',
-                'checksum_algorithm = "sha256"',
-                'artefacts = [ { source = "LICENSE" } ]',
-                "",
-                "[targets.other]",
-                'platform = "linux"',
-                'arch = "amd64"',
-                'target = "x86_64-unknown-linux-gnu"',
-            ]
-        ),
+        """\
+[common]
+bin_name = "netsuke"
+checksum_algorithm = "sha256"
+artefacts = [ { source = "LICENSE" } ]
+
+[targets.other]
+platform = "linux"
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+""",
         encoding="utf-8",
     )
 
@@ -291,29 +280,29 @@ def test_stage_artefacts_exports_metadata(
     result = stage_common.stage_artefacts(config, github_output)
 
     staging_dir = workspace / "dist" / "netsuke_linux_amd64"
-    assert result.staging_dir == staging_dir
-    assert staging_dir.exists()
+    assert result.staging_dir == staging_dir, "StageResult must record the staging directory"
+    assert staging_dir.exists(), "Expected staging directory to be created"
 
     staged_files = {path.name for path in result.staged_artefacts}
-    assert staged_files == {"netsuke", "netsuke.1", "LICENSE"}
-    assert set(result.outputs) == {"binary_path", "man_path", "license_path"}
+    assert staged_files == {"netsuke", "netsuke.1", "LICENSE"}, "Unexpected artefacts staged"
+    assert set(result.outputs) == {"binary_path", "man_path", "license_path"}, "Outputs missing expected keys"
     expected_checksums = {
         "netsuke": staging_dir / "netsuke.sha256",
         "netsuke.1": staging_dir / "netsuke.1.sha256",
         "LICENSE": staging_dir / "LICENSE.sha256",
     }
-    assert set(result.checksums) == set(expected_checksums)
+    assert set(result.checksums) == set(expected_checksums), "Checksum outputs missing entries"
     for path in expected_checksums.values():
-        assert path.exists()
+        assert path.exists(), f"Checksum file {path.name} was not written"
 
     outputs = decode_output_file(github_output)
-    assert outputs["artifact_dir"] == staging_dir.as_posix()
-    assert outputs["binary_path"].endswith("netsuke")
-    assert outputs["license_path"].endswith("LICENSE")
+    assert outputs["artifact_dir"] == staging_dir.as_posix(), "artifact_dir output should reference staging directory"
+    assert outputs["binary_path"].endswith("netsuke"), "binary_path output should point to the staged executable"
+    assert outputs["license_path"].endswith("LICENSE"), "license_path output should point to the staged licence"
     artefact_map = json.loads(outputs["artefact_map"])
-    assert artefact_map["binary_path"].endswith("netsuke")
+    assert artefact_map["binary_path"].endswith("netsuke"), "artefact map should include the binary path"
     checksum_map = json.loads(outputs["checksum_map"])
-    assert set(checksum_map) == {"netsuke", "netsuke.1", "LICENSE"}
+    assert set(checksum_map) == {"netsuke", "netsuke.1", "LICENSE"}, "Checksum map missing entries"
 
 
 def test_stage_artefacts_uses_alternative_glob(
@@ -357,7 +346,9 @@ def test_stage_artefacts_uses_alternative_glob(
     github_output = workspace / "outputs.txt"
     result = stage_common.stage_artefacts(config, github_output)
     staged_path = result.outputs["man_path"]
-    assert staged_path.read_text(encoding="utf-8") == ".TH 2"
+    assert (
+        staged_path.read_text(encoding="utf-8") == ".TH 2"
+    ), "Fallback glob should pick the newest man page"
 
 
 def test_stage_artefacts_glob_selects_newest_candidate(
@@ -402,9 +393,13 @@ def test_stage_artefacts_glob_selects_newest_candidate(
     github_output = workspace / "outputs.txt"
     result = stage_common.stage_artefacts(config, github_output)
     staged_path = result.outputs["man_path"]
-    assert staged_path.read_text(encoding="utf-8") == ".TH 2"
+    assert (
+        staged_path.read_text(encoding="utf-8") == ".TH 2"
+    ), "Glob resolution should select the most recent candidate"
     latest = max(candidates, key=lambda f: f.stat().st_mtime_ns)
-    assert latest.read_text(encoding="utf-8") == staged_path.read_text(encoding="utf-8")
+    assert (
+        latest.read_text(encoding="utf-8") == staged_path.read_text(encoding="utf-8")
+    ), "Selected candidate should match the most recent file"
 
 
 def test_stage_artefacts_warns_for_optional(
@@ -437,7 +432,9 @@ def test_stage_artefacts_warns_for_optional(
 
     stage_common.stage_artefacts(config, workspace / "out.txt")
     captured = capfd.readouterr()
-    assert "::warning title=Artefact Skipped::Optional artefact missing" in captured.err
+    assert (
+        "::warning title=Artefact Skipped::Optional artefact missing" in captured.err
+    ), "Optional artefact warning missing"
 
 
 def test_stage_artefacts_fails_with_attempt_context(
@@ -464,6 +461,8 @@ def test_stage_artefacts_fails_with_attempt_context(
         stage_common.stage_artefacts(config, workspace / "outputs.txt")
 
     message = str(exc.value)
-    assert "Workspace=" in message
-    assert "missing-{target}" in message
-    assert "missing-x86_64-unknown-linux-gnu" in message
+    assert "Workspace=" in message, "Workspace context missing from error"
+    assert "missing-{target}" in message, "Template pattern missing from error"
+    assert (
+        "missing-x86_64-unknown-linux-gnu" in message
+    ), "Rendered path missing from error"

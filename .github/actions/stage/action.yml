@@ -42,8 +42,18 @@ runs:
       uses: astral-sh/setup-uv@8d55fbecc275b1c35dbe060458839f8d30439ccf
       with:
         python-version: '3.11'
+    - id: check-uv
+      name: Verify uv is available
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v uv >/dev/null 2>&1; then
+          echo "::error title=Missing dependency::uv not found on PATH. Install it (e.g. with astral-sh/setup-uv) before this action."
+          exit 1
+        fi
     - id: run-stage
       name: Run staging script
       shell: bash
       run: |
+        set -euo pipefail
         uv run "${{ github.action_path }}/scripts/stage.py" "${{ inputs.config-file }}" "${{ inputs.target }}"
