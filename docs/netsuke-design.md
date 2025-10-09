@@ -1682,15 +1682,14 @@ builds reuse the same action for compilation and now invoke the generic staging
 composite defined in `.github/actions/stage`. The composite shells out to a
 Cyclopts-driven script that reads `.github/release-staging.toml`, merges the
 `[common]` configuration with the target-specific overrides, and copies the
-configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory.
-Workflows must install `uv` before invoking the Stage composite, for example by
-using the `astral-sh/setup-uv` action, so the Cyclopts helper can invoke the
-tool. The helper writes SHA-256 sums for every staged file and exports a JSON
-map of the artefact outputs, allowing the workflow to hydrate downstream steps
-without hard-coded path logic. Figure 8.1 summarises the configuration
-entities, including optional keys reserved for templated directories and
-explicit artefact destinations that the helper can adopt without breaking
-compatibility.
+configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. It
+installs `uv` with `astral-sh/setup-uv`, double-checks the tool is present, and
+only then launches the Python entry point so workflows stay declarative. The
+helper writes SHA-256 sums for every staged file and exports a JSON map of the
+artefact outputs, allowing the workflow to hydrate downstream steps without
+hard-coded path logic. Figure 8.1 summarises the configuration entities,
+including optional keys reserved for templated directories and explicit
+artefact destinations that the helper can adopt without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 

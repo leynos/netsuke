@@ -207,39 +207,7 @@ jobs:
           ARTEFACT_MAP: ${{ steps.stage.outputs.artefact_map }}
         run: |
           set -euo pipefail
-          python <<'PY'
-          import json
-          import os
-          import sys
-          from pathlib import PureWindowsPath
-
-          try:
-              mapping = json.loads(os.environ["ARTEFACT_MAP"])
-          except KeyError as exc:
-              print(f"::error title=Stage output missing::Missing env {exc}", file=sys.stderr)
-              sys.exit(1)
-
-          try:
-              binary = mapping["binary_path"]
-              licence = mapping["license_path"]
-          except KeyError as exc:
-              print(f"::error title=Stage output missing::Missing artefact {exc}", file=sys.stderr)
-              sys.exit(1)
-
-          if not binary:
-              print("::error title=Stage output missing::binary_path output empty", file=sys.stderr)
-              sys.exit(1)
-          if not licence:
-              print("::error title=Stage output missing::license_path output empty", file=sys.stderr)
-              sys.exit(1)
-
-          binary_path = PureWindowsPath(binary)
-          license_path = PureWindowsPath(licence)
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-              handle.write(f"binary_path={binary_path}\\n")
-              handle.write(f"license_path={license_path}\\n")
-          PY
+          python .github/workflows/scripts/normalise_windows_paths.py
       - id: package
         name: Build Windows installer package
         uses: >-

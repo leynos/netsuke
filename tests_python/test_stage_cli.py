@@ -19,14 +19,14 @@ SCRIPTS_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 class _StubCycloptsApp:
     """Minimal stand-in for :mod:`cyclopts` used during testing."""
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:  # noqa: ARG002 - stub signature must match cyclopts.App
         self._handler: typ.Callable[..., object] | None = None
 
     def default(self, func: typ.Callable[..., object]) -> typ.Callable[..., object]:
         self._handler = func
         return func
 
-    def __call__(self, *args: object, **kwargs: object) -> None:
+    def __call__(self, *args: object, **kwargs: object) -> None:  # noqa: ARG002 - stub signature must match cyclopts.App
         """Prevent the stub from being invoked directly."""
         message = "Stub CLI should not be invoked directly"
         raise RuntimeError(message)  # pragma: no cover - not exercised
@@ -72,8 +72,12 @@ def test_stage_cli_stages_and_reports(
 
     outputs = decode_output_file(github_output)
     artefact_map = json.loads(outputs["artefact_map"])
-    assert artefact_map["binary_path"].endswith("netsuke")
-    assert outputs["binary_path"].endswith("netsuke")
+    assert artefact_map["binary_path"].endswith(
+        "netsuke"
+    ), "artefact map should expose the staged binary"
+    assert outputs["binary_path"].endswith(
+        "netsuke"
+    ), "CLI output should provide the staged binary path"
 
 
 def test_stage_cli_requires_github_output(
@@ -89,4 +93,4 @@ def test_stage_cli_requires_github_output(
     with pytest.raises(SystemExit) as exc:
         stage_cli.main(config_copy, "linux-x86_64")
 
-    assert exc.value.code == 1
+    assert exc.value.code == 1, "CLI should exit with status 1 when outputs are missing"
