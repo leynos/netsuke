@@ -1678,14 +1678,15 @@ composite action to cross-compile for `x86_64` and `aarch64`, generate the
 staged binary + man page directory, and then call the shared `linux-packages`
 composite a second time with explicit metadata so the resulting `.deb` and
 `.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
-builds reuse the same action for compilation and then run the uv staging
-wrapper `.github/workflows/scripts/stage_windows.py`, which delegates to
-`.github/workflows/scripts/stage_common.py`. The helper consumes Cyclopts
-parameters for the build metadata, resolves GitHub-provided environment
-variables for workspace details, mirrors the man page, and writes SHA-256 sums
-ready for publishing while enforcing a Windows-specific binary suffix. The
-staged artefacts feed a WiX v4 authoring template stored in
-`installer/Package.wxs`; the workflow invokes the shared
+builds reuse the same action for compilation and now invoke the generic
+staging composite defined in `.github/actions/stage`. The composite shells out
+to a Cyclopts-driven script that reads `.github/release-staging.toml`, merges
+the `[common]` configuration with the target-specific overrides, and copies the
+configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. The
+helper writes SHA-256 sums for every staged file and exports a JSON map of the
+artefact outputs, allowing the workflow to hydrate downstream steps without
+hard-coded path logic. The staged artefacts feed a WiX v4 authoring template
+stored in `installer/Package.wxs`; the workflow invokes the shared
 `windows-package@61340852250fe0c3cf1a06a16443629fccce746e` composite to convert
 the repository licence into RTF, embed the binary, and output a signed MSI
 installer alongside the staged directory. The composite pins the
@@ -1699,13 +1700,12 @@ platforms but is not bundled into the installer to avoid shipping an
 inaccessible help format.
 
 macOS releases execute the shared action twice: once on an Intel runner and
-again on Apple Silicon. They invoke the uv staging wrapper
-`.github/workflows/scripts/stage_macos.py`, which in turn calls the shared
-module to mirror documentation and emit checksums before feeding the resulting
-paths into the `macos-package` action. The macOS and Windows wrappers continue
-to embed `uv` metadata blocks, keeping Cyclopts dependencies discoverable
-without a repository-level `pyproject.toml`; that file is intentionally omitted
-as unnecessary for the release flow. Python linting lives in the top-level
+again on Apple Silicon. The same composite action interprets the TOML
+configuration, emits checksums, and exposes artefact metadata via JSON outputs
+before feeding the resulting paths into the `macos-package` action. Embedding
+the PEP 723 metadata keeps Cyclopts discoverable without a repository-level
+`pyproject.toml`, maintaining the existing approach where uv resolves
+dependencies on demand. Python linting still lives in the top-level
 `ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
 broader helper suite stays consistently linted.
 
