@@ -30,7 +30,6 @@ MODULE_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 @pytest.fixture(scope="session")
 def stage_common() -> object:
     """Load the staging helper package once for reuse across tests."""
-
     sys.path.insert(0, str(MODULE_DIR))
     try:
         return importlib.import_module("stage_common")
@@ -73,7 +72,6 @@ def _write_workspace_inputs(root: Path, target: str) -> None:
 
 def test_staging_config_template_context(stage_common: object, workspace: Path) -> None:
     """The configuration should expose a rich template context."""
-
     config = stage_common.StagingConfig(
         workspace=workspace,
         bin_name="netsuke",
@@ -139,7 +137,6 @@ def test_load_config_reads_repository_file(
     stage_common: object, workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The repository TOML configuration should parse without modification."""
-
     config_source = REPO_ROOT / ".github" / "release-staging.toml"
     config_copy = workspace / "release-staging.toml"
     config_copy.write_text(config_source.read_text(encoding="utf-8"), encoding="utf-8")

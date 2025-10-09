@@ -10,8 +10,10 @@ import sys
 import typing as typ
 from pathlib import Path
 
-from .config import ArtefactConfig, StagingConfig
 from .errors import StageError
+
+if typ.TYPE_CHECKING:
+    from .config import ArtefactConfig, StagingConfig
 
 __all__ = ["StageResult", "stage_artefacts"]
 
@@ -28,7 +30,6 @@ class StageResult:
 
 def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageResult:
     """Copy artefacts into ``config``'s staging directory."""
-
     staging_dir = config.staging_dir()
     context = config.as_template_context()
 
@@ -44,10 +45,7 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
         source_path = _resolve_artefact_source(config.workspace, artefact, context)
         if source_path is None:
             if artefact.required:
-                message = (
-                    "Required artefact not found for template: "
-                    f"{artefact.source}"
-                )
+                message = f"Required artefact not found for template: {artefact.source}"
                 raise StageError(message)
             warning = (
                 "::warning title=Artefact Skipped::Optional artefact missing: "
@@ -180,8 +178,6 @@ def _write_to_github_output(file: Path, values: dict[str, str | list[str]]) -> N
                 handle.write(f"\n{delimiter}\n")
             else:
                 escaped = (
-                    value.replace("%", "%25")
-                    .replace("\r", "%0D")
-                    .replace("\n", "%0A")
+                    value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
                 )
                 handle.write(f"{key}={escaped}\n")

@@ -5,11 +5,11 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+import typing as typ
 from pathlib import Path
 from types import ModuleType
 
 import pytest
-
 from test_stage_common import _decode_output_file  # reuse helper
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -19,19 +19,22 @@ SCRIPTS_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 class _StubCycloptsApp:
     """Minimal stand-in for :mod:`cyclopts` used during testing."""
 
-    def __init__(self, *args, **kwargs) -> None:  # noqa: D401 - simple stub
+    def __init__(self, *args: object, **kwargs: object) -> None:
         self._handler = None
 
-    def default(self, func):
+    def default(self, func: typ.Callable[..., object]) -> typ.Callable[..., object]:
         self._handler = func
         return func
 
-    def __call__(self, *args, **kwargs):  # pragma: no cover - not exercised
-        raise RuntimeError("Stub CLI should not be invoked directly")
+    def __call__(self, *args: object, **kwargs: object) -> None:
+        """Prevent the stub from being invoked directly."""
+        message = "Stub CLI should not be invoked directly"
+        raise RuntimeError(message)  # pragma: no cover - not exercised
 
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Provide an isolated workspace and set ``GITHUB_WORKSPACE``."""
     root = tmp_path / "workspace"
     root.mkdir()
     monkeypatch.setenv("GITHUB_WORKSPACE", str(root))
@@ -41,7 +44,6 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 @pytest.fixture
 def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
-
     sys.path.insert(0, str(SCRIPTS_DIR))
     monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
     cyclopts_module = sys.modules["cyclopts"]
@@ -70,7 +72,6 @@ def test_stage_cli_stages_and_reports(
     stage_cli: ModuleType, workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The CLI should stage artefacts and emit GitHub outputs."""
-
     config_src = REPO_ROOT / ".github" / "release-staging.toml"
     config_copy = workspace / "release-staging.toml"
     config_copy.write_text(config_src.read_text(encoding="utf-8"), encoding="utf-8")
@@ -93,7 +94,6 @@ def test_stage_cli_requires_github_output(
     stage_cli: ModuleType, workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The CLI should exit with an error when ``GITHUB_OUTPUT`` is missing."""
-
     config_src = REPO_ROOT / ".github" / "release-staging.toml"
     config_copy = workspace / "release-staging.toml"
     config_copy.write_text(config_src.read_text(encoding="utf-8"), encoding="utf-8")

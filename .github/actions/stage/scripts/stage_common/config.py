@@ -48,18 +48,15 @@ class StagingConfig:
 
     def staging_dir(self) -> Path:
         """Return the absolute staging directory path."""
-
         return self.workspace / self.dist_dir / self.staging_dir_name
 
     @property
     def staging_dir_name(self) -> str:
         """Directory name rendered from :attr:`staging_dir_template`."""
-
         return self.as_template_context()["staging_dir_name"]
 
     def as_template_context(self) -> dict[str, typ.Any]:
         """Return a mapping suitable for rendering str.format templates."""
-
         ctx = dataclasses.asdict(self)
         ctx.pop("artefacts", None)
         ctx["workspace"] = self.workspace.as_posix()
@@ -72,7 +69,6 @@ class StagingConfig:
 
 def load_config(config_file: Path, target_key: str) -> StagingConfig:
     """Load staging configuration from ``config_file`` for ``target_key``."""
-
     if not config_file.is_file():
         message = f"Configuration file not found at {config_file}"
         raise FileNotFoundError(message)
