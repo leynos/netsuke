@@ -13,7 +13,7 @@ use netsuke::stdlib;
 use std::ffi::OsStr;
 use std::{
     io::{Read, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     thread,
 };
 use test_support::{
@@ -100,9 +100,7 @@ impl From<String> for RelativePath {
 }
 
 pub(crate) fn server_host(url: &str) -> Option<&str> {
-    url.strip_prefix("http://")
-        .or_else(|| url.strip_prefix("https://"))
-        .and_then(|addr| addr.split('/').next())
+    extract_host_from_url(url)
 }
 
 pub(crate) fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
@@ -191,8 +189,29 @@ fn failing_stdlib_command_helper(world: &mut CliWorld) {
     world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
 }
 
+/// Extracts the host portion from an HTTP or HTTPS URL.
+///
+/// Returns None if the URL doesn't have a valid http/https prefix or host.
+fn extract_host_from_url(url: &str) -> Option<&str> {
+    let addr = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
+    addr.split('/').next()
+}
+
+// The reviewer requested nested optional checks to keep the host parsing explicit
+// for readability, so silence the lint that prefers collapsing them.
+#[allow(
+    clippy::collapsible_if,
+    reason = "Review requested explicit nested host extraction checks"
+)]
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
+    if let Some(url) = world.stdlib_url.as_ref() {
+        if let Some(host) = extract_host_from_url(url) {
+            let _ = TcpStream::connect(host);
+        }
+    }
     world.start_http_server(body);
 }
 

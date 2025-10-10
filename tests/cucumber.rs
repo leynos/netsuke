@@ -50,10 +50,13 @@ pub struct CliWorld {
 }
 
 mod steps;
-use steps::stdlib_steps::{server_host, spawn_http_server};
+use steps::stdlib_steps::spawn_http_server;
 
 impl CliWorld {
     pub(crate) fn start_http_server(&mut self, body: String) {
+        if let Some(host) = self.extract_host_from_stdlib_url() {
+            let _ = TcpStream::connect(host);
+        }
         self.shutdown_http_server();
         let (url, handle) = spawn_http_server(body);
         self.stdlib_url = Some(url);
@@ -64,20 +67,17 @@ impl CliWorld {
         let Some(handle) = self.http_server.take() else {
             return;
         };
-
-        self.unblock_http_server();
-
         let _ = handle.join();
+        self.stdlib_url = None;
     }
 
-    fn unblock_http_server(&self) {
-        let Some(url) = self.stdlib_url.as_deref() else {
-            return;
-        };
-        let Some(host) = server_host(url) else {
-            return;
-        };
-        let _ = TcpStream::connect(host);
+    /// Returns the host component of the active stdlib HTTP fixture URL.
+    ///
+    /// The caller uses the host to unblock the listener during teardown.
+    fn extract_host_from_stdlib_url(&self) -> Option<&str> {
+        self.stdlib_url
+            .as_deref()
+            .and_then(steps::stdlib_steps::server_host)
     }
 
     fn restore_environment(&mut self) {
@@ -104,6 +104,9 @@ fn block_device_exists() -> bool {
 
 impl Drop for CliWorld {
     fn drop(&mut self) {
+        if let Some(host) = self.extract_host_from_stdlib_url() {
+            let _ = TcpStream::connect(host);
+        }
         self.shutdown_http_server();
         self.restore_environment();
     }
