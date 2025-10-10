@@ -12,19 +12,49 @@ import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
 
 
-def test_stage_artefacts_exports_metadata(
-    stage_common: object, workspace: Path
-) -> None:
-    """The staging pipeline should copy inputs, hash them, and export outputs."""
+def create_staging_config(
+    stage_common: object,
+    workspace: Path,
+    artefacts: list[object],
+    target: str | None = None,
+) -> object:
+    """Return a staging configuration with standard defaults."""
 
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
-
-    config = stage_common.StagingConfig(
+    return stage_common.StagingConfig(
         workspace=workspace,
         bin_name="netsuke",
         dist_dir="dist",
         checksum_algorithm="sha256",
+        artefacts=artefacts,
+        platform="linux",
+        arch="amd64",
+        target=target or "x86_64-unknown-linux-gnu",
+    )
+
+
+@pytest.fixture
+def standard_target() -> str:
+    """Return the canonical test target triple."""
+
+    return "x86_64-unknown-linux-gnu"
+
+
+@pytest.fixture
+def prepared_workspace(workspace: Path, standard_target: str) -> Path:
+    """Populate ``workspace`` with staged artefact inputs for tests."""
+
+    write_workspace_inputs(workspace, standard_target)
+    return workspace
+
+
+def test_stage_artefacts_exports_metadata(
+    stage_common: object, prepared_workspace: Path, standard_target: str
+) -> None:
+    """The staging pipeline should copy inputs, hash them, and export outputs."""
+
+    config = create_staging_config(
+        stage_common,
+        prepared_workspace,
         artefacts=[
             stage_common.ArtefactConfig(
                 source="target/{target}/release/{bin_name}{bin_ext}",
@@ -42,15 +72,13 @@ def test_stage_artefacts_exports_metadata(
                 output="license_path",
             ),
         ],
-        platform="linux",
-        arch="amd64",
-        target=target,
+        target=standard_target,
     )
 
-    github_output = workspace / "outputs.txt"
+    github_output = prepared_workspace / "outputs.txt"
     result = stage_common.stage_artefacts(config, github_output)
 
-    staging_dir = workspace / "dist" / "netsuke_linux_amd64"
+    staging_dir = prepared_workspace / "dist" / "netsuke_linux_amd64"
     assert result.staging_dir == staging_dir, "StageResult must record the staging directory"
     assert staging_dir.exists(), "Expected staging directory to be created"
 
@@ -77,18 +105,23 @@ def test_stage_artefacts_exports_metadata(
 
 
 def test_stage_artefacts_uses_alternative_glob(
-    stage_common: object, workspace: Path
+    stage_common: object, prepared_workspace: Path, standard_target: str
 ) -> None:
     """Fallback paths should be used when the preferred template is absent."""
 
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
     generated = (
-        workspace / "target" / "generated-man" / target / "release" / "netsuke.1"
+        prepared_workspace
+        / "target"
+        / "generated-man"
+        / standard_target
+        / "release"
+        / "netsuke.1"
     )
     generated.unlink()
 
-    build_dir = workspace / "target" / target / "release" / "build"
+    build_dir = (
+        prepared_workspace / "target" / standard_target / "release" / "build"
+    )
     first = build_dir / "1" / "out" / "netsuke.1"
     second = build_dir / "2" / "out" / "netsuke.1"
     first.parent.mkdir(parents=True, exist_ok=True)
@@ -97,11 +130,9 @@ def test_stage_artefacts_uses_alternative_glob(
     second.write_text(".TH 2", encoding="utf-8")
     os.utime(first, (first.stat().st_atime, first.stat().st_mtime - 100))
 
-    config = stage_common.StagingConfig(
-        workspace=workspace,
-        bin_name="netsuke",
-        dist_dir="dist",
-        checksum_algorithm="sha256",
+    config = create_staging_config(
+        stage_common,
+        prepared_workspace,
         artefacts=[
             stage_common.ArtefactConfig(
                 source="target/generated-man/{target}/release/{bin_name}.1",
@@ -110,12 +141,10 @@ def test_stage_artefacts_uses_alternative_glob(
                 alternatives=["target/{target}/release/build/*/out/{bin_name}.1"],
             ),
         ],
-        platform="linux",
-        arch="amd64",
-        target=target,
+        target=standard_target,
     )
 
-    github_output = workspace / "outputs.txt"
+    github_output = prepared_workspace / "outputs.txt"
     result = stage_common.stage_artefacts(config, github_output)
     staged_path = result.outputs["man_path"]
     assert (
@@ -124,18 +153,23 @@ def test_stage_artefacts_uses_alternative_glob(
 
 
 def test_stage_artefacts_glob_selects_newest_candidate(
-    stage_common: object, workspace: Path
+    stage_common: object, prepared_workspace: Path, standard_target: str
 ) -> None:
     """Glob matches should resolve to the most recently modified file."""
 
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
     generated = (
-        workspace / "target" / "generated-man" / target / "release" / "netsuke.1"
+        prepared_workspace
+        / "target"
+        / "generated-man"
+        / standard_target
+        / "release"
+        / "netsuke.1"
     )
     generated.unlink()
 
-    build_dir = workspace / "target" / target / "release" / "build"
+    build_dir = (
+        prepared_workspace / "target" / standard_target / "release" / "build"
+    )
     build_dir.mkdir(parents=True, exist_ok=True)
     for idx in range(3):
         candidate = build_dir / f"{idx}" / "out" / "netsuke.1"
@@ -143,11 +177,9 @@ def test_stage_artefacts_glob_selects_newest_candidate(
         candidate.write_text(f".TH {idx}", encoding="utf-8")
         os.utime(candidate, (100 + idx, 100 + idx))
 
-    config = stage_common.StagingConfig(
-        workspace=workspace,
-        bin_name="netsuke",
-        dist_dir="dist",
-        checksum_algorithm="sha256",
+    config = create_staging_config(
+        stage_common,
+        prepared_workspace,
         artefacts=[
             stage_common.ArtefactConfig(
                 source="target/generated-man/{target}/release/{bin_name}.1",
@@ -156,12 +188,10 @@ def test_stage_artefacts_glob_selects_newest_candidate(
                 alternatives=["target/{target}/release/build/*/out/{bin_name}.1"],
             ),
         ],
-        platform="linux",
-        arch="amd64",
-        target=target,
+        target=standard_target,
     )
 
-    github_output = workspace / "outputs.txt"
+    github_output = prepared_workspace / "outputs.txt"
     result = stage_common.stage_artefacts(config, github_output)
     staged_path = result.outputs["man_path"]
     assert (
@@ -192,18 +222,16 @@ def test_match_candidate_path_handles_windows_drive(
 
 
 def test_stage_artefacts_warns_for_optional(
-    stage_common: object, workspace: Path, capfd: pytest.CaptureFixture[str]
+    stage_common: object,
+    prepared_workspace: Path,
+    capfd: pytest.CaptureFixture[str],
+    standard_target: str,
 ) -> None:
     """Optional artefacts should emit a warning when absent but not abort."""
 
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
-
-    config = stage_common.StagingConfig(
-        workspace=workspace,
-        bin_name="netsuke",
-        dist_dir="dist",
-        checksum_algorithm="sha256",
+    config = create_staging_config(
+        stage_common,
+        prepared_workspace,
         artefacts=[
             stage_common.ArtefactConfig(
                 source="target/{target}/release/{bin_name}{bin_ext}",
@@ -215,117 +243,87 @@ def test_stage_artefacts_warns_for_optional(
                 output="missing",
             ),
         ],
-        platform="linux",
-        arch="amd64",
-        target=target,
+        target=standard_target,
     )
 
-    stage_common.stage_artefacts(config, workspace / "out.txt")
+    stage_common.stage_artefacts(config, prepared_workspace / "out.txt")
     captured = capfd.readouterr()
     assert (
         "::warning title=Artefact Skipped::Optional artefact missing" in captured.err
     ), "Optional artefact warning missing"
 
 
-def test_stage_artefacts_rejects_reserved_outputs(
-    stage_common: object, workspace: Path
+@pytest.mark.parametrize(
+    ("artefact_definitions", "expected_match"),
+    [
+        pytest.param(
+            [
+                {
+                    "source": "target/{target}/release/{bin_name}{bin_ext}",
+                    "required": True,
+                    "output": "artifact_dir",
+                }
+            ],
+            "collide.*artifact_dir",
+            id="rejects_reserved_outputs",
+        ),
+        pytest.param(
+            [
+                {
+                    "source": "target/{target}/release/{bin_name}{bin_ext}",
+                    "required": True,
+                    "destination": "netsuke",
+                },
+                {
+                    "source": "LICENSE",
+                    "required": True,
+                    "destination": "netsuke",
+                },
+            ],
+            "Duplicate staged destination",
+            id="rejects_duplicate_destinations",
+        ),
+        pytest.param(
+            [
+                {
+                    "source": "target/{target}/release/{bin_name}{bin_ext}",
+                    "required": True,
+                    "output": "binary_path",
+                },
+                {
+                    "source": "LICENSE",
+                    "required": True,
+                    "output": "binary_path",
+                },
+            ],
+            "Duplicate artefact output key",
+            id="rejects_duplicate_outputs",
+        ),
+    ],
+)
+def test_stage_artefacts_validation_errors(
+    stage_common: object,
+    prepared_workspace: Path,
+    standard_target: str,
+    artefact_definitions: list[dict[str, object]],
+    expected_match: str,
 ) -> None:
-    """Custom outputs must not collide with the reserved output keys."""
+    """Staging should fail fast when reserved names or duplicates are present."""
 
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
+    artefacts = [
+        stage_common.ArtefactConfig(**definition)
+        for definition in artefact_definitions
+    ]
 
-    config = stage_common.StagingConfig(
-        workspace=workspace,
-        bin_name="netsuke",
-        dist_dir="dist",
-        checksum_algorithm="sha256",
-        artefacts=[
-            stage_common.ArtefactConfig(
-                source="target/{target}/release/{bin_name}{bin_ext}",
-                required=True,
-                output="artifact_dir",
-            ),
-        ],
-        platform="linux",
-        arch="amd64",
-        target=target,
+    config = create_staging_config(
+        stage_common,
+        prepared_workspace,
+        artefacts=artefacts,
+        target=standard_target,
     )
 
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.stage_artefacts(config, workspace / "outputs.txt")
-
-    message = str(exc.value)
-    assert "collide" in message
-    assert "artifact_dir" in message
-
-
-def test_stage_artefacts_rejects_duplicate_destinations(
-    stage_common: object, workspace: Path
-) -> None:
-    """Staging should fail when two artefacts render the same destination."""
-
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
-
-    config = stage_common.StagingConfig(
-        workspace=workspace,
-        bin_name="netsuke",
-        dist_dir="dist",
-        checksum_algorithm="sha256",
-        artefacts=[
-            stage_common.ArtefactConfig(
-                source="target/{target}/release/{bin_name}{bin_ext}",
-                required=True,
-                destination="netsuke",
-            ),
-            stage_common.ArtefactConfig(
-                source="LICENSE",
-                required=True,
-                destination="netsuke",
-            ),
-        ],
-        platform="linux",
-        arch="amd64",
-        target=target,
-    )
-
-    with pytest.raises(stage_common.StageError, match="Duplicate staged destination"):
-        stage_common.stage_artefacts(config, workspace / "outputs.txt")
-
-
-def test_stage_artefacts_rejects_duplicate_outputs(
-    stage_common: object, workspace: Path
-) -> None:
-    """Staging should fail when two artefacts export the same output key."""
-
-    target = "x86_64-unknown-linux-gnu"
-    write_workspace_inputs(workspace, target)
-
-    config = stage_common.StagingConfig(
-        workspace=workspace,
-        bin_name="netsuke",
-        dist_dir="dist",
-        checksum_algorithm="sha256",
-        artefacts=[
-            stage_common.ArtefactConfig(
-                source="target/{target}/release/{bin_name}{bin_ext}",
-                required=True,
-                output="binary_path",
-            ),
-            stage_common.ArtefactConfig(
-                source="LICENSE",
-                required=True,
-                output="binary_path",
-            ),
-        ],
-        platform="linux",
-        arch="amd64",
-        target=target,
-    )
-
-    with pytest.raises(stage_common.StageError, match="Duplicate artefact output key"):
-        stage_common.stage_artefacts(config, workspace / "outputs.txt")
+    with pytest.raises(stage_common.StageError, match=expected_match):
+        stage_common.stage_artefacts(config, prepared_workspace / "outputs.txt")
 
 
 def test_stage_artefacts_fails_with_attempt_context(
