@@ -348,7 +348,7 @@ def _normalise_alternatives(
     if value is None:
         return []
     if isinstance(value, str):
-        return [] if not value else [value]
+        return [value] if value else []
     if not isinstance(value, list):
         message = (
             "Alternatives must be a list of strings "

@@ -25,17 +25,11 @@ Inspect the planned uploads without publishing anything::
 from __future__ import annotations
 
 import dataclasses as dc
-import os
 import sys
 import typing as typ
 from pathlib import Path
 
-from _release_upload_deps import (
-    RuntimeOptions,
-    load_cyclopts,
-    load_plumbum,
-    run_cli,
-)
+from _release_upload_deps import load_cyclopts, load_plumbum, run_cli
 
 
 class AssetError(RuntimeError):
@@ -123,54 +117,6 @@ def _register_asset(asset_name: str, path: Path, seen: dict[str, Path]) -> None:
         )
         raise AssetError(message)
     seen[asset_name] = path
-
-
-def _prepare_runtime_options(
-    *,
-    inputs: typ.Mapping[str, object],
-    environ: typ.Mapping[str, str | None],
-) -> RuntimeOptions:
-    """Normalise CLI inputs from Cyclopts or ``argparse`` into runtime options."""
-
-    release_tag = typ.cast(str | None, inputs.get("release_tag"))
-    bin_name = typ.cast(str | None, inputs.get("bin_name"))
-    dist_dir = typ.cast(str | Path | None, inputs.get("dist_dir"))
-    dry_run = inputs.get("dry_run")
-
-    resolved_release = release_tag or environ.get("INPUT_RELEASE_TAG")
-    resolved_bin = bin_name or environ.get("INPUT_BIN_NAME")
-    dist_source = dist_dir if dist_dir is not None else environ.get("INPUT_DIST_DIR")
-    resolved_dist = Path(dist_source or "dist")
-
-    dry_run_value: bool
-    if isinstance(dry_run, bool):
-        dry_run_value = dry_run
-    elif dry_run is None:
-        dry_run_value = False
-    else:
-        dry_run_value = _coerce_bool(dry_run)
-    if not dry_run_value and (env_flag := environ.get("INPUT_DRY_RUN")):
-        dry_run_value = _coerce_bool(env_flag)
-
-    missing = [
-        label
-        for label, present in (
-            ("--release-tag", resolved_release),
-            ("--bin-name", resolved_bin),
-        )
-        if not present
-    ]
-    if missing:
-        joined = ", ".join(missing)
-        message = f"Missing required argument(s): {joined}"
-        raise ValueError(message)
-
-    return RuntimeOptions(
-        release_tag=typ.cast(str, resolved_release),
-        bin_name=typ.cast(str, resolved_bin),
-        dist_dir=resolved_dist,
-        dry_run=dry_run_value,
-    )
 
 
 def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
@@ -333,26 +279,19 @@ def main(
 @app.default
 def cli(
     *,
-    release_tag: typ.Annotated[str, Parameter(required=True)],
-    bin_name: typ.Annotated[str, Parameter(required=True)],
-    dist_dir: Path = Path("dist"),
-    dry_run: bool = False,
+    release_tag: typ.Annotated[
+        str, Parameter(required=True, env="INPUT_RELEASE_TAG")
+    ],
+    bin_name: typ.Annotated[str, Parameter(required=True, env="INPUT_BIN_NAME")],
+    dist_dir: typ.Annotated[Path, Parameter(env="INPUT_DIST_DIR")] = Path("dist"),
+    dry_run: typ.Annotated[bool, Parameter(env="INPUT_DRY_RUN")] = False,
 ) -> int:
     """Cyclopts-bound CLI entry point."""
-    options = _prepare_runtime_options(
-        inputs={
-            "release_tag": release_tag,
-            "bin_name": bin_name,
-            "dist_dir": dist_dir,
-            "dry_run": dry_run,
-        },
-        environ=os.environ,
-    )
     return main(
-        release_tag=options.release_tag,
-        bin_name=options.bin_name,
-        dist_dir=options.dist_dir,
-        dry_run=options.dry_run,
+        release_tag=release_tag,
+        bin_name=bin_name,
+        dist_dir=dist_dir,
+        dry_run=dry_run,
     )
 
 
@@ -360,7 +299,7 @@ if __name__ == "__main__":  # pragma: no cover - exercised via CLI
     raise SystemExit(
         run_cli(
             cyclopts_support,
-            prepare_options=_prepare_runtime_options,
+            coerce_bool=_coerce_bool,
             main=main,
             tokens=sys.argv[1:],
         )

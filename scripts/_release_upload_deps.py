@@ -11,46 +11,10 @@ from typing import Any, Callable, NamedTuple, Sequence
 __all__ = [
     "CycloptsSupport",
     "PlumbumSupport",
-    "RuntimeOptions",
     "load_cyclopts",
     "load_plumbum",
     "run_cli",
 ]
-
-
-class _FallbackParameter:
-    """Placeholder preserving ``typing.Annotated`` compatibility."""
-
-    def __init__(self, *_args: object, **_kwargs: object) -> None:
-        """Accept and ignore all arguments."""
-
-
-class _FallbackApp:
-    """Stub ``cyclopts.App`` that raises a descriptive error when invoked."""
-
-    def __init__(self, cause: ModuleNotFoundError) -> None:
-        self._cause = cause
-
-    def default(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        return func
-
-    def __call__(self, *_args: object, **_kwargs: object) -> None:  # pragma: no cover
-        message = "Cyclopts is required for CLI usage; install it to run the script"
-        raise RuntimeError(message) from self._cause
-
-
-class _MissingLocal:
-    """Placeholder mirroring the ``plumbum.local`` interface."""
-
-    def __init__(self, cause: ModuleNotFoundError) -> None:
-        self._cause = cause
-
-    def __getitem__(self, name: str) -> None:  # pragma: no cover - defensive guard.
-        message = (
-            "plumbum is required to execute release uploads; "
-            "install it or run in dry-run mode"
-        )
-        raise ModuleNotFoundError(message) from self._cause
 
 
 class CycloptsSupport(NamedTuple):
@@ -70,15 +34,6 @@ class PlumbumSupport(NamedTuple):
     bound_command: Any
 
 
-class RuntimeOptions(NamedTuple):
-    """Arguments required by :func:`upload_release_assets.main`."""
-
-    release_tag: str
-    bin_name: str
-    dist_dir: Path
-    dry_run: bool
-
-
 def load_cyclopts() -> CycloptsSupport:
     """Return Cyclopts components with graceful fallbacks."""
 
@@ -86,7 +41,19 @@ def load_cyclopts() -> CycloptsSupport:
         import cyclopts as _cyclopts
         from cyclopts import App, Parameter
     except ModuleNotFoundError as exc:  # pragma: no cover - lean test environments.
-        return CycloptsSupport(False, _FallbackApp(exc), _FallbackParameter)
+        def _raise_missing_cyclopts(*_args: object, **_kwargs: object) -> None:
+            message = (
+                "Cyclopts is required for CLI usage; install it to run the script"
+            )
+            raise RuntimeError(message) from exc
+
+        _raise_missing_cyclopts.default = lambda func: func  # type: ignore[attr-defined]
+
+        class _ParameterStub:
+            def __init__(self, *_args: object, **_kwargs: object) -> None:
+                """Accept arguments for ``typing.Annotated`` compatibility."""
+
+        return CycloptsSupport(False, _raise_missing_cyclopts, _ParameterStub)
 
     app = App(config=_cyclopts.config.Env("INPUT_", command=False))
     return CycloptsSupport(True, app, Parameter)
@@ -103,8 +70,16 @@ def load_plumbum() -> PlumbumSupport:
         )
         from plumbum.commands.base import BoundCommand  # type: ignore[import-not-found]
     except ModuleNotFoundError as exc:  # pragma: no cover - lean type-check envs.
+        class _LocalStub:
+            def __getitem__(self, name: str) -> None:  # pragma: no cover - defensive.
+                message = (
+                    "plumbum is required to execute release uploads; "
+                    "install it or run in dry-run mode"
+                )
+                raise ModuleNotFoundError(message) from exc
+
         return PlumbumSupport(
-            local=_MissingLocal(exc),
+            local=_LocalStub(),
             command_not_found=ModuleNotFoundError,
             process_execution_error=RuntimeError,
             bound_command=Any,
@@ -121,38 +96,47 @@ def load_plumbum() -> PlumbumSupport:
 def run_cli(
     support: CycloptsSupport,
     *,
-    prepare_options: Callable[..., RuntimeOptions],
+    coerce_bool: Callable[[object], bool],
     main: Callable[..., int],
     tokens: Sequence[str] | None = None,
 ) -> int:
     """Execute the uploader CLI using Cyclopts or ``argparse`` fallback."""
 
+    arguments = list(tokens) if tokens is not None else None
+
     if support.available:
-        return support.app()
+        return support.app(arguments)
 
     parser = ArgumentParser(description=main.__doc__ or "Upload release assets.")
     parser.add_argument("--release-tag")
     parser.add_argument("--bin-name")
     parser.add_argument("--dist-dir")
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args(list(tokens) if tokens is not None else sys.argv[1:])
+    args = parser.parse_args(arguments if arguments is not None else sys.argv[1:])
 
-    try:
-        options = prepare_options(
-            inputs={
-                "release_tag": args.release_tag,
-                "bin_name": args.bin_name,
-                "dist_dir": args.dist_dir,
-                "dry_run": args.dry_run,
-            },
-            environ=os.environ,
+    release_tag = args.release_tag or os.environ.get("INPUT_RELEASE_TAG")
+    bin_name = args.bin_name or os.environ.get("INPUT_BIN_NAME")
+    dist_dir_value = args.dist_dir or os.environ.get("INPUT_DIST_DIR") or "dist"
+    dry_run_flag = args.dry_run
+
+    if not dry_run_flag and (env_flag := os.environ.get("INPUT_DRY_RUN")):
+        dry_run_flag = coerce_bool(env_flag)
+
+    missing = [
+        label
+        for label, present in (
+            ("--release-tag", release_tag),
+            ("--bin-name", bin_name),
         )
-    except ValueError as exc:
-        parser.exit(status=1, message=f"{exc}\n")
+        if not present
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        parser.exit(status=1, message=f"Missing required argument(s): {joined}\n")
 
     return main(
-        release_tag=options.release_tag,
-        bin_name=options.bin_name,
-        dist_dir=options.dist_dir,
-        dry_run=options.dry_run,
+        release_tag=release_tag,
+        bin_name=bin_name,
+        dist_dir=Path(dist_dir_value),
+        dry_run=dry_run_flag,
     )
