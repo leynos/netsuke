@@ -112,6 +112,46 @@ fn grep_filter_rejects_invalid_flags() {
     );
 }
 
+#[rstest]
+fn shell_filter_rejects_undefined_input() {
+    let (mut env, state) = stdlib_env_with_state();
+    state.reset_impure();
+    env.add_template("shell_undefined", "{{ missing | shell(cmd) }}")
+        .expect("template");
+    let template = env.get_template("shell_undefined").expect("get template");
+    let result = template.render(context!(cmd => "echo ignored"));
+    let err = result.expect_err("shell should reject undefined input");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("input value is undefined"),
+        "error should mention undefined input: {err}",
+    );
+    assert!(
+        state.is_impure(),
+        "undefined input should mark template impure",
+    );
+}
+
+#[rstest]
+fn grep_filter_rejects_undefined_input() {
+    let (mut env, state) = stdlib_env_with_state();
+    state.reset_impure();
+    env.add_template("grep_undefined", "{{ missing | grep('pattern') }}")
+        .expect("template");
+    let template = env.get_template("grep_undefined").expect("get template");
+    let result = template.render(context! {});
+    let err = result.expect_err("grep should reject undefined input");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(
+        err.to_string().contains("input value is undefined"),
+        "error should mention undefined input: {err}",
+    );
+    assert!(
+        state.is_impure(),
+        "undefined input should mark template impure",
+    );
+}
+
 #[cfg(windows)]
 #[fixture]
 fn env_lock() -> EnvLock {
