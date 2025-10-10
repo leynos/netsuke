@@ -195,19 +195,30 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
+        sync::{Mutex, MutexGuard, OnceLock},
     };
 
     use tempfile::tempdir;
 
+    static CWD_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
     struct DirGuard {
         original: PathBuf,
+        _lock: MutexGuard<'static, ()>,
     }
 
     impl DirGuard {
         fn change_to(path: &Path) -> Self {
+            let lock = CWD_LOCK
+                .get_or_init(|| Mutex::new(()))
+                .lock()
+                .expect("cwd lock");
             let original = std::env::current_dir().expect("current dir");
             std::env::set_current_dir(path).expect("set current dir");
-            Self { original }
+            Self {
+                original,
+                _lock: lock,
+            }
         }
     }
 

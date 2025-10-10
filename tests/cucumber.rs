@@ -50,6 +50,7 @@ pub struct CliWorld {
 }
 
 mod steps;
+use steps::stdlib_steps::server_host;
 
 #[cfg(unix)]
 fn block_device_exists() -> bool {
@@ -67,12 +68,7 @@ fn block_device_exists() -> bool {
 impl Drop for CliWorld {
     fn drop(&mut self) {
         if let Some(handle) = self.http_server.take() {
-            if let Some(url) = self.stdlib_url.as_ref()
-                && let Some(addr) = url
-                    .strip_prefix("http://")
-                    .or_else(|| url.strip_prefix("https://"))
-                && let Some(host) = addr.split('/').next()
-            {
+            if let Some(host) = self.stdlib_url.as_deref().and_then(server_host) {
                 let _ = TcpStream::connect(host);
             }
             let _ = handle.join();

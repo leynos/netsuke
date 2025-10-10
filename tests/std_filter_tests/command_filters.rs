@@ -1,6 +1,6 @@
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{ErrorKind, context};
+use minijinja::{ErrorKind, context, value::Value};
 use rstest::rstest;
 use tempfile::tempdir;
 use test_support::command_helper::{compile_failure_helper, compile_uppercase_helper};
@@ -112,44 +112,46 @@ fn grep_filter_rejects_invalid_flags() {
     );
 }
 
-#[rstest]
-fn shell_filter_rejects_undefined_input() {
-    let (mut env, state) = stdlib_env_with_state();
-    state.reset_impure();
-    env.add_template("shell_undefined", "{{ missing | shell(cmd) }}")
-        .expect("template");
-    let template = env.get_template("shell_undefined").expect("get template");
-    let result = template.render(context!(cmd => "echo ignored"));
-    let err = result.expect_err("shell should reject undefined input");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("input value is undefined"),
-        "error should mention undefined input: {err}",
-    );
-    assert!(
-        state.is_impure(),
-        "undefined input should mark template impure",
-    );
+fn empty_context() -> Value {
+    context! {}
+}
+
+fn shell_context() -> Value {
+    context!(cmd => "echo ignored")
 }
 
 #[rstest]
-fn grep_filter_rejects_undefined_input() {
+#[case(
+    "shell_undefined",
+    "{{ missing | shell(cmd) }}",
+    shell_context as fn() -> Value,
+    "shell filter should mark template impure",
+)]
+#[case(
+    "grep_undefined",
+    "{{ missing | grep('pattern') }}",
+    empty_context as fn() -> Value,
+    "grep filter should mark template impure",
+)]
+fn filters_reject_undefined_input(
+    #[case] name: &str,
+    #[case] template_src: &str,
+    #[case] context_fn: fn() -> Value,
+    #[case] impure_message: &str,
+) {
     let (mut env, state) = stdlib_env_with_state();
     state.reset_impure();
-    env.add_template("grep_undefined", "{{ missing | grep('pattern') }}")
-        .expect("template");
-    let template = env.get_template("grep_undefined").expect("get template");
-    let result = template.render(context! {});
-    let err = result.expect_err("grep should reject undefined input");
+    env.add_template(name, template_src).expect("template");
+    let template = env.get_template(name).expect("get template");
+    let err = template
+        .render(context_fn())
+        .expect_err("filter should reject undefined input");
     assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     assert!(
         err.to_string().contains("input value is undefined"),
         "error should mention undefined input: {err}",
     );
-    assert!(
-        state.is_impure(),
-        "undefined input should mark template impure",
-    );
+    assert!(state.is_impure(), "{impure_message}");
 }
 
 #[cfg(windows)]

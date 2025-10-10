@@ -99,6 +99,12 @@ impl From<String> for RelativePath {
     }
 }
 
+pub(crate) fn server_host(url: &str) -> Option<&str> {
+    url.strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
+        .and_then(|addr| addr.split('/').next())
+}
+
 fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind http listener");
     let addr = listener.local_addr().expect("local addr");
@@ -106,15 +112,15 @@ fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
     let handle = thread::spawn(move || {
         if let Ok((mut stream, _)) = listener.accept() {
             let mut buf = [0u8; 512];
-            let _ = stream.read(&mut buf);
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            stream
-                .write_all(response.as_bytes())
-                .expect("write http response");
+            let read = stream.read(&mut buf).unwrap_or(0);
+            if read > 0 {
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
         }
     });
     (url, handle)
@@ -188,12 +194,7 @@ fn failing_stdlib_command_helper(world: &mut CliWorld) {
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
     if let Some(handle) = world.http_server.take() {
-        if let Some(url) = world.stdlib_url.as_ref()
-            && let Some(addr) = url
-                .strip_prefix("http://")
-                .or_else(|| url.strip_prefix("https://"))
-            && let Some(host) = addr.split('/').next()
-        {
+        if let Some(host) = world.stdlib_url.as_deref().and_then(server_host) {
             let _ = TcpStream::connect(host);
         }
         let _ = handle.join();
