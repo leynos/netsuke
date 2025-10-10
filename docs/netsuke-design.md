@@ -1685,8 +1685,8 @@ Cyclopts-driven script that reads `.github/release-staging.toml`, merges the
 configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. It
 installs `uv` with `astral-sh/setup-uv`, double-checks the tool is present, and
 only then launches the Python entry point so workflows stay declarative. The
-helper writes SHA-256 sums for every staged file and exports a JSON map of the
-artefact outputs, allowing the workflow to hydrate downstream steps without
+helper writes SHA-256 sums for every staged file. It also exports a JSON map of
+the artefact outputs, allowing the workflow to hydrate downstream steps without
 hard-coded path logic. Figure 8.1 summarises the configuration entities,
 including optional keys reserved for templated directories and explicit
 artefact destinations that the helper can adopt without breaking compatibility.

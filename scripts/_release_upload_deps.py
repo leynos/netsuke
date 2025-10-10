@@ -1,39 +1,82 @@
-"""Optional dependency loaders for the release uploader CLI."""
+"""Optional dependency loaders and CLI fallback for the release uploader."""
 
 from __future__ import annotations
 
-import dataclasses as dc
-import typing as typ
-from typing import ParamSpec, TypeVar
-
-P = ParamSpec("P")
-T = TypeVar("T")
+import os
+import sys
+from argparse import ArgumentParser
+from pathlib import Path
+from typing import Any, Callable, NamedTuple, Sequence
 
 __all__ = [
     "CycloptsSupport",
     "PlumbumSupport",
+    "RuntimeOptions",
     "load_cyclopts",
     "load_plumbum",
+    "run_cli",
 ]
 
 
-@dc.dataclass(frozen=True)
-class CycloptsSupport:
+class _FallbackParameter:
+    """Placeholder preserving ``typing.Annotated`` compatibility."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        """Accept and ignore all arguments."""
+
+
+class _FallbackApp:
+    """Stub ``cyclopts.App`` that raises a descriptive error when invoked."""
+
+    def __init__(self, cause: ModuleNotFoundError) -> None:
+        self._cause = cause
+
+    def default(self, func: Callable[..., Any]) -> Callable[..., Any]:
+        return func
+
+    def __call__(self, *_args: object, **_kwargs: object) -> None:  # pragma: no cover
+        message = "Cyclopts is required for CLI usage; install it to run the script"
+        raise RuntimeError(message) from self._cause
+
+
+class _MissingLocal:
+    """Placeholder mirroring the ``plumbum.local`` interface."""
+
+    def __init__(self, cause: ModuleNotFoundError) -> None:
+        self._cause = cause
+
+    def __getitem__(self, name: str) -> None:  # pragma: no cover - defensive guard.
+        message = (
+            "plumbum is required to execute release uploads; "
+            "install it or run in dry-run mode"
+        )
+        raise ModuleNotFoundError(message) from self._cause
+
+
+class CycloptsSupport(NamedTuple):
     """Expose Cyclopts components and availability information."""
 
     available: bool
-    app: typ.Any
+    app: Any
     parameter: type
 
 
-@dc.dataclass(frozen=True)
-class PlumbumSupport:
+class PlumbumSupport(NamedTuple):
     """Expose Plumbum components required by the uploader."""
 
-    local: typ.Any
+    local: Any
     command_not_found: type[Exception]
     process_execution_error: type[Exception]
-    bound_command: typ.Any
+    bound_command: Any
+
+
+class RuntimeOptions(NamedTuple):
+    """Arguments required by :func:`upload_release_assets.main`."""
+
+    release_tag: str
+    bin_name: str
+    dist_dir: Path
+    dry_run: bool
 
 
 def load_cyclopts() -> CycloptsSupport:
@@ -42,26 +85,8 @@ def load_cyclopts() -> CycloptsSupport:
     try:
         import cyclopts as _cyclopts
         from cyclopts import App, Parameter
-    except ModuleNotFoundError:  # pragma: no cover - lean test environments.
-        class Parameter:  # type: ignore[empty-body]
-            """Fallback placeholder that preserves ``typing.Annotated`` usage."""
-
-            def __init__(self, *_args: object, **_kwargs: object) -> None:
-                """Accept arguments for compatibility; behaviour is irrelevant."""
-
-        class _FallbackApp:
-            """Stub that surfaces a descriptive error when invoked."""
-
-            def default(self, func: typ.Callable[P, T]) -> typ.Callable[P, T]:
-                return func
-
-            def __call__(self, *_args: P.args, **_kwargs: P.kwargs) -> typ.NoReturn:
-                message = (
-                    "Cyclopts is required for CLI usage; install it to run the script"
-                )
-                raise RuntimeError(message)
-
-        return CycloptsSupport(False, _FallbackApp(), Parameter)
+    except ModuleNotFoundError as exc:  # pragma: no cover - lean test environments.
+        return CycloptsSupport(False, _FallbackApp(exc), _FallbackParameter)
 
     app = App(config=_cyclopts.config.Env("INPUT_", command=False))
     return CycloptsSupport(True, app, Parameter)
@@ -77,22 +102,12 @@ def load_plumbum() -> PlumbumSupport:
             ProcessExecutionError,
         )
         from plumbum.commands.base import BoundCommand  # type: ignore[import-not-found]
-    except ModuleNotFoundError:  # pragma: no cover - lean type-check envs.
-        class _MissingLocal:
-            """Placeholder mirroring the ``plumbum.local`` interface."""
-
-            def __getitem__(self, name: str) -> typ.NoReturn:
-                message = (
-                    "plumbum is required to execute release uploads; "
-                    "install it or run in dry-run mode"
-                )
-                raise ModuleNotFoundError(message)
-
+    except ModuleNotFoundError as exc:  # pragma: no cover - lean type-check envs.
         return PlumbumSupport(
-            local=_MissingLocal(),
+            local=_MissingLocal(exc),
             command_not_found=ModuleNotFoundError,
             process_execution_error=RuntimeError,
-            bound_command=typ.Any,
+            bound_command=Any,
         )
 
     return PlumbumSupport(
@@ -100,4 +115,42 @@ def load_plumbum() -> PlumbumSupport:
         command_not_found=CommandNotFound,
         process_execution_error=ProcessExecutionError,
         bound_command=BoundCommand,
+    )
+
+
+def run_cli(
+    support: CycloptsSupport,
+    *,
+    prepare_options: Callable[..., RuntimeOptions],
+    main: Callable[..., int],
+    tokens: Sequence[str] | None = None,
+) -> int:
+    """Execute the uploader CLI using Cyclopts or ``argparse`` fallback."""
+
+    if support.available:
+        return support.app()
+
+    parser = ArgumentParser(description=main.__doc__ or "Upload release assets.")
+    parser.add_argument("--release-tag")
+    parser.add_argument("--bin-name")
+    parser.add_argument("--dist-dir")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(list(tokens) if tokens is not None else sys.argv[1:])
+
+    try:
+        options = prepare_options(
+            release_tag=args.release_tag,
+            bin_name=args.bin_name,
+            dist_dir=args.dist_dir,
+            dry_run=args.dry_run,
+            environ=os.environ,
+        )
+    except ValueError as exc:
+        parser.exit(status=1, message=f"{exc}\n")
+
+    return main(
+        release_tag=options.release_tag,
+        bin_name=options.bin_name,
+        dist_dir=options.dist_dir,
+        dry_run=options.dry_run,
     )

@@ -12,6 +12,7 @@ def test_public_interface(stage_common: object) -> None:
 
     expected = {
         "ArtefactConfig",
+        "RESERVED_OUTPUT_KEYS",
         "StageError",
         "StageResult",
         "StagingConfig",

@@ -3,10 +3,11 @@
 from .config import ArtefactConfig, StagingConfig, load_config
 from .environment import require_env_path
 from .errors import StageError
-from .staging import StageResult, stage_artefacts
+from .staging import RESERVED_OUTPUT_KEYS, StageResult, stage_artefacts
 
 __all__ = [
     "ArtefactConfig",
+    "RESERVED_OUTPUT_KEYS",
     "StageError",
     "StageResult",
     "StagingConfig",

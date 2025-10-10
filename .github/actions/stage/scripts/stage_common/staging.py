@@ -35,7 +35,15 @@ from .template_utils import render_template, resolve_artefact_source
 if typ.TYPE_CHECKING:
     from .config import ArtefactConfig, StagingConfig
 
-__all__ = ["StageResult", "stage_artefacts"]
+RESERVED_OUTPUT_KEYS = {
+    "artifact_dir",
+    "dist_dir",
+    "staged_files",
+    "artefact_map",
+    "checksum_map",
+}
+
+__all__ = ["RESERVED_OUTPUT_KEYS", "StageResult", "stage_artefacts"]
 
 
 @dataclasses.dataclass(slots=True)
@@ -114,15 +122,13 @@ def stage_artefacts(config: "StagingConfig", github_output_file: Path) -> StageR
     )
     checksum_map_json = json.dumps(dict(sorted(checksums.items())))
 
-    reserved_keys = {
-        "artifact_dir",
-        "dist_dir",
-        "staged_files",
-        "artefact_map",
-        "checksum_map",
-    }
-    if colliding_keys := reserved_keys & outputs.keys():
-        message = f"Artefact outputs collide with reserved keys: {sorted(colliding_keys)}"
+    if colliding_keys := RESERVED_OUTPUT_KEYS & outputs.keys():
+        message = (
+            "Artefact outputs collide with reserved keys: "
+            f"{sorted(colliding_keys)}. Please rename these keys in your "
+            "artefact configuration to avoid using reserved names: "
+            f"{sorted(RESERVED_OUTPUT_KEYS)}."
+        )
         raise StageError(message)
 
     exported_outputs: dict[str, str | list[str]] = {

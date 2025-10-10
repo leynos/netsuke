@@ -31,3 +31,12 @@ def test_action_invokes_cli_script() -> None:
 
     assert "uv run" in content
     assert "scripts/stage.py" in content
+
+
+def test_action_declares_reserved_outputs(stage_common: object) -> None:
+    """Reserved outputs must remain aligned with the composite action."""
+
+    content = ACTION_FILE.read_text(encoding="utf-8")
+    for key in stage_common.RESERVED_OUTPUT_KEYS:
+        needle = f"steps.run-stage.outputs.{key}"
+        assert needle in content, f"Composite action missing output for {key}"
