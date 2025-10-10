@@ -27,13 +27,11 @@ import typing as typ
 from pathlib import Path
 
 from .checksum_utils import write_checksum
+from .config import ArtefactConfig, StagingConfig
 from .errors import StageError
 from .fs_utils import safe_destination_path
 from .github_output import write_github_output
 from .template_utils import render_template, resolve_artefact_source
-
-if typ.TYPE_CHECKING:
-    from .config import ArtefactConfig, StagingConfig
 
 RESERVED_OUTPUT_KEYS = {
     "artifact_dir",
@@ -65,7 +63,7 @@ class _StageOutcome:
     digest: str
 
 
-def stage_artefacts(config: "StagingConfig", github_output_file: Path) -> StageResult:
+def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageResult:
     """Copy artefacts into ``config``'s staging directory.
 
     Parameters
@@ -86,6 +84,18 @@ def stage_artefacts(config: "StagingConfig", github_output_file: Path) -> StageR
     StageError
         Raised when required artefacts are missing or configuration templates
         render invalid destinations.
+
+    Examples
+    --------
+    >>> from pathlib import Path  # doctest: +SKIP
+    >>> from stage_common.config import load_config  # doctest: +SKIP
+    >>> cfg = load_config(  # doctest: +SKIP
+    ...     Path(".github/release-staging.toml"),
+    ...     "linux-x86_64",
+    ... )
+    >>> result = stage_artefacts(cfg, Path("github_output.txt"))  # doctest: +SKIP
+    >>> result.staged_artefacts[0].name  # doctest: +SKIP
+    'netsuke'
     """
     staging_dir = config.staging_dir()
     context = config.as_template_context()
@@ -97,6 +107,8 @@ def stage_artefacts(config: "StagingConfig", github_output_file: Path) -> StageR
     staged_paths: list[Path] = []
     outputs: dict[str, Path] = {}
     checksums: dict[str, str] = {}
+    seen_destinations: set[Path] = set()
+    seen_outputs: set[str] = set()
 
     for artefact in config.artefacts:
         outcome = _stage_single_artefact(
@@ -107,9 +119,23 @@ def stage_artefacts(config: "StagingConfig", github_output_file: Path) -> StageR
         )
         if outcome is None:
             continue
+        if outcome.path in seen_destinations:
+            message = (
+                "Duplicate staged destination detected: "
+                f"{outcome.path.as_posix()} from source {artefact.source}"
+            )
+            raise StageError(message)
+        seen_destinations.add(outcome.path)
         staged_paths.append(outcome.path)
         checksums[outcome.path.name] = outcome.digest
         if outcome.output_key:
+            if outcome.output_key in seen_outputs:
+                message = (
+                    "Duplicate artefact output key detected: "
+                    f"{outcome.output_key}"
+                )
+                raise StageError(message)
+            seen_outputs.add(outcome.output_key)
             outputs[outcome.output_key] = outcome.path
 
     if not staged_paths:
@@ -146,8 +172,8 @@ def stage_artefacts(config: "StagingConfig", github_output_file: Path) -> StageR
 
 def _stage_single_artefact(
     *,
-    config: "StagingConfig",
-    artefact: "ArtefactConfig",
+    config: StagingConfig,
+    artefact: ArtefactConfig,
     staging_dir: Path,
     context: dict[str, typ.Any],
 ) -> _StageOutcome | None:

@@ -260,6 +260,74 @@ def test_stage_artefacts_rejects_reserved_outputs(
     assert "artifact_dir" in message
 
 
+def test_stage_artefacts_rejects_duplicate_destinations(
+    stage_common: object, workspace: Path
+) -> None:
+    """Staging should fail when two artefacts render the same destination."""
+
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="target/{target}/release/{bin_name}{bin_ext}",
+                required=True,
+                destination="netsuke",
+            ),
+            stage_common.ArtefactConfig(
+                source="LICENSE",
+                required=True,
+                destination="netsuke",
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target=target,
+    )
+
+    with pytest.raises(stage_common.StageError, match="Duplicate staged destination"):
+        stage_common.stage_artefacts(config, workspace / "outputs.txt")
+
+
+def test_stage_artefacts_rejects_duplicate_outputs(
+    stage_common: object, workspace: Path
+) -> None:
+    """Staging should fail when two artefacts export the same output key."""
+
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="target/{target}/release/{bin_name}{bin_ext}",
+                required=True,
+                output="binary_path",
+            ),
+            stage_common.ArtefactConfig(
+                source="LICENSE",
+                required=True,
+                output="binary_path",
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target=target,
+    )
+
+    with pytest.raises(stage_common.StageError, match="Duplicate artefact output key"):
+        stage_common.stage_artefacts(config, workspace / "outputs.txt")
+
+
 def test_stage_artefacts_fails_with_attempt_context(
     stage_common: object, workspace: Path
 ) -> None:
@@ -303,11 +371,12 @@ def test_glob_root_and_pattern_handles_windows_drive(stage_common: object) -> No
     assert pattern == "dist/*.zip"
 
 
-def test_glob_root_and_pattern_returns_wildcard_for_root_only(
+def test_glob_root_and_pattern_returns_wildcard_for_root_only(  # noqa: ARG001
     stage_common: object,
 ) -> None:
     """Root-only absolute paths should glob all children."""
 
+    # Fixture import triggers plugin registration; the value itself is unused.
     staging = importlib.import_module("stage_common.staging")
     helper = staging._glob_root_and_pattern
 
@@ -316,9 +385,12 @@ def test_glob_root_and_pattern_returns_wildcard_for_root_only(
     assert pattern == "*"
 
 
-def test_glob_root_and_pattern_handles_posix_absolute(stage_common: object) -> None:
+def test_glob_root_and_pattern_handles_posix_absolute(  # noqa: ARG001
+    stage_common: object,
+) -> None:
     """POSIX absolute paths should preserve relative segments for globbing."""
 
+    # Fixture import triggers plugin registration; the value itself is unused.
     staging = importlib.import_module("stage_common.staging")
     helper = staging._glob_root_and_pattern
 
@@ -327,13 +399,16 @@ def test_glob_root_and_pattern_handles_posix_absolute(stage_common: object) -> N
     assert pattern.endswith("dist/*.zip"), pattern
 
 
-def test_glob_root_and_pattern_rejects_relative_paths(stage_common: object) -> None:
+def test_glob_root_and_pattern_rejects_relative_paths(  # noqa: ARG001
+    stage_common: object,
+) -> None:
     """Relative globs should be rejected to avoid ambiguous anchors."""
 
+    # Fixture import triggers plugin registration; the value itself is unused.
     staging = importlib.import_module("stage_common.staging")
     helper = staging._glob_root_and_pattern
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Expected absolute path"):
         helper(PurePosixPath("dist/*.zip"))
 
 
