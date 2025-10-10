@@ -114,138 +114,110 @@ target = "x86_64-unknown-linux-gnu"
     assert "Environment variable 'GITHUB_WORKSPACE' is not set" in str(exc.value)
 
 
-def test_load_config_rejects_unknown_checksum(
-    stage_common: object, workspace: Path
-) -> None:
-    """Unsupported checksum algorithms should raise ``StageError``."""
-
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+@pytest.mark.parametrize(
+    ("config_content", "error_substring", "test_id"),
+    [
+        pytest.param(
+            """\
 [common]
-bin_name = "netsuke"
-checksum_algorithm = "unknown"
-artefacts = [ { source = "LICENSE" } ]
+bin_name = \"netsuke\"
+checksum_algorithm = \"unknown\"
+artefacts = [ { source = \"LICENSE\" } ]
 
 [targets.test]
-platform = "linux"
-arch = "amd64"
-target = "x86_64-unknown-linux-gnu"
+platform = \"linux\"
+arch = \"amd64\"
+target = \"x86_64-unknown-linux-gnu\"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-    assert "Unsupported checksum algorithm" in str(exc.value)
-
-
-def test_load_config_requires_common_bin_name(
-    stage_common: object, workspace: Path
-) -> None:
-    """Missing ``bin_name`` in ``[common]`` should raise ``StageError``."""
-
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+            "Unsupported checksum algorithm",
+            "rejects_unknown_checksum",
+            id="rejects_unknown_checksum",
+        ),
+        pytest.param(
+            """\
 [common]
-checksum_algorithm = "sha256"
-artefacts = [ { source = "LICENSE" } ]
+checksum_algorithm = \"sha256\"
+artefacts = [ { source = \"LICENSE\" } ]
 
 [targets.test]
-arch = "amd64"
-target = "x86_64-unknown-linux-gnu"
-platform = "linux"
+arch = \"amd64\"
+target = \"x86_64-unknown-linux-gnu\"
+platform = \"linux\"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-
-    message = str(exc.value)
-    assert "bin_name" in message
-    assert "[common]" in message
-
-
-def test_load_config_requires_target_platform(
-    stage_common: object, workspace: Path
-) -> None:
-    """Missing target metadata should raise ``StageError`` with guidance."""
-
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+            "bin_name",
+            "requires_common_bin_name",
+            id="requires_common_bin_name",
+        ),
+        pytest.param(
+            """\
 [common]
-bin_name = "netsuke"
-checksum_algorithm = "sha256"
-artefacts = [ { source = "LICENSE" } ]
+bin_name = \"netsuke\"
+checksum_algorithm = \"sha256\"
+artefacts = [ { source = \"LICENSE\" } ]
 
 [targets.test]
-arch = "amd64"
-target = "x86_64-unknown-linux-gnu"
+arch = \"amd64\"
+target = \"x86_64-unknown-linux-gnu\"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-
-    message = str(exc.value)
-    assert "platform" in message
-    assert "[targets.test]" in message
-
-
-def test_load_config_requires_artefact_source(
-    stage_common: object, workspace: Path
-) -> None:
-    """Artefact entries must define ``source`` for friendly errors."""
-
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+            "platform",
+            "requires_target_platform",
+            id="requires_target_platform",
+        ),
+        pytest.param(
+            """\
 [common]
-bin_name = "netsuke"
-checksum_algorithm = "sha256"
-artefacts = [ { output = "binary" } ]
+bin_name = \"netsuke\"
+checksum_algorithm = \"sha256\"
+artefacts = [ { output = \"binary\" } ]
 
 [targets.test]
-platform = "linux"
-arch = "amd64"
-target = "x86_64-unknown-linux-gnu"
+platform = \"linux\"
+arch = \"amd64\"
+target = \"x86_64-unknown-linux-gnu\"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-
-    message = str(exc.value)
-    assert "source" in message
-    assert "entry #1" in message
-
-
-def test_load_config_requires_target_section(
-    stage_common: object, workspace: Path
-) -> None:
-    """Missing target sections should raise ``StageError``."""
-
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+            "source",
+            "requires_artefact_source",
+            id="requires_artefact_source",
+        ),
+        pytest.param(
+            """\
 [common]
-bin_name = "netsuke"
-checksum_algorithm = "sha256"
-artefacts = [ { source = "LICENSE" } ]
+bin_name = \"netsuke\"
+checksum_algorithm = \"sha256\"
+artefacts = [ { source = \"LICENSE\" } ]
 
 [targets.other]
-platform = "linux"
-arch = "amd64"
-target = "x86_64-unknown-linux-gnu"
+platform = \"linux\"
+arch = \"amd64\"
+target = \"x86_64-unknown-linux-gnu\"
 """,
-        encoding="utf-8",
-    )
+            "Missing configuration key",
+            "requires_target_section",
+            id="requires_target_section",
+        ),
+    ],
+)
+def test_load_config_validation_errors(
+    stage_common: object,
+    workspace: Path,
+    config_content: str,
+    error_substring: str,
+    test_id: str,
+) -> None:
+    """``load_config`` should raise ``StageError`` for invalid configurations."""
+
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(config_content, encoding="utf-8")
 
     with pytest.raises(stage_common.StageError) as exc:
         stage_common.load_config(config_file, "test")
-    assert "Missing configuration key" in str(exc.value)
+
+    message = str(exc.value)
+    assert error_substring in message, f"{test_id} missing expected substring"
+
+    if test_id == "requires_common_bin_name":
+        assert "[common]" in message
+    elif test_id == "requires_target_platform":
+        assert "[targets.test]" in message
+    elif test_id == "requires_artefact_source":
+        assert "entry #1" in message
