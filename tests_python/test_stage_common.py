@@ -217,6 +217,88 @@ target = "x86_64-unknown-linux-gnu"
     assert "Unsupported checksum algorithm" in str(exc.value)
 
 
+def test_load_config_requires_common_bin_name(
+    stage_common: object, workspace: Path
+) -> None:
+    """Missing ``bin_name`` in ``[common]`` should raise ``StageError``."""
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(
+        """\
+[common]
+checksum_algorithm = "sha256"
+artefacts = [ { source = "LICENSE" } ]
+
+[targets.test]
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+platform = "linux"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.load_config(config_file, "test")
+
+    message = str(exc.value)
+    assert "bin_name" in message
+    assert "[common]" in message
+
+
+def test_load_config_requires_target_platform(
+    stage_common: object, workspace: Path
+) -> None:
+    """Missing target metadata should raise ``StageError`` with guidance."""
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(
+        """\
+[common]
+bin_name = "netsuke"
+checksum_algorithm = "sha256"
+artefacts = [ { source = "LICENSE" } ]
+
+[targets.test]
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.load_config(config_file, "test")
+
+    message = str(exc.value)
+    assert "platform" in message
+    assert "[targets.test]" in message
+
+
+def test_load_config_requires_artefact_source(
+    stage_common: object, workspace: Path
+) -> None:
+    """Artefact entries must define ``source`` for friendly errors."""
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(
+        """\
+[common]
+bin_name = "netsuke"
+checksum_algorithm = "sha256"
+artefacts = [ { output = "binary" } ]
+
+[targets.test]
+platform = "linux"
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.load_config(config_file, "test")
+
+    message = str(exc.value)
+    assert "source" in message
+    assert "entry #1" in message
+
+
 def test_load_config_requires_target_section(
     stage_common: object, workspace: Path
 ) -> None:
@@ -400,6 +482,27 @@ def test_stage_artefacts_glob_selects_newest_candidate(
     assert (
         latest.read_text(encoding="utf-8") == staged_path.read_text(encoding="utf-8")
     ), "Selected candidate should match the most recent file"
+
+
+def test_match_candidate_path_handles_windows_drive(
+    stage_common: object, workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Absolute Windows-style globs should resolve relative to the drive root."""
+    monkeypatch.chdir(workspace)
+
+    drive_root = Path("C:\\")
+    windows_workspace = drive_root / "workspace"
+    man_dir = windows_workspace / "man"
+    man_dir.mkdir(parents=True, exist_ok=True)
+    candidate = man_dir / "netsuke.1"
+    candidate.write_text(".TH WINDOWS", encoding="utf-8")
+
+    staging = importlib.import_module("stage_common.staging")
+    matched = staging._match_candidate_path(
+        windows_workspace, "C:/workspace/man/*.1"
+    )
+
+    assert matched == candidate
 
 
 def test_stage_artefacts_warns_for_optional(
