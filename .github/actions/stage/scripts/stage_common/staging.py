@@ -8,7 +8,7 @@ import json
 import shutil
 import sys
 import typing as typ
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from .errors import StageError
 
@@ -140,6 +140,7 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
 
 
 def _render_template(template: str, context: dict[str, typ.Any]) -> str:
+    """Format ``template`` with ``context`` (e.g., ``_render_template('{name}', {'name': 'bob'})`` -> ``'bob'``)."""
     try:
         return template.format(**context)
     except KeyError as exc:
@@ -150,6 +151,7 @@ def _render_template(template: str, context: dict[str, typ.Any]) -> str:
 def _resolve_artefact_source(
     workspace: Path, artefact: ArtefactConfig, context: dict[str, typ.Any]
 ) -> tuple[Path | None, list[_RenderAttempt]]:
+    """Return the first artefact match and attempted renders (e.g., ``_resolve_artefact_source(Path('.'), ArtefactConfig(source='a'), {})`` -> ``(Path('a'), attempts)``)."""
     attempts: list[_RenderAttempt] = []
     patterns = [artefact.source, *artefact.alternatives]
     for pattern in patterns:
@@ -161,20 +163,36 @@ def _resolve_artefact_source(
 
 
 def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
+    """Return the newest path matching ``rendered`` (e.g., ``_match_candidate_path(Path('.'), 'dist/*.zip')`` -> ``Path('dist/app')``)."""
     candidate = Path(rendered)
     base = candidate if candidate.is_absolute() else workspace / candidate
     if any(ch in rendered for ch in "*?[]"):
         if candidate.is_absolute():
             root = Path(candidate.anchor or "/")
-            pattern = rendered.lstrip("/")
-            candidates = [path for path in root.glob(pattern) if path.is_file()]
+            relative_pattern = candidate.relative_to(root).as_posix()
+            candidates = [path for path in root.glob(relative_pattern) if path.is_file()]
         else:
-            candidates = [path for path in workspace.glob(rendered) if path.is_file()]
+            windows_candidate = PureWindowsPath(rendered)
+            if windows_candidate.is_absolute():
+                # Windows requires globbing relative to the drive root. Passing an
+                # absolute pattern string such as ``C:\foo\*.txt`` causes
+                # ``Path.glob`` to reject the drive prefix, so we normalise the
+                # pattern to search from the drive anchor explicitly.
+                anchor = Path(windows_candidate.anchor)
+                relative = PureWindowsPath(*windows_candidate.parts[1:]).as_posix()
+                candidates = [
+                    path for path in anchor.glob(relative) if path.is_file()
+                ]
+            else:
+                candidates = [
+                    path for path in workspace.glob(rendered) if path.is_file()
+                ]
         return None if not candidates else max(candidates, key=_mtime_key)
     return base if base.is_file() else None
 
 
 def _mtime_key(path: Path) -> tuple[int, str]:
+    """Provide a sortable key using mtime with a stable tie-breaker (e.g., ``_mtime_key(Path('file'))`` -> ``(123, 'file')``)."""
     try:
         return (int(path.stat().st_mtime_ns), path.as_posix())
     except OSError:
@@ -182,6 +200,7 @@ def _mtime_key(path: Path) -> tuple[int, str]:
 
 
 def _safe_destination_path(staging_dir: Path, destination: str) -> Path:
+    """Resolve ``destination`` under ``staging_dir`` (e.g., ``_safe_destination_path(Path('/tmp'), 'bin')`` -> ``Path('/tmp/bin')``)."""
     target = (staging_dir / destination).resolve()
     staging_root = staging_dir.resolve()
     if not target.is_relative_to(staging_root):
@@ -192,6 +211,7 @@ def _safe_destination_path(staging_dir: Path, destination: str) -> Path:
 
 
 def _write_checksum(path: Path, algorithm: str) -> str:
+    """Write the checksum sidecar for ``path`` (e.g., ``_write_checksum(Path('bin'), 'sha256')`` -> ``'abc123'``)."""
     hasher = hashlib.new(algorithm)
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8192), b""):
@@ -203,6 +223,7 @@ def _write_checksum(path: Path, algorithm: str) -> str:
 
 
 def _write_to_github_output(file: Path, values: dict[str, str | list[str]]) -> None:
+    """Append outputs to ``file`` using GitHub's format (e.g., ``_write_to_github_output(Path('out'), {'k': 'v'})`` -> ``None``)."""
     file.parent.mkdir(parents=True, exist_ok=True)
     with file.open("a", encoding="utf-8") as handle:
         for key, value in values.items():

@@ -103,9 +103,16 @@ def load_config(config_file: Path, target_key: str) -> StagingConfig:
 
     data = _load_toml(config_file)
     common, target_cfg = _extract_sections(data, config_file, target_key)
+    _require_keys(common, {"bin_name"}, "common", config_file)
+    _require_keys(
+        target_cfg,
+        {"platform", "arch", "target"},
+        f"targets.{target_key}",
+        config_file,
+    )
     workspace = require_env_path("GITHUB_WORKSPACE")
     algorithm = _validate_checksum(common.get("checksum_algorithm"))
-    artefacts = _make_artefacts(common, target_cfg)
+    artefacts = _make_artefacts(common, target_cfg, config_file)
 
     return StagingConfig(
         workspace=workspace,
@@ -152,19 +159,41 @@ def _validate_checksum(name: str | None) -> str:
 
 
 def _make_artefacts(
-    common: dict[str, typ.Any], target_cfg: dict[str, typ.Any]
+    common: dict[str, typ.Any], target_cfg: dict[str, typ.Any], config_path: Path
 ) -> list[ArtefactConfig]:
     entries = [*common.get("artefacts", []), *target_cfg.get("artefacts", [])]
     if not entries:
         message = "No artefacts configured to stage."
         raise StageError(message)
-    return [
-        ArtefactConfig(
-            source=entry["source"],
-            required=entry.get("required", True),
-            output=entry.get("output"),
-            destination=entry.get("destination"),
-            alternatives=entry.get("alternatives", []),
+    artefacts: list[ArtefactConfig] = []
+    for index, entry in enumerate(entries, start=1):
+        source = entry.get("source")
+        if not isinstance(source, str) or not source:
+            message = (
+                "Missing required artefact key 'source' "
+                f"in entry #{index} of {config_path}"
+            )
+            raise StageError(message)
+        artefacts.append(
+            ArtefactConfig(
+                source=source,
+                required=entry.get("required", True),
+                output=entry.get("output"),
+                destination=entry.get("destination"),
+                alternatives=entry.get("alternatives", []),
+            )
         )
-        for entry in entries
-    ]
+    return artefacts
+
+
+def _require_keys(
+    section: dict[str, typ.Any], keys: set[str], label: str, config_path: Path
+) -> None:
+    """Ensure ``section`` defines ``keys`` (e.g., ``_require_keys({'bin': 1}, {'bin'}, 'common', Path('cfg'))`` -> ``None``)."""
+    missing = sorted(key for key in keys if key not in section)
+    if missing:
+        joined = ", ".join(missing)
+        message = (
+            f"Missing required key(s) {joined} in [{label}] section of {config_path}"
+        )
+        raise StageError(message)
