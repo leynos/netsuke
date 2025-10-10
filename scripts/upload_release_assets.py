@@ -42,7 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - executed in lean test envs.
     class Parameter:  # type: ignore[empty-body]
         """Fallback placeholder that preserves ``typing.Annotated`` usage."""
 
-        def __init__(self, *args: object, **kwargs: object) -> None:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
             """Accept arguments for compatibility; behaviour is irrelevant."""
 
     class App:
@@ -59,7 +59,7 @@ except ModuleNotFoundError:  # pragma: no cover - executed in lean test envs.
             return func
 
         def __call__(
-            self, *args: P.args, **kwargs: P.kwargs
+            self, *_args: P.args, **_kwargs: P.kwargs
         ) -> typ.NoReturn:  # pragma: no cover - trivial stub
             """Raise because the CLI requires Cyclopts."""
             raise self._error
@@ -122,7 +122,7 @@ def _needs_manual_cli(tokens: list[str]) -> bool:
             if index + 1 == len(tokens):
                 return True
             next_token = tokens[index + 1]
-            return bool(next_token.startswith("-"))
+            return next_token.startswith("-")
         if argument.startswith("--dry-run="):
             return False
     return False

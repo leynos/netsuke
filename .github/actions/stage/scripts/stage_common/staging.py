@@ -1,4 +1,30 @@
-"""Artefact staging logic shared across the CLI and composite action."""
+"""Artefact staging logic shared across the CLI and composite action.
+
+This module provides the core staging pipeline that copies artefacts from a
+workspace into a staging directory, computes checksums, and exports outputs
+for GitHub Actions workflows.
+
+Usage
+-----
+From the CLI entry point::
+
+    import os
+    from pathlib import Path
+
+    from stage_common import load_config, stage_artefacts
+
+    config = load_config(Path(".github/release-staging.toml"), "linux-x86_64")
+    result = stage_artefacts(config, Path(os.environ["GITHUB_OUTPUT"]))
+    print(f"Staged {len(result.staged_artefacts)} artefacts.")
+
+From the composite action::
+
+    - name: Stage artefacts
+      uses: ./.github/actions/stage
+      with:
+        config-file: .github/release-staging.toml
+        target: linux-x86_64
+"""
 
 from __future__ import annotations
 
@@ -20,6 +46,15 @@ if typ.TYPE_CHECKING:
 __all__ = ["StageResult", "stage_artefacts"]
 
 
+RESERVED_OUTPUT_KEYS: set[str] = {
+    "artifact_dir",
+    "dist_dir",
+    "staged_files",
+    "artefact_map",
+    "checksum_map",
+}
+
+
 @dataclasses.dataclass(slots=True)
 class _RenderAttempt:
     template: str
@@ -34,6 +69,113 @@ class StageResult:
     staged_artefacts: list[Path]
     outputs: dict[str, Path]
     checksums: dict[str, str]
+
+
+def _initialize_staging_dir(staging_dir: Path) -> None:
+    """Create a clean staging directory ready to receive artefacts.
+
+    Parameters
+    ----------
+    staging_dir : Path
+        Absolute path to the staging directory that will hold staged
+        artefacts.
+
+    Examples
+    --------
+    >>> staging_dir = Path("/tmp/stage")
+    >>> (staging_dir / "old").mkdir(parents=True, exist_ok=True)
+    >>> _initialize_staging_dir(staging_dir)
+    >>> staging_dir.exists()
+    True
+    """
+
+    if staging_dir.exists():
+        shutil.rmtree(staging_dir)
+    staging_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _prepare_output_data(
+    staging_dir: Path,
+    staged_paths: list[Path],
+    outputs: dict[str, Path],
+    checksums: dict[str, str],
+) -> dict[str, str | list[str]]:
+    """Assemble workflow outputs describing the staged artefacts.
+
+    Parameters
+    ----------
+    staging_dir : Path
+        Directory that now contains all staged artefacts.
+    staged_paths : list[Path]
+        Collection of artefact paths copied into ``staging_dir``.
+    outputs : dict[str, Path]
+        Mapping of configured GitHub Action output keys to staged artefact
+        destinations.
+    checksums : dict[str, str]
+        Mapping of staged artefact file names to their checksum digests.
+
+    Returns
+    -------
+    dict[str, str | list[str]]
+        Dictionary describing the staging results ready to be exported to the
+        GitHub Actions output file.
+
+    Examples
+    --------
+    >>> staging_dir = Path("/tmp/stage")
+    >>> staged = [staging_dir / "bin.tar.gz"]
+    >>> outputs = {"archive": staged[0]}
+    >>> checksums = {"bin.tar.gz": "abc123"}
+    >>> result = _prepare_output_data(staging_dir, staged, outputs, checksums)
+    >>> sorted(result)
+    ['archive', 'artefact_map', 'artifact_dir', 'checksum_map', 'dist_dir',
+     'staged_files']
+    """
+
+    staged_file_names = [path.name for path in sorted(staged_paths)]
+    artefact_map_json = json.dumps(
+        {key: path.as_posix() for key, path in sorted(outputs.items())}
+    )
+    checksum_map_json = json.dumps(dict(sorted(checksums.items())))
+
+    return {
+        "artifact_dir": staging_dir.as_posix(),
+        "dist_dir": staging_dir.parent.as_posix(),
+        "staged_files": "\n".join(staged_file_names),
+        "artefact_map": artefact_map_json,
+        "checksum_map": checksum_map_json,
+    } | {key: path.as_posix() for key, path in outputs.items()}
+
+
+def _validate_no_reserved_key_collisions(outputs: dict[str, Path]) -> None:
+    """Ensure user-defined outputs avoid the reserved workflow output keys.
+
+    Parameters
+    ----------
+    outputs : dict[str, Path]
+        Mapping of configured GitHub Action output keys to staged artefact
+        destinations.
+
+    Raises
+    ------
+    StageError
+        Raised when a user-defined output key overlaps with reserved keys.
+
+    Examples
+    --------
+    >>> reserved = {"artifact_dir": Path("/tmp/stage/artifact")}
+    >>> _validate_no_reserved_key_collisions(reserved)
+    Traceback (most recent call last):
+    StageError: Artefact outputs collide with reserved keys: artifact_dir
+    """
+
+    collisions = sorted(outputs.keys() & RESERVED_OUTPUT_KEYS)
+    if collisions:
+        message = (
+            "Artefact outputs collide with reserved keys: "
+            f"{collisions}"
+        )
+        raise StageError(message)
 
 
 def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageResult:
@@ -61,9 +203,7 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
     staging_dir = config.staging_dir()
     context = config.as_template_context()
 
-    if staging_dir.exists():
-        shutil.rmtree(staging_dir)
-    staging_dir.mkdir(parents=True, exist_ok=True)
+    _initialize_staging_dir(staging_dir)
 
     staged_paths: list[Path] = []
     outputs: dict[str, Path] = {}
@@ -122,21 +262,11 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
         message = "No artefacts were staged."
         raise StageError(message)
 
-    staged_files_value = "\n".join(path.name for path in sorted(staged_paths))
-    artefact_map_json = json.dumps(
-        {key: path.as_posix() for key, path in sorted(outputs.items())}
+    _validate_no_reserved_key_collisions(outputs)
+    exported_outputs = _prepare_output_data(
+        staging_dir, staged_paths, outputs, checksums
     )
-    checksum_map_json = json.dumps(dict(sorted(checksums.items())))
-
-    exported_outputs: dict[str, str | list[str]] = {
-        "artifact_dir": staging_dir.as_posix(),
-        "dist_dir": staging_dir.parent.as_posix(),
-        "staged_files": staged_files_value,
-        "artefact_map": artefact_map_json,
-        "checksum_map": checksum_map_json,
-    } | {key: path.as_posix() for key, path in outputs.items()}
-
-    _write_to_github_output(github_output_file, exported_outputs)
+    write_github_output(github_output_file, exported_outputs)
 
     return StageResult(staging_dir, staged_paths, outputs, checksums)
 
@@ -170,7 +300,7 @@ def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
     base = candidate if candidate.is_absolute() else workspace / candidate
     if any(ch in rendered for ch in "*?[]"):
         if candidate.is_absolute():
-            root_text, pattern = _glob_root_and_pattern(candidate)
+            root_text, _pattern = _glob_root_and_pattern(candidate)
             root = Path(root_text)
             relative_pattern = candidate.relative_to(root).as_posix()
             candidates = [path for path in root.glob(relative_pattern) if path.is_file()]
@@ -225,8 +355,25 @@ def _write_checksum(path: Path, algorithm: str) -> str:
     return digest
 
 
-def _write_to_github_output(file: Path, values: dict[str, str | list[str]]) -> None:
-    """Append outputs to ``file`` using GitHub's format (e.g., ``_write_to_github_output(Path('out'), {'k': 'v'})`` -> ``None``)."""
+def write_github_output(file: Path, values: dict[str, str | list[str]]) -> None:
+    """Append ``values`` to the GitHub Actions output ``file``.
+
+    Parameters
+    ----------
+    file : Path
+        Target ``GITHUB_OUTPUT`` file that receives the exported values.
+    values : dict[str, str | list[str]]
+        Mapping of output names to values ready for GitHub Actions
+        consumption.
+
+    Examples
+    --------
+    >>> github_output = Path("/tmp/github_output")
+    >>> write_github_output(github_output, {"name": "value"})
+    >>> "name=value" in github_output.read_text()
+    True
+    """
+
     file.parent.mkdir(parents=True, exist_ok=True)
     with file.open("a", encoding="utf-8") as handle:
         for key, value in values.items():
