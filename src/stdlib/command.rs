@@ -13,12 +13,15 @@
 //! enables arbitrary code execution.
 
 use std::{
-    io::{self, Write},
-    process::{Command, Stdio},
+    fmt::Write as FmtWrite,
+    io::{self, Read, Write},
+    process::{Child, Command, ExitStatus, Stdio},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    thread,
+    time::Duration,
 };
 
 use minijinja::{
@@ -29,6 +32,7 @@ use minijinja::{
 use shell_quote::windows::quote as windows_quote;
 #[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
+use wait_timeout::ChildExt;
 
 #[cfg(windows)]
 const SHELL: &str = "cmd";
@@ -39,6 +43,8 @@ const SHELL_ARGS: &[&str] = &["/C"];
 const SHELL: &str = "sh";
 #[cfg(not(windows))]
 const SHELL_ARGS: &[&str] = &["-c"];
+
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn register(env: &mut minijinja::Environment<'_>, impure: Arc<AtomicBool>) {
     let shell_flag = Arc::clone(&impure);
@@ -189,16 +195,49 @@ fn run_program(program: &str, args: &[String], input: &[u8]) -> Result<Vec<u8>, 
 
 fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
+    let mut broken_pipe = None;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(input).map_err(CommandFailure::Io)?;
+        match stdin.write_all(input) {
+            Ok(()) => {}
+            Err(err) => {
+                if err.kind() == io::ErrorKind::BrokenPipe {
+                    broken_pipe = Some(err);
+                } else {
+                    return Err(CommandFailure::Io(err));
+                }
+            }
+        }
     }
-    let output = child.wait_with_output().map_err(CommandFailure::Io)?;
-    if output.status.success() {
-        Ok(output.stdout)
+
+    let mut stdout_reader = spawn_pipe_reader(child.stdout.take());
+    let mut stderr_reader = spawn_pipe_reader(child.stderr.take());
+
+    let status = match wait_for_exit(&mut child, COMMAND_TIMEOUT) {
+        Ok(status) => status,
+        Err(err) => {
+            let _ = join_reader(stdout_reader.take());
+            let _ = join_reader(stderr_reader.take());
+            return Err(err);
+        }
+    };
+
+    let stdout = join_reader(stdout_reader.take()).map_err(CommandFailure::Io)?;
+    let stderr = join_reader(stderr_reader.take()).map_err(CommandFailure::Io)?;
+
+    if let Some(err) = broken_pipe {
+        return Err(CommandFailure::BrokenPipe {
+            source: err,
+            status: status.code(),
+            stderr,
+        });
+    }
+
+    if status.success() {
+        Ok(stdout)
     } else {
         Err(CommandFailure::Exit {
-            status: output.status.code(),
-            stderr: output.stderr,
+            status: status.code(),
+            stderr,
         })
     }
 }
@@ -216,10 +255,35 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
             ErrorKind::InvalidOperation,
             format!("failed to spawn shell for '{command}' in template '{template}': {spawn}"),
         ),
-        CommandFailure::Io(io_err) => Error::new(
-            ErrorKind::InvalidOperation,
-            format!("shell command '{command}' in template '{template}' failed: {io_err}"),
-        ),
+        CommandFailure::Io(io_err) => {
+            let pipe_msg = if io_err.kind() == io::ErrorKind::BrokenPipe {
+                " (command closed input early)"
+            } else {
+                ""
+            };
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!(
+                    "shell command '{command}' in template '{template}' failed: {io_err}{pipe_msg}"
+                ),
+            )
+        }
+        CommandFailure::BrokenPipe {
+            source,
+            status,
+            stderr,
+        } => {
+            let mut msg = format!(
+                "shell command '{command}' in template '{template}' failed: {source} (command closed input early)"
+            );
+            if let Some(code) = status {
+                let _ = FmtWrite::write_fmt(&mut msg, format_args!("; exited with status {code}"));
+            } else {
+                msg.push_str("; terminated by signal");
+            }
+            append_stderr(&mut msg, &stderr);
+            Error::new(ErrorKind::InvalidOperation, msg)
+        }
         CommandFailure::Exit { status, stderr } => {
             let mut msg = status.map_or_else(
                 || {
@@ -233,28 +297,83 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
                     )
                 },
             );
-            let stderr = String::from_utf8_lossy(&stderr);
-            let trimmed = stderr.trim();
-            if !trimmed.is_empty() {
-                msg.push_str(": ");
-                msg.push_str(trimmed);
-            }
+            append_stderr(&mut msg, &stderr);
             Error::new(ErrorKind::InvalidOperation, msg)
         }
+        CommandFailure::Timeout(duration) => Error::new(
+            ErrorKind::InvalidOperation,
+            format!(
+                "shell command '{command}' in template '{template}' timed out after {}s",
+                duration.as_secs()
+            ),
+        ),
     }
 }
 
 enum CommandFailure {
     Spawn(io::Error),
     Io(io::Error),
+    BrokenPipe {
+        source: io::Error,
+        status: Option<i32>,
+        stderr: Vec<u8>,
+    },
     Exit {
         status: Option<i32>,
         stderr: Vec<u8>,
     },
+    Timeout(Duration),
 }
 
 impl From<io::Error> for CommandFailure {
     fn from(err: io::Error) -> Self {
         Self::Io(err)
+    }
+}
+
+fn wait_for_exit(child: &mut Child, timeout: Duration) -> Result<ExitStatus, CommandFailure> {
+    if let Some(status) = child.wait_timeout(timeout).map_err(CommandFailure::Io)? {
+        Ok(status)
+    } else {
+        if let Err(err) = child.kill()
+            && err.kind() != io::ErrorKind::InvalidInput
+        {
+            return Err(CommandFailure::Io(err));
+        }
+        let _ = child.wait();
+        Err(CommandFailure::Timeout(timeout))
+    }
+}
+
+fn spawn_pipe_reader<R>(pipe: Option<R>) -> Option<thread::JoinHandle<io::Result<Vec<u8>>>>
+where
+    R: Read + Send + 'static,
+{
+    pipe.map(|mut reader| {
+        thread::spawn(move || {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf)?;
+            Ok(buf)
+        })
+    })
+}
+
+fn join_reader(handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>) -> io::Result<Vec<u8>> {
+    handle.map_or_else(
+        || Ok(Vec::new()),
+        |handle| {
+            handle
+                .join()
+                .map_err(|_| io::Error::other("pipe reader panicked"))?
+        },
+    )
+}
+
+fn append_stderr(message: &mut String, stderr: &[u8]) {
+    let stderr = String::from_utf8_lossy(stderr);
+    let trimmed = stderr.trim();
+    if !trimmed.is_empty() {
+        message.push_str(": ");
+        message.push_str(trimmed);
     }
 }

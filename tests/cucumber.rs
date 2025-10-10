@@ -38,6 +38,8 @@ pub struct CliWorld {
     pub stdlib_error: Option<String>,
     /// Stdlib impurity state captured for the last render.
     pub stdlib_state: Option<netsuke::stdlib::StdlibState>,
+    /// Quoted command string for stdlib shell scenarios.
+    pub stdlib_command: Option<String>,
     /// Last HTTP server fixture started by stdlib steps.
     pub http_server: Option<JoinHandle<()>>,
     /// URL exposed by the active HTTP server fixture.

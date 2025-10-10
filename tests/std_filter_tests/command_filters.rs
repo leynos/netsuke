@@ -1,26 +1,33 @@
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{ErrorKind, context};
 use rstest::rstest;
+use tempfile::tempdir;
+use test_support::command_helper::compile_uppercase_helper;
 
 use super::support::stdlib_env_with_state;
 
 #[cfg(windows)]
 use {
     super::support::{EnvLock, EnvVarGuard},
-    camino::Utf8PathBuf,
-    cap_std::{ambient_authority, fs_utf8::Dir},
     rstest::fixture,
     std::{ffi::OsString, process::Command},
-    tempfile::tempdir,
 };
 
 #[rstest]
 fn shell_filter_marks_templates_impure() {
+    let temp = tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
+    let helper = compile_uppercase_helper(&dir, &root, "cmd_upper");
+    let command = format!("\"{}\"", helper.as_str());
+
     let (mut env, state) = stdlib_env_with_state();
     state.reset_impure();
-    env.add_template("shell", "{{ 'hello' | shell('tr a-z A-Z') | trim }}")
+    env.add_template("shell", "{{ 'hello' | shell(cmd) | trim }}")
         .expect("template");
     let template = env.get_template("shell").expect("get template");
-    let rendered = template.render(context! {}).expect("render");
+    let rendered = template.render(context!(cmd => command)).expect("render");
     assert_eq!(rendered, "HELLO");
     assert!(
         state.is_impure(),
@@ -47,6 +54,25 @@ fn shell_filter_surfaces_command_failures() {
             || err.to_string().contains("failed")
             || err.to_string().contains("error"),
         "error should indicate command failure: {err}",
+    );
+}
+
+#[cfg(unix)]
+#[rstest]
+fn shell_filter_times_out_long_commands() {
+    let (mut env, state) = stdlib_env_with_state();
+    state.reset_impure();
+    env.add_template("shell_timeout", "{{ '' | shell('sleep 10') }}")
+        .expect("template");
+    let template = env.get_template("shell_timeout").expect("get template");
+    let err = template
+        .render(context! {})
+        .expect_err("sleep should exceed shell timeout");
+    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    assert!(state.is_impure(), "timeout should mark template impure");
+    assert!(
+        err.to_string().contains("timed out"),
+        "timeout error should mention duration: {err}",
     );
 }
 

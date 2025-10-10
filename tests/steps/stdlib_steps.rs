@@ -14,7 +14,7 @@ use std::{
     net::TcpListener,
     thread,
 };
-use test_support::env::set_var;
+use test_support::{command_helper::compile_uppercase_helper, env::set_var};
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
 const LINES_FIXTURE: &str = concat!(
@@ -164,6 +164,14 @@ fn stdlib_workspace(world: &mut CliWorld) {
     world.stdlib_root = Some(root);
 }
 
+#[given("an uppercase stdlib command helper")]
+fn uppercase_stdlib_command_helper(world: &mut CliWorld) {
+    let root = ensure_workspace(world);
+    let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let helper = compile_uppercase_helper(&handle, &root, "cmd_upper");
+    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+}
+
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
     if let Some(handle) = world.http_server.take() {
@@ -246,6 +254,16 @@ fn render_stdlib_template_with_url(world: &mut CliWorld, template: String) {
         .expect("expected HTTP server to be initialised");
     let template_content = TemplateContent::from(template);
     render_template_with_context(world, &template_content, context!(url => url));
+}
+
+#[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib command helper$"#)]
+fn render_stdlib_template_with_command(world: &mut CliWorld, template: String) {
+    let command = world
+        .stdlib_command
+        .clone()
+        .expect("expected stdlib command helper to be compiled");
+    let template_content = TemplateContent::from(template);
+    render_template_with_context(world, &template_content, context!(cmd => command));
 }
 
 #[expect(

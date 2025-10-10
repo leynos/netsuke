@@ -73,7 +73,8 @@ Feature: Template stdlib filters
     Then the stdlib error contains "could not resolve"
 
   Scenario: shell filter transforms text and marks templates impure
-    When I render the stdlib template "{{ 'hello' | shell('tr a-z A-Z') | trim }}"
+    Given an uppercase stdlib command helper
+    When I render the stdlib template "{{ 'hello' | shell(cmd) | trim }}" using the stdlib command helper
     Then the stdlib output is "HELLO"
     And the stdlib template is impure
 
