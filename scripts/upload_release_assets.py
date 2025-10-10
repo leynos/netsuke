@@ -25,73 +25,12 @@ Inspect the planned uploads without publishing anything::
 from __future__ import annotations
 
 import dataclasses as dc
+import os
 import sys
 import typing as typ
 from pathlib import Path
-from typing import ParamSpec, TypeVar
 
-P = ParamSpec("P")
-T = TypeVar("T")
-
-try:
-    import cyclopts as _cyclopts
-    from cyclopts import App, Parameter
-except ModuleNotFoundError:  # pragma: no cover - executed in lean test envs.
-    cyclopts: object | None = None
-
-    class Parameter:  # type: ignore[empty-body]
-        """Fallback placeholder that preserves ``typing.Annotated`` usage."""
-
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
-            """Accept arguments for compatibility; behaviour is irrelevant."""
-
-    class App:
-        """Minimal shim to surface a descriptive error when Cyclopts is absent."""
-
-        def __init__(self, *args: object, **kwargs: object) -> None:
-            message = "Cyclopts is required for CLI usage; install it to run the script"
-            self._error = RuntimeError(message)
-
-        def default(
-            self, func: typ.Callable[P, T]
-        ) -> typ.Callable[P, T]:  # pragma: no cover - trivial stub
-            """Return ``func`` unchanged in fallback mode."""
-            return func
-
-        def __call__(
-            self, *_args: P.args, **_kwargs: P.kwargs
-        ) -> typ.NoReturn:  # pragma: no cover - trivial stub
-            """Raise because the CLI requires Cyclopts."""
-            raise self._error
-else:
-    cyclopts = _cyclopts
-
-try:  # pragma: no cover - exercised indirectly when dependencies are present.
-    from plumbum import local  # type: ignore[import-not-found]
-    from plumbum.commands import (  # type: ignore[import-not-found]
-        CommandNotFound,
-        ProcessExecutionError,
-    )
-except ModuleNotFoundError:  # pragma: no cover - executed in test/type-check envs.
-    CommandNotFound = ModuleNotFoundError
-    ProcessExecutionError = RuntimeError
-
-    class _MissingLocal:
-        """Placeholder that mirrors the ``plumbum.local`` interface."""
-
-        def __getitem__(self, name: str) -> typ.NoReturn:
-            message = (
-                "plumbum is required to execute release uploads; "
-                "install it or run in dry-run mode"
-            )
-            raise ModuleNotFoundError(message)
-
-    local = _MissingLocal()
-
-if typ.TYPE_CHECKING:
-    from plumbum.commands.base import BoundCommand  # type: ignore[import-not-found]
-else:
-    BoundCommand = typ.Any
+from _release_upload_deps import load_cyclopts, load_plumbum
 
 
 class AssetError(RuntimeError):
@@ -107,25 +46,19 @@ class ReleaseAsset:
     size: int
 
 
-if cyclopts is not None:
-    app: App = App(config=cyclopts.config.Env("INPUT_", command=False))
+cyclopts_support = load_cyclopts()
+plumbum_support = load_plumbum()
+
+Parameter = cyclopts_support.parameter
+app = cyclopts_support.app
+CommandNotFound = plumbum_support.command_not_found
+ProcessExecutionError = plumbum_support.process_execution_error
+local = plumbum_support.local
+
+if typ.TYPE_CHECKING:
+    from plumbum.commands.base import BoundCommand  # type: ignore[import-not-found]
 else:
-    app = App()
-
-
-def _needs_manual_cli(tokens: list[str]) -> bool:
-    """Return ``True`` when ``tokens`` require the argparse fallback."""
-    if cyclopts is None:
-        return True
-    for index, argument in enumerate(tokens):
-        if argument == "--dry-run":
-            if index + 1 == len(tokens):
-                return True
-            next_token = tokens[index + 1]
-            return next_token.startswith("-")
-        if argument.startswith("--dry-run="):
-            return False
-    return False
+    BoundCommand = plumbum_support.bound_command
 
 
 def _is_candidate(path: Path, bin_name: str) -> bool:
@@ -361,21 +294,42 @@ def cli(
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised via CLI
-    tokens = sys.argv[1:]
-    if _needs_manual_cli(tokens):
-        import argparse
+    from argparse import ArgumentParser
 
-        parser = argparse.ArgumentParser(description=__doc__)
-        parser.add_argument("--release-tag", required=True)
-        parser.add_argument("--bin-name", required=True)
-        parser.add_argument("--dist-dir", default="dist")
+    def _run_argparse(tokens: list[str]) -> int:
+        parser = ArgumentParser(description=__doc__)
+        parser.add_argument("--release-tag")
+        parser.add_argument("--bin-name")
+        parser.add_argument("--dist-dir")
         parser.add_argument("--dry-run", action="store_true")
         args = parser.parse_args(tokens)
-        exit_code = main(
-            release_tag=args.release_tag,
-            bin_name=args.bin_name,
-            dist_dir=Path(args.dist_dir),
-            dry_run=args.dry_run,
+
+        release_tag = args.release_tag or os.environ.get("INPUT_RELEASE_TAG")
+        bin_name = args.bin_name or os.environ.get("INPUT_BIN_NAME")
+        dist_dir_value = args.dist_dir or os.environ.get("INPUT_DIST_DIR") or "dist"
+        dry_run_value = args.dry_run
+        if not dry_run_value and (env_dry_run := os.environ.get("INPUT_DRY_RUN")):
+            dry_run_value = _coerce_bool(env_dry_run)
+
+        missing = [
+            label
+            for label, present in (
+                ("--release-tag", release_tag),
+                ("--bin-name", bin_name),
+            )
+            if not present
+        ]
+        if missing:
+            joined = ", ".join(missing)
+            print(f"Missing required argument(s): {joined}", file=sys.stderr)
+            return 1
+
+        return main(
+            release_tag=typ.cast(str, release_tag),
+            bin_name=typ.cast(str, bin_name),
+            dist_dir=Path(dist_dir_value),
+            dry_run=dry_run_value,
         )
-        raise SystemExit(exit_code)
-    raise SystemExit(app())
+
+    exit_code = app() if cyclopts_support.available else _run_argparse(sys.argv[1:])
+    raise SystemExit(exit_code)

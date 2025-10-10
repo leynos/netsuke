@@ -166,10 +166,17 @@ def _extract_sections(
 
 def _validate_checksum(name: str | None) -> str:
     algorithm = (name or "sha256").lower()
-    supported = {item.lower() for item in hashlib.algorithms_available}
+    supported = {item.lower() for item in hashlib.algorithms_guaranteed}
     if algorithm not in supported:
         message = f"Unsupported checksum algorithm: {algorithm}"
         raise StageError(message)
+    try:
+        hashlib.new(algorithm)
+    except ValueError as exc:
+        message = (
+            f"Checksum algorithm not supported by hashlib.new: {algorithm}"
+        )
+        raise StageError(message) from exc
     return algorithm
 
 
@@ -189,13 +196,16 @@ def _make_artefacts(
                 f"in entry #{index} of {config_path}"
             )
             raise StageError(message)
+        alternatives = _normalise_alternatives(
+            entry.get("alternatives", []), index, config_path
+        )
         artefacts.append(
             ArtefactConfig(
                 source=source,
                 required=entry.get("required", True),
                 output=entry.get("output"),
                 destination=entry.get("destination"),
-                alternatives=entry.get("alternatives", []),
+                alternatives=alternatives,
             )
         )
     return artefacts
@@ -205,10 +215,39 @@ def _require_keys(
     section: dict[str, typ.Any], keys: set[str], label: str, config_path: Path
 ) -> None:
     """Ensure ``section`` defines ``keys`` (e.g., ``_require_keys({'bin': 1}, {'bin'}, 'common', Path('cfg'))`` -> ``None``)."""
-    missing = sorted(key for key in keys if key not in section)
-    if missing:
+    if missing := sorted(key for key in keys if key not in section):
         joined = ", ".join(missing)
         message = (
             f"Missing required key(s) {joined} in [{label}] section of {config_path}"
         )
         raise StageError(message)
+
+
+def _normalise_alternatives(
+    value: object, index: int, config_path: Path
+) -> list[str]:
+    """Return ``value`` as a list of alternative glob patterns."""
+
+    if value is None:
+        return []
+    if isinstance(value, str):
+        if not value:
+            return []
+        return [value]
+    if not isinstance(value, list):
+        message = (
+            "Alternatives must be a list of strings "
+            f"(entry #{index} in {config_path})"
+        )
+        raise StageError(message)
+    alternatives: list[str] = []
+    for alternative in value:
+        if not isinstance(alternative, str):
+            message = (
+                "Alternatives must be strings "
+                f"(entry #{index} in {config_path})"
+            )
+            raise StageError(message)
+        if alternative:
+            alternatives.append(alternative)
+    return alternatives
