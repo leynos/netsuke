@@ -11,6 +11,7 @@
 //! Platform notes: fake executables are implemented for Unix and Windows.
 
 pub mod check_ninja;
+pub mod command_helper;
 pub mod env;
 pub mod env_guard;
 pub mod env_lock;
