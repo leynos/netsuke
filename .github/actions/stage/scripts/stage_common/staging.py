@@ -77,6 +77,35 @@ def _relative_display(path: Path, base: Path) -> str:
         return path.as_posix()
 
 
+def _validate_and_record_destination(
+    outcome_path: Path, artefact_source: str, seen_destinations: set[Path]
+) -> None:
+    """Guard against duplicate staged destinations."""
+
+    if outcome_path in seen_destinations:
+        message = (
+            "Duplicate staged destination detected: "
+            f"{outcome_path.as_posix()} from source {artefact_source}"
+        )
+        raise StageError(message)
+    seen_destinations.add(outcome_path)
+
+
+def _validate_and_record_output(
+    output_key: str,
+    outcome_path: Path,
+    seen_outputs: set[str],
+    outputs: dict[str, Path],
+) -> None:
+    """Guard against duplicate artefact output keys."""
+
+    if output_key in seen_outputs:
+        message = f"Duplicate artefact output key detected: {output_key}"
+        raise StageError(message)
+    seen_outputs.add(output_key)
+    outputs[output_key] = outcome_path
+
+
 def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageResult:
     """Copy artefacts into ``config``'s staging directory.
 
@@ -133,24 +162,15 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
         )
         if outcome is None:
             continue
-        if outcome.path in seen_destinations:
-            message = (
-                "Duplicate staged destination detected: "
-                f"{outcome.path.as_posix()} from source {artefact.source}"
-            )
-            raise StageError(message)
-        seen_destinations.add(outcome.path)
+        _validate_and_record_destination(
+            outcome.path, artefact.source, seen_destinations
+        )
         staged_paths.append(outcome.path)
         checksums[outcome.path.name] = outcome.digest
         if outcome.output_key:
-            if outcome.output_key in seen_outputs:
-                message = (
-                    "Duplicate artefact output key detected: "
-                    f"{outcome.output_key}"
-                )
-                raise StageError(message)
-            seen_outputs.add(outcome.output_key)
-            outputs[outcome.output_key] = outcome.path
+            _validate_and_record_output(
+                outcome.output_key, outcome.path, seen_outputs, outputs
+            )
 
     if not staged_paths:
         message = "No artefacts were staged."
