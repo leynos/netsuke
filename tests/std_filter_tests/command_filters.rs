@@ -47,6 +47,13 @@ impl CommandFixture {
     }
 }
 
+type CommandCompiler = fn(&Dir, &Utf8PathBuf, &str) -> Utf8PathBuf;
+
+enum ShellExpectation {
+    Success(&'static str),
+    Failure { substrings: &'static [&'static str] },
+}
+
 #[cfg(windows)]
 use {
     super::support::{EnvLock, EnvVarGuard},
@@ -55,50 +62,66 @@ use {
 };
 
 #[rstest]
-fn shell_filter_marks_templates_impure() {
-    let mut fixture = CommandFixture::new(compile_uppercase_helper, "cmd_upper");
+#[case::uppercase(
+    compile_uppercase_helper,
+    "cmd_upper",
+    "shell_upper",
+    "{{ 'hello' | shell(cmd) | trim }}",
+    ShellExpectation::Success("HELLO")
+)]
+#[case::failure(
+    compile_failure_helper,
+    "cmd_fail",
+    "shell_fail",
+    "{{ 'data' | shell(cmd) }}",
+    ShellExpectation::Failure {
+        substrings: &["command", "exited"],
+    },
+)]
+fn shell_filter_behaviour(
+    #[case] compiler: CommandCompiler,
+    #[case] binary: &'static str,
+    #[case] template_name: &'static str,
+    #[case] template_src: &'static str,
+    #[case] expectation: ShellExpectation,
+) {
+    let mut fixture = CommandFixture::new(compiler, binary);
     {
         let env = fixture.env();
-        env.add_template("shell", "{{ 'hello' | shell(cmd) | trim }}")
+        env.add_template(template_name, template_src)
             .expect("template");
     }
     let command = fixture.command().to_owned();
     let template = {
         let env = fixture.env();
-        env.get_template("shell").expect("get template")
+        env.get_template(template_name).expect("get template")
     };
-    let rendered = template.render(context!(cmd => command)).expect("render");
-    assert_eq!(rendered, "HELLO");
-    assert!(
-        fixture.state().is_impure(),
-        "shell filter should mark template impure"
-    );
-}
 
-#[rstest]
-fn shell_filter_surfaces_command_failures() {
-    let mut fixture = CommandFixture::new(compile_failure_helper, "cmd_fail");
-    {
-        let env = fixture.env();
-        env.add_template("shell_fail", "{{ 'data' | shell(cmd) }}")
-            .expect("template");
+    match expectation {
+        ShellExpectation::Success(expected) => {
+            let rendered = template
+                .render(context!(cmd => command.clone()))
+                .expect("render shell");
+            assert_eq!(rendered, expected);
+        }
+        ShellExpectation::Failure { substrings } => {
+            let err = template
+                .render(context!(cmd => command.clone()))
+                .expect_err("shell should propagate failures");
+            assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+            let message = err.to_string();
+            for needle in substrings {
+                assert!(
+                    message.contains(needle),
+                    "error should mention {needle}: {message}",
+                );
+            }
+        }
     }
-    let command = fixture.command().to_owned();
-    let template = {
-        let env = fixture.env();
-        env.get_template("shell_fail").expect("get template")
-    };
-    let result = template.render(context!(cmd => command));
-    let err = result.expect_err("shell should propagate failures");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+
     assert!(
         fixture.state().is_impure(),
-        "failure should still mark template impure"
-    );
-    let message = err.to_string();
-    assert!(
-        message.contains("command") && message.contains("exited"),
-        "error should report command exit status: {message}"
+        "shell filter should mark template impure",
     );
 }
 

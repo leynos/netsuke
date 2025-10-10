@@ -105,7 +105,7 @@ pub(crate) fn server_host(url: &str) -> Option<&str> {
         .and_then(|addr| addr.split('/').next())
 }
 
-fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
+pub(crate) fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind http listener");
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
@@ -193,10 +193,7 @@ fn failing_stdlib_command_helper(world: &mut CliWorld) {
 
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
-    world.shutdown_http_server();
-    let (url, handle) = spawn_http_server(body);
-    world.stdlib_url = Some(url);
-    world.http_server = Some(handle);
+    world.start_http_server(body);
 }
 
 #[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]

@@ -50,19 +50,42 @@ pub struct CliWorld {
 }
 
 mod steps;
-use steps::stdlib_steps::server_host;
+use steps::stdlib_steps::{server_host, spawn_http_server};
 
 impl CliWorld {
+    pub(crate) fn start_http_server(&mut self, body: String) {
+        self.shutdown_http_server();
+        let (url, handle) = spawn_http_server(body);
+        self.stdlib_url = Some(url);
+        self.http_server = Some(handle);
+    }
+
     pub(crate) fn shutdown_http_server(&mut self) {
         let Some(handle) = self.http_server.take() else {
             return;
         };
 
-        if let Some(host) = self.stdlib_url.as_deref().and_then(server_host) {
-            let _ = TcpStream::connect(host);
-        }
+        self.unblock_http_server();
 
         let _ = handle.join();
+    }
+
+    fn unblock_http_server(&self) {
+        let Some(url) = self.stdlib_url.as_deref() else {
+            return;
+        };
+        let Some(host) = server_host(url) else {
+            return;
+        };
+        let _ = TcpStream::connect(host);
+    }
+
+    fn restore_environment(&mut self) {
+        if self.env_vars.is_empty() {
+            return;
+        }
+
+        restore_many(self.env_vars.drain().collect());
     }
 }
 
@@ -82,9 +105,7 @@ fn block_device_exists() -> bool {
 impl Drop for CliWorld {
     fn drop(&mut self) {
         self.shutdown_http_server();
-        if !self.env_vars.is_empty() {
-            restore_many(self.env_vars.drain().collect());
-        }
+        self.restore_environment();
     }
 }
 

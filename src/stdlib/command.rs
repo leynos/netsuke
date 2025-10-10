@@ -48,6 +48,9 @@ const SHELL_ARGS: &[&str] = &["-c"];
 // while still allowing short, legitimate processes to complete. The limit keeps
 // feedback responsive during behavioural tests without imposing noticeable
 // delays for happy-path renders.
+// Commands run during template evaluation must not hang renders. Five seconds
+// keeps `shell` and `grep` responsive for tests and typical helper binaries
+// while still surfacing timeouts for misbehaving commands.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn register(env: &mut minijinja::Environment<'_>, impure: Arc<AtomicBool>) {
