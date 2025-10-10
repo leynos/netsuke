@@ -28,16 +28,70 @@ import dataclasses as dc
 import sys
 import typing as typ
 from pathlib import Path
+from typing import ParamSpec, TypeVar
 
-import cyclopts
-from cyclopts import App, Parameter
-from plumbum import local
-from plumbum.commands import CommandNotFound, ProcessExecutionError
+P = ParamSpec("P")
+T = TypeVar("T")
+
+try:
+    import cyclopts as _cyclopts
+    from cyclopts import App, Parameter
+except ModuleNotFoundError:  # pragma: no cover - executed in lean test envs.
+    cyclopts: object | None = None
+
+    class Parameter:  # type: ignore[empty-body]
+        """Fallback placeholder that preserves ``typing.Annotated`` usage."""
+
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            """Accept arguments for compatibility; behaviour is irrelevant."""
+
+    class App:
+        """Minimal shim to surface a descriptive error when Cyclopts is absent."""
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            message = "Cyclopts is required for CLI usage; install it to run the script"
+            self._error = RuntimeError(message)
+
+        def default(
+            self, func: typ.Callable[P, T]
+        ) -> typ.Callable[P, T]:  # pragma: no cover - trivial stub
+            """Return ``func`` unchanged in fallback mode."""
+            return func
+
+        def __call__(
+            self, *_args: P.args, **_kwargs: P.kwargs
+        ) -> typ.NoReturn:  # pragma: no cover - trivial stub
+            """Raise because the CLI requires Cyclopts."""
+            raise self._error
+else:
+    cyclopts = _cyclopts
+
+try:  # pragma: no cover - exercised indirectly when dependencies are present.
+    from plumbum import local  # type: ignore[import-not-found]
+    from plumbum.commands import (  # type: ignore[import-not-found]
+        CommandNotFound,
+        ProcessExecutionError,
+    )
+except ModuleNotFoundError:  # pragma: no cover - executed in test/type-check envs.
+    CommandNotFound = ModuleNotFoundError
+    ProcessExecutionError = RuntimeError
+
+    class _MissingLocal:
+        """Placeholder that mirrors the ``plumbum.local`` interface."""
+
+        def __getitem__(self, name: str) -> typ.NoReturn:
+            message = (
+                "plumbum is required to execute release uploads; "
+                "install it or run in dry-run mode"
+            )
+            raise ModuleNotFoundError(message)
+
+    local = _MissingLocal()
 
 if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-    from plumbum.commands.base import BoundCommand
+    from plumbum.commands.base import BoundCommand  # type: ignore[import-not-found]
+else:
+    BoundCommand = typ.Any
 
 
 class AssetError(RuntimeError):
@@ -53,7 +107,25 @@ class ReleaseAsset:
     size: int
 
 
-app = App(config=cyclopts.config.Env("INPUT_", command=False))
+if cyclopts is not None:
+    app: App = App(config=cyclopts.config.Env("INPUT_", command=False))
+else:
+    app = App()
+
+
+def _needs_manual_cli(tokens: list[str]) -> bool:
+    """Return ``True`` when ``tokens`` require the argparse fallback."""
+    if cyclopts is None:
+        return True
+    for index, argument in enumerate(tokens):
+        if argument == "--dry-run":
+            if index + 1 == len(tokens):
+                return True
+            next_token = tokens[index + 1]
+            return next_token.startswith("-")
+        if argument.startswith("--dry-run="):
+            return False
+    return False
 
 
 def _is_candidate(path: Path, bin_name: str) -> bool:
@@ -90,7 +162,7 @@ def _resolve_asset_name(path: Path, *, dist_dir: Path) -> str:
     return f"{prefix}-{relative_path.name}"
 
 
-def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> cabc.Iterator[Path]:
+def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> typ.Iterator[Path]:
     for path in sorted(dist_dir.rglob("*")):
         if path.is_file() and _is_candidate(path, bin_name):
             yield path
@@ -160,7 +232,7 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
     return assets
 
 
-def _render_summary(assets: cabc.Iterable[ReleaseAsset]) -> str:
+def _render_summary(assets: typ.Iterable[ReleaseAsset]) -> str:
     lines = ["Planned uploads:"]
     lines.extend(
         f"  - {asset.asset_name} ({asset.size} bytes) -> {asset.path}"
@@ -170,7 +242,7 @@ def _render_summary(assets: cabc.Iterable[ReleaseAsset]) -> str:
 
 
 def upload_assets(
-    *, release_tag: str, assets: cabc.Iterable[ReleaseAsset], dry_run: bool = False
+    *, release_tag: str, assets: typ.Iterable[ReleaseAsset], dry_run: bool = False
 ) -> None:
     """Upload artefacts to GitHub using the ``gh`` CLI.
 
@@ -277,7 +349,7 @@ def cli(
     release_tag: typ.Annotated[str, Parameter(required=True)],
     bin_name: typ.Annotated[str, Parameter(required=True)],
     dist_dir: Path = Path("dist"),
-    dry_run: bool | str = False,
+    dry_run: bool = False,
 ) -> int:
     """Cyclopts-bound CLI entry point."""
     return main(
@@ -289,4 +361,21 @@ def cli(
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised via CLI
+    tokens = sys.argv[1:]
+    if _needs_manual_cli(tokens):
+        import argparse
+
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--release-tag", required=True)
+        parser.add_argument("--bin-name", required=True)
+        parser.add_argument("--dist-dir", default="dist")
+        parser.add_argument("--dry-run", action="store_true")
+        args = parser.parse_args(tokens)
+        exit_code = main(
+            release_tag=args.release_tag,
+            bin_name=args.bin_name,
+            dist_dir=Path(args.dist_dir),
+            dry_run=args.dry_run,
+        )
+        raise SystemExit(exit_code)
     raise SystemExit(app())

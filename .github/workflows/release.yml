@@ -172,9 +172,11 @@ jobs:
           - target: x86_64-pc-windows-msvc
             package_arch: amd64
             msi_arch: x64
+            target_key: windows-x86_64
           - target: aarch64-pc-windows-msvc
             package_arch: arm64
             msi_arch: arm64
+            target_key: windows-aarch64
     steps:
       - uses: >-
           actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
@@ -194,43 +196,18 @@ jobs:
           version: ${{ needs.metadata.outputs.version }}
       - id: stage
         name: Stage Windows artefacts
-        shell: bash
-        env:
-          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
-          TARGET: ${{ matrix.target }}
-          PLATFORM: windows
-          ARCH: ${{ matrix.package_arch }}
-        run: |
-          set -euo pipefail
-          uv run .github/workflows/scripts/stage_windows.py
+        uses: ./.github/actions/stage
+        with:
+          config-file: .github/release-staging.toml
+          target: ${{ matrix.target_key }}
       - id: normalize_windows_paths
         name: Normalise Windows paths
         shell: bash
         env:
-          BIN_PATH: ${{ steps.stage.outputs.binary_path }}
-          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
+          ARTEFACT_MAP: ${{ steps.stage.outputs.artefact_map }}
         run: |
           set -euo pipefail
-          if [[ -z "${BIN_PATH:-}" ]]; then
-            echo '::error title=Stage output missing::binary_path output empty'
-            exit 1
-          fi
-          if [[ -z "${LICENSE_PATH:-}" ]]; then
-            echo '::error title=Stage output missing::license_path output empty'
-            exit 1
-          fi
-          normalise_path() {
-            python -c 'from pathlib import PureWindowsPath; import sys; \
-              print(PureWindowsPath(sys.argv[1]))' "$1"
-          }
-
-          binary_path="$(normalise_path "${BIN_PATH}")"
-          license_path="$(normalise_path "${LICENSE_PATH}")"
-
-          {
-            printf 'binary_path=%s\n' "$binary_path"
-            printf 'license_path=%s\n' "$license_path"
-          } >>"$GITHUB_OUTPUT"
+          python .github/workflows/scripts/normalise_windows_paths.py
       - id: package
         name: Build Windows installer package
         uses: >-
@@ -269,10 +246,12 @@ jobs:
             runner: macos-13
             artifact_suffix: macos-x86_64
             package_arch: x86_64
+            target_key: macos-x86_64
           - target: aarch64-apple-darwin
             runner: macos-14
             artifact_suffix: macos-arm64
             package_arch: arm64
+            target_key: macos-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: >-
@@ -293,15 +272,10 @@ jobs:
           version: ${{ needs.metadata.outputs.version }}
       - id: stage
         name: Stage macOS artefacts
-        shell: bash
-        env:
-          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
-          TARGET: ${{ matrix.target }}
-          PLATFORM: macos
-          ARCH: ${{ matrix.package_arch }}
-        run: |
-          set -euo pipefail
-          uv run .github/workflows/scripts/stage_macos.py
+        uses: ./.github/actions/stage
+        with:
+          config-file: .github/release-staging.toml
+          target: ${{ matrix.target_key }}
       - id: pkg
         name: Build macOS installer package
         uses: >-
