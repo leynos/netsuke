@@ -25,19 +25,17 @@ Inspect the planned uploads without publishing anything::
 from __future__ import annotations
 
 import dataclasses as dc
+import os
 import sys
 import typing as typ
 from pathlib import Path
 
-import cyclopts
-from cyclopts import App, Parameter
-from plumbum import local
-from plumbum.commands import CommandNotFound, ProcessExecutionError
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-    from plumbum.commands.base import BoundCommand
+from _release_upload_deps import (
+    RuntimeOptions,
+    load_cyclopts,
+    load_plumbum,
+    run_cli,
+)
 
 
 class AssetError(RuntimeError):
@@ -53,7 +51,19 @@ class ReleaseAsset:
     size: int
 
 
-app = App(config=cyclopts.config.Env("INPUT_", command=False))
+cyclopts_support = load_cyclopts()
+plumbum_support = load_plumbum()
+
+Parameter = cyclopts_support.parameter
+app = cyclopts_support.app
+CommandNotFound = plumbum_support.command_not_found
+ProcessExecutionError = plumbum_support.process_execution_error
+local = plumbum_support.local
+
+if typ.TYPE_CHECKING:
+    from plumbum.commands.base import BoundCommand  # type: ignore[import-not-found]
+else:
+    BoundCommand = plumbum_support.bound_command
 
 
 def _is_candidate(path: Path, bin_name: str) -> bool:
@@ -90,7 +100,8 @@ def _resolve_asset_name(path: Path, *, dist_dir: Path) -> str:
     return f"{prefix}-{relative_path.name}"
 
 
-def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> cabc.Iterator[Path]:
+def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> typ.Iterator[Path]:
+    """Yield candidate artefact file paths under ``dist_dir`` for ``bin_name``."""
     for path in sorted(dist_dir.rglob("*")):
         if path.is_file() and _is_candidate(path, bin_name):
             yield path
@@ -112,6 +123,52 @@ def _register_asset(asset_name: str, path: Path, seen: dict[str, Path]) -> None:
         )
         raise AssetError(message)
     seen[asset_name] = path
+
+
+def _prepare_runtime_options(
+    *,
+    release_tag: str | None,
+    bin_name: str | None,
+    dist_dir: str | Path | None,
+    dry_run: bool | str | None,
+    environ: typ.Mapping[str, str | None],
+) -> RuntimeOptions:
+    """Normalise CLI inputs from Cyclopts or ``argparse`` into runtime options."""
+
+    resolved_release = release_tag or environ.get("INPUT_RELEASE_TAG")
+    resolved_bin = bin_name or environ.get("INPUT_BIN_NAME")
+    dist_source = dist_dir if dist_dir is not None else environ.get("INPUT_DIST_DIR")
+    resolved_dist = Path(dist_source or "dist")
+
+    dry_run_value: bool
+    if isinstance(dry_run, bool):
+        dry_run_value = dry_run
+    elif dry_run is None:
+        dry_run_value = False
+    else:
+        dry_run_value = _coerce_bool(dry_run)
+    if not dry_run_value and (env_flag := environ.get("INPUT_DRY_RUN")):
+        dry_run_value = _coerce_bool(env_flag)
+
+    missing = [
+        label
+        for label, present in (
+            ("--release-tag", resolved_release),
+            ("--bin-name", resolved_bin),
+        )
+        if not present
+    ]
+    if missing:
+        joined = ", ".join(missing)
+        message = f"Missing required argument(s): {joined}"
+        raise ValueError(message)
+
+    return RuntimeOptions(
+        release_tag=typ.cast(str, resolved_release),
+        bin_name=typ.cast(str, resolved_bin),
+        dist_dir=resolved_dist,
+        dry_run=dry_run_value,
+    )
 
 
 def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
@@ -160,7 +217,7 @@ def discover_assets(dist_dir: Path, *, bin_name: str) -> list[ReleaseAsset]:
     return assets
 
 
-def _render_summary(assets: cabc.Iterable[ReleaseAsset]) -> str:
+def _render_summary(assets: typ.Iterable[ReleaseAsset]) -> str:
     lines = ["Planned uploads:"]
     lines.extend(
         f"  - {asset.asset_name} ({asset.size} bytes) -> {asset.path}"
@@ -170,7 +227,7 @@ def _render_summary(assets: cabc.Iterable[ReleaseAsset]) -> str:
 
 
 def upload_assets(
-    *, release_tag: str, assets: cabc.Iterable[ReleaseAsset], dry_run: bool = False
+    *, release_tag: str, assets: typ.Iterable[ReleaseAsset], dry_run: bool = False
 ) -> None:
     """Upload artefacts to GitHub using the ``gh`` CLI.
 
@@ -277,16 +334,30 @@ def cli(
     release_tag: typ.Annotated[str, Parameter(required=True)],
     bin_name: typ.Annotated[str, Parameter(required=True)],
     dist_dir: Path = Path("dist"),
-    dry_run: bool | str = False,
+    dry_run: bool = False,
 ) -> int:
     """Cyclopts-bound CLI entry point."""
-    return main(
+    options = _prepare_runtime_options(
         release_tag=release_tag,
         bin_name=bin_name,
         dist_dir=dist_dir,
-        dry_run=_coerce_bool(dry_run),
+        dry_run=dry_run,
+        environ=os.environ,
+    )
+    return main(
+        release_tag=options.release_tag,
+        bin_name=options.bin_name,
+        dist_dir=options.dist_dir,
+        dry_run=options.dry_run,
     )
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised via CLI
-    raise SystemExit(app())
+    raise SystemExit(
+        run_cli(
+            cyclopts_support,
+            prepare_options=_prepare_runtime_options,
+            main=main,
+            tokens=sys.argv[1:],
+        )
+    )
