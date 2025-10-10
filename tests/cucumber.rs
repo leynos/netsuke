@@ -52,6 +52,20 @@ pub struct CliWorld {
 mod steps;
 use steps::stdlib_steps::server_host;
 
+impl CliWorld {
+    pub(crate) fn shutdown_http_server(&mut self) {
+        let Some(handle) = self.http_server.take() else {
+            return;
+        };
+
+        if let Some(host) = self.stdlib_url.as_deref().and_then(server_host) {
+            let _ = TcpStream::connect(host);
+        }
+
+        let _ = handle.join();
+    }
+}
+
 #[cfg(unix)]
 fn block_device_exists() -> bool {
     std::fs::read_dir("/dev")
@@ -67,12 +81,7 @@ fn block_device_exists() -> bool {
 
 impl Drop for CliWorld {
     fn drop(&mut self) {
-        if let Some(handle) = self.http_server.take() {
-            if let Some(host) = self.stdlib_url.as_deref().and_then(server_host) {
-                let _ = TcpStream::connect(host);
-            }
-            let _ = handle.join();
-        }
+        self.shutdown_http_server();
         if !self.env_vars.is_empty() {
             restore_many(self.env_vars.drain().collect());
         }

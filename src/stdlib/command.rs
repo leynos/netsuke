@@ -44,6 +44,10 @@ const SHELL: &str = "sh";
 #[cfg(not(windows))]
 const SHELL_ARGS: &[&str] = &["-c"];
 
+// Cap commands at five seconds so template renders fail fast on hung helpers
+// while still allowing short, legitimate processes to complete. The limit keeps
+// feedback responsive during behavioural tests without imposing noticeable
+// delays for happy-path renders.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn register(env: &mut minijinja::Environment<'_>, impure: Arc<AtomicBool>) {

@@ -1,6 +1,6 @@
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{ErrorKind, context, value::Value};
+use minijinja::{Environment, ErrorKind, context, value::Value};
 use rstest::rstest;
 use tempfile::tempdir;
 use test_support::command_helper::{compile_failure_helper, compile_uppercase_helper};
@@ -9,6 +9,43 @@ use test_support::command_helper::{compile_failure_helper, compile_uppercase_hel
 use test_support::command_helper::compile_rust_helper;
 
 use super::support::stdlib_env_with_state;
+
+struct CommandFixture {
+    _temp: tempfile::TempDir,
+    env: Environment<'static>,
+    state: netsuke::stdlib::StdlibState,
+    command: String,
+}
+
+impl CommandFixture {
+    fn new(compiler: impl Fn(&Dir, &Utf8PathBuf, &str) -> Utf8PathBuf, binary: &str) -> Self {
+        let temp = tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
+        let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
+        let helper = compiler(&dir, &root, binary);
+        let command = format!("\"{}\"", helper.as_str());
+        let (env, state) = stdlib_env_with_state();
+        state.reset_impure();
+        Self {
+            _temp: temp,
+            env,
+            state,
+            command,
+        }
+    }
+
+    fn env(&mut self) -> &mut Environment<'static> {
+        &mut self.env
+    }
+
+    fn command(&self) -> &str {
+        &self.command
+    }
+
+    fn state(&self) -> &netsuke::stdlib::StdlibState {
+        &self.state
+    }
+}
 
 #[cfg(windows)]
 use {
@@ -19,49 +56,49 @@ use {
 
 #[rstest]
 fn shell_filter_marks_templates_impure() {
-    let temp = tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
-    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
-    let helper = compile_uppercase_helper(&dir, &root, "cmd_upper");
-    let command = format!("\"{}\"", helper.as_str());
-
-    let (mut env, state) = stdlib_env_with_state();
-    state.reset_impure();
-    env.add_template("shell", "{{ 'hello' | shell(cmd) | trim }}")
-        .expect("template");
-    let template = env.get_template("shell").expect("get template");
+    let mut fixture = CommandFixture::new(compile_uppercase_helper, "cmd_upper");
+    {
+        let env = fixture.env();
+        env.add_template("shell", "{{ 'hello' | shell(cmd) | trim }}")
+            .expect("template");
+    }
+    let command = fixture.command().to_owned();
+    let template = {
+        let env = fixture.env();
+        env.get_template("shell").expect("get template")
+    };
     let rendered = template.render(context!(cmd => command)).expect("render");
     assert_eq!(rendered, "HELLO");
     assert!(
-        state.is_impure(),
+        fixture.state().is_impure(),
         "shell filter should mark template impure"
     );
 }
 
 #[rstest]
 fn shell_filter_surfaces_command_failures() {
-    let temp = tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
-    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
-    let helper = compile_failure_helper(&dir, &root, "cmd_fail");
-    let command = format!("\"{}\"", helper.as_str());
-
-    let (mut env, state) = stdlib_env_with_state();
-    state.reset_impure();
-    env.add_template("shell_fail", "{{ 'data' | shell(cmd) }}")
-        .expect("template");
-    let template = env.get_template("shell_fail").expect("get template");
+    let mut fixture = CommandFixture::new(compile_failure_helper, "cmd_fail");
+    {
+        let env = fixture.env();
+        env.add_template("shell_fail", "{{ 'data' | shell(cmd) }}")
+            .expect("template");
+    }
+    let command = fixture.command().to_owned();
+    let template = {
+        let env = fixture.env();
+        env.get_template("shell_fail").expect("get template")
+    };
     let result = template.render(context!(cmd => command));
     let err = result.expect_err("shell should propagate failures");
     assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     assert!(
-        state.is_impure(),
+        fixture.state().is_impure(),
         "failure should still mark template impure"
     );
     let message = err.to_string();
     assert!(
         message.contains("command") && message.contains("exited"),
-        "error should report command exit status: {message}",
+        "error should report command exit status: {message}"
     );
 }
 

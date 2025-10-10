@@ -13,7 +13,7 @@ use netsuke::stdlib;
 use std::ffi::OsStr;
 use std::{
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     thread,
 };
 use test_support::{
@@ -112,8 +112,8 @@ fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
     let handle = thread::spawn(move || {
         if let Ok((mut stream, _)) = listener.accept() {
             let mut buf = [0u8; 512];
-            let read = stream.read(&mut buf).unwrap_or(0);
-            if read > 0 {
+            let bytes_read = stream.read(&mut buf).unwrap_or(0);
+            if bytes_read > 0 {
                 let response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     body.len(),
@@ -193,12 +193,7 @@ fn failing_stdlib_command_helper(world: &mut CliWorld) {
 
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
-    if let Some(handle) = world.http_server.take() {
-        if let Some(host) = world.stdlib_url.as_deref().and_then(server_host) {
-            let _ = TcpStream::connect(host);
-        }
-        let _ = handle.join();
-    }
+    world.shutdown_http_server();
     let (url, handle) = spawn_http_server(body);
     world.stdlib_url = Some(url);
     world.http_server = Some(handle);

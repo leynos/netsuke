@@ -195,24 +195,18 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
-        sync::{Mutex, MutexGuard, OnceLock},
     };
 
     use tempfile::tempdir;
-
-    static CWD_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    use test_support::env_lock::EnvLock;
 
     struct DirGuard {
         original: PathBuf,
-        _lock: MutexGuard<'static, ()>,
+        _lock: EnvLock,
     }
 
     impl DirGuard {
-        fn change_to(path: &Path) -> Self {
-            let lock = CWD_LOCK
-                .get_or_init(|| Mutex::new(()))
-                .lock()
-                .expect("cwd lock");
+        fn change_to(path: &Path, lock: EnvLock) -> Self {
             let original = std::env::current_dir().expect("current dir");
             std::env::set_current_dir(path).expect("set current dir");
             Self {
@@ -272,7 +266,8 @@ mod tests {
     #[test]
     fn open_cache_dir_creates_relative_directory() {
         let temp = tempdir().expect("tempdir");
-        let _guard = DirGuard::change_to(temp.path());
+        let lock = EnvLock::acquire();
+        let _guard = DirGuard::change_to(temp.path(), lock);
         let dir = open_cache_dir("cache").expect("open relative cache dir");
         dir.write("entry", b"data").expect("write cache entry");
         drop(dir);
