@@ -9,6 +9,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
@@ -52,7 +53,13 @@ fn fetch(url: &str, kwargs: &Kwargs, impure: &Arc<AtomicBool>) -> Result<Value, 
 
 fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
     impure.store(true, Ordering::Relaxed);
-    let response = ureq::get(url).call().map_err(|err| {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(30))
+        .timeout_write(Duration::from_secs(30))
+        .timeout(Duration::from_secs(60))
+        .build();
+    let response = agent.get(url).call().map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,
             format!("fetch failed for '{url}': {err}"),
@@ -97,9 +104,12 @@ fn open_cache_dir(path: &str) -> Result<Dir, Error> {
 
         let root_dir = Dir::open_ambient_dir(&root_path, ambient_authority())
             .map_err(|err| io_error("open root cache dir", &root_path, &err))?;
-        let rel = utf_path
-            .strip_prefix(&root_path)
-            .expect("absolute path must contain its root prefix");
+        let rel = utf_path.strip_prefix(&root_path).map_err(|_| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!("failed to compute relative path for '{utf_path}'"),
+            )
+        })?;
         if rel.as_str().is_empty() {
             return Ok(root_dir);
         }
@@ -182,11 +192,94 @@ fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
 mod tests {
     use super::*;
 
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    use tempfile::tempdir;
+
+    struct DirGuard {
+        original: PathBuf,
+    }
+
+    impl DirGuard {
+        fn change_to(path: &Path) -> Self {
+            let original = std::env::current_dir().expect("current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for DirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).expect("restore current dir");
+        }
+    }
+
     #[test]
     fn cache_key_stable() {
         assert_eq!(
             cache_key("http://example.com"),
             cache_key("http://example.com")
+        );
+    }
+
+    #[test]
+    fn hex_string_formats_bytes() {
+        assert_eq!(hex_string(&[0x0f, 0xa0, 0x3c]), "0fa03c");
+    }
+
+    #[test]
+    fn to_value_preserves_utf8() {
+        let value = to_value(b"payload".to_vec());
+        assert_eq!(value.as_str(), Some("payload"));
+    }
+
+    #[test]
+    fn to_value_returns_bytes_for_invalid_utf8() {
+        let value = to_value(vec![0xff, 0xfe, 0xfd]);
+        assert_eq!(value.as_bytes(), Some(&[0xff, 0xfe, 0xfd][..]));
+    }
+
+    #[test]
+    fn open_cache_dir_rejects_empty_path() {
+        let err = open_cache_dir("").expect_err("empty path should fail");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    }
+
+    #[test]
+    fn open_cache_dir_errors_for_file_path() {
+        let temp = tempdir().expect("tempdir");
+        let file_path = temp.path().join("file");
+        fs::write(&file_path, b"data").expect("write file");
+        let utf_path = Utf8PathBuf::from_path_buf(file_path).expect("utf8 path");
+        let err = open_cache_dir(utf_path.as_str()).expect_err("file path should fail");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    }
+
+    #[test]
+    fn open_cache_dir_creates_relative_directory() {
+        let temp = tempdir().expect("tempdir");
+        let _guard = DirGuard::change_to(temp.path());
+        let dir = open_cache_dir("cache").expect("open relative cache dir");
+        dir.write("entry", b"data").expect("write cache entry");
+        drop(dir);
+        let entry = temp.path().join("cache").join("entry");
+        assert!(fs::metadata(entry).is_ok(), "cache entry should exist");
+    }
+
+    #[test]
+    fn open_cache_dir_creates_absolute_directory() {
+        let temp = tempdir().expect("tempdir");
+        let absolute =
+            Utf8PathBuf::from_path_buf(temp.path().join("cache")).expect("utf8 cache path");
+        let dir = open_cache_dir(absolute.as_str()).expect("open absolute cache dir");
+        dir.write("entry", b"data").expect("write cache entry");
+        let entry = absolute.join("entry");
+        assert!(
+            fs::metadata(entry.as_std_path()).is_ok(),
+            "cache entry should exist"
         );
     }
 }

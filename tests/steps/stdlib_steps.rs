@@ -11,10 +11,13 @@ use netsuke::stdlib;
 use std::ffi::OsStr;
 use std::{
     io::{Read, Write},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     thread,
 };
-use test_support::{command_helper::compile_uppercase_helper, env::set_var};
+use test_support::{
+    command_helper::{compile_failure_helper, compile_uppercase_helper},
+    env::set_var,
+};
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
 const LINES_FIXTURE: &str = concat!(
@@ -172,9 +175,25 @@ fn uppercase_stdlib_command_helper(world: &mut CliWorld) {
     world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
 }
 
+#[given("a failing stdlib command helper")]
+fn failing_stdlib_command_helper(world: &mut CliWorld) {
+    let root = ensure_workspace(world);
+    let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let helper = compile_failure_helper(&handle, &root, "cmd_fail");
+    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+}
+
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
     if let Some(handle) = world.http_server.take() {
+        if let Some(url) = world.stdlib_url.as_ref()
+            && let Some(addr) = url
+                .strip_prefix("http://")
+                .or_else(|| url.strip_prefix("https://"))
+            && let Some(host) = addr.split('/').next()
+        {
+            let _ = TcpStream::connect(host);
+        }
         let _ = handle.join();
     }
     let (url, handle) = spawn_http_server(body);

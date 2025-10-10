@@ -88,7 +88,8 @@ fn fetch_function_respects_cache() {
 
 #[rstest]
 fn fetch_function_reports_errors() {
-    let (mut env, _) = stdlib_env_with_state();
+    let (mut env, state) = stdlib_env_with_state();
+    state.reset_impure();
     env.add_template("fetch_fail", "{{ fetch(url) }}")
         .expect("template");
     let tmpl = env.get_template("fetch_fail").expect("get template");
@@ -98,5 +99,9 @@ fn fetch_function_reports_errors() {
     assert!(
         err.to_string().contains("fetch failed"),
         "error should mention failure: {err}",
+    );
+    assert!(
+        state.is_impure(),
+        "failed fetch should still mark template impure",
     );
 }

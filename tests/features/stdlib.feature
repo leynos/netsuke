@@ -79,7 +79,8 @@ Feature: Template stdlib filters
     And the stdlib template is impure
 
   Scenario: shell filter reports command failures
-    When I render the stdlib template "{{ 'data' | shell('false') }}"
+    Given a failing stdlib command helper
+    When I render the stdlib template "{{ 'data' | shell(cmd) }}" using the stdlib command helper
     Then the stdlib error contains "exited"
     And the stdlib template is impure
 

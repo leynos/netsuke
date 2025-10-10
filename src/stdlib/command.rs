@@ -160,7 +160,7 @@ fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
     if value.is_undefined() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "shell filter cannot act on undefined values",
+            "input value is undefined",
         ));
     }
 
@@ -253,7 +253,7 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
     match err {
         CommandFailure::Spawn(spawn) => Error::new(
             ErrorKind::InvalidOperation,
-            format!("failed to spawn shell for '{command}' in template '{template}': {spawn}"),
+            format!("failed to spawn command '{command}' in template '{template}': {spawn}"),
         ),
         CommandFailure::Io(io_err) => {
             let pipe_msg = if io_err.kind() == io::ErrorKind::BrokenPipe {
@@ -263,9 +263,7 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
             };
             Error::new(
                 ErrorKind::InvalidOperation,
-                format!(
-                    "shell command '{command}' in template '{template}' failed: {io_err}{pipe_msg}"
-                ),
+                format!("command '{command}' in template '{template}' failed: {io_err}{pipe_msg}"),
             )
         }
         CommandFailure::BrokenPipe {
@@ -274,7 +272,7 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
             stderr,
         } => {
             let mut msg = format!(
-                "shell command '{command}' in template '{template}' failed: {source} (command closed input early)"
+                "command '{command}' in template '{template}' failed: {source} (command closed input early)"
             );
             if let Some(code) = status {
                 let _ = FmtWrite::write_fmt(&mut msg, format_args!("; exited with status {code}"));
@@ -286,14 +284,10 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
         }
         CommandFailure::Exit { status, stderr } => {
             let mut msg = status.map_or_else(
-                || {
-                    format!(
-                        "shell command '{command}' in template '{template}' terminated by signal"
-                    )
-                },
+                || format!("command '{command}' in template '{template}' terminated by signal"),
                 |code| {
                     format!(
-                        "shell command '{command}' in template '{template}' exited with status {code}"
+                        "command '{command}' in template '{template}' exited with status {code}"
                     )
                 },
             );
@@ -303,7 +297,7 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
         CommandFailure::Timeout(duration) => Error::new(
             ErrorKind::InvalidOperation,
             format!(
-                "shell command '{command}' in template '{template}' timed out after {}s",
+                "command '{command}' in template '{template}' timed out after {}s",
                 duration.as_secs()
             ),
         ),
