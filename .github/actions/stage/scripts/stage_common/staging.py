@@ -31,6 +31,7 @@ from .config import ArtefactConfig, StagingConfig
 from .errors import StageError
 from .fs_utils import safe_destination_path
 from .github_output import write_github_output
+from .glob_utils import glob_root_and_pattern, match_candidate_path
 from .template_utils import render_template, resolve_artefact_source
 
 RESERVED_OUTPUT_KEYS = {
@@ -41,7 +42,16 @@ RESERVED_OUTPUT_KEYS = {
     "checksum_map",
 }
 
-__all__ = ["RESERVED_OUTPUT_KEYS", "StageResult", "stage_artefacts"]
+__all__ = [
+    "RESERVED_OUTPUT_KEYS",
+    "StageResult",
+    "stage_artefacts",
+    "_glob_root_and_pattern",
+    "_match_candidate_path",
+]
+
+_glob_root_and_pattern = glob_root_and_pattern
+_match_candidate_path = match_candidate_path
 
 
 @dataclasses.dataclass(slots=True)
