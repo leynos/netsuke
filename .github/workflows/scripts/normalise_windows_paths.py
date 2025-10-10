@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import PureWindowsPath
+from pathlib import Path, PureWindowsPath
 
 
 def main() -> int:
@@ -69,7 +69,7 @@ def main() -> int:
     binary_path = PureWindowsPath(binary)
     license_path = PureWindowsPath(licence)
 
-    with open(github_output, "a", encoding="utf-8") as handle:
+    with Path(github_output).open("a", encoding="utf-8") as handle:
         handle.write(f"binary_path={binary_path}\n")
         handle.write(f"license_path={license_path}\n")
     return 0
