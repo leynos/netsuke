@@ -101,6 +101,7 @@ def _resolve_asset_name(path: Path, *, dist_dir: Path) -> str:
 
 
 def _iter_candidate_paths(dist_dir: Path, bin_name: str) -> typ.Iterator[Path]:
+    """Yield candidate artefact file paths under ``dist_dir`` for ``bin_name``."""
     for path in sorted(dist_dir.rglob("*")):
         if path.is_file() and _is_candidate(path, bin_name):
             yield path
