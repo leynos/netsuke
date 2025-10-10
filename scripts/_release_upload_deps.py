@@ -139,10 +139,12 @@ def run_cli(
 
     try:
         options = prepare_options(
-            release_tag=args.release_tag,
-            bin_name=args.bin_name,
-            dist_dir=args.dist_dir,
-            dry_run=args.dry_run,
+            inputs={
+                "release_tag": args.release_tag,
+                "bin_name": args.bin_name,
+                "dist_dir": args.dist_dir,
+                "dry_run": args.dry_run,
+            },
             environ=os.environ,
         )
     except ValueError as exc:

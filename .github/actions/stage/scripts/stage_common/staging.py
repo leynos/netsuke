@@ -63,6 +63,20 @@ class _StageOutcome:
     digest: str
 
 
+def _relative_display(path: Path, base: Path) -> str:
+    """Return ``path`` relative to ``base`` when possible.
+
+    Paths outside ``base`` can occur when staging artefacts from sibling
+    workspaces. ``Path.relative_to`` raises ``ValueError`` in that scenario, so
+    fall back to the absolute POSIX form to keep diagnostics informative.
+    """
+
+    try:
+        return path.relative_to(base).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageResult:
     """Copy artefacts into ``config``'s staging directory.
 
@@ -214,10 +228,9 @@ def _stage_single_artefact(
     if destination_path.exists():
         destination_path.unlink()
     shutil.copy2(source_path, destination_path)
-    print(
-        f"Staged '{source_path.relative_to(config.workspace)}' ->"
-        f" '{destination_path.relative_to(config.workspace)}'",
-    )
+    source_display = _relative_display(source_path, config.workspace)
+    destination_display = _relative_display(destination_path, config.workspace)
+    print(f"Staged '{source_display}' -> '{destination_display}'")
 
     digest = write_checksum(destination_path, config.checksum_algorithm)
 

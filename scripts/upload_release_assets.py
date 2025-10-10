@@ -127,13 +127,15 @@ def _register_asset(asset_name: str, path: Path, seen: dict[str, Path]) -> None:
 
 def _prepare_runtime_options(
     *,
-    release_tag: str | None,
-    bin_name: str | None,
-    dist_dir: str | Path | None,
-    dry_run: bool | str | None,
+    inputs: typ.Mapping[str, object],
     environ: typ.Mapping[str, str | None],
 ) -> RuntimeOptions:
     """Normalise CLI inputs from Cyclopts or ``argparse`` into runtime options."""
+
+    release_tag = typ.cast(str | None, inputs.get("release_tag"))
+    bin_name = typ.cast(str | None, inputs.get("bin_name"))
+    dist_dir = typ.cast(str | Path | None, inputs.get("dist_dir"))
+    dry_run = inputs.get("dry_run")
 
     resolved_release = release_tag or environ.get("INPUT_RELEASE_TAG")
     resolved_bin = bin_name or environ.get("INPUT_BIN_NAME")
@@ -338,10 +340,12 @@ def cli(
 ) -> int:
     """Cyclopts-bound CLI entry point."""
     options = _prepare_runtime_options(
-        release_tag=release_tag,
-        bin_name=bin_name,
-        dist_dir=dist_dir,
-        dry_run=dry_run,
+        inputs={
+            "release_tag": release_tag,
+            "bin_name": bin_name,
+            "dist_dir": dist_dir,
+            "dry_run": dry_run,
+        },
         environ=os.environ,
     )
     return main(
