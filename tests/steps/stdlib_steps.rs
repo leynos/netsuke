@@ -1,7 +1,9 @@
-//! Cucumber step implementations for stdlib path and file filters.
+//! Cucumber step implementations for stdlib path, file, network, and command
+//! helpers.
 //!
 //! Sets up a temporary workspace, renders templates with stdlib registered,
-//! and asserts outputs and errors.
+//! and asserts outputs and errors. Provides HTTP fixtures for fetch scenarios
+//! and compiles reusable command helpers for shell and grep coverage.
 use crate::CliWorld;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
