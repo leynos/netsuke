@@ -165,30 +165,66 @@ def _resolve_artefact_source(
 def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
     """Return the newest path matching ``rendered`` (e.g., ``_match_candidate_path(Path('.'), 'dist/*.zip')`` -> ``Path('dist/app')``)."""
     candidate = Path(rendered)
+    if _is_glob_pattern(rendered):
+        return _find_newest_glob_match(workspace, candidate, rendered)
+    return _find_exact_file(workspace, candidate)
+
+
+def _is_glob_pattern(rendered: str) -> bool:
+    """Check whether ``rendered`` contains glob meta-characters (e.g., ``_is_glob_pattern('*.zip')`` -> ``True``)."""
+    return any(ch in rendered for ch in "*?[]")
+
+
+def _find_exact_file(workspace: Path, candidate: Path) -> Path | None:
+    """Return ``candidate`` or ``workspace/candidate`` if it exists (e.g., ``_find_exact_file(Path('.'), Path('dist/app'))`` -> ``Path('dist/app')``)."""
     base = candidate if candidate.is_absolute() else workspace / candidate
-    if any(ch in rendered for ch in "*?[]"):
-        if candidate.is_absolute():
-            root = Path(candidate.anchor or "/")
-            relative_pattern = candidate.relative_to(root).as_posix()
-            candidates = [path for path in root.glob(relative_pattern) if path.is_file()]
-        else:
-            windows_candidate = PureWindowsPath(rendered)
-            if windows_candidate.is_absolute():
-                # Windows requires globbing relative to the drive root. Passing an
-                # absolute pattern string such as ``C:\foo\*.txt`` causes
-                # ``Path.glob`` to reject the drive prefix, so we normalise the
-                # pattern to search from the drive anchor explicitly.
-                anchor = Path(windows_candidate.anchor)
-                relative = PureWindowsPath(*windows_candidate.parts[1:]).as_posix()
-                candidates = [
-                    path for path in anchor.glob(relative) if path.is_file()
-                ]
-            else:
-                candidates = [
-                    path for path in workspace.glob(rendered) if path.is_file()
-                ]
-        return None if not candidates else max(candidates, key=_mtime_key)
     return base if base.is_file() else None
+
+
+def _find_newest_glob_match(
+    workspace: Path, candidate: Path, rendered: str
+) -> Path | None:
+    """Return the newest match for ``rendered`` (e.g., ``_find_newest_glob_match(Path('.'), Path('dist/*.zip'), 'dist/*.zip')`` -> ``Path('dist/app.zip')``)."""
+    matches = _collect_glob_candidates(workspace, candidate, rendered)
+    return None if not matches else max(matches, key=_mtime_key)
+
+
+def _collect_glob_candidates(
+    workspace: Path, candidate: Path, rendered: str
+) -> list[Path]:
+    """Collect file matches for ``rendered`` (e.g., ``_collect_glob_candidates(Path('.'), Path('dist/*.zip'), 'dist/*.zip')`` -> ``[Path('dist/app.zip')]``)."""
+    if candidate.is_absolute():
+        return _glob_absolute_posix_path(candidate)
+
+    windows_candidate = PureWindowsPath(rendered)
+    if windows_candidate.is_absolute():
+        return _glob_absolute_windows_path(rendered)
+
+    return _glob_path(workspace, rendered)
+
+
+def _glob_absolute_posix_path(candidate: Path) -> list[Path]:
+    """Glob files for an absolute POSIX path (e.g., ``_glob_absolute_posix_path(Path('/tmp/*.zip'))`` -> ``[Path('/tmp/app.zip')]``)."""
+    root = Path(candidate.anchor or "/")
+    relative_pattern = candidate.relative_to(root).as_posix()
+    return _glob_path(root, relative_pattern)
+
+
+def _glob_path(base: Path, pattern: str) -> list[Path]:
+    """Return files matched by ``pattern`` from ``base`` (e.g., ``_glob_path(Path('.'), 'dist/*.zip')`` -> ``[Path('dist/app.zip')]``)."""
+    return [path for path in base.glob(pattern) if path.is_file()]
+
+
+def _glob_absolute_windows_path(rendered: str) -> list[Path]:
+    """Glob files for an absolute Windows path (e.g., ``_glob_absolute_windows_path('C:/tmp/*.zip')`` -> ``[Path('C:/tmp/app.zip')]``)."""
+    windows_candidate = PureWindowsPath(rendered)
+    anchor = Path(windows_candidate.anchor)
+    # Windows requires globbing relative to the drive root. Passing an absolute
+    # pattern string such as ``C:\foo\*.txt`` causes ``Path.glob`` to reject the
+    # drive prefix, so we normalise the pattern to search from the drive anchor
+    # explicitly.
+    relative = PureWindowsPath(*windows_candidate.parts[1:]).as_posix()
+    return _glob_path(anchor, relative)
 
 
 def _mtime_key(path: Path) -> tuple[int, str]:
