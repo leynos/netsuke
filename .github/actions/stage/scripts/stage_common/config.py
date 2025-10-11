@@ -1,4 +1,19 @@
-"""Configuration models and loader for the staging helper."""
+"""Configuration models and loader for the staging helper.
+
+This module provides dataclasses and a loader function for parsing TOML staging
+configurations that describe artefact sources, target platforms, and staging
+directory templates.
+
+Usage
+-----
+Load a staging configuration for a specific target::
+
+    from pathlib import Path
+    from stage_common.config import load_config
+
+    config = load_config(Path(".github/release-staging.toml"), "windows-x86_64")
+    print(f"Staging directory: {config.staging_dir()}")
+"""
 
 from __future__ import annotations
 

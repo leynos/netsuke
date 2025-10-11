@@ -1,17 +1,48 @@
-"""Normalise Windows paths from stage action outputs."""
+"""Normalise Windows paths from stage action outputs.
+
+This script reads the ``BINARY_PATH`` and ``LICENSE_PATH`` environment
+variables emitted by the Stage composite action, validates that both are
+present, and writes normalised Windows paths to ``GITHUB_OUTPUT`` for
+downstream workflow steps.
+
+Usage
+-----
+Invoke from a GitHub Actions workflow step::
+
+    - name: Normalise Windows paths
+      shell: bash
+      env:
+        BINARY_PATH: ${{ steps.stage.outputs.binary_path }}
+        LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
+      run: python .github/workflows/scripts/normalise_windows_paths.py
+"""
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import PureWindowsPath
 
 
 def main() -> int:
-    """Read ``ARTEFACT_MAP`` and write normalised paths to ``GITHUB_OUTPUT``."""
+    """Read stage outputs and write normalised paths to ``GITHUB_OUTPUT``.
+
+    Returns
+    -------
+    int
+        Exit code: 0 on success, 1 when environment variables are missing,
+        empty, or when ``GITHUB_OUTPUT`` is unset.
+    """
     try:
-        mapping = json.loads(os.environ["ARTEFACT_MAP"])
+        binary = os.environ["BINARY_PATH"]
+    except KeyError as exc:  # pragma: no cover - exercised in workflow runtime
+        print(
+            f"::error title=Stage output missing::Missing env {exc}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        licence = os.environ["LICENSE_PATH"]
     except KeyError as exc:  # pragma: no cover - exercised in workflow runtime
         print(
             f"::error title=Stage output missing::Missing env {exc}",
@@ -19,25 +50,15 @@ def main() -> int:
         )
         return 1
 
-    try:
-        binary = mapping["binary_path"]
-        licence = mapping["license_path"]
-    except KeyError as exc:  # pragma: no cover - exercised in workflow runtime
-        print(
-            f"::error title=Stage output missing::Missing artefact {exc}",
-            file=sys.stderr,
-        )
-        return 1
-
     if not binary:
         print(
-            "::error title=Stage output missing::binary_path output empty",
+            "::error title=Stage output missing::BINARY_PATH output empty",
             file=sys.stderr,
         )
         return 1
     if not licence:
         print(
-            "::error title=Stage output missing::license_path output empty",
+            "::error title=Stage output missing::LICENSE_PATH output empty",
             file=sys.stderr,
         )
         return 1
