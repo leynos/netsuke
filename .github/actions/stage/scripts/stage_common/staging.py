@@ -169,8 +169,7 @@ def _validate_no_reserved_key_collisions(outputs: dict[str, Path]) -> None:
     StageError: Artefact outputs collide with reserved keys: artifact_dir
     """
 
-    collisions = sorted(outputs.keys() & RESERVED_OUTPUT_KEYS)
-    if collisions:
+    if collisions := sorted(outputs.keys() & RESERVED_OUTPUT_KEYS):
         message = (
             "Artefact outputs collide with reserved keys: "
             f"{collisions}"
