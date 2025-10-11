@@ -41,6 +41,13 @@ def stage_common() -> object:
 
 
 @pytest.fixture
+def staging_module(stage_common: object) -> object:
+    """Expose the staging implementation module for unit-level assertions."""
+
+    return importlib.import_module("stage_common.staging")
+
+
+@pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Create an isolated workspace and set ``GITHUB_WORKSPACE`` accordingly."""
     root = tmp_path / "workspace"
@@ -68,6 +75,95 @@ def test_stage_error_is_runtime_error(stage_common: object) -> None:
     error = stage_common.StageError("boom")
     assert isinstance(error, RuntimeError)
     assert str(error) == "boom"
+
+
+def test_initialize_staging_dir_removes_existing_contents(
+    staging_module: object, tmp_path: Path
+) -> None:
+    """The helper should clear any previous staging directory contents."""
+
+    staging_dir = tmp_path / "stage"
+    stale_file = staging_dir / "stale.txt"
+    stale_file.parent.mkdir(parents=True, exist_ok=True)
+    stale_file.write_text("old", encoding="utf-8")
+
+    staging_module._initialize_staging_dir(staging_dir)
+
+    assert staging_dir.exists(), "Expected staging directory to be recreated"
+    assert list(staging_dir.iterdir()) == [], "Stale artefacts should be removed"
+
+
+def test_prepare_output_data_returns_sorted_metadata(
+    staging_module: object, tmp_path: Path
+) -> None:
+    """Output preparation should normalise ordering and serialise metadata."""
+
+    staging_dir = tmp_path / "dist" / "stage"
+    staged = [
+        staging_dir / "b.bin",
+        staging_dir / "a.txt",
+    ]
+    outputs = {
+        "binary": staging_dir / "b.bin",
+        "manual": staging_dir / "a.txt",
+    }
+    checksums = {"b.bin": "bbb", "a.txt": "aaa"}
+
+    result = staging_module._prepare_output_data(
+        staging_dir, staged, outputs, checksums
+    )
+
+    assert result["artifact_dir"].endswith("stage"), "Expected staging directory output"
+    assert result["dist_dir"].endswith("dist"), "Expected dist directory output"
+    assert result["staged_files"].splitlines() == [
+        "a.txt",
+        "b.bin",
+    ], "Staged files should be sorted"
+    artefact_map = json.loads(result["artefact_map"])
+    assert list(artefact_map) == ["binary", "manual"], "Outputs should be sorted"
+    checksum_map = json.loads(result["checksum_map"])
+    assert list(checksum_map) == ["a.txt", "b.bin"], "Checksums should be sorted"
+
+
+def test_validate_no_reserved_key_collisions_rejects_reserved_keys(
+    staging_module: object
+) -> None:
+    """Reserved workflow keys should trigger a stage error."""
+
+    with pytest.raises(staging_module.StageError) as exc:
+        staging_module._validate_no_reserved_key_collisions(
+            {"artifact_dir": Path("/tmp/stage")}
+        )
+
+    assert "collide with reserved keys" in str(exc.value)
+
+
+def test_write_github_output_formats_values(
+    staging_module: object, tmp_path: Path
+) -> None:
+    """The GitHub output helper should escape strings and stream lists."""
+
+    output_file = tmp_path / "github" / "output.txt"
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text("initial=value\n", encoding="utf-8")
+
+    staging_module.write_github_output(
+        output_file,
+        {
+            "name": "value with%percent\nand newline",
+            "lines": ["one", "two"],
+        },
+    )
+
+    content = output_file.read_text(encoding="utf-8")
+    assert "initial=value" in content, "Existing output lines should remain"
+    assert (
+        "name=value with%25percent%0Aand newline" in content
+    ), "String values should be escaped"
+    assert (
+        "lines<<gh_LINES" in content
+    ), "List values should use the multi-line protocol"
+    assert "one\ntwo" in content, "List payload should be preserved"
 
 
 def test_require_env_path_returns_path(stage_common: object, workspace: Path) -> None:
@@ -381,10 +477,121 @@ def test_stage_artefacts_exports_metadata(
     assert outputs["artifact_dir"] == staging_dir.as_posix(), "artifact_dir output should reference staging directory"
     assert outputs["binary_path"].endswith("netsuke"), "binary_path output should point to the staged executable"
     assert outputs["license_path"].endswith("LICENSE"), "license_path output should point to the staged licence"
+    assert outputs["dist_dir"].endswith("dist"), "dist_dir output should reflect parent directory"
+    staged_listing = outputs["staged_files"].splitlines()
+    assert staged_listing == sorted(staged_listing), "Staged files output should be sorted"
     artefact_map = json.loads(outputs["artefact_map"])
     assert artefact_map["binary_path"].endswith("netsuke"), "artefact map should include the binary path"
+    assert artefact_map["license_path"].endswith("LICENSE"), "artefact map should include the licence path"
     checksum_map = json.loads(outputs["checksum_map"])
     assert set(checksum_map) == {"netsuke", "netsuke.1", "LICENSE"}, "Checksum map missing entries"
+
+
+def test_stage_artefacts_reinitialises_staging_dir(
+    stage_common: object, workspace: Path
+) -> None:
+    """Running the pipeline should recreate the staging directory afresh."""
+
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+
+    staging_dir = workspace / "dist" / "netsuke_linux_amd64"
+    stale = staging_dir / "obsolete.txt"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("stale", encoding="utf-8")
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="target/{target}/release/{bin_name}{bin_ext}",
+                required=True,
+                output="binary_path",
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target=target,
+    )
+
+    github_output = workspace / "outputs.txt"
+    stage_common.stage_artefacts(config, github_output)
+
+    assert not stale.exists(), "Previous staging artefacts should be removed"
+    current_entries = {path.name for path in staging_dir.iterdir()}
+    assert "obsolete.txt" not in current_entries, "Old entries must not survive reinitialisation"
+
+
+def test_stage_artefacts_rejects_reserved_output_key(
+    stage_common: object, workspace: Path
+) -> None:
+    """Configs using reserved workflow outputs should error out."""
+
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="LICENSE",
+                required=True,
+                output="artifact_dir",
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target=target,
+    )
+
+    github_output = workspace / "outputs.txt"
+    github_output.write_text("", encoding="utf-8")
+    with pytest.raises(stage_common.StageError) as exc:
+        stage_common.stage_artefacts(config, github_output)
+
+    assert "collide with reserved keys" in str(exc.value)
+    assert github_output.read_text(encoding="utf-8") == "", "Outputs should not be written when validation fails"
+
+
+def test_stage_artefacts_appends_github_output(
+    stage_common: object, workspace: Path
+) -> None:
+    """Writing outputs should append to the existing ``GITHUB_OUTPUT`` file."""
+
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[
+            stage_common.ArtefactConfig(
+                source="LICENSE",
+                required=True,
+                output="license_path",
+            ),
+        ],
+        platform="linux",
+        arch="amd64",
+        target=target,
+    )
+
+    github_output = workspace / "outputs.txt"
+    github_output.write_text("previous=value\n", encoding="utf-8")
+
+    stage_common.stage_artefacts(config, github_output)
+
+    content = github_output.read_text(encoding="utf-8")
+    assert content.startswith("previous=value"), "Existing lines should remain at the top"
+    assert "artifact_dir=" in content, "New outputs should be appended to the file"
 
 
 def test_stage_artefacts_uses_alternative_glob(

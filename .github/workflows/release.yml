@@ -204,7 +204,8 @@ jobs:
         name: Normalise Windows paths
         shell: bash
         env:
-          ARTEFACT_MAP: ${{ steps.stage.outputs.artefact_map }}
+          BINARY_PATH: ${{ steps.stage.outputs.binary_path }}
+          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
         run: |
           set -euo pipefail
           python .github/workflows/scripts/normalise_windows_paths.py
@@ -283,8 +284,8 @@ jobs:
         with:
           name: ${{ needs.metadata.outputs.bin_name }}
           identifier: com.leynos.${{ needs.metadata.outputs.bin_name }}
-          binary: ${{ fromJSON(steps.stage.outputs.artefact_map).binary_path }}
-          manpage: ${{ fromJSON(steps.stage.outputs.artefact_map).man_path }}
+          binary: ${{ steps.stage.outputs.binary_path }}
+          manpage: ${{ steps.stage.outputs.man_path }}
           license-file: LICENSE
           version: ${{ needs.metadata.outputs.version }}
       - name: Stamp architecture into package name
