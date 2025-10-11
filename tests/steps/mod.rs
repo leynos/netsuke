@@ -10,4 +10,4 @@ mod ir_steps;
 mod manifest_steps;
 mod ninja_steps;
 mod process_steps;
-mod stdlib_steps;
+pub(crate) mod stdlib_steps;

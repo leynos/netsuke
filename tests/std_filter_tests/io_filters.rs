@@ -1,15 +1,13 @@
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, ErrorKind, context};
-use netsuke::stdlib;
+use minijinja::{ErrorKind, context};
 use rstest::rstest;
 
-use super::support::{Workspace, filter_workspace, render};
+use super::support::{Workspace, filter_workspace, render, stdlib_env};
 
 #[rstest]
 fn contents_and_linecount_filters(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file");
     let text = render(&mut env, "contents", "{{ path | contents }}", &file);
     assert_eq!(text, "data");
@@ -38,8 +36,7 @@ fn contents_and_linecount_filters(filter_workspace: Workspace) {
 #[rstest]
 fn contents_filter_unsupported_encoding(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     env.add_template("contents_bad_encoding", "{{ path | contents('latin-1') }}")
         .expect("template");
     let template = env
@@ -58,8 +55,7 @@ fn contents_filter_unsupported_encoding(filter_workspace: Workspace) {
 #[rstest]
 fn size_filter(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file");
     let size = render(&mut env, "size", "{{ path | size }}", &file);
     assert_eq!(size.parse::<u64>().expect("u64"), 4);
@@ -68,8 +64,7 @@ fn size_filter(filter_workspace: Workspace) {
 #[rstest]
 fn size_filter_missing_file(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     env.add_template("size_missing", "{{ path | size }}")
         .expect("template");
     let template = env.get_template("size_missing").expect("get template");

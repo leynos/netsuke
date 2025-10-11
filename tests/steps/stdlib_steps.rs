@@ -1,7 +1,9 @@
-//! Cucumber step implementations for stdlib path and file filters.
+//! Cucumber step implementations for stdlib path, file, network, and command
+//! helpers.
 //!
 //! Sets up a temporary workspace, renders templates with stdlib registered,
-//! and asserts outputs and errors.
+//! and asserts outputs and errors. Provides HTTP fixtures for fetch scenarios
+//! and compiles reusable command helpers for shell and grep coverage.
 use crate::CliWorld;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -9,7 +11,15 @@ use cucumber::{given, then, when};
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib;
 use std::ffi::OsStr;
-use test_support::env::set_var;
+use std::{
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
+    thread,
+};
+use test_support::{
+    command_helper::{compile_failure_helper, compile_uppercase_helper},
+    env::set_var,
+};
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
 const LINES_FIXTURE: &str = concat!(
@@ -89,6 +99,31 @@ impl From<String> for RelativePath {
     }
 }
 
+pub(crate) fn server_host(url: &str) -> Option<&str> {
+    extract_host_from_url(url)
+}
+
+pub(crate) fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind http listener");
+    let addr = listener.local_addr().expect("local addr");
+    let url = format!("http://{addr}");
+    let handle = thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 512];
+            let bytes_read = stream.read(&mut buf).unwrap_or(0);
+            if bytes_read > 0 {
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        }
+    });
+    (url, handle)
+}
+
 fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     if let Some(root) = &world.stdlib_root {
         return root.clone();
@@ -111,7 +146,9 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
 
 fn render_template_with_context(world: &mut CliWorld, template: &TemplateContent, ctx: Value) {
     let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let state = stdlib::register(&mut env);
+    state.reset_impure();
+    world.stdlib_state = Some(state.clone());
     let render = env.render_str(template.as_str(), ctx);
     match render {
         Ok(output) => {
@@ -134,6 +171,40 @@ fn render_template(world: &mut CliWorld, template: &TemplateContent, path: &Temp
 fn stdlib_workspace(world: &mut CliWorld) {
     let root = ensure_workspace(world);
     world.stdlib_root = Some(root);
+}
+
+#[given("an uppercase stdlib command helper")]
+fn uppercase_stdlib_command_helper(world: &mut CliWorld) {
+    let root = ensure_workspace(world);
+    let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let helper = compile_uppercase_helper(&handle, &root, "cmd_upper");
+    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+}
+
+#[given("a failing stdlib command helper")]
+fn failing_stdlib_command_helper(world: &mut CliWorld) {
+    let root = ensure_workspace(world);
+    let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let helper = compile_failure_helper(&handle, &root, "cmd_fail");
+    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+}
+
+/// Extracts the host portion from an HTTP or HTTPS URL.
+///
+/// Returns None if the URL doesn't have a valid http/https prefix or host.
+fn extract_host_from_url(url: &str) -> Option<&str> {
+    let addr = url
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))?;
+    addr.split('/').next()
+}
+
+#[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
+fn http_server_returning(world: &mut CliWorld, body: String) {
+    if let Some(host) = world.stdlib_url.as_deref().and_then(extract_host_from_url) {
+        let _ = TcpStream::connect(host);
+    }
+    world.start_http_server(body);
 }
 
 #[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
@@ -198,6 +269,26 @@ fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) 
 fn render_stdlib_template_without_path(world: &mut CliWorld, template: String) {
     let template_content = TemplateContent::from(template);
     render_template_with_context(world, &template_content, context! {});
+}
+
+#[when(regex = r#"^I render "(.+)" with stdlib url$"#)]
+fn render_stdlib_template_with_url(world: &mut CliWorld, template: String) {
+    let url = world
+        .stdlib_url
+        .clone()
+        .expect("expected HTTP server to be initialised");
+    let template_content = TemplateContent::from(template);
+    render_template_with_context(world, &template_content, context!(url => url));
+}
+
+#[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib command helper$"#)]
+fn render_stdlib_template_with_command(world: &mut CliWorld, template: String) {
+    let command = world
+        .stdlib_command
+        .clone()
+        .expect("expected stdlib command helper to be compiled");
+    let template_content = TemplateContent::from(template);
+    render_template_with_context(world, &template_content, context!(cmd => command));
 }
 
 #[expect(
@@ -280,6 +371,24 @@ fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
         error.contains(&fragment),
         "error `{error}` should contain `{fragment}`",
     );
+}
+
+#[then("the stdlib template is impure")]
+fn assert_stdlib_impure(world: &mut CliWorld) {
+    let state = world
+        .stdlib_state
+        .as_ref()
+        .expect("stdlib state should be initialised");
+    assert!(state.is_impure(), "expected template to be impure");
+}
+
+#[then("the stdlib template is pure")]
+fn assert_stdlib_pure(world: &mut CliWorld) {
+    let state = world
+        .stdlib_state
+        .as_ref()
+        .expect("stdlib state should be initialised");
+    assert!(!state.is_impure(), "expected template to remain pure");
 }
 
 #[then("the stdlib output equals the workspace root")]
