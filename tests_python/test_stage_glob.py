@@ -144,10 +144,24 @@ def test_stage_artefacts_matches_absolute_glob(
     assert result.outputs["absolute_path"] == staged_path
 
 
-def test_match_candidate_path_handles_windows_glob(
-    staging_resolution: object, workspace: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("pattern", "description"),
+    [
+        ("C:/workspace/man/*.1", "glob pattern"),
+        ("C:/workspace/man/netsuke.1", "absolute path"),
+    ],
+)
+def test_match_candidate_path_handles_windows_paths(
+    staging_resolution: object,
+    workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pattern: str,
+    description: str,
 ) -> None:
-    """Absolute Windows-style globs should resolve relative to the drive root."""
+    """Absolute Windows-style paths should resolve correctly.
+
+    Tests both glob patterns and direct file paths.
+    """
 
     monkeypatch.chdir(workspace)
     drive_root = Path("C:\\")
@@ -157,31 +171,9 @@ def test_match_candidate_path_handles_windows_glob(
     candidate = man_dir / "netsuke.1"
     candidate.write_text(".TH WINDOWS", encoding="utf-8")
 
-    matched = staging_resolution._match_candidate_path(
-        windows_workspace, "C:/workspace/man/*.1"
-    )
+    matched = staging_resolution._match_candidate_path(windows_workspace, pattern)
 
-    assert matched == candidate
-
-
-def test_match_candidate_path_handles_windows_absolute_file(
-    staging_resolution: object, workspace: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Absolute Windows-style paths without globs should resolve to files."""
-
-    monkeypatch.chdir(workspace)
-    drive_root = Path("C:\\")
-    windows_workspace = drive_root / "workspace"
-    man_dir = windows_workspace / "man"
-    man_dir.mkdir(parents=True, exist_ok=True)
-    candidate = man_dir / "netsuke.1"
-    candidate.write_text(".TH WINDOWS", encoding="utf-8")
-
-    matched = staging_resolution._match_candidate_path(
-        windows_workspace, "C:/workspace/man/netsuke.1"
-    )
-
-    assert matched == candidate
+    assert matched == candidate, f"Expected Windows {description} to resolve"
 
 
 def test_match_candidate_path_prefers_newest_relative_glob(
