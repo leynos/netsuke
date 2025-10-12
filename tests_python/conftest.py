@@ -25,10 +25,31 @@ def stage_common() -> object:
 
 
 @pytest.fixture
-def staging_module(stage_common: object) -> object:
-    """Expose the staging implementation module for unit-level assertions."""
+def staging_package(stage_common: object) -> object:
+    """Expose the staging package for API boundary assertions."""
 
     return importlib.import_module("stage_common.staging")
+
+
+@pytest.fixture
+def staging_pipeline(stage_common: object) -> object:
+    """Expose the staging pipeline module for unit-level assertions."""
+
+    return importlib.import_module("stage_common.staging.pipeline")
+
+
+@pytest.fixture
+def staging_output(stage_common: object) -> object:
+    """Expose the staging output helpers for direct testing."""
+
+    return importlib.import_module("stage_common.staging.output")
+
+
+@pytest.fixture
+def staging_resolution(stage_common: object) -> object:
+    """Expose the path resolution helpers for direct testing."""
+
+    return importlib.import_module("stage_common.staging.resolution")
 
 
 @pytest.fixture
