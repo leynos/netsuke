@@ -1,9 +1,13 @@
+//! Tests for hash and digest filters in the standard library.
+//!
+//! Validates SHA-256, SHA-512, and optionally SHA-1 and MD5 (under the
+//! `legacy-digests` feature) for both the `hash` and `digest` filters.
+
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, ErrorKind, context};
-use netsuke::stdlib;
+use minijinja::{ErrorKind, context};
 use rstest::rstest;
 
-use super::support::{Workspace, filter_workspace, register_template};
+use super::support::{Workspace, filter_workspace, register_template, stdlib_env};
 
 #[rstest]
 #[case(
@@ -49,8 +53,7 @@ fn hash_and_digest_filters(
     #[case] expected_digest: &str,
 ) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
 
     let (file, algorithm) = alg.strip_suffix("-empty").map_or_else(
@@ -88,8 +91,7 @@ fn hash_and_digest_filters(
 #[rstest]
 fn hash_filter_legacy_algorithms_disabled(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
 
     register_template(&mut env, "hash_sha1", "{{ path | hash('sha1') }}");
     let template = env.get_template("hash_sha1").expect("get template");
@@ -105,8 +107,7 @@ fn hash_filter_legacy_algorithms_disabled(filter_workspace: Workspace) {
 #[rstest]
 fn hash_filter_rejects_unknown_algorithm(filter_workspace: Workspace) {
     let (_temp, root) = filter_workspace;
-    let mut env = Environment::new();
-    stdlib::register(&mut env);
+    let mut env = stdlib_env();
     let file = root.join("file");
 
     register_template(&mut env, "hash_unknown", "{{ path | hash('whirlpool') }}");
