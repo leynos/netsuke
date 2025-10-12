@@ -52,28 +52,22 @@ pub struct CliWorld {
 mod steps;
 use steps::stdlib_steps::spawn_http_server;
 
+#[derive(Copy, Clone)]
+enum HttpShutdownMode {
+    Strict,
+    Lenient,
+}
+
 impl CliWorld {
     pub(crate) fn start_http_server(&mut self, body: String) {
-        if let Some(host) = self.extract_host_from_stdlib_url() {
-            let _ = TcpStream::connect(host);
-        } else if self.http_server.is_some() {
-            panic!(
-                "Cannot extract host from stdlib_url; server teardown will hang. URL: {:?}",
-                self.stdlib_url
-            );
-        }
-        self.shutdown_http_server();
+        self.shutdown_http_server_with(HttpShutdownMode::Strict);
         let (url, handle) = spawn_http_server(body);
         self.stdlib_url = Some(url);
         self.http_server = Some(handle);
     }
 
     pub(crate) fn shutdown_http_server(&mut self) {
-        let Some(handle) = self.http_server.take() else {
-            return;
-        };
-        let _ = handle.join();
-        self.stdlib_url = None;
+        self.shutdown_http_server_with(HttpShutdownMode::Lenient);
     }
 
     /// Returns the host component of the active stdlib HTTP fixture URL.
@@ -92,6 +86,35 @@ impl CliWorld {
 
         restore_many(self.env_vars.drain().collect());
     }
+
+    fn shutdown_http_server_with(&mut self, mode: HttpShutdownMode) {
+        let Some(handle) = self.http_server.take() else {
+            self.stdlib_url = None;
+            return;
+        };
+
+        if let Some(host) = self.extract_host_from_stdlib_url() {
+            let _ = TcpStream::connect(host);
+            let _ = handle.join();
+            self.stdlib_url = None;
+            return;
+        }
+
+        match mode {
+            HttpShutdownMode::Strict => panic!(
+                "Cannot extract host from stdlib_url; server teardown will hang. URL: {:?}",
+                self.stdlib_url
+            ),
+            HttpShutdownMode::Lenient => {
+                eprintln!(
+                    "Warning: Cannot extract host from stdlib_url; skipping server shutdown to avoid hang. URL: {:?}",
+                    self.stdlib_url
+                );
+                drop(handle);
+            }
+        }
+        self.stdlib_url = None;
+    }
 }
 
 #[cfg(unix)]
@@ -109,17 +132,6 @@ fn block_device_exists() -> bool {
 
 impl Drop for CliWorld {
     fn drop(&mut self) {
-        if let Some(host) = self.extract_host_from_stdlib_url() {
-            let _ = TcpStream::connect(host);
-        } else if self.http_server.is_some() {
-            eprintln!(
-                "Warning: Cannot extract host from stdlib_url; skipping server shutdown to avoid hang. URL: {:?}",
-                self.stdlib_url
-            );
-            let _ = self.http_server.take();
-            self.restore_environment();
-            return;
-        }
         self.shutdown_http_server();
         self.restore_environment();
     }

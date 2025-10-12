@@ -12,6 +12,7 @@ use std::{
     time::Duration,
 };
 
+use super::value_from_bytes;
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{
@@ -48,7 +49,7 @@ fn fetch(url: &str, kwargs: &Kwargs, impure: &Arc<AtomicBool>) -> Result<Value, 
         fetch_remote(url, impure)?
     };
 
-    Ok(to_value(bytes))
+    Ok(value_from_bytes(bytes))
 }
 
 fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
@@ -111,7 +112,10 @@ fn open_cache_dir(path: &str) -> Result<Dir, Error> {
             )
         })?;
         if rel.as_str().is_empty() {
-            return Ok(root_dir);
+            return Err(Error::new(
+                ErrorKind::InvalidOperation,
+                "cache_dir must not be the filesystem root",
+            ));
         }
 
         root_dir
@@ -172,13 +176,6 @@ fn hex_string(bytes: &[u8]) -> String {
         let _ = write!(out, "{byte:02x}");
     }
     out
-}
-
-fn to_value(bytes: Vec<u8>) -> Value {
-    match String::from_utf8(bytes) {
-        Ok(text) => Value::from(text),
-        Err(err) => Value::from_bytes(err.into_bytes()),
-    }
 }
 
 fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
@@ -243,13 +240,13 @@ mod tests {
 
     #[test]
     fn to_value_preserves_utf8() {
-        let value = to_value(b"payload".to_vec());
+        let value = value_from_bytes(b"payload".to_vec());
         assert_eq!(value.as_str(), Some("payload"));
     }
 
     #[test]
     fn to_value_returns_bytes_for_invalid_utf8() {
-        let value = to_value(vec![0xff, 0xfe, 0xfd]);
+        let value = value_from_bytes(vec![0xff, 0xfe, 0xfd]);
         assert_eq!(value.as_bytes(), Some(&[0xff, 0xfe, 0xfd][..]));
     }
 

@@ -24,6 +24,7 @@ use std::{
     time::Duration,
 };
 
+use super::value_from_bytes;
 use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
@@ -53,6 +54,17 @@ const SHELL_ARGS: &[&str] = &["-c"];
 // while still surfacing timeouts for misbehaving commands.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Registers shell-oriented filters in the `MiniJinja` environment.
+///
+/// The `shell` filter executes arbitrary shell commands and returns their
+/// stdout. The `grep` filter searches input text using the `grep` utility.
+/// Both filters mark the provided `impure` flag to signal that template
+/// evaluation has side effects and should not be cached.
+///
+/// # Security
+///
+/// Only use these filters with trusted templates. See the module-level
+/// documentation for further details about the associated risks.
 pub(crate) fn register(env: &mut minijinja::Environment<'_>, impure: Arc<AtomicBool>) {
     let shell_flag = Arc::clone(&impure);
     env.add_filter(
@@ -202,19 +214,10 @@ fn run_program(program: &str, args: &[String], input: &[u8]) -> Result<Vec<u8>, 
 
 fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
-    let mut broken_pipe = None;
-    if let Some(mut stdin) = child.stdin.take() {
-        match stdin.write_all(input) {
-            Ok(()) => {}
-            Err(err) => {
-                if err.kind() == io::ErrorKind::BrokenPipe {
-                    broken_pipe = Some(err);
-                } else {
-                    return Err(CommandFailure::Io(err));
-                }
-            }
-        }
-    }
+    let stdin_handle = child.stdin.take().map(|mut stdin| {
+        let buffer = input.to_vec();
+        thread::spawn(move || stdin.write_all(&buffer))
+    });
 
     let mut stdout_reader = spawn_pipe_reader(child.stdout.take());
     let mut stderr_reader = spawn_pipe_reader(child.stderr.take());
@@ -224,6 +227,9 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
         Err(err) => {
             let _ = join_reader(stdout_reader.take());
             let _ = join_reader(stderr_reader.take());
+            if let Some(handle) = stdin_handle {
+                let _ = handle.join();
+            }
             return Err(err);
         }
     };
@@ -231,12 +237,25 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
     let stdout = join_reader(stdout_reader.take()).map_err(CommandFailure::Io)?;
     let stderr = join_reader(stderr_reader.take()).map_err(CommandFailure::Io)?;
 
-    if let Some(err) = broken_pipe {
-        return Err(CommandFailure::BrokenPipe {
-            source: err,
-            status: status.code(),
-            stderr,
-        });
+    if let Some(handle) = stdin_handle {
+        match handle.join() {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                if err.kind() == io::ErrorKind::BrokenPipe {
+                    return Err(CommandFailure::BrokenPipe {
+                        source: err,
+                        status: status.code(),
+                        stderr,
+                    });
+                }
+                return Err(CommandFailure::Io(err));
+            }
+            Err(_) => {
+                return Err(CommandFailure::Io(io::Error::other(
+                    "stdin writer panicked",
+                )));
+            }
+        }
     }
 
     if status.success() {
@@ -246,13 +265,6 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
             status: status.code(),
             stderr,
         })
-    }
-}
-
-fn value_from_bytes(bytes: Vec<u8>) -> Value {
-    match String::from_utf8(bytes) {
-        Ok(text) => Value::from(text),
-        Err(err) => Value::from_bytes(err.into_bytes()),
     }
 }
 

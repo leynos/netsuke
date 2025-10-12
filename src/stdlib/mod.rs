@@ -78,6 +78,13 @@ pub fn register(env: &mut Environment<'_>) -> StdlibState {
     state
 }
 
+pub(crate) fn value_from_bytes(bytes: Vec<u8>) -> Value {
+    match String::from_utf8(bytes) {
+        Ok(text) => Value::from(text),
+        Err(err) => Value::from_bytes(err.into_bytes()),
+    }
+}
+
 fn register_file_tests(env: &mut Environment<'_>) {
     const TESTS: &[FileTest] = &[
         ("dir", is_dir),

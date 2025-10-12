@@ -295,6 +295,12 @@ def _make_artefacts(
         raise StageError(message)
     artefacts: list[ArtefactConfig] = []
     for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            message = (
+                "Artefact entries must be tables of key/value pairs "
+                f"(entry #{index} in {config_path})"
+            )
+            raise StageError(message)
         source = entry.get("source")
         if not isinstance(source, str) or not source:
             message = (

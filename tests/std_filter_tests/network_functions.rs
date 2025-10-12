@@ -1,9 +1,12 @@
+//! Tests for stdlib network helpers covering fetch caching and failure paths.
+
 use std::{
     io::{Read, Write},
     net::TcpListener,
     thread,
 };
 
+use camino::Utf8PathBuf;
 use minijinja::{ErrorKind, context};
 use rstest::rstest;
 use tempfile::tempdir;
@@ -52,15 +55,16 @@ fn fetch_function_downloads_content() {
 
 #[rstest]
 fn fetch_function_respects_cache() {
-    let temp = tempdir().expect("tempdir");
-    let cache_dir = temp.path().join("cache");
-    let cache_str = cache_dir.to_str().expect("utf8 cache dir").to_owned();
+    let temp_dir = tempdir().expect("tempdir");
+    let temp_root = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("utf8 temp path");
+    let cache_dir = temp_root.join("cache");
+    let cache_str = cache_dir.as_str().to_owned();
     let (url, handle) = start_server("cached");
     let (mut env, state) = stdlib_env_with_state();
     state.reset_impure();
     env.add_template(
         "fetch_cache",
-        "{{ fetch(url, cache=True, cache_dir=cache_dir) }}",
+        "{{ fetch(url, cache=true, cache_dir=cache_dir) }}",
     )
     .expect("template");
     let tmpl = env.get_template("fetch_cache").expect("get template");

@@ -13,7 +13,7 @@ use netsuke::stdlib;
 use std::ffi::OsStr;
 use std::{
     io::{Read, Write},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     thread,
 };
 use test_support::{
@@ -201,9 +201,6 @@ fn extract_host_from_url(url: &str) -> Option<&str> {
 
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
 fn http_server_returning(world: &mut CliWorld, body: String) {
-    if let Some(host) = world.stdlib_url.as_deref().and_then(extract_host_from_url) {
-        let _ = TcpStream::connect(host);
-    }
     world.start_http_server(body);
 }
 
