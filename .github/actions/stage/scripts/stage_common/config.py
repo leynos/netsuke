@@ -277,9 +277,7 @@ def _validate_checksum(name: str | None) -> str:
     try:
         hashlib.new(algorithm)
     except (TypeError, ValueError) as exc:
-        message = (
-            f"Checksum algorithm not supported by hashlib.new: {algorithm}"
-        )
+        message = f"Checksum algorithm not supported by hashlib.new: {algorithm}"
         raise StageError(message) from exc
     return algorithm
 
@@ -293,34 +291,42 @@ def _make_artefacts(
     if not entries:
         message = "No artefacts configured to stage."
         raise StageError(message)
-    artefacts: list[ArtefactConfig] = []
-    for index, entry in enumerate(entries, start=1):
-        if not isinstance(entry, dict):
-            message = (
-                "Artefact entries must be tables of key/value pairs "
-                f"(entry #{index} in {config_path})"
-            )
-            raise StageError(message)
-        source = entry.get("source")
-        if not isinstance(source, str) or not source:
-            message = (
-                "Missing required artefact key 'source' "
-                f"in entry #{index} of {config_path}"
-            )
-            raise StageError(message)
-        alternatives = _normalise_alternatives(
-            entry.get("alternatives", []), index, config_path
+
+    return [
+        _parse_artefact_entry(entry, index, config_path)
+        for index, entry in enumerate(entries, start=1)
+    ]
+
+
+def _parse_artefact_entry(
+    entry: object, index: int, config_path: Path
+) -> ArtefactConfig:
+    """Convert an ``artefacts`` table into an ``ArtefactConfig`` instance."""
+    if not isinstance(entry, dict):
+        message = (
+            "Artefact entries must be tables of key/value pairs "
+            f"(entry #{index} in {config_path})"
         )
-        artefacts.append(
-            ArtefactConfig(
-                source=source,
-                required=entry.get("required", True),
-                output=entry.get("output"),
-                destination=entry.get("destination"),
-                alternatives=alternatives,
-            )
+        raise StageError(message)
+
+    source = entry.get("source")
+    if not isinstance(source, str) or not source:
+        message = (
+            f"Missing required artefact key 'source' in entry #{index} of {config_path}"
         )
-    return artefacts
+        raise StageError(message)
+
+    alternatives = _normalise_alternatives(
+        entry.get("alternatives", []), index, config_path
+    )
+
+    return ArtefactConfig(
+        source=source,
+        required=entry.get("required", True),
+        output=entry.get("output"),
+        destination=entry.get("destination"),
+        alternatives=alternatives,
+    )
 
 
 def _require_keys(
@@ -340,34 +346,34 @@ def _require_keys(
     if missing := sorted(key for key in keys if key not in section):
         joined = ", ".join(missing)
         message = (
-            "Missing required key(s) "
-            f"{joined} in [{label}] section of {config_path}"
+            f"Missing required key(s) {joined} in [{label}] section of {config_path}"
         )
         raise StageError(message)
 
 
-def _normalise_alternatives(
-    value: object, index: int, config_path: Path
-) -> list[str]:
+def _normalise_alternatives(value: object, index: int, config_path: Path) -> list[str]:
     """Return ``value`` as a list of alternative glob patterns."""
-
     if value is None:
         return []
     if isinstance(value, str):
         return [value] if value else []
-    if not isinstance(value, list):
-        message = (
-            "Alternatives must be a list of strings "
-            f"(entry #{index} in {config_path})"
-        )
-        raise StageError(message)
+    if isinstance(value, list):
+        return _normalise_alternative_list(value, index, config_path)
+
+    message = (
+        f"Alternatives must be a list of strings (entry #{index} in {config_path})"
+    )
+    raise StageError(message)
+
+
+def _normalise_alternative_list(
+    values: list[object], index: int, config_path: Path
+) -> list[str]:
+    """Filter a list of alternative patterns down to non-empty strings."""
     alternatives: list[str] = []
-    for alternative in value:
+    for alternative in values:
         if not isinstance(alternative, str):
-            message = (
-                "Alternatives must be strings "
-                f"(entry #{index} in {config_path})"
-            )
+            message = f"Alternatives must be strings (entry #{index} in {config_path})"
             raise StageError(message)
         if alternative:
             alternatives.append(alternative)
