@@ -145,10 +145,10 @@ def test_stage_artefacts_matches_absolute_glob(
 
 
 @pytest.mark.parametrize(
-    ("pattern", "description"),
+    "pattern",
     [
-        ("C:/workspace/man/*.1", "glob pattern"),
-        ("C:/workspace/man/netsuke.1", "absolute path"),
+        "C:/workspace/man/*.1",
+        "C:/workspace/man/netsuke.1",
     ],
 )
 def test_match_candidate_path_handles_windows_paths(
@@ -156,7 +156,6 @@ def test_match_candidate_path_handles_windows_paths(
     workspace: Path,
     monkeypatch: pytest.MonkeyPatch,
     pattern: str,
-    description: str,
 ) -> None:
     """Absolute Windows-style paths should resolve correctly.
 
@@ -173,7 +172,7 @@ def test_match_candidate_path_handles_windows_paths(
 
     matched = staging_resolution._match_candidate_path(windows_workspace, pattern)
 
-    assert matched == candidate, f"Expected Windows {description} to resolve"
+    assert matched == candidate, f"Expected Windows path '{pattern}' to resolve"
 
 
 def test_match_candidate_path_prefers_newest_relative_glob(
