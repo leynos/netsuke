@@ -28,6 +28,7 @@ From the composite action::
 
 from __future__ import annotations
 
+import glob
 import dataclasses
 import hashlib
 import json
@@ -69,6 +70,15 @@ class StageResult:
     staged_artefacts: list[Path]
     outputs: dict[str, Path]
     checksums: dict[str, str]
+
+
+@dataclasses.dataclass(slots=True, frozen=True)
+class StagedArtefact:
+    """Describe a staged artefact yielded by :func:`_iter_staged_artefacts`."""
+
+    path: Path
+    artefact: "ArtefactConfig"
+    checksum: str
 
 
 def _initialize_staging_dir(staging_dir: Path) -> None:
@@ -208,14 +218,12 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
     outputs: dict[str, Path] = {}
     checksums: dict[str, str] = {}
 
-    for destination_path, artefact, digest in _iter_staged_artefacts(
-        config, staging_dir, context
-    ):
-        staged_paths.append(destination_path)
-        checksums[destination_path.name] = digest
+    for staged in _iter_staged_artefacts(config, staging_dir, context):
+        staged_paths.append(staged.path)
+        checksums[staged.path.name] = staged.checksum
 
-        if artefact.output:
-            outputs[artefact.output] = destination_path
+        if staged.artefact.output:
+            outputs[staged.artefact.output] = staged.path
 
     if not staged_paths:
         message = "No artefacts were staged."
@@ -262,8 +270,8 @@ def _ensure_source_available(
 
 def _iter_staged_artefacts(
     config: StagingConfig, staging_dir: Path, context: dict[str, typ.Any]
-) -> typ.Iterator[tuple[Path, ArtefactConfig, str]]:
-    """Yield staged artefacts with their metadata.
+) -> typ.Iterator[StagedArtefact]:
+    """Yield :class:`StagedArtefact` entries describing staged artefacts.
 
     Examples
     --------
@@ -301,7 +309,7 @@ def _iter_staged_artefacts(
             config, staging_dir, artefact, context, typ.cast(Path, source_path)
         )
         digest = _write_checksum(destination_path, config.checksum_algorithm)
-        yield destination_path, artefact, digest
+        yield StagedArtefact(destination_path, artefact, digest)
 
 
 def _stage_single_artefact(
@@ -384,11 +392,11 @@ def _match_glob_candidate(
     """
 
     if candidate.is_absolute():
-        matches = _iter_posix_absolute_matches(candidate)
+        matches = _iter_absolute_matches(candidate)
     else:
         windows_candidate = PureWindowsPath(rendered)
         if windows_candidate.is_absolute():
-            matches = _iter_windows_absolute_matches(windows_candidate)
+            matches = _iter_absolute_matches(windows_candidate)
         else:
             matches = workspace.glob(rendered)
     return _newest_file(matches)
@@ -397,35 +405,22 @@ def _match_glob_candidate(
 def _contains_glob(pattern: str) -> bool:
     """Return ``True`` when ``pattern`` contains glob wildcards."""
 
-    return any(char in pattern for char in "*?[]")
+    return glob.has_magic(pattern)
 
 
-def _iter_posix_absolute_matches(candidate: Path) -> typ.Iterable[Path]:
-    """Yield files for a POSIX absolute glob ``candidate``."""
+def _iter_absolute_matches(candidate: "PurePath") -> typ.Iterable[Path]:
+    """Yield files for an absolute glob ``candidate`` on any platform."""
 
-    root_text, _pattern = _glob_root_and_pattern(candidate)
+    root_text, pattern = _glob_root_and_pattern(candidate)
     root = Path(root_text)
-    relative_pattern = candidate.relative_to(root).as_posix()
-    return root.glob(relative_pattern)
-
-
-def _iter_windows_absolute_matches(candidate: PureWindowsPath) -> typ.Iterable[Path]:
-    """Yield files for an absolute Windows glob ``candidate``."""
-
-    # Windows requires globbing relative to the drive root. Passing an absolute
-    # pattern string such as ``C:\foo\*.txt`` causes ``Path.glob`` to reject the
-    # drive prefix, so we normalise the pattern to search from the drive anchor
-    # explicitly.
-    anchor = Path(candidate.anchor)
-    relative = PureWindowsPath(*candidate.parts[1:]).as_posix()
-    return anchor.glob(relative)
+    return root.glob(pattern)
 
 
 def _newest_file(candidates: typ.Iterable[Path]) -> Path | None:
     """Return the newest file from ``candidates`` (if any)."""
 
     files = [path for path in candidates if path.is_file()]
-    return None if not files else max(files, key=_mtime_key)
+    return max(files, key=_mtime_key) if files else None
 
 
 def _mtime_key(path: Path) -> tuple[int, str]:
