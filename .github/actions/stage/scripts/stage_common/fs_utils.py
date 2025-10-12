@@ -10,7 +10,25 @@ __all__ = ["safe_destination_path"]
 
 
 def safe_destination_path(staging_dir: Path, destination: str) -> Path:
-    """Return ``destination`` resolved beneath ``staging_dir``."""
+    """Return ``destination`` resolved beneath ``staging_dir``.
+
+    Parameters
+    ----------
+    staging_dir : Path
+        Root directory under which artefacts must reside.
+    destination : str
+        Relative artefact target path supplied by configuration.
+
+    Returns
+    -------
+    Path
+        Absolute destination located below ``staging_dir``.
+
+    Raises
+    ------
+    StageError
+        Raised when ``destination`` resolves outside ``staging_dir``.
+    """
 
     target = (staging_dir / destination).resolve()
     staging_root = staging_dir.resolve()

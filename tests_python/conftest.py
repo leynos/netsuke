@@ -14,7 +14,18 @@ MODULE_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 
 @pytest.fixture(scope="session")
 def stage_common() -> object:
-    """Load the staging helper package once for reuse across tests."""
+    """Load the staging helper package once for reuse across tests.
+
+    Returns
+    -------
+    types.ModuleType
+        Imported ``stage_common`` module.
+
+    Raises
+    ------
+    ImportError
+        Raised when Python cannot import the staging helper.
+    """
 
     sys_path = str(MODULE_DIR)
     sys.path.insert(0, sys_path)
@@ -26,7 +37,20 @@ def stage_common() -> object:
 
 @pytest.fixture
 def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Create an isolated workspace and set ``GITHUB_WORKSPACE`` accordingly."""
+    """Create an isolated workspace and set ``GITHUB_WORKSPACE`` accordingly.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Temporary base directory provided by pytest.
+    monkeypatch : pytest.MonkeyPatch
+        Fixture used to mutate environment variables.
+
+    Returns
+    -------
+    Path
+        Absolute path to the workspace directory.
+    """
 
     root = tmp_path / "workspace"
     root.mkdir()

@@ -23,6 +23,15 @@ use sha2::{Digest, Sha256};
 
 const DEFAULT_CACHE_DIR: &str = ".netsuke/fetch";
 
+/// Register network functions into the template environment.
+///
+/// Currently registers the `fetch` function for retrieving remote resources
+/// with optional on-disk caching.
+///
+/// # Parameters
+///
+/// * `env` - `MiniJinja` environment to register functions into.
+/// * `impure` - Shared flag for tracking template impurity.
 pub(crate) fn register_functions(env: &mut Environment<'_>, impure: Arc<AtomicBool>) {
     env.add_function("fetch", move |url: String, kwargs: Kwargs| {
         fetch(&url, &kwargs, &impure)

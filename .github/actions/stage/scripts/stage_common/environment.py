@@ -23,8 +23,8 @@ def require_env_path(name: str) -> Path:
     StageError
         Raised when the environment variable is unset or empty.
     """
-    value = os.environ.get(name)
+    value = os.environ.get(name, "").strip()
     if not value:
-        message = f"Environment variable '{name}' is not set."
+        message = f"Environment variable '{name}' is not set or empty."
         raise StageError(message)
     return Path(value)

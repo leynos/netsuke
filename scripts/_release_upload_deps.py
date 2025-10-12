@@ -30,7 +30,14 @@ class CycloptsSupport:
 
 
 def load_cyclopts() -> CycloptsSupport:
-    """Return cyclopts helpers or informative stubs when unavailable."""
+    """Load cyclopts support objects.
+
+    Returns
+    -------
+    CycloptsSupport
+        Packed availability state alongside the ``cyclopts.App`` factory and
+        ``cyclopts.Parameter`` type or their stub fallbacks.
+    """
 
     try:
         from cyclopts import App, Parameter
@@ -76,7 +83,14 @@ class PlumbumSupport:
 
 
 def load_plumbum() -> PlumbumSupport:
-    """Return plumbum helpers or descriptive stubs when unavailable."""
+    """Load plumbum support helpers.
+
+    Returns
+    -------
+    PlumbumSupport
+        Bound helpers exposing ``plumbum.local`` along with the relevant command
+        exception types or descriptive stubs when the dependency is absent.
+    """
 
     try:
         from plumbum import local

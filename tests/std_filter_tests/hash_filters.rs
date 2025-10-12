@@ -1,3 +1,8 @@
+//! Tests for hash and digest filters in the standard library.
+//!
+//! Validates SHA-256, SHA-512, and optionally SHA-1 and MD5 (under the
+//! `legacy-digests` feature) for both the `hash` and `digest` filters.
+
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{ErrorKind, context};
 use rstest::rstest;

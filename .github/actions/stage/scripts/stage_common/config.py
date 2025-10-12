@@ -276,7 +276,7 @@ def _validate_checksum(name: str | None) -> str:
         raise StageError(message)
     try:
         hashlib.new(algorithm)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         message = (
             f"Checksum algorithm not supported by hashlib.new: {algorithm}"
         )

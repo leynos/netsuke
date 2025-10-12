@@ -56,7 +56,8 @@ fn fetch_function_downloads_content() {
 #[rstest]
 fn fetch_function_respects_cache() {
     let temp_dir = tempdir().expect("tempdir");
-    let temp_root = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("utf8 temp path");
+    let temp_root =
+        Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("utf8 temp path");
     let cache_dir = temp_root.join("cache");
     let cache_str = cache_dir.as_str().to_owned();
     let (url, handle) = start_server("cached");

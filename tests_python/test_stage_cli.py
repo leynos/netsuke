@@ -41,7 +41,7 @@ def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
     module = importlib.import_module("stage")
     monkeypatch.setitem(sys.modules, "stage", module)
-    yield module
+    return module
 
 
 def test_stage_cli_stages_and_reports(
