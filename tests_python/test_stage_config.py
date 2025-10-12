@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@dataclasses.dataclass(frozen=True)
+class ValidationTestCase:
+    """Describe a configuration validation scenario for ``load_config``."""
+
+    test_id: str
+    toml_content: str
+    target_key: str
+    expected_substrings: list[str]
 
 
 def test_public_interface(stage_common: object) -> None:
@@ -153,11 +164,12 @@ target = "x86_64-unknown-linux-gnu"
 
 
 @pytest.mark.parametrize(
-    ("test_id", "toml_content", "target_key", "expected_substrings"),
+    "test_case",
     [
         pytest.param(
-            "unknown_checksum",
-            """\
+            ValidationTestCase(
+                test_id="unknown_checksum",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "unknown"
@@ -168,13 +180,15 @@ platform = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-            "test",
-            ["Unsupported checksum algorithm"],
+                target_key="test",
+                expected_substrings=["Unsupported checksum algorithm"],
+            ),
             id="unknown_checksum",
         ),
         pytest.param(
-            "missing_common_bin_name",
-            """\
+            ValidationTestCase(
+                test_id="missing_common_bin_name",
+                toml_content="""\
 [common]
 checksum_algorithm = "sha256"
 artefacts = [ { source = "LICENSE" } ]
@@ -184,13 +198,15 @@ arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 platform = "linux"
 """,
-            "test",
-            ["bin_name", "[common]"],
+                target_key="test",
+                expected_substrings=["bin_name", "[common]"],
+            ),
             id="missing_common_bin_name",
         ),
         pytest.param(
-            "missing_target_platform",
-            """\
+            ValidationTestCase(
+                test_id="missing_target_platform",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "sha256"
@@ -200,13 +216,15 @@ artefacts = [ { source = "LICENSE" } ]
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-            "test",
-            ["platform", "[targets.test]"],
+                target_key="test",
+                expected_substrings=["platform", "[targets.test]"],
+            ),
             id="missing_target_platform",
         ),
         pytest.param(
-            "missing_artefact_source",
-            """\
+            ValidationTestCase(
+                test_id="missing_artefact_source",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "sha256"
@@ -217,13 +235,15 @@ platform = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-            "test",
-            ["source", "entry #1"],
+                target_key="test",
+                expected_substrings=["source", "entry #1"],
+            ),
             id="missing_artefact_source",
         ),
         pytest.param(
-            "missing_target_section",
-            """\
+            ValidationTestCase(
+                test_id="missing_target_section",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "sha256"
@@ -234,27 +254,27 @@ platform = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-            "test",
-            ["Missing configuration key"],
+                target_key="test",
+                expected_substrings=["Missing configuration key"],
+            ),
             id="missing_target_section",
         ),
     ],
 )
 def test_load_config_validation_errors(
-    test_id: str,
-    toml_content: str,
-    target_key: str,
-    expected_substrings: list[str],
+    test_case: ValidationTestCase,
     stage_common: object,
     workspace: Path,
 ) -> None:
     """``load_config`` should surface friendly validation errors."""
     config_file = workspace / "release-staging.toml"
-    config_file.write_text(toml_content, encoding="utf-8")
+    config_file.write_text(test_case.toml_content, encoding="utf-8")
 
     with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, target_key)
+        stage_common.load_config(config_file, test_case.target_key)
 
     message = str(exc.value)
-    for substring in expected_substrings:
-        assert substring in message, f"{test_id} missing substring: {substring!r}"
+    for substring in test_case.expected_substrings:
+        assert substring in message, (
+            f"{test_case.test_id} missing substring: {substring!r}"
+        )

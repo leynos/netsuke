@@ -442,8 +442,12 @@ def test_stage_single_artefact_overwrites_existing_file(
     stale.write_text("old", encoding="utf-8")
 
     context = config.as_template_context()
+    env = staging_module._StagingEnvironment(
+        staging_dir=staging_dir,
+        context=context,
+    )
     staged_path = staging_module._stage_single_artefact(
-        config, staging_dir, artefact, context, source
+        config, env, artefact, source
     )
 
     assert staged_path == stale
