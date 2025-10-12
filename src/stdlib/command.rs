@@ -214,7 +214,7 @@ fn run_program(program: &str, args: &[String], input: &[u8]) -> Result<Vec<u8>, 
 
 fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
-    let stdin_handle = child.stdin.take().map(|mut stdin| {
+    let mut stdin_handle = child.stdin.take().map(|mut stdin| {
         let buffer = input.to_vec();
         thread::spawn(move || stdin.write_all(&buffer))
     });
@@ -225,11 +225,7 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
     let status = match wait_for_exit(&mut child, COMMAND_TIMEOUT) {
         Ok(status) => status,
         Err(err) => {
-            let _ = join_reader(stdout_reader.take());
-            let _ = join_reader(stderr_reader.take());
-            if let Some(handle) = stdin_handle {
-                let _ = handle.join();
-            }
+            cleanup_readers(&mut stdout_reader, &mut stderr_reader, &mut stdin_handle);
             return Err(err);
         }
     };
@@ -237,26 +233,7 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
     let stdout = join_reader(stdout_reader.take()).map_err(CommandFailure::Io)?;
     let stderr = join_reader(stderr_reader.take()).map_err(CommandFailure::Io)?;
 
-    if let Some(handle) = stdin_handle {
-        match handle.join() {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => {
-                if err.kind() == io::ErrorKind::BrokenPipe {
-                    return Err(CommandFailure::BrokenPipe {
-                        source: err,
-                        status: status.code(),
-                        stderr,
-                    });
-                }
-                return Err(CommandFailure::Io(err));
-            }
-            Err(_) => {
-                return Err(CommandFailure::Io(io::Error::other(
-                    "stdin writer panicked",
-                )));
-            }
-        }
-    }
+    handle_stdin_result(stdin_handle.take(), status.code(), &stderr)?;
 
     if status.success() {
         Ok(stdout)
@@ -265,6 +242,45 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
             status: status.code(),
             stderr,
         })
+    }
+}
+
+fn cleanup_readers(
+    stdout_reader: &mut Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
+    stderr_reader: &mut Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
+    stdin_handle: &mut Option<thread::JoinHandle<io::Result<()>>>,
+) {
+    let _ = join_reader(stdout_reader.take());
+    let _ = join_reader(stderr_reader.take());
+    if let Some(handle) = stdin_handle.take() {
+        let _ = handle.join();
+    }
+}
+
+fn handle_stdin_result(
+    stdin_handle: Option<thread::JoinHandle<io::Result<()>>>,
+    status: Option<i32>,
+    stderr: &[u8],
+) -> Result<(), CommandFailure> {
+    let Some(handle) = stdin_handle else {
+        return Ok(());
+    };
+
+    match handle.join() {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(err)) => {
+            if err.kind() == io::ErrorKind::BrokenPipe {
+                return Err(CommandFailure::BrokenPipe {
+                    source: err,
+                    status,
+                    stderr: stderr.to_vec(),
+                });
+            }
+            Err(CommandFailure::Io(err))
+        }
+        Err(_) => Err(CommandFailure::Io(io::Error::other(
+            "stdin writer panicked",
+        ))),
     }
 }
 
