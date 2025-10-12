@@ -156,7 +156,7 @@ def test_glob_root_and_pattern_handles_posix_absolute(staging_module: object) ->
 def test_glob_root_and_pattern_rejects_relative_paths(staging_module: object) -> None:
     """Relative globs should be rejected to avoid ambiguous anchors."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"Expected absolute path"):
         staging_module._glob_root_and_pattern(PurePosixPath("dist/*.zip"))
 
 
@@ -193,3 +193,96 @@ def test_stage_artefacts_matches_absolute_glob(
     staged_path = result.staged_artefacts[0]
     assert staged_path.read_text(encoding="utf-8") == "payload"
     assert result.outputs["absolute_path"] == staged_path
+
+
+def test_match_glob_candidate_handles_absolute_posix(
+    staging_module: object, tmp_path: Path
+) -> None:
+    """Absolute POSIX-style globs should resolve within the workspace."""
+
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    candidate = dist_dir / "netsuke.txt"
+    candidate.write_text("payload", encoding="utf-8")
+
+    pattern = Path(f"{dist_dir.as_posix()}/*.txt")
+    matched = staging_module._match_glob_candidate(
+        tmp_path, pattern, pattern.as_posix()
+    )
+
+    assert matched == candidate
+
+
+def test_match_glob_candidate_handles_absolute_windows(
+    staging_module: object, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Absolute Windows globs should resolve relative to the drive anchor."""
+
+    monkeypatch.chdir(tmp_path)
+    drive_root = Path("C:\\")
+    workspace = drive_root / "workspace"
+    target_dir = workspace / "dist"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    candidate = target_dir / "netsuke.zip"
+    candidate.write_text("payload", encoding="utf-8")
+
+    pattern = "C:/workspace/dist/*.zip"
+    matched = staging_module._match_glob_candidate(
+        workspace, Path(pattern), pattern
+    )
+
+    assert matched == candidate
+
+
+def test_contains_glob_detects_magic(staging_module: object) -> None:
+    """Wildcard detection should align with Python's glob semantics."""
+
+    assert staging_module._contains_glob("*.txt")
+    assert staging_module._contains_glob("archive.[0-9]")
+    assert not staging_module._contains_glob("plain.txt")
+
+
+def test_iter_absolute_matches_handles_platforms(
+    staging_module: object, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Absolute glob iteration should work for POSIX and simulated Windows paths."""
+
+    # POSIX root
+    posix_root = tmp_path / "root"
+    target = posix_root / "dist"
+    target.mkdir(parents=True)
+    posix_file = target / "netsuke.tar.gz"
+    posix_file.write_text("payload", encoding="utf-8")
+    posix_pattern = PurePosixPath(f"{target.as_posix()}/*.tar.gz")
+    posix_matches = list(staging_module._iter_absolute_matches(posix_pattern))
+    assert posix_file in posix_matches
+
+    # Windows-style root
+    monkeypatch.chdir(tmp_path)
+    drive_root = Path("C:\\")
+    drive_target = drive_root / "build"
+    drive_target.mkdir(parents=True, exist_ok=True)
+    windows_file = drive_target / "netsuke.exe"
+    windows_file.write_text("payload", encoding="utf-8")
+    windows_pattern = PureWindowsPath("C:/build/*.exe")
+    windows_matches = list(
+        staging_module._iter_absolute_matches(windows_pattern)
+    )
+    assert windows_file in windows_matches
+
+
+def test_newest_file_returns_latest_candidate(
+    staging_module: object, tmp_path: Path
+) -> None:
+    """The newest file helper should select the most recently modified path."""
+
+    files = []
+    for idx in range(3):
+        candidate = tmp_path / f"file{idx}.txt"
+        candidate.write_text(str(idx), encoding="utf-8")
+        os.utime(candidate, (100 + idx, 100 + idx))
+        files.append(candidate)
+
+    newest = staging_module._newest_file(files)
+    assert newest == files[-1]
+    assert staging_module._newest_file([]) is None

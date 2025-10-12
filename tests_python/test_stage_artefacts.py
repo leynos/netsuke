@@ -337,3 +337,192 @@ def test_stage_artefacts_fails_with_attempt_context(
     assert (
         "missing-x86_64-unknown-linux-gnu" in message
     ), "Rendered path missing from error"
+
+
+def test_iter_staged_artefacts_yields_metadata(
+    stage_common: object, staging_module: object, workspace: Path
+) -> None:
+    """The iterator should yield dataclass entries with staged file metadata."""
+
+    source = workspace / "LICENSE"
+    source.write_text("payload", encoding="utf-8")
+    artefact = stage_common.ArtefactConfig(source="LICENSE", required=True)
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[artefact],
+        platform="linux",
+        arch="amd64",
+        target="test",
+    )
+
+    staging_dir = config.staging_dir()
+    context = config.as_template_context()
+    staging_module._initialize_staging_dir(staging_dir)
+
+    staged = list(
+        staging_module._iter_staged_artefacts(config, staging_dir, context)
+    )
+
+    assert len(staged) == 1, "Expected the iterator to yield the staged artefact"
+    entry = staged[0]
+    assert isinstance(entry, staging_module.StagedArtefact)
+    assert entry.path.exists(), "Staged artefact path should exist on disk"
+    assert entry.checksum, "Iterator should include a checksum digest"
+    checksum_file = entry.path.with_name(f"{entry.path.name}.sha256")
+    assert checksum_file.exists(), "Checksum sidecar should be written"
+
+
+def test_stage_artefacts_aligns_with_iterator(
+    stage_common: object, staging_module: object, workspace: Path
+) -> None:
+    """Behaviourally verify the iterator matches the public staging result."""
+
+    (workspace / "first.txt").write_text("first", encoding="utf-8")
+    (workspace / "second.txt").write_text("second", encoding="utf-8")
+    artefacts = [
+        stage_common.ArtefactConfig(source="first.txt", required=True),
+        stage_common.ArtefactConfig(source="second.txt", required=True),
+    ]
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=artefacts,
+        platform="linux",
+        arch="amd64",
+        target="behavioural",
+    )
+
+    staging_dir = config.staging_dir()
+    context = config.as_template_context()
+    staging_module._initialize_staging_dir(staging_dir)
+    iter_names = [
+        entry.path.name
+        for entry in staging_module._iter_staged_artefacts(
+            config, staging_dir, context
+        )
+    ]
+
+    github_output = workspace / "outputs.txt"
+    result = stage_common.stage_artefacts(config, github_output)
+
+    assert iter_names == [path.name for path in result.staged_artefacts]
+
+
+def test_stage_single_artefact_overwrites_existing_file(
+    stage_common: object, staging_module: object, workspace: Path
+) -> None:
+    """The helper should replace existing staged files atomically."""
+
+    source = workspace / "binary"
+    source.write_text("new", encoding="utf-8")
+    artefact = stage_common.ArtefactConfig(
+        source="binary",
+        destination="bin/{source_name}",
+        required=True,
+    )
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[artefact],
+        platform="linux",
+        arch="amd64",
+        target="unit",
+    )
+
+    staging_dir = config.staging_dir()
+    stale = staging_dir / "bin" / "binary"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text("old", encoding="utf-8")
+
+    context = config.as_template_context()
+    env = staging_module._StagingEnvironment(
+        staging_dir=staging_dir,
+        context=context,
+    )
+    staged_path = staging_module._stage_single_artefact(
+        config, env, artefact, source
+    )
+
+    assert staged_path == stale
+    assert staged_path.read_text(encoding="utf-8") == "new"
+
+
+def test_stage_artefacts_honours_destination_templates(
+    stage_common: object, workspace: Path
+) -> None:
+    """Destination templates should be rendered beneath the staging directory."""
+
+    source = workspace / "payload.bin"
+    source.write_text("payload", encoding="utf-8")
+    artefact = stage_common.ArtefactConfig(
+        source="payload.bin",
+        destination="artifacts/{bin_name}/{source_name}",
+        required=True,
+        output="payload_path",
+    )
+    config = stage_common.StagingConfig(
+        workspace=workspace,
+        bin_name="netsuke",
+        dist_dir="dist",
+        checksum_algorithm="sha256",
+        artefacts=[artefact],
+        platform="linux",
+        arch="amd64",
+        target="behavioural",
+    )
+
+    github_output = workspace / "github.txt"
+    result = stage_common.stage_artefacts(config, github_output)
+
+    staged_path = result.outputs["payload_path"]
+    relative = staged_path.relative_to(result.staging_dir)
+    assert relative.as_posix() == "artifacts/netsuke/payload.bin"
+
+
+def test_ensure_source_available_required_error(
+    stage_common: object, staging_module: object, workspace: Path
+) -> None:
+    """Missing required artefacts should raise a StageError with context."""
+
+    artefact = stage_common.ArtefactConfig(source="missing.bin", required=True)
+    attempts = [
+        staging_module._RenderAttempt("missing.bin", "missing.bin"),
+    ]
+
+    with pytest.raises(stage_common.StageError) as exc:
+        staging_module._ensure_source_available(
+            None, artefact, attempts, workspace
+        )
+
+    message = str(exc.value)
+    assert "Required artefact not found" in message
+    assert "missing.bin" in message
+
+
+def test_ensure_source_available_optional_warning(
+    stage_common: object,
+    staging_module: object,
+    workspace: Path,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Optional artefacts should be skipped with a warning instead of failing."""
+
+    artefact = stage_common.ArtefactConfig(source="missing.txt", required=False)
+
+    should_stage = staging_module._ensure_source_available(
+        None,
+        artefact,
+        [staging_module._RenderAttempt("missing.txt", "missing.txt")],
+        workspace,
+    )
+
+    captured = capfd.readouterr()
+    assert not should_stage
+    assert "Optional artefact missing" in captured.err
