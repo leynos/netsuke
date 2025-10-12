@@ -270,6 +270,9 @@ fn handle_stdin_result(
         Ok(Ok(())) => Ok(()),
         Ok(Err(err)) => {
             if err.kind() == io::ErrorKind::BrokenPipe {
+                if status == Some(0) {
+                    return Ok(());
+                }
                 return Err(CommandFailure::BrokenPipe {
                     source: err,
                     status,

@@ -144,6 +144,28 @@ fn shell_filter_times_out_long_commands() {
     );
 }
 
+#[cfg(unix)]
+#[rstest]
+fn shell_filter_tolerates_commands_that_close_stdin() {
+    let (mut env, state) = stdlib_env_with_state();
+    state.reset_impure();
+    env.add_template(
+        "shell_head",
+        "{{ 'alpha\\nbeta\\n' | shell('head -n1') | trim }}",
+    )
+    .expect("template");
+    let template = env.get_template("shell_head").expect("get template");
+
+    let rendered = template
+        .render(context! {})
+        .expect("head should exit successfully");
+    assert_eq!(rendered, "alpha");
+    assert!(
+        state.is_impure(),
+        "head command should mark template impure"
+    );
+}
+
 #[rstest]
 fn grep_filter_filters_lines() {
     let (mut env, state) = stdlib_env_with_state();
