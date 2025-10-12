@@ -28,6 +28,7 @@ From the composite action::
 
 from __future__ import annotations
 
+import glob
 import dataclasses
 import hashlib
 import json
@@ -69,6 +70,23 @@ class StageResult:
     staged_artefacts: list[Path]
     outputs: dict[str, Path]
     checksums: dict[str, str]
+
+
+@dataclasses.dataclass(slots=True)
+class _StagingEnvironment:
+    """Encapsulates the staging directory and template context."""
+
+    staging_dir: Path
+    context: dict[str, typ.Any]
+
+
+@dataclasses.dataclass(slots=True, frozen=True)
+class StagedArtefact:
+    """Describe a staged artefact yielded by :func:`_iter_staged_artefacts`."""
+
+    path: Path
+    artefact: "ArtefactConfig"
+    checksum: str
 
 
 def _initialize_staging_dir(staging_dir: Path) -> None:
@@ -208,54 +226,12 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
     outputs: dict[str, Path] = {}
     checksums: dict[str, str] = {}
 
-    for artefact in config.artefacts:
-        source_path, attempts = _resolve_artefact_source(
-            config.workspace, artefact, context
-        )
-        if source_path is None:
-            if artefact.required:
-                attempt_lines = ", ".join(
-                    f"{attempt.template!r} -> {attempt.rendered!r}"
-                    for attempt in attempts
-                )
-                message = (
-                    "Required artefact not found. "
-                    f"Workspace={config.workspace.as_posix()} "
-                    f"Attempts=[{attempt_lines}]"
-                )
-                raise StageError(message)
-            warning = (
-                "::warning title=Artefact Skipped::Optional artefact missing: "
-                f"{artefact.source}"
-            )
-            print(warning, file=sys.stderr)
-            continue
+    for staged in _iter_staged_artefacts(config, staging_dir, context):
+        staged_paths.append(staged.path)
+        checksums[staged.path.name] = staged.checksum
 
-        artefact_context = context | {
-            "source_path": source_path.as_posix(),
-            "source_name": source_path.name,
-        }
-        destination_text = (
-            _render_template(destination, artefact_context)
-            if (destination := artefact.destination)
-            else source_path.name
-        )
-
-        destination_path = _safe_destination_path(staging_dir, destination_text)
-        if destination_path.exists():
-            destination_path.unlink()
-        shutil.copy2(source_path, destination_path)
-        print(
-            f"Staged '{source_path.relative_to(config.workspace)}' ->"
-            f" '{destination_path.relative_to(config.workspace)}'",
-        )
-
-        staged_paths.append(destination_path)
-        digest = _write_checksum(destination_path, config.checksum_algorithm)
-        checksums[destination_path.name] = digest
-
-        if artefact.output:
-            outputs[artefact.output] = destination_path
+        if staged.artefact.output:
+            outputs[staged.artefact.output] = staged.path
 
     if not staged_paths:
         message = "No artefacts were staged."
@@ -268,6 +244,111 @@ def stage_artefacts(config: StagingConfig, github_output_file: Path) -> StageRes
     write_github_output(github_output_file, exported_outputs)
 
     return StageResult(staging_dir, staged_paths, outputs, checksums)
+
+
+def _ensure_source_available(
+    source_path: Path | None,
+    artefact: ArtefactConfig,
+    attempts: list[_RenderAttempt],
+    workspace: Path,
+) -> bool:
+    """Return ``True`` when ``source_path`` exists, otherwise handle the miss."""
+
+    if source_path is not None:
+        return True
+
+    if artefact.required:
+        attempt_lines = ", ".join(
+            f"{attempt.template!r} -> {attempt.rendered!r}" for attempt in attempts
+        )
+        message = (
+            "Required artefact not found. "
+            f"Workspace={workspace.as_posix()} "
+            f"Attempts=[{attempt_lines}]"
+        )
+        raise StageError(message)
+
+    warning = (
+        "::warning title=Artefact Skipped::Optional artefact missing: "
+        f"{artefact.source}"
+    )
+    print(warning, file=sys.stderr)
+    return False
+
+
+def _iter_staged_artefacts(
+    config: StagingConfig, staging_dir: Path, context: dict[str, typ.Any]
+) -> typ.Iterator[StagedArtefact]:
+    """Yield :class:`StagedArtefact` entries describing staged artefacts.
+
+    Examples
+    --------
+    >>> from pathlib import Path
+    >>> from types import SimpleNamespace
+    >>> workspace = Path('.')
+    >>> artefact = SimpleNamespace(
+    ...     source='missing', alternatives=[], required=False, destination=None, output=None
+    ... )
+    >>> staged = list(
+    ...     _iter_staged_artefacts(
+    ...         SimpleNamespace(
+    ...             workspace=workspace,
+    ...             artefacts=[artefact],
+    ...             checksum_algorithm='sha256',
+    ...         ),
+    ...         workspace / 'stage',
+    ...         {},
+    ...     )
+    ... )
+    >>> staged
+    []
+    """
+
+    env = _StagingEnvironment(staging_dir=staging_dir, context=context)
+
+    for artefact in config.artefacts:
+        source_path, attempts = _resolve_artefact_source(
+            config.workspace, artefact, context
+        )
+        if not _ensure_source_available(
+            source_path, artefact, attempts, config.workspace
+        ):
+            continue
+
+        destination_path = _stage_single_artefact(
+            config, env, artefact, typ.cast(Path, source_path)
+        )
+        digest = _write_checksum(destination_path, config.checksum_algorithm)
+        yield StagedArtefact(destination_path, artefact, digest)
+
+
+def _stage_single_artefact(
+    config: StagingConfig,
+    env: _StagingEnvironment,
+    artefact: ArtefactConfig,
+    source_path: Path,
+) -> Path:
+    """Copy ``source_path`` into ``env.staging_dir`` and return the staged path."""
+
+    artefact_context = env.context | {
+        "source_path": source_path.as_posix(),
+        "source_name": source_path.name,
+    }
+    destination_text = (
+        _render_template(destination, artefact_context)
+        if (destination := artefact.destination)
+        else source_path.name
+    )
+
+    destination_path = _safe_destination_path(env.staging_dir, destination_text)
+    if destination_path.exists():
+        destination_path.unlink()
+    shutil.copy2(source_path, destination_path)
+    print(
+        f"Staged '{source_path.relative_to(config.workspace)}' ->"
+        f" '{destination_path.relative_to(config.workspace)}'",
+    )
+    return destination_path
 
 
 def _render_template(template: str, context: dict[str, typ.Any]) -> str:
@@ -296,31 +377,59 @@ def _resolve_artefact_source(
 def _match_candidate_path(workspace: Path, rendered: str) -> Path | None:
     """Return the newest path matching ``rendered`` (e.g., ``_match_candidate_path(Path('.'), 'dist/*.zip')`` -> ``Path('dist/app')``)."""
     candidate = Path(rendered)
+    if _contains_glob(rendered):
+        return _match_glob_candidate(workspace, candidate, rendered)
+
     base = candidate if candidate.is_absolute() else workspace / candidate
-    if any(ch in rendered for ch in "*?[]"):
-        if candidate.is_absolute():
-            root_text, _pattern = _glob_root_and_pattern(candidate)
-            root = Path(root_text)
-            relative_pattern = candidate.relative_to(root).as_posix()
-            candidates = [path for path in root.glob(relative_pattern) if path.is_file()]
-        else:
-            windows_candidate = PureWindowsPath(rendered)
-            if windows_candidate.is_absolute():
-                # Windows requires globbing relative to the drive root. Passing an
-                # absolute pattern string such as ``C:\foo\*.txt`` causes
-                # ``Path.glob`` to reject the drive prefix, so we normalise the
-                # pattern to search from the drive anchor explicitly.
-                anchor = Path(windows_candidate.anchor)
-                relative = PureWindowsPath(*windows_candidate.parts[1:]).as_posix()
-                candidates = [
-                    path for path in anchor.glob(relative) if path.is_file()
-                ]
-            else:
-                candidates = [
-                    path for path in workspace.glob(rendered) if path.is_file()
-                ]
-        return None if not candidates else max(candidates, key=_mtime_key)
     return base if base.is_file() else None
+
+
+def _match_glob_candidate(
+    workspace: Path, candidate: Path, rendered: str
+) -> Path | None:
+    """Resolve the newest match for a glob ``rendered``.
+
+    Examples
+    --------
+    >>> workspace = Path('.')
+    >>> candidate = workspace / 'dist'
+    >>> candidate.mkdir(exist_ok=True)
+    >>> file = candidate / 'netsuke.txt'
+    >>> _ = file.write_text('payload', encoding='utf-8')
+    >>> _match_glob_candidate(workspace, Path('dist/*.txt'), 'dist/*.txt') == file
+    True
+    """
+
+    if candidate.is_absolute():
+        matches = _iter_absolute_matches(candidate)
+    else:
+        windows_candidate = PureWindowsPath(rendered)
+        if windows_candidate.is_absolute():
+            matches = _iter_absolute_matches(windows_candidate)
+        else:
+            matches = workspace.glob(rendered)
+    return _newest_file(matches)
+
+
+def _contains_glob(pattern: str) -> bool:
+    """Return ``True`` when ``pattern`` contains glob wildcards."""
+
+    return glob.has_magic(pattern)
+
+
+def _iter_absolute_matches(candidate: "PurePath") -> typ.Iterable[Path]:
+    """Yield files for an absolute glob ``candidate`` on any platform."""
+
+    root_text, pattern = _glob_root_and_pattern(candidate)
+    root = Path(root_text)
+    return root.glob(pattern)
+
+
+def _newest_file(candidates: typ.Iterable[Path]) -> Path | None:
+    """Return the newest file from ``candidates`` (if any)."""
+
+    files = [path for path in candidates if path.is_file()]
+    return max(files, key=_mtime_key) if files else None
 
 
 def _mtime_key(path: Path) -> tuple[int, str]:

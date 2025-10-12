@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@dataclasses.dataclass(frozen=True)
+class ValidationTestCase:
+    """Describe a configuration validation scenario for ``load_config``."""
+
+    test_id: str
+    toml_content: str
+    target_key: str
+    expected_substrings: list[str]
 
 
 def test_public_interface(stage_common: object) -> None:
@@ -152,13 +163,13 @@ target = "x86_64-unknown-linux-gnu"
     assert "Environment variable 'GITHUB_WORKSPACE' is not set" in str(exc.value)
 
 
-def test_load_config_rejects_unknown_checksum(
-    stage_common: object, workspace: Path
-) -> None:
-    """Unsupported checksum algorithms should raise ``StageError``."""
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            ValidationTestCase(
+                test_id="unknown_checksum",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "unknown"
@@ -169,21 +180,15 @@ platform = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-    assert "Unsupported checksum algorithm" in str(exc.value)
-
-
-def test_load_config_requires_common_bin_name(
-    stage_common: object, workspace: Path
-) -> None:
-    """Missing ``bin_name`` in ``[common]`` should raise ``StageError``."""
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+                target_key="test",
+                expected_substrings=["Unsupported checksum algorithm"],
+            ),
+            id="unknown_checksum",
+        ),
+        pytest.param(
+            ValidationTestCase(
+                test_id="missing_common_bin_name",
+                toml_content="""\
 [common]
 checksum_algorithm = "sha256"
 artefacts = [ { source = "LICENSE" } ]
@@ -193,24 +198,15 @@ arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 platform = "linux"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-
-    message = str(exc.value)
-    assert "bin_name" in message
-    assert "[common]" in message
-
-
-def test_load_config_requires_target_platform(
-    stage_common: object, workspace: Path
-) -> None:
-    """Missing target metadata should raise ``StageError`` with guidance."""
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+                target_key="test",
+                expected_substrings=["bin_name", "[common]"],
+            ),
+            id="missing_common_bin_name",
+        ),
+        pytest.param(
+            ValidationTestCase(
+                test_id="missing_target_platform",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "sha256"
@@ -220,24 +216,15 @@ artefacts = [ { source = "LICENSE" } ]
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-
-    message = str(exc.value)
-    assert "platform" in message
-    assert "[targets.test]" in message
-
-
-def test_load_config_requires_artefact_source(
-    stage_common: object, workspace: Path
-) -> None:
-    """Artefact entries must define ``source`` for friendly errors."""
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+                target_key="test",
+                expected_substrings=["platform", "[targets.test]"],
+            ),
+            id="missing_target_platform",
+        ),
+        pytest.param(
+            ValidationTestCase(
+                test_id="missing_artefact_source",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "sha256"
@@ -248,24 +235,15 @@ platform = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-        encoding="utf-8",
-    )
-
-    with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-
-    message = str(exc.value)
-    assert "source" in message
-    assert "entry #1" in message
-
-
-def test_load_config_requires_target_section(
-    stage_common: object, workspace: Path
-) -> None:
-    """Missing target sections should raise ``StageError``."""
-    config_file = workspace / "release-staging.toml"
-    config_file.write_text(
-        """\
+                target_key="test",
+                expected_substrings=["source", "entry #1"],
+            ),
+            id="missing_artefact_source",
+        ),
+        pytest.param(
+            ValidationTestCase(
+                test_id="missing_target_section",
+                toml_content="""\
 [common]
 bin_name = "netsuke"
 checksum_algorithm = "sha256"
@@ -276,9 +254,27 @@ platform = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 """,
-        encoding="utf-8",
-    )
+                target_key="test",
+                expected_substrings=["Missing configuration key"],
+            ),
+            id="missing_target_section",
+        ),
+    ],
+)
+def test_load_config_validation_errors(
+    test_case: ValidationTestCase,
+    stage_common: object,
+    workspace: Path,
+) -> None:
+    """``load_config`` should surface friendly validation errors."""
+    config_file = workspace / "release-staging.toml"
+    config_file.write_text(test_case.toml_content, encoding="utf-8")
 
     with pytest.raises(stage_common.StageError) as exc:
-        stage_common.load_config(config_file, "test")
-    assert "Missing configuration key" in str(exc.value)
+        stage_common.load_config(config_file, test_case.target_key)
+
+    message = str(exc.value)
+    for substring in test_case.expected_substrings:
+        assert substring in message, (
+            f"{test_case.test_id} missing substring: {substring!r}"
+        )
