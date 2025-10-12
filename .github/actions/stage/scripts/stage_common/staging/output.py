@@ -128,7 +128,7 @@ def write_github_output(file: Path, values: dict[str, str | list[str]]) -> None:
 
     file.parent.mkdir(parents=True, exist_ok=True)
     with file.open("a", encoding="utf-8") as handle:
-        for key, value in values.items():
+        for key, value in sorted(values.items()):
             if isinstance(value, list):
                 delimiter = f"gh_{key.upper()}"
                 handle.write(f"{key}<<{delimiter}\n")

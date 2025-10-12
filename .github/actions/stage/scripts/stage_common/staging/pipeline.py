@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import logging
 import shutil
-import sys
 import typing as typ
 from pathlib import Path
 
@@ -21,6 +21,9 @@ if typ.TYPE_CHECKING:
     from ..config import ArtefactConfig, StagingConfig
 
 __all__ = ["StageResult", "stage_artefacts"]
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(slots=True)
@@ -157,7 +160,7 @@ def _ensure_source_available(
         "::warning title=Artefact Skipped::Optional artefact missing: "
         f"{artefact.source}"
     )
-    print(warning, file=sys.stderr)
+    logger.warning(warning)
     return False
 
 
@@ -229,20 +232,30 @@ def _stage_single_artefact(
     if destination_path.exists():
         destination_path.unlink()
     shutil.copy2(source_path, destination_path)
-    print(
-        f"Staged '{source_path.relative_to(config.workspace)}' ->"
-        f" '{destination_path.relative_to(config.workspace)}'",
+    logger.info(
+        "Staged '%s' -> '%s'",
+        source_path.relative_to(config.workspace),
+        destination_path.relative_to(config.workspace),
     )
     return destination_path
 
 
 def _render_template(template: str, context: dict[str, typ.Any]) -> str:
-    """Format ``template`` with ``context`` (e.g., ``_render_template('{name}', {'name': 'bob'})`` -> ``'bob'``)."""
+    """Render ``template`` with ``context`` and normalise formatting errors.
+
+    Examples
+    --------
+    >>> _render_template("{name}", {"name": "netsuke"})
+    'netsuke'
+    """
 
     try:
         return template.format(**context)
     except KeyError as exc:
         message = f"Invalid template key {exc} in '{template}'"
+        raise StageError(message) from exc
+    except ValueError as exc:
+        message = f"Template formatting error: {exc} in '{template}'"
         raise StageError(message) from exc
 
 

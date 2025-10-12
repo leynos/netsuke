@@ -10,8 +10,27 @@ import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
 
 
+def test_staging_package_exports_public_api(
+    stage_common: object,
+    staging_package: object,
+    staging_pipeline: object,
+    staging_output: object,
+) -> None:
+    """The staging package should expose the streamlined public surface."""
+
+    assert staging_package.stage_artefacts is stage_common.stage_artefacts
+    assert staging_package.StageResult is staging_pipeline.StageResult
+    assert staging_package.StageResult is stage_common.StageResult
+    assert staging_package.StagedArtefact is staging_pipeline.StagedArtefact
+    assert staging_package.write_github_output is staging_output.write_github_output
+    assert (
+        staging_package.RESERVED_OUTPUT_KEYS
+        == staging_output.RESERVED_OUTPUT_KEYS
+    )
+
+
 def test_initialize_staging_dir_removes_existing_contents(
-    staging_module: object, tmp_path: Path
+    staging_pipeline: object, tmp_path: Path
 ) -> None:
     """The helper should clear any previous staging directory contents."""
 
@@ -20,14 +39,14 @@ def test_initialize_staging_dir_removes_existing_contents(
     stale_file.parent.mkdir(parents=True, exist_ok=True)
     stale_file.write_text("old", encoding="utf-8")
 
-    staging_module._initialize_staging_dir(staging_dir)
+    staging_pipeline._initialize_staging_dir(staging_dir)
 
     assert staging_dir.exists(), "Expected staging directory to be recreated"
     assert list(staging_dir.iterdir()) == [], "Stale artefacts should be removed"
 
 
 def test_prepare_output_data_returns_sorted_metadata(
-    staging_module: object, tmp_path: Path
+    staging_output: object, tmp_path: Path
 ) -> None:
     """Output preparation should normalise ordering and serialise metadata."""
 
@@ -42,7 +61,7 @@ def test_prepare_output_data_returns_sorted_metadata(
     }
     checksums = {"b.bin": "bbb", "a.txt": "aaa"}
 
-    result = staging_module._prepare_output_data(
+    result = staging_output._prepare_output_data(
         staging_dir, staged, outputs, checksums
     )
 
@@ -59,12 +78,12 @@ def test_prepare_output_data_returns_sorted_metadata(
 
 
 def test_validate_no_reserved_key_collisions_rejects_reserved_keys(
-    staging_module: object
+    staging_output: object
 ) -> None:
     """Reserved workflow keys should trigger a stage error."""
 
-    with pytest.raises(staging_module.StageError) as exc:
-        staging_module._validate_no_reserved_key_collisions(
+    with pytest.raises(staging_output.StageError) as exc:
+        staging_output._validate_no_reserved_key_collisions(
             {"artifact_dir": Path("/tmp/stage")}
         )
 
@@ -72,7 +91,7 @@ def test_validate_no_reserved_key_collisions_rejects_reserved_keys(
 
 
 def test_write_github_output_formats_values(
-    staging_module: object, tmp_path: Path
+    staging_output: object, tmp_path: Path
 ) -> None:
     """The GitHub output helper should escape strings and stream lists."""
 
@@ -80,7 +99,7 @@ def test_write_github_output_formats_values(
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text("initial=value\n", encoding="utf-8")
 
-    staging_module.write_github_output(
+    staging_output.write_github_output(
         output_file,
         {
             "name": "value with%percent\nand newline",
@@ -97,6 +116,14 @@ def test_write_github_output_formats_values(
         "lines<<gh_LINES" in content
     ), "List values should use the multi-line protocol"
     assert "one\ntwo" in content, "List payload should be preserved"
+    lines = content.splitlines()
+    lines_header_index = lines.index("lines<<gh_LINES")
+    name_index = next(
+        idx for idx, value in enumerate(lines) if value.startswith("name=")
+    )
+    assert (
+        lines_header_index < name_index
+    ), "Outputs should be written in deterministic sorted order"
 
 
 def test_stage_artefacts_exports_metadata(
@@ -274,7 +301,7 @@ def test_stage_artefacts_appends_github_output(
 
 
 def test_stage_artefacts_warns_for_optional(
-    stage_common: object, workspace: Path, capfd: pytest.CaptureFixture[str]
+    stage_common: object, workspace: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Optional artefacts should emit a warning when absent but not abort."""
     target = "x86_64-unknown-linux-gnu"
@@ -301,10 +328,11 @@ def test_stage_artefacts_warns_for_optional(
         target=target,
     )
 
-    stage_common.stage_artefacts(config, workspace / "out.txt")
-    captured = capfd.readouterr()
-    assert (
-        "::warning title=Artefact Skipped::Optional artefact missing" in captured.err
+    with caplog.at_level("WARNING"):
+        stage_common.stage_artefacts(config, workspace / "out.txt")
+
+    assert any(
+        "Optional artefact missing" in message for message in caplog.messages
     ), "Optional artefact warning missing"
 
 
@@ -340,7 +368,7 @@ def test_stage_artefacts_fails_with_attempt_context(
 
 
 def test_iter_staged_artefacts_yields_metadata(
-    stage_common: object, staging_module: object, workspace: Path
+    stage_common: object, staging_pipeline: object, workspace: Path
 ) -> None:
     """The iterator should yield dataclass entries with staged file metadata."""
 
@@ -360,15 +388,15 @@ def test_iter_staged_artefacts_yields_metadata(
 
     staging_dir = config.staging_dir()
     context = config.as_template_context()
-    staging_module._initialize_staging_dir(staging_dir)
+    staging_pipeline._initialize_staging_dir(staging_dir)
 
     staged = list(
-        staging_module._iter_staged_artefacts(config, staging_dir, context)
+        staging_pipeline._iter_staged_artefacts(config, staging_dir, context)
     )
 
     assert len(staged) == 1, "Expected the iterator to yield the staged artefact"
     entry = staged[0]
-    assert isinstance(entry, staging_module.StagedArtefact)
+    assert isinstance(entry, staging_pipeline.StagedArtefact)
     assert entry.path.exists(), "Staged artefact path should exist on disk"
     assert entry.checksum, "Iterator should include a checksum digest"
     checksum_file = entry.path.with_name(f"{entry.path.name}.sha256")
@@ -376,7 +404,7 @@ def test_iter_staged_artefacts_yields_metadata(
 
 
 def test_stage_artefacts_aligns_with_iterator(
-    stage_common: object, staging_module: object, workspace: Path
+    stage_common: object, staging_pipeline: object, workspace: Path
 ) -> None:
     """Behaviourally verify the iterator matches the public staging result."""
 
@@ -399,10 +427,10 @@ def test_stage_artefacts_aligns_with_iterator(
 
     staging_dir = config.staging_dir()
     context = config.as_template_context()
-    staging_module._initialize_staging_dir(staging_dir)
+    staging_pipeline._initialize_staging_dir(staging_dir)
     iter_names = [
         entry.path.name
-        for entry in staging_module._iter_staged_artefacts(
+        for entry in staging_pipeline._iter_staged_artefacts(
             config, staging_dir, context
         )
     ]
@@ -414,7 +442,7 @@ def test_stage_artefacts_aligns_with_iterator(
 
 
 def test_stage_single_artefact_overwrites_existing_file(
-    stage_common: object, staging_module: object, workspace: Path
+    stage_common: object, staging_pipeline: object, workspace: Path
 ) -> None:
     """The helper should replace existing staged files atomically."""
 
@@ -442,11 +470,11 @@ def test_stage_single_artefact_overwrites_existing_file(
     stale.write_text("old", encoding="utf-8")
 
     context = config.as_template_context()
-    env = staging_module._StagingEnvironment(
+    env = staging_pipeline._StagingEnvironment(
         staging_dir=staging_dir,
         context=context,
     )
-    staged_path = staging_module._stage_single_artefact(
+    staged_path = staging_pipeline._stage_single_artefact(
         config, env, artefact, source
     )
 
@@ -487,17 +515,17 @@ def test_stage_artefacts_honours_destination_templates(
 
 
 def test_ensure_source_available_required_error(
-    stage_common: object, staging_module: object, workspace: Path
+    stage_common: object, staging_pipeline: object, workspace: Path
 ) -> None:
     """Missing required artefacts should raise a StageError with context."""
 
     artefact = stage_common.ArtefactConfig(source="missing.bin", required=True)
     attempts = [
-        staging_module._RenderAttempt("missing.bin", "missing.bin"),
+        staging_pipeline._RenderAttempt("missing.bin", "missing.bin"),
     ]
 
     with pytest.raises(stage_common.StageError) as exc:
-        staging_module._ensure_source_available(
+        staging_pipeline._ensure_source_available(
             None, artefact, attempts, workspace
         )
 
@@ -508,21 +536,24 @@ def test_ensure_source_available_required_error(
 
 def test_ensure_source_available_optional_warning(
     stage_common: object,
-    staging_module: object,
+    staging_pipeline: object,
     workspace: Path,
-    capfd: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Optional artefacts should be skipped with a warning instead of failing."""
 
     artefact = stage_common.ArtefactConfig(source="missing.txt", required=False)
 
-    should_stage = staging_module._ensure_source_available(
-        None,
-        artefact,
-        [staging_module._RenderAttempt("missing.txt", "missing.txt")],
-        workspace,
-    )
+    with caplog.at_level("WARNING"):
+        should_stage = staging_pipeline._ensure_source_available(
+            None,
+            artefact,
+            [staging_pipeline._RenderAttempt("missing.txt", "missing.txt")],
+            workspace,
+        )
 
-    captured = capfd.readouterr()
     assert not should_stage
-    assert "Optional artefact missing" in captured.err
+    assert any(
+        "Optional artefact missing" in message
+        for message in caplog.messages
+    )
