@@ -49,8 +49,9 @@ def main(config_file: Path, target: str) -> None:
         error.
     """
     try:
+        config_path = Path(config_file)
         github_output = require_env_path("GITHUB_OUTPUT")
-        config = load_config(config_file, target)
+        config = load_config(config_path, target)
         result = stage_artefacts(config, github_output)
     except (FileNotFoundError, StageError) as exc:
         print(f"::error title=Staging Failure::{exc}", file=sys.stderr)

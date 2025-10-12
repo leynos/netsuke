@@ -19,29 +19,39 @@ SCRIPTS_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 class _StubCycloptsApp:
     """Minimal stand-in for :mod:`cyclopts` used during testing."""
 
-    def __init__(self, *_: object, **__: object) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:  # noqa: ARG002 - stub signature must match cyclopts.App
         self._handler: typ.Callable[..., object] | None = None
 
     def default(self, func: typ.Callable[..., object]) -> typ.Callable[..., object]:
         self._handler = func
         return func
 
-    def __call__(self, *_: object, **__: object) -> None:
+    def __call__(self, *args: object, **kwargs: object) -> None:  # noqa: ARG002 - stub signature must match cyclopts.App
         """Prevent the stub from being invoked directly."""
         message = "Stub CLI should not be invoked directly"
         raise RuntimeError(message)  # pragma: no cover - not exercised
 
 
 @pytest.fixture
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Provide an isolated workspace and set ``GITHUB_WORKSPACE``."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(root))
+    return root
+
+
+@pytest.fixture
 def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
-    monkeypatch.syspath_prepend(str(SCRIPTS_DIR))
+    sys.path.insert(0, str(SCRIPTS_DIR))
     monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
     cyclopts_module = sys.modules["cyclopts"]
     cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
-    module = importlib.import_module("stage")
-    monkeypatch.setitem(sys.modules, "stage", module)
-    return module
+    yield importlib.import_module("stage")
+    sys.path.remove(str(SCRIPTS_DIR))
+    sys.modules.pop("stage", None)
+    sys.modules.pop("cyclopts", None)
 
 
 def test_stage_cli_stages_and_reports(

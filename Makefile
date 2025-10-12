@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint typecheck fmt check-fmt markdownlint nixie
 
 APP ?= netsuke
 CARGO ?= cargo
@@ -23,6 +23,11 @@ target/%/$(APP): ## Build binary in debug or release mode
 
 lint: ## Run Clippy with warnings denied
 	$(CARGO) clippy $(CLIPPY_FLAGS)
+
+typecheck: ## Type-check staging scripts with ty
+	uvx --with cyclopts ty check --extra-search-path \
+		.github/actions/stage/scripts/ \
+		.github/actions/stage/scripts/*.py
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
