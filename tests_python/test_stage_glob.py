@@ -156,7 +156,7 @@ def test_glob_root_and_pattern_handles_posix_absolute(staging_module: object) ->
 def test_glob_root_and_pattern_rejects_relative_paths(staging_module: object) -> None:
     """Relative globs should be rejected to avoid ambiguous anchors."""
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Expected absolute path"):
         staging_module._glob_root_and_pattern(PurePosixPath("dist/*.zip"))
 
 
