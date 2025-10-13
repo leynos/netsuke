@@ -28,7 +28,7 @@ def stage_common() -> object:
 def staging_package(stage_common: object) -> object:
     """Expose the staging package for API boundary assertions."""
 
-    _stage_common = stage_common  # ensure fixture initialises before import
+    del stage_common  # ensure fixture initialises before import
     return importlib.import_module("stage_common.staging")
 
 
@@ -36,7 +36,7 @@ def staging_package(stage_common: object) -> object:
 def staging_pipeline(stage_common: object) -> object:
     """Expose the staging pipeline module for unit-level assertions."""
 
-    _stage_common = stage_common  # ensure fixture initialises before import
+    del stage_common  # ensure fixture initialises before import
     return importlib.import_module("stage_common.staging.pipeline")
 
 
@@ -44,7 +44,7 @@ def staging_pipeline(stage_common: object) -> object:
 def staging_output(stage_common: object) -> object:
     """Expose the staging output helpers for direct testing."""
 
-    _stage_common = stage_common  # ensure fixture initialises before import
+    del stage_common  # ensure fixture initialises before import
     return importlib.import_module("stage_common.staging.output")
 
 
@@ -52,7 +52,7 @@ def staging_output(stage_common: object) -> object:
 def staging_resolution(stage_common: object) -> object:
     """Expose the path resolution helpers for direct testing."""
 
-    _stage_common = stage_common  # ensure fixture initialises before import
+    del stage_common  # ensure fixture initialises before import
     return importlib.import_module("stage_common.staging.resolution")
 
 
