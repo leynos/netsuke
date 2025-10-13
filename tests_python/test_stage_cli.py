@@ -42,18 +42,40 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+def stage_cli() -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
-    sys.path.insert(0, str(SCRIPTS_DIR))
+
+    sys_path_entry = str(SCRIPTS_DIR)
+    previous_stage = sys.modules.get("stage")
+    previous_cyclopts = sys.modules.get("cyclopts")
+
+    sys.path.insert(0, sys_path_entry)
     try:
-        monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
-        cyclopts_module = sys.modules["cyclopts"]
-        cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
-        yield importlib.import_module("stage")
+        cyclopts_stub = ModuleType("cyclopts")
+        cyclopts_stub.App = _StubCycloptsApp  # type: ignore[attr-defined]
+        sys.modules["cyclopts"] = cyclopts_stub
+
+        module = importlib.import_module("stage")
+        yield module
     finally:
-        sys.path.remove(str(SCRIPTS_DIR))
-        sys.modules.pop("stage", None)
-        sys.modules.pop("cyclopts", None)
+        # Remove the path entry we inserted, regardless of where it ended up.
+        if sys.path and sys.path[0] == sys_path_entry:
+            del sys.path[0]
+        else:
+            try:
+                sys.path.remove(sys_path_entry)
+            except ValueError:
+                pass
+
+        if previous_stage is not None:
+            sys.modules["stage"] = previous_stage
+        else:
+            sys.modules.pop("stage", None)
+
+        if previous_cyclopts is not None:
+            sys.modules["cyclopts"] = previous_cyclopts
+        else:
+            sys.modules.pop("cyclopts", None)
 
 
 def test_stage_cli_stages_and_reports(
