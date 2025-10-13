@@ -70,6 +70,27 @@ class TestValidateReservedKeys:
 class TestWriteGithubOutput:
     """Tests covering the GitHub output writer."""
 
+    def test_formats_empty_values(
+        self, staging_output: object, tmp_path: Path
+    ) -> None:
+        """The helper should handle empty strings and lists without errors."""
+
+        output_file = tmp_path / "github" / "output.txt"
+        staging_output.write_github_output(
+            output_file,
+            {
+                "empty_str": "",
+                "empty_list": [],
+            },
+        )
+
+        content = output_file.read_text(encoding="utf-8")
+        lines = content.splitlines()
+        assert lines[0] == "empty_list<<gh_EMPTY_LIST"
+        assert lines[1] == ""
+        assert lines[2] == "gh_EMPTY_LIST"
+        assert lines[3] == "empty_str="
+
     def test_formats_values(
         self, staging_output: object, tmp_path: Path
     ) -> None:

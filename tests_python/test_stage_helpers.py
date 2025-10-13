@@ -23,7 +23,7 @@ class TestInitializeStagingDir:
         staging_pipeline._initialize_staging_dir(staging_dir)
 
         assert staging_dir.exists(), "Expected staging directory to be recreated"
-        assert list(staging_dir.iterdir()) == [], "Stale artefacts should be removed"
+        assert not list(staging_dir.iterdir()), "Stale artefacts should be removed"
 
 
 class TestIterStagedArtefacts:
@@ -167,6 +167,26 @@ class TestEnsureSourceAvailable:
         message = str(exc.value)
         assert "Required artefact not found" in message
         assert "missing.bin" in message
+
+    def test_required_error_with_invalid_path_characters(
+        self, stage_common: object, staging_pipeline: object, workspace: Path
+    ) -> None:
+        """Even invalid source paths should surface a descriptive StageError."""
+
+        invalid_source = "payload\x00bin"
+        artefact = stage_common.ArtefactConfig(source=invalid_source, required=True)
+        attempts = [
+            staging_pipeline._RenderAttempt(invalid_source, invalid_source),
+        ]
+
+        with pytest.raises(stage_common.StageError) as exc:
+            staging_pipeline._ensure_source_available(
+                None, artefact, attempts, workspace
+            )
+
+        message = str(exc.value)
+        assert "Required artefact not found" in message
+        assert invalid_source in message
 
     def test_optional_warning(
         self,
