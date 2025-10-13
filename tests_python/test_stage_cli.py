@@ -45,13 +45,15 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
     sys.path.insert(0, str(SCRIPTS_DIR))
-    monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
-    cyclopts_module = sys.modules["cyclopts"]
-    cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
-    yield importlib.import_module("stage")
-    sys.path.remove(str(SCRIPTS_DIR))
-    sys.modules.pop("stage", None)
-    sys.modules.pop("cyclopts", None)
+    try:
+        monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
+        cyclopts_module = sys.modules["cyclopts"]
+        cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
+        yield importlib.import_module("stage")
+    finally:
+        sys.path.remove(str(SCRIPTS_DIR))
+        sys.modules.pop("stage", None)
+        sys.modules.pop("cyclopts", None)
 
 
 def test_stage_cli_stages_and_reports(
