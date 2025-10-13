@@ -12,6 +12,10 @@ from types import ModuleType
 import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
 
+# The shared ``workspace`` fixture is defined in ``tests_python.conftest``;
+# keeping the dependency explicit here discourages recreating a local variant
+# that would shadow the shared behaviour and reintroduce divergence.
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 
