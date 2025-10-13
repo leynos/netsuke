@@ -539,6 +539,7 @@ use netsuke::ast::*;
 let ast = NetsukeManifest {
     netsuke_version: Version::parse("1.0.0").unwrap(),
     vars: HashMap::new(),
+    macros: vec![],
     rules: vec![],
     actions: vec![],
     targets: vec![Target {
@@ -719,6 +720,13 @@ rules:
 If a macro name matches a built-in function or filter, the macro overrides the
 built-in definition. This mirrors Jinja's behaviour and follows `minijinja`
 semantics where later definitions shadow earlier ones.
+
+The manifest loader compiles each macro definition into an internal template
+and registers a wrapper function that evaluates the macro on demand. The
+wrapper constructs a fresh MiniJinja state for every invocation so macro calls
+do not depend on the lifetime of the manifest parsing state. This preserves
+MiniJinja's argument handling, including keyword parameters and `caller`
+support, while allowing later macros to override earlier ones.
 
 ### 4.4 Essential Custom Functions
 

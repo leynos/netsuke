@@ -1,0 +1,11 @@
+netsuke_version: "1.0.0"
+macros:
+  - signature: "greet(name)"
+    body: |-
+      Hello {{ name }}!
+  - signature: "shout(text)"
+    body: |-
+      {{ text | upper }}
+targets:
+  - name: greeting
+    command: "{{ shout(greet('netsuke')) }}"
