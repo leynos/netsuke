@@ -33,15 +33,6 @@ class _StubCycloptsApp:
 
 
 @pytest.fixture
-def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Provide an isolated workspace and set ``GITHUB_WORKSPACE``."""
-    root = tmp_path / "workspace"
-    root.mkdir()
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(root))
-    return root
-
-
-@pytest.fixture
 def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
     sys.path.insert(0, str(SCRIPTS_DIR))
