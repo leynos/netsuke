@@ -49,6 +49,13 @@ class TestSuccessfulRuns:
         result = stage_common.stage_artefacts(config, github_output)
 
         staging_dir = workspace / "dist" / "netsuke_linux_amd64"
+        self._assert_staging_structure(result, staging_dir)
+        self._assert_checksums(result, staging_dir)
+        self._assert_output_file(github_output, staging_dir)
+
+    def _assert_staging_structure(
+        self, result: object, staging_dir: Path
+    ) -> None:
         assert (
             result.staging_dir == staging_dir
         ), "StageResult must record the staging directory"
@@ -65,6 +72,8 @@ class TestSuccessfulRuns:
             "man_path",
             "license_path",
         }, "Outputs missing expected keys"
+
+    def _assert_checksums(self, result: object, staging_dir: Path) -> None:
         expected_checksums = {
             "netsuke": staging_dir / "netsuke.sha256",
             "netsuke.1": staging_dir / "netsuke.1.sha256",
@@ -76,6 +85,7 @@ class TestSuccessfulRuns:
         for path in expected_checksums.values():
             assert path.exists(), f"Checksum file {path.name} was not written"
 
+    def _assert_output_file(self, github_output: Path, staging_dir: Path) -> None:
         outputs = decode_output_file(github_output)
         assert (
             outputs["artifact_dir"] == staging_dir.as_posix()
