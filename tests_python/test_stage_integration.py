@@ -249,7 +249,13 @@ class TestSuccessfulRuns:
 
         staged_path = result.outputs["payload_path"]
         relative = staged_path.relative_to(result.staging_dir)
-        assert relative.as_posix() == "artifacts/netsuke/payload.bin"
+        assert (
+            relative.as_posix() == "artifacts/netsuke/payload.bin"
+        ), (
+            "staged path relative to staging_dir should be "
+            "'artifacts/netsuke/payload.bin' "
+            f"(got: {relative.as_posix()})"
+        )
 
 
 class TestFailureModes:

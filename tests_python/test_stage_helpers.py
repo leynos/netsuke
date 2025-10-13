@@ -58,7 +58,9 @@ class TestIterStagedArtefacts:
 
         assert len(staged) == 1, "Expected the iterator to yield the staged artefact"
         entry = staged[0]
-        assert isinstance(entry, staging_pipeline.StagedArtefact)
+        assert isinstance(
+            entry, staging_pipeline.StagedArtefact
+        ), "Expected staged entry to be a StagedArtefact"
         assert entry.path.exists(), "Staged artefact path should exist on disk"
         assert entry.checksum, "Iterator should include a checksum digest"
         checksum_file = entry.path.with_name(f"{entry.path.name}.sha256")
@@ -99,7 +101,10 @@ class TestIterStagedArtefacts:
         github_output = workspace / "outputs.txt"
         result = stage_common.stage_artefacts(config, github_output)
 
-        assert iter_names == [path.name for path in result.staged_artefacts]
+        expected_names = [path.name for path in result.staged_artefacts]
+        assert (
+            iter_names == expected_names
+        ), f"Expected iterator names {expected_names}, got {iter_names}"
 
 
 class TestStageSingleArtefact:
@@ -142,8 +147,12 @@ class TestStageSingleArtefact:
             config, env, artefact, source
         )
 
-        assert staged_path == stale
-        assert staged_path.read_text(encoding="utf-8") == "new"
+        assert (
+            staged_path == stale
+        ), "Staged artefact path should reuse the existing destination"
+        assert (
+            staged_path.read_text(encoding="utf-8") == "new"
+        ), "Staged artefact content should be overwritten with the new payload"
 
 
 class TestEnsureSourceAvailable:
@@ -207,8 +216,7 @@ class TestEnsureSourceAvailable:
                 workspace,
             )
 
-        assert not should_stage
+        assert not should_stage, "Optional artefacts should not be staged"
         assert any(
-            "Optional artefact missing" in message
-            for message in caplog.messages
-        )
+            "missing.txt" in message for message in caplog.messages
+        ), "Expected warning to mention missing optional artefact 'missing.txt'"

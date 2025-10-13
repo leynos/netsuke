@@ -56,12 +56,15 @@ class TestPrepareOutputData:
 class TestValidateReservedKeys:
     """Tests validating reserved GitHub output key handling."""
 
-    def test_rejects_reserved_keys(self, staging_output: object) -> None:
+    def test_rejects_reserved_keys(
+        self, staging_output: object, tmp_path: Path
+    ) -> None:
         """Reserved workflow keys should trigger a stage error."""
 
+        staging_dir = tmp_path / "stage"
         with pytest.raises(staging_output.StageError) as exc:
             staging_output._validate_no_reserved_key_collisions(
-                {"artifact_dir": Path("/tmp/stage")}
+                {"artifact_dir": staging_dir}
             )
 
         assert "collide with reserved keys" in str(exc.value)
