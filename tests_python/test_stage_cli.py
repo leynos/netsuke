@@ -41,6 +41,43 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
+def _remove_sys_path_entry(entry: str) -> None:
+    """Remove ``entry`` from ``sys.path`` if it was previously inserted.
+
+    Examples:
+        >>> sys.path.insert(0, "/tmp/example")
+        >>> _remove_sys_path_entry("/tmp/example")
+        >>> "/tmp/example" in sys.path
+        False
+    """
+
+    if sys.path and sys.path[0] == entry:
+        del sys.path[0]
+        return
+
+    try:
+        sys.path.remove(entry)
+    except ValueError:
+        pass
+
+
+def _restore_module(name: str, previous: ModuleType | None) -> None:
+    """Restore ``sys.modules[name]`` to ``previous`` or remove it if missing.
+
+    Examples:
+        >>> previous = sys.modules.get("json")
+        >>> sys.modules["json"] = ModuleType("json")
+        >>> _restore_module("json", previous)
+        >>> sys.modules.get("json") is previous
+        True
+    """
+
+    if previous is not None:
+        sys.modules[name] = previous
+    else:
+        sys.modules.pop(name, None)
+
+
 @pytest.fixture
 def stage_cli() -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
@@ -58,24 +95,9 @@ def stage_cli() -> ModuleType:
         module = importlib.import_module("stage")
         yield module
     finally:
-        # Remove the path entry we inserted, regardless of where it ended up.
-        if sys.path and sys.path[0] == sys_path_entry:
-            del sys.path[0]
-        else:
-            try:
-                sys.path.remove(sys_path_entry)
-            except ValueError:
-                pass
-
-        if previous_stage is not None:
-            sys.modules["stage"] = previous_stage
-        else:
-            sys.modules.pop("stage", None)
-
-        if previous_cyclopts is not None:
-            sys.modules["cyclopts"] = previous_cyclopts
-        else:
-            sys.modules.pop("cyclopts", None)
+        _remove_sys_path_entry(sys_path_entry)
+        _restore_module("stage", previous_stage)
+        _restore_module("cyclopts", previous_cyclopts)
 
 
 def test_stage_cli_stages_and_reports(
