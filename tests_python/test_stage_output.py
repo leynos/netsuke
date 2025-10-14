@@ -91,10 +91,16 @@ class TestWriteGithubOutput:
 
         content = output_file.read_text(encoding="utf-8")
         lines = content.splitlines()
-        assert lines[0] == "empty_list<<gh_EMPTY_LIST"
-        assert lines[1] == ""
-        assert lines[2] == "gh_EMPTY_LIST"
-        assert lines[3] == "empty_str="
+        assert (
+            lines[0] == "empty_list<<gh_EMPTY_LIST"
+        ), "Expected empty list header with gh_EMPTY_LIST sentinel"
+        assert lines[1] == "", "Expected blank separator after list header"
+        assert (
+            lines[2] == "gh_EMPTY_LIST"
+        ), "Expected gh_EMPTY_LIST terminator line for list payload"
+        assert (
+            lines[3] == "empty_str="
+        ), "Expected empty string entry to emit key with trailing equals"
 
     def test_formats_values(
         self, staging_output: object, tmp_path: Path
@@ -129,4 +135,4 @@ class TestWriteGithubOutput:
         )
         assert (
             lines_header_index < name_index
-        ), "Outputs should be written in deterministic sorted order"
+        ), "Outputs should be written in deterministic sorted order (lines before name)"

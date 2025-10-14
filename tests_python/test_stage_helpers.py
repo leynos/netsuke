@@ -236,5 +236,10 @@ class TestEnsureSourceAvailable:
             )
 
         message = str(exc.value)
-        assert "Required artefact not found" in message
-        assert source in message
+        assert (
+            "Required artefact not found" in message
+        ), "Missing error preamble for required artefact"
+        assert source in message, (
+            "Missing artefact source in error message: expected to find "
+            f"'{source}'"
+        )
