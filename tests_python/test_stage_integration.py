@@ -1,4 +1,16 @@
-"""Behavioural staging tests covering integration flows end-to-end."""
+"""Behavioural staging tests covering integration flows end-to-end.
+
+This module validates the complete staging pipeline, including artefact copying,
+checksum generation, output formatting, and error handling.
+
+Usage
+-----
+Run with pytest from the repository root::
+
+    make test
+    # or directly:
+    pytest tests_python/test_stage_integration.py
+"""
 
 from __future__ import annotations
 
@@ -10,19 +22,52 @@ import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
 
 
+@pytest.fixture()
+def populated_workspace(workspace: Path) -> tuple[Path, str]:
+    """Populate the workspace with default build outputs and return the target."""
+
+    target = "x86_64-unknown-linux-gnu"
+    write_workspace_inputs(workspace, target)
+    return workspace, target
+
+
+def make_staging_config(
+    stage_common: object,
+    workspace: Path,
+    target: str,
+    artefacts: list[object],
+    **overrides: object,
+) -> object:
+    """Create a staging config with common defaults for integration tests."""
+
+    defaults = {
+        "workspace": workspace,
+        "bin_name": "netsuke",
+        "dist_dir": "dist",
+        "checksum_algorithm": "sha256",
+        "platform": "linux",
+        "arch": "amd64",
+        "target": target,
+    }
+    return stage_common.StagingConfig(
+        artefacts=artefacts,
+        **(defaults | overrides),
+    )
+
+
 class TestSuccessfulRuns:
     """Integration scenarios where staging succeeds."""
 
-    def test_exports_metadata(self, stage_common: object, workspace: Path) -> None:
+    def test_exports_metadata(
+        self, stage_common: object, populated_workspace: tuple[Path, str]
+    ) -> None:
         """The staging pipeline should copy inputs, hash them, and export outputs."""
-        target = "x86_64-unknown-linux-gnu"
-        write_workspace_inputs(workspace, target)
+        workspace, target = populated_workspace
 
-        config = stage_common.StagingConfig(
-            workspace=workspace,
-            bin_name="netsuke",
-            dist_dir="dist",
-            checksum_algorithm="sha256",
+        config = make_staging_config(
+            stage_common,
+            workspace,
+            target,
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="target/{target}/release/{bin_name}{bin_ext}",
@@ -40,9 +85,6 @@ class TestSuccessfulRuns:
                     output="license_path",
                 ),
             ],
-            platform="linux",
-            arch="amd64",
-            target=target,
         )
 
         github_output = workspace / "outputs.txt"
@@ -118,23 +160,22 @@ class TestSuccessfulRuns:
         }, "Checksum map missing entries"
 
     def test_reinitialises_staging_dir(
-        self, stage_common: object, workspace: Path
+        self,
+        stage_common: object,
+        populated_workspace: tuple[Path, str],
     ) -> None:
         """Running the pipeline should recreate the staging directory afresh."""
-
-        target = "x86_64-unknown-linux-gnu"
-        write_workspace_inputs(workspace, target)
+        workspace, target = populated_workspace
 
         staging_dir = workspace / "dist" / "netsuke_linux_amd64"
         stale = staging_dir / "obsolete.txt"
         stale.parent.mkdir(parents=True, exist_ok=True)
         stale.write_text("stale", encoding="utf-8")
 
-        config = stage_common.StagingConfig(
-            workspace=workspace,
-            bin_name="netsuke",
-            dist_dir="dist",
-            checksum_algorithm="sha256",
+        config = make_staging_config(
+            stage_common,
+            workspace,
+            target,
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="target/{target}/release/{bin_name}{bin_ext}",
@@ -142,9 +183,6 @@ class TestSuccessfulRuns:
                     output="binary_path",
                 ),
             ],
-            platform="linux",
-            arch="amd64",
-            target=target,
         )
 
         github_output = workspace / "outputs.txt"
@@ -157,18 +195,17 @@ class TestSuccessfulRuns:
         ), "Old entries must not survive reinitialisation"
 
     def test_appends_github_output(
-        self, stage_common: object, workspace: Path
+        self,
+        stage_common: object,
+        populated_workspace: tuple[Path, str],
     ) -> None:
         """Writing outputs should append to the existing ``GITHUB_OUTPUT`` file."""
+        workspace, target = populated_workspace
 
-        target = "x86_64-unknown-linux-gnu"
-        write_workspace_inputs(workspace, target)
-
-        config = stage_common.StagingConfig(
-            workspace=workspace,
-            bin_name="netsuke",
-            dist_dir="dist",
-            checksum_algorithm="sha256",
+        config = make_staging_config(
+            stage_common,
+            workspace,
+            target,
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="LICENSE",
@@ -176,9 +213,6 @@ class TestSuccessfulRuns:
                     output="license_path",
                 ),
             ],
-            platform="linux",
-            arch="amd64",
-            target=target,
         )
 
         github_output = workspace / "outputs.txt"
@@ -195,18 +229,16 @@ class TestSuccessfulRuns:
     def test_warns_for_optional(
         self,
         stage_common: object,
-        workspace: Path,
+        populated_workspace: tuple[Path, str],
         caplog: pytest.LogCaptureFixture,
     ) -> None:
         """Optional artefacts should emit a warning when absent but not abort."""
-        target = "x86_64-unknown-linux-gnu"
-        write_workspace_inputs(workspace, target)
+        workspace, target = populated_workspace
 
-        config = stage_common.StagingConfig(
-            workspace=workspace,
-            bin_name="netsuke",
-            dist_dir="dist",
-            checksum_algorithm="sha256",
+        config = make_staging_config(
+            stage_common,
+            workspace,
+            target,
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="target/{target}/release/{bin_name}{bin_ext}",
@@ -218,17 +250,14 @@ class TestSuccessfulRuns:
                     output="missing",
                 ),
             ],
-            platform="linux",
-            arch="amd64",
-            target=target,
         )
 
         with caplog.at_level("WARNING"):
             stage_common.stage_artefacts(config, workspace / "out.txt")
 
         assert any(
-            "Optional artefact missing" in message for message in caplog.messages
-        ), "Optional artefact warning missing"
+            "missing.txt" in message for message in caplog.messages
+        ), "Expected warning to mention missing optional artefact 'missing.txt'"
 
     def test_honours_destination_templates(
         self, stage_common: object, workspace: Path
@@ -272,18 +301,17 @@ class TestFailureModes:
     """Integration scenarios covering failure cases."""
 
     def test_rejects_reserved_output_key(
-        self, stage_common: object, workspace: Path
+        self,
+        stage_common: object,
+        populated_workspace: tuple[Path, str],
     ) -> None:
         """Configs using reserved workflow outputs should error out."""
+        workspace, target = populated_workspace
 
-        target = "x86_64-unknown-linux-gnu"
-        write_workspace_inputs(workspace, target)
-
-        config = stage_common.StagingConfig(
-            workspace=workspace,
-            bin_name="netsuke",
-            dist_dir="dist",
-            checksum_algorithm="sha256",
+        config = make_staging_config(
+            stage_common,
+            workspace,
+            target,
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="LICENSE",
@@ -291,9 +319,6 @@ class TestFailureModes:
                     output="artifact_dir",
                 ),
             ],
-            platform="linux",
-            arch="amd64",
-            target=target,
         )
 
         github_output = workspace / "outputs.txt"

@@ -168,14 +168,14 @@ class TestEnsureSourceAvailable:
             staging_pipeline._RenderAttempt("missing.bin", "missing.bin"),
         ]
 
-        with pytest.raises(stage_common.StageError) as exc:
-            staging_pipeline._ensure_source_available(
-                None, artefact, attempts, workspace
-            )
-
-        message = str(exc.value)
-        assert "Required artefact not found" in message
-        assert "missing.bin" in message
+        self._assert_required_error(
+            stage_common,
+            staging_pipeline,
+            workspace,
+            artefact,
+            attempts,
+            "missing.bin",
+        )
 
     def test_required_error_with_invalid_path_characters(
         self, stage_common: object, staging_pipeline: object, workspace: Path
@@ -188,14 +188,14 @@ class TestEnsureSourceAvailable:
             staging_pipeline._RenderAttempt(invalid_source, invalid_source),
         ]
 
-        with pytest.raises(stage_common.StageError) as exc:
-            staging_pipeline._ensure_source_available(
-                None, artefact, attempts, workspace
-            )
-
-        message = str(exc.value)
-        assert "Required artefact not found" in message
-        assert invalid_source in message
+        self._assert_required_error(
+            stage_common,
+            staging_pipeline,
+            workspace,
+            artefact,
+            attempts,
+            invalid_source,
+        )
 
     def test_optional_warning(
         self,
@@ -220,3 +220,23 @@ class TestEnsureSourceAvailable:
         assert any(
             "missing.txt" in message for message in caplog.messages
         ), "Expected warning to mention missing optional artefact 'missing.txt'"
+
+    def _assert_required_error(
+        self,
+        stage_common: object,
+        staging_pipeline: object,
+        workspace: Path,
+        artefact: object,
+        attempts: list[object],
+        expected_fragment: str,
+    ) -> None:
+        """Assert that missing required artefacts raise informative StageErrors."""
+
+        with pytest.raises(stage_common.StageError) as exc:
+            staging_pipeline._ensure_source_available(
+                None, artefact, attempts, workspace
+            )
+
+        message = str(exc.value)
+        assert "Required artefact not found" in message
+        assert expected_fragment in message

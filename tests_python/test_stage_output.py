@@ -67,7 +67,9 @@ class TestValidateReservedKeys:
                 {"artifact_dir": staging_dir}
             )
 
-        assert "collide with reserved keys" in str(exc.value)
+        assert "collide with reserved keys" in str(
+            exc.value
+        ), "StageError message should describe reserved-key collisions"
 
 
 class TestWriteGithubOutput:
