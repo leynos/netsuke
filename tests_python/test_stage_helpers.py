@@ -1,4 +1,17 @@
-"""Tests exercising staging helper utilities and iterators."""
+"""Tests exercising staging helper utilities and iterators.
+
+This module validates low-level staging helpers in isolation, including
+directory initialisation, artefact iteration, single-file staging, and
+source availability checking.
+
+Usage
+-----
+Run with pytest from the repository root::
+
+    make test
+    # or directly:
+    pytest tests_python/test_stage_helpers.py
+"""
 
 from __future__ import annotations
 
@@ -175,12 +188,20 @@ class TestEnsureSourceAvailable:
         """Missing required artefacts should raise a StageError for both normal and invalid paths."""
 
         artefact = stage_common.ArtefactConfig(source=source, required=True)
+        attempts = [staging_pipeline._RenderAttempt(source, source)]
 
-        self._assert_required_error(
-            stage_common,
-            staging_pipeline,
-            workspace,
-            artefact,
+        with pytest.raises(stage_common.StageError) as exc:
+            staging_pipeline._ensure_source_available(
+                None, artefact, attempts, workspace
+            )
+
+        message = str(exc.value)
+        assert (
+            "Required artefact not found" in message
+        ), "Missing error preamble for required artefact"
+        assert source in message, (
+            "Missing artefact source in error message: expected to find "
+            f"'{source}'"
         )
 
     def test_optional_warning(
@@ -207,30 +228,3 @@ class TestEnsureSourceAvailable:
             "missing.txt" in message for message in caplog.messages
         ), "Expected warning to mention missing optional artefact 'missing.txt'"
 
-    def _assert_required_error(
-        self,
-        stage_common: object,
-        staging_pipeline: object,
-        workspace: Path,
-        artefact: object,
-    ) -> None:
-        """Assert that missing required artefacts raise informative StageErrors."""
-
-        source = artefact.source
-        attempts = [
-            staging_pipeline._RenderAttempt(source, source),
-        ]
-
-        with pytest.raises(stage_common.StageError) as exc:
-            staging_pipeline._ensure_source_available(
-                None, artefact, attempts, workspace
-            )
-
-        message = str(exc.value)
-        assert (
-            "Required artefact not found" in message
-        ), "Missing error preamble for required artefact"
-        assert source in message, (
-            "Missing artefact source in error message: expected to find "
-            f"'{source}'"
-        )

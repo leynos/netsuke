@@ -22,7 +22,7 @@ import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
 
 
-@pytest.fixture()
+@pytest.fixture
 def populated_workspace(workspace: Path) -> tuple[Path, str]:
     """Populate the workspace with default build outputs and return the target."""
 
@@ -97,6 +97,7 @@ class TestSuccessfulRuns:
     def _assert_staging_structure(
         self, result: object, staging_dir: Path
     ) -> None:
+        """Verify staging directory and artefact structure."""
         assert (
             result.staging_dir == staging_dir
         ), "StageResult must record the staging directory"
@@ -115,6 +116,7 @@ class TestSuccessfulRuns:
         }, "Outputs missing expected keys"
 
     def _assert_checksums(self, result: object, staging_dir: Path) -> None:
+        """Verify checksum files are written alongside staged artefacts."""
         expected_checksums = {
             "netsuke": staging_dir / "netsuke.sha256",
             "netsuke.1": staging_dir / "netsuke.1.sha256",
@@ -127,6 +129,7 @@ class TestSuccessfulRuns:
             assert path.exists(), f"Checksum file {path.name} was not written"
 
     def _assert_output_file(self, github_output: Path, staging_dir: Path) -> None:
+        """Verify GitHub output metadata matches the staged artefacts."""
         outputs = decode_output_file(github_output)
         assert (
             outputs["artifact_dir"] == staging_dir.as_posix()

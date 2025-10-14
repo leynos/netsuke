@@ -1,4 +1,17 @@
-"""Tests covering staging output formatting and validation helpers."""
+"""Tests covering staging output formatting and validation helpers.
+
+This module validates staging output preparation, reserved-key collision
+detection, and GitHub Actions output file formatting (including escaping,
+multi-line protocol, and deterministic ordering).
+
+Usage
+-----
+Run with pytest from the repository root::
+
+    make test
+    # or directly:
+    pytest tests_python/test_stage_output.py
+"""
 
 from __future__ import annotations
 
