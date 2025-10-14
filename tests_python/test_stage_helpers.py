@@ -158,14 +158,34 @@ class TestStageSingleArtefact:
 class TestEnsureSourceAvailable:
     """Tests for `_ensure_source_available` covering required and optional paths."""
 
+    @pytest.mark.parametrize(
+        ("source", "scenario"),
+        [
+            pytest.param("missing.bin", "normal_path", id="normal_path"),
+            pytest.param(
+                "payload\x00bin", "invalid_characters", id="invalid_characters"
+            ),
+        ],
+    )
     def test_required_error(
-        self, stage_common: object, staging_pipeline: object, workspace: Path
+        self,
+        stage_common: object,
+        staging_pipeline: object,
+        workspace: Path,
+        source: str,
+        scenario: str,
     ) -> None:
-        """Missing required artefacts should raise a StageError with context."""
+        """Missing required artefacts should raise a StageError for both normal and invalid paths."""
 
-        artefact = stage_common.ArtefactConfig(source="missing.bin", required=True)
+        # Guard the parametrisation so failures indicate which scenario regressed.
+        if scenario == "invalid_characters":
+            assert "\x00" in source
+        else:
+            assert "\x00" not in source
+
+        artefact = stage_common.ArtefactConfig(source=source, required=True)
         attempts = [
-            staging_pipeline._RenderAttempt("missing.bin", "missing.bin"),
+            staging_pipeline._RenderAttempt(source, source),
         ]
 
         self._assert_required_error(
@@ -174,27 +194,7 @@ class TestEnsureSourceAvailable:
             workspace,
             artefact,
             attempts,
-            "missing.bin",
-        )
-
-    def test_required_error_with_invalid_path_characters(
-        self, stage_common: object, staging_pipeline: object, workspace: Path
-    ) -> None:
-        """Even invalid source paths should surface a descriptive StageError."""
-
-        invalid_source = "payload\x00bin"
-        artefact = stage_common.ArtefactConfig(source=invalid_source, required=True)
-        attempts = [
-            staging_pipeline._RenderAttempt(invalid_source, invalid_source),
-        ]
-
-        self._assert_required_error(
-            stage_common,
-            staging_pipeline,
-            workspace,
-            artefact,
-            attempts,
-            invalid_source,
+            source,
         )
 
     def test_optional_warning(
