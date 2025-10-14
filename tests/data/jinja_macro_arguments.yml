@@ -1,0 +1,23 @@
+netsuke_version: "1.0.0"
+macros:
+  - signature: "no_args()"
+    body: |-
+      ready
+  - signature: "defaulted(name='world')"
+    body: |-
+      Hi {{ name }}
+  - signature: "joiner(items)"
+    body: |-
+      {{ items | join(',') }}
+  - signature: "show(name, excited=false)"
+    body: |-
+      {{ name ~ ('!' if excited else '') }}
+targets:
+  - name: ready
+    command: "{{ no_args() }}"
+  - name: default
+    command: "{{ defaulted() }}"
+  - name: join
+    command: "{{ joiner(['a', 'b', 'c']) }}"
+  - name: excite
+    command: "{{ show('Netsuke', excited=true) }}"

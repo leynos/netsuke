@@ -7,7 +7,7 @@
 //! filesystem patterns during template evaluation. Both helpers fail fast when
 //! inputs are missing or patterns are invalid.
 
-use crate::ast::NetsukeManifest;
+use crate::ast::{MacroDefinition, NetsukeManifest};
 use anyhow::{Context, Result};
 use minijinja::{
     Environment, Error, ErrorKind, State, UndefinedBehavior,
@@ -62,6 +62,11 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 
 fn parse_macro_name(signature: &str) -> Result<String> {
     let trimmed = signature.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow::anyhow!(
+            "macro signature '{signature}' is missing an identifier"
+        ));
+    }
     let Some((name, _rest)) = trimmed.split_once('(') else {
         return Err(anyhow::anyhow!(
             "macro signature '{signature}' must include parameter list"
@@ -84,54 +89,40 @@ fn register_macro(env: &mut Environment, signature: &str, body: &str, index: usi
     env.add_template_owned(template_name.clone(), template_source)
         .with_context(|| format!("compile macro '{name}'"))?;
 
-    let macro_template = template_name.clone();
-    let macro_name = name.clone();
-    env.add_function(
-        name,
-        move |state: &State, args: Rest<Value>| -> Result<Value, Error> {
-            let Rest(args) = args;
-            let template = state.env().get_template(&macro_template)?;
-            let macro_state = template.eval_to_state(())?;
-            let value = macro_state.lookup(&macro_name).ok_or_else(|| {
-                Error::new(
-                    ErrorKind::InvalidOperation,
-                    format!("macro '{macro_name}' is not defined in template '{macro_template}'"),
-                )
-            })?;
-            value.call(&macro_state, &args)
-        },
-    );
-
+    env.add_function(name.clone(), make_macro_fn(template_name, name));
     Ok(())
 }
 
 fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()> {
-    let Some(items) = doc.get("macros") else {
+    let Some(macros) = doc.get("macros").cloned() else {
         return Ok(());
     };
 
-    let seq = items
-        .as_sequence()
-        .ok_or_else(|| anyhow::anyhow!("macros must be a sequence"))?;
-    for (idx, item) in seq.iter().enumerate() {
-        let mapping = item
-            .as_mapping()
-            .ok_or_else(|| anyhow::anyhow!("macros[{idx}] must be a mapping"))?;
-        let signature_key = YamlValue::String("signature".into());
-        let body_key = YamlValue::String("body".into());
-        let signature = mapping
-            .get(&signature_key)
-            .and_then(YamlValue::as_str)
-            .ok_or_else(|| anyhow::anyhow!("macros[{idx}] signature must be a string"))?;
-        let body = mapping
-            .get(&body_key)
-            .and_then(YamlValue::as_str)
-            .ok_or_else(|| anyhow::anyhow!("macros[{idx}] body must be a string"))?;
+    let defs: Vec<MacroDefinition> = serde_yml::from_value(macros)
+        .context("macros must be a sequence of mappings with string signature/body")?;
 
-        register_macro(env, signature, body, idx)
-            .with_context(|| format!("register macro '{signature}'"))?;
+    for (idx, def) in defs.into_iter().enumerate() {
+        register_macro(env, &def.signature, &def.body, idx)
+            .with_context(|| format!("register macro '{}'", def.signature))?;
     }
     Ok(())
+}
+
+fn make_macro_fn(
+    template_name: String,
+    macro_name: String,
+) -> impl Fn(&State, Rest<Value>) -> Result<Value, Error> {
+    move |state, Rest(args)| {
+        let template = state.env().get_template(&template_name)?;
+        let macro_state = template.eval_to_state(())?;
+        let value = macro_state.lookup(&macro_name).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!("macro '{macro_name}' not defined in template '{template_name}'"),
+            )
+        })?;
+        value.call(&macro_state, &args)
+    }
 }
 
 /// Parse a manifest string using Jinja for value templating.
@@ -201,4 +192,95 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use anyhow::Result as AnyResult;
+    use minijinja::Environment;
+    use rstest::{fixture, rstest};
+    use serde_yml::value::Mapping;
+
+    fn render_with(env: &Environment, template: &str) -> AnyResult<String> {
+        Ok(env.render_str(template, ())?)
+    }
+
+    #[fixture]
+    fn strict_env() -> Environment<'static> {
+        let mut env = Environment::new();
+        env.set_undefined_behavior(UndefinedBehavior::Strict);
+        env
+    }
+
+    #[rstest]
+    #[case("greet(name)", "greet")]
+    #[case("shout(text='hi')", "shout")]
+    #[case("joiner(*items)", "joiner")]
+    #[case("format(name, caller=None)", "format")]
+    #[case("complex(value, /, *, flag=false, **kw)", "complex")]
+    fn parse_macro_name_extracts_identifier(#[case] signature: &str, #[case] expected: &str) {
+        let name = parse_macro_name(signature).expect("parse name");
+        assert_eq!(name, expected);
+    }
+
+    #[rstest]
+    #[case("greet", "include parameter list")]
+    #[case("(name)", "missing an identifier")]
+    #[case("   ", "missing an identifier")]
+    fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) {
+        let err = parse_macro_name(signature).expect_err("should fail");
+        assert!(err.to_string().contains(message), "{err}");
+    }
+
+    #[rstest]
+    #[case("greet()", "Hello", "{{ greet() }}", "Hello")]
+    #[case("echo(text='hi')", "{{ text }}", "{{ echo() }}", "hi")]
+    #[case(
+        "joiner(items)",
+        "{{ items | join(',') }}",
+        "{{ joiner(['a', 'b', 'c']) }}",
+        "a,b,c"
+    )]
+    #[case(
+        "show(name, excited=false)",
+        "{{ name ~ ('!' if excited else '') }}",
+        "{{ show('Netsuke', excited=true) }}",
+        "Netsuke!"
+    )]
+    fn register_macro_handles_arguments(
+        #[case] signature: &str,
+        #[case] body: &str,
+        #[case] template: &str,
+        #[case] expected: &str,
+        mut strict_env: Environment,
+    ) {
+        register_macro(&mut strict_env, signature, body, 0).expect("register");
+        let rendered = render_with(&strict_env, template).expect("render");
+        assert_eq!(rendered, expected);
+    }
+
+    #[rstest]
+    fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
+        let mut mapping = Mapping::new();
+        mapping.insert(
+            YamlValue::from("macros"),
+            YamlValue::from(vec![YamlValue::from(42)]),
+        );
+        let doc = YamlValue::Mapping(mapping);
+        let err = register_manifest_macros(&doc, &mut strict_env).expect_err("shape error");
+        assert!(
+            err.to_string()
+                .contains("macros must be a sequence of mappings"),
+            "{err}"
+        );
+    }
+
+    #[rstest]
+    fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
+        let yaml = serde_yml::from_str::<YamlValue>(
+            "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",
+        )
+        .expect("yaml value");
+        register_manifest_macros(&yaml, &mut strict_env).expect("register");
+        let rendered = render_with(&strict_env, "{{ shout(greet('netsuke')) }}").expect("render");
+        assert_eq!(rendered.trim(), "HELLO NETSUKE");
+    }
+}

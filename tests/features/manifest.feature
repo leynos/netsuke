@@ -67,6 +67,16 @@ Feature: Manifest Parsing
     When the manifest is checked
     Then the first target command is "HELLO NETSUKE!"
 
+  Scenario: Rendering manifest macros with varied signatures
+    Given the manifest file "tests/data/jinja_macro_arguments.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 4 macros
+    And the macro 1 signature is "no_args()"
+    And the target 1 command is "ready"
+    And the target 2 command is "Hi world"
+    And the target 3 command is "a,b,c"
+    And the target 4 command is "Netsuke!"
+
   Scenario: Parsing fails when an environment variable is undefined
     Given the environment variable "NETSUKE_UNDEFINED_ENV" is unset
     And the manifest file "tests/data/jinja_env_missing.yml" is parsed
@@ -78,6 +88,12 @@ Feature: Manifest Parsing
     When the parsing result is checked
     Then parsing the manifest fails
     And the error message contains "signature"
+
+  Scenario: Parsing fails when a macro omits parentheses
+    Given the manifest file "tests/data/jinja_macro_missing_parens.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "parameter list"
 
   Scenario: Rendering Jinja conditionals in a manifest
     Given the manifest file "tests/data/jinja_if.yml" is parsed
