@@ -184,17 +184,12 @@ class TestEnsureSourceAvailable:
             assert "\x00" not in source
 
         artefact = stage_common.ArtefactConfig(source=source, required=True)
-        attempts = [
-            staging_pipeline._RenderAttempt(source, source),
-        ]
 
         self._assert_required_error(
             stage_common,
             staging_pipeline,
             workspace,
             artefact,
-            attempts,
-            source,
         )
 
     def test_optional_warning(
@@ -227,10 +222,13 @@ class TestEnsureSourceAvailable:
         staging_pipeline: object,
         workspace: Path,
         artefact: object,
-        attempts: list[object],
-        expected_fragment: str,
     ) -> None:
         """Assert that missing required artefacts raise informative StageErrors."""
+
+        source = artefact.source
+        attempts = [
+            staging_pipeline._RenderAttempt(source, source),
+        ]
 
         with pytest.raises(stage_common.StageError) as exc:
             staging_pipeline._ensure_source_available(
@@ -239,4 +237,4 @@ class TestEnsureSourceAvailable:
 
         message = str(exc.value)
         assert "Required artefact not found" in message
-        assert expected_fragment in message
+        assert source in message

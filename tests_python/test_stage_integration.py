@@ -33,13 +33,13 @@ def populated_workspace(workspace: Path) -> tuple[Path, str]:
 
 def make_staging_config(
     stage_common: object,
-    workspace: Path,
-    target: str,
+    workspace_and_target: tuple[Path, str],
     artefacts: list[object],
     **overrides: object,
 ) -> object:
     """Create a staging config with common defaults for integration tests."""
 
+    workspace, target = workspace_and_target
     defaults = {
         "workspace": workspace,
         "bin_name": "netsuke",
@@ -66,8 +66,7 @@ class TestSuccessfulRuns:
 
         config = make_staging_config(
             stage_common,
-            workspace,
-            target,
+            (workspace, target),
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="target/{target}/release/{bin_name}{bin_ext}",
@@ -174,8 +173,7 @@ class TestSuccessfulRuns:
 
         config = make_staging_config(
             stage_common,
-            workspace,
-            target,
+            (workspace, target),
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="target/{target}/release/{bin_name}{bin_ext}",
@@ -204,8 +202,7 @@ class TestSuccessfulRuns:
 
         config = make_staging_config(
             stage_common,
-            workspace,
-            target,
+            (workspace, target),
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="LICENSE",
@@ -237,8 +234,7 @@ class TestSuccessfulRuns:
 
         config = make_staging_config(
             stage_common,
-            workspace,
-            target,
+            (workspace, target),
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="target/{target}/release/{bin_name}{bin_ext}",
@@ -310,8 +306,7 @@ class TestFailureModes:
 
         config = make_staging_config(
             stage_common,
-            workspace,
-            target,
+            (workspace, target),
             artefacts=[
                 stage_common.ArtefactConfig(
                     source="LICENSE",
