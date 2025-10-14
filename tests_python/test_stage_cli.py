@@ -37,16 +37,56 @@ class _StubCycloptsApp:
 
 
 @pytest.fixture
-def stage_cli(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Provide an isolated workspace and set ``GITHUB_WORKSPACE``."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(root))
+    return root
+
+
+def _remove_sys_path_entry(entry: str) -> None:
+    """Remove ``entry`` from ``sys.path`` if present, preferring index 0."""
+
+    if sys.path and sys.path[0] == entry:
+        del sys.path[0]
+        return
+
+    try:
+        sys.path.remove(entry)
+    except ValueError:
+        pass
+
+
+def _restore_module(name: str, previous: ModuleType | None) -> None:
+    """Restore ``sys.modules[name]`` to ``previous`` or remove if it was absent."""
+
+    if previous is not None:
+        sys.modules[name] = previous
+    else:
+        sys.modules.pop(name, None)
+
+
+@pytest.fixture
+def stage_cli() -> ModuleType:
     """Import the CLI module with a stubbed :mod:`cyclopts`."""
-    sys.path.insert(0, str(SCRIPTS_DIR))
-    monkeypatch.setitem(sys.modules, "cyclopts", ModuleType("cyclopts"))
-    cyclopts_module = sys.modules["cyclopts"]
-    cyclopts_module.App = _StubCycloptsApp  # type: ignore[attr-defined]
-    yield importlib.import_module("stage")
-    sys.path.remove(str(SCRIPTS_DIR))
-    sys.modules.pop("stage", None)
-    sys.modules.pop("cyclopts", None)
+
+    sys_path_entry = str(SCRIPTS_DIR)
+    previous_stage = sys.modules.get("stage")
+    previous_cyclopts = sys.modules.get("cyclopts")
+
+    sys.path.insert(0, sys_path_entry)
+    try:
+        cyclopts_stub = ModuleType("cyclopts")
+        cyclopts_stub.App = _StubCycloptsApp  # type: ignore[attr-defined]
+        sys.modules["cyclopts"] = cyclopts_stub
+
+        module = importlib.import_module("stage")
+        yield module
+    finally:
+        _remove_sys_path_entry(sys_path_entry)
+        _restore_module("stage", previous_stage)
+        _restore_module("cyclopts", previous_cyclopts)
 
 
 def test_stage_cli_stages_and_reports(
