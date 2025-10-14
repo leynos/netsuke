@@ -212,7 +212,7 @@ jobs:
       - id: package
         name: Build Windows installer package
         uses: >-
-          leynos/shared-actions/.github/actions/windows-package@61340852250fe0c3cf1a06a16443629fccce746e
+          leynos/shared-actions/.github/actions/windows-package@9cba6e5ed1a28342df489a24e327c2edca0bb905
         env:
           PRODUCT_NAME: ${{ needs.metadata.outputs.bin_name }}
           MANUFACTURER: Leynos
@@ -226,9 +226,10 @@ jobs:
           output-basename: ${{ needs.metadata.outputs.bin_name }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          upload-artifact: 'false'
+          upload-artifact: ${{ needs.metadata.outputs.should_publish }}
           wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
       - name: Upload Windows artefacts
+        if: needs.metadata.outputs.should_publish == 'true'
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
