@@ -81,10 +81,13 @@ fn parse_macro_name(signature: &str) -> Result<String> {
     Ok(name.to_string())
 }
 
-fn register_macro(env: &mut Environment, signature: &str, body: &str, index: usize) -> Result<()> {
-    let name = parse_macro_name(signature)?;
+fn register_macro(env: &mut Environment, macro_def: &MacroDefinition, index: usize) -> Result<()> {
+    let name = parse_macro_name(&macro_def.signature)?;
     let template_name = format!("__manifest_macro_{index}_{name}");
-    let template_source = format!("{{% macro {signature} %}}{body}{{% endmacro %}}",);
+    let template_source = format!(
+        "{{% macro {} %}}{}{{% endmacro %}}",
+        macro_def.signature, macro_def.body
+    );
 
     env.add_template_owned(template_name.clone(), template_source)
         .with_context(|| format!("compile macro '{name}'"))?;
@@ -102,8 +105,13 @@ fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()
         .context("macros must be a sequence of mappings with string signature/body")?;
 
     for (idx, def) in defs.into_iter().enumerate() {
-        register_macro(env, &def.signature, &def.body, idx)
-            .with_context(|| format!("register macro '{}'", def.signature))?;
+        let macro_def = MacroDefinition {
+            signature: def.signature,
+            body: def.body,
+        };
+        let macro_name = macro_def.signature.clone();
+        register_macro(env, &macro_def, idx)
+            .with_context(|| format!("register macro '{macro_name}'"))?;
     }
     Ok(())
 }
@@ -252,7 +260,11 @@ mod tests {
         #[case] expected: &str,
         mut strict_env: Environment,
     ) {
-        register_macro(&mut strict_env, signature, body, 0).expect("register");
+        let macro_def = MacroDefinition {
+            signature: signature.to_string(),
+            body: body.to_string(),
+        };
+        register_macro(&mut strict_env, &macro_def, 0).expect("register");
         let rendered = render_with(&strict_env, template).expect("render");
         assert_eq!(rendered, expected);
     }
