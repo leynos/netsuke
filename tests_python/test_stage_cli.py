@@ -12,6 +12,10 @@ from types import ModuleType
 import pytest
 from stage_test_helpers import decode_output_file, write_workspace_inputs
 
+# The shared ``workspace`` fixture is defined in ``tests_python.conftest``;
+# keeping the dependency explicit here discourages recreating a local variant
+# that would shadow the shared behaviour and reintroduce divergence.
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_DIR = REPO_ROOT / ".github" / "actions" / "stage" / "scripts"
 
@@ -30,16 +34,6 @@ class _StubCycloptsApp:
         """Prevent the stub from being invoked directly."""
         message = "Stub CLI should not be invoked directly"
         raise RuntimeError(message)  # pragma: no cover - not exercised
-
-
-@pytest.fixture
-def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Provide an isolated workspace and set ``GITHUB_WORKSPACE``."""
-    root = tmp_path / "workspace"
-    root.mkdir()
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(root))
-    return root
-
 
 def _remove_sys_path_entry(entry: str) -> None:
     """Remove ``entry`` from ``sys.path`` if present, preferring index 0."""
