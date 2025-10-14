@@ -739,16 +739,16 @@ providing a secure bridge to the underlying system.
   Symlinks are followed by the `glob` crate by default. Matching is case-
   sensitive on all platforms. `glob_with` enforces
   `require_literal_separator = true` internally, so wildcards do not cross path
-  separators unless `**` is used. Callers may use `/` or `\` in patterns; these
-  are normalized to the host platform before matching. Results contain only
-  files (directories are ignored) and path separators are normalized to `/`.
-  Leading-dot entries are matched by wildcards. Empty results are represented
-  as `[]`. Invalid patterns surface as `SyntaxError`; filesystem iteration
-  errors surface as `InvalidOperation`, matching minijinja error semantics. On
-  Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`,
-  `?`) are preserved during separator normalization. A backslash before `*` or
-  `?` is kept only when the wildcard is trailing or followed by an
-  alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
+  separators unless `**` is used. Callers may use `/` or `\\` in patterns;
+  these are normalized to the host platform before matching. Results contain
+  only files (directories are ignored) and path separators are normalized to
+  `/`. Leading-dot entries are matched by wildcards. Empty results are
+  represented as `[]`. Invalid patterns surface as `SyntaxError`; filesystem
+  iteration errors surface as `InvalidOperation`, matching minijinja error
+  semantics. On Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`,
+  `}`, `*`, `?`) are preserved during separator normalization. A backslash
+  before `*` or `?` is kept only when the wildcard is trailing or followed by
+  an alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
   `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not
   supported. This provides globbing support not available in Ninja itself,
   which does not support globbing.[^3]

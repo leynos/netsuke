@@ -29,8 +29,6 @@ use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
 };
-#[cfg(windows)]
-use shell_quote::windows::quote as windows_quote;
 #[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
 use wait_timeout::ChildExt;
@@ -166,7 +164,25 @@ fn format_command(base: &str, args: &[String]) -> String {
 
 #[cfg(windows)]
 fn quote(arg: &str) -> String {
-    windows_quote(arg)
+    if arg.is_empty() {
+        return "\"\"".to_owned();
+    }
+    let requires_quotes = arg.chars().any(|ch| ch.is_whitespace() || ch == '"');
+    if !requires_quotes {
+        return arg.to_owned();
+    }
+
+    let mut buf = String::with_capacity(arg.len() + 2);
+    buf.push('"');
+    // Double quotation marks so readers understand how cmd.exe interprets them.
+    for ch in arg.chars() {
+        if ch == '"' {
+            buf.push('"');
+        }
+        buf.push(ch);
+    }
+    buf.push('"');
+    buf
 }
 
 #[cfg(not(windows))]
