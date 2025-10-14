@@ -159,12 +159,10 @@ class TestEnsureSourceAvailable:
     """Tests for `_ensure_source_available` covering required and optional paths."""
 
     @pytest.mark.parametrize(
-        ("source", "scenario"),
+        "source",
         [
-            pytest.param("missing.bin", "normal_path", id="normal_path"),
-            pytest.param(
-                "payload\x00bin", "invalid_characters", id="invalid_characters"
-            ),
+            pytest.param("missing.bin", id="normal_path"),
+            pytest.param("payload\x00bin", id="invalid_characters"),
         ],
     )
     def test_required_error(
@@ -173,15 +171,8 @@ class TestEnsureSourceAvailable:
         staging_pipeline: object,
         workspace: Path,
         source: str,
-        scenario: str,
     ) -> None:
         """Missing required artefacts should raise a StageError for both normal and invalid paths."""
-
-        # Guard the parametrisation so failures indicate which scenario regressed.
-        if scenario == "invalid_characters":
-            assert "\x00" in source
-        else:
-            assert "\x00" not in source
 
         artefact = stage_common.ArtefactConfig(source=source, required=True)
 
