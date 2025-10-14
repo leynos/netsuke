@@ -42,14 +42,7 @@ def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def _remove_sys_path_entry(entry: str) -> None:
-    """Remove ``entry`` from ``sys.path`` if it was previously inserted.
-
-    Examples:
-        >>> sys.path.insert(0, "/tmp/example")
-        >>> _remove_sys_path_entry("/tmp/example")
-        >>> "/tmp/example" in sys.path
-        False
-    """
+    """Remove ``entry`` from ``sys.path`` if present, preferring index 0."""
 
     if sys.path and sys.path[0] == entry:
         del sys.path[0]
@@ -62,15 +55,7 @@ def _remove_sys_path_entry(entry: str) -> None:
 
 
 def _restore_module(name: str, previous: ModuleType | None) -> None:
-    """Restore ``sys.modules[name]`` to ``previous`` or remove it if missing.
-
-    Examples:
-        >>> previous = sys.modules.get("json")
-        >>> sys.modules["json"] = ModuleType("json")
-        >>> _restore_module("json", previous)
-        >>> sys.modules.get("json") is previous
-        True
-    """
+    """Restore ``sys.modules[name]`` to ``previous`` or remove if it was absent."""
 
     if previous is not None:
         sys.modules[name] = previous
