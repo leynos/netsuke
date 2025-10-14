@@ -35,16 +35,6 @@ class _StubCycloptsApp:
         message = "Stub CLI should not be invoked directly"
         raise RuntimeError(message)  # pragma: no cover - not exercised
 
-
-@pytest.fixture
-def workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Provide an isolated workspace and set ``GITHUB_WORKSPACE``."""
-    root = tmp_path / "workspace"
-    root.mkdir()
-    monkeypatch.setenv("GITHUB_WORKSPACE", str(root))
-    return root
-
-
 def _remove_sys_path_entry(entry: str) -> None:
     """Remove ``entry`` from ``sys.path`` if present, preferring index 0."""
 
