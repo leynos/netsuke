@@ -1669,8 +1669,8 @@ value is invalid.
 ### 8.6 Release Automation
 
 Release engineering is delegated to GitHub Actions workflows built on the
-`leynos/shared-actions` toolchain. The actions are pinned to
-`9cba6e5ed1a28342df489a24e327c2edca0bb905` so release automation remains
+`leynos/shared-actions` toolchain. All shared composites are pinned to
+`dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b` so release automation remains
 reproducible. The tagging workflow first verifies that the Git ref matches
 `Cargo.toml` and records the crate's binary name once so all subsequent jobs
 operate on consistent metadata. Linux builds invoke the `rust-build-release`
@@ -1725,7 +1725,7 @@ erDiagram
 
 The staged artefacts feed a WiX v4 authoring template stored in
 `installer/Package.wxs`; the workflow invokes the shared
-`windows-package@9cba6e5ed1a28342df489a24e327c2edca0bb905` composite to convert
+`windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b` composite to convert
 the repository licence into RTF, embed the binary, and output a signed MSI
 installer alongside the staged directory. The packaging step gates the action's
 internal artefact uploader behind the `should_publish` flag exported by the
