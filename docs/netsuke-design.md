@@ -739,16 +739,16 @@ providing a secure bridge to the underlying system.
   Symlinks are followed by the `glob` crate by default. Matching is case-
   sensitive on all platforms. `glob_with` enforces
   `require_literal_separator = true` internally, so wildcards do not cross path
-  separators unless `**` is used. Callers may use `/` or `\` in patterns; these
-  are normalized to the host platform before matching. Results contain only
-  files (directories are ignored) and path separators are normalized to `/`.
-  Leading-dot entries are matched by wildcards. Empty results are represented
-  as `[]`. Invalid patterns surface as `SyntaxError`; filesystem iteration
-  errors surface as `InvalidOperation`, matching minijinja error semantics. On
-  Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`,
-  `?`) are preserved during separator normalization. A backslash before `*` or
-  `?` is kept only when the wildcard is trailing or followed by an
-  alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
+  separators unless `**` is used. Callers may use `/` or `\\` in patterns;
+  these are normalized to the host platform before matching. Results contain
+  only files (directories are ignored) and path separators are normalized to
+  `/`. Leading-dot entries are matched by wildcards. Empty results are
+  represented as `[]`. Invalid patterns surface as `SyntaxError`; filesystem
+  iteration errors surface as `InvalidOperation`, matching minijinja error
+  semantics. On Unix, backslash escapes for glob metacharacters (`[`, `]`, `{`,
+  `}`, `*`, `?`) are preserved during separator normalization. A backslash
+  before `*` or `?` is kept only when the wildcard is trailing or followed by
+  an alphanumeric, `_`, or `-`; otherwise it becomes a path separator so
   `config\*.yml` maps to `config/*.yml`. On Windows, backslash escapes are not
   supported. This provides globbing support not available in Ninja itself,
   which does not support globbing.[^3]
@@ -1669,8 +1669,8 @@ value is invalid.
 ### 8.6 Release Automation
 
 Release engineering is delegated to GitHub Actions workflows built on the
-`leynos/shared-actions` toolchain. The actions are pinned to
-`61340852250fe0c3cf1a06a16443629fccce746e` so release automation remains
+`leynos/shared-actions` toolchain. All shared composites are pinned to
+`dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b` so release automation remains
 reproducible. The tagging workflow first verifies that the Git ref matches
 `Cargo.toml` and records the crate's binary name once so all subsequent jobs
 operate on consistent metadata. Linux builds invoke the `rust-build-release`
@@ -1725,9 +1725,11 @@ erDiagram
 
 The staged artefacts feed a WiX v4 authoring template stored in
 `installer/Package.wxs`; the workflow invokes the shared
-`windows-package@61340852250fe0c3cf1a06a16443629fccce746e` composite to convert
+`windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b` composite to convert
 the repository licence into RTF, embed the binary, and output a signed MSI
-installer alongside the staged directory. The composite pins the
+installer alongside the staged directory. The packaging step gates the action's
+internal artefact uploader behind the `should_publish` flag exported by the
+metadata job so that dry runs do not leak MSI artefacts. The composite pins the
 `WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
 `WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
 WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
