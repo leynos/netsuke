@@ -226,7 +226,7 @@ jobs:
           output-basename: ${{ needs.metadata.outputs.bin_name }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          upload-artifact: ${{ needs.metadata.outputs.should_publish }}
+          upload-artifact: ${{ fromJSON(needs.metadata.outputs.should_publish) }}
           wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
       - name: Upload Windows artefacts
         if: needs.metadata.outputs.should_publish == 'true'
