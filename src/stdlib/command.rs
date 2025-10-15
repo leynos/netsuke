@@ -5,6 +5,21 @@
 //! impure so the caller can invalidate any caching layer that depends on pure
 //! template evaluation.
 //!
+//! # Windows quoting strategy
+//!
+//! Windows does not ship a widely-used Rust crate that can reliably escape
+//! `cmd.exe` arguments. General Windows bindings such as `winsafe` expose
+//! Win32 APIs but leave command-line quoting to the caller, and no alternative
+//! crate currently offers a robust drop-in solution. We therefore maintain a
+//! small implementation derived from the official [`CommandLineToArgvW`][ms-argv]
+//! documentation and the detailed guidance on [metacharacter handling][ss64]. The
+//! routine emits double-quoted arguments when required and escapes
+//! metacharacters (`^`, `&`, `|`, `<`, `>`, `%`, and `!`) so that `cmd.exe`
+//! always treats templated data as literals.
+//!
+//! [ms-argv]: https://learn.microsoft.com/windows/win32/api/shellapi/nf-shellapi-commandlinetoargvw
+//! [ss64]: https://ss64.com/nt/syntax-esc.html
+//!
 //! # Security
 //!
 //! The `shell` and `grep` filters execute external commands based on template
@@ -457,7 +472,15 @@ mod tests {
         use super::quote;
 
         assert_eq!(quote("simple"), "simple");
+        assert_eq!(quote(""), "\"\"");
         assert_eq!(quote("needs space"), "\"needs space\"");
+        assert_eq!(quote("pipe|test"), "\"pipe^|test\"");
+        assert_eq!(quote("redir<test"), "\"redir^<test\"");
+        assert_eq!(quote("redir>test"), "\"redir^>test\"");
+        assert_eq!(quote("caret^test"), "\"caret^^test\"");
+        assert_eq!(quote("tab\ttab"), "\"tab\ttab\"");
+        assert_eq!(quote("line\nbreak"), "\"line\nbreak\"");
+        assert_eq!(quote("carriage\rreturn"), "\"carriage\rreturn\"");
         assert_eq!(quote("report&del *.txt"), "\"report^&del *.txt\"");
         assert_eq!(quote("%TEMP%"), "\"%%TEMP%%\"");
         assert_eq!(quote("echo!boom"), "\"echo^!boom\"");
