@@ -11,7 +11,7 @@ use crate::ast::{MacroDefinition, NetsukeManifest};
 use anyhow::{Context, Result};
 use minijinja::{
     Environment, Error, ErrorKind, State, UndefinedBehavior,
-    value::{Rest, Value},
+    value::{Kwargs, Rest, Value},
 };
 use serde_yml::Value as YamlValue;
 use std::{fs, path::Path};
@@ -119,8 +119,8 @@ fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()
 fn make_macro_fn(
     template_name: String,
     macro_name: String,
-) -> impl Fn(&State, Rest<Value>) -> Result<Value, Error> {
-    move |state, Rest(args)| {
+) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
+    move |state, Rest(mut args), kwargs| {
         let template = state.env().get_template(&template_name)?;
         let macro_state = template.eval_to_state(())?;
         let value = macro_state.lookup(&macro_name).ok_or_else(|| {
@@ -129,6 +129,9 @@ fn make_macro_fn(
                 format!("macro '{macro_name}' not defined in template '{template_name}'"),
             )
         })?;
+        if kwargs.args().next().is_some() {
+            args.push(Value::from(kwargs));
+        }
         value.call(&macro_state, &args)
     }
 }
