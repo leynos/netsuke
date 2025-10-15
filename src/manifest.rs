@@ -104,14 +104,9 @@ fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()
     let defs: Vec<MacroDefinition> = serde_yml::from_value(macros)
         .context("macros must be a sequence of mappings with string signature/body")?;
 
-    for (idx, def) in defs.into_iter().enumerate() {
-        let macro_def = MacroDefinition {
-            signature: def.signature,
-            body: def.body,
-        };
-        let macro_name = macro_def.signature.clone();
-        register_macro(env, &macro_def, idx)
-            .with_context(|| format!("register macro '{macro_name}'"))?;
+    for (idx, def) in defs.iter().enumerate() {
+        register_macro(env, def, idx)
+            .with_context(|| format!("register macro '{}'", def.signature))?;
     }
     Ok(())
 }
