@@ -16,6 +16,27 @@ use minijinja::{
 use serde_yml::Value as YamlValue;
 use std::{fs, path::Path};
 
+/// A display name for a manifest source, used in error reporting.
+#[derive(Debug, Clone)]
+pub struct ManifestName(String);
+
+impl ManifestName {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ManifestName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 mod diagnostics;
 mod expand;
 mod glob;
@@ -145,9 +166,9 @@ fn make_macro_fn(
 /// # Errors
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
-fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
+fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(e, yaml, name),
+        source: map_yaml_error(e, yaml, name.as_str()),
     })?;
 
     let mut jinja = Environment::new();
@@ -173,7 +194,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 
     let manifest: NetsukeManifest =
         serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
-            source: map_yaml_error(e, yaml, name),
+            source: map_yaml_error(e, yaml, name.as_str()),
         })?;
 
     render_manifest(manifest, &jinja)
@@ -188,7 +209,7 @@ fn from_str_named(yaml: &str, name: &str) -> Result<NetsukeManifest> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    from_str_named(yaml, "Netsukefile")
+    from_str_named(yaml, &ManifestName::new("Netsukefile"))
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
@@ -200,7 +221,8 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref)
         .with_context(|| format!("failed to read {}", path_ref.display()))?;
-    from_str_named(&data, &path_ref.display().to_string())
+    let name = ManifestName::new(path_ref.display().to_string());
+    from_str_named(&data, &name)
 }
 
 #[cfg(test)]
