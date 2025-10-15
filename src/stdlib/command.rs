@@ -18,10 +18,12 @@
 //! always treats templated data as literals. Double quotes within the argument
 //! are escaped with a caret so the shell preserves them, while preceding
 //! backslashes are passed through unchanged because `cmd.exe` does not treat `\`
-//! as an escape character. When the command reaches the invoked program the
-//! Windows argument splitter applies the [`CommandLineToArgvW`][ms-argv]
-//! backslash rules, so sequences such as `\"` still deliver the intended
-//! backslashes alongside the literal quote.
+//! as an escape character. Line-feed and carriage-return characters are rejected
+//! outright because `cmd.exe` interprets them as command terminators even inside
+//! quotes. When the command reaches the invoked program the Windows argument
+//! splitter applies the [`CommandLineToArgvW`][ms-argv] backslash rules, so
+//! sequences such as `\"` still deliver the intended backslashes alongside the
+//! literal quote.
 //!
 //! [ms-argv]: https://learn.microsoft.com/windows/win32/api/shellapi/nf-shellapi-commandlinetoargvw
 //! [ss64]: https://ss64.com/nt/syntax-esc.html
@@ -34,7 +36,7 @@
 //! enables arbitrary code execution.
 
 use std::{
-    fmt::Write as FmtWrite,
+    fmt::{self, Write as FmtWrite},
     io::{self, Read, Write},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
@@ -133,7 +135,7 @@ fn execute_grep(
 
     let mut args = collect_flag_args(flags)?;
     args.push(pattern.to_owned());
-    let command = format_command("grep", &args);
+    let command = format_command("grep", &args)?;
     let input = to_bytes(value)?;
 
     #[cfg(windows)]
@@ -174,32 +176,59 @@ fn collect_flag_args(flags: Option<Value>) -> Result<Vec<String>, Error> {
     }
 }
 
-fn format_command(base: &str, args: &[String]) -> String {
+fn format_command(base: &str, args: &[String]) -> Result<String, Error> {
     let mut command = String::from(base);
     for arg in args {
         command.push(' ');
-        command.push_str(&quote(arg));
+        let quoted = quote(arg).map_err(|err| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!("argument {arg:?} cannot be safely quoted: {err}"),
+            )
+        })?;
+        command.push_str(&quoted);
     }
-    command
+    Ok(command)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum QuoteError {
+    ContainsLineBreak,
+}
+
+impl fmt::Display for QuoteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ContainsLineBreak => f.write_str(
+                "arguments containing carriage returns or line feeds cannot be safely quoted",
+            ),
+        }
+    }
 }
 
 #[cfg(windows)]
-fn quote(arg: &str) -> String {
+fn quote(arg: &str) -> Result<String, QuoteError> {
     // cmd.exe interprets metacharacters even inside double quotes. Escape them using
     // caret prefixes and collapse environment-expansion tokens so arbitrary inputs
     // remain literal. Reference: https://ss64.com/nt/syntax-esc.html
+    // Line breaks still terminate the command even when quoted, so reject them to
+    // keep templated arguments from spawning additional statements.
+    if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
+        return Err(QuoteError::ContainsLineBreak);
+    }
+
     if arg.is_empty() {
-        return "\"\"".to_owned();
+        return Ok("\"\"".to_owned());
     }
 
     let needs_quotes = arg.chars().any(|ch| {
         matches!(
             ch,
-            ' ' | '\t' | '\n' | '\r' | '"' | '^' | '&' | '|' | '<' | '>' | '%' | '!'
+            ' ' | '\t' | '"' | '^' | '&' | '|' | '<' | '>' | '%' | '!'
         )
     });
     if !needs_quotes {
-        return arg.to_owned();
+        return Ok(arg.to_owned());
     }
 
     let mut buf = String::with_capacity(arg.len() + 2);
@@ -226,13 +255,17 @@ fn quote(arg: &str) -> String {
         }
     }
     buf.push('"');
-    buf
+    Ok(buf)
 }
 
 #[cfg(not(windows))]
-fn quote(arg: &str) -> String {
+fn quote(arg: &str) -> Result<String, QuoteError> {
+    if arg.chars().any(|ch| matches!(ch, '\n' | '\r')) {
+        return Err(QuoteError::ContainsLineBreak);
+    }
+
     let bytes = arg.quoted(Sh);
-    String::from_utf8(bytes).expect("quoted args are valid UTF-8")
+    Ok(String::from_utf8(bytes).expect("quoted args are valid UTF-8"))
 }
 
 fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
@@ -475,26 +508,32 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn quote_escapes_cmd_metacharacters() {
-        use super::quote;
+        use super::{QuoteError, quote};
 
-        assert_eq!(quote("simple"), "simple");
-        assert_eq!(quote(""), "\"\"");
-        assert_eq!(quote("needs space"), "\"needs space\"");
-        assert_eq!(quote("pipe|test"), "\"pipe^|test\"");
-        assert_eq!(quote("redir<test"), "\"redir^<test\"");
-        assert_eq!(quote("redir>test"), "\"redir^>test\"");
-        assert_eq!(quote("caret^test"), "\"caret^^test\"");
-        assert_eq!(quote("tab\ttab"), "\"tab\ttab\"");
-        assert_eq!(quote("line\nbreak"), "\"line\nbreak\"");
-        assert_eq!(quote("carriage\rreturn"), "\"carriage\rreturn\"");
-        assert_eq!(quote("report&del *.txt"), "\"report^&del *.txt\"");
-        assert_eq!(quote("%TEMP%"), "\"%%TEMP%%\"");
-        assert_eq!(quote("echo!boom"), "\"echo^!boom\"");
-        assert_eq!(quote("say \"hi\""), "\"say ^\"hi^\"\"");
-        assert_eq!(quote("\""), "\"^\"\"");
-        assert_eq!(quote("foo\"bar\"baz"), "\"foo^\"bar^\"baz\"");
-        assert_eq!(quote("!DELAYED!"), "\"^!DELAYED^!\"");
-        assert_eq!(quote("\"!VAR!\""), "\"^\"^!VAR^!^\"\"");
-        assert_eq!(quote(r##"C:\path\"ending"##), r#""C:\path\^"ending""#,);
+        assert_eq!(quote("simple").unwrap(), "simple");
+        assert_eq!(quote("").unwrap(), "\"\"");
+        assert_eq!(quote("needs space").unwrap(), "\"needs space\"");
+        assert_eq!(quote("pipe|test").unwrap(), "\"pipe^|test\"");
+        assert_eq!(quote("redir<test").unwrap(), "\"redir^<test\"");
+        assert_eq!(quote("redir>test").unwrap(), "\"redir^>test\"");
+        assert_eq!(quote("caret^test").unwrap(), "\"caret^^test\"");
+        assert_eq!(quote("tab\ttab").unwrap(), "\"tab\ttab\"");
+        assert_eq!(quote("report&del *.txt").unwrap(), "\"report^&del *.txt\"");
+        assert_eq!(quote("%TEMP%").unwrap(), "\"%%TEMP%%\"");
+        assert_eq!(quote("echo!boom").unwrap(), "\"echo^!boom\"");
+        assert_eq!(quote("say \"hi\"").unwrap(), "\"say ^\"hi^\"\"");
+        assert_eq!(quote("\"").unwrap(), "\"^\"\"");
+        assert_eq!(quote("foo\"bar\"baz").unwrap(), "\"foo^\"bar^\"baz\"");
+        assert_eq!(quote("!DELAYED!").unwrap(), "\"^!DELAYED^!\"");
+        assert_eq!(quote("\"!VAR!\"").unwrap(), "\"^\"^!VAR^!^\"\"");
+        assert_eq!(
+            quote(r##"C:\path\"ending"##).unwrap(),
+            r#""C:\path\^"ending""#,
+        );
+        assert_eq!(quote("line\nbreak"), Err(QuoteError::ContainsLineBreak));
+        assert_eq!(
+            quote("carriage\rreturn"),
+            Err(QuoteError::ContainsLineBreak)
+        );
     }
 }
