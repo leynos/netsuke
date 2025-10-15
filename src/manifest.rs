@@ -168,6 +168,42 @@ fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()
     Ok(())
 }
 
+/// Create a wrapper that invokes a compiled manifest macro on demand.
+///
+/// The returned closure fetches the internal template, resolves the macro, and
+/// forwards the provided positional and keyword arguments to the call.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// # use minijinja::Environment;
+/// # use minijinja::value::{Kwargs, Rest, Value};
+/// # use netsuke::manifest::make_macro_fn;
+/// let mut env = Environment::new();
+/// env.add_template(
+///     "macro",
+///     "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
+/// )
+/// .unwrap();
+/// let wrapper = make_macro_fn("macro".into(), "greet".into());
+/// let state = env
+///     .get_template("macro")
+///     .unwrap()
+///     .eval_to_state(())
+///     .unwrap();
+/// let kwargs = Kwargs::from_iter([
+///     (String::from("name"), Value::from("Ada")),
+/// ]);
+/// let output = wrapper(&state, Rest(vec![]), kwargs)
+///     .unwrap()
+///     .to_string();
+/// assert_eq!(output, "hi Ada");
+/// ```
+///
+/// # Errors
+///
+/// The wrapper returns an error if the macro cannot be located or execution
+/// fails.
 fn make_macro_fn(
     template_name: String,
     macro_name: String,
@@ -182,16 +218,22 @@ fn make_macro_fn(
             )
         })?;
 
-        let call_args = if kwargs.args().next().is_some() {
-            args.into_iter()
-                .chain(std::iter::once(Value::from(kwargs)))
-                .collect::<Vec<_>>()
-        } else {
-            args
-        };
-
-        value.call(&macro_state, &call_args)
+        call_macro_value(&value, &macro_state, args, kwargs)
     }
+}
+
+fn call_macro_value(
+    value: &Value,
+    state: &State,
+    mut args: Vec<Value>,
+    kwargs: Kwargs,
+) -> Result<Value, Error> {
+    let has_kwargs = kwargs.args().next().is_some();
+    if has_kwargs {
+        args.push(Value::from(kwargs));
+    }
+
+    value.call(state, &args)
 }
 
 /// Parse a manifest string using Jinja for value templating.
