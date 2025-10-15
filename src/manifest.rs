@@ -81,6 +81,22 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
     }
 }
 
+/// Extract the macro identifier from a signature string.
+///
+/// The signature must follow the form `name(params)` where `name` is a valid
+/// Jinja identifier and `params` is a parameter list (possibly empty).
+///
+/// # Errors
+///
+/// Returns an error if the signature is empty, lacks a parameter list, or the
+/// identifier before `(` is empty.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let name = parse_macro_name("greet(name)").expect("valid signature");
+/// assert_eq!(name, "greet");
+/// ```
 fn parse_macro_name(signature: &str) -> Result<String> {
     let trimmed = signature.trim();
     if trimmed.is_empty() {
@@ -102,6 +118,16 @@ fn parse_macro_name(signature: &str) -> Result<String> {
     Ok(name.to_string())
 }
 
+/// Register a single manifest macro in the Jinja environment.
+///
+/// Compiles the macro body into a template and registers a callable function
+/// with the extracted macro name. The template name is synthesised using the
+/// provided index to ensure uniqueness.
+///
+/// # Errors
+///
+/// Returns an error if the macro signature is invalid or template compilation
+/// fails.
 fn register_macro(env: &mut Environment, macro_def: &MacroDefinition, index: usize) -> Result<()> {
     let name = parse_macro_name(&macro_def.signature)?;
     let template_name = format!("__manifest_macro_{index}_{name}");
@@ -117,6 +143,16 @@ fn register_macro(env: &mut Environment, macro_def: &MacroDefinition, index: usi
     Ok(())
 }
 
+/// Register all manifest macros from a YAML document.
+///
+/// Expects the YAML to have a `macros` key containing a sequence of mappings,
+/// each with `signature` and `body` string fields. Registers each macro in the
+/// environment using [`register_macro`].
+///
+/// # Errors
+///
+/// Returns an error if the YAML shape is invalid, any macro signature is
+/// malformed, or template compilation fails.
 fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()> {
     let Some(macros) = doc.get("macros").cloned() else {
         return Ok(());
