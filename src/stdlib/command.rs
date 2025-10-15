@@ -15,7 +15,13 @@
 //! documentation and the detailed guidance on [metacharacter handling][ss64]. The
 //! routine emits double-quoted arguments when required and escapes
 //! metacharacters (`^`, `&`, `|`, `<`, `>`, `%`, and `!`) so that `cmd.exe`
-//! always treats templated data as literals.
+//! always treats templated data as literals. Double quotes within the argument
+//! are escaped with a caret so the shell preserves them, while preceding
+//! backslashes are passed through unchanged because `cmd.exe` does not treat `\`
+//! as an escape character. When the command reaches the invoked program the
+//! Windows argument splitter applies the [`CommandLineToArgvW`][ms-argv]
+//! backslash rules, so sequences such as `\"` still deliver the intended
+//! backslashes alongside the literal quote.
 //!
 //! [ms-argv]: https://learn.microsoft.com/windows/win32/api/shellapi/nf-shellapi-commandlinetoargvw
 //! [ss64]: https://ss64.com/nt/syntax-esc.html
@@ -485,5 +491,10 @@ mod tests {
         assert_eq!(quote("%TEMP%"), "\"%%TEMP%%\"");
         assert_eq!(quote("echo!boom"), "\"echo^!boom\"");
         assert_eq!(quote("say \"hi\""), "\"say ^\"hi^\"\"");
+        assert_eq!(quote("\""), "\"^\"\"");
+        assert_eq!(quote("foo\"bar\"baz"), "\"foo^\"bar^\"baz\"");
+        assert_eq!(quote("!DELAYED!"), "\"^!DELAYED^!\"");
+        assert_eq!(quote("\"!VAR!\""), "\"^\"^!VAR^!^\"\"");
+        assert_eq!(quote(r##"C:\path\"ending"##), r#""C:\path\^"ending""#,);
     }
 }
