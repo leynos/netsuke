@@ -21,11 +21,29 @@ use std::{fs, path::Path};
 pub struct ManifestName(String);
 
 impl ManifestName {
+    /// Construct a manifest name for diagnostics.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use netsuke::manifest::ManifestName;
+    /// let name = ManifestName::new("Netsukefile");
+    /// assert_eq!(name.to_string(), "Netsukefile");
+    /// ```
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
     #[must_use]
+    /// Borrow the manifest name as a string slice.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use netsuke::manifest::ManifestName;
+    /// let name = ManifestName::new("Config");
+    /// assert_eq!(name.as_str(), "Config");
+    /// ```
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -218,17 +236,8 @@ fn make_macro_fn(
             )
         })?;
 
-        call_macro_value(&value, &macro_state, args.as_slice(), kwargs)
+        <Value as ValueCallExt>::call(&value, &macro_state, args.as_slice(), kwargs)
     }
-}
-
-fn call_macro_value(
-    value: &Value,
-    state: &State,
-    args: &[Value],
-    kwargs: Kwargs,
-) -> Result<Value, Error> {
-    ValueCallExt::call(value, state, args, kwargs)
 }
 
 trait ValueCallExt {
