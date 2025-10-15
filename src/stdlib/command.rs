@@ -164,22 +164,45 @@ fn format_command(base: &str, args: &[String]) -> String {
 
 #[cfg(windows)]
 fn quote(arg: &str) -> String {
+    // cmd.exe interprets metacharacters even inside double quotes. Escape them using
+    // caret prefixes and collapse environment-expansion tokens so arbitrary inputs
+    // remain literal. Reference: https://ss64.com/nt/syntax-esc.html
     if arg.is_empty() {
         return "\"\"".to_owned();
     }
-    let requires_quotes = arg.chars().any(|ch| ch.is_whitespace() || ch == '"');
-    if !requires_quotes {
+
+    let needs_quotes = arg.chars().any(|ch| {
+        matches!(
+            ch,
+            ' ' | '\t' | '\n' | '\r' | '"' | '^' | '&' | '|' | '<' | '>' | '%' | '!'
+        )
+    });
+    if !needs_quotes {
         return arg.to_owned();
     }
 
     let mut buf = String::with_capacity(arg.len() + 2);
     buf.push('"');
-    // Double quotation marks so readers understand how cmd.exe interprets them.
     for ch in arg.chars() {
-        if ch == '"' {
-            buf.push('"');
+        match ch {
+            '"' => {
+                buf.push('^');
+                buf.push('"');
+            }
+            '^' | '&' | '|' | '<' | '>' => {
+                buf.push('^');
+                buf.push(ch);
+            }
+            '%' => {
+                buf.push('%');
+                buf.push('%');
+            }
+            '!' => {
+                buf.push('^');
+                buf.push('!');
+            }
+            _ => buf.push(ch),
         }
-        buf.push(ch);
     }
     buf.push('"');
     buf
@@ -423,5 +446,21 @@ fn append_stderr(message: &mut String, stderr: &[u8]) {
     if !trimmed.is_empty() {
         message.push_str(": ");
         message.push_str(trimmed);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(windows)]
+    #[test]
+    fn quote_escapes_cmd_metacharacters() {
+        use super::quote;
+
+        assert_eq!(quote("simple"), "simple");
+        assert_eq!(quote("needs space"), "\"needs space\"");
+        assert_eq!(quote("report&del *.txt"), "\"report^&del *.txt\"");
+        assert_eq!(quote("%TEMP%"), "\"%%TEMP%%\"");
+        assert_eq!(quote("echo!boom"), "\"echo^!boom\"");
+        assert_eq!(quote("say \"hi\""), "\"say ^\"hi^\"\"");
     }
 }
