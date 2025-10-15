@@ -218,25 +218,38 @@ fn make_macro_fn(
             )
         })?;
 
-        call_macro_value(&value, &macro_state, args, kwargs)
+        call_macro_value(&value, &macro_state, args.as_slice(), kwargs)
     }
 }
 
 fn call_macro_value(
     value: &Value,
     state: &State,
-    args: Vec<Value>,
+    args: &[Value],
+    kwargs: Kwargs,
+) -> Result<Value, Error> {
+    call_value_with_kwargs(value, state, args, kwargs)
+}
+
+/// Bridge `MiniJinja`'s calling convention to the wrapper-friendly signature.
+///
+/// `MiniJinja` encodes keyword arguments as a trailing [`Kwargs`] value in the
+/// positional slice, so this helper rebuilds the slice when keywords are
+/// provided before invoking [`Value::call`].  This keeps the wrapper logic
+/// straightforward while matching the runtime's expectations.
+fn call_value_with_kwargs(
+    value: &Value,
+    state: &State,
+    args: &[Value],
     kwargs: Kwargs,
 ) -> Result<Value, Error> {
     if kwargs.args().next().is_some() {
-        let mut call_args = args;
-        // MiniJinja encodes keyword arguments as a trailing `Kwargs` value on the
-        // argument slice.  Push the wrapper rather than attempting to call with
-        // a separate parameter so the runtime extracts keywords correctly.
+        let mut call_args = Vec::with_capacity(args.len() + 1);
+        call_args.extend_from_slice(args);
         call_args.push(Value::from(kwargs));
         value.call(state, call_args.as_slice())
     } else {
-        value.call(state, args.as_slice())
+        value.call(state, args)
     }
 }
 
