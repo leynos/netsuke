@@ -225,15 +225,19 @@ fn make_macro_fn(
 fn call_macro_value(
     value: &Value,
     state: &State,
-    mut args: Vec<Value>,
+    args: Vec<Value>,
     kwargs: Kwargs,
 ) -> Result<Value, Error> {
-    let has_kwargs = kwargs.args().next().is_some();
-    if has_kwargs {
-        args.push(Value::from(kwargs));
+    if kwargs.args().next().is_some() {
+        let mut call_args = args;
+        // MiniJinja encodes keyword arguments as a trailing `Kwargs` value on the
+        // argument slice.  Push the wrapper rather than attempting to call with
+        // a separate parameter so the runtime extracts keywords correctly.
+        call_args.push(Value::from(kwargs));
+        value.call(state, call_args.as_slice())
+    } else {
+        value.call(state, args.as_slice())
     }
-
-    value.call(state, &args)
 }
 
 /// Parse a manifest string using Jinja for value templating.
