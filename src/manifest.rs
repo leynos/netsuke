@@ -14,8 +14,7 @@ use minijinja::{
     value::{Kwargs, Object, Rest, Value},
 };
 use serde_yml::Value as YamlValue;
-use std::sync::Arc;
-use std::{fs, path::Path};
+use std::{fs, path::Path, ptr, sync::Arc};
 
 /// A display name for a manifest source, used in error reporting.
 #[derive(Debug, Clone)]
@@ -53,6 +52,12 @@ impl ManifestName {
 impl std::fmt::Display for ManifestName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<str> for ManifestName {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
     }
 }
 
@@ -263,8 +268,7 @@ struct CallerAdapter {
 
 impl CallerAdapter {
     fn new(state: &State, caller: Value) -> Self {
-        #[allow(clippy::cast_ptr_alignment)]
-        let ptr = state as *const State<'_, '_> as *const State<'static, 'static>;
+        let ptr = ptr::from_ref(state).cast::<State<'static, 'static>>();
         Self { caller, state: ptr }
     }
 }
@@ -274,7 +278,7 @@ unsafe impl Sync for CallerAdapter {}
 
 impl Object for CallerAdapter {
     fn call(self: &Arc<Self>, _state: &State, args: &[Value]) -> Result<Value, Error> {
-        let state = unsafe { &*self.state.cast::<State<'static, 'static>>() };
+        let state = unsafe { &*self.state };
         self.caller.call(state, args)
     }
 }
@@ -289,7 +293,7 @@ impl Object for CallerAdapter {
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(e, yaml, name.as_str()),
+        source: map_yaml_error(e, yaml, name.as_ref()),
     })?;
 
     let mut jinja = Environment::new();
@@ -315,7 +319,7 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
 
     let manifest: NetsukeManifest =
         serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
-            source: map_yaml_error(e, yaml, name.as_str()),
+            source: map_yaml_error(e, yaml, name.as_ref()),
         })?;
 
     render_manifest(manifest, &jinja)

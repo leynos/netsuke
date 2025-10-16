@@ -417,6 +417,11 @@ unnecessary project risk.
 `serde_yml` is mature, widely adopted, and battle-tested, making it the prudent
 choice for production-quality software.
 
+**Maintenance risk.** `serde_yml` is archived upstream and carries unsoundness
+advisories. Netsuke relies on it today, but we will investigate a maintained
+successor such as `serde_yaml_ng`. A follow-up ADR will outline the migration
+plan and compatibility testing.
+
 ### 3.2 Core Data Structures (`ast.rs`)
 
 The Rust structs that `serde_yml` will deserialise into form the Abstract
