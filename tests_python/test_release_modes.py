@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 from importlib import util
 from pathlib import Path
-from typing import Dict
+from types import ModuleType
 
 import pytest
 
@@ -17,7 +15,7 @@ SCRIPT_PATH = REPO_ROOT / ".github" / "workflows" / "scripts" / "determine_relea
 
 
 @pytest.fixture(scope="module")
-def release_modes_module():  # type: ignore[override]
+def release_modes_module() -> ModuleType:
     """Load the release mode helper as a Python module for unit tests."""
 
     spec = util.spec_from_file_location("determine_release_modes", SCRIPT_PATH)
@@ -64,63 +62,75 @@ class TestDetermineReleaseModes:
 class TestWorkflowBehaviour:
     """Behavioural tests exercising the script entry point."""
 
-    def _run_helper(self, env: Dict[str, str]) -> Dict[str, str]:
-        """Execute the helper script and capture its outputs."""
+    @staticmethod
+    def _invoke_helper(
+        module: ModuleType,
+        *,
+        env: dict[str, str],
+        output_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> dict[str, str]:
+        """Execute ``main`` under a controlled environment."""
 
-        result = subprocess.run(
-            [sys.executable, str(SCRIPT_PATH)],
-            check=True,
-            capture_output=True,
-            env=env,
-            text=True,
-        )
-        assert result.stdout == ""
-        outputs: Dict[str, str] = {}
-        with Path(env["GITHUB_OUTPUT"]).open(encoding="utf-8") as handle:
+        for key, value in env.items():
+            monkeypatch.setenv(key, value)
+
+        module.main()
+
+        outputs: dict[str, str] = {}
+        with output_path.open(encoding="utf-8") as handle:
             for line in handle:
                 key, value = line.strip().split("=", 1)
                 outputs[key] = value
         return outputs
 
-    def test_dry_run_workflow_call_skips_uploads(self, tmp_path):
-        """Dry-run workflow executions should skip uploading artefacts."""
+    @pytest.mark.parametrize(
+        ("event_name", "payload", "expected"),
+        [
+            (
+                "workflow_call",
+                {"inputs": {"dry-run": "true", "publish": "true"}},
+                {
+                    "dry_run": "true",
+                    "should_publish": "false",
+                    "should_upload_workflow_artifacts": "false",
+                },
+            ),
+            (
+                "push",
+                {},
+                {
+                    "dry_run": "false",
+                    "should_publish": "true",
+                    "should_upload_workflow_artifacts": "true",
+                },
+            ),
+        ],
+    )
+    def test_entry_point_outputs(
+        self,
+        event_name: str,
+        payload: dict[str, object],
+        expected: dict[str, str],
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        release_modes_module: ModuleType,
+    ) -> None:
+        """Executing the helper emits workflow outputs for the caller."""
 
-        payload = {"inputs": {"dry-run": "true", "publish": "true"}}
         event_path = tmp_path / "event.json"
         event_path.write_text(json.dumps(payload), encoding="utf-8")
         output_path = tmp_path / "outputs.txt"
 
-        env = os.environ.copy()
-        env.update(
-            {
-                "GITHUB_EVENT_NAME": "workflow_call",
+        outputs = self._invoke_helper(
+            release_modes_module,
+            env={
+                "GITHUB_EVENT_NAME": event_name,
                 "GITHUB_EVENT_PATH": str(event_path),
                 "GITHUB_OUTPUT": str(output_path),
-            }
+            },
+            output_path=output_path,
+            monkeypatch=monkeypatch,
         )
 
-        outputs = self._run_helper(env)
-        assert outputs["dry_run"] == "true"
-        assert outputs["should_publish"] == "false"
-        assert outputs["should_upload_workflow_artifacts"] == "false"
-
-    def test_push_event_emits_publish_outputs(self, tmp_path):
-        """Tag pushes should keep publishing and artefact uploads enabled."""
-
-        event_path = tmp_path / "event.json"
-        event_path.write_text("{}", encoding="utf-8")
-        output_path = tmp_path / "outputs.txt"
-
-        env = os.environ.copy()
-        env.update(
-            {
-                "GITHUB_EVENT_NAME": "push",
-                "GITHUB_EVENT_PATH": str(event_path),
-                "GITHUB_OUTPUT": str(output_path),
-            }
-        )
-
-        outputs = self._run_helper(env)
-        assert outputs["dry_run"] == "false"
-        assert outputs["should_publish"] == "true"
-        assert outputs["should_upload_workflow_artifacts"] == "true"
+        assert outputs == expected
