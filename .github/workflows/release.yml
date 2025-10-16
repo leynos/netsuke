@@ -171,6 +171,8 @@ jobs:
   build-windows:
     needs: metadata
     runs-on: windows-latest
+    env:
+      SHOULD_UPLOAD_WORKFLOW_ARTEFACTS: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
     strategy:
       matrix:
         include:
@@ -231,10 +233,10 @@ jobs:
           output-basename: ${{ needs.metadata.outputs.bin_name }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          upload-artifact: ${{ fromJSON(needs.metadata.outputs.should_publish) }}
+          upload-artifact: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
           wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
       - name: Upload Windows artefacts
-        if: needs.metadata.outputs.should_publish == 'true'
+        if: env.SHOULD_UPLOAD_WORKFLOW_ARTEFACTS == 'true'
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
