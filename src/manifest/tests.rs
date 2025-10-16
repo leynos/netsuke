@@ -1,10 +1,15 @@
 //! Tests for manifest parsing and macro registration helpers.
 
-use super::jinja_macros::{parse_macro_name, register_macro, register_manifest_macros};
+use super::jinja_macros::{
+    call_macro_value, parse_macro_name, register_macro, register_manifest_macros,
+};
 use super::*;
 use crate::ast::MacroDefinition;
 use anyhow::Result as AnyResult;
-use minijinja::Environment;
+use minijinja::{
+    Environment,
+    value::{Kwargs, Value},
+};
 use rstest::{fixture, rstest};
 use serde_yml::value::Mapping;
 
@@ -91,6 +96,39 @@ fn register_macro_forwards_caller(mut strict_env: Environment) {
     let rendered =
         render_with(&strict_env, "{% call wrap('Hi ') %}World{% endcall %}").expect("render");
     assert_eq!(rendered.trim(), "Hi World");
+}
+
+#[rstest]
+fn call_macro_value_supports_kwargs(mut strict_env: Environment) {
+    strict_env
+        .add_template(
+            "macro",
+            "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
+        )
+        .expect("template");
+    let template = strict_env.get_template("macro").expect("template");
+    let state = template.eval_to_state(()).expect("state");
+    let value = state.lookup("greet").expect("macro").clone();
+    let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
+    let rendered = call_macro_value(&state, &value, &[], Some(kwargs)).expect("call");
+    assert_eq!(rendered.to_string(), "hi Ada");
+}
+
+#[rstest]
+fn register_macro_is_reusable(mut strict_env: Environment) {
+    let macro_def = MacroDefinition {
+        signature: "echo(text)".to_string(),
+        body: "{{ text }}".to_string(),
+    };
+    register_macro(&mut strict_env, &macro_def, 0).expect("register");
+
+    let template = "{{ echo('first') }} {{ echo('second') }}";
+    let rendered = render_with(&strict_env, template).expect("render once");
+    assert_eq!(rendered.trim(), "first second");
+
+    // Re-render to ensure the cached macro value remains valid.
+    let rendered_again = render_with(&strict_env, template).expect("render twice");
+    assert_eq!(rendered_again.trim(), "first second");
 }
 
 #[rstest]
