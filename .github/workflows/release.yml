@@ -15,6 +15,13 @@ name: Release Binary
         required: false
         type: boolean
         default: false
+      dry-run:
+        description: >-
+          When `true`, build artefacts without uploading them to GitHub
+          releases or workflow artefacts.
+        required: false
+        type: boolean
+        default: false
       wix-extension-version:
         description: >-
           Version of the WixToolset.UI.wixext extension to install alongside
@@ -52,6 +59,7 @@ jobs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs.value }}
       should_publish: ${{ steps.publish.outputs.value }}
+      dry_run: ${{ steps.dry_run.outputs.value }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
     steps:
       - uses: >-
@@ -63,17 +71,31 @@ jobs:
         # v5
         with:
           python-version: '3.11'
+      - id: dry_run
+        name: Determine dry run mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = 'workflow_call' ]; then
+            dry_run="$(jq -r '.inputs["dry-run"] // false' "$GITHUB_EVENT_PATH")"
+          else
+            dry_run='false'
+          fi
+          echo "value=$dry_run" >>"$GITHUB_OUTPUT"
       - id: publish
         name: Determine publish mode
         shell: bash
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = 'push' ]; then
-            echo "value=true" >>"$GITHUB_OUTPUT"
+            publish='true'
           else
             publish="$(jq -r '.inputs.publish // false' "$GITHUB_EVENT_PATH")"
-            echo "value=$publish" >>"$GITHUB_OUTPUT"
           fi
+          if [ "${{ steps.dry_run.outputs.value }}" = 'true' ]; then
+            publish='false'
+          fi
+          echo "value=$publish" >>"$GITHUB_OUTPUT"
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
@@ -156,6 +178,7 @@ jobs:
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
       - name: Upload Linux artefacts
+        if: needs.metadata.outputs.dry_run != 'true'
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
@@ -302,6 +325,7 @@ jobs:
           mkdir -p "$(dirname "$dest")"
           mv "$PKG_PATH" "$dest"
       - name: Upload macOS artefacts
+        if: needs.metadata.outputs.dry_run != 'true'
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
