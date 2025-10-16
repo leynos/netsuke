@@ -142,6 +142,7 @@ mod tests {
         Ok(NetsukeManifest {
             netsuke_version: Version::parse("1.0.0")?,
             vars: manifest_vars,
+            macros: Vec::new(),
             rules: vec![rule],
             actions: Vec::new(),
             targets: vec![target],

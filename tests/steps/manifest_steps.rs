@@ -229,6 +229,27 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) {
     assert_eq!(manifest.targets.len(), count);
 }
 
+#[then(expr = "the manifest has {int} macros")]
+fn manifest_has_macros(world: &mut CliWorld, count: usize) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    assert_eq!(manifest.macros.len(), count);
+}
+
+#[then(expr = "the macro {int} signature is {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
+fn macro_signature_is(world: &mut CliWorld, index: usize, signature: String) {
+    let manifest = world.manifest.as_ref().expect("manifest");
+    let idx = index.checked_sub(1).expect("macros use 1-based index");
+    let macro_def = manifest
+        .macros
+        .get(idx)
+        .unwrap_or_else(|| panic!("missing macro {index}"));
+    assert_eq!(macro_def.signature, signature);
+}
+
 #[then(expr = "the manifest has targets named {string}")]
 #[expect(
     clippy::needless_pass_by_value,

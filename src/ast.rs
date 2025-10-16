@@ -56,6 +56,15 @@ where
 /// assert_eq!(manifest.targets.len(), 1);
 /// # Ok(()) }
 /// ```
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MacroDefinition {
+    /// Full macro signature as accepted by `MiniJinja`.
+    pub signature: String,
+    /// Body of the macro written using YAML block style.
+    pub body: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
@@ -65,6 +74,10 @@ pub struct NetsukeManifest {
     /// Global key/value pairs available to recipes.
     #[serde(default)]
     pub vars: Vars,
+
+    /// Optional list of user-defined Jinja macros registered before rendering.
+    #[serde(default)]
+    pub macros: Vec<MacroDefinition>,
 
     /// Named rule templates that can be referenced by targets.
     #[serde(default)]

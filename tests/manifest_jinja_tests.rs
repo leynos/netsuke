@@ -163,6 +163,104 @@ fn undefined_variable_errors() {
 }
 
 #[rstest]
+fn registers_manifest_macros() {
+    let yaml = manifest_yaml(concat!(
+        "macros:\n",
+        "  - signature: \"greet(name)\"\n",
+        "    body: |-\n",
+        "      Hello {{ name }}!\n",
+        "  - signature: \"shout(text)\"\n",
+        "    body: |-\n",
+        "      {{ text | upper }}\n",
+        "targets:\n",
+        "  - name: greet\n",
+        "    command: \"{{ shout(greet('world')) }}\"\n",
+    ));
+
+    let manifest = manifest::from_str(&yaml).expect("parse macros");
+    let target = manifest.targets.first().expect("target");
+    match &target.recipe {
+        Recipe::Command { command } => assert_eq!(command, "HELLO WORLD!"),
+        other => panic!("expected command recipe, got {other:?}"),
+    }
+}
+
+#[rstest]
+#[case(
+    concat!(
+        "macros:\n",
+        "  - signature: \"no_args()\"\n",
+        "    body: |-\n",
+        "      ready\n",
+    ),
+    "{{ no_args() }}",
+    "ready",
+)]
+#[case(
+    concat!(
+        "macros:\n",
+        "  - signature: \"defaulted(name='world')\"\n",
+        "    body: |-\n",
+        "      Hi {{ name }}\n",
+    ),
+    "{{ defaulted() }}",
+    "Hi world",
+)]
+#[case(
+    concat!(
+        "macros:\n",
+        "  - signature: \"joiner(items)\"\n",
+        "    body: |-\n",
+        "      {{ items | join(',') }}\n",
+    ),
+    "{{ joiner(['a', 'b', 'c']) }}",
+    "a,b,c",
+)]
+#[case(
+    concat!(
+        "macros:\n",
+        "  - signature: \"show(name, excited=false)\"\n",
+        "    body: |-\n",
+        "      {{ name ~ ('!' if excited else '') }}\n",
+    ),
+    "{{ show('Netsuke', excited=true) }}",
+    "Netsuke!",
+)]
+fn registers_manifest_macro_argument_variants(
+    #[case] macros_block: &str,
+    #[case] expression: &str,
+    #[case] expected: &str,
+) {
+    let command = expression.replace('"', "\\\"");
+    let yaml = manifest_yaml(&format!(
+        "{macros_block}targets:\n  - name: test\n    command: \"{command}\"\n",
+    ));
+
+    let manifest = manifest::from_str(&yaml).expect("parse macros");
+    let target = manifest.targets.first().expect("target");
+    match &target.recipe {
+        Recipe::Command { command } => assert_eq!(command, expected),
+        other => panic!("expected command recipe, got {other:?}"),
+    }
+}
+
+#[rstest]
+fn manifest_macro_with_missing_signature_errors() {
+    let yaml = manifest_yaml(concat!(
+        "macros:\n",
+        "  - body: |\n",
+        "      hi\n",
+        "targets:\n",
+        "  - name: noop\n",
+        "    command: noop\n",
+    ));
+
+    let err = manifest::from_str(&yaml).expect_err("macro signature required");
+    let msg = format!("{err:?}");
+    assert!(msg.contains("signature"), "error message: {msg}");
+}
+
+#[rstest]
 fn syntax_error_errors() {
     let yaml = manifest_yaml("targets:\n  - name: hello\n    command: echo {{ who\n");
 

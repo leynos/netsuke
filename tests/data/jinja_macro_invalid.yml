@@ -1,0 +1,7 @@
+netsuke_version: "1.0.0"
+macros:
+  - body: |
+      Missing signature
+targets:
+  - name: oops
+    command: "{{ greet('world') }}"

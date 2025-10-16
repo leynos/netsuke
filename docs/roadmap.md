@@ -107,7 +107,7 @@ configurations with variables, control flow, and custom functions.
   - [x] Implement the critical glob(pattern) custom function to perform file
      path globbing, with results sorted lexicographically.
 
-  - [ ] Support user-defined Jinja macros declared in a top-level macros list,
+  - [x] Support user-defined Jinja macros declared in a top-level macros list,
     registering them with the environment before rendering.
 
 - **Success Criterion:**
@@ -116,6 +116,13 @@ configurations with variables, control flow, and custom functions.
     conditional logic within string values, the `foreach` and `when` keys,
     custom macros, and the `glob()` function to discover and operate on source
     files.
+
+- [ ] **YAML Parser Migration:**
+
+  - [ ] Draft an ADR evaluating maintained replacements for `serde_yml`
+        (for example `serde_yaml_ng`) and record the migration decision.
+  - [ ] Run a migration spike with the preferred crate, exercising the manifest
+        fixtures to capture compatibility notes and required mitigations.
 
 ## Phase 3: The "Friendly" Polish 🛡️
 

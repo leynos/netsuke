@@ -199,6 +199,45 @@ fn optional_fields() {
 }
 
 #[rstest]
+fn parses_macro_definitions() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        macros:
+          - signature: "greet(name)"
+            body: |-
+              Hello {{ name }}
+        targets:
+          - name: hello
+            command: "{{ greet('world') }}"
+    "#;
+
+    let manifest = parse_manifest(yaml).expect("parse");
+    assert_eq!(manifest.macros.len(), 1);
+    let macro_def = manifest.macros.first().expect("macro");
+    assert_eq!(macro_def.signature, "greet(name)");
+    assert!(macro_def.body.contains("Hello {{ name }}"));
+
+    let serialised = serde_yml::to_string(&manifest.macros).expect("serialise macros");
+    assert!(serialised.contains("greet(name)"));
+    assert!(serialised.contains("Hello {{ name }}"));
+}
+
+#[test]
+fn macro_definition_rejects_invalid_types() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        macros:
+          - signature: 42
+            body: []
+        targets:
+          - name: hello
+            command: noop
+    "#;
+
+    assert!(parse_manifest(yaml).is_err());
+}
+
+#[rstest]
 #[case::invalid_enum_variant(
     r#"
     netsuke_version: "1.0.0"
