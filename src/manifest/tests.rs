@@ -69,6 +69,18 @@ fn register_macro_handles_arguments(
 }
 
 #[rstest]
+fn register_macro_forwards_caller(mut strict_env: Environment) {
+    let macro_def = MacroDefinition {
+        signature: "wrap(prefix, caller)".to_string(),
+        body: "{{ prefix }}{{ caller() }}".to_string(),
+    };
+    register_macro(&mut strict_env, &macro_def, 0).expect("register");
+    let rendered =
+        render_with(&strict_env, "{% call wrap('Hi ') %}World{% endcall %}").expect("render");
+    assert_eq!(rendered.trim(), "Hi World");
+}
+
+#[rstest]
 fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
     let mut mapping = Mapping::new();
     mapping.insert(

@@ -10,10 +10,11 @@
 use crate::ast::{MacroDefinition, NetsukeManifest};
 use anyhow::{Context, Result};
 use minijinja::{
-    Environment, Error, ErrorKind, State, UndefinedBehavior,
-    value::{Kwargs, Rest, Value},
+    AutoEscape, Environment, Error, ErrorKind, State, UndefinedBehavior,
+    value::{Kwargs, Object, Rest, Value},
 };
 use serde_yml::Value as YamlValue;
+use std::sync::Arc;
 use std::{fs, path::Path};
 
 /// A display name for a manifest source, used in error reporting.
@@ -229,35 +230,52 @@ fn make_macro_fn(
     move |state, Rest(args), kwargs| {
         let template = state.env().get_template(&template_name)?;
         let macro_state = template.eval_to_state(())?;
-        let value = macro_state.lookup(&macro_name).ok_or_else(|| {
-            Error::new(
-                ErrorKind::InvalidOperation,
-                format!("macro '{macro_name}' not defined in template '{template_name}'"),
-            )
-        })?;
+        let mut call_args = Vec::with_capacity(args.len() + 1);
+        call_args.extend_from_slice(&args);
+        let mut entries: Vec<(String, Value)> = Vec::new();
+        for key in kwargs.args() {
+            let mut value = kwargs.peek::<Value>(key)?;
+            if key == "caller" {
+                value = Value::from_object(CallerAdapter::new(state, value));
+            }
+            entries.push((key.to_string(), value));
+        }
+        if !entries.is_empty() {
+            call_args.push(Value::from(Kwargs::from_iter(entries)));
+        }
 
-        <Value as ValueCallExt>::call(&value, &macro_state, args.as_slice(), kwargs)
+        let rendered = macro_state.call_macro(&macro_name, call_args.as_slice())?;
+
+        let value = if matches!(state.auto_escape(), AutoEscape::None) {
+            Value::from(rendered)
+        } else {
+            Value::from_safe_string(rendered)
+        };
+        Ok(value)
     }
 }
 
-trait ValueCallExt {
-    fn call(&self, state: &State, args: &[Value], kwargs: Kwargs) -> Result<Value, Error>;
+#[derive(Debug)]
+struct CallerAdapter {
+    caller: Value,
+    state: *const State<'static, 'static>,
 }
 
-impl ValueCallExt for Value {
-    fn call(&self, state: &State, args: &[Value], kwargs: Kwargs) -> Result<Value, Error> {
-        if kwargs.args().next().is_some() {
-            // MiniJinja encodes keyword arguments as a trailing `Kwargs` value
-            // in the positional slice passed to [`Value::call`]. The API does
-            // not expose a dedicated parameter for kwargs, so we append the
-            // converted `Value` when at least one named argument is present.
-            let mut call_args = Vec::with_capacity(args.len() + 1);
-            call_args.extend_from_slice(args);
-            call_args.push(Self::from(kwargs));
-            Self::call(self, state, call_args.as_slice())
-        } else {
-            Self::call(self, state, args)
-        }
+impl CallerAdapter {
+    fn new(state: &State, caller: Value) -> Self {
+        #[allow(clippy::cast_ptr_alignment)]
+        let ptr = state as *const State<'_, '_> as *const State<'static, 'static>;
+        Self { caller, state: ptr }
+    }
+}
+
+unsafe impl Send for CallerAdapter {}
+unsafe impl Sync for CallerAdapter {}
+
+impl Object for CallerAdapter {
+    fn call(self: &Arc<Self>, _state: &State, args: &[Value]) -> Result<Value, Error> {
+        let state = unsafe { &*self.state.cast::<State<'static, 'static>>() };
+        self.caller.call(state, args)
     }
 }
 
