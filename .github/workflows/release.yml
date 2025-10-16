@@ -58,8 +58,9 @@ jobs:
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs.value }}
-      should_publish: ${{ steps.publish.outputs.value }}
-      dry_run: ${{ steps.dry_run.outputs.value }}
+      should_publish: ${{ steps.release_modes.outputs.should_publish }}
+      dry_run: ${{ steps.release_modes.outputs.dry_run }}
+      should_upload_workflow_artifacts: ${{ steps.release_modes.outputs.should_upload_workflow_artifacts }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
     steps:
       - uses: >-
@@ -71,37 +72,16 @@ jobs:
         # v5
         with:
           python-version: '3.11'
-      - id: dry_run
-        name: Determine dry run mode
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = 'workflow_call' ]; then
-            dry_run="$(jq -r '.inputs["dry-run"] // false' "$GITHUB_EVENT_PATH")"
-          else
-            dry_run='false'
-          fi
-          echo "value=$dry_run" >>"$GITHUB_OUTPUT"
-      - id: publish
-        name: Determine publish mode
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = 'push' ]; then
-            publish='true'
-          else
-            publish="$(jq -r '.inputs.publish // false' "$GITHUB_EVENT_PATH")"
-          fi
-          if [ "${{ steps.dry_run.outputs.value }}" = 'true' ]; then
-            publish='false'
-          fi
-          echo "value=$publish" >>"$GITHUB_OUTPUT"
+      - id: release_modes
+        name: Determine release modes
+        shell: python
+        run: python .github/workflows/scripts/determine_release_modes.py
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
           leynos/shared-actions/.github/actions/ensure-cargo-version@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
         with:
-          check-tag: ${{ fromJSON(steps.publish.outputs.value) }}
+          check-tag: ${{ fromJSON(steps.release_modes.outputs.should_publish) }}
       - id: wix_extension_version
         name: Resolve WiX extension version
         shell: bash
@@ -137,6 +117,8 @@ jobs:
   build-linux:
     needs: metadata
     runs-on: ubuntu-latest
+    env:
+      SHOULD_UPLOAD_WORKFLOW_ARTEFACTS: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
     strategy:
       matrix:
         include:
@@ -178,7 +160,7 @@ jobs:
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
       - name: Upload Linux artefacts
-        if: needs.metadata.outputs.dry_run != 'true'
+        if: env.SHOULD_UPLOAD_WORKFLOW_ARTEFACTS == 'true'
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
@@ -264,6 +246,8 @@ jobs:
 
   build-macos:
     needs: metadata
+    env:
+      SHOULD_UPLOAD_WORKFLOW_ARTEFACTS: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
     strategy:
       matrix:
         include:
@@ -325,7 +309,7 @@ jobs:
           mkdir -p "$(dirname "$dest")"
           mv "$PKG_PATH" "$dest"
       - name: Upload macOS artefacts
-        if: needs.metadata.outputs.dry_run != 'true'
+        if: env.SHOULD_UPLOAD_WORKFLOW_ARTEFACTS == 'true'
         uses: >-
           actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         # v4
