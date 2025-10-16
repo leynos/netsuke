@@ -1,6 +1,8 @@
 //! Tests for manifest parsing and macro registration helpers.
 
+use super::jinja_macros::{parse_macro_name, register_macro, register_manifest_macros};
 use super::*;
+use crate::ast::MacroDefinition;
 use anyhow::Result as AnyResult;
 use minijinja::Environment;
 use rstest::{fixture, rstest};
