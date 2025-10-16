@@ -422,6 +422,13 @@ advisories. Netsuke relies on it today, but we will investigate a maintained
 successor such as `serde_yaml_ng`. A follow-up ADR will outline the migration
 plan and compatibility testing.
 
+Follow-up actions:
+
+- Draft an ADR comparing `serde_yml` with candidate replacements and recording
+  the migration decision.
+- Schedule a migration spike to prototype deserialisation with the preferred
+  crate and capture compatibility notes.
+
 ### 3.2 Core Data Structures (`ast.rs`)
 
 The Rust structs that `serde_yml` will deserialise into form the Abstract

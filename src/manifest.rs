@@ -260,6 +260,26 @@ fn make_macro_fn(
     }
 }
 
+/// Adapter to preserve the outer template state for caller block invocation.
+///
+/// `MiniJinja` executes the wrapper closure with a synthetic [`State`] that
+/// differs from the one active when the manifest macro was called. Caller
+/// blocks, however, must run within the original context to access the
+/// manifest's globals and captured variables. This adapter stores a raw
+/// pointer to that state so the macro can invoke the block later.
+///
+/// # Safety
+///
+/// The raw pointer is only valid while the outer [`State`] is alive. Safety
+/// hinges on:
+///
+/// - the macro invocation remaining synchronous (no `async` suspension)
+/// - the original state outliving every [`CallerAdapter`] invocation
+/// - the adapter not moving across threads despite the `Send`/`Sync` impls
+///
+/// The unsynchronised `Send` and `Sync` impls mirror `MiniJinja`'s built-in
+/// macro objects. They rely on the engine executing caller blocks on the same
+/// thread that created the adapter, which matches the runtime's behaviour.
 #[derive(Debug)]
 struct CallerAdapter {
     caller: Value,
