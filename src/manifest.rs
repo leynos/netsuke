@@ -192,6 +192,48 @@ fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()
     Ok(())
 }
 
+/// Invoke a `MiniJinja` value with optional keyword arguments.
+///
+/// `MiniJinja` encodes keyword arguments by appending a [`Kwargs`] value to the
+/// positional slice. This helper hides that convention so callers can pass the
+/// keyword collection explicitly.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use minijinja::{Environment, value::{Kwargs, Value}};
+/// use netsuke::manifest::call_macro_value;
+///
+/// let mut env = Environment::new();
+/// env.add_template(
+///     "macro",
+///     "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
+/// )
+/// .unwrap();
+/// let template = env.get_template("macro").unwrap();
+/// let state = template.eval_to_state(()).unwrap();
+/// let value = state.lookup("greet").unwrap();
+/// let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
+/// let rendered = call_macro_value(&state, &value, &[], Some(kwargs)).unwrap();
+/// assert_eq!(rendered.to_string(), "hi Ada");
+/// ```
+fn call_macro_value(
+    state: &State,
+    macro_value: &Value,
+    positional: &[Value],
+    kwargs: Option<Kwargs>,
+) -> Result<Value, Error> {
+    kwargs.map_or_else(
+        || macro_value.call(state, positional),
+        |kwargs| {
+            let mut call_args = Vec::with_capacity(positional.len() + 1);
+            call_args.extend_from_slice(positional);
+            call_args.push(Value::from(kwargs));
+            macro_value.call(state, call_args.as_slice())
+        },
+    )
+}
+
 /// Create a wrapper that invokes a compiled manifest macro on demand.
 ///
 /// The returned closure fetches the internal template, resolves the macro, and
@@ -235,8 +277,16 @@ fn make_macro_fn(
     move |state, Rest(args), kwargs| {
         let template = state.env().get_template(&template_name)?;
         let macro_state = template.eval_to_state(())?;
-        let mut call_args = Vec::with_capacity(args.len() + 1);
-        call_args.extend_from_slice(&args);
+        let macro_value = macro_state.lookup(&macro_name).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!("macro '{macro_name}' not defined in '{template_name}'"),
+            )
+        })?;
+
+        // MiniJinja requires keyword arguments to be appended as a trailing
+        // `Kwargs` value within the positional slice. Build that value lazily so
+        // we avoid allocating when no keywords were supplied.
         let mut entries: Vec<(String, Value)> = Vec::new();
         for key in kwargs.args() {
             let mut value = kwargs.peek::<Value>(key)?;
@@ -245,12 +295,14 @@ fn make_macro_fn(
             }
             entries.push((key.to_string(), value));
         }
-        if !entries.is_empty() {
-            call_args.push(Value::from(Kwargs::from_iter(entries)));
-        }
+        let maybe_kwargs = if entries.is_empty() {
+            None
+        } else {
+            Some(entries.into_iter().collect::<Kwargs>())
+        };
 
-        let rendered = macro_state.call_macro(&macro_name, call_args.as_slice())?;
-
+        let rendered_value = call_macro_value(&macro_state, &macro_value, &args, maybe_kwargs)?;
+        let rendered: String = rendered_value.into();
         let value = if matches!(state.auto_escape(), AutoEscape::None) {
             Value::from(rendered)
         } else {

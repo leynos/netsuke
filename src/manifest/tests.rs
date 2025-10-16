@@ -69,6 +69,17 @@ fn register_macro_handles_arguments(
 }
 
 #[rstest]
+fn register_macro_supports_keyword_invocation(mut strict_env: Environment) {
+    let macro_def = MacroDefinition {
+        signature: "salute(name='friend')".to_string(),
+        body: "Hello {{ name }}".to_string(),
+    };
+    register_macro(&mut strict_env, &macro_def, 0).expect("register");
+    let rendered = render_with(&strict_env, "{{ salute(name='Ada') }}").expect("render");
+    assert_eq!(rendered.trim(), "Hello Ada");
+}
+
+#[rstest]
 fn register_macro_forwards_caller(mut strict_env: Environment) {
     let macro_def = MacroDefinition {
         signature: "wrap(prefix, caller)".to_string(),

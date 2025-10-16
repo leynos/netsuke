@@ -117,6 +117,13 @@ configurations with variables, control flow, and custom functions.
     custom macros, and the `glob()` function to discover and operate on source
     files.
 
+- [ ] **YAML Parser Migration:**
+
+  - [ ] Draft an ADR evaluating maintained replacements for `serde_yml`
+        (for example `serde_yaml_ng`) and record the migration decision.
+  - [ ] Run a migration spike with the preferred crate, exercising the manifest
+        fixtures to capture compatibility notes and required mitigations.
+
 ## Phase 3: The "Friendly" Polish 🛡️
 
 Objective: To implement the advanced features that deliver a superior, secure,
