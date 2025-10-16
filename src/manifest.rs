@@ -247,6 +247,10 @@ trait ValueCallExt {
 impl ValueCallExt for Value {
     fn call(&self, state: &State, args: &[Value], kwargs: Kwargs) -> Result<Value, Error> {
         if kwargs.args().next().is_some() {
+            // MiniJinja encodes keyword arguments as a trailing `Kwargs` value
+            // in the positional slice passed to [`Value::call`]. The API does
+            // not expose a dedicated parameter for kwargs, so we append the
+            // converted `Value` when at least one named argument is present.
             let mut call_args = Vec::with_capacity(args.len() + 1);
             call_args.extend_from_slice(args);
             call_args.push(Self::from(kwargs));
