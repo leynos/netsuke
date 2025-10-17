@@ -48,18 +48,26 @@ class TestDetermineReleaseModes:
         """Tag pushes should publish and upload artefacts."""
 
         modes = release_modes_module.determine_release_modes("push", {})
-        assert modes.dry_run is False
-        assert modes.should_publish is True
-        assert modes.should_upload_workflow_artifacts is True
+        assert modes.dry_run is False, "Push events must not enter dry-run mode"
+        assert modes.should_publish is True, "Push events must request publishing"
+        assert (
+            modes.should_upload_workflow_artifacts is True
+        ), "Push events must upload workflow artefacts"
 
     def test_workflow_call_dry_run_disables_outputs(self, release_modes_module):
         """Dry-run invocations disable publishing and workflow artefacts."""
 
         event = {"inputs": {"dry-run": "true", "publish": "true"}}
         modes = release_modes_module.determine_release_modes("workflow_call", event)
-        assert modes.dry_run is True
-        assert modes.should_publish is False
-        assert modes.should_upload_workflow_artifacts is False
+        assert (
+            modes.dry_run is True
+        ), "Dry-run invocations must enable dry-run mode"
+        assert (
+            modes.should_publish is False
+        ), "Dry-run invocations must suppress publishing"
+        assert (
+            modes.should_upload_workflow_artifacts is False
+        ), "Dry-run invocations must suppress workflow artefact uploads"
 
     def test_invalid_bool_values_raise(self, release_modes_module):
         """Invalid boolean inputs should surface a helpful error."""
@@ -141,4 +149,6 @@ class TestWorkflowBehaviour:
             monkeypatch=monkeypatch,
         )
 
-        assert outputs == test_case.expected
+        assert (
+            outputs == test_case.expected
+        ), "Script outputs must match the expected mapping"

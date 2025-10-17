@@ -74,7 +74,6 @@ jobs:
           python-version: '3.11'
       - id: release_modes
         name: Determine release modes
-        shell: python
         run: python .github/workflows/scripts/determine_release_modes.py
       - id: ensure_version
         name: Read package version from Cargo.toml
