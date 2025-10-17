@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from importlib import util
 from pathlib import Path
 from types import ModuleType
@@ -12,6 +13,15 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / ".github" / "workflows" / "scripts" / "determine_release_modes.py"
+
+
+@dataclass(frozen=True)
+class WorkflowTestCase:
+    """Test case data for workflow behaviour tests."""
+
+    event_name: str
+    payload: dict[str, object]
+    expected: dict[str, str]
 
 
 @pytest.fixture(scope="module")
@@ -85,21 +95,21 @@ class TestWorkflowBehaviour:
         return outputs
 
     @pytest.mark.parametrize(
-        ("event_name", "payload", "expected"),
+        "test_case",
         [
-            (
-                "workflow_call",
-                {"inputs": {"dry-run": "true", "publish": "true"}},
-                {
+            WorkflowTestCase(
+                event_name="workflow_call",
+                payload={"inputs": {"dry-run": "true", "publish": "true"}},
+                expected={
                     "dry_run": "true",
                     "should_publish": "false",
                     "should_upload_workflow_artifacts": "false",
                 },
             ),
-            (
-                "push",
-                {},
-                {
+            WorkflowTestCase(
+                event_name="push",
+                payload={},
+                expected={
                     "dry_run": "false",
                     "should_publish": "true",
                     "should_upload_workflow_artifacts": "true",
@@ -109,9 +119,7 @@ class TestWorkflowBehaviour:
     )
     def test_entry_point_outputs(
         self,
-        event_name: str,
-        payload: dict[str, object],
-        expected: dict[str, str],
+        test_case: WorkflowTestCase,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         release_modes_module: ModuleType,
@@ -119,13 +127,13 @@ class TestWorkflowBehaviour:
         """Executing the helper emits workflow outputs for the caller."""
 
         event_path = tmp_path / "event.json"
-        event_path.write_text(json.dumps(payload), encoding="utf-8")
+        event_path.write_text(json.dumps(test_case.payload), encoding="utf-8")
         output_path = tmp_path / "outputs.txt"
 
         outputs = self._invoke_helper(
             release_modes_module,
             env={
-                "GITHUB_EVENT_NAME": event_name,
+                "GITHUB_EVENT_NAME": test_case.event_name,
                 "GITHUB_EVENT_PATH": str(event_path),
                 "GITHUB_OUTPUT": str(output_path),
             },
@@ -133,4 +141,4 @@ class TestWorkflowBehaviour:
             monkeypatch=monkeypatch,
         )
 
-        assert outputs == expected
+        assert outputs == test_case.expected
