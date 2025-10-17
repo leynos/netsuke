@@ -117,7 +117,13 @@ class TestWorkflowBehaviour:
         outputs: dict[str, str] = {}
         with output_path.open(encoding="utf-8") as handle:
             for line in handle:
-                key, value = line.strip().split("=", 1)
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if "=" not in stripped:
+                    msg = f"Malformed output line: {stripped!r}"
+                    raise ValueError(msg)
+                key, value = stripped.split("=", 1)
                 outputs[key] = value
         return outputs
 

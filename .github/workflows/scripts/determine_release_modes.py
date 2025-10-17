@@ -126,12 +126,28 @@ def determine_release_modes(event_name: str, event: Mapping[str, Any]) -> Releas
 def main() -> None:
     """Entry point for GitHub Actions steps."""
 
-    event_name = os.environ["GITHUB_EVENT_NAME"]
-    event_path = Path(os.environ["GITHUB_EVENT_PATH"]).resolve()
+    try:
+        event_name = os.environ["GITHUB_EVENT_NAME"]
+    except KeyError as exc:
+        msg = "GITHUB_EVENT_NAME environment variable must be set"
+        raise RuntimeError(msg) from exc
+    try:
+        event_path_value = os.environ["GITHUB_EVENT_PATH"]
+    except KeyError as exc:
+        msg = "GITHUB_EVENT_PATH environment variable must be set"
+        raise RuntimeError(msg) from exc
+    try:
+        output_path_value = os.environ["GITHUB_OUTPUT"]
+    except KeyError as exc:
+        msg = "GITHUB_OUTPUT environment variable must be set"
+        raise RuntimeError(msg) from exc
+
+    event_path = Path(event_path_value).resolve()
+    output_path = Path(output_path_value)
     event_payload = _load_event(event_path)
 
     modes = determine_release_modes(event_name, event_payload)
-    _write_outputs(Path(os.environ["GITHUB_OUTPUT"]), modes)
+    _write_outputs(output_path, modes)
 
 
 def _load_event(event_path: Path) -> Mapping[str, Any]:
