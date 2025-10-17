@@ -45,10 +45,10 @@ class ReleaseModes:
         """Serialise the release modes into ``GITHUB_OUTPUT`` assignments."""
 
         return {
-            "dry_run": _format_bool(self.dry_run),
-            "should_publish": _format_bool(self.should_publish),
+            "dry_run": _format_bool(value=self.dry_run),
+            "should_publish": _format_bool(value=self.should_publish),
             "should_upload_workflow_artifacts": _format_bool(
-                self.should_upload_workflow_artifacts
+                value=self.should_upload_workflow_artifacts
             ),
         }
 
@@ -176,7 +176,7 @@ def _coerce_bool(value: object, *, default: bool) -> bool:
     raise ValueError(msg)
 
 
-def _format_bool(value: bool) -> str:
+def _format_bool(*, value: bool) -> str:
     """Convert ``bool`` values into the lowercase strings Actions expects."""
 
     return "true" if value else "false"

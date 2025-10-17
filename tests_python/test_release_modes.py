@@ -31,7 +31,8 @@ def release_modes_module() -> Iterator[ModuleType]:
 
     spec = util.spec_from_file_location("determine_release_modes", SCRIPT_PATH)
     if spec is None or spec.loader is None:
-        raise RuntimeError("Unable to load determine_release_modes module")
+        message = "Unable to load determine_release_modes module"
+        raise RuntimeError(message)
     module = util.module_from_spec(spec)
     sys.modules[spec.name] = module
     try:
