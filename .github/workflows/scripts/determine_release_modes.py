@@ -30,6 +30,9 @@ from collections.abc import Mapping
 from typing import Any
 
 
+_INPUT_DRIVEN_EVENTS = {"workflow_call", "pull_request"}
+
+
 @dataclass(frozen=True)
 class ReleaseModes:
     """Aggregate release settings derived from the workflow event."""
@@ -88,15 +91,23 @@ def determine_release_modes(event_name: str, event: Mapping[str, Any]) -> Releas
         ... )
         ReleaseModes(dry_run=True, should_publish=False,
         ... should_upload_workflow_artifacts=False)
+
+    Pull request invocations default to dry-run mode, ensuring artefacts remain
+    unpublished::
+
+        >>> determine_release_modes("pull_request", {})
+        ReleaseModes(dry_run=True, should_publish=False,
+        ... should_upload_workflow_artifacts=False)
     """
 
-    if event_name not in {"push", "workflow_call"}:
+    if event_name not in {"push", *_INPUT_DRIVEN_EVENTS}:
         msg = f"Unsupported event '{event_name}' for release workflow"
         raise ValueError(msg)
 
-    inputs = _extract_inputs(event) if event_name == "workflow_call" else {}
+    inputs = _extract_inputs(event) if event_name in _INPUT_DRIVEN_EVENTS else {}
 
-    dry_run = _coerce_bool(inputs.get("dry-run"), default=False)
+    dry_run_default = event_name == "pull_request"
+    dry_run = _coerce_bool(inputs.get("dry-run"), default=dry_run_default)
     if event_name == "push":
         should_publish = True
     else:

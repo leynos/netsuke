@@ -82,6 +82,18 @@ class TestDetermineReleaseModes:
         with pytest.raises(ValueError, match="Unsupported event 'schedule'"):
             release_modes_module.determine_release_modes("schedule", {})
 
+    def test_pull_request_defaults_to_dry_run(self, release_modes_module):
+        """Pull request events should default to dry-run mode."""
+
+        modes = release_modes_module.determine_release_modes("pull_request", {})
+        assert modes.dry_run is True, "Pull requests must enable dry-run mode"
+        assert (
+            modes.should_publish is False
+        ), "Pull requests must suppress publishing"
+        assert (
+            modes.should_upload_workflow_artifacts is False
+        ), "Pull requests must skip workflow artefact uploads"
+
 
 class TestWorkflowBehaviour:
     """Behavioural tests exercising the script entry point."""
@@ -127,6 +139,15 @@ class TestWorkflowBehaviour:
                     "dry_run": "false",
                     "should_publish": "true",
                     "should_upload_workflow_artifacts": "true",
+                },
+            ),
+            WorkflowTestCase(
+                event_name="pull_request",
+                payload={},
+                expected={
+                    "dry_run": "true",
+                    "should_publish": "false",
+                    "should_upload_workflow_artifacts": "false",
                 },
             ),
         ],
