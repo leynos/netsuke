@@ -39,6 +39,12 @@ name: Release Binary
       should_publish:
         description: Whether artefacts should be published to the release
         value: ${{ jobs.metadata.outputs.should_publish }}
+      dry_run:
+        description: Whether the workflow is running in dry-run mode
+        value: ${{ jobs.metadata.outputs.dry_run }}
+      should_upload_workflow_artifacts:
+        description: Whether workflow artefact uploads are enabled
+        value: ${{ jobs.metadata.outputs.should_upload_workflow_artifacts }}
       wix_extension_version:
         description: >-
           Resolved WixToolset.UI.wixext version compatible with the configured
