@@ -6,6 +6,17 @@
 //! exposes `env()` to read environment variables and `glob()` to expand
 //! filesystem patterns during template evaluation. Both helpers fail fast when
 //! inputs are missing or patterns are invalid.
+//!
+//! Consumers interact with the intermediate manifest through the re-exported
+//! [`ManifestValue`] and [`ManifestMap`] aliases. Diagnostics wrap manifest
+//! identifiers in [`ManifestName`] and YAML source strings in
+//! [`ManifestSource`] so callers pass domain-specific types instead of raw
+//! strings.
+//!
+//! The optional `vars` section must deserialise into a JSON object with string
+//! keys. YAML manifests that use non-string keys (for example integers) now
+//! fail with a [`ManifestError::Parse`] diagnostic, matching the Jinja context
+//! semantics and preventing ambiguous variable lookup.
 
 use crate::ast::NetsukeManifest;
 use anyhow::{Context, Result};

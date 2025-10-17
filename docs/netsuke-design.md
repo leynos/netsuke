@@ -51,14 +51,14 @@ before execution, a critical requirement for compatibility with Ninja.
 
 3. Stage 3: Template Expansion
 
-   Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and the
-   `foreach` and `when` keys. Each mapping containing these keys is expanded
-   with an iteration context providing `item` and optional `index`. Variable
-   lookups respect the precedence `globals` < `target.vars` < per-iteration
-   locals, and this context is preserved for later rendering. At this stage
-   Jinja must not modify the YAML structure directly; control constructs live
-   only within these explicit keys. Structural Jinja blocks (`{% ... %}`) are
-   not permitted to reshape mappings or sequences.
+   Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and
+   the `foreach` and `when` keys. Each mapping containing these keys is
+   expanded with an iteration context providing `item` and optional `index`.
+   Variable lookups respect the precedence `globals` < `target.vars` <
+   per-iteration locals, and this context is preserved for later rendering. At
+   this stage Jinja must not modify the YAML structure directly; control
+   constructs live only within these explicit keys. Structural Jinja blocks
+   (`{% ... %}`) are not permitted to reshape mappings or sequences.
 
 4. Stage 4: Deserialisation & Final Rendering
 
@@ -165,7 +165,9 @@ level keys.
 
 - `vars`: A mapping of global key-value pairs. Keys must be strings. Values may
   be strings, numbers, booleans, or sequences. These variables seed the Jinja
-  templating context and drive control flow within the manifest.
+  templating context and drive control flow within the manifest. Non-string
+  YAML keys (for example integers) trigger a parse-time diagnostic because
+  Netsuke loads the values into a JSON object before Jinja evaluation.
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
   `signature` string using standard Jinja syntax and a `body` declared with the
@@ -428,11 +430,11 @@ releases.
 
 ### 3.2 Core Data Structures (`ast.rs`)
 
-The Rust structs that `serde_saphyr` deserialises into form the Abstract
-Syntax Tree (AST) of the build manifest. These structs must precisely mirror
-the YAML schema defined in Section 2. They will be defined in a dedicated
-module, `src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`)
-to enable automatic deserialisation and easy debugging.
+The Rust structs that `serde_saphyr` deserialises into form the Abstract Syntax
+Tree (AST) of the build manifest. These structs must precisely mirror the YAML
+schema defined in Section 2. They will be defined in a dedicated module,
+`src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
+enable automatic deserialisation and easy debugging.
 
 Rust
 
@@ -609,14 +611,18 @@ Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
-the `HashMap<String, serde_json::Value>` type so booleans and sequences are
-preserved for Jinja control flow. Targets also accept optional `phony` and
-`always` booleans. They default to `false`, making it explicit when an action
-should run regardless of file timestamps. Targets listed in the `actions`
-section are deserialised using a custom helper so they are always treated as
-`phony` tasks. This ensures preparation actions never generate build artefacts.
-Convenience functions in `src/manifest.rs` load a manifest from a string or a
-file path, returning `anyhow::Result` for straightforward error handling.
+the `ManifestMap` alias (`serde_json::Map<String, ManifestValue>`) so booleans
+and sequences are preserved for Jinja control flow while presenting a stable
+public API surface. Targets also accept optional `phony` and `always` booleans.
+They default to `false`, making it explicit when an action should run
+regardless of file timestamps. Targets listed in the `actions` section are
+deserialised using a custom helper so they are always treated as `phony` tasks.
+This ensures preparation actions never generate build artefacts. Convenience
+functions in `src/manifest.rs` load a manifest from a string or a file path,
+returning `anyhow::Result` for straightforward error handling. Diagnostics now
+wrap source and manifest identifiers in the `ManifestSource` and `ManifestName`
+newtypes, allowing downstream tooling to reuse the strongly typed strings when
+producing errors or logs.
 
 The ingestion pipeline now parses the manifest as YAML before any Jinja
 evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
@@ -1772,6 +1778,14 @@ with their staging directories to avoid collisions before attaching them to the
 GitHub release draft. This automated pipeline guarantees parity across Windows,
 Linux, and macOS without custom GoReleaser logic.
 
+### 8.7 Release Notes
+
+Netsuke's manifest loader now re-exports the `ManifestValue` and `ManifestMap`
+aliases alongside the `ManifestSource`, `ManifestName`, `map_yaml_error`, and
+`map_data_error` helpers. Library consumers should upgrade to these symbols
+when interacting with manifest data or diagnostics; the change is user-visible
+and must be highlighted in the next crate release summary.
+
 ## Section 9: Implementation Roadmap and Strategic Recommendations
 
 This final section outlines a strategic plan for implementing Netsuke, along
@@ -1794,7 +1808,8 @@ goal.
 
     1. Implement the initial `clap` CLI structure for the `build` command.
 
-    2. Implement the YAML parser using `serde_saphyr` and the AST data structures
+    2. Implement the YAML parser using `serde_saphyr` and the AST data
+       structures
        (`ast.rs`).
 
     3. Implement the AST-to-IR transformation logic, including basic validation
@@ -1862,7 +1877,7 @@ selected for this project and the rationale for their inclusion.
 | Component      | Recommended Crate           | Rationale                                                                                                                       |
 | -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | CLI Parsing    | clap                        | The Rust standard for powerful, derive-based CLI development.                                                                   |
-| YAML Parsing   | serde_saphyr                | Maintained, panic-free YAML 1.2 parser with a serde-compatible API.                                                     |
+| YAML Parsing   | serde_saphyr                | Maintained, panic-free YAML 1.2 parser with a serde-compatible API.                                                             |
 | Templating     | minijinja                   | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                                    |
 | Shell Quoting  | shell-quote                 | A critical security component; provides robust, shell-specific escaping for command arguments.                                  |
 | Error Handling | anyhow + thiserror + miette | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports with precise source spans. |
@@ -1934,7 +1949,6 @@ projects.
 [^8]: "The Ninja build system." Ninja. Accessed on 12 July 2025\.
       <https://ninja-build.org/manual.html>
 
-[^11]: "Saphyr libraries." crates.io. Accessed on 12 July 2025\.
        <https://crates.io/crates/saphyr>
 
 [^15]: "minijinja." crates.io. Accessed on 12 July 2025\.

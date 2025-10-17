@@ -11,7 +11,7 @@ use thiserror::Error;
 /// let source = ManifestSource::from("foo: 1");
 /// assert_eq!(source.as_str(), "foo: 1");
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ManifestSource(String);
 
 impl ManifestSource {
@@ -44,6 +44,12 @@ impl AsRef<str> for ManifestSource {
     }
 }
 
+impl std::fmt::Display for ManifestSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0.as_str())
+    }
+}
+
 /// Display name for a manifest source used in diagnostics.
 ///
 /// # Examples
@@ -52,7 +58,7 @@ impl AsRef<str> for ManifestSource {
 /// let name = ManifestName::new("Netsukefile");
 /// assert_eq!(name.as_str(), "Netsukefile");
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ManifestName(String);
 
 impl ManifestName {
@@ -87,7 +93,7 @@ impl AsRef<str> for ManifestName {
 
 impl std::fmt::Display for ManifestName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        f.write_str(self.0.as_str())
     }
 }
 
@@ -242,7 +248,8 @@ pub fn map_data_error(
     err: serde_json::Error,
     name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
-    let message = format!("manifest structure error in {}: {err}", name.as_ref());
+    let message =
+        format!("[netsuke::manifest::structure] manifest structure error in {name}: {err}");
     Box::new(DataDiagnostic {
         source: err,
         message,
