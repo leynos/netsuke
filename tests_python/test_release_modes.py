@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass
 from importlib import util
 from pathlib import Path
@@ -25,7 +26,7 @@ class WorkflowTestCase:
 
 
 @pytest.fixture(scope="module")
-def release_modes_module() -> ModuleType:
+def release_modes_module() -> Iterator[ModuleType]:
     """Load the release mode helper as a Python module for unit tests."""
 
     spec = util.spec_from_file_location("determine_release_modes", SCRIPT_PATH)
@@ -35,10 +36,9 @@ def release_modes_module() -> ModuleType:
     sys.modules[spec.name] = module
     try:
         spec.loader.exec_module(module)
-    except Exception:
+        yield module
+    finally:
         sys.modules.pop(spec.name, None)
-        raise
-    return module
 
 
 class TestDetermineReleaseModes:
@@ -75,6 +75,12 @@ class TestDetermineReleaseModes:
         event = {"inputs": {"dry-run": "maybe"}}
         with pytest.raises(ValueError, match="Cannot interpret 'maybe'"):
             release_modes_module.determine_release_modes("workflow_call", event)
+
+    def test_unsupported_event_raises(self, release_modes_module):
+        """Unsupported events should raise a clear error."""
+
+        with pytest.raises(ValueError, match="Unsupported event 'schedule'"):
+            release_modes_module.determine_release_modes("schedule", {})
 
 
 class TestWorkflowBehaviour:
