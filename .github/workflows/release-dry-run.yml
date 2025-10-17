@@ -5,40 +5,9 @@ name: Release Dry Run
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 
-env:
-  REPO_NAME: ${{ github.event.repository.name }}
-
 jobs:
   release:
     uses: ./.github/workflows/release.yml
     with:
-      publish: false
-      wix-extension-version: '6'
+      dry-run: true
     secrets: inherit
-
-  validate-artifacts:
-    name: Validate packaged artefacts
-    needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download artefacts
-        uses: >-
-          actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        # v4
-        with:
-          path: dist
-          pattern: ${{ env.REPO_NAME }}-*
-      - id: validate
-        name: Validate artefacts
-        uses: ./.github/actions/upload-release-assets
-        with:
-          release-tag: ${{ github.ref_name }}
-          bin-name: ${{ needs.release.outputs.bin_name }}
-          dist-dir: dist
-          dry-run: "true"
-      - name: Check validation errors
-        if: steps.validate.outputs.upload-error == 'true'
-        run: |
-          echo "Error validating release assets:"
-          printf '%s\n' "${{ steps.validate.outputs.error-message }}"
-          exit 1
