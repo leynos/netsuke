@@ -10,7 +10,7 @@
 use crate::ast::NetsukeManifest;
 use anyhow::{Context, Result};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
-use serde_json::Value as YamlValue;
+use serde::de::Error as _;
 use std::{fs, path::Path};
 
 mod diagnostics;
@@ -19,6 +19,9 @@ mod glob;
 mod hints;
 mod jinja_macros;
 mod render;
+
+pub type ManifestValue = serde_json::Value;
+pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
@@ -71,9 +74,10 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(e, &ManifestSource::from(yaml), name),
-    })?;
+    let mut doc: ManifestValue =
+        serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
+            source: map_yaml_error(e, &ManifestSource::from(yaml), name),
+        })?;
 
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -82,7 +86,16 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = crate::stdlib::register(&mut jinja);
 
-    if let Some(vars) = doc.get("vars").and_then(|v| v.as_object()).cloned() {
+    if let Some(vars_value) = doc.get("vars") {
+        let vars = vars_value
+            .as_object()
+            .cloned()
+            .ok_or_else(|| ManifestError::Parse {
+                source: map_data_error(
+                    serde_json::Error::custom("manifest vars must be an object with string keys"),
+                    name,
+                ),
+            })?;
         for (key, value) in vars {
             jinja.add_global(key, Value::from_serialize(value));
         }

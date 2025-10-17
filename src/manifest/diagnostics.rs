@@ -93,30 +93,30 @@ impl std::fmt::Display for ManifestName {
 
 use super::hints::YAML_HINTS;
 
-fn saturating_usize(value: u64) -> usize {
-    usize::try_from(value.min(usize::MAX as u64)).unwrap_or(usize::MAX)
+fn byte_index(src: &ManifestSource, loc: Location) -> usize {
+    byte_index_at(src.as_ref(), loc.line(), loc.column())
 }
 
-fn location_to_index(src: &ManifestSource, loc: Location) -> usize {
-    let target_line = saturating_usize(loc.line().saturating_sub(1));
-    let target_column = saturating_usize(loc.column().saturating_sub(1));
+fn byte_index_at(src: &str, line: u64, column: u64) -> usize {
+    let target_line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
+    let target_column = usize::try_from(column.saturating_sub(1)).unwrap_or(usize::MAX);
     let mut offset = 0usize;
-    for (idx, segment) in src.as_ref().split_inclusive('\n').enumerate() {
+    for (idx, segment) in src.split_inclusive('\n').enumerate() {
         if idx == target_line {
             let line = segment.strip_suffix('\n').unwrap_or(segment);
-            let byte_index = line
+            let column_offset = line
                 .char_indices()
                 .nth(target_column)
                 .map_or(line.len(), |(byte_idx, _)| byte_idx);
-            return offset + byte_index;
+            return offset + column_offset;
         }
         offset += segment.len();
     }
-    src.as_ref().len()
+    src.len()
 }
 
 fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
-    let at = location_to_index(src, loc);
+    let at = byte_index(src, loc);
     let bytes = src.as_ref().as_bytes();
     let (start, end) = match bytes.get(at) {
         Some(&b) if b != b'\n' => (at, at + 1),
@@ -151,7 +151,7 @@ struct YamlDiagnostic {
 
 fn has_tab_indent(src: &ManifestSource, loc: Option<Location>) -> bool {
     let Some(loc) = loc else { return false };
-    let line_idx = saturating_usize(loc.line().saturating_sub(1));
+    let line_idx = usize::try_from(loc.line().saturating_sub(1)).unwrap_or(usize::MAX);
     let line = src.as_ref().lines().nth(line_idx).unwrap_or("");
     line.chars()
         .take_while(|c| c.is_whitespace())
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn map_yaml_error_includes_tab_hint() {
         let src = ManifestSource::from("\tkey: \"unterminated");
-        let err = serde_saphyr::from_str::<serde_json::Value>(src.as_ref())
+        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
             .expect_err("expected parse error");
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
@@ -262,5 +262,43 @@ mod tests {
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
         assert!(diag.to_string().contains("line 1, column 1"));
+    }
+}
+
+#[cfg(test)]
+fn expected_offset(src: &str, column: u64) -> usize {
+    src.chars()
+        .take(usize::try_from(column.saturating_sub(1)).unwrap_or(usize::MAX))
+        .map(char::len_utf8)
+        .sum()
+}
+
+#[cfg(test)]
+mod byte_index_tests {
+    use super::{byte_index_at, expected_offset};
+
+    #[test]
+    fn byte_index_accounts_for_multibyte_characters() {
+        let line = "emoji: 😀value";
+        let column = 9; // just after the emoji, before the 'v'.
+        let offset = byte_index_at(line, 1, column);
+        assert_eq!(offset, expected_offset(line, column));
+    }
+
+    #[test]
+    fn byte_index_clamps_past_line_end() {
+        let line = "short";
+        let column = 42;
+        let offset = byte_index_at(line, 1, column);
+        assert_eq!(offset, line.len());
+    }
+
+    #[test]
+    fn byte_index_advances_over_previous_lines() {
+        let src = "one\ntwo\nthree";
+        let column = 3; // 'r' in "three"
+        let offset = byte_index_at(src, 3, column);
+        let expected = "one\ntwo\n".len() + expected_offset("three", column);
+        assert_eq!(offset, expected);
     }
 }

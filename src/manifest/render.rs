@@ -1,8 +1,8 @@
 //! Renders manifest templates using `MiniJinja` before execution.
+use super::ManifestValue;
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use serde_json::Value as YamlValue;
 
 /// Render manifest targets and rules by evaluating template expressions.
 ///
@@ -67,7 +67,7 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
 fn render_vars(vars: &mut Vars, env: &Environment) -> Result<()> {
     let snapshot = vars.clone();
     for (key, value) in vars.iter_mut() {
-        if let YamlValue::String(s) = value {
+        if let ManifestValue::String(s) = value {
             *s = render_str_with(env, s, &snapshot, || format!("render var '{key}'"))?;
         }
     }
@@ -107,11 +107,11 @@ mod tests {
 
     fn sample_manifest() -> Result<NetsukeManifest> {
         let mut target_vars = Vars::new();
-        target_vars.insert("greet".into(), YamlValue::String("hello".into()));
-        target_vars.insert("subject".into(), YamlValue::String("world".into()));
+        target_vars.insert("greet".into(), ManifestValue::String("hello".into()));
+        target_vars.insert("subject".into(), ManifestValue::String("world".into()));
         target_vars.insert(
             "message".into(),
-            YamlValue::String("{{ greet }} {{ subject }}".into()),
+            ManifestValue::String("{{ greet }} {{ subject }}".into()),
         );
 
         let target = Target {
@@ -137,7 +137,10 @@ mod tests {
         };
 
         let mut manifest_vars = Vars::new();
-        manifest_vars.insert("message".into(), YamlValue::String("hello world".into()));
+        manifest_vars.insert(
+            "message".into(),
+            ManifestValue::String("hello world".into()),
+        );
 
         Ok(NetsukeManifest {
             netsuke_version: Version::parse("1.0.0")?,

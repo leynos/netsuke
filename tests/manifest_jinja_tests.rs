@@ -449,7 +449,9 @@ fn foreach_vars_must_be_mapping() {
 
     let err = manifest::from_str(&yaml).expect_err("parse should fail");
     assert!(
-        err.to_string().contains("target.vars must be a mapping"),
+        err.chain()
+            .map(ToString::to_string)
+            .any(|msg| msg.contains("target.vars must be an object")),
         "unexpected error: {err}"
     );
 }

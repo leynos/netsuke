@@ -28,6 +28,21 @@ fn normalise_report(report: &str) -> String {
 )]
 #[case(
     concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: root\n",
+        "    command: echo\n",
+        "    vars:\n",
+        "      nested:\n",
+        "        deeper: { key: value\n",
+    ),
+    &[
+        "line 8, column 1",
+        "did not find expected ',' or '}'",
+    ],
+)]
+#[case(
+    concat!(
         "targets:\n",
         "  - name: ok\n",
         "    command: echo\n",

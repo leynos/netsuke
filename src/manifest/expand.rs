@@ -1,9 +1,8 @@
 //! Expands manifest foreach directives into concrete targets.
+use super::{ManifestMap, ManifestValue};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
-use serde_json::{Number as JsonNumber, Value as YamlValue};
-
-type YamlMapping = serde_json::Map<String, YamlValue>;
+use serde_json::Number as JsonNumber;
 
 /// Expand manifest targets defined with the `foreach` key.
 ///
@@ -11,7 +10,7 @@ type YamlMapping = serde_json::Map<String, YamlValue>;
 ///
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialise, or when target metadata is malformed.
-pub fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
+pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> {
     let Some(targets) = doc.get_mut("targets").and_then(|v| v.as_array_mut()) else {
         return Ok(());
     };
@@ -19,7 +18,7 @@ pub fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
     let mut expanded = Vec::new();
     for target in std::mem::take(targets) {
         match target {
-            YamlValue::Object(map) => expanded.extend(expand_target(map, env)?),
+            ManifestValue::Object(map) => expanded.extend(expand_target(map, env)?),
             other => expanded.push(other),
         }
     }
@@ -28,7 +27,7 @@ pub fn expand_foreach(doc: &mut YamlValue, env: &Environment) -> Result<()> {
     Ok(())
 }
 
-fn expand_target(map: YamlMapping, env: &Environment) -> Result<Vec<YamlValue>> {
+fn expand_target(map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, env)?;
         let mut items = Vec::new();
@@ -39,15 +38,15 @@ fn expand_target(map: YamlMapping, env: &Environment) -> Result<Vec<YamlValue>> 
                 continue;
             }
             inject_iteration_vars(&mut clone, &item, index)?;
-            items.push(YamlValue::Object(clone));
+            items.push(ManifestValue::Object(clone));
         }
         Ok(items)
     } else {
-        Ok(vec![YamlValue::Object(map)])
+        Ok(vec![ManifestValue::Object(map)])
     }
 }
 
-fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<Value>> {
+fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {
     if let Some(seq) = expr_val.as_array() {
         return Ok(seq.iter().cloned().map(Value::from_serialize).collect());
     }
@@ -60,7 +59,7 @@ fn parse_foreach_values(expr_val: &YamlValue, env: &Environment) -> Result<Vec<V
 }
 
 fn when_allows(
-    map: &mut YamlMapping,
+    map: &mut ManifestMap,
     env: &Environment,
     item: &Value,
     index: usize,
@@ -74,13 +73,13 @@ fn when_allows(
     }
 }
 
-fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> Result<()> {
+fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
     let mut vars = match map.remove("vars") {
-        None => YamlMapping::new(),
-        Some(YamlValue::Object(m)) => m,
+        None => ManifestMap::new(),
+        Some(ManifestValue::Object(m)) => m,
         Some(other) => {
             return Err(anyhow::anyhow!(
-                "target.vars must be a mapping, got: {other:?}"
+                "target.vars must be an object, got: {other:?}"
             ));
         }
     };
@@ -88,15 +87,15 @@ fn inject_iteration_vars(map: &mut YamlMapping, item: &Value, index: usize) -> R
         "item".into(),
         serde_json::to_value(item).context("serialise item")?,
     );
-    let index_value = YamlValue::Number(JsonNumber::from(
+    let index_value = ManifestValue::Number(JsonNumber::from(
         u64::try_from(index).expect("index overflow"),
     ));
     vars.insert("index".into(), index_value);
-    map.insert("vars".into(), YamlValue::Object(vars));
+    map.insert("vars".into(), ManifestValue::Object(vars));
     Ok(())
 }
 
-fn as_str<'a>(value: &'a YamlValue, field: &str) -> Result<&'a str> {
+fn as_str<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
     value
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("{field} must be a string expression"))
@@ -117,7 +116,7 @@ mod tests {
     #[test]
     fn expand_foreach_expands_sequence_values() -> Result<()> {
         let env = Environment::new();
-        let mut doc: YamlValue = serde_saphyr::from_str(
+        let mut doc: ManifestValue = serde_saphyr::from_str(
             "targets:
   - name: literal
     foreach:
@@ -140,11 +139,11 @@ mod tests {
                 .expect("vars map");
             let index_val = vars.get("index").expect("index value");
             let item_val = vars.get("item").expect("item value");
-            let YamlValue::Number(index_num) = index_val else {
+            let ManifestValue::Number(index_num) = index_val else {
                 panic!("index should be numeric: {index_val:?}");
             };
             assert_eq!(index_num.as_u64().expect("u64"), idx as u64);
-            let YamlValue::Number(item_num) = item_val else {
+            let ManifestValue::Number(item_num) = item_val else {
                 panic!("item should be numeric: {item_val:?}");
             };
             assert_eq!(item_num.as_u64().expect("u64"), (idx + 1) as u64);
@@ -155,7 +154,7 @@ mod tests {
     #[test]
     fn expand_foreach_applies_when_expression() -> Result<()> {
         let env = Environment::new();
-        let mut doc: YamlValue = serde_saphyr::from_str(
+        let mut doc: ManifestValue = serde_saphyr::from_str(
             "targets:
   - name: literal
     foreach: '[1, 2, 3]'
@@ -175,7 +174,7 @@ mod tests {
                     .get("vars")
                     .and_then(|v| v.as_object())
                     .expect("vars map");
-                let YamlValue::Number(num) = vars.get("index").expect("index value") else {
+                let ManifestValue::Number(num) = vars.get("index").expect("index value") else {
                     panic!("index missing");
                 };
                 num.as_u64().expect("u64")
