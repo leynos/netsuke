@@ -148,6 +148,19 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
 }
 
 #[rstest]
+fn register_manifest_macros_requires_body(mut strict_env: Environment) {
+    let mut macro_mapping = Mapping::new();
+    macro_mapping.insert(YamlValue::from("signature"), YamlValue::from("greet(name)"));
+    let macros = YamlValue::Sequence(vec![YamlValue::Mapping(macro_mapping)]);
+    let mut doc = Mapping::new();
+    doc.insert(YamlValue::from("macros"), macros);
+    let doc = YamlValue::Mapping(doc);
+
+    let err = register_manifest_macros(&doc, &mut strict_env).expect_err("missing macro body");
+    assert!(err.to_string().contains("body"), "{err}");
+}
+
+#[rstest]
 fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
     let yaml = serde_yml::from_str::<YamlValue>(
         "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",

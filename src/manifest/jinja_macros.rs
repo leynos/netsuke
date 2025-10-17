@@ -8,7 +8,7 @@
 use crate::ast::MacroDefinition;
 use anyhow::{Context, Result};
 use minijinja::{
-    AutoEscape, Environment, Error, State,
+    AutoEscape, Environment, Error, ErrorKind, State,
     value::{Kwargs, Object, Rest, Value},
 };
 use serde_yml::Value as YamlValue;
@@ -201,7 +201,14 @@ fn make_macro_fn(
         for key in kwargs.args() {
             let mut value = kwargs.peek::<Value>(key)?;
             if key == "caller" {
-                value = Value::from_object(CallerAdapter::new(state, value));
+                if value.as_object().is_some() {
+                    value = Value::from_object(CallerAdapter::new(state, value));
+                } else {
+                    return Err(Error::new(
+                        ErrorKind::InvalidOperation,
+                        format!("'caller' argument must be callable, got {}", value.kind()),
+                    ));
+                }
             }
             entries.push((key.to_string(), value));
         }
