@@ -13,51 +13,6 @@ use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
 use serde_json::Value as YamlValue;
 use std::{fs, path::Path};
 
-/// A display name for a manifest source, used in error reporting.
-#[derive(Debug, Clone)]
-pub struct ManifestName(String);
-
-impl ManifestName {
-    /// Construct a manifest name for diagnostics.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use netsuke::manifest::ManifestName;
-    /// let name = ManifestName::new("Netsukefile");
-    /// assert_eq!(name.to_string(), "Netsukefile");
-    /// ```
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    #[must_use]
-    /// Borrow the manifest name as a string slice.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use netsuke::manifest::ManifestName;
-    /// let name = ManifestName::new("Config");
-    /// assert_eq!(name.as_str(), "Config");
-    /// ```
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ManifestName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl AsRef<str> for ManifestName {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
 mod diagnostics;
 mod expand;
 mod glob;
@@ -65,7 +20,9 @@ mod hints;
 mod jinja_macros;
 mod render;
 
-pub use diagnostics::{ManifestError, map_data_error, map_yaml_error};
+pub use diagnostics::{
+    ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
+};
 pub use glob::glob_paths;
 
 pub use expand::expand_foreach;
@@ -115,7 +72,7 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     let mut doc: YamlValue = serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(e, yaml, name.as_ref()),
+        source: map_yaml_error(e, &ManifestSource::from(yaml), name),
     })?;
 
     let mut jinja = Environment::new();
@@ -137,7 +94,7 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
 
     let manifest: NetsukeManifest =
         serde_json::from_value(doc).map_err(|e| ManifestError::Parse {
-            source: map_data_error(e, name.as_ref()),
+            source: map_data_error(e, name),
         })?;
 
     render_manifest(manifest, &jinja)

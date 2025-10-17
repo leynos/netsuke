@@ -3,17 +3,105 @@ use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde_saphyr::{Error as YamlError, Location};
 use thiserror::Error;
 
+/// YAML source content for a manifest.
+///
+/// # Examples
+/// ```rust
+/// use netsuke::manifest::ManifestSource;
+/// let source = ManifestSource::from("foo: 1");
+/// assert_eq!(source.as_str(), "foo: 1");
+/// ```
+#[derive(Debug, Clone)]
+pub struct ManifestSource(String);
+
+impl ManifestSource {
+    #[must_use]
+    pub fn new(src: impl Into<String>) -> Self {
+        Self(src.into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<&str> for ManifestSource {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<String> for ManifestSource {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl AsRef<str> for ManifestSource {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+/// Display name for a manifest source used in diagnostics.
+///
+/// # Examples
+/// ```rust
+/// use netsuke::manifest::ManifestName;
+/// let name = ManifestName::new("Netsukefile");
+/// assert_eq!(name.as_str(), "Netsukefile");
+/// ```
+#[derive(Debug, Clone)]
+pub struct ManifestName(String);
+
+impl ManifestName {
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<&str> for ManifestName {
+    fn from(value: &str) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<String> for ManifestName {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+impl AsRef<str> for ManifestName {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl std::fmt::Display for ManifestName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 use super::hints::YAML_HINTS;
 
 fn saturating_usize(value: u64) -> usize {
     usize::try_from(value.min(usize::MAX as u64)).unwrap_or(usize::MAX)
 }
 
-fn location_to_index(src: &str, loc: Location) -> usize {
+fn location_to_index(src: &ManifestSource, loc: Location) -> usize {
     let target_line = saturating_usize(loc.line().saturating_sub(1));
     let target_column = saturating_usize(loc.column().saturating_sub(1));
     let mut offset = 0usize;
-    for (idx, segment) in src.split_inclusive('\n').enumerate() {
+    for (idx, segment) in src.as_ref().split_inclusive('\n').enumerate() {
         if idx == target_line {
             let line = segment.strip_suffix('\n').unwrap_or(segment);
             let byte_index = line
@@ -24,12 +112,12 @@ fn location_to_index(src: &str, loc: Location) -> usize {
         }
         offset += segment.len();
     }
-    src.len()
+    src.as_ref().len()
 }
 
-fn to_span(src: &str, loc: Location) -> SourceSpan {
+fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
     let at = location_to_index(src, loc);
-    let bytes = src.as_bytes();
+    let bytes = src.as_ref().as_bytes();
     let (start, end) = match bytes.get(at) {
         Some(&b) if b != b'\n' => (at, at + 1),
         _ => {
@@ -61,16 +149,16 @@ struct YamlDiagnostic {
     message: String,
 }
 
-fn has_tab_indent(src: &str, loc: Option<Location>) -> bool {
+fn has_tab_indent(src: &ManifestSource, loc: Option<Location>) -> bool {
     let Some(loc) = loc else { return false };
     let line_idx = saturating_usize(loc.line().saturating_sub(1));
-    let line = src.lines().nth(line_idx).unwrap_or("");
+    let line = src.as_ref().lines().nth(line_idx).unwrap_or("");
     line.chars()
         .take_while(|c| c.is_whitespace())
         .any(|c| c == '\t')
 }
 
-fn hint_for(err_str: &str, src: &str, loc: Option<Location>) -> Option<String> {
+fn hint_for(err_str: &str, src: &ManifestSource, loc: Option<Location>) -> Option<String> {
     if has_tab_indent(src, loc) {
         return Some("Use spaces for indentation; tabs are invalid in YAML.".into());
     }
@@ -105,8 +193,8 @@ pub enum ManifestError {
 #[must_use]
 pub fn map_yaml_error(
     err: YamlError,
-    src: &str,
-    name: &str,
+    src: &ManifestSource,
+    name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
     let loc = err.location();
     let (line, col, span) = loc.map_or((1, 1, None), |l| {
@@ -121,7 +209,7 @@ pub fn map_yaml_error(
     }
 
     Box::new(YamlDiagnostic {
-        src: NamedSource::new(name, src.to_string()),
+        src: NamedSource::new(name.as_ref(), src.as_ref().to_string()),
         span,
         help: hint,
         source: err,
@@ -141,9 +229,9 @@ struct DataDiagnostic {
 #[must_use]
 pub fn map_data_error(
     err: serde_json::Error,
-    name: &str,
+    name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
-    let message = format!("manifest structure error in {name}: {err}");
+    let message = format!("manifest structure error in {}: {err}", name.as_ref());
     Box::new(DataDiagnostic {
         source: err,
         message,
@@ -156,21 +244,23 @@ mod tests {
 
     #[test]
     fn map_yaml_error_includes_tab_hint() {
-        let src = "\tkey: \"unterminated";
-        let err =
-            serde_saphyr::from_str::<serde_json::Value>(src).expect_err("expected parse error");
-        let diag = map_yaml_error(err, src, "test");
+        let src = ManifestSource::from("\tkey: \"unterminated");
+        let err = serde_saphyr::from_str::<serde_json::Value>(src.as_ref())
+            .expect_err("expected parse error");
+        let name = ManifestName::from("test");
+        let diag = map_yaml_error(err, &src, &name);
         let msg = diag.to_string();
         assert!(msg.contains("Use spaces for indentation"), "message: {msg}");
     }
 
     #[test]
     fn map_yaml_error_defaults_location_when_missing() {
-        let src = "foo: [1";
+        let src = ManifestSource::from("foo: [1");
         let err = serde_saphyr::Error::Eof {
             location: serde_saphyr::Location::UNKNOWN,
         };
-        let diag = map_yaml_error(err, src, "test");
+        let name = ManifestName::from("test");
+        let diag = map_yaml_error(err, &src, &name);
         assert!(diag.to_string().contains("line 1, column 1"));
     }
 }
