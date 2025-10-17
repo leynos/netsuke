@@ -418,9 +418,9 @@ unnecessary project risk.
 choice for production-quality software.
 
 **Maintenance risk.** `serde_yml` is archived upstream and carries unsoundness
-advisories. Netsuke relies on it today, but we will investigate a maintained
-successor such as `serde_yaml_ng`. A follow-up ADR will outline the migration
-plan and compatibility testing.
+advisories. Netsuke relies on it today, but a maintained successor such as
+`serde_yaml_ng` will be investigated. A follow-up ADR will outline the
+migration plan and compatibility testing.
 
 Follow-up actions:
 

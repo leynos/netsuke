@@ -1,8 +1,15 @@
 //! Tests for manifest parsing and macro registration helpers.
 
+use super::jinja_macros::{
+    call_macro_value, parse_macro_name, register_macro, register_manifest_macros,
+};
 use super::*;
+use crate::ast::MacroDefinition;
 use anyhow::Result as AnyResult;
-use minijinja::Environment;
+use minijinja::{
+    Environment,
+    value::{Kwargs, Value},
+};
 use rstest::{fixture, rstest};
 use serde_yml::value::Mapping;
 
@@ -52,6 +59,18 @@ fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) {
     "{{ show('Netsuke', excited=true) }}",
     "Netsuke!"
 )]
+#[case(
+    "salute(name='friend')",
+    "Hello {{ name }}",
+    "{{ salute(name='Ada') }}",
+    "Hello Ada"
+)]
+#[case(
+    "wrap(prefix, caller)",
+    "{{ prefix }}{{ caller() }}",
+    "{% call wrap('Hi ') %}World{% endcall %}",
+    "Hi World"
+)]
 fn register_macro_handles_arguments(
     #[case] signature: &str,
     #[case] body: &str,
@@ -69,26 +88,36 @@ fn register_macro_handles_arguments(
 }
 
 #[rstest]
-fn register_macro_supports_keyword_invocation(mut strict_env: Environment) {
-    let macro_def = MacroDefinition {
-        signature: "salute(name='friend')".to_string(),
-        body: "Hello {{ name }}".to_string(),
-    };
-    register_macro(&mut strict_env, &macro_def, 0).expect("register");
-    let rendered = render_with(&strict_env, "{{ salute(name='Ada') }}").expect("render");
-    assert_eq!(rendered.trim(), "Hello Ada");
+fn call_macro_value_supports_kwargs(mut strict_env: Environment) {
+    strict_env
+        .add_template(
+            "macro",
+            "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
+        )
+        .expect("template");
+    let template = strict_env.get_template("macro").expect("template");
+    let state = template.eval_to_state(()).expect("state");
+    let value = state.lookup("greet").expect("macro").clone();
+    let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
+    let rendered = call_macro_value(&state, &value, &[], Some(kwargs)).expect("call");
+    assert_eq!(rendered.to_string(), "hi Ada");
 }
 
 #[rstest]
-fn register_macro_forwards_caller(mut strict_env: Environment) {
+fn register_macro_is_reusable(mut strict_env: Environment) {
     let macro_def = MacroDefinition {
-        signature: "wrap(prefix, caller)".to_string(),
-        body: "{{ prefix }}{{ caller() }}".to_string(),
+        signature: "echo(text)".to_string(),
+        body: "{{ text }}".to_string(),
     };
     register_macro(&mut strict_env, &macro_def, 0).expect("register");
-    let rendered =
-        render_with(&strict_env, "{% call wrap('Hi ') %}World{% endcall %}").expect("render");
-    assert_eq!(rendered.trim(), "Hi World");
+
+    let template = "{{ echo('first') }} {{ echo('second') }}";
+    let rendered = render_with(&strict_env, template).expect("render once");
+    assert_eq!(rendered.trim(), "first second");
+
+    // Re-render to ensure the cached macro value remains valid.
+    let rendered_again = render_with(&strict_env, template).expect("render twice");
+    assert_eq!(rendered_again.trim(), "first second");
 }
 
 #[rstest]
@@ -105,6 +134,19 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
             .contains("macros must be a sequence of mappings"),
         "{err}"
     );
+}
+
+#[rstest]
+fn register_manifest_macros_requires_body(mut strict_env: Environment) {
+    let mut macro_mapping = Mapping::new();
+    macro_mapping.insert(YamlValue::from("signature"), YamlValue::from("greet(name)"));
+    let macros = YamlValue::Sequence(vec![YamlValue::Mapping(macro_mapping)]);
+    let mut doc = Mapping::new();
+    doc.insert(YamlValue::from("macros"), macros);
+    let doc = YamlValue::Mapping(doc);
+
+    let err = register_manifest_macros(&doc, &mut strict_env).expect_err("missing macro body");
+    assert!(err.to_string().contains("body"), "{err}");
 }
 
 #[rstest]

@@ -261,6 +261,21 @@ fn manifest_macro_with_missing_signature_errors() {
 }
 
 #[rstest]
+fn manifest_macro_with_missing_body_errors() {
+    let yaml = manifest_yaml(concat!(
+        "macros:\n",
+        "  - signature: \"greet(name)\"\n",
+        "targets:\n",
+        "  - name: noop\n",
+        "    command: noop\n",
+    ));
+
+    let err = manifest::from_str(&yaml).expect_err("macro body required");
+    let msg = format!("{err:?}");
+    assert!(msg.contains("body"), "error message: {msg}");
+}
+
+#[rstest]
 fn syntax_error_errors() {
     let yaml = manifest_yaml("targets:\n  - name: hello\n    command: echo {{ who\n");
 
