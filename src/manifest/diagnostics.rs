@@ -104,6 +104,7 @@ fn byte_index_at(src: &str, line: u64, column: u64) -> usize {
     for (idx, segment) in src.split_inclusive('\n').enumerate() {
         if idx == target_line {
             let line = segment.strip_suffix('\n').unwrap_or(segment);
+            let line = line.strip_suffix('\r').unwrap_or(line);
             let column_offset = line
                 .char_indices()
                 .nth(target_column)
@@ -118,10 +119,11 @@ fn byte_index_at(src: &str, line: u64, column: u64) -> usize {
 fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
     let at = byte_index(src, loc);
     let bytes = src.as_ref().as_bytes();
+    let is_line_break = |b: u8| b == b'\n' || b == b'\r';
     let (start, end) = match bytes.get(at) {
-        Some(&b) if b != b'\n' => (at, at + 1),
+        Some(&b) if !is_line_break(b) => (at, at + 1),
         _ => {
-            let start = if at > 0 && bytes.get(at - 1).is_some_and(|p| *p != b'\n') {
+            let start = if at > 0 && bytes.get(at - 1).is_some_and(|p| !is_line_break(*p)) {
                 at - 1
             } else {
                 at
@@ -190,6 +192,11 @@ pub enum ManifestError {
     },
 }
 
+/// Map a `serde_saphyr` YAML parse error into a [`miette`] diagnostic.
+///
+/// The diagnostic includes the offending span when `serde_saphyr` reports byte
+/// offsets, and attempts to attach contextual hints for common mistakes such as
+/// tab indentation.
 #[must_use]
 pub fn map_yaml_error(
     err: YamlError,
@@ -226,6 +233,10 @@ struct DataDiagnostic {
     message: String,
 }
 
+/// Map a [`serde_json`] structural error into a diagnostic without a source
+/// span. `serde_json` does not report byte offsets for data validation failures,
+/// so the resulting diagnostic only carries the manifest name and error
+/// message.
 #[must_use]
 pub fn map_data_error(
     err: serde_json::Error,
@@ -241,6 +252,7 @@ pub fn map_data_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error as StdError;
 
     #[test]
     fn map_yaml_error_includes_tab_hint() {
@@ -262,6 +274,23 @@ mod tests {
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
         assert!(diag.to_string().contains("line 1, column 1"));
+    }
+
+    #[test]
+    fn map_yaml_error_span_skips_carriage_return() {
+        let src = ManifestSource::from("targets:\r\n  - name: hi\r\n    command echo\r\n");
+        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+            .expect_err("expected parse error");
+        let name = ManifestName::from("test");
+        let diag = map_yaml_error(err, &src, &name);
+        let yaml_diag = (&*diag as &(dyn StdError + 'static))
+            .downcast_ref::<YamlDiagnostic>()
+            .expect("expected YAML diagnostic");
+        let span = yaml_diag.span.expect("span present");
+        let offset = span.offset();
+        if let Some(byte) = src.as_ref().as_bytes().get(offset) {
+            assert_ne!(*byte, b'\r');
+        }
     }
 }
 
@@ -299,6 +328,15 @@ mod byte_index_tests {
         let column = 3; // 'r' in "three"
         let offset = byte_index_at(src, 3, column);
         let expected = "one\ntwo\n".len() + expected_offset("three", column);
+        assert_eq!(offset, expected);
+    }
+
+    #[test]
+    fn byte_index_handles_crlf_lines() {
+        let src = "one\r\ntwo\r\nthree";
+        let column = 2; // 'w' in "two"
+        let offset = byte_index_at(src, 2, column);
+        let expected = "one\r\n".len() + expected_offset("two", column);
         assert_eq!(offset, expected);
     }
 }

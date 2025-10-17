@@ -87,9 +87,7 @@ fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> R
         "item".into(),
         serde_json::to_value(item).context("serialise item")?,
     );
-    let index_value = ManifestValue::Number(JsonNumber::from(
-        u64::try_from(index).expect("index overflow"),
-    ));
+    let index_value = ManifestValue::Number(JsonNumber::from(index as u64));
     vars.insert("index".into(), index_value);
     map.insert("vars".into(), ManifestValue::Object(vars));
     Ok(())

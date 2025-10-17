@@ -16,12 +16,25 @@
 //!     assert_eq!(name, "hello");
 //! }
 //! ```
+//!
+//! For most applications you should prefer the high-level
+//! [`manifest::from_str`](crate::manifest::from_str) helper, which validates and
+//! reports diagnostics consistently:
+//!
+//! ```rust
+//! use netsuke::manifest;
+//!
+//! let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    command: \"echo hi\"";
+//! let manifest = manifest::from_str(yaml).expect("parse");
+//! assert_eq!(manifest.targets.len(), 1);
+//! ```
 
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
 
-/// Map type for `vars` blocks, preserving YAML values.
+/// Map type for `vars` blocks, preserving JSON values produced by the YAML
+/// parser.
 pub type Vars = HashMap<String, serde_json::Value>;
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
