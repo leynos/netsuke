@@ -59,6 +59,18 @@ fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) {
     "{{ show('Netsuke', excited=true) }}",
     "Netsuke!"
 )]
+#[case(
+    "salute(name='friend')",
+    "Hello {{ name }}",
+    "{{ salute(name='Ada') }}",
+    "Hello Ada"
+)]
+#[case(
+    "wrap(prefix, caller)",
+    "{{ prefix }}{{ caller() }}",
+    "{% call wrap('Hi ') %}World{% endcall %}",
+    "Hi World"
+)]
 fn register_macro_handles_arguments(
     #[case] signature: &str,
     #[case] body: &str,
@@ -73,29 +85,6 @@ fn register_macro_handles_arguments(
     register_macro(&mut strict_env, &macro_def, 0).expect("register");
     let rendered = render_with(&strict_env, template).expect("render");
     assert_eq!(rendered, expected);
-}
-
-#[rstest]
-fn register_macro_supports_keyword_invocation(mut strict_env: Environment) {
-    let macro_def = MacroDefinition {
-        signature: "salute(name='friend')".to_string(),
-        body: "Hello {{ name }}".to_string(),
-    };
-    register_macro(&mut strict_env, &macro_def, 0).expect("register");
-    let rendered = render_with(&strict_env, "{{ salute(name='Ada') }}").expect("render");
-    assert_eq!(rendered.trim(), "Hello Ada");
-}
-
-#[rstest]
-fn register_macro_forwards_caller(mut strict_env: Environment) {
-    let macro_def = MacroDefinition {
-        signature: "wrap(prefix, caller)".to_string(),
-        body: "{{ prefix }}{{ caller() }}".to_string(),
-    };
-    register_macro(&mut strict_env, &macro_def, 0).expect("register");
-    let rendered =
-        render_with(&strict_env, "{% call wrap('Hi ') %}World{% endcall %}").expect("render");
-    assert_eq!(rendered.trim(), "Hi World");
 }
 
 #[rstest]
