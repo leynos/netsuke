@@ -11,7 +11,7 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 use rstest::{fixture, rstest};
-use serde_yml::value::Mapping;
+use serde_json::Map as Mapping;
 
 fn render_with(env: &Environment, template: &str) -> AnyResult<String> {
     Ok(env.render_str(template, ())?)
@@ -123,11 +123,8 @@ fn register_macro_is_reusable(mut strict_env: Environment) {
 #[rstest]
 fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
     let mut mapping = Mapping::new();
-    mapping.insert(
-        YamlValue::from("macros"),
-        YamlValue::from(vec![YamlValue::from(42)]),
-    );
-    let doc = YamlValue::Mapping(mapping);
+    mapping.insert("macros".into(), YamlValue::Array(vec![YamlValue::from(42)]));
+    let doc = YamlValue::Object(mapping);
     let err = register_manifest_macros(&doc, &mut strict_env).expect_err("shape error");
     assert!(
         err.to_string()
@@ -139,11 +136,11 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
 #[rstest]
 fn register_manifest_macros_requires_body(mut strict_env: Environment) {
     let mut macro_mapping = Mapping::new();
-    macro_mapping.insert(YamlValue::from("signature"), YamlValue::from("greet(name)"));
-    let macros = YamlValue::Sequence(vec![YamlValue::Mapping(macro_mapping)]);
+    macro_mapping.insert("signature".into(), YamlValue::from("greet(name)"));
+    let macros = YamlValue::Array(vec![YamlValue::Object(macro_mapping)]);
     let mut doc = Mapping::new();
-    doc.insert(YamlValue::from("macros"), macros);
-    let doc = YamlValue::Mapping(doc);
+    doc.insert("macros".into(), macros);
+    let doc = YamlValue::Object(doc);
 
     let err = register_manifest_macros(&doc, &mut strict_env).expect_err("missing macro body");
     assert!(err.to_string().contains("body"), "{err}");
@@ -151,7 +148,7 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment) {
 
 #[rstest]
 fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
-    let yaml = serde_yml::from_str::<YamlValue>(
+    let yaml = serde_saphyr::from_str::<YamlValue>(
         "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",
     )
     .expect("yaml value");

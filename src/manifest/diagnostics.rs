@@ -1,12 +1,34 @@
 //! Translates manifest parsing errors into actionable diagnostics.
 use miette::{Diagnostic, NamedSource, SourceSpan};
-use serde_yml::{Error as YamlError, Location};
+use serde_saphyr::{Error as YamlError, Location};
 use thiserror::Error;
 
 use super::hints::YAML_HINTS;
 
+fn saturating_usize(value: u64) -> usize {
+    usize::try_from(value.min(usize::MAX as u64)).unwrap_or(usize::MAX)
+}
+
+fn location_to_index(src: &str, loc: Location) -> usize {
+    let target_line = saturating_usize(loc.line().saturating_sub(1));
+    let target_column = saturating_usize(loc.column().saturating_sub(1));
+    let mut offset = 0usize;
+    for (idx, segment) in src.split_inclusive('\n').enumerate() {
+        if idx == target_line {
+            let line = segment.strip_suffix('\n').unwrap_or(segment);
+            let byte_index = line
+                .char_indices()
+                .nth(target_column)
+                .map_or(line.len(), |(byte_idx, _)| byte_idx);
+            return offset + byte_index;
+        }
+        offset += segment.len();
+    }
+    src.len()
+}
+
 fn to_span(src: &str, loc: Location) -> SourceSpan {
-    let at = loc.index();
+    let at = location_to_index(src, loc);
     let bytes = src.as_bytes();
     let (start, end) = match bytes.get(at) {
         Some(&b) if b != b'\n' => (at, at + 1),
@@ -41,7 +63,7 @@ struct YamlDiagnostic {
 
 fn has_tab_indent(src: &str, loc: Option<Location>) -> bool {
     let Some(loc) = loc else { return false };
-    let line_idx = loc.line().saturating_sub(1);
+    let line_idx = saturating_usize(loc.line().saturating_sub(1));
     let line = src.lines().nth(line_idx).unwrap_or("");
     line.chars()
         .take_while(|c| c.is_whitespace())
@@ -107,14 +129,36 @@ pub fn map_yaml_error(
     })
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("{message}")]
+#[diagnostic(code(netsuke::manifest::structure))]
+struct DataDiagnostic {
+    #[source]
+    source: serde_json::Error,
+    message: String,
+}
+
+#[must_use]
+pub fn map_data_error(
+    err: serde_json::Error,
+    name: &str,
+) -> Box<dyn Diagnostic + Send + Sync + 'static> {
+    let message = format!("manifest structure error in {name}: {err}");
+    Box::new(DataDiagnostic {
+        source: err,
+        message,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn map_yaml_error_includes_tab_hint() {
-        let src = "\tkey: value\n";
-        let err = serde_yml::from_str::<serde_yml::Value>(src).expect_err("expected parse error");
+        let src = "\tkey: \"unterminated";
+        let err =
+            serde_saphyr::from_str::<serde_json::Value>(src).expect_err("expected parse error");
         let diag = map_yaml_error(err, src, "test");
         let msg = diag.to_string();
         assert!(msg.contains("Use spaces for indentation"), "message: {msg}");
@@ -122,8 +166,10 @@ mod tests {
 
     #[test]
     fn map_yaml_error_defaults_location_when_missing() {
-        let src = ":";
-        let err = serde_yml::from_str::<serde_yml::Value>(src).expect_err("expected parse error");
+        let src = "foo: [1";
+        let err = serde_saphyr::Error::Eof {
+            location: serde_saphyr::Location::UNKNOWN,
+        };
         let diag = map_yaml_error(err, src, "test");
         assert!(diag.to_string().contains("line 1, column 1"));
     }

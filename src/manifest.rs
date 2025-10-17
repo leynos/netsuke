@@ -10,7 +10,7 @@
 use crate::ast::NetsukeManifest;
 use anyhow::{Context, Result};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
-use serde_yml::Value as YamlValue;
+use serde_json::Value as YamlValue;
 use std::{fs, path::Path};
 
 /// A display name for a manifest source, used in error reporting.
@@ -65,7 +65,7 @@ mod hints;
 mod jinja_macros;
 mod render;
 
-pub use diagnostics::{ManifestError, map_yaml_error};
+pub use diagnostics::{ManifestError, map_data_error, map_yaml_error};
 pub use glob::glob_paths;
 
 pub use expand::expand_foreach;
@@ -114,7 +114,7 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| ManifestError::Parse {
+    let mut doc: YamlValue = serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
         source: map_yaml_error(e, yaml, name.as_ref()),
     })?;
 
@@ -125,13 +125,9 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = crate::stdlib::register(&mut jinja);
 
-    if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
-        for (k, v) in vars {
-            let key = k
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("non-string key in vars mapping: {k:?}"))?
-                .to_string();
-            jinja.add_global(key, Value::from_serialize(v));
+    if let Some(vars) = doc.get("vars").and_then(|v| v.as_object()).cloned() {
+        for (key, value) in vars {
+            jinja.add_global(key, Value::from_serialize(value));
         }
     }
 
@@ -140,8 +136,8 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     expand_foreach(&mut doc, &jinja)?;
 
     let manifest: NetsukeManifest =
-        serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
-            source: map_yaml_error(e, yaml, name.as_ref()),
+        serde_json::from_value(doc).map_err(|e| ManifestError::Parse {
+            source: map_data_error(e, name.as_ref()),
         })?;
 
     render_manifest(manifest, &jinja)

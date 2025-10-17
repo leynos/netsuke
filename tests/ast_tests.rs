@@ -217,7 +217,7 @@ fn parses_macro_definitions() {
     assert_eq!(macro_def.signature, "greet(name)");
     assert!(macro_def.body.contains("Hello {{ name }}"));
 
-    let serialised = serde_yml::to_string(&manifest.macros).expect("serialise macros");
+    let serialised = serde_saphyr::to_string(&manifest.macros).expect("serialise macros");
     assert!(serialised.contains("greet(name)"));
     assert!(serialised.contains("Hello {{ name }}"));
 }

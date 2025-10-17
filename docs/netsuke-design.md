@@ -45,12 +45,13 @@ before execution, a critical requirement for compatibility with Ninja.
 
 2. Stage 2: Initial YAML Parsing
 
-   The raw string is parsed into an untyped `serde_yml::Value`. This step
-   ensures the manifest is valid YAML before any templating takes place.
+   The raw string is parsed with `serde_saphyr` into an untyped
+   `serde_json::Value`. This step ensures the manifest is valid YAML before any
+   templating takes place.
 
 3. Stage 3: Template Expansion
 
-   Netsuke walks the YAML `Value`, evaluating Jinja macros, variables, and the
+   Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and the
    `foreach` and `when` keys. Each mapping containing these keys is expanded
    with an iteration context providing `item` and optional `index`. Variable
    lookups respect the precedence `globals` < `target.vars` < per-iteration
@@ -397,41 +398,37 @@ critical step is to parse this string and deserialise it into a structured, in-
 memory representation. The choice of libraries and the definition of the target
 data structures are crucial for the robustness and maintainability of Netsuke.
 
-### 3.1 Crate Selection: `serde_yml`
+### 3.1 Crate Selection: `serde_saphyr`
 
-For YAML parsing and deserialisation, the recommended crate is `serde_yml`.
-This choice is based on its deep and direct integration with the `serde`
-framework, the de-facto standard for serialisation and deserialisation in the
-Rust ecosystem. Using `serde_yml` allows `serde`'s powerful derive macros to
-automatically generate the deserialisation logic for Rust structs. This
-approach is idiomatic, highly efficient, and significantly reduces boilerplate.
-Add `#[derive(Deserialize)]` (optionally also `Debug`) to make a struct a
-deserialisation target.
+Netsuke now relies on `serde_saphyr` for YAML parsing and serialisation. The
+crate wraps the actively maintained `saphyr` parser while preserving the
+familiar `serde_yaml`-style API: helpers such as `from_str`, `from_reader`, and
+`to_string` integrate cleanly with `serde` derives, and the error type exposes
+line and column information for diagnostics. This provides a maintained,
+panic-free alternative to the archived `serde_yml` without forcing a redesign
+of the parsing pipeline.
 
-While other promising YAML libraries like `saphyr` exist, their `serde`
-integration (`saphyr-serde`) is currently described as "soon-to-be" or is at a
-highly experimental stage (version 0.0.0)[^11]. Building a core component of
-Netsuke on a nascent or unreleased library would introduce significant and
-unnecessary project risk.
+Because `serde_saphyr` intentionally omits a bespoke `Value` tree, Netsuke
+deserialises manifests into `serde_json::Value` for its intermediate
+transformations. The JSON value retains YAML anchors, scalars, and sequences in
+data structures that are easy to traverse and mutate. Once templating and
+`foreach` expansion complete, `serde_json::from_value` hydrates the strongly
+typed manifest AST exactly as before.
 
-`serde_yml` is mature, widely adopted, and battle-tested, making it the prudent
-choice for production-quality software.
+Adopting `serde_saphyr` delivers the features Netsuke depends on:
 
-**Maintenance risk.** `serde_yml` is archived upstream and carries unsoundness
-advisories. Netsuke relies on it today, but a maintained successor such as
-`serde_yaml_ng` will be investigated. A follow-up ADR will outline the
-migration plan and compatibility testing.
+- Full YAML 1.2 support with alias resolution handled during parsing.
+- Drop-in compatibility with existing `serde` derives, keeping the AST code
+  unchanged.
+- Structured errors that carry location metadata for precise diagnostics.
 
-Follow-up actions:
-
-- Draft an ADR comparing `serde_yml` with candidate replacements and recording
-  the migration decision.
-- Schedule a migration spike to prototype deserialisation with the preferred
-  crate and capture compatibility notes.
+An Architecture Decision Record documents the migration rationale and
+compatibility results; no further action is required beyond monitoring upstream
+releases.
 
 ### 3.2 Core Data Structures (`ast.rs`)
 
-The Rust structs that `serde_yml` will deserialise into form the Abstract
+The Rust structs that `serde_saphyr` deserialises into form the Abstract
 Syntax Tree (AST) of the build manifest. These structs must precisely mirror
 the YAML schema defined in Section 2. They will be defined in a dedicated
 module, `src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`)
@@ -451,7 +448,7 @@ pub struct NetsukeManifest {
     pub netsuke_version: Version,
 
     #[serde(default)]
-    pub vars: HashMap<String, serde_yml::Value>,
+    pub vars: HashMap<String, serde_json::Value>,
 
     #[serde(default)]
     pub rules: Vec<Rule>,
@@ -503,7 +500,7 @@ pub struct Target {
     pub order_only_deps: StringOrList,
 
     #[serde(default)]
-    pub vars: HashMap<String, serde_yml::Value>,
+    pub vars: HashMap<String, serde_json::Value>,
 
     /// Run this target when requested even if a file with the same name exists.
     #[serde(default)]
@@ -574,7 +571,7 @@ let ast = NetsukeManifest {
 
 The integration of a templating engine like Jinja fundamentally shapes the
 parsing pipeline, mandating a two-pass approach. It is impossible to parse the
-user's `Netsukefile` file with `serde_yml` in a single step.
+user's `Netsukefile` file with `serde_saphyr` in a single step.
 
 Consider a manifest containing Jinja syntax:
 
@@ -589,7 +586,7 @@ targets:
 
 The value of `sources`, `{{ glob('src/*.c') }}`, is a plain YAML string. The
 manifest must be valid YAML before any templating occurs, so the parser can
-first load it into a `serde_yml::Value` tree.
+first load it into a `serde_json::Value` tree.
 
 Once parsed, Netsuke performs a series of transformation stages:
 
@@ -612,7 +609,7 @@ Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
-the `HashMap<String, serde_yml::Value>` type so booleans and sequences are
+the `HashMap<String, serde_json::Value>` type so booleans and sequences are
 preserved for Jinja control flow. Targets also accept optional `phony` and
 `always` booleans. They default to `false`, making it explicit when an action
 should run regardless of file timestamps. Targets listed in the `actions`
@@ -1797,7 +1794,7 @@ goal.
 
     1. Implement the initial `clap` CLI structure for the `build` command.
 
-    2. Implement the YAML parser using `serde_yml` and the AST data structures
+    2. Implement the YAML parser using `serde_saphyr` and the AST data structures
        (`ast.rs`).
 
     3. Implement the AST-to-IR transformation logic, including basic validation
@@ -1822,7 +1819,7 @@ goal.
     1. Integrate the `minijinja` crate into the build pipeline.
 
     2. Implement the two-pass parsing mechanism: first render the manifest with
-       `minijinja`, then parse the result with `serde_yml`.
+       `minijinja`, then parse the result with `serde_saphyr`.
 
     3. Populate the initial Jinja context with the global `vars` from the
        manifest.
@@ -1865,7 +1862,7 @@ selected for this project and the rationale for their inclusion.
 | Component      | Recommended Crate           | Rationale                                                                                                                       |
 | -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | CLI Parsing    | clap                        | The Rust standard for powerful, derive-based CLI development.                                                                   |
-| YAML Parsing   | serde_yml                   | Mature, stable, and provides seamless integration with the serde framework.                                                     |
+| YAML Parsing   | serde_saphyr                | Maintained, panic-free YAML 1.2 parser with a serde-compatible API.                                                     |
 | Templating     | minijinja                   | High compatibility with Jinja2, minimal dependencies, and supports runtime template loading.                                    |
 | Shell Quoting  | shell-quote                 | A critical security component; provides robust, shell-specific escaping for command arguments.                                  |
 | Error Handling | anyhow + thiserror + miette | An idiomatic and powerful combination for creating rich, contextual, and user-friendly error reports with precise source spans. |

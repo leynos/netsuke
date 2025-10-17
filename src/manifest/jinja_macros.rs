@@ -11,7 +11,7 @@ use minijinja::{
     AutoEscape, Environment, Error, ErrorKind, State,
     value::{Kwargs, Object, Rest, Value},
 };
-use serde_yml::Value as YamlValue;
+use serde_json::Value as YamlValue;
 use std::{
     mem,
     ptr::NonNull,
@@ -102,7 +102,7 @@ pub(crate) fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -
         return Ok(());
     };
 
-    let defs: Vec<MacroDefinition> = serde_yml::from_value(macros)
+    let defs: Vec<MacroDefinition> = serde_json::from_value(macros)
         .context("macros must be a sequence of mappings with string signature/body")?;
 
     for (idx, def) in defs.iter().enumerate() {

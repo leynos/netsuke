@@ -296,7 +296,7 @@ fn assert_target_index(world: &CliWorld, index: usize, expected: usize) {
     let actual = target
         .vars
         .get(INDEX_KEY)
-        .and_then(serde_yml::Value::as_u64)
+        .and_then(serde_json::Value::as_u64)
         .and_then(|n| usize::try_from(n).ok())
         .unwrap_or_else(|| panic!("target {index} missing index"));
     assert_eq!(actual, expected, "unexpected index for target {index}");

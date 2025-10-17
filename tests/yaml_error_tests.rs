@@ -15,13 +15,16 @@ fn normalise_report(report: &str) -> String {
 #[case(
     "targets:\n\t- name: test\n",
     &[
-        "line 2, column 1",
+        "line 2, column 2",
         "Use spaces for indentation; tabs are invalid in YAML.",
     ],
 )]
 #[case(
     "targets:\n  - name: hi\n    command echo\n",
-    &["line 3", "expected ':'"],
+    &[
+        "line 4, column 1",
+        "simple key expect ':'",
+    ],
 )]
 #[case(
     concat!(
@@ -41,24 +44,24 @@ fn normalise_report(report: &str) -> String {
     "",
     &[
         "manifest parse error",
-        "missing field",
-        "netsuke_version",
+        "manifest structure error",
+        "invalid type: null, expected struct NetsukeManifest",
     ],
 )]
 #[case(
     "    \n    ",
     &[
         "manifest parse error",
-        "missing field",
-        "netsuke_version",
+        "manifest structure error",
+        "invalid type: null, expected struct NetsukeManifest",
     ],
 )]
 #[case(
     "# just a comment\n# another comment",
     &[
         "manifest parse error",
-        "missing field",
-        "netsuke_version",
+        "manifest structure error",
+        "invalid type: null, expected struct NetsukeManifest",
     ],
 )]
 // No location information should default to the start of the file.

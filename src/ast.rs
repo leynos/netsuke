@@ -2,7 +2,7 @@
 //!
 //! This module defines the data structures used to represent a parsed
 //! `Netsukefile`. They mirror the YAML schema described in the design
-//! document and are deserialised with `serde_yml`.
+//! document and are deserialised with `serde_saphyr`.
 //!
 //! The following example shows how to parse a minimal manifest string:
 //!
@@ -11,7 +11,7 @@
 //! use netsuke::ast::StringOrList;
 //!
 //! let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    command: \"echo hi\"";
-//! let manifest: NetsukeManifest = serde_yml::from_str(yaml).expect("parse");
+//! let manifest: NetsukeManifest = serde_saphyr::from_str(yaml).expect("parse");
 //! if let StringOrList::String(name) = &manifest.targets[0].name {
 //!     assert_eq!(name, "hello");
 //! }
@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
 
 /// Map type for `vars` blocks, preserving YAML values.
-pub type Vars = HashMap<String, serde_yml::Value>;
+pub type Vars = HashMap<String, serde_json::Value>;
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where
@@ -52,7 +52,7 @@ where
 /// use netsuke::ast::NetsukeManifest;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let yaml = "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    command: echo hi";
-/// let manifest: NetsukeManifest = serde_yml::from_str(yaml)?;
+/// let manifest: NetsukeManifest = serde_saphyr::from_str(yaml)?;
 /// assert_eq!(manifest.targets.len(), 1);
 /// # Ok(()) }
 /// ```

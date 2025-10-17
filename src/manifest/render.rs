@@ -2,7 +2,7 @@
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use serde_yml::Value as YamlValue;
+use serde_json::Value as YamlValue;
 
 /// Render manifest targets and rules by evaluating template expressions.
 ///
