@@ -5,13 +5,13 @@
 //! rendering environment so manifest templates can invoke them like built-in
 //! helpers.
 
+use super::ManifestValue;
 use crate::ast::MacroDefinition;
 use anyhow::{Context, Result};
 use minijinja::{
     AutoEscape, Environment, Error, ErrorKind, State,
     value::{Kwargs, Object, Rest, Value},
 };
-use serde_yml::Value as YamlValue;
 use std::{
     mem,
     ptr::NonNull,
@@ -97,12 +97,12 @@ pub(crate) fn register_macro(
 ///
 /// Returns an error if the YAML shape is invalid, any macro signature is
 /// malformed, or template compilation fails.
-pub(crate) fn register_manifest_macros(doc: &YamlValue, env: &mut Environment) -> Result<()> {
+pub(crate) fn register_manifest_macros(doc: &ManifestValue, env: &mut Environment) -> Result<()> {
     let Some(macros) = doc.get("macros").cloned() else {
         return Ok(());
     };
 
-    let defs: Vec<MacroDefinition> = serde_yml::from_value(macros)
+    let defs: Vec<MacroDefinition> = serde_json::from_value(macros)
         .context("macros must be a sequence of mappings with string signature/body")?;
 
     for (idx, def) in defs.iter().enumerate() {

@@ -82,6 +82,28 @@ fn unknown_fields() {
 }
 
 #[test]
+fn vars_section_must_be_object() {
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        vars:
+          - not: mapping
+        targets:
+          - name: hello
+            command: "echo hi"
+    "#;
+    let err = parse_manifest(yaml).expect_err("vars should be an object");
+    let chain = err
+        .chain()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        chain.contains("vars must be an object with string keys"),
+        "unexpected error message: {chain}"
+    );
+}
+
+#[test]
 fn empty_lists_and_maps() {
     let yaml = r#"
         netsuke_version: "1.0.0"
@@ -217,9 +239,31 @@ fn parses_macro_definitions() {
     assert_eq!(macro_def.signature, "greet(name)");
     assert!(macro_def.body.contains("Hello {{ name }}"));
 
-    let serialised = serde_yml::to_string(&manifest.macros).expect("serialise macros");
+    let serialised = serde_saphyr::to_string(&manifest.macros).expect("serialise macros");
     assert!(serialised.contains("greet(name)"));
     assert!(serialised.contains("Hello {{ name }}"));
+}
+
+#[test]
+fn macro_serialization_with_special_characters_round_trips() {
+    let special_signature = "greet_special(name, emoji='😀', note=\"hi\")";
+    let special_body = "Hello \"{{ name }}\"\nLine two with unicode 😀";
+
+    let macro_def = MacroDefinition {
+        signature: special_signature.to_string(),
+        body: special_body.to_string(),
+    };
+
+    let serialised = serde_saphyr::to_string(&vec![macro_def.clone()]).expect("serialise macros");
+    assert!(serialised.contains("greet_special"));
+    assert!(serialised.contains("unicode 😀"));
+
+    let deserialised: Vec<MacroDefinition> =
+        serde_saphyr::from_str(&serialised).expect("deserialise macros");
+    assert_eq!(deserialised.len(), 1);
+    let recovered = deserialised.first().expect("macro entry");
+    assert_eq!(recovered.signature, macro_def.signature);
+    assert_eq!(recovered.body, macro_def.body);
 }
 
 #[test]

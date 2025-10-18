@@ -13,11 +13,12 @@ even preferred.
 The `serde-yml` crate has recently been **deprecated/archived** and raised
 concerns around maintenance and safety. It was a fork of `serde_yaml` using the
 C libyaml parser via unsafe code, and introduced unsound behaviour (segfaults
-were demonstrated)([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L176-L184))([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L194-L203)).
-This situation prompts the need to choose a more robust and actively maintained
-YAML+Serde library. There are no constraints requiring extremely small binaries
-or WebAssembly support, so the selection can focus on the best available
-solution without platform limitations.
+were
+demonstrated)([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L176-L184))([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L194-L203)).
+ This situation prompts the need to choose a more robust and actively
+maintained YAML+Serde library. There are no constraints requiring extremely
+small binaries or WebAssembly support, so the selection can focus on the best
+available solution without platform limitations.
 
 ## Decision Outcome (Summary)
 
@@ -28,13 +29,12 @@ it offers:
 
 - **Safety:** A pure Rust implementation with **no `unsafe` libyaml
   dependencies**([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums))([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)),
-   eliminating C library risks.
+  eliminating C library risks.
 
 - **Spec Compliance:** Full YAML 1.2 support (including proper handling of
   anchors and merge
   keys)([3](https://github.com/saphyr-rs/saphyr#:~:text=Specification%20Compliance)),
-   which aligns with Netsuke requirements and future-proofs the manifest
-  format.
+   which aligns with Netsuke requirements and future-proofs the manifest format.
 
 - **Robustness:** Built-in handling for resource limits and duplicate keys
   (configurable budgets and policies) to prevent pathological YAML from causing
@@ -89,8 +89,7 @@ Several YAML+Serde libraries were evaluated against the project requirements:
    but as of now it hasn’t eliminated the core safety issue. It also does not
   add new features beyond what `serde_yaml` had. Given that Netsuke does not
   need YAML 1.1 quirks and prefers to avoid C library dependencies, this is
-  only a
-  marginal improvement over `serde_yml`.
+  only a marginal improvement over `serde_yml`.
 
 - **`serde_norway`:** Another community fork of `serde_yaml` (“norway” being a
   codename) which is similarly intended to maintain YAML support. It is also
@@ -225,7 +224,7 @@ It’s worth noting that `serde_yaml_ng`’s maintainer is working on integratin
 safer libyaml or alternative
 parser([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L224-L232)),
  and `serde_norway` may similarly evolve. However, these efforts are uncertain
- in timeline and still wouldn’t necessarily achieve YAML 1.2 compliance or the
+in timeline and still wouldn’t necessarily achieve YAML 1.2 compliance or the
 one-pass design delivered by Saphyr. Meanwhile, `serde_saphyr` is already
 delivering these advantages today. Adopting it now positions Netsuke on a
 forward-looking path with minimal downsides.
@@ -256,10 +255,10 @@ forward-looking path with minimal downsides.
   refactor that call site. `serde_saphyr` does **not use** a `Value` model
   internally. Netsuke currently parses directly into concrete structs (e.g.,
   manifest definitions), so this scenario is unlikely, but confirm that no
-  intermediate YAML value logic is required (such as merging two YAML
-  documents or manually inspecting the YAML DOM). If such behaviour exists,
-  consider using the `saphyr` crate’s `Yaml` type or adjusting the design. For
-  now, the expectation is that no change is needed.
+  intermediate YAML value logic is required (such as merging two YAML documents
+  or manually inspecting the YAML DOM). If such behaviour exists, consider
+  using the `saphyr` crate’s `Yaml` type or adjusting the design. For now, the
+  expectation is that no change is needed.
 
 - Anchors and aliases in manifests will be automatically resolved by
   `serde_saphyr` during parsing. Netsuke does not output YAML with anchors, so
@@ -313,8 +312,8 @@ forward-looking path with minimal downsides.
   serialisation of the data structures to a YAML string is sufficient.
 
 - **Documentation:** Update Netsuke’s documentation (README or user guide) to
-  note that Netsuke now supports **YAML 1.2** fully. If there are any changes in
-  accepted syntax from YAML 1.1 (e.g., the booleans example), call that out.
+  note that Netsuke now supports **YAML 1.2** fully. If there are any changes
+  in accepted syntax from YAML 1.1 (e.g., the booleans example), call that out.
   Also, document that duplicate keys in manifests will result in an error (if
   it wasn’t already documented as invalid). Essentially, clarify that manifests
   should adhere to standard YAML 1.2.
@@ -337,8 +336,8 @@ forward-looking path with minimal downsides.
 **Positive consequences:**
 
 - Eliminates a deprecated and potentially unsafe dependency (`serde_yml` and
-  its underlying libyaml) in favour of a safer, pure-Rust solution. This reduces
-  the chance of YAML parsing causing crashes or security issues in
+  its underlying libyaml) in favour of a safer, pure-Rust solution. This
+  reduces the chance of YAML parsing causing crashes or security issues in
   Netsuke([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)).
 
 - Aligns with the YAML 1.2 spec, which means better consistency going forward
@@ -372,8 +371,8 @@ forward-looking path with minimal downsides.
   their manifests could break. The existing manifests already use explicit
   booleans and similar constructs, but communicate this change clearly. This is
   more of an education/updating issue than a technical problem. The stricter
-  behaviour (and error on duplicate keys) will actually surface potential config
-  errors that could otherwise go unnoticed.
+  behaviour (and error on duplicate keys) will actually surface potential
+  config errors that could otherwise go unnoticed.
 
 - **Dependency churn:** Introducing a new library always carries a small risk
   in dependency tree changes. `serde-saphyr` brings in the `saphyr-parser` and

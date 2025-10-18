@@ -22,7 +22,7 @@ compilation pipeline from parsing to execution.
 
   - [x] Annotate AST structs with #[derive(Deserialize)] and
     #[serde(deny_unknown_fields)]
-    to enable serde_yml parsing. *(done)*
+    to enable serde_saphyr parsing. *(done)*
 
   - [x] Implement parsing for the netsuke_version field and validate it using
     the semver crate. *(done)*
@@ -80,7 +80,7 @@ configurations with variables, control flow, and custom functions.
   - [x] Integrate the `minijinja` crate into the build pipeline.
 
   - [x] Implement data-first parsing: parse the manifest into a
-    `serde_yml::Value` (Stage 2: Initial YAML Parsing), expand `foreach` and
+    `serde_json::Value` (Stage 2: Initial YAML Parsing), expand `foreach` and
     `when` entries with a Jinja environment (Stage 3: Template Expansion), then
     deserialise the expanded tree into the typed AST and render remaining
     string fields (Stage 4: Deserialisation & Final Rendering).
@@ -119,10 +119,10 @@ configurations with variables, control flow, and custom functions.
 
 - [ ] **YAML Parser Migration:**
 
-  - [ ] Draft an ADR evaluating maintained replacements for `serde_yml`
+  - [x] Draft an ADR evaluating maintained replacements for `serde_yml`
         (for example `serde_yaml_ng`) and record the migration decision.
-  - [ ] Run a migration spike with the preferred crate, exercising the manifest
-        fixtures to capture compatibility notes and required mitigations.
+  - [x] Migrate the parser to `serde_saphyr`, exercising the manifest fixtures
+        to capture compatibility notes and required mitigations.
 
 ## Phase 3: The "Friendly" Polish 🛡️
 

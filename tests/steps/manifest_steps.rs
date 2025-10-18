@@ -4,7 +4,7 @@ use crate::CliWorld;
 use cucumber::{given, then, when};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
-    manifest,
+    manifest::{self, ManifestValue},
 };
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
@@ -296,7 +296,7 @@ fn assert_target_index(world: &CliWorld, index: usize, expected: usize) {
     let actual = target
         .vars
         .get(INDEX_KEY)
-        .and_then(serde_yml::Value::as_u64)
+        .and_then(ManifestValue::as_u64)
         .and_then(|n| usize::try_from(n).ok())
         .unwrap_or_else(|| panic!("target {index} missing index"));
     assert_eq!(actual, expected, "unexpected index for target {index}");

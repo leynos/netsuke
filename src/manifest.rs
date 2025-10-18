@@ -6,57 +6,23 @@
 //! exposes `env()` to read environment variables and `glob()` to expand
 //! filesystem patterns during template evaluation. Both helpers fail fast when
 //! inputs are missing or patterns are invalid.
+//!
+//! Consumers interact with the intermediate manifest through the re-exported
+//! [`ManifestValue`] and [`ManifestMap`] aliases. Diagnostics wrap manifest
+//! identifiers in [`ManifestName`] and YAML source strings in
+//! [`ManifestSource`] so callers pass domain-specific types instead of raw
+//! strings.
+//!
+//! The optional `vars` section must deserialise into a JSON object with string
+//! keys. YAML manifests that use non-string keys (for example integers) now
+//! fail with a [`ManifestError::Parse`] diagnostic, matching the Jinja context
+//! semantics and preventing ambiguous variable lookup.
 
 use crate::ast::NetsukeManifest;
 use anyhow::{Context, Result};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
-use serde_yml::Value as YamlValue;
+use serde::de::Error as _;
 use std::{fs, path::Path};
-
-/// A display name for a manifest source, used in error reporting.
-#[derive(Debug, Clone)]
-pub struct ManifestName(String);
-
-impl ManifestName {
-    /// Construct a manifest name for diagnostics.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use netsuke::manifest::ManifestName;
-    /// let name = ManifestName::new("Netsukefile");
-    /// assert_eq!(name.to_string(), "Netsukefile");
-    /// ```
-    pub fn new(name: impl Into<String>) -> Self {
-        Self(name.into())
-    }
-
-    #[must_use]
-    /// Borrow the manifest name as a string slice.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use netsuke::manifest::ManifestName;
-    /// let name = ManifestName::new("Config");
-    /// assert_eq!(name.as_str(), "Config");
-    /// ```
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for ManifestName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl AsRef<str> for ManifestName {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
-}
 
 mod diagnostics;
 mod expand;
@@ -65,7 +31,12 @@ mod hints;
 mod jinja_macros;
 mod render;
 
-pub use diagnostics::{ManifestError, map_yaml_error};
+pub type ManifestValue = serde_json::Value;
+pub type ManifestMap = serde_json::Map<String, ManifestValue>;
+
+pub use diagnostics::{
+    ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
+};
 pub use glob::glob_paths;
 
 pub use expand::expand_foreach;
@@ -114,9 +85,10 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
-    let mut doc: YamlValue = serde_yml::from_str(yaml).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(e, yaml, name.as_ref()),
-    })?;
+    let mut doc: ManifestValue =
+        serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
+            source: map_yaml_error(e, &ManifestSource::from(yaml), name),
+        })?;
 
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -125,13 +97,18 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = crate::stdlib::register(&mut jinja);
 
-    if let Some(vars) = doc.get("vars").and_then(|v| v.as_mapping()).cloned() {
-        for (k, v) in vars {
-            let key = k
-                .as_str()
-                .ok_or_else(|| anyhow::anyhow!("non-string key in vars mapping: {k:?}"))?
-                .to_string();
-            jinja.add_global(key, Value::from_serialize(v));
+    if let Some(vars_value) = doc.get("vars") {
+        let vars = vars_value
+            .as_object()
+            .cloned()
+            .ok_or_else(|| ManifestError::Parse {
+                source: map_data_error(
+                    serde_json::Error::custom("manifest vars must be an object with string keys"),
+                    name,
+                ),
+            })?;
+        for (key, value) in vars {
+            jinja.add_global(key, Value::from_serialize(value));
         }
     }
 
@@ -140,8 +117,8 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     expand_foreach(&mut doc, &jinja)?;
 
     let manifest: NetsukeManifest =
-        serde_yml::from_value(doc).map_err(|e| ManifestError::Parse {
-            source: map_yaml_error(e, yaml, name.as_ref()),
+        serde_json::from_value(doc).map_err(|e| ManifestError::Parse {
+            source: map_data_error(e, name),
         })?;
 
     render_manifest(manifest, &jinja)

@@ -11,7 +11,6 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 use rstest::{fixture, rstest};
-use serde_yml::value::Mapping;
 
 fn render_with(env: &Environment, template: &str) -> AnyResult<String> {
     Ok(env.render_str(template, ())?)
@@ -122,12 +121,12 @@ fn register_macro_is_reusable(mut strict_env: Environment) {
 
 #[rstest]
 fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
-    let mut mapping = Mapping::new();
+    let mut mapping = ManifestMap::new();
     mapping.insert(
-        YamlValue::from("macros"),
-        YamlValue::from(vec![YamlValue::from(42)]),
+        "macros".into(),
+        ManifestValue::Array(vec![ManifestValue::from(42)]),
     );
-    let doc = YamlValue::Mapping(mapping);
+    let doc = ManifestValue::Object(mapping);
     let err = register_manifest_macros(&doc, &mut strict_env).expect_err("shape error");
     assert!(
         err.to_string()
@@ -137,13 +136,48 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
 }
 
 #[rstest]
+fn register_manifest_macros_rejects_non_string_values(mut strict_env: Environment) {
+    let mut macro_mapping = ManifestMap::new();
+    macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
+    macro_mapping.insert(
+        "body".into(),
+        ManifestValue::Number(serde_json::Number::from(42)),
+    );
+    let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
+    let mut doc = ManifestMap::new();
+    doc.insert("macros".into(), macros);
+    let doc = ManifestValue::Object(doc);
+
+    let err = register_manifest_macros(&doc, &mut strict_env)
+        .expect_err("non-string macro body should fail");
+    let msg = err.to_string();
+    assert!(msg.contains("macros"), "unexpected error: {msg}");
+}
+
+#[test]
+fn manifest_macros_with_non_string_keys_fail_to_parse() {
+    let yaml = r#"
+macros:
+  - ? [not, string]
+    : signature: "greet(name)"
+      body: "Hello"
+"#;
+    let err = serde_saphyr::from_str::<ManifestValue>(yaml).expect_err("expected parse failure");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("expected string scalar") || msg.contains("key") || msg.contains("mapping"),
+        "{msg}"
+    );
+}
+
+#[rstest]
 fn register_manifest_macros_requires_body(mut strict_env: Environment) {
-    let mut macro_mapping = Mapping::new();
-    macro_mapping.insert(YamlValue::from("signature"), YamlValue::from("greet(name)"));
-    let macros = YamlValue::Sequence(vec![YamlValue::Mapping(macro_mapping)]);
-    let mut doc = Mapping::new();
-    doc.insert(YamlValue::from("macros"), macros);
-    let doc = YamlValue::Mapping(doc);
+    let mut macro_mapping = ManifestMap::new();
+    macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
+    let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
+    let mut doc = ManifestMap::new();
+    doc.insert("macros".into(), macros);
+    let doc = ManifestValue::Object(doc);
 
     let err = register_manifest_macros(&doc, &mut strict_env).expect_err("missing macro body");
     assert!(err.to_string().contains("body"), "{err}");
@@ -151,7 +185,7 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment) {
 
 #[rstest]
 fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
-    let yaml = serde_yml::from_str::<YamlValue>(
+    let yaml = serde_saphyr::from_str::<ManifestValue>(
         "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",
     )
     .expect("yaml value");
