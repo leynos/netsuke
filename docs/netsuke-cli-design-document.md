@@ -184,41 +184,36 @@ essential for a welcoming UX globally.
 
 Accessibility is a first-class concern for the Netsuke CLI. Although
 command-line interfaces are text-based and keyboard-driven (qualities which
-make them *inherently* more accessible than GUIs in some
-respects([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=While%20CLIs%20are%20inherently%20different,principles%20can%20still%20be%20applied))),
- CLIs still pose unique challenges for users with disabilities. We will adhere
-to **Section 508 standards** and research-backed recommendations to ensure that
+make them *inherently* more accessible than GUIs in some respects[^1]), CLIs
+still pose unique challenges for users with disabilities. We will adhere to
+**Section 508 standards** and research-backed recommendations to ensure that
 Netsuke is usable by developers with visual or other impairments. Below we
 detail how Netsuke’s CLI will meet key accessibility criteria:
 
 - **Keyboard Operability:** The CLI will be fully operable via keyboard alone
   (by nature, CLIs accept text input and do not require a mouse). There will be
-  no hidden functionality that assumes mouse or pointer
-  interaction([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=%E2%80%A2%20%20%20Keyboard%20Accessibility%3A,alone%20to%20convey%20important%20information)).
-   If Netsuke ever provides interactive prompts (for example, a yes/no
-  confirmation or a menu selection in a future feature), those will be
-  navigable with keyboard controls (arrow keys, Enter, etc., or single-key
-  shortcuts) and will have clear instructions. However, by default, Netsuke’s
-  operations (build, clean, etc.) are non-interactive batch processes initiated
-  by a single command, which aligns with keyboard-only usage.
+  no hidden functionality that assumes mouse or pointer interaction[^1]. If
+  Netsuke ever provides interactive prompts (for example, a yes/no confirmation
+  or a menu selection in a future feature), those will be navigable with
+  keyboard controls (arrow keys, Enter, etc., or single-key shortcuts) and will
+  have clear instructions. However, by default, Netsuke’s operations (build,
+  clean, etc.) are non-interactive batch processes initiated by a single
+  command, which aligns with keyboard-only usage.
 
 - **No Reliance on Color Alone:** Netsuke will support monochrome terminals and
   users who cannot perceive colour. Any information conveyed with colour will
-  **also be conveyed in text or symbol
-  form**([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=ensure%20compatibility%20where%20possible%2C%20such,to%20accommodate%20various%20visual%20impairments)).
-   For example, if a successful build is indicated with a green message or a ✅
-  check mark, the text will also include a word like “Success.” Error messages
-  might be coloured red for emphasis, but they will also begin with an explicit
-  **“Error:”** label (and/or an `✖` symbol) so that they are identifiable in
-  plain text. We will choose output colours with **high contrast** against both
-  dark and light backgrounds (ensuring compliance with colour contrast
-  guidelines([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=%E2%80%A2%20%20%20Color%20Contrast%3A,to%20accommodate%20various%20visual%20impairments))).
-   Additionally, the CLI will respect the standard `NO_COLOR` environment
+  **also be conveyed in text or symbol form**[^1]. For example, if a successful
+  build is indicated with a green message or a ✅ check mark, the text will
+  also include a word like “Success.” Error messages might be coloured red for
+  emphasis, but they will also begin with an explicit **“Error:”** label
+  (and/or an `✖` symbol) so that they are identifiable in plain text. We will
+  choose output colours with **high contrast** against both dark and light
+  backgrounds (ensuring compliance with colour contrast guidelines[^1]).
+  Additionally, the CLI will respect the standard `NO_COLOR` environment
   variable to disable coloured output entirely, falling back to pure text
-  indicators([2](https://clig.dev/#:~:text=,color%20specifically%20for%20your%20program)).
-   This ensures users with monochrome displays or those who prefer no colour
-  (including many screen reader setups that ignore colour) get the full meaning
-  of the output.
+  indicators[^2]. This ensures users with monochrome displays or those who
+  prefer no colour (including many screen reader setups that ignore colour) get
+  the full meaning of the output.
 
 - **Screen Reader-Friendly Output:** We will structure CLI output to be as
   linear and “screen-reader digestible” as possible. A known issue with many
@@ -232,11 +227,10 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   **“quiet” mode by default for screen readers**. We may detect if the `TERM`
   environment equals `"dumb"` (often used for basic terminals or some screen
   reader terminals) and automatically simplify the output (e.g., no
-  live-updating
-  spinners)([2](https://clig.dev/#:~:text=,color%20specifically%20for%20your%20program))([2](https://clig.dev/#:~:text=If%20,trees%20in%20CI%20log%20output)).
-   We will also provide a user setting (CLI flag or config) to enable a
-  **“no-spinner” or “accessible” mode**, which ensures that progress is
-  reported with static text updates instead of live animation.
+  live-updating spinners)[^2][^2]. We will also provide a user setting (CLI
+  flag or config) to enable a **“no-spinner” or “accessible” mode**, which
+  ensures that progress is reported with static text updates instead of live
+  animation.
 
 - **Status Feedback for Long Operations:** Every Netsuke command that takes
   significant time will provide some form of **status or progress indication**.
@@ -453,31 +447,27 @@ for numbers or durations.
 **Use of Symbols and Formatting:** We will use Unicode symbols like `✔` and `✖`
 (or `✅/❌`) as friendly cues for success and failure, and perhaps `▸` or `=`
 characters for progress bars. These make the output more visually
-scannable([2](https://clig.dev/#:~:text=Use%20symbols%20and%20emoji%20where,or%20feel%20like%20a%20toy)).
- Importantly, as noted, these will **augment** but not replace text. A screen
-reader will likely read `✔` as “check mark”, which along with the word
-“succeeded” should be okay. If we discover that some symbols are read poorly
-(e.g., the spinner might be read as “vertical bar, slash, dash…” each frame),
-we will fall back to simpler characters in accessible mode. The CLI will also
-respect user preferences: for instance, if the environment variable
+scannable[^2]. Importantly, as noted, these will **augment** but not replace
+text. A screen reader will likely read `✔` as “check mark”, which along with
+the word “succeeded” should be okay. If we discover that some symbols are read
+poorly (e.g., the spinner might be read as “vertical bar, slash, dash…” each
+frame), we will fall back to simpler characters in accessible mode. The CLI
+will also respect user preferences: for instance, if the environment variable
 `NETSUKE_NO_EMOJI` is set (just as an example we can support), we might switch
 to plain text “OK”/“FAIL” instead of check/cross. Similarly, if `NO_COLOR` is
-set, we won’t output coloured bars or coloured
-symbols([2](https://clig.dev/#:~:text=,color%20specifically%20for%20your%20program)).
+set, we won’t output coloured bars or coloured symbols[^2].
 
 We will disable or simplify **animations in non-interactive contexts**. If
 output is being piped to a file or a CI system (detected by !isatty on stdout),
 `indicatif` will automatically disable its adaptive animations (to avoid
-garbage characters in
-logs)([2](https://clig.dev/#:~:text=If%20,trees%20in%20CI%20log%20output)). In
-such cases, Netsuke can either print nothing until completion (to keep logs
-clean) or print minimal static updates. A likely approach: if not a TTY, we do
-not show the live progress bar at all, and instead just print a single line
-“Building… (tasks running)” at start and “Build completed” at end, or perhaps a
-few milestone lines. The reasoning is that in CI logs or when redirecting
-output, a steady stream of progress updates can spam the log (making it hard to
-read)([2](https://clig.dev/#:~:text=If%20,trees%20in%20CI%20log%20output)). We
-prefer a high-level summary unless the user explicitly requests verbose output.
+garbage characters in logs)[^2]. In such cases, Netsuke can either print
+nothing until completion (to keep logs clean) or print minimal static updates.
+A likely approach: if not a TTY, we do not show the live progress bar at all,
+and instead just print a single line “Building… (tasks running)” at start and
+“Build completed” at end, or perhaps a few milestone lines. The reasoning is
+that in CI logs or when redirecting output, a steady stream of progress updates
+can spam the log (making it hard to read)[^2]. We prefer a high-level summary
+unless the user explicitly requests verbose output.
 
 To summarize, the CLI’s real-time feedback system will use `indicatif` to give
 **clear and continuous insight** into what Netsuke is doing, without
@@ -508,17 +498,16 @@ error reporting.
 types of output. By convention, **Netsuke’s own status messages and
 warnings/errors will be sent to stderr**, while the normal output of build
 commands will flow to stdout. This separation is common in CLI design (stdout
-for primary output, stderr for ancillary
-messages([2](https://clig.dev/#:~:text=Send%20output%20to%20,piping%20sends%20things%20by%20default)))
- and allows advanced users to redirect or pipe outputs as needed. For example,
-if a user only wants to capture the actual build output (e.g., compiler
-warnings) to a log, they can redirect stdout to a file, and Netsuke’s progress
-and status (on stderr) will still display to the console. Conversely, in a
-silent or machine mode, a user might ignore stdout and only heed structured
-JSON on stderr, etc. Under the hood, as mentioned earlier, Netsuke captures
-Ninja’s stdout and stderr via piped streams and re-emits them appropriately. We
-will ensure that we **preserve Ninja’s output order** exactly – i.e., Netsuke
-will not buffer things in a way that jumbles the sequence of messages.
+for primary output, stderr for ancillary messages[^2]) and allows advanced
+users to redirect or pipe outputs as needed. For example, if a user only wants
+to capture the actual build output (e.g., compiler warnings) to a log, they can
+redirect stdout to a file, and Netsuke’s progress and status (on stderr) will
+still display to the console. Conversely, in a silent or machine mode, a user
+might ignore stdout and only heed structured JSON on stderr, etc. Under the
+hood, as mentioned earlier, Netsuke captures Ninja’s stdout and stderr via
+piped streams and re-emits them appropriately. We will ensure that we
+**preserve Ninja’s output order** exactly – i.e., Netsuke will not buffer
+things in a way that jumbles the sequence of messages.
 
 When printing messages, we will include **explicit markers** or formatting to
 distinguish origin. Netsuke’s messages can be prefixed or styled. For instance,
@@ -648,16 +637,13 @@ the diagnostic, otherwise you “discard spans and help text”).
 with a common prefix (e.g., `Error:` or `✖ Error:`) and are usually printed to
 stderr. They will often be multi-line as shown, with indentation for the file
 snippet, etc. We will avoid dumping long backtraces or internal details by
-default – those are not helpful to most
-users([2](https://clig.dev/#:~:text=One%20of%20the%20most%20common,the%20user%20loads%20of%20time))([2](https://clig.dev/#:~:text=If%20there%20is%20an%20unexpected,printing%20it%20to%20the%20terminal)).
- Instead, for unexpected panics or developer-level debugging, we can provide a
-**verbose error mode**. For instance, if an environment variable
-`NETSUKE_DEBUG=1` or a `-vv` flag is set, we might include a backtrace or
-internal log path. But normally, the error shown is meant to be understood by
-the user and give them next steps (this echoes best practices from CLI
-guidelines: “catch errors and rewrite them for
-humans”([2](https://clig.dev/#:~:text=One%20of%20the%20most%20common,the%20user%20loads%20of%20time)),
- and provide actionable messages rather than cryptic ones).
+default – those are not helpful to most users[^2][^2]. Instead, for unexpected
+panics or developer-level debugging, we can provide a **verbose error mode**.
+For instance, if an environment variable `NETSUKE_DEBUG=1` or a `-vv` flag is
+set, we might include a backtrace or internal log path. But normally, the error
+shown is meant to be understood by the user and give them next steps (this
+echoes best practices from CLI guidelines: “catch errors and rewrite them for
+humans”[^2], and provide actionable messages rather than cryptic ones).
 
 **Distinguishing Build Failures vs Tool Failures:** If a build command (like
 the compiler or a user script) fails, Ninja will exit with a nonzero status.
@@ -705,8 +691,7 @@ warnings for deprecated syntax or minor issues; those will be formatted with a
 label like “Warning:” (possibly in yellow text) so they are easy to pick out.
 Multiple warnings of the same type may be grouped or summarized to avoid
 overwhelming the user (following the guideline of maintaining a good
-signal-to-noise
-ratio([2](https://clig.dev/#:~:text=to%20make%20it%20writable%20by,%E2%80%9D))).
+signal-to-noise ratio[^2]).
 
 In summary, Netsuke’s CLI output is carefully organized into two channels:
 **informational progress output vs. command output**, and within errors:
@@ -725,19 +710,16 @@ Netsuke’s CLI is designed to be not only easy out-of-the-box, but also
 configurable to fit into different workflows. We achieve this by using the
 **OrthoConfig** crate to manage configuration from multiple sources –
 command-line flags, environment variables, and configuration files – in a
-unified
-way([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26)).
- This means users can customize the CLI’s behaviour (like output style,
-verbosity, default targets, etc.) persistently, rather than having to type
-numerous flags each time.
+unified way[^3]. This means users can customize the CLI’s behaviour (like
+output style, verbosity, default targets, etc.) persistently, rather than
+having to type numerous flags each time.
 
 **Layered Configuration Sources:** OrthoConfig allows us to define a
 configuration struct in Rust and have it automatically populated from (1)
 program defaults, (2) a config file (e.g., a TOML or YAML file), (3)
-environment variables, and (4) CLI arguments, with that precedence
-order([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26)).
- In Netsuke, we will define a struct (say `CliConfig`) that includes fields
-such as:
+environment variables, and (4) CLI arguments, with that precedence order[^3].
+In Netsuke, we will define a struct (say `CliConfig`) that includes fields such
+as:
 
 - `verbose: bool` – for verbose output mode
 
@@ -763,26 +745,22 @@ can map to a `--verbose` flag (already in Clap), an env var like
 `NETSUKE_VERBOSE=true`, and a config file entry `verbose = true`. OrthoConfig’s
 **orthographic naming** feature will handle the naming conventions (so
 `--no-color` flag might correspond to env `NETSUKE_NO_COLOR` and config file
-key `color = "never"` etc.) without a lot of manual
-wiring([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L10-L19))([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L24-L32)).
- We’ll use a prefix like `NETSUKE_` for environment variables to avoid
-conflicts (the OrthoConfig derive allows specifying a prefix for env vars and
-file
-sections([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L76-L84))([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L142-L151))).
+key `color = "never"` etc.) without a lot of manual wiring[^3][^3]. We’ll use a
+prefix like `NETSUKE_` for environment variables to avoid conflicts (the
+OrthoConfig derive allows specifying a prefix for env vars and file
+sections[^3][^3]).
 
 **Configuration File:** By default, Netsuke will look for a config file in
 standard locations. Thanks to OrthoConfig’s discovery mechanism, we can support
 a config file name like `.netsuke.toml` or
 `$XDG_CONFIG_HOME/netsuke/config.toml`. The OrthoConfig docs indicate it
 searches for a file in the current directory or home directory with a
-prefix-based
-name([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L150-L158)).
- We will likely set the prefix to "netsuke", meaning it will look for
-`.netsuke.toml` or `.netsuke.yaml` (if YAML support is enabled) in the current
-directory or `~/.netsuke.toml` in the user’s home. This lets users define
-project-specific config (in the project directory) or global config (in their
-home) that affects Netsuke’s behaviour. The config file is optional – if not
-present, default settings apply.
+prefix-based name[^3]. We will likely set the prefix to "netsuke", meaning it
+will look for `.netsuke.toml` or `.netsuke.yaml` (if YAML support is enabled)
+in the current directory or `~/.netsuke.toml` in the user’s home. This lets
+users define project-specific config (in the project directory) or global
+config (in their home) that affects Netsuke’s behaviour. The config file is
+optional – if not present, default settings apply.
 
 **Environment Variables:** Each config option will also map to an environment
 variable. For instance, to force colour off globally, a user could set
@@ -790,8 +768,7 @@ variable. For instance, to force colour off globally, a user could set
 output in a CI environment, one could set `NETSUKE_OUTPUT_FORMAT=json`.
 Environment vars are convenient for CI and also for users who prefer them over
 config files. They override the config file but are themselves overridden by
-explicit CLI
-flags([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26)).
+explicit CLI flags[^3].
 
 **Command-Line Flags:** We integrate OrthoConfig with Clap such that flags
 parsed by Clap feed into the config struct. Since Clap is already being used
@@ -855,8 +832,7 @@ following via config:
 OrthoConfig makes adding these options straightforward and consistent. We just
 add a field to the struct, and the derive will ensure CLI flags and env var
 names are generated in a consistent way (kebab-case for CLI, upper-snake for
-env,
-etc.)([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L10-L19))([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L24-L32)).
+env, etc.)[^3][^3].
 
 ### Example: Setting Configurations
 
@@ -898,11 +874,9 @@ Finally, note that Clap and OrthoConfig together ensure **consistent naming and
 discovery**. For instance, if our binary name is `netsuke`, OrthoConfig by
 default might look for `.netsuke.toml`. If a user wants to use a custom config
 file path, we can provide `--config <path>` flag (which Ortho can generate via
-an
-attribute)([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L150-L158)).
- We’ll likely allow `Netsuke --config myconfig.toml` to load a specific config.
-This helps in CI or multiple project scenarios where one might store config
-with the project.
+an attribute)[^3]. We’ll likely allow `Netsuke --config myconfig.toml` to load
+a specific config. This helps in CI or multiple project scenarios where one
+might store config with the project.
 
 In conclusion, by integrating OrthoConfig, Netsuke’s CLI becomes highly
 customizable without adding burden on the user to always specify options. Users
@@ -1055,10 +1029,9 @@ In summary, the Netsuke CLI supports a gradual learning curve: **easy to
 start**, with sensible defaults and guidance; **informative as needed**, with
 verbosity control; and **empowering at advanced levels** with introspection and
 integration features. This approach aligns with modern CLI design philosophy of
-being helpful and
-“human-first”([2](https://clig.dev/#:~:text=,Empathy))([2](https://clig.dev/#:~:text=By%20default%2C%20don%E2%80%99t%20output%20information,by%20default%E2%80%94only%20in%20verbose%20mode)),
- ensuring that as users invest more in Netsuke, Netsuke continues to support
-them with a rich, configurable, and scriptable interface.
+being helpful and “human-first”[^2][^2], ensuring that as users invest more in
+Netsuke, Netsuke continues to support them with a rich, configurable, and
+scriptable interface.
 
 ## Visual Design and Layout Guidance
 
@@ -1155,9 +1128,7 @@ contrast in chosen colours: for example, a dark blue might be hard to read on
 black; we’d use bright blue (cyan) instead.
 
 **Use of Emojis and Symbols:** Emojis like ✅ and ❌ can add clarity and a bit
-of friendly character, but use them
-judiciously([2](https://clig.dev/#:~:text=Use%20symbols%20and%20emoji%20where,or%20feel%20like%20a%20toy)).
- We will use:
+of friendly character, but use them judiciously[^2]. We will use:
 
 - **“✅” (green check mark)** for final success or possibly for each completed
   stage in progress output.
@@ -1298,27 +1269,23 @@ marked), and the output will avoid common pitfalls like misaligned text or
 overuse of colour without text. The style choices also reinforce the Netsuke
 brand as a modern tool: use of emojis and Unicode where appropriate can add a
 friendly touch, but the core output remains **structured and informative**, not
-gimmicky([2](https://clig.dev/#:~:text=Use%20symbols%20and%20emoji%20where,or%20feel%20like%20a%20toy)).
- Ultimately, these visual decisions serve the goals of **usability,
-readability, and accessibility**, ensuring that whether a user is glancing
-quickly at their screen, poring over a log file, or listening via a screen
-reader, they can quickly grasp what Netsuke is communicating.
+gimmicky[^2]. Ultimately, these visual decisions serve the goals of
+**usability, readability, and accessibility**, ensuring that whether a user is
+glancing quickly at their screen, poring over a log file, or listening via a
+screen reader, they can quickly grasp what Netsuke is communicating.
 
 **References:**
 
 - Harini Sampath et al., *“Accessibility of Command Line Interfaces,”* CHI ’21
   – Recommendations for making CLI output accessible.
 
-- Reddit discussion on Section 508 and CLIs – emphasizes keyboard support,
-  avoiding colour-only cues,
-  etc.([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=%E2%80%A2%20%20%20Keyboard%20Accessibility%3A,users%20to%20customize%20font%20sizes)).
-
 - Netsuke Design Document – error handling strategy with `miette` diagnostics
   and JSON output for CI.
 
-- OrthoConfig Documentation – layered config precedence (CLI > Env > File >
-  Defaults)([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26)).
+[^1]: Reddit discussion on Section 508 guidelines for command-line interfaces.
+    <https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/>
 
-- Command Line Interface Guidelines (clig.dev) – advice on handling output,
-  colours, and animations in CLI
-  programs([2](https://clig.dev/#:~:text=If%20,trees%20in%20CI%20log%20output))([2](https://clig.dev/#:~:text=One%20of%20the%20most%20common,the%20user%20loads%20of%20time)).
+[^2]: Command Line Interface Guidelines. <https://clig.dev/>
+
+[^3]: OrthoConfig documentation detailing layered configuration precedence.
+    <https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26>
