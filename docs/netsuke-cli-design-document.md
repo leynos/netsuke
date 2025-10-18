@@ -4,10 +4,10 @@
 
 This document specifies the design of the Netsuke command-line interface (CLI),
 building on the core architecture outlined in the Netsuke mid-level design
-document. The focus here is on the user-facing CLI implementation and behavior,
-including user experience, internationalization, accessibility, real-time
-feedback, error reporting, configuration, and advanced usage. The CLI will be
-implemented using the following Rust crates:
+document. The focus here is on the user-facing CLI implementation and
+behaviour, including user experience, internationalization, accessibility,
+real-time feedback, error reporting, configuration, and advanced usage. The CLI
+will be implemented using the following Rust crates:
 
 - **Clap** (for argument parsing – as established in the core design)
 
@@ -36,7 +36,7 @@ helpful feedback. If a valid `Netsukefile` manifest is present, running
 target(s)** as defined in the manifest. This allows a novice user to simply run
 the tool and see results with minimal configuration. If no targets are
 specified and the manifest’s `defaults` section is defined, those targets are
-built by default – a convenient behavior called out in the core design. If the
+built by default – a convenient behaviour called out in the core design. If the
 user runs `netsuke` in a directory without a manifest, the CLI should
 **gracefully handle the missing file**. For example, it might print:
 
@@ -203,21 +203,21 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   by a single command, which aligns with keyboard-only usage.
 
 - **No Reliance on Color Alone:** Netsuke will support monochrome terminals and
-  users who cannot perceive color. Any information conveyed with color will
+  users who cannot perceive colour. Any information conveyed with colour will
   **also be conveyed in text or symbol
   form**([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=ensure%20compatibility%20where%20possible%2C%20such,to%20accommodate%20various%20visual%20impairments)).
    For example, if a successful build is indicated with a green message or a ✅
   check mark, the text will also include a word like “Success.” Error messages
-  might be colored red for emphasis, but they will also begin with an explicit
+  might be coloured red for emphasis, but they will also begin with an explicit
   **“Error:”** label (and/or an `✖` symbol) so that they are identifiable in
-  plain text. We will choose output colors with **high contrast** against both
-  dark and light backgrounds (ensuring compliance with color contrast
+  plain text. We will choose output colours with **high contrast** against both
+  dark and light backgrounds (ensuring compliance with colour contrast
   guidelines([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=%E2%80%A2%20%20%20Color%20Contrast%3A,to%20accommodate%20various%20visual%20impairments))).
    Additionally, the CLI will respect the standard `NO_COLOR` environment
-  variable to disable colored output entirely, falling back to pure text
+  variable to disable coloured output entirely, falling back to pure text
   indicators([2](https://clig.dev/#:~:text=,color%20specifically%20for%20your%20program)).
-   This ensures users with monochrome displays or those who prefer no color
-  (including many screen reader setups that ignore color) get the full meaning
+   This ensures users with monochrome displays or those who prefer no colour
+  (including many screen reader setups that ignore colour) get the full meaning
   of the output.
 
 - **Screen Reader-Friendly Output:** We will structure CLI output to be as
@@ -308,7 +308,7 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
 
 - **Avoiding Ephemeral or Non-Verbal Cues:** We will avoid any UI mechanism
   that conveys information purely through ephemeral or non-textual cues. For
-  example, some CLI tools use a flashing cursor or changing colors to indicate
+  example, some CLI tools use a flashing cursor or changing colours to indicate
   progress, or rely on timing (like “press any key in 5 seconds to abort”).
   Netsuke will not use timing-based interactions (all interactions will wait
   indefinitely for user input if needed, or proceed with sensible defaults).
@@ -338,7 +338,7 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
 
 By implementing these measures, Netsuke’s CLI will strive to be **Section 508
 compliant** and user-friendly for people with disabilities. Many of these
-practices (e.g., not relying on color, providing alternate outputs) will
+practices (e.g., not relying on colour, providing alternate outputs) will
 benefit all users – for instance, JSON output is great for automation, and
 clear textual messages help even when not using a screen reader. Accessibility
 is treated not as an afterthought but as an integral part of the CLI design,
@@ -462,7 +462,7 @@ we will fall back to simpler characters in accessible mode. The CLI will also
 respect user preferences: for instance, if the environment variable
 `NETSUKE_NO_EMOJI` is set (just as an example we can support), we might switch
 to plain text “OK”/“FAIL” instead of check/cross. Similarly, if `NO_COLOR` is
-set, we won’t output colored bars or colored
+set, we won’t output coloured bars or coloured
 symbols([2](https://clig.dev/#:~:text=,color%20specifically%20for%20your%20program)).
 
 We will disable or simplify **animations in non-interactive contexts**. If
@@ -524,9 +524,9 @@ When printing messages, we will include **explicit markers** or formatting to
 distinguish origin. Netsuke’s messages can be prefixed or styled. For instance,
 Netsuke might prefix its messages with its name or a short tag like `[Netsuke]`
 in verbose mode. In normal mode, we might rely on styling: e.g., Netsuke status
-messages could be in bold or a different color (cyan, for example), while
+messages could be in bold or a different colour (cyan, for example), while
 command outputs remain in default text. Either way, we guarantee that in the
-absence of color, there is still a differentiation. One possibility is
+absence of colour, there is still a differentiation. One possibility is
 indentation: we could print all subprocess output indented by a couple of
 spaces, so it visually appears as a sub-block under a Netsuke heading. For
 example:
@@ -606,10 +606,11 @@ mechanism), the line from the file with a caret under the problematic spot (the
 quote”), and a **remediation hint** after a hint marker (here `=` is used by
 miette to denote an advisory note) suggesting how to fix it. The exact
 formatting will be handled by `miette` – which is known for producing
-compiler-like error messages with color highlighting of the error span and bold
-labels. We will ensure these messages are **clear when read aloud** by a screen
-reader as well (for example, the above would be read line by line, so it should
-make sense even without color – which it does, thanks to the arrows and text).
+compiler-like error messages with colour highlighting of the error span and
+bold labels. We will ensure these messages are **clear when read aloud** by a
+screen reader as well (for example, the above would be read line by line, so it
+should make sense even without colour – which it does, thanks to the arrows and
+text).
 
 Netsuke will implement similar diagnostics for **Jinja template errors**. If a
 Jinja expression fails (say the user used an undefined variable in a `{{ }}`
@@ -726,7 +727,7 @@ configurable to fit into different workflows. We achieve this by using the
 command-line flags, environment variables, and configuration files – in a
 unified
 way([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26)).
- This means users can customize the CLI’s behavior (like output style,
+ This means users can customize the CLI’s behaviour (like output style,
 verbosity, default targets, etc.) persistently, rather than having to type
 numerous flags each time.
 
@@ -742,7 +743,7 @@ such as:
 
 - `quiet: bool` – for noise-free mode
 
-- `color: Option<String>` – color mode (“always”, “never”, or “auto”)
+- `color: Option<String>` – colour mode (“always”, “never”, or “auto”)
 
 - `output_format: Option<String>` – format for output/diagnostics (“text” or
   “json”)
@@ -780,11 +781,11 @@ name([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1
 `.netsuke.toml` or `.netsuke.yaml` (if YAML support is enabled) in the current
 directory or `~/.netsuke.toml` in the user’s home. This lets users define
 project-specific config (in the project directory) or global config (in their
-home) that affects Netsuke’s behavior. The config file is optional – if not
+home) that affects Netsuke’s behaviour. The config file is optional – if not
 present, default settings apply.
 
 **Environment Variables:** Each config option will also map to an environment
-variable. For instance, to force color off globally, a user could set
+variable. For instance, to force colour off globally, a user could set
 `NETSUKE_NO_COLOR=1` in their shell profile. Or to always get JSON diagnostic
 output in a CI environment, one could set `NETSUKE_OUTPUT_FORMAT=json`.
 Environment vars are convenient for CI and also for users who prefer them over
@@ -811,12 +812,12 @@ following via config:
   makes Netsuke always verbose unless `--quiet` is passed. Or a user who
   dislikes any extra output can set `quiet = true` globally.
 
-- **Color Theme:** Users can decide if they always want color or never. For
+- **Color Theme:** Users can decide if they always want colour or never. For
   instance, in some continuous integration setups, the terminal might actually
-  support color but they still prefer plain text logs – setting
+  support colour but they still prefer plain text logs – setting
   `color = "never"` in config handles that. Conversely, if someone’s workflow
   pipes output to a pager that supports ANSI, they might set `color = "always"`
-  to force color even when stdout is not a TTY. (Clap/Ortho can interpret an
+  to force colour even when stdout is not a TTY. (Clap/Ortho can interpret an
   enum for such options; we’ll likely support the standard values “auto”
   (default), “always”, “never”.)
 
@@ -872,7 +873,7 @@ output_format = "text"
 spinner = false
 ```
 
-This ensures that by default, Netsuke will not use color, will suppress
+This ensures that by default, Netsuke will not use colour, will suppress
 non-essential output, and will not show spinners or progress bars (quiet mode).
 When they do need to see more details, they can still run `netsuke -v` to
 temporarily override quiet mode. OrthoConfig will merge that flag appropriately.
@@ -884,8 +885,8 @@ color = "always"
 theme = "unicode"   # use all the fancy Unicode bars and symbols
 ```
 
-So even if they redirect output, they’d still get color (say, piping through
-`less -R` to view colored output).
+So even if they redirect output, they’d still get colour (say, piping through
+`less -R` to view coloured output).
 
 We will document all these configuration knobs in the Netsuke manual. Using
 OrthoConfig gives a lot of flexibility “for free” – it allows the CLI to cater
@@ -907,7 +908,7 @@ In conclusion, by integrating OrthoConfig, Netsuke’s CLI becomes highly
 customizable without adding burden on the user to always specify options. Users
 get **intuitive, orthogonal config names** across CLI flags, env vars, and
 files, enabling them to adapt Netsuke to their environment – whether that’s
-making it quieter, more verbose, more colorful, or altering defaults. This
+making it quieter, more verbose, more colourful, or altering defaults. This
 layering also plays well with the concept of different **profiles** (if later
 on we introduce build profiles or contexts, config could switch between them).
 The CLI will read configurations in a predictable order and apply them,
@@ -997,7 +998,7 @@ features like introspection commands and diagnostic modes come into play.
   parse errors. They might use `netsuke --diag-json` locally when working with
   an editor that reads JSON diagnostics to highlight errors in code (some
   editors could invoke netsuke on save to get live error feedback). They also
-  might set up a global config to turn off color if the CI logs were getting
+  might set up a global config to turn off colour if the CI logs were getting
   escape codes (they recall from documentation that `NO_COLOR` is respected or
   use `NETSUKE_NO_COLOR`). In a team, one developer might prefer very quiet
   output while another wants to see the full commands; each can use their
@@ -1087,8 +1088,8 @@ progress bar with a percentage or fraction displayed. For example:
 is a possible style. If Unicode block characters don’t render well in some
 environments, we can fallback to ASCII like `====>` and `----`. The progress
 bar should update in-place. The length of the bar can be fixed (say 40 or 50
-characters) for consistency. The color for completed portion might be green
-(indicating progress/success), and the pending portion gray. If color is
+characters) for consistency. The colour for completed portion might be green
+(indicating progress/success), and the pending portion gray. If colour is
 disabled, the difference is just via the characters themselves. We will not use
 overly ornate Unicode symbols that might not be universally supported (like
 exotic emoji) for the core progress bar, to avoid rendering issues.
@@ -1110,37 +1111,37 @@ detecting terminal width via `indicatif::Terminal` features or similar.)
 **Differentiating Text Styles:** Netsuke will use **text styling (ANSI escape
 codes)** to differentiate categories of output:
 
-- **Informational status** (normal progress messages): perhaps colored **cyan**
+- **Informational status** (normal progress messages): perhaps coloured **cyan**
   or **blue** to distinguish from normal text. Blue/cyan is often used for
   info, and it generally has good contrast on both black and white backgrounds
   (especially cyan). We will avoid using solely blue if it might be dark on
   black; cyan is usually brighter. Alternatively, we could style them bold
-  instead of color, or italic. Bold white (bright gray) could also highlight
+  instead of colour, or italic. Bold white (bright gray) could also highlight
   Netsuke messages.
 
-- **Success messages**: colored **green** (with a check mark). E.g., the “Build
+- **Success messages**: coloured **green** (with a check mark). E.g., the “Build
   succeeded” line in green bold. Green typically signals success and is
   readable on dark backgrounds; on light backgrounds, the terminal typically
   has a darker green that still contrasts.
 
-- **Error messages**: colored **red** and bold. The word “Error:” in bright
+- **Error messages**: coloured **red** and bold. The word “Error:” in bright
   red, and any important portions (like file names or error codes) could be
-  underlined or in red as well. We must ensure that even without color, the
+  underlined or in red as well. We must ensure that even without colour, the
   error stands out due to the "Error" label and maybe an exclamation or cross
   symbol.
 
-- **Warnings**: colored **yellow**. Warnings (non-fatal issues) can be prefixed
-  “Warning:” and colored yellow. Yellow on white can be low contrast, but most
+- **Warnings**: coloured **yellow**. Warnings (non-fatal issues) can be prefixed
+  “Warning:” and coloured yellow. Yellow on white can be low contrast, but most
   terminals render “yellow” as a brownish or goldenrod that is visible; still,
   we might opt for bold text plus maybe magenta if yellow is problematic. (Some
   CLI tools use magenta for warnings to be more legible on light backgrounds.)
 
-- **Command output**: ideally not recolored from what the command itself
-  outputs. If the compiler prints warnings with its own color (e.g., GCC prints
-  warnings in yellow typically), we’ll preserve that since we’re not altering
-  the bytes, just piping them. If we did intercept, we’d want to keep those
-  escape codes. Netsuke itself should not recolor the command text (except
-  maybe dim it or indent to separate – but likely we leave it as-is for
+- **Command output**: ideally not recoloured from what the command itself
+  outputs. If the compiler prints warnings with its own colour (e.g., GCC
+  prints warnings in yellow typically), we’ll preserve that since we’re not
+  altering the bytes, just piping them. If we did intercept, we’d want to keep
+  those escape codes. Netsuke itself should not recolour the command text
+  (except maybe dim it or indent to separate – but likely we leave it as-is for
   authenticity).
 
 - **Interactive elements**: If in the future any interactive prompt appears
@@ -1148,9 +1149,9 @@ codes)** to differentiate categories of output:
   yes/no, and ensure the default is capitalized. Keep any prompt text short and
   to the point, with the choices obvious.
 
-Remember that any use of color or style will be conditional on detection and
-user preference (no color mode disables it, etc.). Also, provide sufficient
-contrast in chosen colors: for example, a dark blue might be hard to read on
+Remember that any use of colour or style will be conditional on detection and
+user preference (no colour mode disables it, etc.). Also, provide sufficient
+contrast in chosen colours: for example, a dark blue might be hard to read on
 black; we’d use bright blue (cyan) instead.
 
 **Use of Emojis and Symbols:** Emojis like ✅ and ❌ can add clarity and a bit
@@ -1214,7 +1215,7 @@ OPTIONS:
     -v, --verbose          Enable verbose logging output
     -q, --quiet            Minimal output (only errors and essential info)
     --diag-json            Output error diagnostics in JSON format
-    --no-color             Disable colored output
+    --no-color             Disable coloured output
 
 SUBCOMMANDS:
     build        Build specified targets (or default targets if none given) [default]
@@ -1281,20 +1282,20 @@ we might prefix them with a debug marker. For example, “[DEBUG] Resolved 45
 targets” or “[TRACE] Reading config file…”. We’ll likely not expose extremely
 low-level logs unless requested, but if we do, having them easily filterable
 (with tags like DEBUG/TRACE) is useful. They should go to stderr as well, and
-could be colored faintly (dim white) so as not to distract from primary output.
+could be coloured faintly (dim white) so as not to distract from primary output.
 
 **Testing Visuals:** We will test the CLI output on different terminals
 (Windows `cmd` vs PowerShell vs various Linux terminals) to ensure the Unicode
-and color sequences behave as expected. If necessary (for Windows older
+and colour sequences behave as expected. If necessary (for Windows older
 consoles that don’t support ANSI), we might include the Windows console mode
 enabling code or use crates that abstract that. Modern Windows terminals
-support ANSI colors and Unicode well, so likely it’s fine.
+support ANSI colours and Unicode well, so likely it’s fine.
 
 By adhering to these visual design guidelines, the Netsuke CLI will present
 information in a **clean, professional, and user-friendly manner**. Key
 information will stand out (errors in red, success in green, prompts clearly
 marked), and the output will avoid common pitfalls like misaligned text or
-overuse of color without text. The style choices also reinforce the Netsuke
+overuse of colour without text. The style choices also reinforce the Netsuke
 brand as a modern tool: use of emojis and Unicode where appropriate can add a
 friendly touch, but the core output remains **structured and informative**, not
 gimmicky([2](https://clig.dev/#:~:text=Use%20symbols%20and%20emoji%20where,or%20feel%20like%20a%20toy)).
@@ -1309,7 +1310,7 @@ reader, they can quickly grasp what Netsuke is communicating.
   – Recommendations for making CLI output accessible.
 
 - Reddit discussion on Section 508 and CLIs – emphasizes keyboard support,
-  avoiding color-only cues,
+  avoiding colour-only cues,
   etc.([1](https://www.reddit.com/r/accessibility/comments/1em96h5/section_508_guidelines_for_command_line_interfaces/#:~:text=%E2%80%A2%20%20%20Keyboard%20Accessibility%3A,users%20to%20customize%20font%20sizes)).
 
 - Netsuke Design Document – error handling strategy with `miette` diagnostics
@@ -1319,5 +1320,5 @@ reader, they can quickly grasp what Netsuke is communicating.
   Defaults)([3](https://github.com/leynos/ortho-config/blob/0373169f70dcb5e98da8deeebe1c7570e77a8194/README.md#L18-L26)).
 
 - Command Line Interface Guidelines (clig.dev) – advice on handling output,
-  colors, and animations in CLI
+  colours, and animations in CLI
   programs([2](https://clig.dev/#:~:text=If%20,trees%20in%20CI%20log%20output))([2](https://clig.dev/#:~:text=One%20of%20the%20most%20common,the%20user%20loads%20of%20time)).
