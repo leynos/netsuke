@@ -66,6 +66,7 @@ jobs:
     env:
       BIN_NAME: ${{ inputs['bin-name'] }}
       VERSION: ${{ inputs.version }}
+      MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
         # v4.1.2
@@ -94,7 +95,7 @@ jobs:
           target: ${{ inputs.target }}
           version: ${{ inputs.version }}
           formats: deb,rpm
-          man-paths: dist/${{ inputs['bin-name'] }}_linux_${{ inputs['package-arch'] }}/${{ inputs['bin-name'] }}.1
+          man-paths: dist/${{ inputs['bin-name'] }}_linux_${{ env.MAN_ARCH }}/${{ inputs['bin-name'] }}.1
           outdir: dist
           deb-depends: ninja-build
           rpm-depends: ninja-build
