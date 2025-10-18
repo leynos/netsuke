@@ -2,7 +2,7 @@
 use super::{ManifestMap, ManifestValue};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
-use serde_json::Number as JsonNumber;
+use serde_json::{Number as JsonNumber, map::Entry};
 
 /// Expand manifest targets defined with the `foreach` key.
 ///
@@ -74,22 +74,30 @@ fn when_allows(
 }
 
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
-    let mut vars = match map.remove("vars") {
-        None => ManifestMap::new(),
-        Some(ManifestValue::Object(m)) => m,
-        Some(other) => {
-            return Err(anyhow::anyhow!(
-                "target.vars must be an object, got: {other:?}"
-            ));
+    let vars_value = match map.entry("vars") {
+        Entry::Vacant(slot) => slot.insert(ManifestValue::Object(ManifestMap::new())),
+        Entry::Occupied(slot) => {
+            let value = slot.into_mut();
+            match value {
+                ManifestValue::Object(_) => value,
+                other => {
+                    return Err(anyhow::anyhow!(
+                        "target.vars must be an object, got: {other:?}"
+                    ));
+                }
+            }
         }
     };
+
+    let vars = vars_value
+        .as_object_mut()
+        .expect("vars entry ensured to be an object");
     vars.insert(
         "item".into(),
         serde_json::to_value(item).context("serialise item")?,
     );
     let index_value = ManifestValue::Number(JsonNumber::from(index as u64));
     vars.insert("index".into(), index_value);
-    map.insert("vars".into(), ManifestValue::Object(vars));
     Ok(())
 }
 
@@ -179,6 +187,38 @@ mod tests {
             })
             .collect();
         assert_eq!(indexes, vec![1, 2]);
+        Ok(())
+    }
+
+    #[test]
+    fn expand_foreach_preserves_object_key_order() -> Result<()> {
+        let env = Environment::new();
+        let yaml = r"targets:
+  - name: literal
+    vars:
+      existing: keep
+    foreach:
+      - 1
+      - 2
+    when: 'true'
+    after: done
+";
+        let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = doc
+            .get("targets")
+            .and_then(|v| v.as_array())
+            .expect("targets sequence");
+        assert_eq!(targets.len(), 2);
+        for target in targets {
+            let map = target.as_object().expect("target object");
+            let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+            assert_eq!(
+                keys,
+                ["name", "vars", "after"],
+                "key order should remain stable"
+            );
+        }
         Ok(())
     }
 }

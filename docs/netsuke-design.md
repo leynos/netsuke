@@ -624,6 +624,12 @@ wrap source and manifest identifiers in the `ManifestSource` and `ManifestName`
 newtypes, allowing downstream tooling to reuse the strongly typed strings when
 producing errors or logs.
 
+`serde_json` is built with the `preserve_order` feature so the backing
+`ManifestMap` retains the insertion order observed in the YAML manifest. This
+guarantees that downstream consumers see keys in a stable sequence after
+foreach expansion, matching the authoring intent and keeping diagnostics and
+serialised output predictable.
+
 The ingestion pipeline now parses the manifest as YAML before any Jinja
 evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
 fields are rendered only after deserialisation, keeping data and templating
@@ -1809,8 +1815,7 @@ goal.
     1. Implement the initial `clap` CLI structure for the `build` command.
 
     2. Implement the YAML parser using `serde_saphyr` and the AST data
-       structures
-       (`ast.rs`).
+       structures (`ast.rs`).
 
     3. Implement the AST-to-IR transformation logic, including basic validation
        like checking for rule existence.

@@ -100,10 +100,20 @@ impl std::fmt::Display for ManifestName {
 use super::hints::YAML_HINTS;
 
 fn location_to_index(src: &ManifestSource, loc: Location) -> usize {
-    byte_index_at(src.as_ref(), loc.line(), loc.column())
+    byte_index(src, loc)
 }
 
-fn byte_index_at(src: &str, line: u64, column: u64) -> usize {
+fn byte_index(src: &ManifestSource, loc: Location) -> usize {
+    byte_index_components(src.as_ref(), loc.line(), loc.column())
+}
+
+/// Reconstruct the byte offset for a `serde_saphyr::Location`.
+///
+/// `serde_saphyr` exposes only line and column accessors, so we derive the
+/// byte index by iterating over the manifest source directly. The logic clamps
+/// offsets that exceed the current line and tolerates both Unix (`\n`) and
+/// Windows (`\r\n`) newlines.
+fn byte_index_components(src: &str, line: u64, column: u64) -> usize {
     let target_line = usize::try_from(line.saturating_sub(1)).unwrap_or(usize::MAX);
     let target_column = usize::try_from(column.saturating_sub(1)).unwrap_or(usize::MAX);
     let mut offset = 0usize;
@@ -327,13 +337,13 @@ fn expected_offset(src: &str, column: u64) -> usize {
 
 #[cfg(test)]
 mod byte_index_tests {
-    use super::{byte_index_at, expected_offset};
+    use super::{byte_index_components, expected_offset};
 
     #[test]
     fn byte_index_accounts_for_multibyte_characters() {
         let line = "emoji: 😀value";
         let column = 9; // just after the emoji, before the 'v'.
-        let offset = byte_index_at(line, 1, column);
+        let offset = byte_index_components(line, 1, column);
         assert_eq!(offset, expected_offset(line, column));
     }
 
@@ -341,7 +351,7 @@ mod byte_index_tests {
     fn byte_index_clamps_past_line_end() {
         let line = "short";
         let column = 42;
-        let offset = byte_index_at(line, 1, column);
+        let offset = byte_index_components(line, 1, column);
         assert_eq!(offset, line.len());
     }
 
@@ -349,7 +359,7 @@ mod byte_index_tests {
     fn byte_index_advances_over_previous_lines() {
         let src = "one\ntwo\nthree";
         let column = 3; // 'r' in "three"
-        let offset = byte_index_at(src, 3, column);
+        let offset = byte_index_components(src, 3, column);
         let expected = "one\ntwo\n".len() + expected_offset("three", column);
         assert_eq!(offset, expected);
     }
@@ -358,7 +368,7 @@ mod byte_index_tests {
     fn byte_index_handles_crlf_lines() {
         let src = "one\r\ntwo\r\nthree";
         let column = 2; // 'w' in "two"
-        let offset = byte_index_at(src, 2, column);
+        let offset = byte_index_components(src, 2, column);
         let expected = "one\r\n".len() + expected_offset("two", column);
         assert_eq!(offset, expected);
     }
