@@ -99,7 +99,7 @@ impl std::fmt::Display for ManifestName {
 
 use super::hints::YAML_HINTS;
 
-fn byte_index(src: &ManifestSource, loc: Location) -> usize {
+fn location_to_index(src: &ManifestSource, loc: Location) -> usize {
     byte_index_at(src.as_ref(), loc.line(), loc.column())
 }
 
@@ -123,7 +123,7 @@ fn byte_index_at(src: &str, line: u64, column: u64) -> usize {
 }
 
 fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
-    let at = byte_index(src, loc);
+    let at = location_to_index(src, loc);
     let bytes = src.as_ref().as_bytes();
     let is_line_break = |b: u8| b == b'\n' || b == b'\r';
     let (start, end) = match bytes.get(at) {
@@ -248,8 +248,10 @@ pub fn map_data_error(
     err: serde_json::Error,
     name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
-    let message =
-        format!("[netsuke::manifest::structure] manifest structure error in {name}: {err}");
+    let message = format!(
+        "[netsuke::manifest::structure] manifest structure error in {}: {err}",
+        name.as_ref()
+    );
     Box::new(DataDiagnostic {
         source: err,
         message,
@@ -298,6 +300,20 @@ mod tests {
         if let Some(byte) = src.as_ref().as_bytes().get(offset) {
             assert_ne!(*byte, b'\r');
         }
+    }
+
+    #[test]
+    fn location_to_index_handles_utf8() {
+        // café: 'é' is multi-byte
+        let src = ManifestSource::from("café: [\n");
+        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+            .expect_err("expected parse error");
+        let loc = err.location().expect("location present");
+        let idx = location_to_index(&src, loc);
+        assert!(src.as_ref().is_char_boundary(idx));
+        let e_idx = src.as_ref().find('é').expect("contains é");
+        assert!(idx > e_idx, "index {idx} must follow é at {e_idx}");
+        assert!(idx <= src.as_ref().len());
     }
 }
 
