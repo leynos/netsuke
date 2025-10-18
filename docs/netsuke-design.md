@@ -166,8 +166,9 @@ level keys.
 - `vars`: A mapping of global key-value pairs. Keys must be strings. Values may
   be strings, numbers, booleans, or sequences. These variables seed the Jinja
   templating context and drive control flow within the manifest. Non-string
-  YAML keys (for example integers) trigger a parse-time diagnostic because
-  Netsuke loads the values into a JSON object before Jinja evaluation.
+  YAML keys (for example integers such as `1: value`) trigger a parse-time
+  diagnostic (`E0001: "vars key must be a string"`) because Netsuke loads the
+  values into a JSON object before Jinja evaluation.
 
 - `macros`: An optional list of Jinja macro definitions. Each item provides a
   `signature` string using standard Jinja syntax and a `body` declared with the
@@ -611,24 +612,28 @@ Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
 follows semantic versioning rules. Global and target variable maps now share
-the `ManifestMap` alias (`serde_json::Map<String, ManifestValue>`) so booleans
-and sequences are preserved for Jinja control flow while presenting a stable
-public API surface. Targets also accept optional `phony` and `always` booleans.
-They default to `false`, making it explicit when an action should run
-regardless of file timestamps. Targets listed in the `actions` section are
-deserialised using a custom helper so they are always treated as `phony` tasks.
-This ensures preparation actions never generate build artefacts. Convenience
-functions in `src/manifest.rs` load a manifest from a string or a file path,
-returning `anyhow::Result` for straightforward error handling. Diagnostics now
-wrap source and manifest identifiers in the `ManifestSource` and `ManifestName`
-newtypes, allowing downstream tooling to reuse the strongly typed strings when
-producing errors or logs.
+the `ManifestMap` alias:
 
-`serde_json` is built with the `preserve_order` feature so the backing
-`ManifestMap` retains the insertion order observed in the YAML manifest. This
-guarantees that downstream consumers see keys in a stable sequence after
-foreach expansion, matching the authoring intent and keeping diagnostics and
-serialised output predictable.
+```rust
+type ManifestMap = serde_json::Map<String, serde_json::Value>;
+```
+
+This alias preserves booleans and sequences needed for Jinja control flow while
+presenting a stable public API surface. The `serde_json` library is built with
+the `preserve_order` feature so the backing `ManifestMap` retains the insertion
+order observed in the YAML manifest. This guarantees that downstream consumers
+see keys in a stable sequence after foreach expansion, matching the authoring
+intent and keeping diagnostics and serialised output predictable. Targets also
+accept optional `phony` and `always` booleans. They default to `false`, making
+it explicit when an action should run regardless of file timestamps. Targets
+listed in the `actions` section are deserialised using a custom helper so they
+are always treated as `phony` tasks. This ensures preparation actions never
+generate build artefacts. Convenience functions in `src/manifest.rs` load a
+manifest from a string or a file path, returning `anyhow::Result` for
+straightforward error handling. Diagnostics now wrap source and manifest
+identifiers in the `ManifestSource` and `ManifestName` newtypes, allowing
+downstream tooling to reuse the strongly typed strings when producing errors or
+logs.
 
 The ingestion pipeline now parses the manifest as YAML before any Jinja
 evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
