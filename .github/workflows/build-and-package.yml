@@ -1,0 +1,196 @@
+---
+name: Build and Package
+
+'on':
+  workflow_call:
+    inputs:
+      platform:
+        description: Target platform identifier (linux, windows, or macos)
+        required: true
+        type: string
+      runner:
+        description: Runner label that should execute the job
+        required: true
+        type: string
+      target:
+        description: Rust target triple to compile for
+        required: true
+        type: string
+      bin-name:
+        description: Name of the binary to build
+        required: true
+        type: string
+      version:
+        description: Version string used for packaging
+        required: true
+        type: string
+      artifact-name:
+        description: Name used when uploading workflow artefacts
+        required: true
+        type: string
+      should-upload-workflow-artifacts:
+        description: Whether workflow artefacts should be uploaded
+        required: true
+        type: boolean
+      package-arch:
+        description: Linux package architecture identifier (e.g. amd64)
+        required: false
+        type: string
+      stage-target:
+        description: Key used to look up staged artefacts
+        required: false
+        type: string
+      msi-arch:
+        description: Architecture identifier for Windows MSI packaging
+        required: false
+        type: string
+      artifact-suffix:
+        description: Suffix appended to macOS package filenames
+        required: false
+        type: string
+      python-version:
+        description: Python version to install with uv on non-Linux platforms
+        required: false
+        default: '3.11'
+        type: string
+      wix-extension-version:
+        description: WiX Toolset extension version for Windows packaging
+        required: false
+        default: '6'
+        type: string
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }} artefacts
+    runs-on: ${{ inputs.runner }}
+    env:
+      BIN_NAME: ${{ inputs['bin-name'] }}
+      VERSION: ${{ inputs.version }}
+      MAN_ARCH: ${{ inputs['package-arch'] != '' && inputs['package-arch'] || 'unknown' }}
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
+        # v4.1.2
+
+      - name: Install uv
+        if: inputs.platform != 'linux'
+        uses: astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7
+        # v3.1.2
+        with:
+          python-version: ${{ inputs['python-version'] }}
+
+      - name: Build release binary
+        uses: leynos/shared-actions/.github/actions/rust-build-release@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        with:
+          target: ${{ inputs.target }}
+          bin-name: ${{ inputs['bin-name'] }}
+          version: ${{ inputs.version }}
+
+      - name: Package Linux artefacts with dependencies
+        if: inputs.platform == 'linux'
+        uses: leynos/shared-actions/.github/actions/linux-packages@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        with:
+          project-dir: .
+          package-name: ${{ inputs['bin-name'] }}
+          bin-name: ${{ inputs['bin-name'] }}
+          target: ${{ inputs.target }}
+          version: ${{ inputs.version }}
+          formats: deb,rpm
+          man-paths: dist/${{ inputs['bin-name'] }}_linux_${{ env.MAN_ARCH }}/${{ inputs['bin-name'] }}.1
+          outdir: dist
+          deb-depends: ninja-build
+          rpm-depends: ninja-build
+
+      - name: Prune packaging metadata
+        if: inputs.platform == 'linux'
+        shell: bash
+        run: rm -rf dist/.man dist/nfpm.yaml
+
+      - name: Stage artefacts
+        if: inputs.platform != 'linux'
+        id: stage
+        uses: ./.github/actions/stage
+        with:
+          config-file: .github/release-staging.toml
+          target: ${{ inputs['stage-target'] }}
+
+      - name: Normalise Windows paths
+        if: inputs.platform == 'windows'
+        id: normalize_windows_paths
+        shell: bash
+        env:
+          BINARY_PATH: ${{ steps.stage.outputs.binary_path }}
+          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
+        run: |
+          set -euo pipefail
+          python .github/workflows/scripts/normalise_windows_paths.py
+
+      - name: Build Windows installer package
+        if: inputs.platform == 'windows'
+        id: package_windows
+        uses: leynos/shared-actions/.github/actions/windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        with:
+          product-name: ${{ inputs['bin-name'] }}
+          manufacturer: Leynos
+          install-dir-name: ${{ inputs['bin-name'] }}
+          application-path: ${{ steps.normalize_windows_paths.outputs.binary_path }}
+          license-rtf-path: ${{ steps.normalize_windows_paths.outputs.license_path }}
+          architecture: ${{ inputs['msi-arch'] }}
+          version: ${{ inputs.version }}
+          output-basename: ${{ inputs['bin-name'] }}
+          output-directory: dist
+          license-plaintext-path: LICENSE
+          upload-artifact: ${{ inputs['should-upload-workflow-artifacts'] }}
+          wix-extension-version: ${{ inputs['wix-extension-version'] }}
+
+      - name: Build macOS installer package
+        if: inputs.platform == 'macos'
+        id: package_macos
+        uses: leynos/shared-actions/.github/actions/macos-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        with:
+          name: ${{ inputs['bin-name'] }}
+          identifier: com.leynos.${{ inputs['bin-name'] }}
+          binary: ${{ steps.stage.outputs.binary_path }}
+          manpage: ${{ steps.stage.outputs.man_path }}
+          license-file: LICENSE
+          version: ${{ inputs.version }}
+
+      - name: Stamp architecture into package name
+        if: inputs.platform == 'macos'
+        id: rename_macos_pkg
+        shell: bash
+        env:
+          ARCHIVE_SUFFIX: ${{ inputs['artifact-suffix'] }}
+          PKG_PATH: ${{ steps.package_macos.outputs.pkg-path }}
+        run: |
+          set -euo pipefail
+          dest="dist/${BIN_NAME}-${VERSION}-${ARCHIVE_SUFFIX}.pkg"
+          mkdir -p "$(dirname "$dest")"
+          mv "$PKG_PATH" "$dest"
+
+      - name: Upload Linux artefacts
+        if: inputs.platform == 'linux' && inputs['should-upload-workflow-artifacts']
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
+        with:
+          name: ${{ inputs['artifact-name'] }}
+          path: dist
+
+      - name: Upload Windows artefacts
+        if: inputs.platform == 'windows' && inputs['should-upload-workflow-artifacts']
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
+        with:
+          name: ${{ inputs['artifact-name'] }}
+          path: |
+            ${{ steps.stage.outputs.artifact_dir }}
+            ${{ steps.package_windows.outputs['msi-path'] }}
+
+      - name: Upload macOS artefacts
+        if: inputs.platform == 'macos' && inputs['should-upload-workflow-artifacts']
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        # v4
+        with:
+          name: ${{ inputs['artifact-name'] }}
+          path: |
+            ${{ steps.stage.outputs.artifact_dir }}
+            dist/${{ inputs['bin-name'] }}-${{ inputs.version }}-${{ inputs['artifact-suffix'] }}.pkg

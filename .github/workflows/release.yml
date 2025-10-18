@@ -51,9 +51,6 @@ name: Release Binary
           WiX CLI toolchain
         value: ${{ jobs.metadata.outputs.wix_extension_version }}
 
-env:
-  REPO_NAME: ${{ github.event.repository.name }}
-
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
@@ -68,10 +65,14 @@ jobs:
       dry_run: ${{ steps.release_modes.outputs.dry_run }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs.should_upload_workflow_artifacts }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
+      repo_name: ${{ steps.repo_name.outputs.value }}
     steps:
       - uses: >-
           actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
         # v4.1.2
+      - id: repo_name
+        name: Determine repository name
+        run: echo "value=${GITHUB_REPOSITORY#*/}" >>"$GITHUB_OUTPUT"
       - name: Setup Python 3.11
         uses: >-
           actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -121,9 +122,6 @@ jobs:
 
   build-linux:
     needs: metadata
-    runs-on: ubuntu-latest
-    env:
-      SHOULD_UPLOAD_WORKFLOW_ARTEFACTS: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
     strategy:
       matrix:
         include:
@@ -133,51 +131,19 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             artifact: linux-arm64
             package_arch: arm64
-    steps:
-      - uses: >-
-          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
-        # v4.1.2
-      - name: Build Linux release
-        uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
-        with:
-          target: ${{ matrix.target }}
-          bin-name: ${{ needs.metadata.outputs.bin_name }}
-          version: ${{ needs.metadata.outputs.version }}
-          # Package formats are produced by linux-packages below
-      - name: Package Linux artefacts with dependencies
-        uses: >-
-          leynos/shared-actions/.github/actions/linux-packages@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
-        with:
-          project-dir: .
-          package-name: ${{ needs.metadata.outputs.bin_name }}
-          bin-name: ${{ needs.metadata.outputs.bin_name }}
-          target: ${{ matrix.target }}
-          version: ${{ needs.metadata.outputs.version }}
-          formats: deb,rpm
-          man-paths: >-
-            dist/${{ needs.metadata.outputs.bin_name }}_linux_${{
-            matrix.package_arch }}/${{ needs.metadata.outputs.bin_name }}.1
-          outdir: dist
-          deb-depends: ninja-build
-          rpm-depends: ninja-build
-      - name: Prune packaging metadata
-        shell: bash
-        run: rm -rf dist/.man dist/nfpm.yaml
-      - name: Upload Linux artefacts
-        if: env.SHOULD_UPLOAD_WORKFLOW_ARTEFACTS == 'true'
-        uses: >-
-          actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        # v4
-        with:
-          name: ${{ env.REPO_NAME }}-${{ matrix.artifact }}
-          path: dist
+    uses: ./.github/workflows/build-and-package.yml
+    with:
+      platform: linux
+      runner: ubuntu-latest
+      target: ${{ matrix.target }}
+      bin-name: ${{ needs.metadata.outputs.bin_name }}
+      version: ${{ needs.metadata.outputs.version }}
+      artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artifact }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      package-arch: ${{ matrix.package_arch }}
 
   build-windows:
     needs: metadata
-    runs-on: windows-latest
-    env:
-      SHOULD_UPLOAD_WORKFLOW_ARTEFACTS: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
     strategy:
       matrix:
         include:
@@ -189,144 +155,43 @@ jobs:
             package_arch: arm64
             msi_arch: arm64
             target_key: windows-aarch64
-    steps:
-      - uses: >-
-          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
-        # v4.1.2
-      - name: Install uv
-        uses: >-
-          astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7
-        # v3.1.2
-        with:
-          python-version: '3.11'
-      - name: Build Windows release
-        uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
-        with:
-          target: ${{ matrix.target }}
-          bin-name: ${{ needs.metadata.outputs.bin_name }}
-          version: ${{ needs.metadata.outputs.version }}
-      - id: stage
-        name: Stage Windows artefacts
-        uses: ./.github/actions/stage
-        with:
-          config-file: .github/release-staging.toml
-          target: ${{ matrix.target_key }}
-      - id: normalize_windows_paths
-        name: Normalise Windows paths
-        shell: bash
-        env:
-          BINARY_PATH: ${{ steps.stage.outputs.binary_path }}
-          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
-        run: |
-          set -euo pipefail
-          python .github/workflows/scripts/normalise_windows_paths.py
-      - id: package
-        name: Build Windows installer package
-        uses: >-
-          leynos/shared-actions/.github/actions/windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
-        with:
-          product-name: ${{ needs.metadata.outputs.bin_name }}
-          manufacturer: Leynos
-          install-dir-name: ${{ needs.metadata.outputs.bin_name }}
-          application-path: >-
-            ${{ steps.normalize_windows_paths.outputs.binary_path }}
-          license-rtf-path: >-
-            ${{ steps.normalize_windows_paths.outputs.license_path }}
-          architecture: ${{ matrix.msi_arch }}
-          version: ${{ needs.metadata.outputs.version }}
-          output-basename: ${{ needs.metadata.outputs.bin_name }}
-          output-directory: dist
-          license-plaintext-path: LICENSE
-          upload-artifact: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
-          wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
-      - name: Upload Windows artefacts
-        if: env.SHOULD_UPLOAD_WORKFLOW_ARTEFACTS == 'true'
-        uses: >-
-          actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        # v4
-        with:
-          name: ${{ env.REPO_NAME }}-windows-${{ matrix.package_arch }}
-          path: |
-            ${{ steps.stage.outputs.artifact_dir }}
-            ${{ steps.package.outputs.msi-path }}
+    uses: ./.github/workflows/build-and-package.yml
+    with:
+      platform: windows
+      runner: windows-latest
+      target: ${{ matrix.target }}
+      bin-name: ${{ needs.metadata.outputs.bin_name }}
+      version: ${{ needs.metadata.outputs.version }}
+      artifact-name: ${{ needs.metadata.outputs.repo_name }}-windows-${{ matrix.package_arch }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      stage-target: ${{ matrix.target_key }}
+      msi-arch: ${{ matrix.msi_arch }}
+      wix-extension-version: ${{ needs.metadata.outputs.wix_extension_version }}
 
   build-macos:
     needs: metadata
-    env:
-      SHOULD_UPLOAD_WORKFLOW_ARTEFACTS: ${{ needs.metadata.outputs.should_upload_workflow_artifacts }}
     strategy:
       matrix:
         include:
           - target: x86_64-apple-darwin
             runner: macos-13
             artifact_suffix: macos-x86_64
-            package_arch: x86_64
             target_key: macos-x86_64
           - target: aarch64-apple-darwin
             runner: macos-14
             artifact_suffix: macos-arm64
-            package_arch: arm64
             target_key: macos-aarch64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: >-
-          actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633
-        # v4.1.2
-      - name: Install uv
-        uses: >-
-          astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7
-        # v3.1.2
-        with:
-          python-version: '3.11'
-      - name: Build macOS release
-        uses: >-
-          leynos/shared-actions/.github/actions/rust-build-release@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
-        with:
-          target: ${{ matrix.target }}
-          bin-name: ${{ needs.metadata.outputs.bin_name }}
-          version: ${{ needs.metadata.outputs.version }}
-      - id: stage
-        name: Stage macOS artefacts
-        uses: ./.github/actions/stage
-        with:
-          config-file: .github/release-staging.toml
-          target: ${{ matrix.target_key }}
-      - id: pkg
-        name: Build macOS installer package
-        uses: >-
-          leynos/shared-actions/.github/actions/macos-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
-        with:
-          name: ${{ needs.metadata.outputs.bin_name }}
-          identifier: com.leynos.${{ needs.metadata.outputs.bin_name }}
-          binary: ${{ steps.stage.outputs.binary_path }}
-          manpage: ${{ steps.stage.outputs.man_path }}
-          license-file: LICENSE
-          version: ${{ needs.metadata.outputs.version }}
-      - name: Stamp architecture into package name
-        shell: bash
-        env:
-          BIN_NAME: ${{ needs.metadata.outputs.bin_name }}
-          VERSION: ${{ needs.metadata.outputs.version }}
-          ARCHIVE_SUFFIX: ${{ matrix.artifact_suffix }}
-          PKG_PATH: ${{ steps.pkg.outputs.pkg-path }}
-        run: |
-          set -euo pipefail
-          dest="dist/${BIN_NAME}-${VERSION}-${ARCHIVE_SUFFIX}.pkg"
-          mkdir -p "$(dirname "$dest")"
-          mv "$PKG_PATH" "$dest"
-      - name: Upload macOS artefacts
-        if: env.SHOULD_UPLOAD_WORKFLOW_ARTEFACTS == 'true'
-        uses: >-
-          actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        # v4
-        with:
-          name: ${{ env.REPO_NAME }}-${{ matrix.artifact_suffix }}
-          path: |
-            ${{ steps.stage.outputs.artifact_dir }}
-            dist/${{ needs.metadata.outputs.bin_name }}-${{
-              needs.metadata.outputs.version }}-${{
-              matrix.artifact_suffix }}.pkg
+    uses: ./.github/workflows/build-and-package.yml
+    with:
+      platform: macos
+      runner: ${{ matrix.runner }}
+      target: ${{ matrix.target }}
+      bin-name: ${{ needs.metadata.outputs.bin_name }}
+      version: ${{ needs.metadata.outputs.version }}
+      artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artifact_suffix }}
+      should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
+      stage-target: ${{ matrix.target_key }}
+      artifact-suffix: ${{ matrix.artifact_suffix }}
 
   release:
     if: needs.metadata.outputs.should_publish == 'true'
@@ -359,7 +224,7 @@ jobs:
         # v4
         with:
           path: dist
-          pattern: ${{ env.REPO_NAME }}-*
+          pattern: ${{ needs.metadata.outputs.repo_name }}-*
       - id: upload_assets
         name: Upload artefacts to release
         uses: ./.github/actions/upload-release-assets
