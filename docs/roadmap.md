@@ -269,18 +269,20 @@ library, and CLI ergonomics.
   - [ ] Introduce a `CliConfig` struct derived with `OrthoConfig` so Clap
     integration, configuration files, and environment variables share one
     schema covering verbosity, colour policy, locale, spinner mode, output
-    format, default targets, and theme.
+    format, default targets, and theme, following the patterns captured in
+    `docs/ortho-config-users-guide.md`.
 
   - [ ] Discover configuration files in project and user scopes, honouring env
     overrides and CLI precedence, with integration tests for each precedence
-    tier.
+    tier that align with `docs/ortho-config-users-guide.md`.
 
   - [ ] Expose `--config <path>` (and `NETSUKE_CONFIG`) to select alternative
     config files, and ship annotated sample configs in the documentation.
 
   - [ ] Add regression tests that exercise OrthoConfig’s precedence ladder
     (defaults < file < env < CLI) to ensure the Clap facade remains aligned
-    with the design document.
+    with the design document and the guidance in
+    `docs/ortho-config-users-guide.md`.
 
 - [ ] **Visual Design Validation:**
 
