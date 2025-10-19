@@ -965,6 +965,10 @@ Implementation details:
   override the cache path, ensuring caches remain bounded by the workspace. Any
   remote fetch or cache write marks the stdlib state as impure so callers can
   discard memoised renders.
+- `manifest::from_path` derives the workspace root from the manifest file's
+  directory before registering the stdlib. This keeps caches scoped to the
+  manifest tree even when the CLI evaluates a manifest from another working
+  directory.
 - `shell` and `grep` spawn the platform shell (`sh` or `cmd.exe`) with POSIX
   single-quoted arguments emitted via `shell-quote`. The stdlib registers a
   shared `StdlibState` that flips an `impure` flag whenever these helpers

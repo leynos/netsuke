@@ -4,13 +4,63 @@ use super::jinja_macros::{
     call_macro_value, parse_macro_name, register_macro, register_manifest_macros,
 };
 use super::*;
-use crate::ast::MacroDefinition;
-use anyhow::Result as AnyResult;
+use crate::ast::{MacroDefinition, Recipe};
+use anyhow::{Context, Result as AnyResult};
 use minijinja::{
     Environment,
     value::{Kwargs, Value},
 };
 use rstest::{fixture, rstest};
+use sha2::{Digest, Sha256};
+use std::{
+    fs,
+    io::{Read, Write},
+    net::TcpListener,
+    thread,
+};
+use tempfile::tempdir;
+use test_support::{EnvVarGuard, env_lock::EnvLock};
+
+fn start_server(body: &'static str) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+    let addr = listener.local_addr().expect("local addr");
+    let url = format!("http://{addr}");
+    let handle = thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 512];
+            let bytes_read = stream.read(&mut buf).unwrap_or(0);
+            if bytes_read > 0 {
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(response.as_bytes());
+            }
+        }
+    });
+    (url, handle)
+}
+
+#[derive(Debug)]
+struct CurrentDirGuard {
+    original: std::path::PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn change_to(path: &std::path::Path) -> AnyResult<Self> {
+        let original = std::env::current_dir().context("capture current working directory")?;
+        std::env::set_current_dir(path)
+            .with_context(|| format!("switch to working directory {}", path.display()))?;
+        Ok(Self { original })
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.original);
+    }
+}
 
 fn render_with(env: &Environment, template: &str) -> AnyResult<String> {
     Ok(env.render_str(template, ())?)
@@ -192,4 +242,61 @@ fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
     register_manifest_macros(&yaml, &mut strict_env).expect("register");
     let rendered = render_with(&strict_env, "{{ shout(greet('netsuke')) }}").expect("render");
     assert_eq!(rendered.trim(), "HELLO NETSUKE");
+}
+
+#[rstest]
+fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
+    let _env_lock = EnvLock::acquire();
+    let temp = tempdir()?;
+    let workspace = temp.path().join("workspace");
+    fs::create_dir_all(&workspace)?;
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(&outside)?;
+    let manifest_path = workspace.join("Netsukefile");
+
+    let (url, handle) = start_server("workspace-body");
+    let manifest_yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: fetch\n",
+        "    vars:\n",
+        "      url: \"{{ env('NETSUKE_MANIFEST_URL') }}\"\n",
+        "    command: \"{{ fetch(url, cache=true) }}\"\n",
+    );
+    fs::write(&manifest_path, manifest_yaml)?;
+
+    let _cwd_guard = CurrentDirGuard::change_to(&outside)?;
+    let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);
+
+    let manifest = super::from_path(&manifest_path)?;
+    handle.join().expect("join server");
+
+    let first_target = manifest.targets.first().expect("target");
+    match &first_target.recipe {
+        Recipe::Command { command } => assert_eq!(command, "workspace-body"),
+        other => panic!("expected command recipe, got {other:?}"),
+    }
+
+    let cache_key = {
+        let digest = Sha256::digest(url.as_bytes());
+        let mut key = String::with_capacity(digest.len() * 2);
+        {
+            use std::fmt::Write as _;
+            for byte in digest {
+                let _ = write!(&mut key, "{byte:02x}");
+            }
+        }
+        key
+    };
+    let cache_path = workspace.join(".netsuke").join("fetch").join(cache_key);
+    assert!(
+        cache_path.exists(),
+        "cache file should be created inside the manifest workspace",
+    );
+    assert!(
+        !outside.join(".netsuke").exists(),
+        "outside working directory must not receive cache data",
+    );
+
+    Ok(())
 }
