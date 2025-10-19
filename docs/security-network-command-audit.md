@@ -7,7 +7,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
 
 ## Network helper findings
 
-- **Cache directories lack target validation and isolation.** The `fetch`
+- [ ] **Cache directories lack target validation and isolation.** The `fetch`
   helper lets templates pick any `cache_dir`, accepts absolute paths, and opens
   them using the ambient filesystem capability (`open_cache_dir` /
   `write_cache`). A malicious manifest can therefore point the cache at
@@ -18,14 +18,15 @@ introduces, and concrete remediation tasks that would harden the helpers.
     `Dir` root.
   - Consider exposing cache configurability only via trusted configuration,
     not per-template input.
-- **Outbound requests lack scheme and host validation.** Because `fetch`
+- [ ] **Outbound requests lack scheme and host validation.** Because `fetch`
   accepts any URL, manifests can reach link-local metadata services (for
   example, `http://169.254.169.254/`) or other internal resources, yielding
   SSRF. *Remediation tasks:*
   - Provide an allowlist / blocklist mechanism (e.g. only `https://` hosts or
     specific domains) and allow administrators to disable outbound requests
     entirely for untrusted manifests.
-- **Response bodies are read without a size limit.** `fetch_remote` reads the
+- [ ] **Response bodies are read without a size limit.** `fetch_remote` reads
+      the
   entire HTTP response into memory before returning or caching it. An attacker
   controlling the endpoint can stream unbounded data and exhaust memory or
   disk. *Remediation tasks:*
@@ -37,7 +38,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
 
 ## Command helper findings
 
-- **Arbitrary command execution is always enabled.** The `shell` and `grep`
+- [ ] **Arbitrary command execution is always enabled.** The `shell` and `grep`
   filters launch external programmes via the system shell, with a five-second
   timeout. There is no option to disable them or to restrict the commands that
   can run. If templates originate from untrusted sources this yields instant
@@ -47,7 +48,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
   - Provide an allowlist-based command runner (e.g. declarative mapping of
     helper names to binaries) so manifests can reference vetted utilities
     without shell access.
-- **Helpers buffer stdout/stderr without limits.** Both filters capture the
+- [ ] **Helpers buffer stdout/stderr without limits.** Both filters capture the
   entire command output into memory before returning it. A command that writes
   an unbounded stream will lead to memory exhaustion or at least prolonged
   blocking. *Remediation tasks:*
