@@ -15,10 +15,10 @@ mod network;
 mod path;
 mod time;
 
-use camino::Utf8Path;
-use cap_std::fs;
+use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
+use cap_std::{ambient_authority, fs, fs_utf8::Dir};
 use minijinja::{Environment, Error, value::Value};
 use std::{
     sync::Arc,
@@ -26,6 +26,60 @@ use std::{
 };
 
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
+
+pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
+
+#[derive(Debug)]
+pub struct StdlibConfig {
+    workspace_root: Arc<Dir>,
+    fetch_cache_relative: Utf8PathBuf,
+}
+
+impl StdlibConfig {
+    #[must_use]
+    pub fn new(workspace_root: Dir) -> Self {
+        Self {
+            workspace_root: Arc::new(workspace_root),
+            fetch_cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+        }
+    }
+
+    #[must_use]
+    pub fn with_fetch_cache_relative(mut self, relative: impl Into<Utf8PathBuf>) -> Self {
+        self.fetch_cache_relative = relative.into();
+        self
+    }
+
+    pub(crate) fn network_config(self) -> NetworkConfig {
+        NetworkConfig {
+            cache_root: self.workspace_root,
+            cache_relative: self.fetch_cache_relative,
+        }
+    }
+}
+
+impl Clone for StdlibConfig {
+    fn clone(&self) -> Self {
+        Self {
+            workspace_root: Arc::clone(&self.workspace_root),
+            fetch_cache_relative: self.fetch_cache_relative.clone(),
+        }
+    }
+}
+
+impl Default for StdlibConfig {
+    fn default() -> Self {
+        let root =
+            Dir::open_ambient_dir(".", ambient_authority()).expect("open stdlib workspace root");
+        Self::new(root)
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct NetworkConfig {
+    pub(crate) cache_root: Arc<Dir>,
+    pub(crate) cache_relative: Utf8PathBuf,
+}
 
 /// Captures mutable state shared between stdlib helpers.
 #[derive(Clone, Default, Debug)]
@@ -67,12 +121,16 @@ impl StdlibState {
 /// assert_eq!(rendered, "bar.txt");
 /// ```
 pub fn register(env: &mut Environment<'_>) -> StdlibState {
+    register_with_config(env, StdlibConfig::default())
+}
+
+pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> StdlibState {
     let state = StdlibState::default();
     register_file_tests(env);
     path::register_filters(env);
     collections::register_filters(env);
     let impure = state.impure_flag();
-    network::register_functions(env, Arc::clone(&impure));
+    network::register_functions(env, Arc::clone(&impure), config.network_config());
     command::register(env, impure);
     time::register_functions(env);
     state

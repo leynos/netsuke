@@ -100,3 +100,16 @@ Feature: Template stdlib filters
     Then the stdlib error contains "fetch failed"
     And the stdlib template is impure
 
+  Scenario: fetch caches responses inside the workspace
+    Given an HTTP server returning "cached"
+    When I render "{{ fetch(url, cache=true) }}" with stdlib url
+    Then the stdlib output is "cached"
+    And the stdlib template is impure
+    And the stdlib workspace contains the fetch cache for stdlib url
+
+  Scenario: fetch rejects cache_dir overrides
+    Given an HTTP server returning "payload"
+    When I render the stdlib template "{{ fetch(url, cache=true, cache_dir='.netsuke/cache') }}" with stdlib url
+    Then the stdlib error contains "cache_dir"
+    And the stdlib template is pure
+

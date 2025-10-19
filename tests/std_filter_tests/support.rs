@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context};
-use netsuke::stdlib::{self, StdlibState};
+use netsuke::stdlib::{self, StdlibConfig, StdlibState};
 use rstest::fixture;
 use tempfile::tempdir;
 
@@ -19,10 +19,14 @@ pub(crate) fn register_template(
     env.add_template_owned(name, source).expect("template");
 }
 
-pub(crate) fn stdlib_env_with_state() -> (Environment<'static>, StdlibState) {
+pub(crate) fn stdlib_env_with_config(config: StdlibConfig) -> (Environment<'static>, StdlibState) {
     let mut env = Environment::new();
-    let state = stdlib::register(&mut env);
+    let state = stdlib::register_with_config(&mut env, config);
     (env, state)
+}
+
+pub(crate) fn stdlib_env_with_state() -> (Environment<'static>, StdlibState) {
+    stdlib_env_with_config(StdlibConfig::default())
 }
 
 pub(crate) fn stdlib_env() -> Environment<'static> {

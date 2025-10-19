@@ -12,16 +12,33 @@ use std::{
     time::Duration,
 };
 
-use super::value_from_bytes;
+use super::{NetworkConfig, value_from_bytes};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use cap_std::fs_utf8::Dir;
 use minijinja::{
     Environment, Error, ErrorKind,
     value::{Kwargs, Value},
 };
 use sha2::{Digest, Sha256};
 
-const DEFAULT_CACHE_DIR: &str = ".netsuke/fetch";
+#[derive(Clone)]
+struct FetchCache {
+    root: Arc<Dir>,
+    relative: Utf8PathBuf,
+}
+
+impl FetchCache {
+    fn new(config: NetworkConfig) -> Self {
+        Self {
+            root: config.cache_root,
+            relative: config.cache_relative,
+        }
+    }
+
+    fn open_dir(&self) -> Result<Dir, Error> {
+        open_cache_dir(&self.root, &self.relative)
+    }
+}
 
 /// Register network functions into the template environment.
 ///
@@ -32,19 +49,28 @@ const DEFAULT_CACHE_DIR: &str = ".netsuke/fetch";
 ///
 /// * `env` - `MiniJinja` environment to register functions into.
 /// * `impure` - Shared flag for tracking template impurity.
-pub(crate) fn register_functions(env: &mut Environment<'_>, impure: Arc<AtomicBool>) {
+pub(crate) fn register_functions(
+    env: &mut Environment<'_>,
+    impure: Arc<AtomicBool>,
+    config: NetworkConfig,
+) {
+    let cache = Arc::new(FetchCache::new(config));
     env.add_function("fetch", move |url: String, kwargs: Kwargs| {
-        fetch(&url, &kwargs, &impure)
+        fetch(&url, &kwargs, &impure, &cache)
     });
 }
 
-fn fetch(url: &str, kwargs: &Kwargs, impure: &Arc<AtomicBool>) -> Result<Value, Error> {
+fn fetch(
+    url: &str,
+    kwargs: &Kwargs,
+    impure: &Arc<AtomicBool>,
+    cache: &FetchCache,
+) -> Result<Value, Error> {
     let use_cache = kwargs.get::<Option<bool>>("cache")?.unwrap_or(false);
-    let cache_dir = kwargs.get::<Option<String>>("cache_dir")?;
     kwargs.assert_all_used()?;
 
     let bytes = if use_cache {
-        let dir = open_cache_dir(cache_dir.as_deref().unwrap_or(DEFAULT_CACHE_DIR))?;
+        let dir = cache.open_dir()?;
         let key = cache_key(url);
         if let Some(cached) = read_cached(&dir, &key)? {
             impure.store(true, Ordering::Relaxed);
@@ -86,8 +112,8 @@ fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
-fn open_cache_dir(path: &str) -> Result<Dir, Error> {
-    let utf_path = Utf8Path::new(path);
+fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
+    let utf_path = relative;
     if utf_path.as_str().is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
@@ -96,50 +122,27 @@ fn open_cache_dir(path: &str) -> Result<Dir, Error> {
     }
 
     if utf_path.is_absolute() {
-        let mut root = String::new();
-        for component in utf_path.components() {
-            match component {
-                Utf8Component::Prefix(prefix) => root.push_str(prefix.as_str()),
-                Utf8Component::RootDir => {
-                    root.push('/');
-                    break;
-                }
-                _ => break,
-            }
-        }
-        if root.is_empty() {
-            root.push('/');
-        }
-        let root_path = Utf8PathBuf::from(root);
-
-        let root_dir = Dir::open_ambient_dir(&root_path, ambient_authority())
-            .map_err(|err| io_error("open root cache dir", &root_path, &err))?;
-        let rel = utf_path.strip_prefix(&root_path).map_err(|_| {
-            Error::new(
-                ErrorKind::InvalidOperation,
-                format!("failed to compute relative path for '{utf_path}'"),
-            )
-        })?;
-        if rel.as_str().is_empty() {
-            return Err(Error::new(
-                ErrorKind::InvalidOperation,
-                "cache_dir must not be the filesystem root",
-            ));
-        }
-
-        root_dir
-            .create_dir_all(rel)
-            .map_err(|err| io_error("create cache dir", utf_path, &err))?;
-        return root_dir
-            .open_dir(rel)
-            .map_err(|err| io_error("open cache dir", utf_path, &err));
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("cache_dir must be relative to the workspace (received '{utf_path}')"),
+        ));
     }
 
-    let cwd = Dir::open_ambient_dir(".", ambient_authority())
-        .map_err(|err| io_error("open working dir", utf_path, &err))?;
-    cwd.create_dir_all(utf_path)
+    for component in utf_path.components() {
+        if matches!(
+            component,
+            Utf8Component::ParentDir | Utf8Component::Prefix(_)
+        ) {
+            return Err(Error::new(
+                ErrorKind::InvalidOperation,
+                format!("cache_dir must stay within the workspace (received '{utf_path}')"),
+            ));
+        }
+    }
+
+    root.create_dir_all(utf_path)
         .map_err(|err| io_error("create cache dir", utf_path, &err))?;
-    cwd.open_dir(utf_path)
+    root.open_dir(utf_path)
         .map_err(|err| io_error("open cache dir", utf_path, &err))
 }
 
@@ -198,105 +201,122 @@ fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
 mod tests {
     use super::*;
 
-    use std::{
-        fs,
-        path::{Path, PathBuf},
-        sync::{Mutex, MutexGuard, OnceLock},
-    };
+    use std::{fs, sync::Arc};
 
+    use crate::stdlib::DEFAULT_FETCH_CACHE_DIR;
+    use camino::Utf8PathBuf;
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use rstest::{fixture, rstest};
     use tempfile::tempdir;
 
-    fn cwd_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+    #[fixture]
+    fn cache_workspace() -> (tempfile::TempDir, Arc<Dir>, Utf8PathBuf) {
+        let temp = tempdir().expect("tempdir");
+        let root_path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 path");
+        let dir = Dir::open_ambient_dir(&root_path, ambient_authority()).expect("open workspace");
+        (temp, Arc::new(dir), root_path)
     }
 
-    struct DirGuard {
-        original: PathBuf,
-        _lock: MutexGuard<'static, ()>,
-    }
-
-    impl DirGuard {
-        fn change_to(path: &Path) -> Self {
-            let lock = cwd_lock().lock().expect("cwd lock");
-            let original = std::env::current_dir().expect("current dir");
-            std::env::set_current_dir(path).expect("set current dir");
-            Self {
-                original,
-                _lock: lock,
-            }
+    fn make_cache(root: Arc<Dir>) -> FetchCache {
+        FetchCache {
+            root,
+            relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
         }
     }
 
-    impl Drop for DirGuard {
-        fn drop(&mut self) {
-            std::env::set_current_dir(&self.original).expect("restore current dir");
-        }
-    }
-
-    #[test]
+    #[rstest]
     fn cache_key_stable() {
         assert_eq!(
             cache_key("http://example.com"),
-            cache_key("http://example.com")
+            cache_key("http://example.com"),
         );
     }
 
-    #[test]
+    #[rstest]
     fn hex_string_formats_bytes() {
         assert_eq!(hex_string(&[0x0f, 0xa0, 0x3c]), "0fa03c");
     }
 
-    #[test]
+    #[rstest]
     fn to_value_preserves_utf8() {
         let value = value_from_bytes(b"payload".to_vec());
         assert_eq!(value.as_str(), Some("payload"));
     }
 
-    #[test]
+    #[rstest]
     fn to_value_returns_bytes_for_invalid_utf8() {
         let value = value_from_bytes(vec![0xff, 0xfe, 0xfd]);
         assert_eq!(value.as_bytes(), Some(&[0xff, 0xfe, 0xfd][..]));
     }
 
-    #[test]
-    fn open_cache_dir_rejects_empty_path() {
-        let err = open_cache_dir("").expect_err("empty path should fail");
+    #[rstest]
+    fn open_cache_dir_rejects_empty_path(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, _path) = cache_workspace;
+        let err = open_cache_dir(&root, Utf8Path::new("")).expect_err("empty path should fail");
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     }
 
-    #[test]
-    fn open_cache_dir_errors_for_file_path() {
-        let temp = tempdir().expect("tempdir");
-        let file_path = temp.path().join("file");
-        fs::write(&file_path, b"data").expect("write file");
-        let utf_path = Utf8PathBuf::from_path_buf(file_path).expect("utf8 path");
-        let err = open_cache_dir(utf_path.as_str()).expect_err("file path should fail");
+    #[rstest]
+    fn open_cache_dir_rejects_absolute_paths(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, _path) = cache_workspace;
+        let err = open_cache_dir(&root, Utf8Path::new("/etc/netsuke-cache"))
+            .expect_err("absolute path should fail");
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
     }
 
-    #[test]
-    fn open_cache_dir_creates_relative_directory() {
-        let temp = tempdir().expect("tempdir");
-        let _guard = DirGuard::change_to(temp.path());
-        let dir = open_cache_dir("cache").expect("open relative cache dir");
+    #[rstest]
+    fn open_cache_dir_rejects_parent_paths(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, _path) = cache_workspace;
+        let err = open_cache_dir(&root, Utf8Path::new("../escape"))
+            .expect_err("parent paths should fail");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    }
+
+    #[rstest]
+    fn open_cache_dir_errors_for_file_path(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, path) = cache_workspace;
+        let file_path = path.join("file");
+        fs::write(file_path.as_std_path(), b"data").expect("write file");
+        let err = open_cache_dir(&root, file_path.as_path()).expect_err("file path should fail");
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    }
+
+    #[rstest]
+    fn open_cache_dir_creates_relative_directory(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, path) = cache_workspace;
+        let dir = open_cache_dir(&root, Utf8Path::new("cache")).expect("open relative cache dir");
         dir.write("entry", b"data").expect("write cache entry");
         drop(dir);
-        let entry = temp.path().join("cache").join("entry");
-        assert!(fs::metadata(entry).is_ok(), "cache entry should exist");
-    }
-
-    #[test]
-    fn open_cache_dir_creates_absolute_directory() {
-        let temp = tempdir().expect("tempdir");
-        let absolute =
-            Utf8PathBuf::from_path_buf(temp.path().join("cache")).expect("utf8 cache path");
-        let dir = open_cache_dir(absolute.as_str()).expect("open absolute cache dir");
-        dir.write("entry", b"data").expect("write cache entry");
-        let entry = absolute.join("entry");
+        let entry = path.join("cache").join("entry");
         assert!(
             fs::metadata(entry.as_std_path()).is_ok(),
             "cache entry should exist"
+        );
+    }
+
+    #[rstest]
+    fn fetch_cache_opens_default_directory(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, path) = cache_workspace;
+        let cache = make_cache(root);
+        let dir = cache.open_dir().expect("open default cache dir");
+        dir.write("entry", b"data").expect("write entry");
+        drop(dir);
+        let entry = path.join(DEFAULT_FETCH_CACHE_DIR).join("entry");
+        assert!(
+            fs::metadata(entry.as_std_path()).is_ok(),
+            "entry should exist"
         );
     }
 }

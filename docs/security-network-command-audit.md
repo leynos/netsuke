@@ -7,7 +7,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
 
 ## Network helper findings
 
-- [ ] **Cache directories lack target validation and isolation.** The `fetch`
+- [x] **Cache directories lack target validation and isolation.** The `fetch`
   helper lets templates pick any `cache_dir`, accepts absolute paths, and opens
   them using the ambient filesystem capability (`open_cache_dir` /
   `write_cache`). A malicious manifest can therefore point the cache at
@@ -18,6 +18,10 @@ introduces, and concrete remediation tasks that would harden the helpers.
     `Dir` root.
   - Consider exposing cache configurability only via trusted configuration,
     not per-template input.
+  - **Remediation:** caches are now rooted beneath `.netsuke/fetch` within the
+    workspace via `StdlibConfig`, which opens directories through a sandboxed
+    `Dir` handle. Template code can no longer pass `cache_dir`, preventing
+    manifests from redirecting caches outside the workspace.
 - [ ] **Outbound requests lack scheme and host validation.** Because `fetch`
   accepts any URL, manifests can reach link-local metadata services (for
   example, `http://169.254.169.254/`) or other internal resources, yielding
@@ -25,10 +29,10 @@ introduces, and concrete remediation tasks that would harden the helpers.
   - Provide an allowlist / blocklist mechanism (e.g. only `https://` hosts or
     specific domains) and allow administrators to disable outbound requests
     entirely for untrusted manifests.
-- [ ] **Response bodies are read without a size limit.** `fetch_remote` reads the
-  entire HTTP response into memory before returning or caching it. An attacker
-  controlling the endpoint can stream unbounded data and exhaust memory or
-  disk. *Remediation tasks:*
+- [ ] **Response bodies are read without a size limit.** `fetch_remote` reads
+  the entire HTTP response into memory before returning or caching it. An
+  attacker controlling the endpoint can stream unbounded data and exhaust
+  memory or disk. *Remediation tasks:*
   - Impose a configurable maximum response size, aborting once the budget is
     exceeded and describing the limit in the error message so template authors
     understand the constraint.

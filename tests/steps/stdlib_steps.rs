@@ -9,7 +9,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::{given, then, when};
 use minijinja::{Environment, context, value::Value};
-use netsuke::stdlib;
+use netsuke::stdlib::{self, StdlibConfig};
+use sha2::{Digest, Sha256};
 use std::ffi::OsStr;
 use std::{
     io::{Read, Write},
@@ -145,8 +146,11 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
 }
 
 fn render_template_with_context(world: &mut CliWorld, template: &TemplateContent, ctx: Value) {
+    let root = ensure_workspace(world);
     let mut env = Environment::new();
-    let state = stdlib::register(&mut env);
+    let workspace = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let config = StdlibConfig::new(workspace);
+    let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
     world.stdlib_state = Some(state.clone());
     let render = env.render_str(template.as_str(), ctx);
@@ -386,6 +390,29 @@ fn assert_stdlib_pure(world: &mut CliWorld) {
         .as_ref()
         .expect("stdlib state should be initialised");
     assert!(!state.is_impure(), "expected template to remain pure");
+}
+
+#[then("the stdlib workspace contains the fetch cache for stdlib url")]
+fn assert_fetch_cache_present(world: &mut CliWorld) {
+    let root = world
+        .stdlib_root
+        .as_ref()
+        .expect("expected stdlib workspace root");
+    let url = world
+        .stdlib_url
+        .as_ref()
+        .expect("expected stdlib url for cache check");
+    let digest = Sha256::digest(url.as_bytes());
+    let mut key = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write;
+        let _ = write!(&mut key, "{byte:02x}");
+    }
+    let cache_path = root.join(".netsuke").join("fetch").join(key);
+    assert!(
+        std::fs::metadata(cache_path.as_std_path()).is_ok(),
+        "expected fetch cache at {cache_path}",
+    );
 }
 
 #[then("the stdlib output equals the workspace root")]
