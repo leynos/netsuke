@@ -54,7 +54,7 @@ working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
 `HELLO_WORLD_*` environment variables per scenario to demonstrate precedence:
 configuration files < environment variables < CLI arguments.
 
-The runtime discovers `.hello_world.toml` in several locations so local
+The runtime discovers `.hello_world.toml` in several locations, so local
 overrides apply without additional flags. `HELLO_WORLD_CONFIG_PATH` wins when
 set; otherwise the loader searches `$XDG_CONFIG_HOME/hello_world/config.toml`,
 every directory listed in `$XDG_CONFIG_DIRS`, `%APPDATA%` on Windows,
@@ -151,12 +151,12 @@ A configuration is represented by a plain Rust struct. To take advantage of
   is performed using `ortho_config` attributes such as `cli_short`, or
   `cli_long`.
 
-- `OrthoConfig` – provided by the library. This derive macro generates the code
+- `OrthoConfig` – provided by the library. The derive macro generates the code
   to load and merge configuration from multiple sources.
 
 Optionally, the struct can include a `#[ortho_config(prefix = "PREFIX")]`
 attribute. The prefix sets a common string for environment variables and
-configuration file names. Trailing underscores are trimmed and the prefix is
+configuration file names. Trailing underscores are trimmed, and the prefix is
 lower‑cased when used to form file names. For example, a prefix of `APP_`
 results in environment variables like `APP_PORT` and file names such as
 `.app.toml`.
@@ -301,7 +301,7 @@ following steps:
        locations.
 
 3. Adds an environment provider using the prefix specified on the struct. Keys
-   are upper‑cased and nested fields use double underscores (`__`) to separate
+   are upper‑cased, and nested fields use double underscores (`__`) to separate
    components.
 
 4. Adds a provider containing the CLI values (captured as `Option<T>` fields)
@@ -312,8 +312,8 @@ following steps:
    with values from higher precedence ones.
 
 6. Attempts to extract the merged configuration into the concrete struct. On
-   success it returns the completed configuration; otherwise an `OrthoError` is
-   returned.
+   success, it returns the completed configuration; otherwise an `OrthoError`
+   is returned.
 
 ### Config path override
 
@@ -371,10 +371,10 @@ field is explicitly supplied on the command line.
 ### Using defaults and optional fields
 
 Fields of type `Option<T>` are treated as optional values. If no source
-provides a value for an `Option<T>` field then it remains `None`. To provide a
+provides a value for an `Option<T>` field, then it remains `None`. To provide a
 default value for a non‑`Option` field or for an `Option<T>` field that should
 have an initial value, specify `#[ortho_config(default = expr)]`. This default
-acts as the lowest‑precedence source and is overridden by file, environment or
+acts as the lowest‑precedence source and is overridden by file, environment, or
 CLI values.
 
 ### Environment variable naming
@@ -395,7 +395,7 @@ to disable list parsing.
 ## Configuration inheritance
 
 A configuration file may specify an `extends` key pointing to another file. The
-referenced file is loaded first and the current file's values override it. The
+referenced file is loaded first, and the current file's values override it. The
 path is resolved relative to the file containing the `extends` directive.
 Precedence across all sources becomes base file → extending file → environment
 variables → CLI flags. Cycles are detected and reported via a `CyclicExtends`
@@ -553,8 +553,8 @@ tree.
 The `clap‑dispatch` crate can be combined with `OrthoConfig` to simplify
 subcommand execution. Each subcommand struct implements a trait defining the
 action to perform. An enum of subcommands is annotated with
-`#[clap_dispatch(fn run(...))]`, and the `load_and_merge_subcommand_for`
-function can be called on each variant before dispatching. See the
+`#[clap_dispatch(fn run(…))]`, and the `load_and_merge_subcommand_for` function
+can be called on each variant before dispatching. See the
 `Subcommand Configuration` section of the `OrthoConfig` [README](../README.md)
 for a complete example.
 
@@ -565,7 +565,7 @@ for `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file
 I/O and `figment`. Failures during the final merge of CLI values over
 configuration sources surface as the `Merge` variant, providing clearer
 diagnostics when the combined data is invalid. When multiple sources fail, the
-errors are collected into the `Aggregate` variant so callers can inspect each
+errors are collected into the `Aggregate` variant, so callers can inspect each
 individual failure. Consumers should handle these errors appropriately, for
 example by printing them to stderr and exiting. If required fields are missing
 after merging, the crate returns `OrthoError::MissingRequiredValues` with a
