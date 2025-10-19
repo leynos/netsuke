@@ -26,10 +26,9 @@ introduces, and concrete remediation tasks that would harden the helpers.
     specific domains) and allow administrators to disable outbound requests
     entirely for untrusted manifests.
 - [ ] **Response bodies are read without a size limit.** `fetch_remote` reads
-      the
-  entire HTTP response into memory before returning or caching it. An attacker
-  controlling the endpoint can stream unbounded data and exhaust memory or
-  disk. *Remediation tasks:*
+      the entire HTTP response into memory before returning or caching it. An
+      attacker controlling the endpoint can stream unbounded data and exhaust
+      memory or disk. *Remediation tasks:*
   - Impose a configurable maximum response size, aborting once the budget is
     exceeded and describing the limit in the error message so template authors
     understand the constraint.
