@@ -171,7 +171,8 @@ fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
         .file_name()
         .and_then(|name| name.to_str())
         .map_or_else(|| path.display().to_string(), str::to_owned);
-    let workspace = Utf8PathBuf::from_path_buf(parent.to_path_buf()).map_err(|_| {
+    let resolved = fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf());
+    let workspace = Utf8PathBuf::from_path_buf(resolved).map_err(|_| {
         anyhow!(
             "manifest directory '{}' contains non-UTF-8 components",
             parent.display()

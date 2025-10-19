@@ -10,16 +10,17 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::{given, then, when};
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib::{self, StdlibConfig};
-use sha2::{Digest, Sha256};
 use std::ffi::OsStr;
 use std::{
     io::{Read, Write},
     net::TcpListener,
     thread,
+    time::{Duration as StdDuration, Instant},
 };
 use test_support::{
     command_helper::{compile_failure_helper, compile_uppercase_helper},
     env::set_var,
+    hash,
 };
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
@@ -106,19 +107,34 @@ pub(crate) fn server_host(url: &str) -> Option<&str> {
 
 pub(crate) fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind http listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set listener non-blocking");
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
     let handle = thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
-            let mut buf = [0u8; 512];
-            let bytes_read = stream.read(&mut buf).unwrap_or(0);
-            if bytes_read > 0 {
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = stream.write_all(response.as_bytes());
+        let deadline = Instant::now() + StdDuration::from_secs(2);
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut buf = [0u8; 512];
+                    let bytes_read = stream.read(&mut buf).unwrap_or(0);
+                    if bytes_read > 0 {
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            body.len(),
+                            body
+                        );
+                        let _ = stream.write_all(response.as_bytes());
+                    }
+                    break;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    let timed_out = Instant::now() >= deadline;
+                    assert!(!timed_out, "timed out waiting for fetch test connection");
+                    thread::sleep(StdDuration::from_millis(10));
+                }
+                Err(err) => panic!("failed to accept connection: {err}"),
             }
         }
     });
@@ -402,12 +418,7 @@ fn assert_fetch_cache_present(world: &mut CliWorld) {
         .stdlib_url
         .as_ref()
         .expect("expected stdlib url for cache check");
-    let digest = Sha256::digest(url.as_bytes());
-    let mut key = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write;
-        let _ = write!(&mut key, "{byte:02x}");
-    }
+    let key = hash::sha256_hex(url.as_bytes());
     let cache_path = root.join(".netsuke").join("fetch").join(key);
     assert!(
         std::fs::metadata(cache_path.as_std_path()).is_ok(),

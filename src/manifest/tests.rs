@@ -11,48 +11,67 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 use rstest::{fixture, rstest};
-use sha2::{Digest, Sha256};
 use std::{
     fs,
     io::{Read, Write},
     net::TcpListener,
     thread,
+    time::{Duration, Instant},
 };
 use tempfile::tempdir;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
+use test_support::{EnvVarGuard, env_lock::EnvLock, hash};
 
 fn start_server(body: &'static str) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set listener non-blocking");
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
     let handle = thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
-            let mut buf = [0u8; 512];
-            let bytes_read = stream.read(&mut buf).unwrap_or(0);
-            if bytes_read > 0 {
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = stream.write_all(response.as_bytes());
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut buf = [0u8; 512];
+                    let bytes_read = stream.read(&mut buf).unwrap_or(0);
+                    if bytes_read > 0 {
+                        let response = format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                            body.len(),
+                            body
+                        );
+                        let _ = stream.write_all(response.as_bytes());
+                    }
+                    break;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    let timed_out = Instant::now() >= deadline;
+                    assert!(!timed_out, "timed out waiting for fetch test connection");
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => panic!("failed to accept connection: {err}"),
             }
         }
     });
     (url, handle)
 }
 
-#[derive(Debug)]
 struct CurrentDirGuard {
     original: std::path::PathBuf,
+    _lock: EnvLock,
 }
 
 impl CurrentDirGuard {
     fn change_to(path: &std::path::Path) -> AnyResult<Self> {
+        let lock = EnvLock::acquire();
         let original = std::env::current_dir().context("capture current working directory")?;
         std::env::set_current_dir(path)
             .with_context(|| format!("switch to working directory {}", path.display()))?;
-        Ok(Self { original })
+        Ok(Self {
+            original,
+            _lock: lock,
+        })
     }
 }
 
@@ -246,7 +265,6 @@ fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
 
 #[rstest]
 fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
-    let _env_lock = EnvLock::acquire();
     let temp = tempdir()?;
     let workspace = temp.path().join("workspace");
     fs::create_dir_all(&workspace)?;
@@ -277,17 +295,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         other => panic!("expected command recipe, got {other:?}"),
     }
 
-    let cache_key = {
-        let digest = Sha256::digest(url.as_bytes());
-        let mut key = String::with_capacity(digest.len() * 2);
-        {
-            use std::fmt::Write as _;
-            for byte in digest {
-                let _ = write!(&mut key, "{byte:02x}");
-            }
-        }
-        key
-    };
+    let cache_key = hash::sha256_hex(url.as_bytes());
     let cache_path = workspace.join(".netsuke").join("fetch").join(cache_key);
     assert!(
         cache_path.exists(),

@@ -1,3 +1,8 @@
+//! Shared helpers for stdlib filter integration tests.
+//!
+//! These utilities prepare temporary workspaces and template environments so
+//! behaviour-driven scenarios can focus on assertions instead of boilerplate.
+
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context};

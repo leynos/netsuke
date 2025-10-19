@@ -16,6 +16,7 @@ pub mod env;
 pub mod env_guard;
 pub mod env_lock;
 pub mod env_var_guard;
+pub mod hash;
 pub mod path_guard;
 /// Re-export of [`PathGuard`] for crate-level ergonomics in tests.
 pub use path_guard::PathGuard;
