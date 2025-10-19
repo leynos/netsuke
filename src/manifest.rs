@@ -167,13 +167,20 @@ fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
+    let manifest_label = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or_else(|| path.display().to_string(), str::to_owned);
     let workspace = Utf8PathBuf::from_path_buf(parent.to_path_buf()).map_err(|_| {
         anyhow!(
             "manifest directory '{}' contains non-UTF-8 components",
             parent.display()
         )
     })?;
-    let dir = Dir::open_ambient_dir(&workspace, ambient_authority())
-        .with_context(|| format!("failed to open manifest workspace directory {workspace}"))?;
+    let dir = Dir::open_ambient_dir(&workspace, ambient_authority()).with_context(|| {
+        format!(
+            "failed to open manifest workspace directory {workspace} for manifest {manifest_label}"
+        )
+    })?;
     Ok(StdlibConfig::new(dir))
 }
