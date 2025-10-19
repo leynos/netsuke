@@ -345,11 +345,12 @@ separates its own progress output from the output of the build commands being
 run.
 
 **Stages and Progress Bars:** Netsuke’s build pipeline consists of six stages
-(Manifest Ingestion, YAML Parsing, Template Expansion, Deserialization &
-Rendering, IR Generation, Ninja Execution). The CLI reflects these stages in
-the output so that users see a high-level progression. Using `indicatif`, a
-**multi-progress bar** setup can represent each stage or simply list the stages
-with a spinner. For example, Netsuke might print something like:
+(Manifest Ingestion, YAML (YAML Ain’t Markup Language) Parsing, Template
+Expansion, Deserialization & Rendering, IR Generation, Ninja Execution). The
+CLI reflects these stages in the output so that users see a high-level
+progression. Using `indicatif`, a **multi-progress bar** setup can represent
+each stage or simply list the stages with a spinner. For example, Netsuke might
+print something like:
 
 ```text
 [1/6] Parsing Netsukefile...      (✔ done)
@@ -452,16 +453,17 @@ Similarly, if `NO_COLOR` is set, coloured bars or coloured symbols are
 omitted[^2].
 
 Animations are disabled or simplified in **non-interactive contexts**. If
-output is being piped to a file or a CI system (detected by !isatty on stdout),
-`indicatif` will automatically disable its adaptive animations (to avoid
-garbage characters in logs)[^2]. In such cases, Netsuke can either print
-nothing until completion (to keep logs clean) or print minimal static updates.
-A likely approach: if not a TTY, the live progress bar is not shown at all, and
-instead just prints a single line “Building… (tasks running)” at start and
-“Build completed” at end, or perhaps a few milestone lines. The reasoning is
-that in CI logs or when redirecting output, a steady stream of progress updates
-can spam the log (making it hard to read)[^2]. A high-level summary is
-preferred unless the user explicitly requests verbose output.
+output is being piped to a file or a continuous integration (CI) system
+(detected by !isatty on stdout), `indicatif` will automatically disable its
+adaptive animations (to avoid garbage characters in logs)[^2]. In such cases,
+Netsuke can either print nothing until completion (to keep logs clean) or print
+minimal static updates. A likely approach: if not a TTY, the live progress bar
+is not shown at all, and instead just prints a single line “Building… (tasks
+running)” at start and “Build completed” at end, or perhaps a few milestone
+lines. The reasoning is that in CI logs or when redirecting output, a steady
+stream of progress updates can spam the log (making it hard to read)[^2]. A
+high-level summary is preferred unless the user explicitly requests verbose
+output.
 
 To summarize, the CLI’s real-time feedback system will use `indicatif` to give
 **clear and continuous insight** into what Netsuke is doing, without
@@ -711,9 +713,10 @@ having to type numerous flags each time.
 
 **Layered Configuration Sources:** OrthoConfig allows the engineering team to
 define a configuration struct in Rust and have it automatically populated from
-(1) program defaults, (2) a config file (e.g., a TOML or YAML file), (3)
-environment variables, and (4) CLI arguments, with that precedence order[^3].
-In Netsuke, the struct (say `CliConfig`) includes fields such as:
+(1) program defaults, (2) a config file (e.g., a TOML (Tom’s Obvious, Minimal
+Language) or YAML file), (3) environment variables, and (4) CLI arguments, with
+that precedence order[^3]. In Netsuke, the struct (say `CliConfig`) includes
+fields such as:
 
 - `verbose: bool` – for verbose output mode
 
