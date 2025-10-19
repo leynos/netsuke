@@ -83,7 +83,7 @@ configurations with variables, control flow, and custom functions.
     `serde_json::Value` (Stage 2: Initial YAML Parsing), expand `foreach` and
     `when` entries with a Jinja environment (Stage 3: Template Expansion), then
     deserialise the expanded tree into the typed AST and render remaining
-    string fields (Stage 4: Deserialisation & Final Rendering).
+    string fields (Stage 4: Deserialization & Final Rendering).
 
   - [x] Create a minijinja::Environment and populate its initial context with
     the global vars defined in the manifest.
@@ -192,7 +192,7 @@ library, and CLI ergonomics.
     disk and streaming to stdout.
 
   - [ ] Extend the graph subcommand with an optional `--html` renderer that
-    produces a browsable graph visualisation while documenting a text-only
+    produces a browsable graph visualization while documenting a text-only
     fallback workflow.
 
   - [ ] Evaluate and document whether to ship a `netsuke explain <code>`
@@ -206,7 +206,7 @@ library, and CLI ergonomics.
     the CLI design, guarded by integration tests.
 
   - [ ] Curate OrthoConfig-generated Clap help output so every subcommand and
-    flag has a plain-language, localisable description aligned with the style
+    flag has a plain-language, localizable description aligned with the style
     guide.
 
   - [ ] Publish a “Hello World” quick-start walkthrough that demonstrates
@@ -215,7 +215,7 @@ library, and CLI ergonomics.
 
 - [ ] **Localization with Fluent:**
 
-  - [ ] Externalise all user-facing strings into Fluent `.ftl` bundles with a
+  - [ ] Externalize all user-facing strings into Fluent `.ftl` bundles with a
     compile-time audit that fails CI when a message key is missing.
 
   - [ ] Implement locale resolution via `--locale`, `NETSUKE_LOCALE`,
@@ -223,7 +223,7 @@ library, and CLI ergonomics.
     translations are absent.
 
   - [ ] Provide translator tooling and documentation covering message keys,
-    plural forms, and variable usage, and ensure localisation smoke tests cover
+    plural forms, and variable usage, and ensure localization smoke tests cover
     at least one secondary locale.
 
 - [ ] **Accessibility and Section 508 Compliance:**
@@ -242,7 +242,7 @@ library, and CLI ergonomics.
 - [ ] **Real-Time Feedback and Progress:**
 
   - [ ] Integrate `indicatif::MultiProgress` to surface the six pipeline stages
-    with persistent summaries and localisation-aware labelling.
+    with persistent summaries and localization-aware labelling.
 
   - [ ] Parse Ninja status lines to drive task progress, ensuring fallback
     textual updates are emitted when stdout is not a TTY or accessible mode is
@@ -257,7 +257,7 @@ library, and CLI ergonomics.
     subprocess output preserves ordering on stdout, verified by end-to-end
     tests that redirect each stream.
 
-  - [ ] Introduce consistent, localisable prefixes or indentation rules that
+  - [ ] Introduce consistent, localizable prefixes or indentation rules that
     differentiate Netsuke logs from child process output, with ASCII and
     Unicode themes.
 
@@ -306,6 +306,6 @@ library, and CLI ergonomics.
 
 - **Success Criterion:**
 
-  - [ ] Netsuke ships a localisable, accessible, and fully configurable CLI
+  - [ ] Netsuke ships a localizable, accessible, and fully configurable CLI
     that delivers real-time feedback, machine-readable diagnostics, and the
     onboarding experience defined in the Netsuke CLI design document.
