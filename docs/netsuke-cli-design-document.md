@@ -1268,7 +1268,7 @@ gimmicky[^2]. Ultimately, these visual decisions serve the goals of
 glancing quickly at their screen, poring over a log file, or listening via a
 screen reader, they can quickly grasp what Netsuke is communicating.
 
-**References:**
+## References
 
 - Harini Sampath et al., *“Accessibility of Command Line Interfaces,”* CHI ’21
   – Recommendations for making CLI output accessible.
