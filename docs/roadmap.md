@@ -83,7 +83,7 @@ configurations with variables, control flow, and custom functions.
     `serde_json::Value` (Stage 2: Initial YAML Parsing), expand `foreach` and
     `when` entries with a Jinja environment (Stage 3: Template Expansion), then
     deserialise the expanded tree into the typed AST and render remaining
-    string fields (Stage 4: Deserialisation & Final Rendering).
+    string fields (Stage 4: Deserialization & Final Rendering).
 
   - [x] Create a minijinja::Environment and populate its initial context with
     the global vars defined in the manifest.
@@ -185,11 +185,129 @@ library, and CLI ergonomics.
     a DOT representation of the dependency graph.
 
   - [ ] Refine all CLI output for clarity, ensuring help messages are
-
     descriptive and command feedback is intuitive.
+
+  - [ ] Implement the `manifest` subcommand to persist the generated Ninja file
+    without executing it, including integration tests that cover writing to
+    disk and streaming to stdout.
+
+  - [ ] Extend the graph subcommand with an optional `--html` renderer that
+    produces a browsable graph visualization while documenting a text-only
+    fallback workflow.
+
+  - [ ] Evaluate and document whether to ship a `netsuke explain <code>`
+    command for diagnostic codes, capturing the decision and rationale in the
+    architecture docs.
+
+- [ ] **Welcoming Onboarding and Defaults:**
+
+  - [ ] Ensure running `netsuke` with no subcommand builds manifest defaults,
+    and missing-manifest scenarios emit the guided error and hint specified in
+    the CLI design, guarded by integration tests.
+
+  - [ ] Curate OrthoConfig-generated Clap help output so every subcommand and
+    flag has a plain-language, localizable description aligned with the style
+    guide.
+
+  - [ ] Publish a “Hello World” quick-start walkthrough that demonstrates
+    running Netsuke end-to-end, exercised by a documentation test or example
+    build fixture.
+
+- [ ] **Localization with Fluent:**
+
+  - [ ] Externalize all user-facing strings into Fluent `.ftl` bundles with a
+    compile-time audit that fails CI when a message key is missing.
+
+  - [ ] Implement locale resolution via `--locale`, `NETSUKE_LOCALE`,
+    configuration files, and system defaults, falling back to `en-US` when
+    translations are absent.
+
+  - [ ] Provide translator tooling and documentation covering message keys,
+    plural forms, and variable usage, and ensure localization smoke tests cover
+    at least one secondary locale.
+
+- [ ] **Accessibility and Section 508 Compliance:**
+
+  - [ ] Add an accessible output mode (auto-enabled for `TERM=dumb`,
+    `NO_COLOR`, or explicit config) that replaces spinners with static status
+    lines and guarantees textual labels for every status.
+
+  - [ ] Respect `NO_COLOR`, `NETSUKE_NO_EMOJI`, and ASCII-only preferences
+    while keeping semantic prefixes (Error, Warning, Success) in all modes.
+
+  - [ ] Conduct assistive technology verification (NVDA on Windows,
+    VoiceOver on macOS, and a Linux screen reader), documenting results and
+    corrective actions.
+
+- [ ] **Real-Time Feedback and Progress:**
+
+  - [ ] Integrate `indicatif::MultiProgress` to surface the six pipeline stages
+    with persistent summaries and localization-aware labelling.
+
+  - [ ] Parse Ninja status lines to drive task progress, ensuring fallback
+    textual updates are emitted when stdout is not a TTY or accessible mode is
+    active.
+
+  - [ ] Capture per-stage timing metrics in verbose mode and include them in
+    the completion summary while avoiding noise in default output.
+
+- [ ] **Output Channels and Diagnostics:**
+
+  - [ ] Guarantee Netsuke status messages always stream to stderr and
+    subprocess output preserves ordering on stdout, verified by end-to-end
+    tests that redirect each stream.
+
+  - [ ] Introduce consistent, localizable prefixes or indentation rules that
+    differentiate Netsuke logs from child process output, with ASCII and
+    Unicode themes.
+
+  - [ ] Deliver a `--diag-json` machine-readable diagnostics mode with a
+    documented schema, plus snapshot tests to guard compatibility.
+
+- [ ] **Configuration and Preferences:**
+
+  - [ ] Introduce a `CliConfig` struct derived with `OrthoConfig` so Clap
+    integration, configuration files, and environment variables share one
+    schema covering verbosity, colour policy, locale, spinner mode, output
+    format, default targets, and theme, following the patterns captured in
+    `docs/ortho-config-users-guide.md`.
+
+  - [ ] Discover configuration files in project and user scopes, honouring env
+    overrides and CLI precedence, with integration tests for each precedence
+    tier that align with `docs/ortho-config-users-guide.md`.
+
+  - [ ] Expose `--config <path>` (and `NETSUKE_CONFIG`) to select alternative
+    config files, and ship annotated sample configs in the documentation.
+
+  - [ ] Add regression tests that exercise OrthoConfig’s precedence ladder
+    (defaults < file < env < CLI) to ensure the Clap facade remains aligned
+    with the design document and the guidance in
+    `docs/ortho-config-users-guide.md`.
+
+- [ ] **Visual Design Validation:**
+
+  - [ ] Define design tokens for colours, symbols, and spacing, and wire them
+    through the CLI theme system so ASCII and Unicode modes remain consistent.
+
+  - [ ] Snapshot progress and status output for unicode and ascii themes to
+    guard alignment and wrapping against regressions.
+
+  - [ ] Test output renderings across common terminals (Windows Console,
+    PowerShell, xterm-compatible shells) and document any conditional handling.
+
+- [ ] **User Journey Support:**
+
+  - [ ] Add smoke tests that exercise novice flows (first run success, missing
+    manifest, help output) and confirm UX matches the documented journey.
+
+  - [ ] Extend user documentation with an advanced usage chapter covering
+    `clean`, `graph`, `manifest`, configuration layering, and JSON diagnostics.
+
+  - [ ] Provide CI-focused guidance, including examples of consuming JSON
+    diagnostics and configuring quiet/verbose modes for automation.
 
 - **Success Criterion:**
 
-  - [ ] Netsuke is a feature-complete, secure, and user-friendly build tool that
-    meets all initial design goals, with a comprehensive template standard
-    library, robust error handling, and a polished command-line interface.
+  - [ ] Netsuke ships a localizable, accessible, and fully configurable CLI
+    that delivers real-time feedback, machine-readable diagnostics, and the
+    onboarding experience defined in the Netsuke CLI design document.
