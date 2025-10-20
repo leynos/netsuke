@@ -5,7 +5,7 @@ use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::{collections::HashMap, ffi::OsString, net::TcpStream, thread::JoinHandle};
-use test_support::{PathGuard, env::restore_many};
+use test_support::{PathGuard, env::restore_many, http};
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
@@ -50,7 +50,6 @@ pub struct CliWorld {
 }
 
 mod steps;
-use steps::stdlib_steps::spawn_http_server;
 
 #[derive(Copy, Clone)]
 enum HttpShutdownMode {
@@ -61,7 +60,7 @@ enum HttpShutdownMode {
 impl CliWorld {
     pub(crate) fn start_http_server(&mut self, body: String) {
         self.shutdown_http_server_with(HttpShutdownMode::Strict);
-        let (url, handle) = spawn_http_server(body);
+        let (url, handle) = http::spawn_http_server(body);
         self.stdlib_url = Some(url);
         self.http_server = Some(handle);
     }

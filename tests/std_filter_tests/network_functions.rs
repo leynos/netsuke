@@ -1,12 +1,6 @@
 //! Tests for stdlib network helpers covering fetch caching and failure paths.
 
-use std::{
-    fs,
-    io::{Read, Write},
-    net::TcpListener,
-    thread,
-    time::{Duration, Instant},
-};
+use std::fs;
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -16,47 +10,11 @@ use rstest::rstest;
 use tempfile::tempdir;
 
 use super::support::{stdlib_env_with_config, stdlib_env_with_state};
-use test_support::hash;
-
-fn start_server(body: &'static str) -> (String, thread::JoinHandle<()>) {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
-    listener
-        .set_nonblocking(true)
-        .expect("set listener non-blocking");
-    let addr = listener.local_addr().expect("local addr");
-    let url = format!("http://{addr}");
-    let handle = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let mut buf = [0u8; 512];
-                    let bytes_read = stream.read(&mut buf).unwrap_or(0);
-                    if bytes_read > 0 {
-                        let response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                            body.len(),
-                            body
-                        );
-                        let _ = stream.write_all(response.as_bytes());
-                    }
-                    break;
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    let timed_out = Instant::now() >= deadline;
-                    assert!(!timed_out, "timed out waiting for fetch test connection");
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => panic!("failed to accept connection: {err}"),
-            }
-        }
-    });
-    (url, handle)
-}
+use test_support::{hash, http};
 
 #[rstest]
 fn fetch_function_downloads_content() {
-    let (url, handle) = start_server("payload");
+    let (url, handle) = http::spawn_http_server("payload");
     let (mut env, state) = stdlib_env_with_state();
     state.reset_impure();
     env.add_template("fetch", "{{ fetch(url) }}")
@@ -78,7 +36,7 @@ fn fetch_function_respects_cache() {
     let temp_dir = tempdir().expect("tempdir");
     let temp_root =
         Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("utf8 temp path");
-    let (url, handle) = start_server("cached");
+    let (url, handle) = http::spawn_http_server("cached");
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority()).expect("workspace");
     let config = StdlibConfig::new(workspace);
     let (mut env, state) = stdlib_env_with_config(config);

@@ -11,51 +11,9 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 use rstest::{fixture, rstest};
-use std::{
-    fs,
-    io::{Read, Write},
-    net::TcpListener,
-    thread,
-    time::{Duration, Instant},
-};
+use std::fs;
 use tempfile::tempdir;
-use test_support::{EnvVarGuard, env_lock::EnvLock, hash};
-
-fn start_server(body: &'static str) -> (String, thread::JoinHandle<()>) {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
-    listener
-        .set_nonblocking(true)
-        .expect("set listener non-blocking");
-    let addr = listener.local_addr().expect("local addr");
-    let url = format!("http://{addr}");
-    let handle = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let mut buf = [0u8; 512];
-                    let bytes_read = stream.read(&mut buf).unwrap_or(0);
-                    if bytes_read > 0 {
-                        let response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                            body.len(),
-                            body
-                        );
-                        let _ = stream.write_all(response.as_bytes());
-                    }
-                    break;
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    let timed_out = Instant::now() >= deadline;
-                    assert!(!timed_out, "timed out waiting for fetch test connection");
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => panic!("failed to accept connection: {err}"),
-            }
-        }
-    });
-    (url, handle)
-}
+use test_support::{EnvVarGuard, env_lock::EnvLock, hash, http};
 
 struct CurrentDirGuard {
     original: std::path::PathBuf,
@@ -272,7 +230,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     fs::create_dir_all(&outside)?;
     let manifest_path = workspace.join("Netsukefile");
 
-    let (url, handle) = start_server("workspace-body");
+    let (url, handle) = http::spawn_http_server("workspace-body");
     let manifest_yaml = concat!(
         "netsuke_version: \"1.0.0\"\n",
         "targets:\n",
