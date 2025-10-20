@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::{collections::HashMap, ffi::OsString, net::TcpStream, thread::JoinHandle};
+use std::{collections::HashMap, ffi::OsString, net::TcpStream};
 use test_support::{PathGuard, env::restore_many, http};
 
 /// Shared state for Cucumber scenarios.
@@ -41,7 +41,7 @@ pub struct CliWorld {
     /// Quoted command string for stdlib shell scenarios.
     pub stdlib_command: Option<String>,
     /// Last HTTP server fixture started by stdlib steps.
-    pub http_server: Option<JoinHandle<()>>,
+    pub http_server: Option<http::HttpServer>,
     /// URL exposed by the active HTTP server fixture.
     pub stdlib_url: Option<String>,
     /// Snapshot of pre-scenario values for environment variables that were overridden.
@@ -60,9 +60,9 @@ enum HttpShutdownMode {
 impl CliWorld {
     pub(crate) fn start_http_server(&mut self, body: String) {
         self.shutdown_http_server_with(HttpShutdownMode::Strict);
-        let (url, handle) = http::spawn_http_server(body);
+        let (url, server) = http::spawn_http_server(body);
         self.stdlib_url = Some(url);
-        self.http_server = Some(handle);
+        self.http_server = Some(server);
     }
 
     pub(crate) fn shutdown_http_server(&mut self) {
@@ -87,14 +87,14 @@ impl CliWorld {
     }
 
     fn shutdown_http_server_with(&mut self, mode: HttpShutdownMode) {
-        let Some(handle) = self.http_server.take() else {
+        let Some(server) = self.http_server.take() else {
             self.stdlib_url = None;
             return;
         };
 
         if let Some(host) = self.extract_host_from_stdlib_url() {
             let _ = TcpStream::connect(host);
-            let _ = handle.join();
+            let _ = server.join();
             self.stdlib_url = None;
             return;
         }
@@ -109,7 +109,7 @@ impl CliWorld {
                     "Warning: Cannot extract host from stdlib_url; skipping server shutdown to avoid hang. URL: {:?}",
                     self.stdlib_url
                 );
-                drop(handle);
+                drop(server);
             }
         }
         self.stdlib_url = None;

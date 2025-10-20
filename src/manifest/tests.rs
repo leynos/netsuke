@@ -230,7 +230,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     fs::create_dir_all(&outside)?;
     let manifest_path = workspace.join("Netsukefile");
 
-    let (url, handle) = http::spawn_http_server("workspace-body");
+    let (url, server) = http::spawn_http_server("workspace-body");
     let manifest_yaml = concat!(
         "netsuke_version: \"1.0.0\"\n",
         "targets:\n",
@@ -245,7 +245,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);
 
     let manifest = super::from_path(&manifest_path)?;
-    handle.join().expect("join server");
+    server.join().expect("join server");
 
     let first_target = manifest.targets.first().expect("target");
     match &first_target.recipe {

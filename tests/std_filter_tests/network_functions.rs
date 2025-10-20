@@ -14,7 +14,7 @@ use test_support::{hash, http};
 
 #[rstest]
 fn fetch_function_downloads_content() {
-    let (url, handle) = http::spawn_http_server("payload");
+    let (url, server) = http::spawn_http_server("payload");
     let (mut env, state) = stdlib_env_with_state();
     state.reset_impure();
     env.add_template("fetch", "{{ fetch(url) }}")
@@ -28,7 +28,7 @@ fn fetch_function_downloads_content() {
         state.is_impure(),
         "network fetch should mark template impure"
     );
-    handle.join().expect("join server");
+    server.join().expect("join server");
 }
 
 #[rstest]
@@ -36,7 +36,7 @@ fn fetch_function_respects_cache() {
     let temp_dir = tempdir().expect("tempdir");
     let temp_root =
         Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("utf8 temp path");
-    let (url, handle) = http::spawn_http_server("cached");
+    let (url, server) = http::spawn_http_server("cached");
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority()).expect("workspace");
     let config = StdlibConfig::new(workspace);
     let (mut env, state) = stdlib_env_with_config(config);
@@ -53,7 +53,7 @@ fn fetch_function_respects_cache() {
         "network-backed cache fill should mark template impure"
     );
     state.reset_impure();
-    handle.join().expect("join server");
+    server.join().expect("join server");
 
     // Drop the listener and verify the cached response is returned.
     let rendered_again = tmpl

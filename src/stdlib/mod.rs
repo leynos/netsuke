@@ -15,8 +15,8 @@ mod network;
 mod path;
 mod time;
 
-use anyhow::{Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use anyhow::{Context, Result, ensure};
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
 use cap_std::{ambient_authority, fs, fs_utf8::Dir};
@@ -30,6 +30,23 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
 pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
 
+/// Configuration for registering Netsuke's standard library helpers.
+///
+/// The configuration records the capability-scoped workspace directory used to
+/// sandbox helper I/O and the relative path where network caches are stored.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use cap_std::{ambient_authority, fs_utf8::Dir};
+/// use minijinja::Environment;
+/// use netsuke::stdlib::{self, StdlibConfig};
+///
+/// let root = Dir::open_ambient_dir(".", ambient_authority())
+///     .expect("open workspace");
+/// let mut env = Environment::new();
+/// let _state = stdlib::register_with_config(&mut env, StdlibConfig::new(root));
+/// ```
 #[derive(Debug)]
 pub struct StdlibConfig {
     workspace_root: Arc<Dir>,
@@ -37,18 +54,53 @@ pub struct StdlibConfig {
 }
 
 impl StdlibConfig {
+    /// Create a configuration bound to `workspace_root`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use cap_std::{ambient_authority, fs_utf8::Dir};
+    /// use netsuke::stdlib::StdlibConfig;
+    ///
+    /// let dir = Dir::open_ambient_dir(".", ambient_authority())
+    ///     .expect("open workspace");
+    /// let config = StdlibConfig::new(dir);
+    /// assert_eq!(config.fetch_cache_relative().as_str(), ".netsuke/fetch");
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if Netsuke's built-in fetch cache directory constant fails
+    /// validation. This indicates a programming error and should never occur in
+    /// production builds.
     #[must_use]
     pub fn new(workspace_root: Dir) -> Self {
+        let default = Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR);
+        // Safety: the constant is static and validated for defence in depth.
+        Self::validate_cache_relative(&default).expect("default fetch cache path should be valid");
         Self {
             workspace_root: Arc::new(workspace_root),
-            fetch_cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+            fetch_cache_relative: default,
         }
     }
 
+    /// Override the relative cache directory within the workspace.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the provided path is empty, absolute, or attempts
+    /// to escape the workspace via parent components.
+    pub fn with_fetch_cache_relative(mut self, relative: impl Into<Utf8PathBuf>) -> Result<Self> {
+        let relative = relative.into();
+        Self::validate_cache_relative(&relative)?;
+        self.fetch_cache_relative = relative;
+        Ok(self)
+    }
+
+    /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
-    pub fn with_fetch_cache_relative(mut self, relative: impl Into<Utf8PathBuf>) -> Self {
-        self.fetch_cache_relative = relative.into();
-        self
+    pub fn fetch_cache_relative(&self) -> &Utf8Path {
+        &self.fetch_cache_relative
     }
 
     pub(crate) fn network_config(self) -> NetworkConfig {
@@ -56,6 +108,27 @@ impl StdlibConfig {
             cache_root: self.workspace_root,
             cache_relative: self.fetch_cache_relative,
         }
+    }
+
+    fn validate_cache_relative(relative: &Utf8Path) -> Result<()> {
+        ensure!(
+            !relative.as_str().is_empty(),
+            "fetch cache path must not be empty",
+        );
+        ensure!(
+            !relative.is_absolute(),
+            "fetch cache path must be relative to the workspace",
+        );
+        for component in relative.components() {
+            ensure!(
+                !matches!(
+                    component,
+                    Utf8Component::ParentDir | Utf8Component::Prefix(_)
+                ),
+                "fetch cache path must stay within the workspace",
+            );
+        }
+        Ok(())
     }
 }
 
@@ -133,6 +206,24 @@ pub fn register(env: &mut Environment<'_>) -> Result<StdlibState> {
     Ok(register_with_config(env, StdlibConfig::new(root)))
 }
 
+/// Register stdlib helpers using an explicit configuration.
+///
+/// This is intended for callers that have already derived a capability-scoped
+/// workspace directory and need to wire the stdlib into a `MiniJinja`
+/// environment.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use cap_std::{ambient_authority, fs_utf8::Dir};
+/// use minijinja::Environment;
+/// use netsuke::stdlib::{self, StdlibConfig};
+///
+/// let dir = Dir::open_ambient_dir(".", ambient_authority())
+///     .expect("open workspace");
+/// let mut env = Environment::new();
+/// let _state = stdlib::register_with_config(&mut env, StdlibConfig::new(dir));
+/// ```
 pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> StdlibState {
     let state = StdlibState::default();
     register_file_tests(env);
