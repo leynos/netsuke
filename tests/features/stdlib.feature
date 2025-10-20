@@ -113,3 +113,15 @@ Feature: Template stdlib filters
     Then the stdlib error contains "cache_dir"
     And the stdlib template is pure
 
+  Scenario: fetch rejects absolute cache_dir overrides
+    Given an HTTP server returning "payload"
+    When I render the stdlib template "{{ fetch(url, cache=true, cache_dir='/etc/netsuke-cache') }}" with stdlib url
+    Then the stdlib error contains "cache_dir"
+    And the stdlib template is pure
+
+  Scenario: fetch rejects parent-relative cache_dir overrides
+    Given an HTTP server returning "payload"
+    When I render the stdlib template "{{ fetch(url, cache=true, cache_dir='../cache') }}" with stdlib url
+    Then the stdlib error contains "cache_dir"
+    And the stdlib template is pure
+

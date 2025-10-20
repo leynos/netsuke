@@ -15,6 +15,7 @@ mod network;
 mod path;
 mod time;
 
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
@@ -112,7 +113,7 @@ impl StdlibState {
 /// use netsuke::stdlib;
 ///
 /// let mut env = Environment::new();
-/// let _state = stdlib::register(&mut env);
+/// let _state = stdlib::register(&mut env).expect("register stdlib");
 /// env.add_template("t", "{{ path | basename }}").expect("add template");
 /// let tmpl = env.get_template("t").expect("get template");
 /// let rendered = tmpl
@@ -120,8 +121,16 @@ impl StdlibState {
 ///     .expect("render");
 /// assert_eq!(rendered, "bar.txt");
 /// ```
-pub fn register(env: &mut Environment<'_>) -> StdlibState {
-    register_with_config(env, StdlibConfig::default())
+///
+/// # Errors
+///
+/// Returns an error when the current working directory cannot be opened using
+/// capability-based I/O. This occurs when the process lacks permission to read
+/// the directory or if it no longer exists.
+pub fn register(env: &mut Environment<'_>) -> Result<StdlibState> {
+    let root = Dir::open_ambient_dir(".", ambient_authority())
+        .context("open current directory for stdlib registration")?;
+    Ok(register_with_config(env, StdlibConfig::new(root)))
 }
 
 pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> StdlibState {

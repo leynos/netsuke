@@ -2,6 +2,8 @@
 //!
 //! These utilities prepare temporary workspaces and template environments so
 //! behaviour-driven scenarios can focus on assertions instead of boilerplate.
+//! Helpers expose explicit `StdlibConfig` wiring that binds caches to the
+//! isolated workspace used by each test.
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};

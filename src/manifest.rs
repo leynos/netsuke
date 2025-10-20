@@ -102,9 +102,9 @@ fn from_str_named(
     jinja.add_function("env", |name: String| env_var(&name));
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = match stdlib_config {
-        Some(config) => crate::stdlib::register_with_config(&mut jinja, config),
+        Some(config) => Ok(crate::stdlib::register_with_config(&mut jinja, config)),
         None => crate::stdlib::register(&mut jinja),
-    };
+    }?;
 
     if let Some(vars_value) = doc.get("vars") {
         let vars = vars_value
