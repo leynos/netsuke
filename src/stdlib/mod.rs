@@ -47,7 +47,7 @@ pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
 /// let mut env = Environment::new();
 /// let _state = stdlib::register_with_config(&mut env, StdlibConfig::new(root));
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StdlibConfig {
     workspace_root: Arc<Dir>,
     fetch_cache_relative: Utf8PathBuf,
@@ -76,7 +76,7 @@ impl StdlibConfig {
     #[must_use]
     pub fn new(workspace_root: Dir) -> Self {
         let default = Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR);
-        // Safety: the constant is static and validated for defence in depth.
+        // Rationale: the constant is static and validated for defence in depth.
         Self::validate_cache_relative(&default).expect("default fetch cache path should be valid");
         Self {
             workspace_root: Arc::new(workspace_root),
@@ -129,15 +129,6 @@ impl StdlibConfig {
             );
         }
         Ok(())
-    }
-}
-
-impl Clone for StdlibConfig {
-    fn clone(&self) -> Self {
-        Self {
-            workspace_root: Arc::clone(&self.workspace_root),
-            fetch_cache_relative: self.fetch_cache_relative.clone(),
-        }
     }
 }
 

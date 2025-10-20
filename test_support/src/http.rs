@@ -57,52 +57,7 @@ pub fn spawn_http_server(body: impl Into<String>) -> (String, HttpServer) {
         .expect("set listener non-blocking");
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
-    let handle = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    stream
-                        .set_nonblocking(true)
-                        .expect("set stream non-blocking");
-                    let mut buf = [0u8; 512];
-                    let read_deadline = Instant::now() + Duration::from_millis(500);
-                    let bytes_read = loop {
-                        match stream.read(&mut buf) {
-                            Ok(n) => {
-                                if n > 0 {
-                                    break n;
-                                }
-                                break 0;
-                            }
-                            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                                if Instant::now() >= read_deadline {
-                                    break 0;
-                                }
-                                thread::sleep(Duration::from_millis(5));
-                            }
-                            Err(err) => panic!("failed to read request: {err}"),
-                        }
-                    };
-                    if bytes_read > 0 {
-                        let response = format!(
-                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                            body.len(),
-                            body
-                        );
-                        let _ = stream.write_all(response.as_bytes());
-                    }
-                    break;
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    let timed_out = Instant::now() >= deadline;
-                    assert!(!timed_out, "timed out waiting for fetch test connection");
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => panic!("failed to accept connection: {err}"),
-            }
-        }
-    });
+    let handle = thread::spawn(move || run_http_server(listener, body));
     (
         url,
         HttpServer {
@@ -110,4 +65,59 @@ pub fn spawn_http_server(body: impl Into<String>) -> (String, HttpServer) {
             addr,
         },
     )
+}
+
+fn run_http_server(listener: TcpListener, body: String) {
+    let accept_deadline = Instant::now() + Duration::from_secs(2);
+    let mut stream = accept_connection(&listener, accept_deadline);
+    stream
+        .set_nonblocking(true)
+        .expect("set stream non-blocking");
+    let read_deadline = Instant::now() + Duration::from_millis(500);
+    let bytes_read = read_request(&mut stream, read_deadline);
+    if bytes_read > 0 {
+        write_response(&mut stream, &body);
+    }
+}
+
+fn accept_connection(listener: &TcpListener, deadline: Instant) -> TcpStream {
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                assert!(
+                    Instant::now() < deadline,
+                    "timed out waiting for fetch test connection"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(err) => panic!("failed to accept connection: {err}"),
+        }
+    }
+}
+
+fn read_request(stream: &mut TcpStream, deadline: Instant) -> usize {
+    let mut buf = [0u8; 512];
+    loop {
+        match stream.read(&mut buf) {
+            Ok(0) => return 0,
+            Ok(n) => return n,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    return 0;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(err) => panic!("failed to read request: {err}"),
+        }
+    }
+}
+
+fn write_response(stream: &mut TcpStream, body: &str) {
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let _ = stream.write_all(response.as_bytes());
 }
