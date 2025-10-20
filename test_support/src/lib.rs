@@ -4,6 +4,8 @@
 //! - creating fake executables for process-related tests
 //! - manipulating PATH safely (PathGuard)
 //! - serialising environment mutation across tests (EnvLock)
+//! - computing SHA-256 hashes for cache keys (hash module)
+//! - spawning lightweight HTTP servers for network tests (http module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.

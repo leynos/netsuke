@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::{collections::HashMap, ffi::OsString, net::TcpStream};
+use std::{collections::HashMap, ffi::OsString};
 use test_support::{PathGuard, env::restore_many, http};
 
 /// Shared state for Cucumber scenarios.
@@ -71,7 +71,9 @@ impl CliWorld {
 
     /// Returns the host component of the active stdlib HTTP fixture URL.
     ///
-    /// The caller uses the host to unblock the listener during teardown.
+    /// The caller verifies that the URL exposes a host suitable for
+    /// cooperative shutdown; [`HttpServer::join`](test_support::http::HttpServer::join)
+    /// performs the actual unblocking internally.
     fn extract_host_from_stdlib_url(&self) -> Option<&str> {
         self.stdlib_url
             .as_deref()
@@ -92,8 +94,7 @@ impl CliWorld {
             return;
         };
 
-        if let Some(host) = self.extract_host_from_stdlib_url() {
-            let _ = TcpStream::connect(host);
+        if self.extract_host_from_stdlib_url().is_some() {
             let _ = server.join();
             self.stdlib_url = None;
             return;
