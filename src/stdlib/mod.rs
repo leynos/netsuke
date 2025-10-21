@@ -28,6 +28,7 @@ use std::{
 
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
+/// Default relative path for the fetch cache within the workspace.
 pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
 
 /// Configuration for registering Netsuke's standard library helpers.
@@ -103,6 +104,7 @@ impl StdlibConfig {
         &self.fetch_cache_relative
     }
 
+    /// Consume the configuration and produce a `NetworkConfig` for the network module.
     pub(crate) fn network_config(self) -> NetworkConfig {
         NetworkConfig {
             cache_root: self.workspace_root,
@@ -140,6 +142,7 @@ impl Default for StdlibConfig {
     }
 }
 
+/// Internal configuration passed to the network module for fetch cache initialisation.
 #[derive(Clone)]
 pub(crate) struct NetworkConfig {
     pub(crate) cache_root: Arc<Dir>,

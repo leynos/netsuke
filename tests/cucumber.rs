@@ -95,7 +95,7 @@ impl CliWorld {
         };
 
         if self.extract_host_from_stdlib_url().is_some() {
-            let _ = server.join();
+            server.join().expect("HTTP server thread panicked");
             self.stdlib_url = None;
             return;
         }
