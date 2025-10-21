@@ -14,8 +14,10 @@ use std::{
 /// Join handle for a spawned HTTP fixture.
 ///
 /// The handle joins the underlying thread when dropped to avoid leaking
-/// background work if a test aborts early. Call [`HttpServer::join`] to surface
-/// any panic from the server thread explicitly.
+/// background work if a test aborts early. Drop intentionally suppresses any
+/// panic raised by the server thread so cleanup always completes; callers that
+/// need to detect panics must invoke [`HttpServer::join`] and handle its
+/// [`thread::Result`] instead of relying on the destructor.
 #[derive(Debug)]
 #[must_use]
 pub struct HttpServer {
