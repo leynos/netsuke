@@ -24,7 +24,7 @@ fn run_ok(cmd: &mut Command) -> String {
 fn touch_manifest_ninja_validation() {
     let ninja_check = Command::new("ninja").arg("--version").output();
     if ninja_check.is_err() || !ninja_check.as_ref().expect("spawn ninja").status.success() {
-        eprintln!("skipping test: ninja must be installed for integration tests");
+        tracing::warn!("skipping test: ninja must be installed for integration tests");
         return;
     }
     let manifest_yaml = r#"

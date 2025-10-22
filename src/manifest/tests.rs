@@ -233,7 +233,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let (url, server) = match http::spawn_http_server("workspace-body") {
         Ok(pair) => pair,
         Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
-            eprintln!(
+            tracing::warn!(
                 "Skipping from_path_uses_manifest_directory_for_caches: cannot bind HTTP listener ({err})"
             );
             return Ok(());

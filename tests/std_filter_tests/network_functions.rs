@@ -17,7 +17,7 @@ fn fetch_function_downloads_content() {
     let (url, server) = match http::spawn_http_server("payload") {
         Ok(pair) => pair,
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-            eprintln!(
+            tracing::warn!(
                 "Skipping fetch_function_downloads_content: cannot bind HTTP listener ({err})"
             );
             return;
@@ -48,7 +48,9 @@ fn fetch_function_respects_cache() {
     let (url, server) = match http::spawn_http_server("cached") {
         Ok(pair) => pair,
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-            eprintln!("Skipping fetch_function_respects_cache: cannot bind HTTP listener ({err})");
+            tracing::warn!(
+                "Skipping fetch_function_respects_cache: cannot bind HTTP listener ({err})"
+            );
             return;
         }
         Err(err) => panic!("failed to spawn HTTP server: {err}"),

@@ -24,7 +24,7 @@ pub use paths::*;
 // Re-export redaction helpers for doctests without leaking unused imports in release builds.
 #[cfg_attr(
     not(doctest),
-    allow(unused_imports, reason = "retain doctest re-exports")
+    expect(unused_imports, reason = "retain doctest re-exports")
 )]
 pub use redaction::*;
 

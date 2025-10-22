@@ -9,13 +9,16 @@ use tracing_subscriber::fmt;
 
 fn main() -> ExitCode {
     let cli = Cli::parse_with_default();
-    if cli.verbose {
-        fmt().with_max_level(Level::DEBUG).init();
-    }
+    let max_level = if cli.verbose {
+        Level::DEBUG
+    } else {
+        Level::ERROR
+    };
+    fmt().with_max_level(max_level).init();
     match runner::run(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("{err}");
+            tracing::error!("{err}");
             ExitCode::FAILURE
         }
     }

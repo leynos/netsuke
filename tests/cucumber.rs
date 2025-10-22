@@ -112,7 +112,7 @@ impl CliWorld {
                 self.stdlib_url
             ),
             HttpShutdownMode::Lenient => {
-                eprintln!(
+                tracing::warn!(
                     "Warning: Cannot extract host from stdlib_url; skipping server shutdown to avoid hang. URL: {:?}",
                     self.stdlib_url
                 );
@@ -146,7 +146,9 @@ impl Drop for CliWorld {
 #[tokio::main]
 async fn main() {
     if let Err(err) = TcpListener::bind(("127.0.0.1", 0)) {
-        eprintln!("Skipping Cucumber tests: cannot bind TCP listener on this platform ({err})");
+        tracing::warn!(
+            "Skipping Cucumber tests: cannot bind TCP listener on this platform ({err})"
+        );
         return;
     }
 
@@ -156,7 +158,7 @@ async fn main() {
         if block_device_exists() {
             CliWorld::run("tests/features_unix").await;
         } else {
-            eprintln!("No block device in /dev; skipping Unix file-system features.");
+            tracing::warn!("No block device in /dev; skipping Unix file-system features.");
         }
     }
 }

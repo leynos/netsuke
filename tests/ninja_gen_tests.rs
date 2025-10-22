@@ -18,11 +18,11 @@ use tempfile::{TempDir, tempdir};
 fn skip_if_ninja_unavailable() -> bool {
     match Command::new("ninja").arg("--version").output() {
         Err(_) => {
-            eprintln!("skipping test: ninja not found in PATH");
+            tracing::warn!("skipping test: ninja not found in PATH");
             true
         }
         Ok(output) if !output.status.success() => {
-            eprintln!("skipping test: ninja --version failed");
+            tracing::warn!("skipping test: ninja --version failed");
             true
         }
         Ok(_) => false,
