@@ -110,21 +110,10 @@ fn read_request(stream: &mut TcpStream, deadline: Instant) -> usize {
             Ok(0) => return 0,
             Ok(n) => return n,
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                if !handle_would_block(deadline) {
-                    return 0;
-                }
+                thread::sleep(Duration::from_millis(5));
             }
             Err(err) => panic!("failed to read request: {err}"),
         }
-    }
-}
-
-fn handle_would_block(deadline: Instant) -> bool {
-    if Instant::now() >= deadline {
-        false
-    } else {
-        thread::sleep(Duration::from_millis(5));
-        true
     }
 }
 
