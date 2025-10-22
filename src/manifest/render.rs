@@ -153,30 +153,45 @@ mod tests {
         })
     }
 
+    fn expect_var<'a>(vars: &'a Vars, key: &str) -> &'a str {
+        vars.get(key)
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("expected rendered var '{key}'"))
+    }
+
+    fn expect_string<'a>(value: &'a StringOrList, label: &str) -> &'a str {
+        match value {
+            StringOrList::String(item) => item,
+            other => panic!("expected {label} as string, got {other:?}"),
+        }
+    }
+
+    fn expect_list<'a>(value: &'a StringOrList, label: &str) -> &'a [String] {
+        match value {
+            StringOrList::List(items) => items,
+            other => panic!("expected {label} as list, got {other:?}"),
+        }
+    }
+
+    fn expect_command<'a>(recipe: &'a Recipe, label: &str) -> &'a str {
+        match recipe {
+            Recipe::Command { command } => command,
+            other => panic!("expected {label} command recipe, got {other:?}"),
+        }
+    }
+
     fn assert_rendered_target(target: &Target) {
-        let vars = &target.vars;
-        let message = vars
-            .get("message")
-            .and_then(|v| v.as_str())
-            .expect("rendered message");
-        assert_eq!(message, "hello world");
-        match &target.name {
-            StringOrList::String(s) => assert_eq!(s, "hello world!"),
-            other => panic!("expected string name, got {other:?}"),
-        }
-        let rendered_sources = match &target.sources {
-            StringOrList::List(items) => items.clone(),
-            other => panic!("expected list sources, got {other:?}"),
-        };
-        assert_eq!(rendered_sources, vec!["world.txt".to_owned()]);
-        match &target.recipe {
-            Recipe::Command { command } => assert_eq!(command, "hello world"),
-            other => panic!("expected command recipe, got {other:?}"),
-        }
-        match &target.order_only_deps {
-            StringOrList::List(items) => assert_eq!(items, &["world.meta".to_owned()]),
-            other => panic!("expected order-only deps list, got {other:?}"),
-        }
+        assert_eq!(expect_var(&target.vars, "message"), "hello world");
+        assert_eq!(expect_string(&target.name, "target name"), "hello world!");
+        assert_eq!(
+            expect_list(&target.sources, "target sources"),
+            ["world.txt"]
+        );
+        assert_eq!(expect_command(&target.recipe, "target"), "hello world");
+        assert_eq!(
+            expect_list(&target.order_only_deps, "order-only deps"),
+            ["world.meta"]
+        );
     }
 
     fn assert_rendered_rule(rule: &Rule) {

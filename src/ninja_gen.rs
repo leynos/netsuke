@@ -179,37 +179,55 @@ struct NamedAction<'a> {
     action: &'a crate::ir::Action,
 }
 
-impl Display for NamedAction<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "rule {}", self.id)?;
+impl NamedAction<'_> {
+    fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.action.recipe {
             Recipe::Command { command } => {
-                debug_assert!(
-                    shlex::split(command).is_some(),
-                    "invalid command: {command}"
-                );
-                writeln!(f, "  command = {command}")?;
+                Self::assert_shell_command(command);
+                writeln!(f, "  command = {command}")
             }
-            Recipe::Script { script } => {
-                // Ninja commands must be single-line. Encode newlines and
-                // reconstruct the original script with `printf %b` piped into
-                // a fresh shell to preserve expected expansions.
-                let escaped = escape_script(script);
-                let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
-                debug_assert!(shlex::split(&cmd).is_some(), "invalid command: {cmd}");
-                writeln!(f, "  command = {cmd}")?;
-            }
-            Recipe::Rule { .. } => {
-                debug_assert!(false, "rules do not reference other rules");
-                return Err(fmt::Error);
-            }
+            Recipe::Script { script } => Self::write_script_command(f, script),
+            Recipe::Rule { .. } => Self::reject_rule_recipe(),
         }
+    }
+
+    fn write_script_command(f: &mut Formatter<'_>, script: &str) -> fmt::Result {
+        // Ninja commands must be single-line. Encode newlines and reconstruct the
+        // original script with `printf %b` piped into a fresh shell to preserve
+        // expected expansions.
+        let escaped = escape_script(script);
+        let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
+        Self::assert_shell_command(&cmd);
+        writeln!(f, "  command = {cmd}")
+    }
+
+    fn write_metadata(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write_kv!(f, "description", &self.action.description);
         write_kv!(f, "depfile", &self.action.depfile);
         write_kv!(f, "deps", &self.action.deps_format);
         write_kv!(f, "pool", &self.action.pool);
         write_flag!(f, "restat", self.action.restat);
         writeln!(f)
+    }
+
+    fn assert_shell_command(command: &str) {
+        debug_assert!(
+            shlex::split(command).is_some(),
+            "invalid command: {command}"
+        );
+    }
+
+    fn reject_rule_recipe() -> fmt::Result {
+        debug_assert!(false, "rules do not reference other rules");
+        Err(fmt::Error)
+    }
+}
+
+impl Display for NamedAction<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "rule {}", self.id)?;
+        self.write_recipe(f)?;
+        self.write_metadata(f)
     }
 }
 

@@ -1,2 +1,2 @@
 # Align with CodeScene’s ceiling
-cognitive-complexity-threshold = 12     # default is 25
+cognitive-complexity-threshold = 9     # default is 25
