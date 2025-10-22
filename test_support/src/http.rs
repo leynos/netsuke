@@ -99,20 +99,26 @@ fn accept_connection(listener: &TcpListener, deadline: Instant) -> TcpStream {
     }
 }
 
-fn read_request(stream: &mut TcpStream, deadline: Instant) -> usize {
+fn try_read(stream: &mut TcpStream) -> Option<usize> {
     let mut buf = [0u8; 512];
-    loop {
-        if Instant::now() >= deadline {
-            return 0;
-        }
+    match stream.read(&mut buf) {
+        Ok(0) => Some(0),
+        Ok(n) => Some(n),
+        Err(err) if err.kind() == io::ErrorKind::WouldBlock => None,
+        Err(err) => panic!("failed to read request: {err}"),
+    }
+}
 
-        match stream.read(&mut buf) {
-            Ok(0) => return 0,
-            Ok(n) => return n,
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+fn read_request(stream: &mut TcpStream, deadline: Instant) -> usize {
+    loop {
+        match try_read(stream) {
+            Some(bytes_read) => return bytes_read,
+            None => {
+                if Instant::now() >= deadline {
+                    return 0;
+                }
                 thread::sleep(Duration::from_millis(5));
             }
-            Err(err) => panic!("failed to read request: {err}"),
         }
     }
 }
