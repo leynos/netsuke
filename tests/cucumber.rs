@@ -4,8 +4,8 @@ use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::{collections::HashMap, ffi::OsString, net::TcpStream, thread::JoinHandle};
-use test_support::{PathGuard, env::restore_many};
+use std::{collections::HashMap, ffi::OsString};
+use test_support::{PathGuard, env::restore_many, http};
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
@@ -41,7 +41,7 @@ pub struct CliWorld {
     /// Quoted command string for stdlib shell scenarios.
     pub stdlib_command: Option<String>,
     /// Last HTTP server fixture started by stdlib steps.
-    pub http_server: Option<JoinHandle<()>>,
+    pub http_server: Option<http::HttpServer>,
     /// URL exposed by the active HTTP server fixture.
     pub stdlib_url: Option<String>,
     /// Snapshot of pre-scenario values for environment variables that were overridden.
@@ -50,7 +50,6 @@ pub struct CliWorld {
 }
 
 mod steps;
-use steps::stdlib_steps::spawn_http_server;
 
 #[derive(Copy, Clone)]
 enum HttpShutdownMode {
@@ -61,9 +60,9 @@ enum HttpShutdownMode {
 impl CliWorld {
     pub(crate) fn start_http_server(&mut self, body: String) {
         self.shutdown_http_server_with(HttpShutdownMode::Strict);
-        let (url, handle) = spawn_http_server(body);
+        let (url, server) = http::spawn_http_server(body);
         self.stdlib_url = Some(url);
-        self.http_server = Some(handle);
+        self.http_server = Some(server);
     }
 
     pub(crate) fn shutdown_http_server(&mut self) {
@@ -72,7 +71,9 @@ impl CliWorld {
 
     /// Returns the host component of the active stdlib HTTP fixture URL.
     ///
-    /// The caller uses the host to unblock the listener during teardown.
+    /// The caller verifies that the URL exposes a host suitable for
+    /// cooperative shutdown; [`HttpServer::join`](test_support::http::HttpServer::join)
+    /// performs the actual unblocking internally.
     fn extract_host_from_stdlib_url(&self) -> Option<&str> {
         self.stdlib_url
             .as_deref()
@@ -88,14 +89,13 @@ impl CliWorld {
     }
 
     fn shutdown_http_server_with(&mut self, mode: HttpShutdownMode) {
-        let Some(handle) = self.http_server.take() else {
+        let Some(server) = self.http_server.take() else {
             self.stdlib_url = None;
             return;
         };
 
-        if let Some(host) = self.extract_host_from_stdlib_url() {
-            let _ = TcpStream::connect(host);
-            let _ = handle.join();
+        if self.extract_host_from_stdlib_url().is_some() {
+            server.join().expect("HTTP server thread panicked");
             self.stdlib_url = None;
             return;
         }
@@ -110,7 +110,7 @@ impl CliWorld {
                     "Warning: Cannot extract host from stdlib_url; skipping server shutdown to avoid hang. URL: {:?}",
                     self.stdlib_url
                 );
-                drop(handle);
+                drop(server);
             }
         }
         self.stdlib_url = None;

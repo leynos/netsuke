@@ -9,16 +9,12 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::{given, then, when};
 use minijinja::{Environment, context, value::Value};
-use netsuke::stdlib;
+use netsuke::stdlib::{self, StdlibConfig};
 use std::ffi::OsStr;
-use std::{
-    io::{Read, Write},
-    net::TcpListener,
-    thread,
-};
 use test_support::{
     command_helper::{compile_failure_helper, compile_uppercase_helper},
     env::set_var,
+    hash,
 };
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
@@ -103,27 +99,6 @@ pub(crate) fn server_host(url: &str) -> Option<&str> {
     extract_host_from_url(url)
 }
 
-pub(crate) fn spawn_http_server(body: String) -> (String, thread::JoinHandle<()>) {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind http listener");
-    let addr = listener.local_addr().expect("local addr");
-    let url = format!("http://{addr}");
-    let handle = thread::spawn(move || {
-        if let Ok((mut stream, _)) = listener.accept() {
-            let mut buf = [0u8; 512];
-            let bytes_read = stream.read(&mut buf).unwrap_or(0);
-            if bytes_read > 0 {
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = stream.write_all(response.as_bytes());
-            }
-        }
-    });
-    (url, handle)
-}
-
 fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
     if let Some(root) = &world.stdlib_root {
         return root.clone();
@@ -145,8 +120,11 @@ fn ensure_workspace(world: &mut CliWorld) -> Utf8PathBuf {
 }
 
 fn render_template_with_context(world: &mut CliWorld, template: &TemplateContent, ctx: Value) {
+    let root = ensure_workspace(world);
     let mut env = Environment::new();
-    let state = stdlib::register(&mut env);
+    let workspace = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
+    let config = StdlibConfig::new(workspace);
+    let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
     world.stdlib_state = Some(state.clone());
     let render = env.render_str(template.as_str(), ctx);
@@ -386,6 +364,24 @@ fn assert_stdlib_pure(world: &mut CliWorld) {
         .as_ref()
         .expect("stdlib state should be initialised");
     assert!(!state.is_impure(), "expected template to remain pure");
+}
+
+#[then("the stdlib workspace contains the fetch cache for stdlib url")]
+fn assert_fetch_cache_present(world: &mut CliWorld) {
+    let root = world
+        .stdlib_root
+        .as_ref()
+        .expect("expected stdlib workspace root");
+    let url = world
+        .stdlib_url
+        .as_ref()
+        .expect("expected stdlib url for cache check");
+    let key = hash::sha256_hex(url.as_bytes());
+    let cache_path = root.join(".netsuke").join("fetch").join(key);
+    assert!(
+        std::fs::metadata(cache_path.as_std_path()).is_ok(),
+        "expected fetch cache at {cache_path}",
+    );
 }
 
 #[then("the stdlib output equals the workspace root")]

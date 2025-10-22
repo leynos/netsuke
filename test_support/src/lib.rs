@@ -4,6 +4,8 @@
 //! - creating fake executables for process-related tests
 //! - manipulating PATH safely (PathGuard)
 //! - serialising environment mutation across tests (EnvLock)
+//! - computing SHA-256 hashes for cache keys (hash module)
+//! - spawning lightweight HTTP servers for network tests (http module)
 //!
 //! All items are intended for use in tests within this workspace; avoid using
 //! them in production code.
@@ -16,7 +18,11 @@ pub mod env;
 pub mod env_guard;
 pub mod env_lock;
 pub mod env_var_guard;
+pub mod hash;
+pub mod http;
 pub mod path_guard;
+/// Re-export the SHA-256 helper for concise call sites.
+pub use hash::sha256_hex;
 /// Re-export of [`PathGuard`] for crate-level ergonomics in tests.
 pub use path_guard::PathGuard;
 

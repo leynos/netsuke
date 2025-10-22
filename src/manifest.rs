@@ -18,8 +18,10 @@
 //! fail with a [`ManifestError::Parse`] diagnostic, matching the Jinja context
 //! semantics and preventing ambiguous variable lookup.
 
-use crate::ast::NetsukeManifest;
-use anyhow::{Context, Result};
+use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
+use anyhow::{Context, Result, anyhow};
+use camino::Utf8PathBuf;
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
 use std::{fs, path::Path};
@@ -84,7 +86,11 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
 /// # Errors
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
-fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
+fn from_str_named(
+    yaml: &str,
+    name: &ManifestName,
+    stdlib_config: Option<StdlibConfig>,
+) -> Result<NetsukeManifest> {
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
             source: map_yaml_error(e, &ManifestSource::from(yaml), name),
@@ -95,7 +101,10 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
     // Expose custom helpers to templates.
     jinja.add_function("env", |name: String| env_var(&name));
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
-    let _stdlib_state = crate::stdlib::register(&mut jinja);
+    let _stdlib_state = match stdlib_config {
+        Some(config) => Ok(crate::stdlib::register_with_config(&mut jinja, config)),
+        None => crate::stdlib::register(&mut jinja),
+    }?;
 
     if let Some(vars_value) = doc.get("vars") {
         let vars = vars_value
@@ -133,7 +142,7 @@ fn from_str_named(yaml: &str, name: &ManifestName) -> Result<NetsukeManifest> {
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    from_str_named(yaml, &ManifestName::new("Netsukefile"))
+    from_str_named(yaml, &ManifestName::new("Netsukefile"), None)
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
@@ -146,8 +155,33 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
     let data = fs::read_to_string(path_ref)
         .with_context(|| format!("failed to read {}", path_ref.display()))?;
     let name = ManifestName::new(path_ref.display().to_string());
-    from_str_named(&data, &name)
+    let config = stdlib_config_for_manifest(path_ref)?;
+    from_str_named(&data, &name, Some(config))
 }
 
 #[cfg(test)]
 mod tests;
+
+fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let manifest_label = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or_else(|| path.display().to_string(), str::to_owned);
+    let resolved = fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf());
+    let workspace_display = resolved.display().to_string();
+    let workspace = Utf8PathBuf::from_path_buf(resolved).map_err(|_| {
+        anyhow!(
+            "manifest workspace directory '{workspace_display}' for manifest {manifest_label} contains non-UTF-8 components"
+        )
+    })?;
+    let dir = Dir::open_ambient_dir(&workspace, ambient_authority()).with_context(|| {
+        format!(
+            "failed to open manifest workspace directory {workspace} for manifest {manifest_label}"
+        )
+    })?;
+    Ok(StdlibConfig::new(dir))
+}
