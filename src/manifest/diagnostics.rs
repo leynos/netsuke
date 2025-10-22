@@ -15,11 +15,13 @@ use thiserror::Error;
 pub struct ManifestSource(String);
 
 impl ManifestSource {
+    /// Construct a new manifest source buffer from any owned string type.
     #[must_use]
     pub fn new(src: impl Into<String>) -> Self {
         Self(src.into())
     }
 
+    /// View the stored source contents as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -62,11 +64,13 @@ impl std::fmt::Display for ManifestSource {
 pub struct ManifestName(String);
 
 impl ManifestName {
+    /// Construct a diagnostic label describing the manifest being processed.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
+    /// Access the label as a borrowed string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -199,11 +203,13 @@ fn hint_for(err_str: &str, src: &ManifestSource, loc: Option<Location>) -> Optio
 /// assert_eq!(format!("{err}"), "manifest parse error");
 /// ```
 pub enum ManifestError {
+    /// Manifest parsing failed and produced the supplied diagnostic.
     #[error("manifest parse error")]
     #[diagnostic(code(netsuke::manifest::parse))]
     Parse {
         #[source]
         #[diagnostic_source]
+        /// Underlying diagnostic reported by the parser or validator.
         source: Box<dyn Diagnostic + Send + Sync + 'static>,
     },
 }

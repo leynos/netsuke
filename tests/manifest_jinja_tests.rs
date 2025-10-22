@@ -8,19 +8,27 @@ use netsuke::{
 use rstest::{fixture, rstest};
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
-// Domain types for the most frequently used string patterns
+/// Domain-specific environment variables exercised by manifest tests.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EnvVar {
+    /// Environment variable populated to verify successful interpolation.
     TestEnv,
+    /// Environment variable intentionally absent to surface diagnostics.
     TestEnvMissing,
 }
 
+/// Manifest fields asserted repeatedly within the test suite.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FieldName {
+    /// Target output name field.
     Name,
+    /// Recipe source files field.
     Sources,
+    /// Prerequisite dependencies field.
     Deps,
+    /// Order-only dependencies field.
     OrderOnlyDeps,
+    /// Nested rule reference field.
     Rule,
 }
 

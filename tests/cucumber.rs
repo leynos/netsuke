@@ -4,16 +4,21 @@ use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::{collections::HashMap, ffi::OsString};
+use std::{collections::HashMap, ffi::OsString, net::TcpListener};
 use test_support::{PathGuard, env::restore_many, http};
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
 pub struct CliWorld {
+    /// Parsed CLI configuration passed into the runner.
     pub cli: Option<netsuke::cli::Cli>,
+    /// Error message captured when CLI parsing fails.
     pub cli_error: Option<String>,
+    /// Fully parsed manifest for the current scenario.
     pub manifest: Option<netsuke::ast::NetsukeManifest>,
+    /// Error text captured when manifest loading fails.
     pub manifest_error: Option<String>,
+    /// Build graph derived from the active manifest.
     pub build_graph: Option<netsuke::ir::BuildGraph>,
     /// Generated Ninja file content.
     pub ninja: Option<String>,
@@ -60,7 +65,8 @@ enum HttpShutdownMode {
 impl CliWorld {
     pub(crate) fn start_http_server(&mut self, body: String) {
         self.shutdown_http_server_with(HttpShutdownMode::Strict);
-        let (url, server) = http::spawn_http_server(body);
+        let (url, server) =
+            http::spawn_http_server(body).expect("spawn HTTP server for stdlib steps");
         self.stdlib_url = Some(url);
         self.http_server = Some(server);
     }
@@ -139,6 +145,11 @@ impl Drop for CliWorld {
 
 #[tokio::main]
 async fn main() {
+    if let Err(err) = TcpListener::bind(("127.0.0.1", 0)) {
+        eprintln!("Skipping Cucumber tests: cannot bind TCP listener on this platform ({err})");
+        return;
+    }
+
     CliWorld::run("tests/features").await;
     #[cfg(unix)]
     {

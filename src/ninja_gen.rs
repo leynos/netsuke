@@ -12,10 +12,16 @@ use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use thiserror::Error;
 
+/// Errors produced while rendering Ninja manifests.
 #[derive(Debug, Error)]
 pub enum NinjaGenError {
+    /// The build graph referenced an action that was not defined.
     #[error("action '{id}' referenced by build edge was not found")]
-    MissingAction { id: String },
+    MissingAction {
+        /// Identifier of the missing action referenced by a build edge.
+        id: String,
+    },
+    /// Formatting the Ninja output failed.
     #[error("failed to format Ninja output")]
     Format(#[from] fmt::Error),
 }

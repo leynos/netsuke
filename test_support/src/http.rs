@@ -129,44 +129,40 @@ impl Drop for HttpServer {
 /// - `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS`
 ///   (values below 1 ms are clamped to 1 ms to avoid busy-spinning)
 ///
-/// # Panics
-/// See [`spawn_http_server_with_config`] for potential panic conditions.
-pub fn spawn_http_server(body: impl Into<String>) -> (String, HttpServer) {
+/// # Errors
+/// Returns an [`io::Error`] if the listener cannot be bound, switched to
+/// non-blocking mode, queried for its local address, or if the fixture thread
+/// fails to spawn.
+pub fn spawn_http_server(body: impl Into<String>) -> io::Result<(String, HttpServer)> {
     spawn_http_server_with_config(body, HttpServerConfig::from_env())
 }
 
 /// Spawn a single-use HTTP server using the provided configuration.
 ///
-/// # Panics
-///
-/// Panics if:
-/// - binding the listener fails (for example, when ephemeral ports are
-///   exhausted).
-/// - switching the listener or accepted stream to non-blocking mode fails.
-/// - accepting a connection or reading from the socket yields unexpected I/O
-///   errors.
+/// # Errors
+/// Propagates any [`io::Error`] encountered when binding the listener,
+/// switching it to non-blocking mode, querying its local address, or spawning
+/// the fixture thread. Subsequent operations may panic if unexpected I/O
+/// conditions occur while handling the client connection.
 pub fn spawn_http_server_with_config(
     body: impl Into<String>,
     config: HttpServerConfig,
-) -> (String, HttpServer) {
+) -> io::Result<(String, HttpServer)> {
     let body = body.into();
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind HTTP listener");
-    listener
-        .set_nonblocking(true)
-        .expect("set listener non-blocking");
-    let addr = listener.local_addr().expect("local addr");
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    listener.set_nonblocking(true)?;
+    let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
-        .spawn(move || run_http_server(listener, body, config))
-        .expect("spawn http fixture thread");
-    (
+        .spawn(move || run_http_server(listener, body, config))?;
+    Ok((
         url,
         HttpServer {
             handle: Some(handle),
             addr,
         },
-    )
+    ))
 }
 
 fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig) {

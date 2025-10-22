@@ -40,6 +40,7 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
+    /// Optional subcommand to execute; defaults to `build` when omitted.
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

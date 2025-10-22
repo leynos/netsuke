@@ -33,7 +33,9 @@ mod hints;
 mod jinja_macros;
 mod render;
 
+/// JSON representation of a manifest node after YAML and Jinja evaluation.
 pub type ManifestValue = serde_json::Value;
+/// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 
 pub use diagnostics::{

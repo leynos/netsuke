@@ -48,6 +48,16 @@ where
     Ok(actions)
 }
 
+/// Definition of a reusable manifest macro registered with `MiniJinja`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MacroDefinition {
+    /// Full macro signature as accepted by `MiniJinja`.
+    pub signature: String,
+    /// Body of the macro written using YAML block style.
+    pub body: String,
+}
+
 /// Top-level manifest structure parsed from a `Netsukefile`.
 ///
 /// Each field mirrors a key in the YAML manifest. Optional collections default
@@ -69,15 +79,6 @@ where
 /// assert_eq!(manifest.targets.len(), 1);
 /// # Ok(()) }
 /// ```
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct MacroDefinition {
-    /// Full macro signature as accepted by `MiniJinja`.
-    pub signature: String,
-    /// Body of the macro written using YAML block style.
-    pub body: String,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
@@ -138,11 +139,20 @@ pub struct Rule {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
     /// A single shell command.
-    Command { command: String },
+    Command {
+        /// Shell command executed verbatim by Ninja.
+        command: String,
+    },
     /// An embedded multi-line script.
-    Script { script: String },
+    Script {
+        /// Shell script content rendered into a `printf %b` pipeline.
+        script: String,
+    },
     /// Invoke another named rule.
-    Rule { rule: StringOrList },
+    Rule {
+        /// Name or names of rules to execute.
+        rule: StringOrList,
+    },
 }
 
 impl<'de> Deserialize<'de> for Recipe {

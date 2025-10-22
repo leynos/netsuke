@@ -23,17 +23,21 @@ mod process;
 pub use process::doc;
 pub use process::run_ninja;
 
+/// Wrapper around generated Ninja manifest text.
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
 impl NinjaContent {
+    /// Store the provided Ninja manifest string.
     #[must_use]
     pub fn new(content: String) -> Self {
         Self(content)
     }
+    /// Borrow the underlying manifest text.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+    /// Consume the wrapper returning the owned manifest string.
     #[must_use]
     pub fn into_string(self) -> String {
         self.0
@@ -46,14 +50,17 @@ impl NinjaContent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
+    /// Wrap a borrowed list of command-line target names.
     #[must_use]
     pub fn new(targets: &'a [String]) -> Self {
         Self(targets)
     }
+    /// Return the underlying slice of target names.
     #[must_use]
     pub fn as_slice(&self) -> &'a [String] {
         self.0
     }
+    /// Indicate whether no explicit targets were provided.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()

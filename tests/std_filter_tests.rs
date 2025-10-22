@@ -1,3 +1,5 @@
+//! Integration suite covering stdlib filter modules.
+
 #[path = "std_filter_tests/collection_filters.rs"]
 mod collection_filters;
 #[path = "std_filter_tests/command_filters.rs"]

@@ -1,3 +1,5 @@
+//! Behavioural tests for the Netsuke runner and CLI integration.
+
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::{fixture, rstest};

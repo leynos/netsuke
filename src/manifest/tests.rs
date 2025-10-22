@@ -230,7 +230,16 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     fs::create_dir_all(&outside)?;
     let manifest_path = workspace.join("Netsukefile");
 
-    let (url, server) = http::spawn_http_server("workspace-body");
+    let (url, server) = match http::spawn_http_server("workspace-body") {
+        Ok(pair) => pair,
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            eprintln!(
+                "Skipping from_path_uses_manifest_directory_for_caches: cannot bind HTTP listener ({err})"
+            );
+            return Ok(());
+        }
+        Err(err) => return Err(err.into()),
+    };
     let manifest_yaml = concat!(
         "netsuke_version: \"1.0.0\"\n",
         "targets:\n",

@@ -1,6 +1,6 @@
 //! Tests for stdlib network helpers covering fetch caching and failure paths.
 
-use std::fs;
+use std::{fs, io};
 
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -14,7 +14,16 @@ use test_support::{hash, http};
 
 #[rstest]
 fn fetch_function_downloads_content() {
-    let (url, server) = http::spawn_http_server("payload");
+    let (url, server) = match http::spawn_http_server("payload") {
+        Ok(pair) => pair,
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            eprintln!(
+                "Skipping fetch_function_downloads_content: cannot bind HTTP listener ({err})"
+            );
+            return;
+        }
+        Err(err) => panic!("failed to spawn HTTP server: {err}"),
+    };
     let (mut env, state) = stdlib_env_with_state();
     state.reset_impure();
     env.add_template("fetch", "{{ fetch(url) }}")
@@ -36,7 +45,14 @@ fn fetch_function_respects_cache() {
     let temp_dir = tempdir().expect("tempdir");
     let temp_root =
         Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf()).expect("utf8 temp path");
-    let (url, server) = http::spawn_http_server("cached");
+    let (url, server) = match http::spawn_http_server("cached") {
+        Ok(pair) => pair,
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            eprintln!("Skipping fetch_function_respects_cache: cannot bind HTTP listener ({err})");
+            return;
+        }
+        Err(err) => panic!("failed to spawn HTTP server: {err}"),
+    };
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority()).expect("workspace");
     let config = StdlibConfig::new(workspace);
     let (mut env, state) = stdlib_env_with_config(config);
