@@ -1,4 +1,5 @@
 //! Tests for shell quoting of command substitutions.
+
 use netsuke::{ast::Recipe, ir::BuildGraph, manifest};
 use rstest::rstest;
 

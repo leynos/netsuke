@@ -123,12 +123,14 @@ fn byte_index_components(src: &str, line: u64, column: u64) -> usize {
     let mut offset = 0usize;
     for (idx, segment) in src.split_inclusive('\n').enumerate() {
         if idx == target_line {
-            let line = segment.strip_suffix('\n').unwrap_or(segment);
-            let line = line.strip_suffix('\r').unwrap_or(line);
-            let column_offset = line
+            let without_newline = segment.strip_suffix('\n').unwrap_or(segment);
+            let cleaned_line = without_newline
+                .strip_suffix('\r')
+                .unwrap_or(without_newline);
+            let column_offset = cleaned_line
                 .char_indices()
                 .nth(target_column)
-                .map_or(line.len(), |(byte_idx, _)| byte_idx);
+                .map_or(cleaned_line.len(), |(byte_idx, _)| byte_idx);
             return offset + column_offset;
         }
         offset += segment.len();
@@ -171,9 +173,11 @@ struct YamlDiagnostic {
     message: String,
 }
 
-fn has_tab_indent(src: &ManifestSource, loc: Option<Location>) -> bool {
-    let Some(loc) = loc else { return false };
-    let line_idx = usize::try_from(loc.line().saturating_sub(1)).unwrap_or(usize::MAX);
+fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
+    let Some(actual_loc) = location else {
+        return false;
+    };
+    let line_idx = usize::try_from(actual_loc.line().saturating_sub(1)).unwrap_or(usize::MAX);
     let line = src.as_ref().lines().nth(line_idx).unwrap_or("");
     line.chars()
         .take_while(|c| c.is_whitespace())
@@ -238,7 +242,7 @@ pub fn map_yaml_error(
     }
 
     Box::new(YamlDiagnostic {
-        src: NamedSource::new(name.as_ref(), src.as_ref().to_string()),
+        src: NamedSource::new(name.as_ref(), src.as_ref().to_owned()),
         span,
         help: hint,
         source: err,

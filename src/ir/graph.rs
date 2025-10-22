@@ -126,7 +126,7 @@ pub enum IrGenError {
     /// if let IrGenError::MultipleRules { rules, .. } = err {
     ///     assert_eq!(
     ///         rules,
-    ///         vec!["c".to_string(), "cpp".to_string()]
+    ///         vec!["c".to_owned(), "cpp".to_owned()]
     ///     );
     /// }
     /// ```
@@ -168,7 +168,7 @@ pub enum IrGenError {
     /// if let IrGenError::DuplicateOutput { outputs } = err {
     ///     assert_eq!(
     ///         outputs,
-    ///         vec!["obj.o".to_string()]
+    ///         vec!["obj.o".to_owned()]
     ///     );
     /// }
     /// ```

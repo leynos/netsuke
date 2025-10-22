@@ -107,9 +107,9 @@ impl BuildGraph {
             cycle,
             missing_dependencies,
         } = cycle::analyse(&self.targets);
-        if let Some(cycle) = cycle {
+        if let Some(detected_cycle) = cycle {
             return Err(IrGenError::CircularDependency {
-                cycle,
+                cycle: detected_cycle,
                 missing_dependencies,
             });
         }
@@ -124,7 +124,7 @@ fn register_action(
     inputs: &[Utf8PathBuf],
     outputs: &[Utf8PathBuf],
 ) -> Result<String, IrGenError> {
-    let recipe = match recipe {
+    let resolved_recipe = match recipe {
         Recipe::Command { command } => {
             let interpolated = interpolate_command(&command, inputs, outputs)?;
             Recipe::Command {
@@ -134,7 +134,7 @@ fn register_action(
         other => other,
     };
     let action = Action {
-        recipe,
+        recipe: resolved_recipe,
         description,
         depfile: None,
         deps_format: None,
@@ -183,12 +183,12 @@ fn resolve_rule(
             let mut rules = to_string_vec(rule);
             if rules.is_empty() {
                 Err(IrGenError::EmptyRule {
-                    target_name: target_name.to_string(),
+                    target_name: target_name.to_owned(),
                 })
             } else {
                 rules.sort();
                 Err(IrGenError::MultipleRules {
-                    target_name: target_name.to_string(),
+                    target_name: target_name.to_owned(),
                     rules,
                 })
             }
@@ -198,8 +198,8 @@ fn resolve_rule(
                 .get(name)
                 .cloned()
                 .ok_or_else(|| IrGenError::RuleNotFound {
-                    target_name: target_name.to_string(),
-                    rule_name: name.to_string(),
+                    target_name: target_name.to_owned(),
+                    rule_name: name.to_owned(),
                 })
         },
     )

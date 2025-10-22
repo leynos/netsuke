@@ -149,20 +149,28 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
         let reader = BufReader::new(stdout);
         let mut handle = io::stdout();
         for line in reader.lines().map_while(Result::ok) {
-            let _ = writeln!(handle, "{line}");
+            if writeln!(handle, "{line}").is_err() {
+                break;
+            }
         }
     });
     let err_handle = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         let mut handle = io::stderr();
         for line in reader.lines().map_while(Result::ok) {
-            let _ = writeln!(handle, "{line}");
+            if writeln!(handle, "{line}").is_err() {
+                break;
+            }
         }
     });
 
     let status = child.wait()?;
-    let _ = out_handle.join();
-    let _ = err_handle.join();
+    if let Err(err) = out_handle.join() {
+        tracing::warn!("stdout forwarding thread panicked: {err:?}");
+    }
+    if let Err(err) = err_handle.join() {
+        tracing::warn!("stderr forwarding thread panicked: {err:?}");
+    }
     Ok(status)
 }
 

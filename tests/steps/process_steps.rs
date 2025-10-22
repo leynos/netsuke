@@ -1,4 +1,9 @@
 //! Step definitions for Ninja process execution.
+#![allow(
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    reason = "Cucumber step macros rebind capture names"
+)]
 
 use crate::CliWorld;
 use camino::Utf8Path;
@@ -27,8 +32,9 @@ fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, nin
 
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
-fn install_fake_ninja(world: &mut CliWorld, code: i32) {
-    let (dir, path) = fake_ninja(u8::try_from(code).expect("exit code must be between 0 and 255"));
+fn install_fake_ninja(world: &mut CliWorld, exit_code: i32) {
+    let (dir, path) =
+        fake_ninja(u8::try_from(exit_code).expect("exit code must be between 0 and 255"));
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
 }
@@ -132,14 +138,14 @@ fn command_should_fail(world: &mut CliWorld) {
     reason = "cucumber step parameters require owned Strings"
 )]
 #[then(expr = "the command should fail with error {string}")]
-fn command_should_fail_with_error(world: &mut CliWorld, expected: String) {
+fn command_should_fail_with_error(world: &mut CliWorld, expected_fragment: String) {
     assert_eq!(world.run_status, Some(false));
     let actual = world
         .run_error
         .as_ref()
         .expect("Expected an error message, but none was found");
     assert!(
-        actual.contains(&expected),
-        "Expected error message to contain '{expected}', but got '{actual}'",
+        actual.contains(&expected_fragment),
+        "Expected error message to contain '{expected_fragment}', but got '{actual}'",
     );
 }

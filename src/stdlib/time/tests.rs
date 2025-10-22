@@ -71,12 +71,12 @@ fn now_applies_custom_offset() {
 fn now_rejects_invalid_offset(#[case] offset: &str) {
     let env = build_env();
     let expr = format!("now(offset='{offset}')");
-    let err = env
+    let eval_result = env
         .compile_expression(&expr)
         .expect("compile expression")
         .eval(context! {});
-    let err = err.expect_err("invalid offset should error");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    let evaluation_error = eval_result.expect_err("invalid offset should error");
+    assert_eq!(evaluation_error.kind(), ErrorKind::InvalidOperation);
 }
 
 #[rstest]
@@ -130,12 +130,12 @@ fn timedelta_supports_negative_values(#[case] expr: &str, #[case] expected: Dura
 #[rstest]
 fn timedelta_detects_overflow() {
     let env = build_env();
-    let err = env
+    let eval_result = env
         .compile_expression("timedelta(days=9223372036854775807)")
         .expect("compile expression")
         .eval(context! {});
-    let err = err.expect_err("overflow should error");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    let evaluation_error = eval_result.expect_err("overflow should error");
+    assert_eq!(evaluation_error.kind(), ErrorKind::InvalidOperation);
 }
 
 #[rstest]

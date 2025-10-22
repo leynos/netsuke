@@ -2,6 +2,7 @@
 //!
 //! This module exercises the command-line interface defined in [`netsuke::cli`]
 //! using `rstest` for parameterised coverage of success and error scenarios.
+
 use clap::Parser;
 use clap::error::ErrorKind;
 use netsuke::cli::{BuildArgs, Cli, Commands};

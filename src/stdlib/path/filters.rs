@@ -22,9 +22,9 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
          count: Option<usize>,
          sep: Option<String>|
          -> Result<String, Error> {
-            let count = count.unwrap_or(1);
-            let sep = sep.unwrap_or_else(|| ".".to_string());
-            path_utils::with_suffix(Utf8Path::new(&raw), &suffix, count, &sep)
+            let count_value = count.unwrap_or(1);
+            let sep_value = sep.unwrap_or_else(|| ".".to_owned());
+            path_utils::with_suffix(Utf8Path::new(&raw), &suffix, count_value, &sep_value)
                 .map(camino::Utf8PathBuf::into_string)
         },
     );
@@ -47,8 +47,8 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter(
         "contents",
         |raw: String, encoding: Option<String>| -> Result<String, Error> {
-            let encoding = encoding.unwrap_or_else(|| "utf-8".to_string());
-            match encoding.to_ascii_lowercase().as_str() {
+            let chosen_encoding = encoding.unwrap_or_else(|| "utf-8".to_owned());
+            match chosen_encoding.to_ascii_lowercase().as_str() {
                 "utf-8" | "utf8" => fs_utils::read_utf8(Utf8Path::new(&raw)),
                 other => Err(Error::new(
                     ErrorKind::InvalidOperation,
@@ -63,16 +63,16 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter(
         "hash",
         |raw: String, alg: Option<String>| -> Result<String, Error> {
-            let alg = alg.unwrap_or_else(|| "sha256".to_string());
-            hash_utils::compute_hash(Utf8Path::new(&raw), &alg)
+            let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
+            hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm)
         },
     );
     env.add_filter(
         "digest",
         |raw: String, len: Option<usize>, alg: Option<String>| -> Result<String, Error> {
-            let len = len.unwrap_or(8);
-            let alg = alg.unwrap_or_else(|| "sha256".to_string());
-            hash_utils::compute_digest(Utf8Path::new(&raw), len, &alg)
+            let digest_len = len.unwrap_or(8);
+            let algorithm = alg.unwrap_or_else(|| "sha256".to_owned());
+            hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm)
         },
     );
 }

@@ -1,4 +1,9 @@
 //! Step definitions for manifest feature tests.
+#![allow(
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    reason = "Cucumber step macros rebind capture names"
+)]
 
 use crate::CliWorld;
 use cucumber::{given, then, when};
@@ -305,7 +310,7 @@ fn assert_target_index(world: &CliWorld, index: usize, expected: usize) {
 fn assert_list_contains(value: &StringOrList, expected: &str) {
     match value {
         StringOrList::List(list) => {
-            assert!(list.contains(&expected.to_string()), "missing {expected}");
+            assert!(list.contains(&expected.to_owned()), "missing {expected}");
         }
         StringOrList::String(s) => {
             assert_eq!(s, expected);
@@ -362,9 +367,9 @@ fn target_has_dep(world: &mut CliWorld, index: usize, dep: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
-fn target_has_order_only_dep(world: &mut CliWorld, index: usize, dep: String) {
-    let target = get_target(world, index);
-    assert_list_contains(&target.order_only_deps, &dep);
+fn target_has_order_only_dep(world: &mut CliWorld, target_index: usize, expected_dep: String) {
+    let target = get_target(world, target_index);
+    assert_list_contains(&target.order_only_deps, &expected_dep);
 }
 
 #[then(expr = "the target {int} script is {string}")]
@@ -372,10 +377,10 @@ fn target_has_order_only_dep(world: &mut CliWorld, index: usize, dep: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
-fn target_script_is(world: &mut CliWorld, index: usize, script: String) {
-    let target = get_target(world, index);
+fn target_script_is(world: &mut CliWorld, target_index: usize, expected_script: String) {
+    let target = get_target(world, target_index);
     if let Recipe::Script { script: actual } = &target.recipe {
-        assert_eq!(actual, &script);
+        assert_eq!(actual, &expected_script);
     } else {
         panic!("Expected script recipe, got: {:?}", target.recipe);
     }
@@ -386,11 +391,11 @@ fn target_script_is(world: &mut CliWorld, index: usize, script: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber step requires owned String"
 )]
-fn target_rule_is(world: &mut CliWorld, index: usize, rule_name: String) {
-    let target = get_target(world, index);
+fn target_rule_is(world: &mut CliWorld, target_index: usize, expected_rule_name: String) {
+    let target = get_target(world, target_index);
     if let Recipe::Rule { rule } = &target.recipe {
         let actual = get_string_from_string_or_list(rule, "rule");
-        assert_eq!(actual, rule_name);
+        assert_eq!(actual, expected_rule_name);
     } else {
         panic!("Expected rule recipe, got: {:?}", target.recipe);
     }

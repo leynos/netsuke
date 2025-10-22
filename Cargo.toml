@@ -76,28 +76,28 @@ integer_division_remainder_used     = "deny"
 panic_in_result_fn                  = "deny"
 unreachable                         = "deny"
 
-## 4. portability
-#host_endian_bytes                   = "deny"
-#little_endian_bytes                 = "deny"
-#big_endian_bytes                    = "deny"
-#
-## 5. nursery idiom polish
-#let_underscore_must_use             = "deny"
-#or_fun_call                         = "deny"
-#option_if_let_else                  = "deny"
-#self_named_module_files             = "deny"
-#shadow_reuse                        = "deny"
-#shadow_same                         = "deny"
-#shadow_unrelated                    = "deny"
-#str_to_string                       = "deny"
-#string_lit_as_bytes                 = "deny"
+# 4. portability
+host_endian_bytes                   = "deny"
+little_endian_bytes                 = "deny"
+big_endian_bytes                    = "deny"
+
+# 5. nursery idiom polish
+let_underscore_must_use             = "deny"
+or_fun_call                         = "deny"
+option_if_let_else                  = "deny"
+self_named_module_files             = "deny"
+shadow_reuse                        = "deny"
+shadow_same                         = "deny"
+shadow_unrelated                    = "deny"
+str_to_string                       = "deny"
+string_lit_as_bytes                 = "deny"
 #tests_outside_test_module           = "deny"
-#try_err                             = "deny"
-#unneeded_field_pattern              = "deny"
-#use_self                            = "deny"
-#
-## 6. numerical foot-guns
-#float_arithmetic                    = "deny"
+try_err                             = "deny"
+unneeded_field_pattern              = "deny"
+use_self                            = "deny"
+
+# 6. numerical foot-guns
+float_arithmetic                    = "deny"
 
 [lints.rust]
 missing_docs             = "deny"

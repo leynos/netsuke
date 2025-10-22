@@ -40,45 +40,55 @@ targets:
 }
 #[test]
 fn missing_required_fields() {
-    let yaml = r#"
-        targets:
-          - name: hello
-            command: "echo hi"
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            targets:
+              - name: hello
+                command: "echo hi"
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - command: "echo hi"
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - command: "echo hi"
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 }
 
 #[test]
 fn unknown_fields() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            command: "echo hi"
-        extra: 42
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                command: "echo hi"
+            extra: 42
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            command: "echo hi"
-            unexpected: true
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                command: "echo hi"
+                unexpected: true
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 }
 
 #[test]
@@ -105,119 +115,137 @@ fn vars_section_must_be_object() {
 
 #[test]
 fn empty_lists_and_maps() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets: []
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    assert!(manifest.targets.is_empty());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets: []
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        assert!(manifest.targets.is_empty());
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            command: {}
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                command: {}
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            script: {}
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                script: {}
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            rule: {}
-    "#;
-    assert!(parse_manifest(yaml).is_err());
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                rule: {}
+        "#;
+        assert!(parse_manifest(yaml).is_err());
+    }
 }
 
 #[test]
 fn string_or_list_variants() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: hello
-            command: "echo hi"
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let first = manifest.targets.first().expect("target");
-    if let StringOrList::String(name) = &first.name {
-        assert_eq!(name, "hello");
-    } else {
-        panic!("Expected String variant");
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: hello
+                command: "echo hi"
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let first = manifest.targets.first().expect("target");
+        if let StringOrList::String(name) = &first.name {
+            assert_eq!(name, "hello");
+        } else {
+            panic!("Expected String variant");
+        }
     }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name:
-              - hello
-              - world
-            command: "echo hi"
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let first = manifest.targets.first().expect("target");
-    if let StringOrList::List(names) = &first.name {
-        assert_eq!(names, &vec!["hello".to_string(), "world".to_string()]);
-    } else {
-        panic!("Expected List variant");
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name:
+                  - hello
+                  - world
+                command: "echo hi"
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let first = manifest.targets.first().expect("target");
+        if let StringOrList::List(names) = &first.name {
+            assert_eq!(names, &vec!["hello".to_owned(), "world".to_owned()]);
+        } else {
+            panic!("Expected List variant");
+        }
     }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: []
-            command: "echo hi"
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let first = manifest.targets.first().expect("target");
-    if let StringOrList::List(names) = &first.name {
-        assert!(names.is_empty());
-    } else {
-        panic!("Expected List variant");
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: []
+                command: "echo hi"
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let first = manifest.targets.first().expect("target");
+        if let StringOrList::List(names) = &first.name {
+            assert!(names.is_empty());
+        } else {
+            panic!("Expected List variant");
+        }
     }
 }
 
 #[test]
 fn optional_fields() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        rules:
-          - name: compile
-            command: cc
-            description: "Compile"
-            deps: hello
-        targets:
-          - name: hello
-            rule: compile
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let rule = manifest.rules.first().expect("rule");
-    assert_eq!(rule.description.as_deref(), Some("Compile"));
-    match &rule.deps {
-        StringOrList::String(dep) => assert_eq!(dep, "hello"),
-        other => panic!("deps should be String, got: {other:?}"),
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            rules:
+              - name: compile
+                command: cc
+                description: "Compile"
+                deps: hello
+            targets:
+              - name: hello
+                rule: compile
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let rule = manifest.rules.first().expect("rule");
+        assert_eq!(rule.description.as_deref(), Some("Compile"));
+        match &rule.deps {
+            StringOrList::String(dep) => assert_eq!(dep, "hello"),
+            other => panic!("deps should be String, got: {other:?}"),
+        }
     }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        rules:
-          - name: compile
-            command: cc
-        targets:
-          - name: hello
-            rule: compile
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let rule = manifest.rules.first().expect("rule");
-    assert!(rule.description.is_none());
-    assert!(matches!(rule.deps, StringOrList::Empty));
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            rules:
+              - name: compile
+                command: cc
+            targets:
+              - name: hello
+                rule: compile
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let rule = manifest.rules.first().expect("rule");
+        assert!(rule.description.is_none());
+        assert!(matches!(rule.deps, StringOrList::Empty));
+    }
 }
 
 #[rstest]
@@ -250,8 +278,8 @@ fn macro_serialization_with_special_characters_round_trips() {
     let special_body = "Hello \"{{ name }}\"\nLine two with unicode 😀";
 
     let macro_def = MacroDefinition {
-        signature: special_signature.to_string(),
-        body: special_body.to_string(),
+        signature: special_signature.to_owned(),
+        body: special_body.to_owned(),
     };
 
     let serialised = serde_saphyr::to_string(&vec![macro_def.clone()]).expect("serialise macros");
@@ -307,29 +335,33 @@ fn parsing_failures(#[case] yaml: &str) {
 
 #[test]
 fn phony_and_always_flags() {
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: clean
-            command: rm -rf build
-            phony: true
-            always: true
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let target = manifest.targets.first().expect("target");
-    assert!(target.phony);
-    assert!(target.always);
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: clean
+                command: rm -rf build
+                phony: true
+                always: true
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let target = manifest.targets.first().expect("target");
+        assert!(target.phony);
+        assert!(target.always);
+    }
 
-    let yaml = r#"
-        netsuke_version: "1.0.0"
-        targets:
-          - name: clean
-            command: rm -rf build
-    "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    let target = manifest.targets.first().expect("target");
-    assert!(!target.phony);
-    assert!(!target.always);
+    {
+        let yaml = r#"
+            netsuke_version: "1.0.0"
+            targets:
+              - name: clean
+                command: rm -rf build
+        "#;
+        let manifest = parse_manifest(yaml).expect("parse");
+        let target = manifest.targets.first().expect("target");
+        assert!(!target.phony);
+        assert!(!target.always);
+    }
 }
 
 #[rstest]

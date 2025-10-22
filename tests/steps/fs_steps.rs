@@ -1,4 +1,9 @@
 //! Steps for preparing file-system fixtures used in Jinja tests.
+#![allow(
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    reason = "Cucumber step macros rebind capture names"
+)]
 
 use crate::CliWorld;
 use camino::Utf8PathBuf;
@@ -103,7 +108,7 @@ fn setup_environment_variables(
     ];
     for (key, path) in entries {
         let previous = set_var(key, path.as_std_path().as_os_str());
-        world.env_vars.entry(key.to_string()).or_insert(previous);
+        world.env_vars.entry(key.to_owned()).or_insert(previous);
     }
     let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
     world.env_vars.entry("WORKSPACE".into()).or_insert(previous);

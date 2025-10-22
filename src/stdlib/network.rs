@@ -161,7 +161,7 @@ fn hex_string(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         use std::fmt::Write;
-        let _ = write!(out, "{byte:02x}");
+        write!(out, "{byte:02x}").expect("format hex byte");
     }
     out
 }

@@ -64,10 +64,10 @@ fn build_graph_duplicate_action_ids() {
         pool: None,
         restat: false,
     };
-    let prev = graph.actions.insert("a".into(), action1);
-    assert!(prev.is_none());
-    let prev = graph.actions.insert("a".into(), action2);
-    assert!(prev.is_some());
+    let first_insert = graph.actions.insert("a".into(), action1);
+    assert!(first_insert.is_none());
+    let second_insert = graph.actions.insert("a".into(), action2);
+    assert!(second_insert.is_some());
     assert_eq!(graph.actions.len(), 1);
     if let Recipe::Command { command } = &graph.actions.get("a").expect("action").recipe {
         assert_eq!(command, "two");
@@ -97,10 +97,10 @@ fn build_graph_duplicate_targets() {
         phony: false,
         always: true,
     };
-    let prev = graph.targets.insert(Utf8PathBuf::from("out"), edge1);
-    assert!(prev.is_none());
-    let prev = graph.targets.insert(Utf8PathBuf::from("out"), edge2);
-    assert!(prev.is_some());
+    let first_insert = graph.targets.insert(Utf8PathBuf::from("out"), edge1);
+    assert!(first_insert.is_none());
+    let second_insert = graph.targets.insert(Utf8PathBuf::from("out"), edge2);
+    assert!(second_insert.is_some());
     assert_eq!(graph.targets.len(), 1);
     assert!(
         graph

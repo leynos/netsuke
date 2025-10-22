@@ -42,18 +42,18 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
             "macro signature '{signature}' is missing an identifier"
         ));
     }
-    let Some((name, _rest)) = trimmed.split_once('(') else {
+    let Some((name_segment, _rest)) = trimmed.split_once('(') else {
         return Err(anyhow::anyhow!(
             "macro signature '{signature}' must include parameter list"
         ));
     };
-    let name = name.trim();
-    if name.is_empty() {
+    let identifier = name_segment.trim();
+    if identifier.is_empty() {
         return Err(anyhow::anyhow!(
             "macro signature '{signature}' is missing an identifier"
         ));
     }
-    Ok(name.to_string())
+    Ok(identifier.to_owned())
 }
 
 /// Register a single manifest macro in the Jinja environment.
@@ -145,10 +145,10 @@ pub(crate) fn call_macro_value(
 ) -> Result<Value, Error> {
     kwargs.map_or_else(
         || macro_value.call(state, positional),
-        |kwargs| {
+        |macro_kwargs| {
             let mut call_args = Vec::with_capacity(positional.len() + 1);
             call_args.extend_from_slice(positional);
-            call_args.push(Value::from(kwargs));
+            call_args.push(Value::from(macro_kwargs));
             macro_value.call(state, call_args.as_slice())
         },
     )
@@ -192,14 +192,14 @@ pub(crate) fn call_macro_value(
 fn make_macro_fn(
     cache: Arc<MacroCache>,
 ) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
-    move |state, Rest(args), kwargs| {
+    move |state, Rest(args), macro_kwargs| {
         let macro_instance = cache.instance();
         // MiniJinja requires keyword arguments to be appended as a trailing
         // `Kwargs` value within the positional slice. Build that value lazily so
         // we avoid allocating when no keywords were supplied.
         let mut entries: Vec<(String, Value)> = Vec::new();
-        for key in kwargs.args() {
-            let mut value = kwargs.peek::<Value>(key)?;
+        for key in macro_kwargs.args() {
+            let mut value = macro_kwargs.peek::<Value>(key)?;
             if key == "caller" {
                 if value.as_object().is_some() {
                     value = Value::from_object(CallerAdapter::new(state, value));
@@ -210,7 +210,7 @@ fn make_macro_fn(
                     ));
                 }
             }
-            entries.push((key.to_string(), value));
+            entries.push((key.to_owned(), value));
         }
         let maybe_kwargs = if entries.is_empty() {
             None
@@ -259,7 +259,9 @@ impl MacroCache {
     fn prepare(&self, env: &Environment) -> Result<()> {
         if self.instance.get().is_none() {
             let instance = MacroInstance::new(env, &self.template_name, &self.macro_name)?;
-            let _ = self.instance.set(instance);
+            if let Err(returned_instance) = self.instance.set(instance) {
+                drop(returned_instance);
+            }
         }
         Ok(())
     }

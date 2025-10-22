@@ -168,13 +168,13 @@ mod tests {
             StringOrList::List(items) => items.clone(),
             other => panic!("expected list sources, got {other:?}"),
         };
-        assert_eq!(rendered_sources, vec!["world.txt".to_string()]);
+        assert_eq!(rendered_sources, vec!["world.txt".to_owned()]);
         match &target.recipe {
             Recipe::Command { command } => assert_eq!(command, "hello world"),
             other => panic!("expected command recipe, got {other:?}"),
         }
         match &target.order_only_deps {
-            StringOrList::List(items) => assert_eq!(items, &["world.meta".to_string()]),
+            StringOrList::List(items) => assert_eq!(items, &["world.meta".to_owned()]),
             other => panic!("expected order-only deps list, got {other:?}"),
         }
     }
@@ -186,7 +186,7 @@ mod tests {
             other => panic!("expected command recipe, got {other:?}"),
         }
         match &rule.deps {
-            StringOrList::List(items) => assert_eq!(items, &["hello world".to_string()]),
+            StringOrList::List(items) => assert_eq!(items, &["hello world".to_owned()]),
             other => panic!("expected deps list, got {other:?}"),
         }
     }

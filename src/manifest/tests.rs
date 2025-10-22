@@ -35,7 +35,9 @@ impl CurrentDirGuard {
 
 impl Drop for CurrentDirGuard {
     fn drop(&mut self) {
-        let _ = std::env::set_current_dir(&self.original);
+        if let Err(err) = std::env::set_current_dir(&self.original) {
+            tracing::warn!("failed to restore working directory: {err}");
+        }
     }
 }
 
@@ -105,8 +107,8 @@ fn register_macro_handles_arguments(
     mut strict_env: Environment,
 ) {
     let macro_def = MacroDefinition {
-        signature: signature.to_string(),
-        body: body.to_string(),
+        signature: signature.to_owned(),
+        body: body.to_owned(),
     };
     register_macro(&mut strict_env, &macro_def, 0).expect("register");
     let rendered = render_with(&strict_env, template).expect("render");
@@ -132,8 +134,8 @@ fn call_macro_value_supports_kwargs(mut strict_env: Environment) {
 #[rstest]
 fn register_macro_is_reusable(mut strict_env: Environment) {
     let macro_def = MacroDefinition {
-        signature: "echo(text)".to_string(),
-        body: "{{ text }}".to_string(),
+        signature: "echo(text)".to_owned(),
+        body: "{{ text }}".to_owned(),
     };
     register_macro(&mut strict_env, &macro_def, 0).expect("register");
 
@@ -173,9 +175,9 @@ fn register_manifest_macros_rejects_non_string_values(mut strict_env: Environmen
     let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
     let mut doc = ManifestMap::new();
     doc.insert("macros".into(), macros);
-    let doc = ManifestValue::Object(doc);
+    let doc_value = ManifestValue::Object(doc);
 
-    let err = register_manifest_macros(&doc, &mut strict_env)
+    let err = register_manifest_macros(&doc_value, &mut strict_env)
         .expect_err("non-string macro body should fail");
     let msg = err.to_string();
     assert!(msg.contains("macros"), "unexpected error: {msg}");
@@ -204,9 +206,10 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment) {
     let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
     let mut doc = ManifestMap::new();
     doc.insert("macros".into(), macros);
-    let doc = ManifestValue::Object(doc);
+    let doc_value = ManifestValue::Object(doc);
 
-    let err = register_manifest_macros(&doc, &mut strict_env).expect_err("missing macro body");
+    let err =
+        register_manifest_macros(&doc_value, &mut strict_env).expect_err("missing macro body");
     assert!(err.to_string().contains("body"), "{err}");
 }
 

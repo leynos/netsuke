@@ -1,4 +1,9 @@
 //! Step definitions for Ninja file generation scenarios.
+#![allow(
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    reason = "Cucumber step macros rebind capture names"
+)]
 
 use crate::CliWorld;
 use cucumber::{then, when};
@@ -27,12 +32,12 @@ fn generate_ninja(world: &mut CliWorld) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-fn ninja_contains(world: &mut CliWorld, text: String) {
+fn ninja_contains(world: &mut CliWorld, expected_fragment: String) {
     let ninja = world
         .ninja
         .as_ref()
         .expect("ninja content should be available");
-    assert!(ninja.contains(&text));
+    assert!(ninja.contains(&expected_fragment));
 }
 
 #[then(expr = "shlex splitting command {int} yields {string}")]
@@ -40,7 +45,7 @@ fn ninja_contains(world: &mut CliWorld, text: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
+fn ninja_command_tokens(world: &mut CliWorld, command_index: usize, expected_tokens: String) {
     let ninja = world
         .ninja
         .as_ref()
@@ -49,10 +54,12 @@ fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
         .lines()
         .filter(|l| l.trim_start().starts_with("command ="))
         .collect();
-    let line = commands.get(index - 1).expect("command index within range");
+    let line = commands
+        .get(command_index - 1)
+        .expect("command index within range");
     let command = line.trim_start().trim_start_matches("command = ");
     let words = shlex::split(command).expect("split command");
-    let expected: Vec<String> = expected
+    let expected: Vec<String> = expected_tokens
         .split(',')
         .map(|w| w.trim().replace("\\n", "\n"))
         .collect();
@@ -60,8 +67,8 @@ fn ninja_command_tokens(world: &mut CliWorld, index: usize, expected: String) {
 }
 
 #[then(expr = "shlex splitting the command yields {string}")]
-fn ninja_first_command_tokens(world: &mut CliWorld, expected: String) {
-    ninja_command_tokens(world, 2, expected);
+fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: String) {
+    ninja_command_tokens(world, 2, expected_tokens);
 }
 
 #[then(expr = "ninja generation fails with {string}")]
@@ -69,12 +76,12 @@ fn ninja_first_command_tokens(world: &mut CliWorld, expected: String) {
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
-fn ninja_generation_fails(world: &mut CliWorld, text: String) {
+fn ninja_generation_fails(world: &mut CliWorld, expected_fragment: String) {
     let err = world
         .ninja_error
         .as_ref()
         .expect("ninja error should be available");
-    assert!(err.contains(&text));
+    assert!(err.contains(&expected_fragment));
 }
 
 #[then("ninja generation fails mentioning the removed action id")]

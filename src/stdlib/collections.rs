@@ -28,7 +28,7 @@ impl GroupedValues {
         for key in groups.keys() {
             if let Some(label) = key.as_str() {
                 string_keys
-                    .entry(label.to_string())
+                    .entry(label.to_owned())
                     .or_insert_with(|| key.clone());
             }
         }
@@ -117,7 +117,7 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
     if attr.trim().is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "group_by requires a non-empty attribute".to_string(),
+            "group_by requires a non-empty attribute".to_owned(),
         ));
     }
 
@@ -174,7 +174,7 @@ mod tests {
         let ctx = context! { values => vec![1, 1, 2, 2, 3, 1] };
         let result = render_filter("values | uniq", ctx).expect("uniq result");
         let iter = result.try_iter().expect("iter");
-        let collected: Vec<_> = iter.map(|value| value.to_string()).collect();
+        let collected: Vec<_> = iter.map(|value| format!("{value}")).collect();
         assert_eq!(collected, vec!["1", "2", "3"]);
     }
 
@@ -183,7 +183,7 @@ mod tests {
         let ctx = context! { values => vec![vec![vec![1], vec![2]], vec![vec![3]]] };
         let result = render_filter("values | flatten", ctx).expect("flatten result");
         let iter = result.try_iter().expect("iter");
-        let collected: Vec<_> = iter.map(|value| value.to_string()).collect();
+        let collected: Vec<_> = iter.map(|value| format!("{value}")).collect();
         assert_eq!(collected, vec!["1", "2", "3"]);
     }
 

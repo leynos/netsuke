@@ -56,14 +56,14 @@ fn create_glob_error(context: &GlobErrorContext, details: Option<String>) -> Err
             ),
         ),
         GlobErrorType::InvalidPattern => {
-            let detail = details.unwrap_or_else(|| "unknown pattern error".to_string());
+            let detail = details.unwrap_or_else(|| "unknown pattern error".to_owned());
             Error::new(
                 ErrorKind::SyntaxError,
                 format!("invalid glob pattern '{}': {detail}", context.pattern),
             )
         }
         GlobErrorType::IoError => {
-            let detail = details.unwrap_or_else(|| "unknown IO error".to_string());
+            let detail = details.unwrap_or_else(|| "unknown IO error".to_owned());
             let message = if detail.starts_with("glob ") {
                 detail
             } else {
@@ -93,7 +93,7 @@ fn process_glob_entry(
                         position: pattern.raw.len(),
                         error_type: GlobErrorType::IoError,
                     },
-                    Some("glob matched a non-UTF-8 path".to_string()),
+                    Some("glob matched a non-UTF-8 path".to_owned()),
                 )
             })?;
             let metadata = fetch_metadata(root, &utf_path).map_err(|err| {
@@ -403,7 +403,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     };
 
     let mut pattern_state = GlobPattern {
-        raw: pattern.to_string(),
+        raw: pattern.to_owned(),
         normalized: None,
     };
 

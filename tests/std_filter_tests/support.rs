@@ -21,9 +21,10 @@ pub(crate) fn register_template(
     name: impl Into<String>,
     source: impl Into<String>,
 ) {
-    let name = name.into();
-    let source = source.into();
-    env.add_template_owned(name, source).expect("template");
+    let template_name = name.into();
+    let template_source = source.into();
+    env.add_template_owned(template_name, template_source)
+        .expect("template");
 }
 
 pub(crate) fn stdlib_env_with_config(config: StdlibConfig) -> (Environment<'static>, StdlibState) {

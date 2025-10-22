@@ -343,10 +343,16 @@ fn cleanup_readers(
     stderr_reader: &mut Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
     stdin_handle: &mut Option<thread::JoinHandle<io::Result<()>>>,
 ) {
-    let _ = join_reader(stdout_reader.take());
-    let _ = join_reader(stderr_reader.take());
-    if let Some(handle) = stdin_handle.take() {
-        let _ = handle.join();
+    if let Err(err) = join_reader(stdout_reader.take()) {
+        tracing::warn!("failed to join stdout reader: {err}");
+    }
+    if let Err(err) = join_reader(stderr_reader.take()) {
+        tracing::warn!("failed to join stderr reader: {err}");
+    }
+    if let Some(handle) = stdin_handle.take()
+        && let Err(join_err) = handle.join()
+    {
+        tracing::warn!("stdin writer thread panicked: {join_err:?}");
     }
 }
 
@@ -406,7 +412,11 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
                 "command '{command}' in template '{template}' failed: {source} (command closed input early)"
             );
             if let Some(code) = status {
-                let _ = FmtWrite::write_fmt(&mut msg, format_args!("; exited with status {code}"));
+                if let Err(fmt_err) =
+                    FmtWrite::write_fmt(&mut msg, format_args!("; exited with status {code}"))
+                {
+                    tracing::warn!("failed to append exit status: {fmt_err}");
+                }
             } else {
                 msg.push_str("; terminated by signal");
             }
@@ -465,7 +475,9 @@ fn wait_for_exit(child: &mut Child, timeout: Duration) -> Result<ExitStatus, Com
         {
             return Err(CommandFailure::Io(err));
         }
-        let _ = child.wait();
+        if let Err(err) = child.wait() {
+            tracing::warn!("failed to reap timed-out command: {err}");
+        }
         Err(CommandFailure::Timeout(timeout))
     }
 }
@@ -486,8 +498,8 @@ where
 fn join_reader(handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>) -> io::Result<Vec<u8>> {
     handle.map_or_else(
         || Ok(Vec::new()),
-        |handle| {
-            handle
+        |join_handle| {
+            join_handle
                 .join()
                 .map_err(|_| io::Error::other("pipe reader panicked"))?
         },
@@ -495,8 +507,8 @@ fn join_reader(handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>) -> io::R
 }
 
 fn append_stderr(message: &mut String, stderr: &[u8]) {
-    let stderr = String::from_utf8_lossy(stderr);
-    let trimmed = stderr.trim();
+    let stderr_text = String::from_utf8_lossy(stderr);
+    let trimmed = stderr_text.trim();
     if !trimmed.is_empty() {
         message.push_str(": ");
         message.push_str(trimmed);

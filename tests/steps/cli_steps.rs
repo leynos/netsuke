@@ -2,6 +2,11 @@
 //!
 //! This module provides step definitions that test the command-line interface
 //! parsing and validation using the Cucumber framework.
+#![allow(
+    clippy::shadow_reuse,
+    clippy::shadow_unrelated,
+    reason = "Cucumber step macros rebind capture names"
+)]
 
 use crate::CliWorld;
 use clap::Parser;
@@ -10,7 +15,7 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use std::path::PathBuf;
 
 fn apply_cli(world: &mut CliWorld, args: &str) {
-    let tokens: Vec<String> = std::iter::once("netsuke".to_string())
+    let tokens: Vec<String> = std::iter::once("netsuke".to_owned())
         .chain(args.split_whitespace().map(str::to_string))
         .collect();
     match Cli::try_parse_from(tokens) {
@@ -45,8 +50,8 @@ fn extract_build(world: &CliWorld) -> Option<(&Vec<String>, &Option<PathBuf>)> {
 )]
 #[given(expr = "the CLI is parsed with {string}")]
 #[when(expr = "the CLI is parsed with {string}")]
-fn parse_cli(world: &mut CliWorld, args: String) {
-    apply_cli(world, &args);
+fn parse_cli(world: &mut CliWorld, cli_args: String) {
+    apply_cli(world, &cli_args);
 }
 
 #[expect(
@@ -55,8 +60,8 @@ fn parse_cli(world: &mut CliWorld, args: String) {
 )]
 #[given(expr = "the CLI is parsed with invalid arguments {string}")]
 #[when(expr = "the CLI is parsed with invalid arguments {string}")]
-fn parse_cli_invalid(world: &mut CliWorld, args: String) {
-    apply_cli(world, &args);
+fn parse_cli_invalid(world: &mut CliWorld, invalid_args: String) {
+    apply_cli(world, &invalid_args);
 }
 
 #[then("parsing succeeds")]
@@ -101,9 +106,9 @@ fn command_is_manifest(world: &mut CliWorld) {
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the manifest path is {string}")]
-fn manifest_path(world: &mut CliWorld, path: String) {
+fn manifest_path(world: &mut CliWorld, manifest_path_str: String) {
     let cli = world.cli.as_ref().expect("cli");
-    assert_eq!(cli.file, PathBuf::from(&path));
+    assert_eq!(cli.file, PathBuf::from(&manifest_path_str));
 }
 
 #[expect(
@@ -111,9 +116,9 @@ fn manifest_path(world: &mut CliWorld, path: String) {
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the first target is {string}")]
-fn first_target(world: &mut CliWorld, target: String) {
+fn first_target(world: &mut CliWorld, expected_target: String) {
     let (targets, _) = extract_build(world).expect("command should be build");
-    assert_eq!(targets.first(), Some(&target));
+    assert_eq!(targets.first(), Some(&expected_target));
 }
 
 #[expect(
@@ -121,15 +126,15 @@ fn first_target(world: &mut CliWorld, target: String) {
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the working directory is {string}")]
-fn working_directory(world: &mut CliWorld, dir: String) {
+fn working_directory(world: &mut CliWorld, directory: String) {
     let cli = world.cli.as_ref().expect("cli");
-    assert_eq!(cli.directory.as_ref(), Some(&PathBuf::from(&dir)));
+    assert_eq!(cli.directory.as_ref(), Some(&PathBuf::from(&directory)));
 }
 
 #[then(expr = "the job count is {int}")]
-fn job_count(world: &mut CliWorld, jobs: usize) {
+fn job_count(world: &mut CliWorld, expected_jobs: usize) {
     let cli = world.cli.as_ref().expect("cli");
-    assert_eq!(cli.jobs, Some(jobs));
+    assert_eq!(cli.jobs, Some(expected_jobs));
 }
 
 #[expect(
@@ -137,19 +142,21 @@ fn job_count(world: &mut CliWorld, jobs: usize) {
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the emit path is {string}")]
-fn emit_path(world: &mut CliWorld, path: String) {
+fn emit_path(world: &mut CliWorld, emit_path_str: String) {
     let (_, emit) = extract_build(world).expect("command should be build");
-    assert_eq!(emit.as_ref(), Some(&PathBuf::from(&path)));
+    assert_eq!(emit.as_ref(), Some(&PathBuf::from(&emit_path_str)));
 }
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the manifest command path is {string}")]
-fn manifest_command_path(world: &mut CliWorld, path: String) {
+fn manifest_command_path(world: &mut CliWorld, manifest_output_path: String) {
     let cli = world.cli.as_ref().expect("cli");
     match cli.command.as_ref().expect("command") {
-        Commands::Manifest { file } => assert_eq!(file, &PathBuf::from(&path)),
+        Commands::Manifest { file } => {
+            assert_eq!(file, &PathBuf::from(&manifest_output_path));
+        }
         _ => panic!("command should be manifest"),
     }
 }
@@ -167,10 +174,10 @@ fn error_should_be_returned(world: &mut CliWorld) {
     reason = "Cucumber requires owned String arguments"
 )]
 #[then(expr = "the error message should contain {string}")]
-fn error_message_should_contain(world: &mut CliWorld, expected: String) {
+fn error_message_should_contain(world: &mut CliWorld, expected_fragment: String) {
     let error = world.cli_error.as_ref().expect("No error was returned");
     assert!(
-        error.contains(&expected),
-        "Error message '{error}' does not contain expected '{expected}'"
+        error.contains(&expected_fragment),
+        "Error message '{error}' does not contain expected '{expected_fragment}'"
     );
 }

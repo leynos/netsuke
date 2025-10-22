@@ -279,10 +279,10 @@ fn finalize_duration_buffer(mut buffer: String, time_section: &str) -> String {
 }
 
 fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
-    let seconds = u64::try_from(seconds)
+    let seconds_u64 = u64::try_from(seconds)
         .expect("seconds must be non-negative when formatting from absolute duration remainder");
     if nanos == 0 {
-        return format!("{seconds}S");
+        return format!("{seconds_u64}S");
     }
 
     let mut fraction = format!("{nanos:09}");
@@ -290,7 +290,7 @@ fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
         fraction.pop();
     }
 
-    format!("{seconds}.{fraction}S")
+    format!("{seconds_u64}.{fraction}S")
 }
 
 #[derive(Clone, Copy)]

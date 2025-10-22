@@ -239,9 +239,9 @@ fn registers_manifest_macro_argument_variants(
     #[case] expression: &str,
     #[case] expected: &str,
 ) {
-    let command = expression.replace('"', "\\\"");
+    let rendered_command = expression.replace('"', "\\\"");
     let yaml = manifest_yaml(&format!(
-        "{macros_block}targets:\n  - name: test\n    command: \"{command}\"\n",
+        "{macros_block}targets:\n  - name: test\n    command: \"{rendered_command}\"\n",
     ));
 
     let manifest = manifest::from_str(&yaml).expect("parse macros");
@@ -401,7 +401,7 @@ fn no_targets_generated_scenarios(
     let foreach_lit = if quoted_foreach {
         format!("\"{foreach_value}\"")
     } else {
-        foreach_value.to_string()
+        foreach_value.to_owned()
     };
 
     let yaml = manifest_yaml(&format!(
@@ -440,7 +440,7 @@ fn foreach_non_iterable_errors(#[case] val: &str, #[case] quoted: bool) {
     let foreach = if quoted {
         format!("\"{val}\"")
     } else {
-        val.to_string()
+        val.to_owned()
     };
     let yaml = manifest_yaml(&format!(
         "targets:\n  - foreach: {foreach}\n    name: 'a'\n    command: 'echo a'\n",
@@ -504,13 +504,13 @@ fn renders_target_fields_command() {
     assert_string_or_list_eq(&target.name, "base1", FieldName::Name);
     assert_string_or_list_eq_list(
         &target.sources,
-        &["base1.src".to_string()],
+        &["base1.src".to_owned()],
         FieldName::Sources,
     );
-    assert_string_or_list_eq_list(&target.deps, &["base1.dep".to_string()], FieldName::Deps);
+    assert_string_or_list_eq_list(&target.deps, &["base1.dep".to_owned()], FieldName::Deps);
     assert_string_or_list_eq_list(
         &target.order_only_deps,
-        &["base1.ord".to_string()],
+        &["base1.ord".to_owned()],
         FieldName::OrderOnlyDeps,
     );
     if let Recipe::Command { command } = &target.recipe {

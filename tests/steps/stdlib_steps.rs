@@ -4,6 +4,10 @@
 //! Sets up a temporary workspace, renders templates with stdlib registered,
 //! and asserts outputs and errors. Provides HTTP fixtures for fetch scenarios
 //! and compiles reusable command helpers for shell and grep coverage.
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros reuse parameter identifiers for captures"
+)]
 use crate::CliWorld;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -232,37 +236,37 @@ fn resolve_template_path(root: &Utf8Path, raw: &RelativePath) -> TemplatePath {
 }
 
 #[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
-fn render_stdlib_template(world: &mut CliWorld, template: String, path: String) {
+fn render_stdlib_template(world: &mut CliWorld, template_source: String, raw_path: String) {
     let root = ensure_workspace(world);
-    let template_content = TemplateContent::from(template);
-    let relative_path = RelativePath::from(path);
+    let template_content = TemplateContent::from(template_source);
+    let relative_path = RelativePath::from(raw_path);
     let target = resolve_template_path(root.as_path(), &relative_path);
     render_template(world, &template_content, &target);
 }
 
 #[when(regex = r#"^I render the stdlib template "(.+)"$"#)]
-fn render_stdlib_template_without_path(world: &mut CliWorld, template: String) {
-    let template_content = TemplateContent::from(template);
+fn render_stdlib_template_without_path(world: &mut CliWorld, template_source: String) {
+    let template_content = TemplateContent::from(template_source);
     render_template_with_context(world, &template_content, context! {});
 }
 
 #[when(regex = r#"^I render "(.+)" with stdlib url$"#)]
-fn render_stdlib_template_with_url(world: &mut CliWorld, template: String) {
+fn render_stdlib_template_with_url(world: &mut CliWorld, template_source: String) {
     let url = world
         .stdlib_url
         .clone()
         .expect("expected HTTP server to be initialised");
-    let template_content = TemplateContent::from(template);
+    let template_content = TemplateContent::from(template_source);
     render_template_with_context(world, &template_content, context!(url => url));
 }
 
 #[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib command helper$"#)]
-fn render_stdlib_template_with_command(world: &mut CliWorld, template: String) {
+fn render_stdlib_template_with_command(world: &mut CliWorld, template_source: String) {
     let command = world
         .stdlib_command
         .clone()
         .expect("expected stdlib command helper to be compiled");
-    let template_content = TemplateContent::from(template);
+    let template_content = TemplateContent::from(template_source);
     render_template_with_context(world, &template_content, context!(cmd => command));
 }
 
@@ -271,12 +275,12 @@ fn render_stdlib_template_with_command(world: &mut CliWorld, template: String) {
     reason = "Cucumber requires owned capture arguments"
 )]
 #[then(regex = r#"^the stdlib output is "(.+)"$"#)]
-fn assert_stdlib_output(world: &mut CliWorld, expected: String) {
+fn assert_stdlib_output(world: &mut CliWorld, expected_output: String) {
     let output = world
         .stdlib_output
         .as_ref()
         .expect("expected stdlib output");
-    assert_eq!(output, &expected);
+    assert_eq!(output, &expected_output);
 }
 
 fn stdlib_root_and_output(world: &CliWorld) -> (&Utf8Path, &str) {
@@ -340,11 +344,11 @@ fn parse_expected_offset(raw: &str) -> UtcOffset {
     reason = "Cucumber requires owned capture arguments"
 )]
 #[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
-fn assert_stdlib_error(world: &mut CliWorld, fragment: String) {
+fn assert_stdlib_error(world: &mut CliWorld, expected_fragment: String) {
     let error = world.stdlib_error.as_ref().expect("expected stdlib error");
     assert!(
-        error.contains(&fragment),
-        "error `{error}` should contain `{fragment}`",
+        error.contains(&expected_fragment),
+        "error `{error}` should contain `{expected_fragment}`",
     );
 }
 
@@ -391,9 +395,9 @@ fn assert_stdlib_output_is_root(world: &mut CliWorld) {
 }
 
 #[then(regex = r#"^the stdlib output is the workspace path "(.+)"$"#)]
-fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative: String) {
+fn assert_stdlib_output_is_workspace_path(world: &mut CliWorld, relative_path: String) {
     let (root, output) = stdlib_root_and_output(world);
-    let relative_path = RelativePath::from(relative);
+    let relative_path = RelativePath::from(relative_path);
     let expected = root.join(relative_path.to_path_buf());
     assert_eq!(output, expected.as_str());
 }
@@ -416,9 +420,9 @@ fn assert_stdlib_output_is_utc_timestamp(world: &mut CliWorld) {
     reason = "Cucumber requires owned capture arguments"
 )]
 #[then(regex = r#"^the stdlib output offset is "(.+)"$"#)]
-fn assert_stdlib_output_offset(world: &mut CliWorld, expected: String) {
+fn assert_stdlib_output_offset(world: &mut CliWorld, expected_offset_text: String) {
     let output = stdlib_output(world);
     let parsed = parse_iso_timestamp(output);
-    let expected_offset = parse_expected_offset(&expected);
+    let expected_offset = parse_expected_offset(&expected_offset_text);
     assert_eq!(parsed.offset(), expected_offset);
 }
