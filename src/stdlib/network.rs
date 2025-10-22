@@ -12,8 +12,8 @@ use std::{
     time::Duration,
 };
 
-use super::{NetworkConfig, value_from_bytes};
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
+use super::{CachePathError, NetworkConfig, validate_fetch_cache_relative, value_from_bytes};
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use minijinja::{
     Environment, Error, ErrorKind,
@@ -114,30 +114,20 @@ fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
 
 fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
     let utf_path = relative;
-    if utf_path.as_str().is_empty() {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            "cache_dir must not be empty",
-        ));
-    }
-
-    if utf_path.is_absolute() {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!("cache_dir must be relative to the workspace (received '{utf_path}')"),
-        ));
-    }
-
-    for component in utf_path.components() {
-        if matches!(
-            component,
-            Utf8Component::ParentDir | Utf8Component::Prefix(_)
-        ) {
-            return Err(Error::new(
+    if let Err(err) = validate_fetch_cache_relative(utf_path) {
+        return Err(match err {
+            CachePathError::Empty => {
+                Error::new(ErrorKind::InvalidOperation, "cache_dir must not be empty")
+            }
+            CachePathError::Absolute => Error::new(
+                ErrorKind::InvalidOperation,
+                format!("cache_dir must be relative to the workspace (received '{utf_path}')"),
+            ),
+            CachePathError::EscapesWorkspace => Error::new(
                 ErrorKind::InvalidOperation,
                 format!("cache_dir must stay within the workspace (received '{utf_path}')"),
-            ));
-        }
+            ),
+        });
     }
 
     root.create_dir_all(utf_path)
@@ -201,11 +191,18 @@ fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
 mod tests {
     use super::*;
 
-    use std::{fs, sync::Arc};
+    use std::{
+        fs,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+    };
 
     use crate::stdlib::DEFAULT_FETCH_CACHE_DIR;
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs_utf8::Dir};
+    use minijinja::value::{Kwargs, Value};
     use rstest::{fixture, rstest};
     use tempfile::tempdir;
 
@@ -300,7 +297,29 @@ mod tests {
         let entry = path.join("cache").join("entry");
         assert!(
             fs::metadata(entry.as_std_path()).is_ok(),
-            "cache entry should exist"
+            "cache entry should exist",
+        );
+    }
+
+    #[rstest]
+    fn fetch_rejects_template_cache_dir_argument(
+        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
+    ) {
+        let (_temp, root, _path) = cache_workspace;
+        let cache = make_cache(root);
+        let kwargs =
+            Kwargs::from_iter([(String::from("cache_dir"), Value::from(".netsuke/cache"))]);
+        let impure = Arc::new(AtomicBool::new(false));
+        let err = fetch("http://127.0.0.1:9", &kwargs, &impure, &cache)
+            .expect_err("cache_dir keyword should be rejected");
+        assert_eq!(err.kind(), ErrorKind::TooManyArguments);
+        assert!(
+            err.to_string().contains("cache_dir"),
+            "error should mention unexpected cache_dir argument: {err}",
+        );
+        assert!(
+            !impure.load(Ordering::Relaxed),
+            "rejecting cache_dir must not mark the template impure",
         );
     }
 
@@ -316,7 +335,7 @@ mod tests {
         let entry = path.join(DEFAULT_FETCH_CACHE_DIR).join("entry");
         assert!(
             fs::metadata(entry.as_std_path()).is_ok(),
-            "entry should exist"
+            "entry should exist",
         );
     }
 }

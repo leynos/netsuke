@@ -15,7 +15,7 @@ mod network;
 mod path;
 mod time;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
@@ -113,24 +113,16 @@ impl StdlibConfig {
     }
 
     fn validate_cache_relative(relative: &Utf8Path) -> Result<()> {
-        ensure!(
-            !relative.as_str().is_empty(),
-            "fetch cache path must not be empty",
-        );
-        ensure!(
-            !relative.is_absolute(),
-            "fetch cache path must be relative to the workspace",
-        );
-        for component in relative.components() {
-            ensure!(
-                !matches!(
-                    component,
-                    Utf8Component::ParentDir | Utf8Component::Prefix(_)
-                ),
-                "fetch cache path must stay within the workspace",
-            );
+        match validate_fetch_cache_relative(relative) {
+            Ok(()) => Ok(()),
+            Err(CachePathError::Empty) => bail!("fetch cache path must not be empty"),
+            Err(CachePathError::Absolute) => {
+                bail!("fetch cache path must be relative to the workspace")
+            }
+            Err(CachePathError::EscapesWorkspace) => {
+                bail!("fetch cache path must stay within the workspace")
+            }
         }
-        Ok(())
     }
 }
 
@@ -147,6 +139,34 @@ impl Default for StdlibConfig {
 pub(crate) struct NetworkConfig {
     pub(crate) cache_root: Arc<Dir>,
     pub(crate) cache_relative: Utf8PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CachePathError {
+    Empty,
+    Absolute,
+    EscapesWorkspace,
+}
+
+pub(super) fn validate_fetch_cache_relative(relative: &Utf8Path) -> Result<(), CachePathError> {
+    if relative.as_str().is_empty() {
+        return Err(CachePathError::Empty);
+    }
+
+    if relative.is_absolute() {
+        return Err(CachePathError::Absolute);
+    }
+
+    for component in relative.components() {
+        if matches!(
+            component,
+            Utf8Component::ParentDir | Utf8Component::Prefix(_)
+        ) {
+            return Err(CachePathError::EscapesWorkspace);
+        }
+    }
+
+    Ok(())
 }
 
 /// Captures mutable state shared between stdlib helpers.
