@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "ninja env tests prefer expect for readability"
+)]
+
 //! Tests for overriding the `NINJA_ENV` variable via a mock environment.
 
 use mockable::MockEnv;

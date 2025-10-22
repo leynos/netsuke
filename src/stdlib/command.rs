@@ -264,8 +264,14 @@ fn quote(arg: &str) -> Result<String, QuoteError> {
         return Err(QuoteError::ContainsLineBreak);
     }
 
-    let bytes = arg.quoted(Sh);
-    Ok(String::from_utf8(bytes).expect("quoted args are valid UTF-8"))
+    let bytes: Vec<u8> = arg.quoted(Sh);
+    match String::from_utf8(bytes.clone()) {
+        Ok(text) => Ok(text),
+        Err(err) => {
+            debug_assert!(false, "quoted args must be valid UTF-8: {err}");
+            Ok(String::from_utf8_lossy(&bytes).into_owned())
+        }
+    }
 }
 
 fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
@@ -517,6 +523,10 @@ fn append_stderr(message: &mut String, stderr: &[u8]) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::expect_used,
+        reason = "tests interact with command helpers ergonomically"
+    )]
     #[cfg(windows)]
     #[test]
     fn quote_escapes_cmd_metacharacters() {

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "manifest integration tests rely on expect for readability"
+)]
+
 //! Tests for the YAML-first manifest pipeline: parse YAML, expand foreach/when,
 //! then render Jinja only in string values.
 

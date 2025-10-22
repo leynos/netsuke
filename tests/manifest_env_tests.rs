@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "integration tests prefer expect for clear failures"
+)]
+
 //! Tests for environment variable access via the Jinja `env()` helper.
 
 use netsuke::{ast::Recipe, manifest};

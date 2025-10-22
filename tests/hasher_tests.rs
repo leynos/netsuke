@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "hasher tests use expect for descriptive failures"
+)]
+
 //! Tests for action hashing utilities.
 
 use netsuke::ast::{Recipe, StringOrList};

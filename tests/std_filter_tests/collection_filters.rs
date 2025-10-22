@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "collection filter tests prefer expect for clarity")]
+
 //! Behavioural coverage for the `MiniJinja` collection filters exposed by the
 //! Netsuke stdlib.
 //!

@@ -193,7 +193,15 @@ fn make_macro_fn(
     cache: Arc<MacroCache>,
 ) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
     move |state, Rest(args), macro_kwargs| {
-        let macro_instance = cache.instance();
+        let macro_instance = cache.instance().ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!(
+                    "macro '{}' from template '{}' must be initialised before use",
+                    cache.macro_name, cache.template_name
+                ),
+            )
+        })?;
         // MiniJinja requires keyword arguments to be appended as a trailing
         // `Kwargs` value within the positional slice. Build that value lazily so
         // we avoid allocating when no keywords were supplied.
@@ -266,10 +274,8 @@ impl MacroCache {
         Ok(())
     }
 
-    fn instance(&self) -> &MacroInstance {
-        self.instance
-            .get()
-            .expect("macro instance must be initialised before use")
+    fn instance(&self) -> Option<&MacroInstance> {
+        self.instance.get()
     }
 }
 
@@ -332,8 +338,10 @@ struct MacroStateGuard {
 impl MacroStateGuard {
     fn new(state: State<'static, 'static>) -> Self {
         let boxed = Box::new(state);
-        let ptr = NonNull::new(Box::into_raw(boxed)).expect("macro state pointer");
-        Self { ptr }
+        let ptr = Box::into_raw(boxed);
+        // SAFETY: `Box::into_raw` never returns a null pointer.
+        let ptr_non_null = unsafe { NonNull::new_unchecked(ptr) };
+        Self { ptr: ptr_non_null }
     }
 
     fn as_ref(&self) -> &State<'static, 'static> {

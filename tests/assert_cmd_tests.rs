@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "assert-cmd tests report failures via expect"
+)]
+
 //! Integration tests for CLI execution using `assert_cmd`.
 //!
 //! These tests exercise end-to-end command handling by invoking the compiled

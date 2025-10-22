@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "time tests prefer expect for concise assertions"
+)]
+
 use super::*;
 use minijinja::{Environment, context, value::Value};
 use rstest::rstest;

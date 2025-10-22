@@ -8,6 +8,10 @@
     clippy::shadow_reuse,
     reason = "Cucumber step macros reuse parameter identifiers for captures"
 )]
+#![allow(
+    clippy::expect_used,
+    reason = "Cucumber steps prefer expect for readable assertions"
+)]
 use crate::CliWorld;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};

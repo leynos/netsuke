@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "snapshot tests rely on expect for clarity"
+)]
+
 //! End-to-end validation of Ninja file generation.
 //!
 //! These tests generate a Ninja file from a manifest, snapshot the

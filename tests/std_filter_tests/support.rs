@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "test helpers intentionally panic on setup failure")]
+
 //! Shared helpers for stdlib filter integration tests.
 //!
 //! These utilities prepare temporary workspaces and template environments so

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Cucumber harness uses expect for scenario setup failures"
+)]
+
 //! Cucumber test runner and world state.
 
 use camino::Utf8PathBuf;

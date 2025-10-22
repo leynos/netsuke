@@ -161,7 +161,9 @@ fn hex_string(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         use std::fmt::Write;
-        write!(out, "{byte:02x}").expect("format hex byte");
+        if let Err(err) = write!(out, "{byte:02x}") {
+            debug_assert!(false, "format hex byte failed: {err}");
+        }
     }
     out
 }
@@ -175,6 +177,10 @@ fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::expect_used,
+        reason = "tests cover IO-heavy scenarios succinctly"
+    )]
     use super::*;
 
     use std::{

@@ -100,6 +100,10 @@ fn render_str_with(
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::expect_used,
+        reason = "tests assert rendered manifest state succinctly"
+    )]
     use super::*;
     use crate::ast::Rule;
     use minijinja::Environment;

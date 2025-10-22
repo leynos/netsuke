@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "YAML error tests use expect for diagnostics"
+)]
+
 //! Regression tests for YAML parse errors.
 //!
 //! These tests ensure diagnostics include line numbers and optional hints, and

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "CLI tests employ expect for explicit failure messages"
+)]
+
 //! Unit tests for CLI argument parsing and validation.
 //!
 //! This module exercises the command-line interface defined in [`netsuke::cli`]

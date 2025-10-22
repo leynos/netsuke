@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "filter tests use expect for succinct template assertions")]
+
 //! Tests for hash and digest filters in the standard library.
 //!
 //! Validates SHA-256, SHA-512, and optionally SHA-1 and MD5 (under the

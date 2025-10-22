@@ -280,6 +280,7 @@ pub fn map_data_error(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "tests inspect diagnostic internals")]
     use super::*;
     use std::error::Error as StdError;
 
@@ -347,6 +348,7 @@ fn expected_offset(src: &str, column: u64) -> usize {
 
 #[cfg(test)]
 mod byte_index_tests {
+    #![allow(clippy::expect_used, reason = "tests reason about offsets")]
     use super::{byte_index_components, expected_offset};
 
     #[test]

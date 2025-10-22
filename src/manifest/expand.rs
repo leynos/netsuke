@@ -91,7 +91,7 @@ fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> R
 
     let vars = vars_value
         .as_object_mut()
-        .expect("vars entry ensured to be an object");
+        .ok_or_else(|| anyhow::anyhow!("vars entry ensured to be an object"))?;
     vars.insert(
         "item".into(),
         serde_json::to_value(item).context("serialise item")?,
@@ -116,6 +116,10 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::expect_used,
+        reason = "tests express fixture expectations succinctly"
+    )]
     use super::*;
     use minijinja::Environment;
 

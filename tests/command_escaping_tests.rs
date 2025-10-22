@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "command escaping tests use expect for diagnostics"
+)]
+
 //! Tests for shell quoting of command substitutions.
 
 use netsuke::{ast::Recipe, ir::BuildGraph, manifest};

@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "integration tests rely on expect for clarity"
+)]
+
 //! Unit tests for IR structures.
 
 use camino::Utf8PathBuf;

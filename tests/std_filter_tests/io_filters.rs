@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "filter tests use expect for concise assertions")]
+
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{ErrorKind, context};
 use rstest::rstest;

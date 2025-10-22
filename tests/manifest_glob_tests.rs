@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "glob tests use expect for diagnostic clarity"
+)]
+
 //! Tests for file globbing via the `glob()` Jinja helper.
 
 use netsuke::{

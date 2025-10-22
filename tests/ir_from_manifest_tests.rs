@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "integration tests use expect for descriptive failures"
+)]
+
 //! Tests for generating `BuildGraph` from a manifest.
 
 use camino::Utf8PathBuf;

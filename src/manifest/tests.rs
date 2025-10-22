@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "manifest tests prefer expect for expressive assertions"
+)]
+
 //! Tests for manifest parsing and macro registration helpers.
 
 use super::jinja_macros::{

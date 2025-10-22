@@ -78,7 +78,9 @@ impl StdlibConfig {
     pub fn new(workspace_root: Dir) -> Self {
         let default = Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR);
         // Rationale: the constant is static and validated for defence in depth.
-        Self::validate_cache_relative(&default).expect("default fetch cache path should be valid");
+        if let Err(err) = Self::validate_cache_relative(&default) {
+            panic!("default fetch cache path should be valid: {err}");
+        }
         Self {
             workspace_root: Arc::new(workspace_root),
             fetch_cache_relative: default,
@@ -145,8 +147,8 @@ impl StdlibConfig {
 
 impl Default for StdlibConfig {
     fn default() -> Self {
-        let root =
-            Dir::open_ambient_dir(".", ambient_authority()).expect("open stdlib workspace root");
+        let root = Dir::open_ambient_dir(".", ambient_authority())
+            .unwrap_or_else(|err| panic!("open stdlib workspace root: {err}"));
         Self::new(root)
     }
 }

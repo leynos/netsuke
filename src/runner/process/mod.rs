@@ -121,12 +121,9 @@ fn log_command_execution(cmd: &Command) {
 ///
 /// # Errors
 ///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn or reports a
-/// non-zero exit status.
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
 ///
-/// # Panics
-///
-/// Panics if the child's output streams cannot be captured.
 pub fn run_ninja(
     program: &Path,
     cli: &Cli,
@@ -142,8 +139,14 @@ pub fn run_ninja(
 }
 
 fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
-    let stdout = child.stdout.take().expect("child stdout");
-    let stderr = child.stderr.take().expect("child stderr");
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("child process missing stdout pipe"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("child process missing stderr pipe"))?;
 
     let out_handle = thread::spawn(move || {
         let reader = BufReader::new(stdout);
@@ -191,6 +194,10 @@ fn check_exit_status(status: ExitStatus) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(
+        clippy::expect_used,
+        reason = "tests assert helper invariants succinctly"
+    )]
     use super::*;
     use camino::Utf8PathBuf;
     use std::ffi::OsString;

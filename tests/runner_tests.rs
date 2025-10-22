@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "runner tests use expect for process diagnostics"
+)]
+
 //! Behavioural tests for the Netsuke runner and CLI integration.
 
 use netsuke::cli::{BuildArgs, Cli, Commands};

@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "PATH tests rely on expect for clarity")]
+
 //! Tests for scoped manipulation of `PATH` via `prepend_dir_to_path` and
 //! `PathGuard`.
 

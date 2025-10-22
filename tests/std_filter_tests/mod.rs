@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "filter integration tests use expect for clarity")]
+
 //! Integration suite covering stdlib filter modules.
 
 #[path = "std_filter_tests/collection_filters.rs"]

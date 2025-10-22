@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "command filter tests rely on expect for process assertions")]
+
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, ErrorKind, context, value::Value};

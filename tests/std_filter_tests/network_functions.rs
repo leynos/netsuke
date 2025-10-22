@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used, reason = "network helper tests use expect to assert IO outcomes")]
+
 //! Tests for stdlib network helpers covering fetch caching and failure paths.
 
 use std::{fs, io};

@@ -159,6 +159,7 @@ fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Erro
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "tests read template outputs succinctly")]
     use super::*;
     use minijinja::context;
     use rstest::rstest;

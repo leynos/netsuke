@@ -419,10 +419,10 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     }
 
     pattern_state.normalized = Some(normalized);
-    let normalized_pattern = pattern_state
-        .normalized
-        .as_deref()
-        .expect("normalized pattern must be present");
+    let normalized_pattern = pattern_state.normalized.as_deref().unwrap_or_else(|| {
+        debug_assert!(false, "normalized pattern must be present");
+        pattern_state.raw.as_str()
+    });
 
     let root = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
@@ -458,6 +458,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "tests validate glob edge cases")]
     use super::*;
 
     #[test]

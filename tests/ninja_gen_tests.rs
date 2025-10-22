@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "integration tests prefer expect for expressive failures"
+)]
+
 //! Unit tests for Ninja file generation.
 //!
 //! Snapshot tests use `insta` to ensure the emitted manifest remains stable.

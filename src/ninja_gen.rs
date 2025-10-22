@@ -258,6 +258,7 @@ impl Display for DisplayEdge<'_> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "tests exercise fallible helper paths")]
     use super::*;
     use crate::ir::{Action, BuildEdge, BuildGraph};
     use rstest::rstest;

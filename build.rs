@@ -92,7 +92,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .into());
     }
-    let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION must be set");
+    let version = env::var("CARGO_PKG_VERSION").map_err(
+        |_| "CARGO_PKG_VERSION must be set by Cargo; cannot render manual page without it.",
+    )?;
 
     let man = Man::new(cmd)
         .section("1")

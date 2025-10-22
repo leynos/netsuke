@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "AST tests rely on expect for compact assertions"
+)]
+
 //! Unit tests for Netsuke manifest AST deserialisation.
 
 use anyhow::Result;

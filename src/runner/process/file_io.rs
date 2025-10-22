@@ -83,6 +83,7 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "tests require concise asserts")]
     use super::*;
     use crate::runner::NinjaContent;
     use camino::Utf8PathBuf;

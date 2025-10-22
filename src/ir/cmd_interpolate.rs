@@ -27,7 +27,13 @@ pub(crate) fn interpolate_command(
             .map(|p| {
                 // Utf8PathBuf guarantees UTF-8; avoid lossy conversion.
                 let bytes: Vec<u8> = p.as_str().quoted(Sh);
-                String::from_utf8(bytes).expect("utf-8 shell quoting")
+                match String::from_utf8(bytes.clone()) {
+                    Ok(text) => text,
+                    Err(err) => {
+                        debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
+                        String::from_utf8_lossy(&bytes).into_owned()
+                    }
+                }
             })
             .collect()
     }
@@ -164,6 +170,7 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "fixtures favour expect for clarity")]
     use super::*;
 
     use camino::Utf8PathBuf;

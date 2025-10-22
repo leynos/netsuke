@@ -1,3 +1,8 @@
+#![allow(
+    clippy::expect_used,
+    reason = "test support utilities intentionally panic on failure"
+)]
+
 //! Test-support crate for Netsuke.
 //!
 //! This crate provides test-only utilities for:

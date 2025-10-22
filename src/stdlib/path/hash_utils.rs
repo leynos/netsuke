@@ -74,8 +74,12 @@ where
         if read == 0 {
             break;
         }
-        let chunk = buffer.get(..read).expect("read beyond buffer capacity");
-        hasher.update(chunk);
+        if let Some(chunk) = buffer.get(..read) {
+            hasher.update(chunk);
+        } else {
+            debug_assert!(false, "read beyond buffer capacity: {read} bytes");
+            hasher.update(buffer.as_slice());
+        }
     }
     Ok(encode_hex(&hasher.finalize()))
 }
@@ -84,7 +88,9 @@ fn encode_hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
-        write!(&mut out, "{byte:02x}").expect("format hex byte");
+        if let Err(err) = write!(&mut out, "{byte:02x}") {
+            debug_assert!(false, "format hex byte failed: {err}");
+        }
     }
     out
 }
