@@ -258,19 +258,22 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
 
     let first_target = manifest.targets.first().expect("target");
     match &first_target.recipe {
-        Recipe::Command { command } => assert_eq!(command, "workspace-body"),
-        other => panic!("expected command recipe, got {other:?}"),
+        Recipe::Command { command } => anyhow::ensure!(
+            command == "workspace-body",
+            "unexpected recipe output: {command}"
+        ),
+        other => anyhow::bail!("expected command recipe, got {other:?}"),
     }
 
     let cache_key = hash::sha256_hex(url.as_bytes());
     let cache_path = workspace.join(".netsuke").join("fetch").join(cache_key);
-    assert!(
+    anyhow::ensure!(
         cache_path.exists(),
-        "cache file should be created inside the manifest workspace",
+        "cache file should be created inside the manifest workspace"
     );
-    assert!(
+    anyhow::ensure!(
         !outside.join(".netsuke").exists(),
-        "outside working directory must not receive cache data",
+        "outside working directory must not receive cache data"
     );
 
     Ok(())

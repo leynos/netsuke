@@ -135,24 +135,30 @@ mod tests {
         let targets = doc
             .get("targets")
             .and_then(|v| v.as_array())
-            .expect("targets sequence");
-        assert_eq!(targets.len(), 2);
+            .context("targets sequence missing")?;
+        anyhow::ensure!(targets.len() == 2, "expected two targets");
         for (idx, target) in targets.iter().enumerate() {
-            let map = target.as_object().expect("target map");
+            let map = target.as_object().context("target map")?;
             let vars = map
                 .get("vars")
                 .and_then(|v| v.as_object())
-                .expect("vars map");
-            let index_val = vars.get("index").expect("index value");
-            let item_val = vars.get("item").expect("item value");
+                .context("vars map")?;
+            let index_val = vars.get("index").context("index value")?;
+            let item_val = vars.get("item").context("item value")?;
             let ManifestValue::Number(index_num) = index_val else {
-                panic!("index should be numeric: {index_val:?}");
+                anyhow::bail!("index should be numeric: {index_val:?}");
             };
-            assert_eq!(index_num.as_u64().expect("u64"), idx as u64);
+            let index = index_num
+                .as_u64()
+                .context("numeric index conversion failed")?;
+            anyhow::ensure!(index == idx as u64, "unexpected index value: {index}");
             let ManifestValue::Number(item_num) = item_val else {
-                panic!("item should be numeric: {item_val:?}");
+                anyhow::bail!("item should be numeric: {item_val:?}");
             };
-            assert_eq!(item_num.as_u64().expect("u64"), (idx + 1) as u64);
+            let item = item_num
+                .as_u64()
+                .context("numeric item conversion failed")?;
+            anyhow::ensure!(item == (idx + 1) as u64, "unexpected item value: {item}");
         }
         Ok(())
     }
@@ -170,23 +176,28 @@ mod tests {
         let targets = doc
             .get("targets")
             .and_then(|v| v.as_array())
-            .expect("targets sequence");
-        assert_eq!(targets.len(), 2);
+            .context("targets sequence missing")?;
+        anyhow::ensure!(targets.len() == 2, "expected filtered targets");
         let indexes: Vec<u64> = targets
             .iter()
-            .map(|target| {
-                let map = target.as_object().expect("target map");
+            .map(|target| -> Result<u64> {
+                let map = target.as_object().context("target map")?;
                 let vars = map
                     .get("vars")
                     .and_then(|v| v.as_object())
-                    .expect("vars map");
-                let ManifestValue::Number(num) = vars.get("index").expect("index value") else {
-                    panic!("index missing");
+                    .context("vars map")?;
+                let index_value = vars.get("index").context("index value")?;
+                let ManifestValue::Number(num) = index_value else {
+                    anyhow::bail!("index missing");
                 };
-                num.as_u64().expect("u64")
+                num.as_u64().context("numeric index conversion failed")
             })
-            .collect();
-        assert_eq!(indexes, vec![1, 2]);
+            .collect::<Result<_>>()?;
+        anyhow::ensure!(
+            indexes == vec![1, 2],
+            "unexpected filtered indexes: {:?}",
+            indexes
+        );
         Ok(())
     }
 
@@ -208,15 +219,15 @@ mod tests {
         let targets = doc
             .get("targets")
             .and_then(|v| v.as_array())
-            .expect("targets sequence");
-        assert_eq!(targets.len(), 2);
+            .context("targets sequence missing")?;
+        anyhow::ensure!(targets.len() == 2, "expected expanded targets");
         for target in targets {
-            let map = target.as_object().expect("target object");
+            let map = target.as_object().context("target object")?;
             let keys: Vec<&str> = map.keys().map(String::as_str).collect();
-            assert_eq!(
-                keys,
-                ["name", "vars", "after"],
-                "key order should remain stable"
+            anyhow::ensure!(
+                keys == ["name", "vars", "after"],
+                "key order should remain stable: {:?}",
+                keys
             );
         }
         Ok(())

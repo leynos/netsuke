@@ -199,7 +199,10 @@ impl Display for NamedAction<'_> {
                 debug_assert!(shlex::split(&cmd).is_some(), "invalid command: {cmd}");
                 writeln!(f, "  command = {cmd}")?;
             }
-            Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
+            Recipe::Rule { .. } => {
+                debug_assert!(false, "rules do not reference other rules");
+                return Err(fmt::Error);
+            }
         }
         write_kv!(f, "description", &self.action.description);
         write_kv!(f, "depfile", &self.action.depfile);

@@ -66,16 +66,16 @@ dbg_macro                           = "deny"
 print_stdout                        = "deny"
 print_stderr                        = "deny"
 
-## 3. panic-prone operations
-#unwrap_used                         = "deny"
+# 3. panic-prone operations
+unwrap_used                         = "deny"
 #expect_used                         = "deny"
-#indexing_slicing                    = "deny"
-#string_slice                        = "deny"
-#integer_division                    = "deny"
-#integer_division_remainder_used     = "deny"
-#panic_in_result_fn                  = "deny"
-#unreachable                         = "deny"
-#
+indexing_slicing                    = "deny"
+string_slice                        = "deny"
+integer_division                    = "deny"
+integer_division_remainder_used     = "deny"
+panic_in_result_fn                  = "deny"
+unreachable                         = "deny"
+
 ## 4. portability
 #host_endian_bytes                   = "deny"
 #little_endian_bytes                 = "deny"
