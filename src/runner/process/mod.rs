@@ -136,6 +136,21 @@ pub fn run_ninja(
     check_exit_status(status)
 }
 
+fn process_stream_thread(handle: thread::JoinHandle<ForwardStats>, stream_name: &str) {
+    match handle.join() {
+        Ok(stats) => {
+            if stats.write_failed {
+                tracing::debug!(
+                    "{stream_name} forwarding encountered closed pipe; output truncated"
+                );
+            }
+        }
+        Err(err) => {
+            tracing::warn!("{stream_name} forwarding thread panicked: {err:?}");
+        }
+    }
+}
+
 fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
@@ -156,26 +171,8 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
     });
 
     let status = child.wait()?;
-    match out_handle.join() {
-        Ok(stdout_stats) => {
-            if stdout_stats.write_failed {
-                tracing::debug!("stdout forwarding encountered closed pipe; output truncated");
-            }
-        }
-        Err(err) => {
-            tracing::warn!("stdout forwarding thread panicked: {err:?}");
-        }
-    }
-    match err_handle.join() {
-        Ok(stderr_stats) => {
-            if stderr_stats.write_failed {
-                tracing::debug!("stderr forwarding encountered closed pipe; output truncated");
-            }
-        }
-        Err(err) => {
-            tracing::warn!("stderr forwarding thread panicked: {err:?}");
-        }
-    }
+    process_stream_thread(out_handle, "stdout");
+    process_stream_thread(err_handle, "stderr");
     Ok(status)
 }
 
