@@ -332,8 +332,7 @@ fn assert_stdlib_output(world: &mut CliWorld, expected_output: String) -> Result
 fn stdlib_root_and_output(world: &CliWorld) -> Result<(&Utf8Path, &str)> {
     let root = world
         .stdlib_root
-        .as_ref()
-        .map(Utf8PathBuf::as_path)
+        .as_deref()
         .context("expected stdlib workspace root")?;
     let output = world
         .stdlib_output
