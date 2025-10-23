@@ -97,7 +97,10 @@ impl HttpServer {
     /// Join the server thread and propagate any panic.
     pub fn join(mut self) -> thread::Result<()> {
         self.shutdown_listener();
-        self.handle.take().expect("server already joined").join()
+        match self.handle.take() {
+            Some(handle) => handle.join(),
+            None => Ok(()),
+        }
     }
 
     fn shutdown_listener(&self) {
@@ -172,9 +175,9 @@ fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig
         config.poll_interval,
         config.accept_timeout,
     );
-    stream
-        .set_nonblocking(true)
-        .expect("set stream non-blocking");
+    if let Err(err) = stream.set_nonblocking(true) {
+        panic!("failed to configure stream non-blocking: {err}");
+    }
     let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
     if bytes_read > 0 {
         write_response(&mut stream, &body);

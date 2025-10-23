@@ -1,15 +1,13 @@
-#![allow(clippy::expect_used, reason = "filter tests use expect for succinct template assertions")]
-
 //! Tests for hash and digest filters in the standard library.
 //!
 //! Validates SHA-256, SHA-512, and optionally SHA-1 and MD5 (under the
 //! `legacy-digests` feature) for both the `hash` and `digest` filters.
-
+use anyhow::{bail, ensure, Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{ErrorKind, context};
+use minijinja::{context, ErrorKind};
 use rstest::rstest;
 
-use super::support::{Workspace, filter_workspace, register_template, stdlib_env};
+use super::support::fallible;
 
 #[rstest]
 #[case(
@@ -49,94 +47,136 @@ use super::support::{Workspace, filter_workspace, register_template, stdlib_env}
     case("md5-empty", "d41d8cd98f00b204e9800998ecf8427e", "d41d8cd9",)
 )]
 fn hash_and_digest_filters(
-    filter_workspace: Workspace,
     #[case] alg: &str,
     #[case] expected_hash: &str,
     #[case] expected_digest: &str,
-) {
-    let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
-    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
 
-    let (file, algorithm) = alg.strip_suffix("-empty").map_or_else(
-        || (root.join("file"), alg),
-        |stripped| {
-            let relative = format!("{stripped}_empty");
-            dir.write(relative.as_str(), b"")
-                .expect("create empty file");
-            (root.join(relative.as_str()), stripped)
-        },
-    );
+) -> Result<()> {
+    let ( _temp, root) = fallible::filter_workspace()?;
+    let mut env = fallible::stdlib_env()?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open workspace root for hashing tests")?;
+
+    let (file, algorithm) = if let Some(stripped) = alg.strip_suffix("-empty") {
+        let relative = format!("{stripped}_empty");
+        dir.write(relative.as_str(), b"")
+            .with_context(|| format!("create empty fixture {relative}"))?;
+        (root.join(relative.as_str()), stripped)
+    } else {
+        (root.join("file"), alg)
+    };
 
     let hash_template_name = format!("hash_{alg}");
     let hash_template = format!("{{{{ path | hash('{algorithm}') }}}}");
-    register_template(&mut env, hash_template_name.as_str(), hash_template);
+    fallible::register_template(&mut env, hash_template_name.as_str(), hash_template)?;
     let hash_result = env
         .get_template(hash_template_name.as_str())
-        .expect("get template")
+        .with_context(|| format!("fetch template '{hash_template_name}'"))?
         .render(context!(path => file.as_str()))
-        .expect("render hash");
-    assert_eq!(hash_result, expected_hash);
+        .context("render hash template")?;
+    ensure!(
+        hash_result == expected_hash,
+        "expected hash {expected_hash} but rendered {hash_result}"
+    );
 
     let digest_template_name = format!("digest_{alg}");
     let digest_template = format!("{{{{ path | digest(8, '{algorithm}') }}}}");
-    register_template(&mut env, digest_template_name.as_str(), digest_template);
+    fallible::register_template(&mut env, digest_template_name.as_str(), digest_template)?;
     let digest_result = env
         .get_template(digest_template_name.as_str())
-        .expect("get template")
+        .with_context(|| format!("fetch template '{digest_template_name}'"))?
         .render(context!(path => file.as_str()))
-        .expect("render digest");
-    assert_eq!(digest_result, expected_digest);
+        .context("render digest template")?;
+    ensure!(
+        digest_result == expected_digest,
+        "expected digest {expected_digest} but rendered {digest_result}"
+    );
+    Ok(())
 }
 
 #[cfg(not(feature = "legacy-digests"))]
 #[rstest]
-fn hash_filter_legacy_algorithms_disabled(filter_workspace: Workspace) {
-    let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
+fn hash_filter_legacy_algorithms_disabled() -> Result<()> {
+    let (_temp, root) = fallible::filter_workspace()?;
+    let mut env = fallible::stdlib_env()?;
 
-    register_template(&mut env, "hash_sha1", "{{ path | hash('sha1') }}");
-    let template = env.get_template("hash_sha1").expect("get template");
+    fallible::register_template(&mut env, "hash_sha1", "{{ path | hash('sha1') }}")?;
+    let template = env
+        .get_template("hash_sha1")
+        .context("fetch template 'hash_sha1'")?;
     let result = template.render(context!(path => root.join("file").as_str()));
-    let err = result.expect_err("hash should require the legacy-digests feature for sha1");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("enable feature 'legacy-digests'"),
-        "error should mention legacy feature: {err}",
+    let err = match result {
+        Ok(output) => bail!(
+            "expected hash to require legacy digests for sha1 but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "hash should report InvalidOperation without legacy digests but was {:?}",
+        err.kind()
     );
+    ensure!(
+        err.to_string().contains("enable feature 'legacy-digests'"),
+        "error should mention legacy feature: {err}"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn hash_filter_rejects_unknown_algorithm(filter_workspace: Workspace) {
-    let (_temp, root) = filter_workspace;
-    let mut env = stdlib_env();
+fn hash_filter_rejects_unknown_algorithm() -> Result<()> {
+    let (_temp, root) = fallible::filter_workspace()?;
+    let mut env = fallible::stdlib_env()?;
     let file = root.join("file");
 
-    register_template(&mut env, "hash_unknown", "{{ path | hash('whirlpool') }}");
-    let hash_template = env.get_template("hash_unknown").expect("get template");
+    fallible::register_template(&mut env, "hash_unknown", "{{ path | hash('whirlpool') }}")?;
+    let hash_template = env
+        .get_template("hash_unknown")
+        .context("fetch template 'hash_unknown'")?;
     let hash_result = hash_template.render(context!(path => file.as_str()));
-    let hash_err = hash_result.expect_err("hash should reject unsupported algorithms");
-    assert_eq!(hash_err.kind(), ErrorKind::InvalidOperation);
-    assert!(
+    let hash_err = match hash_result {
+        Ok(output) => bail!(
+            "expected hash to reject unsupported algorithm but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        hash_err.kind() == ErrorKind::InvalidOperation,
+        "hash should report InvalidOperation for unsupported algorithms but was {:?}",
+        hash_err.kind()
+    );
+    ensure!(
         hash_err
             .to_string()
             .contains("unsupported hash algorithm 'whirlpool'"),
-        "error should mention unsupported algorithm: {hash_err}",
+        "error should mention unsupported algorithm: {hash_err}"
     );
 
-    register_template(
+    fallible::register_template(
         &mut env,
         "digest_unknown",
         "{{ path | digest(8, 'whirlpool') }}",
-    );
-    let digest_template = env.get_template("digest_unknown").expect("get template");
+    )?;
+    let digest_template = env
+        .get_template("digest_unknown")
+        .context("fetch template 'digest_unknown'")?;
     let digest_result = digest_template.render(context!(path => file.as_str()));
-    let digest_err = digest_result.expect_err("digest should reject unsupported algorithms");
-    assert_eq!(digest_err.kind(), ErrorKind::InvalidOperation);
-    assert!(
+    let digest_err = match digest_result {
+        Ok(output) => bail!(
+            "expected digest to reject unsupported algorithms but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        digest_err.kind() == ErrorKind::InvalidOperation,
+        "digest should report InvalidOperation for unsupported algorithms but was {:?}",
+        digest_err.kind()
+    );
+    ensure!(
         digest_err
             .to_string()
             .contains("unsupported hash algorithm 'whirlpool'"),
-        "error should mention unsupported algorithm: {digest_err}",
+        "error should mention unsupported algorithm: {digest_err}"
     );
+    Ok(())
 }

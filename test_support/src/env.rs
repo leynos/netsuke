@@ -180,7 +180,10 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
         .map(|os| std::env::split_paths(os).collect())
         .unwrap_or_default();
     paths.insert(0, dir.to_path_buf());
-    let new_path = std::env::join_paths(&paths).expect("Failed to join PATH entries");
+    let new_path = match std::env::join_paths(&paths) {
+        Ok(joined) => joined,
+        Err(err) => panic!("failed to join PATH entries: {err}"),
+    };
     let _lock = EnvLock::acquire();
     // SAFETY: `EnvLock` serialises mutations and the guard restores on drop.
     unsafe { env.set_var("PATH", &new_path) };

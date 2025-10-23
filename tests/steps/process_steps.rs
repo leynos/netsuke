@@ -7,6 +7,7 @@
 )]
 
 use crate::CliWorld;
+use anyhow::{Context, Result};
 use camino::Utf8Path;
 use cucumber::{given, then, when};
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
@@ -33,19 +34,22 @@ fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, nin
 
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
-fn install_fake_ninja(world: &mut CliWorld, exit_code: i32) {
-    let (dir, path) =
-        fake_ninja(u8::try_from(exit_code).expect("exit code must be between 0 and 255"));
+fn install_fake_ninja(world: &mut CliWorld, exit_code: i32) -> Result<()> {
+    let exit_code: u8 =
+        u8::try_from(exit_code).context("exit code must be between 0 and 255 for fake_ninja")?;
+    let (dir, path) = fake_ninja(exit_code)?;
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
+    Ok(())
 }
 
 /// Creates a fake ninja executable that validates the build file path.
 #[given("a fake ninja executable that checks for the build file")]
-fn fake_ninja_check(world: &mut CliWorld) {
-    let (dir, path) = check_ninja::fake_ninja_check_build_file();
+fn fake_ninja_check(world: &mut CliWorld) -> Result<()> {
+    let (dir, path) = check_ninja::fake_ninja_check_build_file()?;
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path);
+    Ok(())
 }
 
 /// Sets up a scenario where no ninja executable is available.

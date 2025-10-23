@@ -3,6 +3,8 @@
 
 use std::{ffi::OsString, process::Command};
 
+use anyhow::{bail, Context, Result};
+
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 
@@ -43,7 +45,7 @@ const FAILURE_SOURCE: &str = concat!(
 /// let exe = compile_uppercase_helper(&dir, &root, "cmd_upper");
 /// assert!(exe.as_std_path().exists());
 /// ```
-pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Utf8PathBuf {
+pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, UPPERCASE_SOURCE)
 }
 
@@ -65,7 +67,7 @@ pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Ut
 /// let exe = compile_failure_helper(&dir, &root, "cmd_fail");
 /// assert!(exe.as_std_path().exists());
 /// ```
-pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Utf8PathBuf {
+pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, FAILURE_SOURCE)
 }
 
@@ -95,9 +97,14 @@ pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Utf8
 /// );
 /// assert!(exe.as_std_path().exists());
 /// ```
-pub fn compile_rust_helper(dir: &Dir, root: &Utf8PathBuf, name: &str, source: &str) -> Utf8PathBuf {
+pub fn compile_rust_helper(
+    dir: &Dir,
+    root: &Utf8PathBuf,
+    name: &str,
+    source: &str,
+) -> Result<Utf8PathBuf> {
     dir.write(&format!("{name}.rs"), source.as_bytes())
-        .expect("write helper source");
+        .with_context(|| format!("write helper source {name}.rs"))?;
 
     let src_path = root.join(format!("{name}.rs"));
     let exe_path = root.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
@@ -107,8 +114,10 @@ pub fn compile_rust_helper(dir: &Dir, root: &Utf8PathBuf, name: &str, source: &s
         .arg("-o")
         .arg(exe_path.as_std_path())
         .status()
-        .expect("compile helper");
+        .with_context(|| format!("invoke {rustc:?} to compile helper {name}"))?;
 
-    assert!(status.success(), "failed to compile helper: {status:?}");
-    exe_path
+    if !status.success() {
+        bail!("failed to compile helper {name}: {status:?}");
+    }
+    Ok(exe_path)
 }

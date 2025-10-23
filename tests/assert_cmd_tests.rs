@@ -33,7 +33,7 @@ fn manifest_subcommand_writes_file() -> Result<()> {
 
 #[test]
 fn build_with_emit_writes_file() -> Result<()> {
-    let (ninja_dir, _ninja_path) = fake_ninja(0u8);
+    let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
     let temp = tempdir().context("create temp dir for build test")?;
     let netsukefile = temp.path().join("Netsukefile");
     fs::copy("tests/data/minimal.yml", &netsukefile)

@@ -13,6 +13,7 @@
     reason = "Cucumber steps prefer expect for readable assertions"
 )]
 use crate::CliWorld;
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::{given, then, when};
@@ -160,19 +161,23 @@ fn stdlib_workspace(world: &mut CliWorld) {
 }
 
 #[given("an uppercase stdlib command helper")]
-fn uppercase_stdlib_command_helper(world: &mut CliWorld) {
+fn uppercase_stdlib_command_helper(world: &mut CliWorld) -> Result<()> {
     let root = ensure_workspace(world);
     let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
-    let helper = compile_uppercase_helper(&handle, &root, "cmd_upper");
+    let helper = compile_uppercase_helper(&handle, &root, "cmd_upper")
+        .context("compile uppercase helper")?;
     world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+    Ok(())
 }
 
 #[given("a failing stdlib command helper")]
-fn failing_stdlib_command_helper(world: &mut CliWorld) {
+fn failing_stdlib_command_helper(world: &mut CliWorld) -> Result<()> {
     let root = ensure_workspace(world);
     let handle = Dir::open_ambient_dir(&root, ambient_authority()).expect("open workspace");
-    let helper = compile_failure_helper(&handle, &root, "cmd_fail");
+    let helper =
+        compile_failure_helper(&handle, &root, "cmd_fail").context("compile failing helper")?;
     world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+    Ok(())
 }
 
 /// Extracts the host portion from an HTTP or HTTPS URL.
