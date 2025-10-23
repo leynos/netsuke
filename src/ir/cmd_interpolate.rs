@@ -31,7 +31,7 @@ pub(crate) fn interpolate_command(
                     Ok(text) => text,
                     Err(err) => {
                         debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
-                        String::from_utf8_lossy(&err.into_bytes()).into_owned()
+                        String::from_utf8_lossy(err.as_bytes()).into_owned()
                     }
                 }
             })

@@ -264,12 +264,12 @@ fn quote(arg: &str) -> Result<String, QuoteError> {
         return Err(QuoteError::ContainsLineBreak);
     }
 
-    let bytes: Vec<u8> = arg.quoted(Sh);
+    let bytes = arg.quoted(Sh);
     match String::from_utf8(bytes) {
         Ok(text) => Ok(text),
         Err(err) => {
             debug_assert!(false, "quoted args must be valid UTF-8: {err}");
-            Ok(String::from_utf8_lossy(&err.into_bytes()).into_owned())
+            Ok(String::from_utf8_lossy(err.as_bytes()).into_owned())
         }
     }
 }
