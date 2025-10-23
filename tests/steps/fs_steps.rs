@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::FileTypeExt as CapFileTypeExt, fs_utf8::Dir};
 use cucumber::given;
 use rustix::fs::{Dev, FileType as RxFileType, Mode, mknodat};
-use std::os::unix::fs::FileTypeExt as StdFileTypeExt;
+use std::os::unix::fs::FileTypeExt;
 use test_support::env::set_var;
 
 fn setup_workspace() -> Result<(tempfile::TempDir, Utf8PathBuf, Dir)> {
