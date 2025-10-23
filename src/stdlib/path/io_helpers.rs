@@ -62,10 +62,6 @@ fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::expect_used,
-        reason = "tests rely on expect for descriptive failures"
-    )]
     use super::*;
     use camino::Utf8PathBuf;
     use rstest::rstest;

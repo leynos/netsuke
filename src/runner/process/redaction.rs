@@ -104,7 +104,6 @@ pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, reason = "tests validate redaction logic")]
     use super::*;
 
     #[test]

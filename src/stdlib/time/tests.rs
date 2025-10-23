@@ -1,18 +1,12 @@
-#![allow(
-    clippy::expect_used,
-    reason = "time tests prefer expect for concise assertions"
-)]
-
 use super::*;
+use anyhow::{Context, Result, anyhow, ensure};
 use minijinja::{Environment, context, value::Value};
 use rstest::rstest;
 use time::{Duration, OffsetDateTime, macros::datetime};
 
-fn eval_expression(env: &Environment<'_>, expr: &str) -> Value {
-    env.compile_expression(expr)
-        .expect("compile expression")
-        .eval(context! {})
-        .expect("evaluate expression")
+fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
+    let compiled = env.compile_expression(expr)?;
+    Ok(compiled.eval(context! {})?)
 }
 
 fn build_env() -> Environment<'static> {
@@ -21,49 +15,50 @@ fn build_env() -> Environment<'static> {
     env
 }
 
-fn value_as_timestamp(value: &Value) -> OffsetDateTime {
+fn value_as_timestamp(value: &Value) -> Result<OffsetDateTime> {
     value
         .as_object()
         .and_then(|obj| obj.downcast_ref::<TimestampValue>())
         .map(|stored| stored.datetime)
-        .expect("timestamp object")
+        .ok_or_else(|| anyhow!("value is not a timestamp object"))
 }
 
-fn value_as_duration(value: &Value) -> Duration {
+fn value_as_duration(value: &Value) -> Result<Duration> {
     value
         .as_object()
         .and_then(|obj| obj.downcast_ref::<TimeDeltaValue>())
         .map(|stored| stored.duration)
-        .expect("duration object")
+        .ok_or_else(|| anyhow!("value is not a duration object"))
 }
 
-fn get_iso8601_property(value: &Value) -> String {
-    value
-        .as_object()
-        .expect("object")
+fn get_iso8601_property(value: &Value) -> Result<String> {
+    let obj = value.as_object().context("value is not an object")?;
+    let iso = obj
         .get_value(&Value::from("iso8601"))
-        .expect("iso8601 attr")
-        .to_string()
+        .context("iso8601 attribute missing")?;
+    Ok(iso.to_string())
 }
 
 #[rstest]
-fn now_defaults_to_utc() {
+fn now_defaults_to_utc() -> Result<()> {
     let env = build_env();
-    let value = eval_expression(&env, "now()");
-    let captured = value_as_timestamp(&value);
+    let value = eval_expression(&env, "now()")?;
+    let captured = value_as_timestamp(&value)?;
     let now = OffsetDateTime::now_utc();
     let delta = (now - captured).abs();
-    assert!(delta <= Duration::seconds(2));
-    assert_eq!(captured.offset(), UtcOffset::UTC);
+    ensure!(delta <= Duration::seconds(2), "delta {delta:?} too large");
+    ensure!(captured.offset() == UtcOffset::UTC);
+    Ok(())
 }
 
 #[rstest]
-fn now_applies_custom_offset() {
+fn now_applies_custom_offset() -> Result<()> {
     let env = build_env();
-    let value = eval_expression(&env, "now(offset='+02:30')");
-    let captured = value_as_timestamp(&value);
-    let offset = UtcOffset::from_hms(2, 30, 0).expect("offset");
-    assert_eq!(captured.offset(), offset);
+    let value = eval_expression(&env, "now(offset='+02:30')")?;
+    let captured = value_as_timestamp(&value)?;
+    let offset = UtcOffset::from_hms(2, 30, 0)?;
+    ensure!(captured.offset() == offset);
+    Ok(())
 }
 
 #[rstest]
@@ -73,33 +68,36 @@ fn now_applies_custom_offset() {
 #[case::minutes_out_of_range("+01:60")]
 #[case::seconds_out_of_range("+01:01:61")]
 #[case::empty("")]
-fn now_rejects_invalid_offset(#[case] offset: &str) {
+fn now_rejects_invalid_offset(#[case] offset: &str) -> Result<()> {
     let env = build_env();
     let expr = format!("now(offset='{offset}')");
-    let eval_result = env
-        .compile_expression(&expr)
-        .expect("compile expression")
-        .eval(context! {});
-    let evaluation_error = eval_result.expect_err("invalid offset should error");
-    assert_eq!(evaluation_error.kind(), ErrorKind::InvalidOperation);
+    let compiled = env.compile_expression(&expr)?;
+    match compiled.eval(context! {}) {
+        Ok(value) => Err(anyhow!("expected invalid offset to fail, got {value:?}")),
+        Err(err) => {
+            ensure!(err.kind() == ErrorKind::InvalidOperation);
+            Ok(())
+        }
+    }
 }
 
 #[rstest]
-fn timedelta_defaults_to_zero() {
+fn timedelta_defaults_to_zero() -> Result<()> {
     let env = build_env();
-    let value = eval_expression(&env, "timedelta()");
-    let duration = value_as_duration(&value);
-    assert!(duration.is_zero());
+    let value = eval_expression(&env, "timedelta()")?;
+    let duration = value_as_duration(&value)?;
+    ensure!(duration.is_zero(), "duration {duration:?} should be zero");
+    Ok(())
 }
 
 #[rstest]
-fn timedelta_accumulates_components() {
+fn timedelta_accumulates_components() -> Result<()> {
     let env = build_env();
     let value = eval_expression(
         &env,
         "timedelta(days=1, hours=2, minutes=30, seconds=5, milliseconds=750, microseconds=250, nanoseconds=1)",
-    );
-    let duration = value_as_duration(&value);
+    )?;
+    let duration = value_as_duration(&value)?;
     let expected = Duration::seconds(SECONDS_PER_DAY)
         + Duration::seconds(SECONDS_PER_HOUR * 2)
         + Duration::seconds(SECONDS_PER_MINUTE * 30)
@@ -107,7 +105,8 @@ fn timedelta_accumulates_components() {
         + Duration::nanoseconds(750 * NANOS_PER_MILLISECOND)
         + Duration::nanoseconds(250 * NANOS_PER_MICROSECOND)
         + Duration::nanoseconds(1);
-    assert_eq!(duration, expected);
+    ensure!(duration == expected);
+    Ok(())
 }
 
 #[rstest]
@@ -125,22 +124,28 @@ fn timedelta_accumulates_components() {
     Duration::nanoseconds(-NANOS_PER_MICROSECOND),
 )]
 #[case("timedelta(nanoseconds=-1)", Duration::nanoseconds(-1))]
-fn timedelta_supports_negative_values(#[case] expr: &str, #[case] expected: Duration) {
+fn timedelta_supports_negative_values(
+    #[case] expr: &str,
+    #[case] expected: Duration,
+) -> Result<()> {
     let env = build_env();
-    let value = eval_expression(&env, expr);
-    let duration = value_as_duration(&value);
-    assert_eq!(duration, expected);
+    let value = eval_expression(&env, expr)?;
+    let duration = value_as_duration(&value)?;
+    ensure!(duration == expected);
+    Ok(())
 }
 
 #[rstest]
-fn timedelta_detects_overflow() {
+fn timedelta_detects_overflow() -> Result<()> {
     let env = build_env();
-    let eval_result = env
-        .compile_expression("timedelta(days=9223372036854775807)")
-        .expect("compile expression")
-        .eval(context! {});
-    let evaluation_error = eval_result.expect_err("overflow should error");
-    assert_eq!(evaluation_error.kind(), ErrorKind::InvalidOperation);
+    let compiled = env.compile_expression("timedelta(days=9223372036854775807)")?;
+    match compiled.eval(context! {}) {
+        Ok(value) => Err(anyhow!("expected overflow but evaluated to {value:?}")),
+        Err(err) => {
+            ensure!(err.kind() == ErrorKind::InvalidOperation);
+            Ok(())
+        }
+    }
 }
 
 #[rstest]
@@ -160,10 +165,14 @@ fn timedelta_detects_overflow() {
     datetime!(2024-05-21 10:30:00.5 -03:30),
     "2024-05-21T10:30:00.500000000-03:30",
 )]
-fn timestamp_iso8601_property(#[case] reference: OffsetDateTime, #[case] expected: &str) {
+fn timestamp_iso8601_property(
+    #[case] reference: OffsetDateTime,
+    #[case] expected: &str,
+) -> Result<()> {
     let value = Value::from_object(TimestampValue::new(reference));
-    let iso = get_iso8601_property(&value);
-    assert_eq!(iso, expected);
+    let iso = get_iso8601_property(&value)?;
+    ensure!(iso == expected);
+    Ok(())
 }
 
 #[rstest]
@@ -180,8 +189,9 @@ fn timestamp_iso8601_property(#[case] reference: OffsetDateTime, #[case] expecte
     Duration::seconds(-30) + Duration::nanoseconds(-250_000_000),
     "-PT30.25S",
 )]
-fn timedelta_iso8601_property(#[case] duration: Duration, #[case] expected: &str) {
+fn timedelta_iso8601_property(#[case] duration: Duration, #[case] expected: &str) -> Result<()> {
     let value = Value::from_object(TimeDeltaValue::new(duration));
-    let iso = get_iso8601_property(&value);
-    assert_eq!(iso, expected);
+    let iso = get_iso8601_property(&value)?;
+    ensure!(iso == expected);
+    Ok(())
 }

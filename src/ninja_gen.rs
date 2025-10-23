@@ -61,8 +61,12 @@ macro_rules! write_flag {
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
 /// });
-/// let text = netsuke::ninja_gen::generate(&graph).expect("generate ninja");
+/// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
+/// let text = netsuke::ninja_gen::generate(&graph)?;
 /// assert!(text.contains("rule a"));
+/// # Ok(())
+/// # })();
+/// # assert!(result.is_ok());
 /// ```
 ///
 /// # Errors
@@ -95,8 +99,12 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     phony: false, always: false
 /// });
 /// let mut out = String::new();
-/// netsuke::ninja_gen::generate_into(&graph, &mut out).expect("format ninja");
+/// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
+/// netsuke::ninja_gen::generate_into(&graph, &mut out)?;
 /// assert!(out.contains("build out: a"));
+/// # Ok(())
+/// # })();
+/// # assert!(result.is_ok());
 /// ```
 ///
 /// # Errors
@@ -258,13 +266,13 @@ impl Display for DisplayEdge<'_> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, reason = "tests exercise fallible helper paths")]
     use super::*;
     use crate::ir::{Action, BuildEdge, BuildGraph};
+    use anyhow::{Result, ensure};
     use rstest::rstest;
 
     #[rstest]
-    fn generate_simple_ninja() {
+    fn generate_simple_ninja() -> Result<()> {
         let action = Action {
             recipe: Recipe::Command {
                 command: "echo hi".into(),
@@ -289,13 +297,17 @@ mod tests {
         graph.targets.insert(Utf8PathBuf::from("out"), edge);
         graph.default_targets.push(Utf8PathBuf::from("out"));
 
-        let ninja = generate(&graph).expect("generate ninja");
+        let ninja = generate(&graph)?;
         let expected = concat!(
             "rule a\n",
             "  command = echo hi\n\n",
             "build out: a in\n\n",
             "default out\n"
         );
-        assert_eq!(ninja, expected);
+        ensure!(
+            ninja == expected,
+            "expected Ninja manifest:\n{expected}\nactual:\n{ninja}"
+        );
+        Ok(())
     }
 }

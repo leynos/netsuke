@@ -170,7 +170,6 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, reason = "fixtures favour expect for clarity")]
     use super::*;
 
     use camino::Utf8PathBuf;

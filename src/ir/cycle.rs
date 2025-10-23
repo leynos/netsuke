@@ -136,7 +136,6 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, reason = "tests assert helper invariants")]
     use super::*;
 
     fn path(name: &str) -> Utf8PathBuf {

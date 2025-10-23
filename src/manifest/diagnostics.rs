@@ -280,61 +280,90 @@ pub fn map_data_error(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, reason = "tests inspect diagnostic internals")]
     use super::*;
+    use anyhow::{Context, Result, anyhow, ensure};
     use std::error::Error as StdError;
 
     #[test]
-    fn map_yaml_error_includes_tab_hint() {
+    fn map_yaml_error_includes_tab_hint() -> Result<()> {
         let src = ManifestSource::from("\tkey: \"unterminated");
-        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
-            .expect_err("expected parse error");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!(
+                "expected YAML parse error for source {:?}",
+                src.as_str()
+            ));
+        };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
         let msg = diag.to_string();
-        assert!(msg.contains("Use spaces for indentation"), "message: {msg}");
+        ensure!(
+            msg.contains("Use spaces for indentation"),
+            "message missing tab hint: {msg}"
+        );
+        Ok(())
     }
 
     #[test]
-    fn map_yaml_error_defaults_location_when_missing() {
+    fn map_yaml_error_defaults_location_when_missing() -> Result<()> {
         let src = ManifestSource::from("foo: [1");
         let err = serde_saphyr::Error::Eof {
             location: serde_saphyr::Location::UNKNOWN,
         };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
-        assert!(diag.to_string().contains("line 1, column 1"));
+        ensure!(
+            diag.to_string().contains("line 1, column 1"),
+            "diagnostic should default to line 1 column 1"
+        );
+        Ok(())
     }
 
     #[test]
-    fn map_yaml_error_span_skips_carriage_return() {
+    fn map_yaml_error_span_skips_carriage_return() -> Result<()> {
         let src = ManifestSource::from("targets:\r\n  - name: hi\r\n    command echo\r\n");
-        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
-            .expect_err("expected parse error");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!("expected parse error for carriage-return input"));
+        };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
         let yaml_diag = (&*diag as &(dyn StdError + 'static))
             .downcast_ref::<YamlDiagnostic>()
-            .expect("expected YAML diagnostic");
-        let span = yaml_diag.span.expect("span present");
+            .ok_or_else(|| anyhow!("expected YAML diagnostic"))?;
+        let span = yaml_diag.span.context("span present")?;
         let offset = span.offset();
         if let Some(byte) = src.as_ref().as_bytes().get(offset) {
-            assert_ne!(*byte, b'\r');
+            ensure!(*byte != b'\r', "span should skip carriage returns");
         }
+        Ok(())
     }
 
     #[test]
-    fn location_to_index_handles_utf8() {
+    fn location_to_index_handles_utf8() -> Result<()> {
         // café: 'é' is multi-byte
         let src = ManifestSource::from("café: [\n");
-        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
-            .expect_err("expected parse error");
-        let loc = err.location().expect("location present");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!("expected parse error for UTF-8 test"));
+        };
+        let loc = err.location().context("location present")?;
         let idx = location_to_index(&src, loc);
-        assert!(src.as_ref().is_char_boundary(idx));
-        let e_idx = src.as_ref().find('é').expect("contains é");
-        assert!(idx > e_idx, "index {idx} must follow é at {e_idx}");
-        assert!(idx <= src.as_ref().len());
+        ensure!(
+            src.as_ref().is_char_boundary(idx),
+            "index {idx} should align to char boundary"
+        );
+        let e_idx = src
+            .as_ref()
+            .find('é')
+            .ok_or_else(|| anyhow!("source should contain 'é'"))?;
+        ensure!(idx > e_idx, "index {idx} must follow é at {e_idx}");
+        ensure!(
+            idx <= src.as_ref().len(),
+            "index {idx} should fall within source length {}",
+            src.as_ref().len()
+        );
+        Ok(())
     }
 }
 
@@ -348,7 +377,6 @@ fn expected_offset(src: &str, column: u64) -> usize {
 
 #[cfg(test)]
 mod byte_index_tests {
-    #![allow(clippy::expect_used, reason = "tests reason about offsets")]
     use super::{byte_index_components, expected_offset};
 
     #[test]

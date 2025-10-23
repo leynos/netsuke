@@ -523,39 +523,60 @@ fn append_stderr(message: &mut String, stderr: &[u8]) {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::expect_used,
-        reason = "tests interact with command helpers ergonomically"
-    )]
     #[cfg(windows)]
     #[test]
-    fn quote_escapes_cmd_metacharacters() {
+    fn quote_escapes_cmd_metacharacters() -> anyhow::Result<()> {
         use super::{QuoteError, quote};
+        use anyhow::{anyhow, ensure};
 
-        assert_eq!(quote("simple").unwrap(), "simple");
-        assert_eq!(quote("").unwrap(), "\"\"");
-        assert_eq!(quote("needs space").unwrap(), "\"needs space\"");
-        assert_eq!(quote("pipe|test").unwrap(), "\"pipe^|test\"");
-        assert_eq!(quote("redir<test").unwrap(), "\"redir^<test\"");
-        assert_eq!(quote("redir>test").unwrap(), "\"redir^>test\"");
-        assert_eq!(quote("caret^test").unwrap(), "\"caret^^test\"");
-        assert_eq!(quote("tab\ttab").unwrap(), "\"tab\ttab\"");
-        assert_eq!(quote("report&del *.txt").unwrap(), "\"report^&del *.txt\"");
-        assert_eq!(quote("%TEMP%").unwrap(), "\"%%TEMP%%\"");
-        assert_eq!(quote("echo!boom").unwrap(), "\"echo^!boom\"");
-        assert_eq!(quote("say \"hi\"").unwrap(), "\"say ^\"hi^\"\"");
-        assert_eq!(quote("\"").unwrap(), "\"^\"\"");
-        assert_eq!(quote("foo\"bar\"baz").unwrap(), "\"foo^\"bar^\"baz\"");
-        assert_eq!(quote("!DELAYED!").unwrap(), "\"^!DELAYED^!\"");
-        assert_eq!(quote("\"!VAR!\"").unwrap(), "\"^\"^!VAR^!^\"\"");
-        assert_eq!(
-            quote(r##"C:\path\"ending"##).unwrap(),
-            r#""C:\path\^"ending""#,
-        );
-        assert_eq!(quote("line\nbreak"), Err(QuoteError::ContainsLineBreak));
-        assert_eq!(
-            quote("carriage\rreturn"),
-            Err(QuoteError::ContainsLineBreak)
-        );
+        let success_cases = [
+            ("simple", "simple"),
+            ("", "\"\""),
+            ("needs space", "\"needs space\""),
+            ("pipe|test", "\"pipe^|test\""),
+            ("redir<test", "\"redir^<test\""),
+            ("redir>test", "\"redir^>test\""),
+            ("caret^test", "\"caret^^test\""),
+            ("tab\ttab", "\"tab\ttab\""),
+            ("report&del *.txt", "\"report^&del *.txt\""),
+            ("%TEMP%", "\"%%TEMP%%\""),
+            ("echo!boom", "\"echo^!boom\""),
+            ("say \"hi\"", "\"say ^\"hi^\"\""),
+            ("\"", "\"^\"\""),
+            ("foo\"bar\"baz", "\"foo^\"bar^\"baz\""),
+            ("!DELAYED!", "\"^!DELAYED^!\""),
+            ("\"!VAR!\"", "\"^\"^!VAR^!^\"\""),
+            (r#"C:\path\"ending"#, r#""C:\path\^"ending""#),
+        ];
+
+        for (input, expected) in success_cases {
+            let actual = quote(input)?;
+            ensure!(
+                actual == expected,
+                "quote({input:?}) -> {actual:?}, expected {expected:?}"
+            );
+        }
+
+        let error_cases = [
+            ("line\nbreak", QuoteError::ContainsLineBreak),
+            ("carriage\rreturn", QuoteError::ContainsLineBreak),
+        ];
+
+        for (input, expected) in error_cases {
+            match quote(input) {
+                Ok(actual) => {
+                    return Err(anyhow!(
+                        "quote({input:?}) succeeded with {actual:?} but expected error {expected:?}"
+                    ));
+                }
+                Err(err) => {
+                    ensure!(
+                        err == expected,
+                        "quote({input:?}) returned error {err:?}, expected {expected:?}"
+                    );
+                }
+            }
+        }
+        Ok(())
     }
 }

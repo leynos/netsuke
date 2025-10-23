@@ -116,10 +116,6 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::expect_used,
-        reason = "tests express fixture expectations succinctly"
-    )]
     use super::*;
     use minijinja::Environment;
 

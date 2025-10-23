@@ -100,10 +100,6 @@ fn render_str_with(
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::expect_used,
-        reason = "tests assert rendered manifest state succinctly"
-    )]
     use super::*;
     use crate::ast::Rule;
     use minijinja::Environment;
@@ -215,9 +211,12 @@ mod tests {
         let env = Environment::new();
         let manifest = sample_manifest()?;
         let rendered = render_manifest(manifest, &env)?;
-        let rendered_target = rendered.targets.first().expect("rendered target");
+        let rendered_target = rendered
+            .targets
+            .first()
+            .context("rendered target missing")?;
         assert_rendered_target(rendered_target);
-        let rendered_rule = rendered.rules.first().expect("rendered rule");
+        let rendered_rule = rendered.rules.first().context("rendered rule missing")?;
         assert_rendered_rule(rendered_rule);
         Ok(())
     }

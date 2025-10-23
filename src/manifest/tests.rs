@@ -1,8 +1,3 @@
-#![allow(
-    clippy::expect_used,
-    reason = "manifest tests prefer expect for expressive assertions"
-)]
-
 //! Tests for manifest parsing and macro registration helpers.
 
 use super::jinja_macros::{
@@ -10,7 +5,7 @@ use super::jinja_macros::{
 };
 use super::*;
 use crate::ast::{MacroDefinition, Recipe};
-use anyhow::{Context, Result as AnyResult};
+use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use minijinja::{
     Environment,
     value::{Kwargs, Value},
@@ -63,18 +58,32 @@ fn strict_env() -> Environment<'static> {
 #[case("joiner(*items)", "joiner")]
 #[case("format(name, caller=None)", "format")]
 #[case("complex(value, /, *, flag=false, **kw)", "complex")]
-fn parse_macro_name_extracts_identifier(#[case] signature: &str, #[case] expected: &str) {
-    let name = parse_macro_name(signature).expect("parse name");
-    assert_eq!(name, expected);
+fn parse_macro_name_extracts_identifier(
+    #[case] signature: &str,
+    #[case] expected: &str,
+) -> AnyResult<()> {
+    let name = parse_macro_name(signature)?;
+    ensure!(name == expected, "expected {expected}, got {name}");
+    Ok(())
 }
 
 #[rstest]
 #[case("greet", "include parameter list")]
 #[case("(name)", "missing an identifier")]
 #[case("   ", "missing an identifier")]
-fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) {
-    let err = parse_macro_name(signature).expect_err("should fail");
-    assert!(err.to_string().contains(message), "{err}");
+fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) -> AnyResult<()> {
+    match parse_macro_name(signature) {
+        Ok(name) => Err(anyhow!(
+            "expected parse_macro_name to fail for {signature:?} but succeeded with {name}"
+        )),
+        Err(err) => {
+            ensure!(
+                err.to_string().contains(message),
+                "expected error to contain {message:?}, got {err:?}"
+            );
+            Ok(())
+        }
+    }
 }
 
 #[rstest]
@@ -110,67 +119,83 @@ fn register_macro_handles_arguments(
     #[case] template: &str,
     #[case] expected: &str,
     mut strict_env: Environment,
-) {
+) -> AnyResult<()> {
     let macro_def = MacroDefinition {
         signature: signature.to_owned(),
         body: body.to_owned(),
     };
-    register_macro(&mut strict_env, &macro_def, 0).expect("register");
-    let rendered = render_with(&strict_env, template).expect("render");
-    assert_eq!(rendered, expected);
+    register_macro(&mut strict_env, &macro_def, 0)?;
+    let rendered = render_with(&strict_env, template)?;
+    ensure!(rendered == expected, "expected {expected}, got {rendered}");
+    Ok(())
 }
 
 #[rstest]
-fn call_macro_value_supports_kwargs(mut strict_env: Environment) {
-    strict_env
-        .add_template(
-            "macro",
-            "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
-        )
-        .expect("template");
-    let template = strict_env.get_template("macro").expect("template");
-    let state = template.eval_to_state(()).expect("state");
-    let value = state.lookup("greet").expect("macro").clone();
+fn call_macro_value_supports_kwargs(mut strict_env: Environment) -> AnyResult<()> {
+    strict_env.add_template(
+        "macro",
+        "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
+    )?;
+    let template = strict_env
+        .get_template("macro")
+        .context("missing template")?;
+    let state = template.eval_to_state(())?;
+    let value = state
+        .lookup("greet")
+        .context("macro value missing")?
+        .clone();
     let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
-    let rendered = call_macro_value(&state, &value, &[], Some(kwargs)).expect("call");
-    assert_eq!(rendered.to_string(), "hi Ada");
+    let rendered = call_macro_value(&state, &value, &[], Some(kwargs))?;
+    ensure!(
+        rendered.to_string() == "hi Ada",
+        "unexpected rendered output"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn register_macro_is_reusable(mut strict_env: Environment) {
+fn register_macro_is_reusable(mut strict_env: Environment) -> AnyResult<()> {
     let macro_def = MacroDefinition {
         signature: "echo(text)".to_owned(),
         body: "{{ text }}".to_owned(),
     };
-    register_macro(&mut strict_env, &macro_def, 0).expect("register");
+    register_macro(&mut strict_env, &macro_def, 0)?;
 
     let template = "{{ echo('first') }} {{ echo('second') }}";
-    let rendered = render_with(&strict_env, template).expect("render once");
-    assert_eq!(rendered.trim(), "first second");
+    let rendered = render_with(&strict_env, template)?;
+    ensure!(rendered.trim() == "first second");
 
     // Re-render to ensure the cached macro value remains valid.
-    let rendered_again = render_with(&strict_env, template).expect("render twice");
-    assert_eq!(rendered_again.trim(), "first second");
+    let rendered_again = render_with(&strict_env, template)?;
+    ensure!(rendered_again.trim() == "first second");
+    Ok(())
 }
 
 #[rstest]
-fn register_manifest_macros_validates_shape(mut strict_env: Environment) {
+fn register_manifest_macros_validates_shape(mut strict_env: Environment) -> AnyResult<()> {
     let mut mapping = ManifestMap::new();
     mapping.insert(
         "macros".into(),
         ManifestValue::Array(vec![ManifestValue::from(42)]),
     );
     let doc = ManifestValue::Object(mapping);
-    let err = register_manifest_macros(&doc, &mut strict_env).expect_err("shape error");
-    assert!(
-        err.to_string()
-            .contains("macros must be a sequence of mappings"),
-        "{err}"
-    );
+    match register_manifest_macros(&doc, &mut strict_env) {
+        Ok(()) => Err(anyhow!("expected error for non-mapping macro entry")),
+        Err(err) => {
+            ensure!(
+                err.to_string()
+                    .contains("macros must be a sequence of mappings"),
+                "{err}"
+            );
+            Ok(())
+        }
+    }
 }
 
 #[rstest]
-fn register_manifest_macros_rejects_non_string_values(mut strict_env: Environment) {
+fn register_manifest_macros_rejects_non_string_values(
+    mut strict_env: Environment,
+) -> AnyResult<()> {
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
     macro_mapping.insert(
@@ -182,30 +207,43 @@ fn register_manifest_macros_rejects_non_string_values(mut strict_env: Environmen
     doc.insert("macros".into(), macros);
     let doc_value = ManifestValue::Object(doc);
 
-    let err = register_manifest_macros(&doc_value, &mut strict_env)
-        .expect_err("non-string macro body should fail");
-    let msg = err.to_string();
-    assert!(msg.contains("macros"), "unexpected error: {msg}");
+    match register_manifest_macros(&doc_value, &mut strict_env) {
+        Ok(()) => Err(anyhow!(
+            "register_manifest_macros should fail when macro body is not a string"
+        )),
+        Err(err) => {
+            let msg = err.to_string();
+            ensure!(msg.contains("macros"), "unexpected error: {msg}");
+            Ok(())
+        }
+    }
 }
 
 #[test]
-fn manifest_macros_with_non_string_keys_fail_to_parse() {
+fn manifest_macros_with_non_string_keys_fail_to_parse() -> AnyResult<()> {
     let yaml = r#"
 macros:
   - ? [not, string]
     : signature: "greet(name)"
       body: "Hello"
 "#;
-    let err = serde_saphyr::from_str::<ManifestValue>(yaml).expect_err("expected parse failure");
-    let msg = err.to_string();
-    assert!(
-        msg.contains("expected string scalar") || msg.contains("key") || msg.contains("mapping"),
-        "{msg}"
-    );
+    match serde_saphyr::from_str::<ManifestValue>(yaml) {
+        Ok(_) => Err(anyhow!("expected non-string keys to fail parsing")),
+        Err(err) => {
+            let msg = err.to_string();
+            ensure!(
+                msg.contains("expected string scalar")
+                    || msg.contains("key")
+                    || msg.contains("mapping"),
+                "{msg}"
+            );
+            Ok(())
+        }
+    }
 }
 
 #[rstest]
-fn register_manifest_macros_requires_body(mut strict_env: Environment) {
+fn register_manifest_macros_requires_body(mut strict_env: Environment) -> AnyResult<()> {
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
     let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
@@ -213,20 +251,24 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment) {
     doc.insert("macros".into(), macros);
     let doc_value = ManifestValue::Object(doc);
 
-    let err =
-        register_manifest_macros(&doc_value, &mut strict_env).expect_err("missing macro body");
-    assert!(err.to_string().contains("body"), "{err}");
+    match register_manifest_macros(&doc_value, &mut strict_env) {
+        Ok(()) => Err(anyhow!("expected missing macro body to trigger an error")),
+        Err(err) => {
+            ensure!(err.to_string().contains("body"), "{err}");
+            Ok(())
+        }
+    }
 }
 
 #[rstest]
-fn register_manifest_macros_supports_multiple(mut strict_env: Environment) {
+fn register_manifest_macros_supports_multiple(mut strict_env: Environment) -> AnyResult<()> {
     let yaml = serde_saphyr::from_str::<ManifestValue>(
         "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",
-    )
-    .expect("yaml value");
-    register_manifest_macros(&yaml, &mut strict_env).expect("register");
-    let rendered = render_with(&strict_env, "{{ shout(greet('netsuke')) }}").expect("render");
-    assert_eq!(rendered.trim(), "HELLO NETSUKE");
+    )?;
+    register_manifest_macros(&yaml, &mut strict_env)?;
+    let rendered = render_with(&strict_env, "{{ shout(greet('netsuke')) }}")?;
+    ensure!(rendered.trim() == "HELLO NETSUKE");
+    Ok(())
 }
 
 #[rstest]
@@ -262,9 +304,11 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);
 
     let manifest = super::from_path(&manifest_path)?;
-    server.join().expect("join server");
+    if let Err(err) = server.join() {
+        return Err(anyhow!("join server thread panicked: {err:?}"));
+    }
 
-    let first_target = manifest.targets.first().expect("target");
+    let first_target = manifest.targets.first().context("target missing")?;
     match &first_target.recipe {
         Recipe::Command { command } => anyhow::ensure!(
             command == "workspace-body",

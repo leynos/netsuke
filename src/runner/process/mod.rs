@@ -194,10 +194,6 @@ fn check_exit_status(status: ExitStatus) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::expect_used,
-        reason = "tests assert helper invariants succinctly"
-    )]
     use super::*;
     use camino::Utf8PathBuf;
     use std::ffi::OsString;

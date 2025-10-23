@@ -177,12 +177,9 @@ fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
 
 #[cfg(test)]
 mod tests {
-    #![allow(
-        clippy::expect_used,
-        reason = "tests cover IO-heavy scenarios succinctly"
-    )]
     use super::*;
 
+    use anyhow::{Context, Result, anyhow, ensure};
     use std::{
         fs,
         sync::{
@@ -198,12 +195,16 @@ mod tests {
     use rstest::{fixture, rstest};
     use tempfile::tempdir;
 
+    type CacheWorkspace = (tempfile::TempDir, Arc<Dir>, Utf8PathBuf);
+
     #[fixture]
-    fn cache_workspace() -> (tempfile::TempDir, Arc<Dir>, Utf8PathBuf) {
-        let temp = tempdir().expect("tempdir");
-        let root_path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 path");
-        let dir = Dir::open_ambient_dir(&root_path, ambient_authority()).expect("open workspace");
-        (temp, Arc::new(dir), root_path)
+    fn cache_workspace() -> Result<CacheWorkspace> {
+        let temp = tempdir().context("create temporary workspace")?;
+        let root_path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("workspace path not valid UTF-8: {path:?}"))?;
+        let dir = Dir::open_ambient_dir(&root_path, ambient_authority())
+            .context("open workspace directory")?;
+        Ok((temp, Arc::new(dir), root_path))
     }
 
     fn make_cache(root: Arc<Dir>) -> FetchCache {
@@ -239,95 +240,146 @@ mod tests {
     }
 
     #[rstest]
-    fn open_cache_dir_rejects_empty_path(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, _path) = cache_workspace;
-        let err = open_cache_dir(&root, Utf8Path::new("")).expect_err("empty path should fail");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    fn open_cache_dir_rejects_empty_path(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+        let (_temp, root, _path) = cache_workspace?;
+        match open_cache_dir(&root, Utf8Path::new("")) {
+            Ok(dir) => Err(anyhow!(
+                "expected empty path to fail but received directory {dir:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 
     #[rstest]
     fn open_cache_dir_rejects_absolute_paths(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, _path) = cache_workspace;
-        let err = open_cache_dir(&root, Utf8Path::new("/etc/netsuke-cache"))
-            .expect_err("absolute path should fail");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        cache_workspace: Result<CacheWorkspace>,
+    ) -> Result<()> {
+        let (_temp, root, _path) = cache_workspace?;
+        match open_cache_dir(&root, Utf8Path::new("/etc/netsuke-cache")) {
+            Ok(dir) => Err(anyhow!(
+                "expected absolute path to fail but received directory {dir:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 
     #[rstest]
-    fn open_cache_dir_rejects_parent_paths(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, _path) = cache_workspace;
-        let err = open_cache_dir(&root, Utf8Path::new("../escape"))
-            .expect_err("parent paths should fail");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+    fn open_cache_dir_rejects_parent_paths(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+        let (_temp, root, _path) = cache_workspace?;
+        match open_cache_dir(&root, Utf8Path::new("../escape")) {
+            Ok(dir) => Err(anyhow!(
+                "expected parent path to fail but received directory {dir:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 
     #[rstest]
-    fn open_cache_dir_errors_for_file_path(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, path) = cache_workspace;
+    fn open_cache_dir_errors_for_file_path(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+        let (_temp, root, path) = cache_workspace?;
         let file_path = path.join("file");
-        fs::write(file_path.as_std_path(), b"data").expect("write file");
-        let err = open_cache_dir(&root, file_path.as_path()).expect_err("file path should fail");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        fs::write(file_path.as_std_path(), b"data").context("write file placeholder")?;
+        match open_cache_dir(&root, file_path.as_path()) {
+            Ok(dir) => Err(anyhow!(
+                "expected file path to fail but received directory {dir:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 
     #[rstest]
     fn open_cache_dir_creates_relative_directory(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, path) = cache_workspace;
-        let dir = open_cache_dir(&root, Utf8Path::new("cache")).expect("open relative cache dir");
-        dir.write("entry", b"data").expect("write cache entry");
+        cache_workspace: Result<CacheWorkspace>,
+    ) -> Result<()> {
+        let (_temp, root, path) = cache_workspace?;
+        let dir = open_cache_dir(&root, Utf8Path::new("cache"))?;
+        dir.write("entry", b"data")
+            .context("write cache entry to relative directory")?;
         drop(dir);
         let entry = path.join("cache").join("entry");
-        assert!(
+        ensure!(
             fs::metadata(entry.as_std_path()).is_ok(),
-            "cache entry should exist",
+            "cache entry {} should exist",
+            entry
         );
+        Ok(())
     }
 
     #[rstest]
     fn fetch_rejects_template_cache_dir_argument(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, _path) = cache_workspace;
+        cache_workspace: Result<CacheWorkspace>,
+    ) -> Result<()> {
+        let (_temp, root, _path) = cache_workspace?;
         let cache = make_cache(root);
         let kwargs =
             Kwargs::from_iter([(String::from("cache_dir"), Value::from(".netsuke/cache"))]);
         let impure = Arc::new(AtomicBool::new(false));
-        let err = fetch("http://127.0.0.1:9", &kwargs, &impure, &cache)
-            .expect_err("cache_dir keyword should be rejected");
-        assert_eq!(err.kind(), ErrorKind::TooManyArguments);
-        assert!(
+        let err = match fetch("http://127.0.0.1:9", &kwargs, &impure, &cache) {
+            Ok(_) => {
+                return Err(anyhow!(
+                    "expected cache_dir keyword to fail but request succeeded"
+                ))
+            }
+            Err(err) => err,
+        };
+        ensure!(
+            err.kind() == ErrorKind::TooManyArguments,
+            "unexpected error kind {kind:?}",
+            kind = err.kind()
+        );
+        ensure!(
             err.to_string().contains("cache_dir"),
             "error should mention unexpected cache_dir argument: {err}",
         );
-        assert!(
+        ensure!(
             !impure.load(Ordering::Relaxed),
             "rejecting cache_dir must not mark the template impure",
         );
+        Ok(())
     }
 
     #[rstest]
-    fn fetch_cache_opens_default_directory(
-        cache_workspace: (tempfile::TempDir, Arc<Dir>, Utf8PathBuf),
-    ) {
-        let (_temp, root, path) = cache_workspace;
+    fn fetch_cache_opens_default_directory(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+        let (_temp, root, path) = cache_workspace?;
         let cache = make_cache(root);
-        let dir = cache.open_dir().expect("open default cache dir");
-        dir.write("entry", b"data").expect("write entry");
+        let dir = cache.open_dir()?;
+        dir.write("entry", b"data")
+            .context("write entry to default cache directory")?;
         drop(dir);
         let entry = path.join(DEFAULT_FETCH_CACHE_DIR).join("entry");
-        assert!(
+        ensure!(
             fs::metadata(entry.as_std_path()).is_ok(),
-            "entry should exist",
+            "entry {} should exist",
+            entry
         );
+        Ok(())
     }
 }
