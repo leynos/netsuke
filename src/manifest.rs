@@ -164,9 +164,14 @@ mod tests;
 
 fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let manifest_label = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map_or_else(|| path.display().to_string(), str::to_owned);
     let utf8_parent = Utf8Path::from_path(parent).ok_or_else(|| {
         anyhow!(
-            "manifest path '{}' contains non-UTF-8 components",
+            "manifest '{}' path '{}' contains non-UTF-8 components",
+            manifest_label,
             path.display()
         )
     })?;
@@ -177,8 +182,7 @@ fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
     };
     let dir = Dir::open_ambient_dir(utf8_parent, ambient_authority()).with_context(|| {
         format!(
-            "failed to open workspace dir for manifest '{}'",
-            path.display()
+            "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"
         )
     })?;
     Ok(StdlibConfig::new(dir))

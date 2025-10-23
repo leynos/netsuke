@@ -5,12 +5,18 @@
 //! deadline so hung clients cannot stall the test suite.
 
 use std::{
-    env,
+    env, fmt,
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     thread,
     time::{Duration, Instant},
 };
+
+#[cfg(test)]
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(test)]
+static DURATION_WARNINGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 /// Configuration for HTTP fixtures, including timeouts used during polling.
 #[derive(Debug, Clone)]
@@ -204,7 +210,114 @@ fn duration_from_env(var: &str, default: Duration) -> Duration {
         Ok(value) => value
             .parse::<u64>()
             .map(Duration::from_millis)
-            .unwrap_or(default),
+            .unwrap_or_else(|err| {
+                log_duration_parse_error(var, &value, &err);
+                default
+            }),
         Err(_) => default,
+    }
+}
+
+fn log_duration_parse_error(var: &str, value: &str, err: &dyn fmt::Display) {
+    #[cfg(test)]
+    {
+        record_duration_warning(format!("ignoring invalid {var}='{value}': {err}"));
+    }
+
+    #[cfg(not(test))]
+    {
+        eprintln!("netsuke: ignoring invalid {var} value '{value}': {err}");
+    }
+}
+
+#[cfg(test)]
+fn record_duration_warning(message: String) {
+    let warnings = DURATION_WARNINGS.get_or_init(|| Mutex::new(Vec::new()));
+    warnings
+        .lock()
+        .expect("duration warnings lock")
+        .push(message);
+}
+
+#[cfg(test)]
+fn take_duration_warnings() -> Vec<String> {
+    let warnings = DURATION_WARNINGS.get_or_init(|| Mutex::new(Vec::new()));
+    std::mem::take(&mut *warnings.lock().expect("duration warnings lock"))
+}
+
+#[cfg(test)]
+fn clear_duration_warnings() {
+    let _ = take_duration_warnings();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        HttpServerConfig, clear_duration_warnings, duration_from_env, take_duration_warnings,
+    };
+
+    use crate::{EnvVarGuard, env_lock::EnvLock};
+    use std::time::Duration;
+
+    #[test]
+    fn from_env_applies_overrides() {
+        let _lock = EnvLock::acquire();
+        clear_duration_warnings();
+        let accept = EnvVarGuard::set("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS", "1500");
+        let read = EnvVarGuard::set("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", "750");
+        let poll = EnvVarGuard::set("NETSUKE_TEST_HTTP_POLL_INTERVAL_MS", "25");
+
+        let config = HttpServerConfig::from_env();
+        assert_eq!(config.accept_timeout, Duration::from_millis(1500));
+        assert_eq!(config.read_timeout, Duration::from_millis(750));
+        assert_eq!(config.poll_interval, Duration::from_millis(25));
+        assert!(
+            take_duration_warnings().is_empty(),
+            "no warnings expected for valid overrides"
+        );
+
+        drop(poll);
+        drop(read);
+        drop(accept);
+    }
+
+    #[test]
+    fn duration_from_env_returns_default_for_missing() {
+        let _lock = EnvLock::acquire();
+        clear_duration_warnings();
+        let guard = EnvVarGuard::remove("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS");
+        let duration = duration_from_env(
+            "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS",
+            Duration::from_secs(3),
+        );
+        assert_eq!(duration, Duration::from_secs(3));
+        assert!(
+            take_duration_warnings().is_empty(),
+            "missing variables should not log warnings"
+        );
+        drop(guard);
+    }
+
+    #[test]
+    fn duration_from_env_reports_invalid_values() {
+        let _lock = EnvLock::acquire();
+        clear_duration_warnings();
+        let guard = EnvVarGuard::set("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS", "not-a-number");
+        let duration = duration_from_env(
+            "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS",
+            Duration::from_secs(3),
+        );
+        assert_eq!(duration, Duration::from_secs(3));
+        let warnings = take_duration_warnings();
+        assert_eq!(warnings.len(), 1);
+        assert!(
+            warnings[0].contains("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS"),
+            "warning should mention the variable name"
+        );
+        assert!(
+            warnings[0].contains("not-a-number"),
+            "warning should include the invalid value"
+        );
+        drop(guard);
     }
 }

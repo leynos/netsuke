@@ -112,17 +112,31 @@ impl StdlibConfig {
         }
     }
 
-    fn validate_cache_relative(relative: &Utf8Path) -> Result<()> {
-        match validate_fetch_cache_relative(relative) {
-            Ok(()) => Ok(()),
-            Err(CachePathError::Empty) => bail!("fetch cache path must not be empty"),
-            Err(CachePathError::Absolute) => {
-                bail!("fetch cache path must be relative to the workspace")
-            }
-            Err(CachePathError::EscapesWorkspace) => {
-                bail!("fetch cache path must stay within the workspace")
+    pub(super) fn validate_cache_relative(relative: &Utf8Path) -> Result<()> {
+        if relative.as_str().is_empty() {
+            bail!("fetch cache path must not be empty");
+        }
+
+        if relative.is_absolute() {
+            bail!(
+                "fetch cache path '{}' must be relative to the workspace",
+                relative
+            );
+        }
+
+        for component in relative.components() {
+            if matches!(
+                component,
+                Utf8Component::ParentDir | Utf8Component::Prefix(_)
+            ) {
+                bail!(
+                    "fetch cache path '{}' must stay within the workspace",
+                    relative
+                );
             }
         }
+
+        Ok(())
     }
 }
 
@@ -139,34 +153,6 @@ impl Default for StdlibConfig {
 pub(crate) struct NetworkConfig {
     pub(crate) cache_root: Arc<Dir>,
     pub(crate) cache_relative: Utf8PathBuf,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum CachePathError {
-    Empty,
-    Absolute,
-    EscapesWorkspace,
-}
-
-pub(super) fn validate_fetch_cache_relative(relative: &Utf8Path) -> Result<(), CachePathError> {
-    if relative.as_str().is_empty() {
-        return Err(CachePathError::Empty);
-    }
-
-    if relative.is_absolute() {
-        return Err(CachePathError::Absolute);
-    }
-
-    for component in relative.components() {
-        if matches!(
-            component,
-            Utf8Component::ParentDir | Utf8Component::Prefix(_)
-        ) {
-            return Err(CachePathError::EscapesWorkspace);
-        }
-    }
-
-    Ok(())
 }
 
 /// Captures mutable state shared between stdlib helpers.
@@ -328,4 +314,44 @@ fn is_device(ft: fs::FileType) -> bool {
 #[cfg(not(unix))]
 fn is_device(_ft: fs::FileType) -> bool {
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StdlibConfig;
+
+    use camino::Utf8Path;
+
+    #[test]
+    fn validate_cache_relative_rejects_empty() {
+        let err = StdlibConfig::validate_cache_relative(Utf8Path::new(""))
+            .expect_err("empty path should fail");
+        assert_eq!(err.to_string(), "fetch cache path must not be empty");
+    }
+
+    #[test]
+    fn validate_cache_relative_rejects_absolute_paths() {
+        let err = StdlibConfig::validate_cache_relative(Utf8Path::new("/cache"))
+            .expect_err("absolute path should fail");
+        assert_eq!(
+            err.to_string(),
+            "fetch cache path '/cache' must be relative to the workspace"
+        );
+    }
+
+    #[test]
+    fn validate_cache_relative_rejects_parent_components() {
+        let err = StdlibConfig::validate_cache_relative(Utf8Path::new("../escape"))
+            .expect_err("parent components should fail");
+        assert_eq!(
+            err.to_string(),
+            "fetch cache path '../escape' must stay within the workspace"
+        );
+    }
+
+    #[test]
+    fn validate_cache_relative_accepts_workspace_relative_paths() {
+        StdlibConfig::validate_cache_relative(Utf8Path::new("nested/cache"))
+            .expect("relative path should be accepted");
+    }
 }

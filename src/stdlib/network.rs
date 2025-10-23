@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use super::{CachePathError, NetworkConfig, validate_fetch_cache_relative, value_from_bytes};
+use super::{NetworkConfig, StdlibConfig, value_from_bytes};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use minijinja::{
@@ -114,20 +114,8 @@ fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
 
 fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
     let utf_path = relative;
-    if let Err(err) = validate_fetch_cache_relative(utf_path) {
-        return Err(match err {
-            CachePathError::Empty => {
-                Error::new(ErrorKind::InvalidOperation, "cache_dir must not be empty")
-            }
-            CachePathError::Absolute => Error::new(
-                ErrorKind::InvalidOperation,
-                format!("cache_dir must be relative to the workspace (received '{utf_path}')"),
-            ),
-            CachePathError::EscapesWorkspace => Error::new(
-                ErrorKind::InvalidOperation,
-                format!("cache_dir must stay within the workspace (received '{utf_path}')"),
-            ),
-        });
+    if let Err(err) = StdlibConfig::validate_cache_relative(utf_path) {
+        return Err(Error::new(ErrorKind::InvalidOperation, err.to_string()));
     }
 
     root.create_dir_all(utf_path)
