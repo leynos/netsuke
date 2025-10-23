@@ -5,7 +5,6 @@ use super::{BuildTargets, NINJA_PROGRAM};
 use crate::cli::Cli;
 use camino::Utf8PathBuf;
 use ninja_env::NINJA_ENV;
-use std::convert::TryFrom;
 use std::{
     env,
     ffi::OsString,
