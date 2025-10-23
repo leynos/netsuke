@@ -89,7 +89,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
 #[rstest]
 fn run_ninja_not_found() -> Result<()> {
     let cli = Cli {
-        file: PathBuf::from("/dev/null"),
+        file: PathBuf::from("Netsukefile"),
         directory: None,
         jobs: None,
         verbose: false,

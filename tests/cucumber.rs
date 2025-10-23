@@ -57,13 +57,23 @@ pub struct CliWorld {
 
 mod steps;
 
+/// Controls how the HTTP server fixture teardown behaves when the host cannot
+/// be extracted from the captured stdlib URL.
 #[derive(Copy, Clone)]
 enum HttpShutdownMode {
+    /// Panic if the host cannot be extracted, ensuring test failures surface.
     Strict,
+    /// Log a warning and skip shutdown when the host is unavailable.
+    /// Prevents the test process from hanging when no host is present.
     Lenient,
 }
 
 impl CliWorld {
+    /// Start a new HTTP server fixture, replacing any existing instance.
+    ///
+    /// The previous server is shut down in strict mode so failures surface
+    /// immediately. The newly spawned server URL and handle are stored for
+    /// later assertions and teardown.
     pub(crate) fn start_http_server(&mut self, body: String) -> Result<()> {
         self.shutdown_http_server_with(HttpShutdownMode::Strict);
         let (url, server) =
@@ -73,6 +83,11 @@ impl CliWorld {
         Ok(())
     }
 
+    /// Shut down the active HTTP server fixture, tolerating missing host data.
+    ///
+    /// Lenient mode avoids panicking when the captured URL cannot be parsed.
+    /// This allows teardown to continue for scenarios that omit the host
+    /// component intentionally.
     pub(crate) fn shutdown_http_server(&mut self) {
         self.shutdown_http_server_with(HttpShutdownMode::Lenient);
     }
@@ -88,6 +103,10 @@ impl CliWorld {
             .and_then(steps::stdlib_steps::server_host)
     }
 
+    /// Restore any environment variables overridden during the scenario.
+    ///
+    /// Values return to their prior state (or are unset if absent); the guard
+    /// map is cleared afterwards.
     fn restore_environment(&mut self) {
         if self.env_vars.is_empty() {
             return;
@@ -96,6 +115,11 @@ impl CliWorld {
         restore_many(self.env_vars.drain().collect());
     }
 
+    /// Shut down the active HTTP server fixture according to the supplied mode.
+    ///
+    /// When the stdlib URL contains a host, the server is always joined.
+    /// If the host cannot be extracted, strict mode panics while lenient mode
+    /// warns and leaves the server to drop naturally.
     fn shutdown_http_server_with(&mut self, mode: HttpShutdownMode) {
         let Some(server) = self.http_server.take() else {
             self.stdlib_url = None;
@@ -120,7 +144,6 @@ impl CliWorld {
                     "Warning: Cannot extract host from stdlib_url; skipping server shutdown to avoid hang. URL: {:?}",
                     self.stdlib_url
                 );
-                drop(server);
             }
         }
         self.stdlib_url = None;
