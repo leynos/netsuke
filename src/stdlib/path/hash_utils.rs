@@ -78,7 +78,10 @@ where
             hasher.update(chunk);
         } else {
             debug_assert!(false, "read beyond buffer capacity: {read} bytes");
-            hasher.update(buffer.as_slice());
+            let end = read.min(buffer.len());
+            if let Some(chunk) = buffer.get(..end) {
+                hasher.update(chunk);
+            }
         }
     }
     Ok(encode_hex(&hasher.finalize()))
