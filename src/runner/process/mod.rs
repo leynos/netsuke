@@ -136,8 +136,8 @@ pub fn run_ninja(
     check_exit_status(status)
 }
 
-fn process_stream_thread(handle: thread::JoinHandle<ForwardStats>, stream_name: &str) {
-    match handle.join() {
+fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_name: &str) {
+    match result {
         Ok(stats) => {
             if stats.write_failed {
                 tracing::debug!(
@@ -171,8 +171,8 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
     });
 
     let status = child.wait()?;
-    process_stream_thread(out_handle, "stdout");
-    process_stream_thread(err_handle, "stderr");
+    handle_forwarding_thread_result(out_handle.join(), "stdout");
+    handle_forwarding_thread_result(err_handle.join(), "stderr");
     Ok(status)
 }
 
