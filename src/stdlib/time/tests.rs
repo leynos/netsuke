@@ -1,3 +1,8 @@
+//! Tests for the stdlib time helpers, validating timestamp and duration
+//! conversions alongside ISO 8601 formatting. The cases assert that `now`
+//! respects UTC defaults, applies caller-provided offsets, rejects malformed
+//! offsets, and that helper functions expose consistent object wrappers for
+//! downstream template evaluation.
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use minijinja::{Environment, context, value::Value};
