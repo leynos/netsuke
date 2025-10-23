@@ -137,14 +137,14 @@ pub fn run_ninja(
 }
 
 fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| io::Error::other("child process missing stdout pipe"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| io::Error::other("child process missing stderr pipe"))?;
+    let Some(stdout) = child.stdout.take() else {
+        terminate_child(&mut child, "stdout pipe unavailable");
+        return Err(io::Error::other("child process missing stdout pipe"));
+    };
+    let Some(stderr) = child.stderr.take() else {
+        terminate_child(&mut child, "stderr pipe unavailable");
+        return Err(io::Error::other("child process missing stderr pipe"));
+    };
 
     let out_handle =
         thread::spawn(move || forward_child_output(BufReader::new(stdout), io::stdout(), "stdout"));
@@ -173,6 +173,15 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
         }
     }
     Ok(status)
+}
+
+fn terminate_child(child: &mut Child, context: &str) {
+    if let Err(err) = child.kill() {
+        tracing::debug!("failed to kill child after {context}: {err}");
+    }
+    if let Err(err) = child.wait() {
+        tracing::debug!("failed to reap child after {context}: {err}");
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
