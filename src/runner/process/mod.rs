@@ -195,6 +195,19 @@ struct ForwardStats {
     write_failed: bool,
 }
 
+struct CountingReader<'a, R> {
+    inner: &'a mut R,
+    read: u64,
+}
+
+impl<R: Read> Read for CountingReader<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let count = self.inner.read(buf)?;
+        self.read += count as u64;
+        Ok(count)
+    }
+}
+
 struct CountingWriter<'a, W> {
     inner: &'a mut W,
     written: u64,
@@ -230,27 +243,30 @@ where
     W: Write,
 {
     let mut stats = ForwardStats::default();
+    let mut counting_reader = CountingReader {
+        inner: &mut reader,
+        read: 0,
+    };
     let mut counting_writer = CountingWriter {
         inner: &mut writer,
         written: 0,
     };
 
-    match io::copy(&mut reader, &mut counting_writer) {
-        Ok(bytes) => {
+    match io::copy(&mut counting_reader, &mut counting_writer) {
+        Ok(_) => {
             stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
-            stats.bytes_read = clamp_u64_to_usize(bytes);
+            stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
         }
         Err(err) => {
             stats.write_failed = true;
             stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
-            stats.bytes_read = clamp_u64_to_usize(counting_writer.written);
+            stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
             tracing::debug!(
                 "Failed to write child {stream_name} output to parent: {err}; discarding remaining bytes"
             );
-            match io::copy(&mut reader, &mut io::sink()) {
-                Ok(drained) => {
-                    let drained_bytes = clamp_u64_to_usize(drained);
-                    stats.bytes_read = stats.bytes_read.saturating_add(drained_bytes);
+            match io::copy(&mut counting_reader, &mut io::sink()) {
+                Ok(_) => {
+                    stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
                 }
                 Err(drain_err) => {
                     tracing::debug!(
