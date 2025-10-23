@@ -21,11 +21,9 @@ mod redaction;
 
 pub use file_io::*;
 pub use paths::*;
-// Re-export redaction helpers for doctests without leaking unused imports in release builds.
-#[cfg_attr(
-    not(doctest),
-    expect(unused_imports, reason = "retain doctest re-exports")
-)]
+// Re-export redaction helpers only for doctests so the examples compile without
+// introducing unused imports in normal builds.
+#[cfg(doctest)]
 pub use redaction::*;
 
 use redaction::{CommandArg, redact_sensitive_args};
