@@ -146,10 +146,14 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
         return Err(io::Error::other("child process missing stderr pipe"));
     };
 
-    let out_handle =
-        thread::spawn(move || forward_child_output(BufReader::new(stdout), io::stdout(), "stdout"));
-    let err_handle =
-        thread::spawn(move || forward_child_output(BufReader::new(stderr), io::stderr(), "stderr"));
+    let out_handle = thread::spawn(move || {
+        let mut lock = io::stdout().lock();
+        forward_child_output(BufReader::new(stdout), &mut lock, "stdout")
+    });
+    let err_handle = thread::spawn(move || {
+        let mut lock = io::stderr().lock();
+        forward_child_output(BufReader::new(stderr), &mut lock, "stderr")
+    });
 
     let status = child.wait()?;
     match out_handle.join() {
