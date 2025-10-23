@@ -73,6 +73,36 @@ fn get_target(world: &CliWorld, index: usize) -> Result<&Target> {
         .with_context(|| format!("missing target {index}"))
 }
 
+fn assert_manifest_collection_len(
+    world: &CliWorld,
+    collection_name: &str,
+    actual_len: usize,
+    expected_len: usize,
+) -> Result<()> {
+    debug_assert!(
+        world.manifest.is_some(),
+        "manifest should be parsed before asserting {collection_name}"
+    );
+    ensure!(
+        actual_len == expected_len,
+        "expected manifest to have {expected_len} {collection_name}, got {actual_len}"
+    );
+    Ok(())
+}
+
+fn assert_field_eq(
+    context_name: &str,
+    field_name: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<()> {
+    ensure!(
+        actual == expected,
+        "expected {context_name} {field_name} '{expected}', got '{actual}'"
+    );
+    Ok(())
+}
+
 fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
 where
     I: Iterator<Item = char>,
@@ -185,11 +215,7 @@ fn manifest_version(world: &mut CliWorld, version: String) -> Result<()> {
         .as_ref()
         .context("manifest has not been parsed")?;
     let actual = manifest.netsuke_version.to_string();
-    ensure!(
-        actual == version,
-        "expected manifest version '{version}', got '{actual}'"
-    );
-    Ok(())
+    assert_field_eq("manifest", "version", actual.as_str(), version.as_str())
 }
 
 #[then(expr = "the first target name is {string}")]
@@ -283,12 +309,7 @@ fn first_rule_name(world: &mut CliWorld, name: String) -> Result<()> {
         .rules
         .first()
         .context("manifest does not contain any rules")?;
-    ensure!(
-        rule.name == name,
-        "expected first rule name '{name}', got '{}'",
-        rule.name
-    );
-    Ok(())
+    assert_field_eq("first rule", "name", rule.name.as_str(), name.as_str())
 }
 
 #[then(expr = "the first target command is {string}")]
@@ -307,11 +328,7 @@ fn manifest_has_targets(world: &mut CliWorld, count: usize) -> Result<()> {
         .as_ref()
         .context("manifest has not been parsed")?;
     let actual = manifest.targets.len();
-    ensure!(
-        actual == count,
-        "expected manifest to have {count} targets, got {actual}"
-    );
-    Ok(())
+    assert_manifest_collection_len(world, "targets", actual, count)
 }
 
 #[then(expr = "the manifest has {int} macros")]
@@ -321,11 +338,7 @@ fn manifest_has_macros(world: &mut CliWorld, count: usize) -> Result<()> {
         .as_ref()
         .context("manifest has not been parsed")?;
     let actual = manifest.macros.len();
-    ensure!(
-        actual == count,
-        "expected manifest to have {count} macros, got {actual}"
-    );
-    Ok(())
+    assert_manifest_collection_len(world, "macros", actual, count)
 }
 
 #[then(expr = "the macro {int} signature is {string}")]
@@ -343,12 +356,12 @@ fn macro_signature_is(world: &mut CliWorld, index: usize, signature: String) -> 
         .macros
         .get(index - 1)
         .with_context(|| format!("missing macro {index}"))?;
-    ensure!(
-        macro_def.signature == signature,
-        "expected macro {index} signature '{signature}', got '{}'",
-        macro_def.signature
-    );
-    Ok(())
+    assert_field_eq(
+        &format!("macro {index}"),
+        "signature",
+        macro_def.signature.as_str(),
+        signature.as_str(),
+    )
 }
 
 #[then(expr = "the manifest has targets named {string}")]
@@ -395,11 +408,7 @@ fn assert_target_command(world: &CliWorld, index: usize, command: &str) -> Resul
     let target = get_target(world, index)?;
     match &target.recipe {
         Recipe::Command { command: actual } => {
-            ensure!(
-                actual == command,
-                "expected target {index} command '{command}', got '{actual}'"
-            );
-            Ok(())
+            assert_field_eq(&format!("target {index}"), "command", actual, command)
         }
         other => bail!("Expected command recipe, got: {other:?}"),
     }
