@@ -1,3 +1,5 @@
+//! Exercises standard library I/O filters to ensure they render file contents,
+//! line counts, and error paths correctly in end-to-end scenarios.
 use anyhow::{bail, ensure, Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{context, ErrorKind};
