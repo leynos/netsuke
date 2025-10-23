@@ -265,11 +265,11 @@ fn quote(arg: &str) -> Result<String, QuoteError> {
     }
 
     let bytes: Vec<u8> = arg.quoted(Sh);
-    match String::from_utf8(bytes.clone()) {
+    match String::from_utf8(bytes) {
         Ok(text) => Ok(text),
         Err(err) => {
             debug_assert!(false, "quoted args must be valid UTF-8: {err}");
-            Ok(String::from_utf8_lossy(&bytes).into_owned())
+            Ok(String::from_utf8_lossy(&err.into_bytes()).into_owned())
         }
     }
 }
