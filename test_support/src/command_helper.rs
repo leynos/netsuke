@@ -3,7 +3,7 @@
 
 use std::{ffi::OsString, process::Command};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;

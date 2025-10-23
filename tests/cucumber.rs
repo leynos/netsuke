@@ -5,6 +5,7 @@
 
 //! Cucumber test runner and world state.
 
+use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use cucumber::World;
 #[cfg(unix)]
@@ -68,12 +69,13 @@ enum HttpShutdownMode {
 }
 
 impl CliWorld {
-    pub(crate) fn start_http_server(&mut self, body: String) {
+    pub(crate) fn start_http_server(&mut self, body: String) -> Result<()> {
         self.shutdown_http_server_with(HttpShutdownMode::Strict);
         let (url, server) =
-            http::spawn_http_server(body).expect("spawn HTTP server for stdlib steps");
+            http::spawn_http_server(body).context("spawn HTTP server for stdlib steps")?;
         self.stdlib_url = Some(url);
         self.http_server = Some(server);
+        Ok(())
     }
 
     pub(crate) fn shutdown_http_server(&mut self) {
