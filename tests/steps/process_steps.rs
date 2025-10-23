@@ -24,11 +24,17 @@ use test_support::{
     clippy::needless_pass_by_value,
     reason = "helper owns path for simplicity"
 )]
-fn install_test_ninja(env: &impl EnvMut, world: &mut CliWorld, dir: TempDir, ninja_path: PathBuf) {
-    let guard = env::prepend_dir_to_path(env, dir.path());
+fn install_test_ninja(
+    env: &impl EnvMut,
+    world: &mut CliWorld,
+    dir: TempDir,
+    ninja_path: PathBuf,
+) -> Result<()> {
+    let guard = env::prepend_dir_to_path(env, dir.path())?;
     world.path_guard = Some(guard);
     world.ninja = Some(ninja_path.to_string_lossy().into_owned());
     world.temp = Some(dir);
+    Ok(())
 }
 
 /// Creates a fake ninja executable that exits with the given status code.
@@ -38,8 +44,7 @@ fn install_fake_ninja(world: &mut CliWorld, exit_code: i32) -> Result<()> {
         u8::try_from(exit_code).context("exit code must be between 0 and 255 for fake_ninja")?;
     let (dir, path) = fake_ninja(exit_code)?;
     let env = env::mocked_path_env();
-    install_test_ninja(&env, world, dir, path);
-    Ok(())
+    install_test_ninja(&env, world, dir, path)
 }
 
 /// Creates a fake ninja executable that validates the build file path.
@@ -47,8 +52,7 @@ fn install_fake_ninja(world: &mut CliWorld, exit_code: i32) -> Result<()> {
 fn fake_ninja_check(world: &mut CliWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_check_build_file()?;
     let env = env::mocked_path_env();
-    install_test_ninja(&env, world, dir, path);
-    Ok(())
+    install_test_ninja(&env, world, dir, path)
 }
 
 /// Sets up a scenario where no ninja executable is available.
@@ -61,8 +65,7 @@ fn no_ninja(world: &mut CliWorld) -> Result<()> {
     let dir = TempDir::new().context("create temp dir for missing ninja scenario")?;
     let path = dir.path().join("ninja");
     let env = env::mocked_path_env();
-    install_test_ninja(&env, world, dir, path);
-    Ok(())
+    install_test_ninja(&env, world, dir, path)
 }
 
 /// Updates the CLI to use the temporary directory created for the fake ninja.

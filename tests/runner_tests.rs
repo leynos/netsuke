@@ -24,7 +24,7 @@ use test_support::{
 fn ninja_in_path() -> Result<(tempfile::TempDir, PathBuf, PathGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
     let env = SystemEnv::new();
-    let guard = prepend_dir_to_path(&env, ninja_dir.path());
+    let guard = prepend_dir_to_path(&env, ninja_dir.path())?;
     Ok((ninja_dir, ninja_path, guard))
 }
 
@@ -41,7 +41,7 @@ fn ninja_with_exit_code(
 ) -> Result<(tempfile::TempDir, PathBuf, PathGuard)> {
     let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
     let env = SystemEnv::new();
-    let guard = prepend_dir_to_path(&env, ninja_dir.path());
+    let guard = prepend_dir_to_path(&env, ninja_dir.path())?;
     Ok((ninja_dir, ninja_path, guard))
 }
 
