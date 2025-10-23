@@ -153,27 +153,32 @@ mod tests {
         })
     }
 
-    fn expect_var<'a>(vars: &'a Vars, key: &str) -> &'a str {
-        vars.get(key)
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_var(vars: &Vars, key: impl AsRef<str>) -> &str {
+        let key_ref = key.as_ref();
+        vars.get(key_ref)
             .and_then(|value| value.as_str())
-            .unwrap_or_else(|| panic!("expected rendered var '{key}'"))
+            .unwrap_or_else(|| panic!("expected rendered var '{key_ref}'"))
     }
 
-    fn expect_string<'a>(value: &'a StringOrList, label: &str) -> &'a str {
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_string(value: &StringOrList, label: impl std::fmt::Display) -> &str {
         match value {
             StringOrList::String(item) => item,
             other => panic!("expected {label} as string, got {other:?}"),
         }
     }
 
-    fn expect_list<'a>(value: &'a StringOrList, label: &str) -> &'a [String] {
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_list(value: &StringOrList, label: impl std::fmt::Display) -> &[String] {
         match value {
             StringOrList::List(items) => items,
             other => panic!("expected {label} as list, got {other:?}"),
         }
     }
 
-    fn expect_command<'a>(recipe: &'a Recipe, label: &str) -> &'a str {
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_command(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
         match recipe {
             Recipe::Command { command } => command,
             other => panic!("expected {label} command recipe, got {other:?}"),
