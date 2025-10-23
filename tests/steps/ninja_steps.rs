@@ -1,9 +1,4 @@
 //! Step definitions for Ninja file generation scenarios.
-#![allow(
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    reason = "Cucumber step macros rebind capture names and steps prefer expect"
-)]
 
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};

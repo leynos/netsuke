@@ -49,9 +49,7 @@ fn find_block_device_fallback() -> Result<Utf8PathBuf> {
     let entries = std::fs::read_dir("/dev").context("read /dev directory")?;
     for entry_result in entries {
         let entry = entry_result.context("read /dev entry")?;
-        let file_type = entry
-            .file_type()
-            .context("fetch /dev entry file type")?;
+        let file_type = entry.file_type().context("fetch /dev entry file type")?;
         if file_type.is_block_device() {
             let path = entry.path();
             let utf8 = Utf8PathBuf::from_path_buf(path)
@@ -76,9 +74,7 @@ fn create_device_with_fallback(config: DeviceConfig<'_>) -> Result<Utf8PathBuf> 
     let entries = dev.entries().context("read /dev entries")?;
     for entry_result in entries {
         let entry = entry_result.context("read /dev entry")?;
-        let file_type = entry
-            .file_type()
-            .context("fetch /dev entry file type")?;
+        let file_type = entry.file_type().context("fetch /dev entry file type")?;
         let matches = match config.file_type {
             RxFileType::BlockDevice => file_type.is_block_device(),
             RxFileType::CharacterDevice => file_type.is_char_device(),
