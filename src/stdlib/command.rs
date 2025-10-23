@@ -36,7 +36,7 @@
 //! enables arbitrary code execution.
 
 use std::{
-    fmt::{self, Write as FmtWrite},
+    fmt::{self},
     io::{self, Read, Write},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
@@ -418,11 +418,9 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
                 "command '{command}' in template '{template}' failed: {source} (command closed input early)"
             );
             if let Some(code) = status {
-                if let Err(fmt_err) =
-                    FmtWrite::write_fmt(&mut msg, format_args!("; exited with status {code}"))
-                {
-                    tracing::warn!("failed to append exit status: {fmt_err}");
-                }
+                msg.push_str("; exited with status ");
+                let code_text = code.to_string();
+                msg.push_str(&code_text);
             } else {
                 msg.push_str("; terminated by signal");
             }
