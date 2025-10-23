@@ -227,8 +227,19 @@ impl NamedAction<'_> {
         );
     }
 
+    #[cold]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "debug builds intentionally panic to expose rule recursion"
+    )]
+    #[expect(
+        clippy::manual_assert,
+        reason = "debug-only guard escalates to panic for visibility"
+    )]
     fn reject_rule_recipe() -> fmt::Result {
-        debug_assert!(false, "rules do not reference other rules");
+        if cfg!(debug_assertions) {
+            panic!("rules do not reference other rules");
+        }
         Err(fmt::Error)
     }
 }
