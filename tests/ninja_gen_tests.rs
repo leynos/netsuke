@@ -14,21 +14,8 @@ use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
 use std::process::Command;
-use tempfile::{TempDir, tempdir};
-
-fn skip_if_ninja_unavailable() -> bool {
-    match Command::new("ninja").arg("--version").output() {
-        Err(_) => {
-            tracing::warn!("skipping test: ninja not found in PATH");
-            true
-        }
-        Ok(output) if !output.status.success() => {
-            tracing::warn!("skipping test: ninja --version failed");
-            true
-        }
-        Ok(_) => false,
-    }
-}
+use tempfile::TempDir;
+use test_support::ninja;
 
 /// Define how the integration test should assert Ninja's behaviour.
 #[derive(Debug)]
@@ -41,15 +28,11 @@ enum AssertionType {
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
 #[fixture]
 fn ninja_integration_setup() -> Option<TempDir> {
-    if skip_if_ninja_unavailable() {
-        None
-    } else {
-        match tempdir() {
-            Ok(dir) => Some(dir),
-            Err(err) => {
-                tracing::warn!("skipping test: failed to create temp dir: {err}");
-                None
-            }
+    match ninja::ninja_integration_workspace() {
+        Ok(dir) => Some(dir),
+        Err(err) => {
+            tracing::warn!("skipping test: {err}");
+            None
         }
     }
 }

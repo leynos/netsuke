@@ -7,7 +7,7 @@ use netsuke::{
 };
 use rstest::{fixture, rstest};
 use std::{fs, path::Path};
-use test_support::display_error_chain;
+use test_support::{display_error_chain, manifest::manifest_yaml};
 
 #[derive(Debug)]
 struct TestFiles<'a> {
@@ -28,10 +28,6 @@ struct GlobTestCase<'a> {
 struct BraceErrorTestCase<'a> {
     pub pattern: &'a str,
     pub expected: &'a str,
-}
-
-fn manifest_yaml(body: &str) -> String {
-    format!("netsuke_version: 1.0.0\n{body}")
 }
 
 fn target_names(manifest: &NetsukeManifest) -> Result<Vec<String>> {

@@ -20,6 +20,8 @@ pub mod env_lock;
 pub mod env_var_guard;
 pub mod hash;
 pub mod http;
+pub mod manifest;
+pub mod ninja;
 pub mod path_guard;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;

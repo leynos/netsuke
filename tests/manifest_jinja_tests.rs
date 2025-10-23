@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::ast::{NetsukeManifest, Recipe, StringOrList, Target};
 use netsuke::manifest::{self, ManifestError};
 use rstest::{fixture, rstest};
-use test_support::{EnvVarGuard, env_lock::EnvLock};
+use test_support::{EnvVarGuard, env_lock::EnvLock, manifest::manifest_yaml};
 
 /// Domain-specific environment variables exercised by manifest tests.
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -55,10 +55,6 @@ impl FieldName {
 const ENV_YAML: &str = "targets:\n  - name: env\n    command: echo {{ env('NETSUKE_TEST_ENV') }}\n";
 const ENV_MISSING_YAML: &str =
     "targets:\n  - name: env_missing\n    command: echo {{ env('NETSUKE_TEST_ENV_MISSING') }}\n";
-
-fn manifest_yaml(body: &str) -> String {
-    format!("netsuke_version: 1.0.0\n{body}")
-}
 
 #[fixture]
 fn env_lock() -> EnvLock {

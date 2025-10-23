@@ -5,11 +5,7 @@ use netsuke::{ast::Recipe, manifest};
 use rstest::rstest;
 use serial_test::serial;
 use std::ffi::OsStr;
-use test_support::env::VarGuard;
-
-fn manifest_yaml(body: &str) -> String {
-    format!("netsuke_version: 1.0.0\n{body}")
-}
+use test_support::{env::VarGuard, manifest::manifest_yaml};
 
 #[rstest]
 #[case("NETSUKE_ENV_TEST", "world", "echo world")]

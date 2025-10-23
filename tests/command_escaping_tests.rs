@@ -3,18 +3,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::{ast::Recipe, ir::BuildGraph, manifest};
 use rstest::rstest;
-
-/// Prefix the provided YAML body with a required `netsuke_version`.
-///
-/// # Examples
-/// ```
-/// let y = manifest_yaml("targets: []");
-/// assert!(y.starts_with("netsuke_version"));
-/// ```
-#[inline]
-pub(crate) fn manifest_yaml(body: &str) -> String {
-    format!("netsuke_version: 1.0.0\n{body}")
-}
+use test_support::manifest::manifest_yaml;
 
 /// Extract shell words from the first target's command.
 ///
@@ -22,6 +11,7 @@ pub(crate) fn manifest_yaml(body: &str) -> String {
 /// ```no_run
 /// # use anyhow::Result;
 /// # use command_escaping_tests::command_words;
+/// # use test_support::manifest::manifest_yaml;
 /// # fn demo() -> Result<()> {
 /// let words = command_words(
 ///     "targets:\n  - name: out\n    sources: in\n    command: \"echo hi\"\n",
