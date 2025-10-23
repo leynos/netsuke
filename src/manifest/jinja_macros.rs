@@ -339,8 +339,9 @@ impl MacroStateGuard {
     fn new(state: State<'static, 'static>) -> Self {
         let boxed = Box::new(state);
         let ptr = Box::into_raw(boxed);
-        // SAFETY: `Box::into_raw` never returns a null pointer.
-        let ptr_non_null = unsafe { NonNull::new_unchecked(ptr) };
+        let Some(ptr_non_null) = NonNull::new(ptr) else {
+            panic!("Box::into_raw cannot return a null pointer");
+        };
         Self { ptr: ptr_non_null }
     }
 
