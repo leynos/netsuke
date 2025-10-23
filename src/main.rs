@@ -18,7 +18,7 @@ fn main() -> ExitCode {
     match runner::run(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            tracing::error!("{err}");
+            tracing::error!(error = %err, "runner failed");
             ExitCode::FAILURE
         }
     }
