@@ -162,9 +162,12 @@ fn hex_string(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         use std::fmt::Write;
-        if let Err(err) = write!(out, "{byte:02x}") {
-            debug_assert!(false, "format hex byte failed: {err}");
-        }
+        let result = write!(out, "{byte:02x}");
+        #[expect(
+            clippy::expect_used,
+            reason = "hex output to String should be infallible"
+        )]
+        result.expect("writing hex to String never fails");
     }
     out
 }
