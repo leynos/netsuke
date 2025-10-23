@@ -23,7 +23,7 @@ fn fetch_function_downloads_content() -> Result<()> {
             );
             return Ok(());
         }
-        Err(err) => panic!("failed to spawn HTTP server: {err}"),
+        Err(err) => bail!("failed to spawn HTTP server: {err}"),
     };
     let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
@@ -58,7 +58,7 @@ fn fetch_function_respects_cache() -> Result<()> {
             );
             return Ok(());
         }
-        Err(err) => panic!("failed to spawn HTTP server: {err}"),
+        Err(err) => bail!("failed to spawn HTTP server: {err}"),
     };
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority())
         .context("open fetch cache workspace")?;
