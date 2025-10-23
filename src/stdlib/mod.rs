@@ -15,7 +15,7 @@ mod network;
 mod path;
 mod time;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, bail};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
@@ -91,7 +91,10 @@ impl StdlibConfig {
     ///
     /// Returns an error when the provided path is empty, absolute, or attempts
     /// to escape the workspace via parent components.
-    pub fn with_fetch_cache_relative(mut self, relative: impl Into<Utf8PathBuf>) -> Result<Self> {
+    pub fn with_fetch_cache_relative(
+        mut self,
+        relative: impl Into<Utf8PathBuf>,
+    ) -> anyhow::Result<Self> {
         let relative = relative.into();
         Self::validate_cache_relative(&relative)?;
         self.fetch_cache_relative = relative;
@@ -112,7 +115,7 @@ impl StdlibConfig {
         }
     }
 
-    pub(super) fn validate_cache_relative(relative: &Utf8Path) -> Result<()> {
+    pub(super) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
         if relative.as_str().is_empty() {
             bail!("fetch cache path must not be empty");
         }
@@ -200,7 +203,7 @@ impl StdlibState {
 /// Returns an error when the current working directory cannot be opened using
 /// capability-based I/O. This occurs when the process lacks permission to read
 /// the directory or if it no longer exists.
-pub fn register(env: &mut Environment<'_>) -> Result<StdlibState> {
+pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     let root = Dir::open_ambient_dir(".", ambient_authority())
         .context("open current directory for stdlib registration")?;
     Ok(register_with_config(env, StdlibConfig::new(root)))
