@@ -1,10 +1,4 @@
 //! Step definitions for manifest feature tests.
-#![allow(
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    reason = "Cucumber step macros rebind capture names and steps prefer expect"
-)]
-
 use crate::CliWorld;
 use anyhow::{Context, Result, bail, ensure};
 use cucumber::{given, then, when};
