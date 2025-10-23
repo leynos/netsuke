@@ -168,6 +168,10 @@ pub fn spawn_http_server_with_config(
     ))
 }
 
+#[expect(
+    clippy::panic,
+    reason = "test HTTP helper should fail fast when networking fails"
+)]
 fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig) {
     let mut stream = accept_connection(
         &listener,
@@ -216,6 +220,10 @@ fn remaining_until_deadline(deadline: Instant) -> Duration {
     }
 }
 
+#[expect(
+    clippy::panic,
+    reason = "tests panic when the helper cannot accept a client"
+)]
 fn accept_connection(
     listener: &TcpListener,
     deadline: Instant,
@@ -234,6 +242,7 @@ fn accept_connection(
     }
 }
 
+#[expect(clippy::panic, reason = "tests panic to surface unexpected IO errors")]
 fn try_read(stream: &mut TcpStream) -> Option<usize> {
     let mut buf = [0u8; 512];
     match stream.read(&mut buf) {
