@@ -431,7 +431,7 @@ fn assert_stdlib_pure(world: &mut CliWorld) -> Result<()> {
 fn assert_fetch_cache_present(world: &mut CliWorld) -> Result<()> {
     let root = world
         .stdlib_root
-        .as_ref()
+        .as_deref()
         .context("expected stdlib workspace root")?;
     let url = world
         .stdlib_url
@@ -439,8 +439,14 @@ fn assert_fetch_cache_present(world: &mut CliWorld) -> Result<()> {
         .context("expected stdlib url for cache check")?;
     let key = hash::sha256_hex(url.as_bytes());
     let cache_path = root.join(".netsuke").join("fetch").join(key);
+    let dir =
+        Dir::open_ambient_dir(root, ambient_authority()).context("open stdlib workspace root")?;
+    let relative_cache = cache_path
+        .strip_prefix(root)
+        .with_context(|| format!("derive cache path relative to {root}"))?;
     ensure!(
-        std::fs::metadata(cache_path.as_std_path()).is_ok(),
+        dir.try_exists(relative_cache)
+            .with_context(|| format!("check fetch cache at {cache_path}"))?,
         "expected fetch cache at {cache_path}"
     );
     Ok(())
