@@ -1,11 +1,6 @@
-#![allow(
-    clippy::expect_used,
-    reason = "AST tests rely on expect for compact assertions"
-)]
-
 //! Unit tests for Netsuke manifest AST deserialisation.
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail, ensure};
 use netsuke::{ast::*, manifest};
 use rstest::rstest;
 use semver::Version;
@@ -16,49 +11,59 @@ fn parse_manifest(yaml: &str) -> Result<NetsukeManifest> {
 }
 
 #[rstest]
-fn parse_minimal_manifest() {
+fn parse_minimal_manifest() -> Result<()> {
     let yaml = r#"netsuke_version: "1.0.0"
 targets:
   - name: hello
     command: "echo hi""#;
 
-    let manifest = parse_manifest(yaml).expect("parse");
-
-    assert_eq!(
+    let manifest = parse_manifest(yaml)?;
+    let expected_version = Version::parse("1.0.0")?;
+    ensure!(
+        manifest.netsuke_version == expected_version,
+        "unexpected manifest version: got {}, expected {}",
         manifest.netsuke_version,
-        Version::parse("1.0.0").expect("ver")
+        expected_version
     );
-    let first = manifest.targets.first().expect("target");
-    let StringOrList::String(name) = &first.name else {
-        panic!(
-            "Expected target name to be StringOrList::String, got: {:?}",
-            first.name
-        );
+    let first = manifest
+        .targets
+        .first()
+        .context("manifest should contain at least one target")?;
+    let name = match &first.name {
+        StringOrList::String(name) => name,
+        other => bail!("Expected target name to be StringOrList::String, got: {other:?}"),
     };
-    assert_eq!(name, "hello");
+    ensure!(name == "hello", "unexpected target name: {name}");
 
     if let Recipe::Command { command } = &first.recipe {
-        assert_eq!(command, "echo hi");
+        ensure!(command == "echo hi", "unexpected command: {command}");
     } else {
-        panic!("Expected command recipe, got: {:?}", first.recipe);
+        bail!("Expected command recipe, got: {:?}", first.recipe);
     }
+    Ok(())
 }
 #[test]
-fn missing_required_fields() {
+fn missing_required_fields() -> Result<()> {
     {
         let yaml = r#"
             targets:
               - name: hello
                 command: "echo hi"
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "manifest missing version should fail"
+        );
     }
 
     {
         let yaml = r#"
             netsuke_version: "1.0.0"
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "manifest missing targets should fail"
+        );
     }
 
     {
@@ -67,12 +72,16 @@ fn missing_required_fields() {
             targets:
               - command: "echo hi"
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "target missing name should fail"
+        );
     }
+    Ok(())
 }
 
 #[test]
-fn unknown_fields() {
+fn unknown_fields() -> Result<()> {
     {
         let yaml = r#"
             netsuke_version: "1.0.0"
@@ -81,7 +90,10 @@ fn unknown_fields() {
                 command: "echo hi"
             extra: 42
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "manifest with extra top-level field should fail"
+        );
     }
 
     {
@@ -92,12 +104,16 @@ fn unknown_fields() {
                 command: "echo hi"
                 unexpected: true
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "manifest with unexpected target field should fail"
+        );
     }
+    Ok(())
 }
 
 #[test]
-fn vars_section_must_be_object() {
+fn vars_section_must_be_object() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
         vars:
@@ -106,27 +122,33 @@ fn vars_section_must_be_object() {
           - name: hello
             command: "echo hi"
     "#;
-    let err = parse_manifest(yaml).expect_err("vars should be an object");
+    let err = parse_manifest(yaml)
+        .err()
+        .context("vars should be an object")?;
     let chain = err
         .chain()
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(
+    ensure!(
         chain.contains("vars must be an object with string keys"),
         "unexpected error message: {chain}"
     );
+    Ok(())
 }
 
 #[test]
-fn empty_lists_and_maps() {
+fn empty_lists_and_maps() -> Result<()> {
     {
         let yaml = r#"
             netsuke_version: "1.0.0"
             targets: []
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        assert!(manifest.targets.is_empty());
+        let manifest = parse_manifest(yaml)?;
+        ensure!(
+            manifest.targets.is_empty(),
+            "expected no targets for empty list manifest"
+        );
     }
 
     {
@@ -136,7 +158,10 @@ fn empty_lists_and_maps() {
               - name: hello
                 command: {}
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "empty rule map should fail to parse"
+        );
     }
 
     {
@@ -146,7 +171,10 @@ fn empty_lists_and_maps() {
               - name: hello
                 script: {}
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "empty script map should fail to parse"
+        );
     }
 
     {
@@ -156,12 +184,16 @@ fn empty_lists_and_maps() {
               - name: hello
                 rule: {}
         "#;
-        assert!(parse_manifest(yaml).is_err());
+        ensure!(
+            parse_manifest(yaml).is_err(),
+            "empty rule map should fail to parse"
+        );
     }
+    Ok(())
 }
 
 #[test]
-fn string_or_list_variants() {
+fn string_or_list_variants() -> Result<()> {
     {
         let yaml = r#"
             netsuke_version: "1.0.0"
@@ -169,12 +201,16 @@ fn string_or_list_variants() {
               - name: hello
                 command: "echo hi"
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let first = manifest.targets.first().expect("target");
-        if let StringOrList::String(name) = &first.name {
-            assert_eq!(name, "hello");
-        } else {
-            panic!("Expected String variant");
+        let manifest = parse_manifest(yaml)?;
+        let first = manifest
+            .targets
+            .first()
+            .context("manifest should contain at least one target")?;
+        match &first.name {
+            StringOrList::String(name) => {
+                ensure!(name == "hello", "unexpected name: {name}");
+            }
+            other => bail!("Expected String variant, got: {other:?}"),
         }
     }
 
@@ -187,12 +223,22 @@ fn string_or_list_variants() {
                   - world
                 command: "echo hi"
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let first = manifest.targets.first().expect("target");
-        if let StringOrList::List(names) = &first.name {
-            assert_eq!(names, &vec!["hello".to_owned(), "world".to_owned()]);
-        } else {
-            panic!("Expected List variant");
+        let manifest = parse_manifest(yaml)?;
+        let first = manifest
+            .targets
+            .first()
+            .context("manifest should contain at least one target")?;
+        match &first.name {
+            StringOrList::List(names) => {
+                let expected = vec!["hello".to_owned(), "world".to_owned()];
+                ensure!(
+                    names == &expected,
+                    "unexpected names: got {:?}, expected {:?}",
+                    names,
+                    expected
+                );
+            }
+            other => bail!("Expected List variant, got: {other:?}"),
         }
     }
 
@@ -203,18 +249,23 @@ fn string_or_list_variants() {
               - name: []
                 command: "echo hi"
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let first = manifest.targets.first().expect("target");
-        if let StringOrList::List(names) = &first.name {
-            assert!(names.is_empty());
-        } else {
-            panic!("Expected List variant");
+        let manifest = parse_manifest(yaml)?;
+        let first = manifest
+            .targets
+            .first()
+            .context("manifest should contain at least one target")?;
+        match &first.name {
+            StringOrList::List(names) => {
+                ensure!(names.is_empty(), "expected empty list, got {names:?}");
+            }
+            other => bail!("Expected List variant, got: {other:?}"),
         }
     }
+    Ok(())
 }
 
 #[test]
-fn optional_fields() {
+fn optional_fields() -> Result<()> {
     {
         let yaml = r#"
             netsuke_version: "1.0.0"
@@ -227,12 +278,21 @@ fn optional_fields() {
               - name: hello
                 rule: compile
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let rule = manifest.rules.first().expect("rule");
-        assert_eq!(rule.description.as_deref(), Some("Compile"));
+        let manifest = parse_manifest(yaml)?;
+        let rule = manifest
+            .rules
+            .first()
+            .context("expected at least one rule")?;
+        ensure!(
+            rule.description.as_deref() == Some("Compile"),
+            "unexpected rule description: {:?}",
+            rule.description
+        );
         match &rule.deps {
-            StringOrList::String(dep) => assert_eq!(dep, "hello"),
-            other => panic!("deps should be String, got: {other:?}"),
+            StringOrList::String(dep) => {
+                ensure!(dep == "hello", "unexpected dep: {dep}");
+            }
+            other => bail!("deps should be String, got: {other:?}"),
         }
     }
 
@@ -246,15 +306,22 @@ fn optional_fields() {
               - name: hello
                 rule: compile
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let rule = manifest.rules.first().expect("rule");
-        assert!(rule.description.is_none());
-        assert!(matches!(rule.deps, StringOrList::Empty));
+        let manifest = parse_manifest(yaml)?;
+        let rule = manifest
+            .rules
+            .first()
+            .context("expected at least one rule")?;
+        ensure!(rule.description.is_none(), "description should be absent");
+        ensure!(
+            matches!(rule.deps, StringOrList::Empty),
+            "deps should be empty"
+        );
     }
+    Ok(())
 }
 
 #[rstest]
-fn parses_macro_definitions() {
+fn parses_macro_definitions() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
         macros:
@@ -266,19 +333,40 @@ fn parses_macro_definitions() {
             command: "{{ greet('world') }}"
     "#;
 
-    let manifest = parse_manifest(yaml).expect("parse");
-    assert_eq!(manifest.macros.len(), 1);
-    let macro_def = manifest.macros.first().expect("macro");
-    assert_eq!(macro_def.signature, "greet(name)");
-    assert!(macro_def.body.contains("Hello {{ name }}"));
+    let manifest = parse_manifest(yaml)?;
+    ensure!(
+        manifest.macros.len() == 1,
+        "expected single macro definition"
+    );
+    let macro_def = manifest
+        .macros
+        .first()
+        .context("expected at least one macro definition")?;
+    ensure!(
+        macro_def.signature == "greet(name)",
+        "unexpected macro signature: {}",
+        macro_def.signature
+    );
+    ensure!(
+        macro_def.body.contains("Hello {{ name }}"),
+        "macro body missing greeting: {}",
+        macro_def.body
+    );
 
-    let serialised = serde_saphyr::to_string(&manifest.macros).expect("serialise macros");
-    assert!(serialised.contains("greet(name)"));
-    assert!(serialised.contains("Hello {{ name }}"));
+    let serialised = serde_saphyr::to_string(&manifest.macros)?;
+    ensure!(
+        serialised.contains("greet(name)"),
+        "serialised macros missing signature: {serialised}"
+    );
+    ensure!(
+        serialised.contains("Hello {{ name }}"),
+        "serialised macros missing body: {serialised}"
+    );
+    Ok(())
 }
 
 #[test]
-fn macro_serialization_with_special_characters_round_trips() {
+fn macro_serialization_with_special_characters_round_trips() -> Result<()> {
     let special_signature = "greet_special(name, emoji='😀', note=\"hi\")";
     let special_body = "Hello \"{{ name }}\"\nLine two with unicode 😀";
 
@@ -287,16 +375,34 @@ fn macro_serialization_with_special_characters_round_trips() {
         body: special_body.to_owned(),
     };
 
-    let serialised = serde_saphyr::to_string(&vec![macro_def.clone()]).expect("serialise macros");
-    assert!(serialised.contains("greet_special"));
-    assert!(serialised.contains("unicode 😀"));
+    let serialised = serde_saphyr::to_string(&vec![macro_def.clone()])?;
+    ensure!(
+        serialised.contains("greet_special"),
+        "serialised macros missing signature: {serialised}"
+    );
+    ensure!(
+        serialised.contains("unicode 😀"),
+        "serialised macros missing unicode glyph: {serialised}"
+    );
 
-    let deserialised: Vec<MacroDefinition> =
-        serde_saphyr::from_str(&serialised).expect("deserialise macros");
-    assert_eq!(deserialised.len(), 1);
-    let recovered = deserialised.first().expect("macro entry");
-    assert_eq!(recovered.signature, macro_def.signature);
-    assert_eq!(recovered.body, macro_def.body);
+    let deserialised: Vec<MacroDefinition> = serde_saphyr::from_str(&serialised)?;
+    ensure!(deserialised.len() == 1, "expected single macro entry");
+    let recovered = deserialised
+        .first()
+        .context("expected macro entry after round trip")?;
+    ensure!(
+        recovered.signature == macro_def.signature,
+        "signature mismatch: got {}, expected {}",
+        recovered.signature,
+        macro_def.signature
+    );
+    ensure!(
+        recovered.body == macro_def.body,
+        "body mismatch: got {}, expected {}",
+        recovered.body,
+        macro_def.body
+    );
+    Ok(())
 }
 
 #[test]
@@ -339,7 +445,7 @@ fn parsing_failures(#[case] yaml: &str) {
 }
 
 #[test]
-fn phony_and_always_flags() {
+fn phony_and_always_flags() -> Result<()> {
     {
         let yaml = r#"
             netsuke_version: "1.0.0"
@@ -349,10 +455,10 @@ fn phony_and_always_flags() {
                 phony: true
                 always: true
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let target = manifest.targets.first().expect("target");
-        assert!(target.phony);
-        assert!(target.always);
+        let manifest = parse_manifest(yaml)?;
+        let target = manifest.targets.first().context("expected target entry")?;
+        ensure!(target.phony, "target should be phony");
+        ensure!(target.always, "target should always run");
     }
 
     {
@@ -362,11 +468,12 @@ fn phony_and_always_flags() {
               - name: clean
                 command: rm -rf build
         "#;
-        let manifest = parse_manifest(yaml).expect("parse");
-        let target = manifest.targets.first().expect("target");
-        assert!(!target.phony);
-        assert!(!target.always);
+        let manifest = parse_manifest(yaml)?;
+        let target = manifest.targets.first().context("expected target entry")?;
+        ensure!(!target.phony, "target should not be phony");
+        ensure!(!target.always, "target should not always run");
     }
+    Ok(())
 }
 
 #[rstest]
@@ -415,15 +522,26 @@ fn actions_behaviour(
     #[case] yaml: &str,
     #[case] expected_phony: bool,
     #[case] expected_always: bool,
-) {
-    let manifest = parse_manifest(yaml).expect("parse");
-    let action = manifest.actions.first().expect("action");
-    assert_eq!(action.phony, expected_phony);
-    assert_eq!(action.always, expected_always);
+) -> Result<()> {
+    let manifest = parse_manifest(yaml)?;
+    let action = manifest.actions.first().context("expected action entry")?;
+    ensure!(
+        action.phony == expected_phony,
+        "unexpected phony flag: got {}, expected {}",
+        action.phony,
+        expected_phony
+    );
+    ensure!(
+        action.always == expected_always,
+        "unexpected always flag: got {}, expected {}",
+        action.always,
+        expected_always
+    );
+    Ok(())
 }
 
 #[test]
-fn multiple_actions_are_marked_phony() {
+fn multiple_actions_are_marked_phony() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
         actions:
@@ -437,21 +555,30 @@ fn multiple_actions_are_marked_phony() {
           - name: done
             command: "true"
     "#;
-    let manifest = parse_manifest(yaml).expect("parse");
-    assert_eq!(manifest.actions.len(), 3);
+    let manifest = parse_manifest(yaml)?;
+    ensure!(
+        manifest.actions.len() == 3,
+        "expected three actions, got {}",
+        manifest.actions.len()
+    );
     for action in &manifest.actions {
-        assert!(action.phony);
-        assert!(!action.always);
+        ensure!(action.phony, "all actions should be phony");
+        ensure!(!action.always, "actions should not always run");
     }
+    Ok(())
 }
 
 #[test]
-fn load_manifest_from_file() {
-    let manifest = manifest::from_path("tests/data/minimal.yml").expect("load");
-    assert_eq!(
+fn load_manifest_from_file() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/minimal.yml")?;
+    let expected_version = Version::parse("1.0.0")?;
+    ensure!(
+        manifest.netsuke_version == expected_version,
+        "unexpected manifest version: got {}, expected {}",
         manifest.netsuke_version,
-        Version::parse("1.0.0").expect("ver")
+        expected_version
     );
+    Ok(())
 }
 
 #[test]
@@ -464,14 +591,20 @@ fn load_manifest_missing_file() {
 #[case("minimal.yml", "hello")]
 #[case("phony.yml", "clean")]
 #[case("rules.yml", "hello.o")]
-fn parse_example_manifests(#[case] file: &str, #[case] first_target: &str) {
+fn parse_example_manifests(#[case] file: &str, #[case] first_target: &str) -> Result<()> {
     let path = format!("tests/data/{file}");
-    let manifest = manifest::from_path(&path).expect("load");
-    let first = manifest.targets.first().expect("targets");
+    let manifest = manifest::from_path(&path)?;
+    let first = manifest
+        .targets
+        .first()
+        .context("expected target entry in manifest")?;
     match &first.name {
-        StringOrList::String(name) => assert_eq!(name, first_target),
-        other => panic!("Expected String variant, got: {other:?}"),
+        StringOrList::String(name) => {
+            ensure!(name == first_target, "unexpected name: {name}");
+        }
+        other => bail!("Expected String variant, got: {other:?}"),
     }
+    Ok(())
 }
 
 #[rstest]

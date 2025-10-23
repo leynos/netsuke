@@ -1,8 +1,3 @@
-#![allow(
-    clippy::expect_used,
-    reason = "integration tests rely on expect for clarity"
-)]
-
 //! Unit tests for IR structures.
 
 use camino::Utf8PathBuf;
@@ -74,7 +69,10 @@ fn build_graph_duplicate_action_ids() {
     let second_insert = graph.actions.insert("a".into(), action2);
     assert!(second_insert.is_some());
     assert_eq!(graph.actions.len(), 1);
-    if let Recipe::Command { command } = &graph.actions.get("a").expect("action").recipe {
+    let Some(action) = graph.actions.get("a") else {
+        panic!("expected action for id 'a'");
+    };
+    if let Recipe::Command { command } = &action.recipe {
         assert_eq!(command, "two");
     } else {
         panic!("unexpected recipe type");
@@ -107,11 +105,9 @@ fn build_graph_duplicate_targets() {
     let second_insert = graph.targets.insert(Utf8PathBuf::from("out"), edge2);
     assert!(second_insert.is_some());
     assert_eq!(graph.targets.len(), 1);
-    assert!(
-        graph
-            .targets
-            .get(&Utf8PathBuf::from("out"))
-            .expect("edge")
-            .always
-    );
+    let out_key = Utf8PathBuf::from("out");
+    let Some(edge) = graph.targets.get(&out_key) else {
+        panic!("expected edge for out");
+    };
+    assert!(edge.always);
 }

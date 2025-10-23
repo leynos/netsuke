@@ -1,10 +1,6 @@
-#![allow(
-    clippy::expect_used,
-    reason = "hasher tests use expect for descriptive failures"
-)]
-
 //! Tests for action hashing utilities.
 
+use anyhow::{Result, ensure};
 use netsuke::ast::{Recipe, StringOrList};
 use netsuke::hasher::ActionHasher;
 use netsuke::ir::Action;
@@ -78,7 +74,11 @@ use rstest::rstest;
     },
     "d5f1a262a95b75db3a7a79a5855eb27b6b430833e7ba93538502a16ebd03f50b"
 )]
-fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) {
-    let digest = ActionHasher::hash(&action).expect("hash action");
-    assert_eq!(digest, expected);
+fn hash_action_is_stable(#[case] action: Action, #[case] expected: &str) -> Result<()> {
+    let digest = ActionHasher::hash(&action)?;
+    ensure!(
+        digest == expected,
+        "unexpected digest: expected {expected}, got {digest}"
+    );
+    Ok(())
 }
