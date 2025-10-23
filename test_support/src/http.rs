@@ -119,7 +119,15 @@ pub fn spawn_http_server(body: impl Into<String>) -> (String, HttpServer) {
 }
 
 /// Spawn a single-use HTTP server using the provided configuration.
-#[allow(clippy::missing_panics_doc)]
+///
+/// # Panics
+///
+/// Panics if:
+/// - binding the listener fails (for example, when ephemeral ports are
+///   exhausted).
+/// - switching the listener or accepted stream to non-blocking mode fails.
+/// - accepting a connection or reading from the socket yields unexpected I/O
+///   errors.
 pub fn spawn_http_server_with_config(
     body: impl Into<String>,
     config: HttpServerConfig,
@@ -207,13 +215,16 @@ fn write_response(stream: &mut TcpStream, body: &str) {
 
 fn duration_from_env(var: &str, default: Duration) -> Duration {
     match env::var(var) {
-        Ok(value) => value
-            .parse::<u64>()
-            .map(Duration::from_millis)
-            .unwrap_or_else(|err| {
-                log_duration_parse_error(var, &value, &err);
-                default
-            }),
+        Ok(value) => {
+            let trimmed = value.trim();
+            match trimmed.parse::<u64>() {
+                Ok(ms) => Duration::from_millis(ms),
+                Err(err) => {
+                    log_duration_parse_error(var, value.as_str(), &err);
+                    default
+                }
+            }
+        }
         Err(_) => default,
     }
 }
@@ -317,6 +328,21 @@ mod tests {
         assert!(
             warnings[0].contains("not-a-number"),
             "warning should include the invalid value"
+        );
+        drop(guard);
+    }
+
+    #[test]
+    fn duration_from_env_trims_whitespace() {
+        let _lock = EnvLock::acquire();
+        clear_duration_warnings();
+        let guard = EnvVarGuard::set("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", "  2500  ");
+        let duration =
+            duration_from_env("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", Duration::from_secs(3));
+        assert_eq!(duration, Duration::from_millis(2500));
+        assert!(
+            take_duration_warnings().is_empty(),
+            "whitespace-only padding should not trigger warnings",
         );
         drop(guard);
     }
