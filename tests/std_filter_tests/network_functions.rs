@@ -61,8 +61,8 @@ fn fetch_function_respects_cache() {
         .expect("render cached fetch");
     assert_eq!(rendered_again, "cached");
     assert!(
-        state.is_impure(),
-        "cached responses should mark template impure",
+        !state.is_impure(),
+        "serving cached responses must not mark the template impure",
     );
 
     let cache_key = hash::sha256_hex(url.as_bytes());

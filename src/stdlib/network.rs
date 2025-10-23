@@ -73,7 +73,6 @@ fn fetch(
         let dir = cache.open_dir()?;
         let key = cache_key(url);
         if let Some(cached) = read_cached(&dir, &key)? {
-            impure.store(true, Ordering::Relaxed);
             cached
         } else {
             let data = fetch_remote(url, impure)?;

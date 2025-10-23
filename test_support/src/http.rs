@@ -114,6 +114,16 @@ impl Drop for HttpServer {
 /// The server listens on `127.0.0.1` and responds with a `200 OK` containing
 /// the provided body. The listener is polled in non-blocking mode until a
 /// client connects or a short deadline expires.
+///
+/// # Configuration
+/// Timeouts are loaded from the environment via
+/// [`HttpServerConfig::from_env`]:
+/// - `NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS`
+/// - `NETSUKE_TEST_HTTP_READ_TIMEOUT_MS`
+/// - `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS`
+///
+/// # Panics
+/// See [`spawn_http_server_with_config`] for potential panic conditions.
 pub fn spawn_http_server(body: impl Into<String>) -> (String, HttpServer) {
     spawn_http_server_with_config(body, HttpServerConfig::from_env())
 }
@@ -169,10 +179,9 @@ fn accept_connection(
         match listener.accept() {
             Ok((stream, _)) => return stream,
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                assert!(
-                    Instant::now() < deadline,
-                    "timed out waiting for fetch test connection"
-                );
+                if Instant::now() >= deadline {
+                    panic!("timed out waiting for fetch test connection");
+                }
                 thread::sleep(poll_interval);
             }
             Err(err) => panic!("failed to accept connection: {err}"),
