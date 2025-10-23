@@ -12,6 +12,20 @@ fn build_graph(world: &CliWorld) -> Result<&netsuke::ir::BuildGraph> {
         .context("build graph should be available")
 }
 
+/// Assert that optional Ninja output or error content contains an expected fragment.
+fn assert_contains(
+    content: Option<&String>,
+    expected_fragment: &str,
+    content_name: &str,
+) -> Result<()> {
+    let text = content.context(format!("{content_name} should be available"))?;
+    ensure!(
+        text.contains(expected_fragment),
+        "{content_name} should contain '{expected_fragment}'"
+    );
+    Ok(())
+}
+
 #[when("the ninja file is generated")]
 fn generate_ninja(world: &mut CliWorld) -> Result<()> {
     let graph = build_graph(world)?;
@@ -34,15 +48,7 @@ fn generate_ninja(world: &mut CliWorld) -> Result<()> {
     reason = "Cucumber requires owned String arguments"
 )]
 fn ninja_contains(world: &mut CliWorld, expected_fragment: String) -> Result<()> {
-    let ninja = world
-        .ninja
-        .as_ref()
-        .context("ninja content should be available")?;
-    ensure!(
-        ninja.contains(&expected_fragment),
-        "ninja output should contain '{expected_fragment}', got: {ninja}"
-    );
-    Ok(())
+    assert_contains(world.ninja.as_ref(), &expected_fragment, "ninja content")
 }
 
 #[then(expr = "shlex splitting command {int} yields {string}")]
@@ -93,15 +99,11 @@ fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: String) -> 
     reason = "Cucumber requires owned String arguments"
 )]
 fn ninja_generation_fails(world: &mut CliWorld, expected_fragment: String) -> Result<()> {
-    let err = world
-        .ninja_error
-        .as_ref()
-        .context("ninja error should be available")?;
-    ensure!(
-        err.contains(&expected_fragment),
-        "ninja error '{err}' does not contain expected '{expected_fragment}'"
-    );
-    Ok(())
+    assert_contains(
+        world.ninja_error.as_ref(),
+        &expected_fragment,
+        "ninja error",
+    )
 }
 
 #[then("ninja generation fails mentioning the removed action id")]
