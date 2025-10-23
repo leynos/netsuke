@@ -219,6 +219,8 @@ impl NamedAction<'_> {
     }
 
     fn assert_shell_command(command: &str) {
+        // `shlex::split` approximates POSIX shell parsing; keep this debug-only
+        // sanity guard to catch obviously malformed commands during development.
         debug_assert!(
             shlex::split(command).is_some(),
             "invalid command: {command}"
@@ -346,5 +348,11 @@ mod tests {
         ensure!(ninja.contains("printf %b"));
         ensure!(ninja.contains("\\n# line' | /bin/sh -e"));
         Ok(())
+    }
+
+    #[test]
+    fn assert_shell_command_tolerates_complex_syntax() {
+        let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
+        NamedAction::assert_shell_command(command);
     }
 }
