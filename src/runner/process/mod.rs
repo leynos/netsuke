@@ -148,33 +148,81 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
         .take()
         .ok_or_else(|| io::Error::other("child process missing stderr pipe"))?;
 
-    let out_handle = thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        let mut handle = io::stdout();
-        for line in reader.lines().map_while(Result::ok) {
-            if writeln!(handle, "{line}").is_err() {
-                break;
-            }
-        }
-    });
-    let err_handle = thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        let mut handle = io::stderr();
-        for line in reader.lines().map_while(Result::ok) {
-            if writeln!(handle, "{line}").is_err() {
-                break;
-            }
-        }
-    });
+    let out_handle =
+        thread::spawn(move || forward_child_output(BufReader::new(stdout), io::stdout(), "stdout"));
+    let err_handle =
+        thread::spawn(move || forward_child_output(BufReader::new(stderr), io::stderr(), "stderr"));
 
     let status = child.wait()?;
-    if let Err(err) = out_handle.join() {
-        tracing::warn!("stdout forwarding thread panicked: {err:?}");
+    match out_handle.join() {
+        Ok(stdout_stats) => {
+            if stdout_stats.write_failed {
+                tracing::debug!("stdout forwarding encountered closed pipe; output truncated");
+            }
+        }
+        Err(err) => {
+            tracing::warn!("stdout forwarding thread panicked: {err:?}");
+        }
     }
-    if let Err(err) = err_handle.join() {
-        tracing::warn!("stderr forwarding thread panicked: {err:?}");
+    match err_handle.join() {
+        Ok(stderr_stats) => {
+            if stderr_stats.write_failed {
+                tracing::debug!("stderr forwarding encountered closed pipe; output truncated");
+            }
+        }
+        Err(err) => {
+            tracing::warn!("stderr forwarding thread panicked: {err:?}");
+        }
     }
     Ok(status)
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ForwardStats {
+    bytes_read: usize,
+    bytes_written: usize,
+    write_failed: bool,
+}
+
+fn forward_child_output<R, W>(
+    mut reader: R,
+    mut writer: W,
+    stream_name: &'static str,
+) -> ForwardStats
+where
+    R: BufRead,
+    W: Write,
+{
+    let mut stats = ForwardStats::default();
+    let mut buffer = String::new();
+    loop {
+        buffer.clear();
+        match reader.read_line(&mut buffer) {
+            Ok(0) => break,
+            Ok(bytes) => {
+                stats.bytes_read += bytes;
+                if stats.write_failed {
+                    continue;
+                }
+                match writer.write_all(buffer.as_bytes()) {
+                    Ok(()) => stats.bytes_written += buffer.len(),
+                    Err(err) => {
+                        stats.write_failed = true;
+                        tracing::debug!(
+                            "Failed to write child {stream_name} output to parent: {err}; discarding remaining bytes"
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::debug!(
+                    "Failed to read child {stream_name} output: {err}; stopping forwarder"
+                );
+                break;
+            }
+        }
+    }
+    stats
 }
 
 fn check_exit_status(status: ExitStatus) -> io::Result<()> {
@@ -196,7 +244,41 @@ fn check_exit_status(status: ExitStatus) -> io::Result<()> {
 mod tests {
     use super::*;
     use camino::Utf8PathBuf;
-    use std::ffi::OsString;
+    use std::{
+        ffi::OsString,
+        io::Cursor,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+    };
+
+    #[derive(Clone)]
+    struct FailingWriter {
+        writes: Arc<AtomicUsize>,
+    }
+
+    impl FailingWriter {
+        fn new(writes: Arc<AtomicUsize>) -> Self {
+            Self { writes }
+        }
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            let previous = self.writes.fetch_add(1, Ordering::SeqCst);
+            let error_kind = if previous == 0 {
+                io::ErrorKind::BrokenPipe
+            } else {
+                io::ErrorKind::Other
+            };
+            Err(io::Error::new(error_kind, "sink closed"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn resolve_ninja_program_utf8_prefers_env_override() {
@@ -219,5 +301,30 @@ mod tests {
             Some(OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a']))
         });
         assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
+    }
+
+    #[test]
+    fn forward_output_writes_all_bytes_when_parent_alive() {
+        let input = b"alpha\nbravo\ncharlie\n".to_vec();
+        let reader = BufReader::new(Cursor::new(input.clone()));
+        let stats = forward_child_output(reader, Vec::new(), "stdout");
+
+        assert_eq!(stats.bytes_read, input.len());
+        assert_eq!(stats.bytes_written, input.len());
+        assert!(!stats.write_failed);
+    }
+
+    #[test]
+    fn forward_output_continues_draining_after_write_failure() {
+        let input = b"echo-one\necho-two\necho-three\n".to_vec();
+        let reader = BufReader::new(Cursor::new(input.clone()));
+        let write_attempts = Arc::new(AtomicUsize::new(0));
+        let failing_writer = FailingWriter::new(write_attempts.clone());
+        let stats = forward_child_output(reader, failing_writer, "stdout");
+
+        assert_eq!(stats.bytes_read, input.len());
+        assert_eq!(write_attempts.load(Ordering::SeqCst), 1);
+        assert!(stats.write_failed);
+        assert_eq!(stats.bytes_written, 0);
     }
 }
