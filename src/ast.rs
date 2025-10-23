@@ -170,30 +170,32 @@ impl<'de> Deserialize<'de> for Recipe {
     {
         let raw = RawRecipe::deserialize(deserializer)?;
         let RawRecipe {
-            command: command_opt,
-            script: script_opt,
-            rule: rule_opt,
+            command: command_field,
+            script: script_field,
+            rule: rule_field,
         } = raw;
-        let present: Vec<&str> = [
-            ("command", command_opt.is_some()),
-            ("script", script_opt.is_some()),
-            ("rule", rule_opt.is_some()),
-        ]
-        .into_iter()
-        .filter_map(|(name, is_present)| is_present.then_some(name))
-        .collect();
-
-        match (command_opt, script_opt, rule_opt) {
+        match (command_field, script_field, rule_field) {
             (Some(command), None, None) => Ok(Self::Command { command }),
             (None, Some(script), None) => Ok(Self::Script { script }),
             (None, None, Some(rule)) => Ok(Self::Rule { rule }),
             (None, None, None) => Err(serde::de::Error::custom(
                 "missing one of command, script, or rule",
             )),
-            _ => Err(serde::de::Error::custom(format!(
-                "fields {} are mutually exclusive",
-                present.join(", ")
-            ))),
+            (command_opt, script_opt, rule_opt) => {
+                let present: Vec<&str> = [
+                    ("command", command_opt.is_some()),
+                    ("script", script_opt.is_some()),
+                    ("rule", rule_opt.is_some()),
+                ]
+                .into_iter()
+                .filter_map(|(name, is_present)| is_present.then_some(name))
+                .collect();
+
+                Err(serde::de::Error::custom(format!(
+                    "fields {} are mutually exclusive",
+                    present.join(", ")
+                )))
+            }
         }
     }
 }
