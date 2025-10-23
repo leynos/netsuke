@@ -1,10 +1,4 @@
 //! Step definitions for Ninja process execution.
-#![allow(
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    reason = "Cucumber step macros rebind capture identifiers"
-)]
-
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8Path;
