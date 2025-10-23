@@ -184,6 +184,9 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 
 /// Determine the manifest path respecting the CLI's directory option.
 ///
+/// # Errors
+/// Returns an error when the CLI `file` or `directory` paths are not valid UTF-8.
+///
 /// # Examples
 /// ```ignore
 /// use crate::cli::Cli;
