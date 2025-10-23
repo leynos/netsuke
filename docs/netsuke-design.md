@@ -963,8 +963,9 @@ Implementation details:
   written beneath `.netsuke/fetch` inside the workspace. Directories are opened
   via capability-restricted handles from `StdlibConfig`. Templates can no
   longer override the cache path, ensuring caches remain bounded by the
-  workspace. Any remote fetch or cache write marks the stdlib state as impure
-  so callers can discard memoised renders.
+  workspace. Remote fetches and cache writes mark the stdlib state as impure so
+  callers can discard memoised renders, while cache hits remain pure and
+  preserve memoised renders.
 - `manifest::from_path` derives the workspace root from the manifest file's
   directory before registering the stdlib. This keeps caches scoped to the
   manifest tree even when the CLI evaluates a manifest from another working

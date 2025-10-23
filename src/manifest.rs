@@ -163,7 +163,10 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 mod tests;
 
 fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let parent = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
     let manifest_label = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -175,11 +178,6 @@ fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
             path.display()
         )
     })?;
-    let utf8_parent = if utf8_parent.as_str().is_empty() {
-        Utf8Path::new(".")
-    } else {
-        utf8_parent
-    };
     let dir = Dir::open_ambient_dir(utf8_parent, ambient_authority()).with_context(|| {
         format!(
             "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"

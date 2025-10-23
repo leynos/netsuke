@@ -47,10 +47,14 @@ impl HttpServerConfig {
                 "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS",
                 Duration::from_secs(5),
             ),
+            // Prevent busy-spin when overrides specify a zero-millisecond poll
+            // interval. Tests only need millisecond precision, so clamp to at
+            // least 1 ms.
             poll_interval: duration_from_env(
                 "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS",
                 Duration::from_millis(10),
-            ),
+            )
+            .max(Duration::from_millis(1)),
         }
     }
 
@@ -299,6 +303,22 @@ mod tests {
         drop(poll);
         drop(read);
         drop(accept);
+    }
+
+    #[test]
+    fn from_env_clamps_zero_poll_interval() {
+        let _lock = EnvLock::acquire();
+        clear_duration_warnings();
+        let poll = EnvVarGuard::set("NETSUKE_TEST_HTTP_POLL_INTERVAL_MS", "0");
+
+        let config = HttpServerConfig::from_env();
+        assert_eq!(config.poll_interval, Duration::from_millis(1));
+        assert!(
+            take_duration_warnings().is_empty(),
+            "parsing a zero poll interval should not warn",
+        );
+
+        drop(poll);
     }
 
     #[test]
