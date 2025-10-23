@@ -10,6 +10,7 @@ use insta::{Settings, assert_snapshot};
 use netsuke::{ir::BuildGraph, manifest, ninja_gen};
 use std::{fs, process::Command};
 use tempfile::tempdir;
+use test_support::ensure_binaries_available;
 
 fn run_ok(cmd: &mut Command) -> Result<String> {
     let out = cmd.output().context("failed to spawn command")?;
@@ -24,13 +25,13 @@ fn run_ok(cmd: &mut Command) -> Result<String> {
 
 #[test]
 fn touch_manifest_ninja_validation() -> Result<()> {
-    let ninja_check = Command::new("ninja").arg("--version").output();
-    if ninja_check
-        .as_ref()
-        .map(|output| !output.status.success())
-        .unwrap_or(true)
+    if let Err(failures) =
+        ensure_binaries_available(&[("ninja", &["--version"]), ("python3", &["--version"])])
     {
-        tracing::warn!("skipping test: ninja must be installed for integration tests");
+        tracing::warn!(
+            "skipping test: required binaries unavailable: {}",
+            failures.join(", ")
+        );
         return Ok(());
     }
     let manifest_yaml = r#"

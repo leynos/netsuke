@@ -45,6 +45,7 @@ use cap_std::{ambient_authority, fs_utf8};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use tempfile::{NamedTempFile, TempDir};
 
 /// Create a fake Ninja executable that exits with `exit_code`.
@@ -97,6 +98,45 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
     }
 
     Ok((dir, path))
+}
+
+/// Probe that required binaries are available in `PATH`.
+///
+/// Each entry provides the programme name and the arguments used to probe it,
+/// typically `["--version"]`. The function returns `Ok(())` when every command
+/// spawns and exits successfully. Failures yield `Err` containing
+/// human-readable descriptions so callers can surface an appropriate skip
+/// message.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use test_support::ensure_binaries_available;
+///
+/// if let Err(failures) = ensure_binaries_available(&[("ninja", &["--version"])]) {
+///     eprintln!("skipping test: {failures:?}");
+/// }
+/// ```
+pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), Vec<String>> {
+    let mut failures = Vec::new();
+
+    for (program, args) in probes {
+        let probe = Command::new(program).args(*args).output();
+        match probe {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => failures.push(format!(
+                "`{program}` exited with status {status}",
+                status = output.status
+            )),
+            Err(err) => failures.push(format!("failed to spawn `{program}`: {err}")),
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures)
+    }
 }
 
 /// Resolve `cli_file` relative to `temp_dir` and ensure it exists.
