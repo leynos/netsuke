@@ -525,7 +525,7 @@ mod tests {
     #[test]
     fn quote_escapes_cmd_metacharacters() -> anyhow::Result<()> {
         use super::{QuoteError, quote};
-        use anyhow::{anyhow, ensure};
+        use anyhow::ensure;
 
         let success_cases = [
             ("simple", "simple"),
@@ -561,19 +561,13 @@ mod tests {
         ];
 
         for (input, expected) in error_cases {
-            match quote(input) {
-                Ok(actual) => {
-                    return Err(anyhow!(
-                        "quote({input:?}) succeeded with {actual:?} but expected error {expected:?}"
-                    ));
-                }
-                Err(err) => {
-                    ensure!(
-                        err == expected,
-                        "quote({input:?}) returned error {err:?}, expected {expected:?}"
-                    );
-                }
-            }
+            let err = quote(input).expect_err(&format!(
+                "quote({input:?}) succeeded but expected error {expected:?}"
+            ));
+            ensure!(
+                err == expected,
+                "quote({input:?}) returned error {err:?}, expected {expected:?}"
+            );
         }
         Ok(())
     }
