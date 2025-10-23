@@ -36,7 +36,10 @@ impl CurrentDirGuard {
 impl Drop for CurrentDirGuard {
     fn drop(&mut self) {
         if let Err(err) = std::env::set_current_dir(&self.original) {
-            tracing::warn!("failed to restore working directory: {err}");
+            tracing::warn!(
+                "failed to restore working directory to {}: {err}",
+                self.original.display()
+            );
         }
     }
 }
