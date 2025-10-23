@@ -5,10 +5,11 @@ use super::{BuildTargets, NINJA_PROGRAM};
 use crate::cli::Cli;
 use camino::Utf8PathBuf;
 use ninja_env::NINJA_ENV;
+use std::convert::TryFrom;
 use std::{
     env,
     ffi::OsString,
-    io::{self, BufRead, BufReader, ErrorKind, Write},
+    io::{self, BufReader, ErrorKind, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     thread,
@@ -184,44 +185,72 @@ struct ForwardStats {
     write_failed: bool,
 }
 
+struct CountingWriter<'a, W> {
+    inner: &'a mut W,
+    written: u64,
+}
+
+impl<W: Write> Write for CountingWriter<'_, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self.inner.write(buf) {
+            Ok(count) => {
+                self.written += count as u64;
+                Ok(count)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+fn clamp_u64_to_usize(value: u64) -> usize {
+    usize::try_from(value).unwrap_or(usize::MAX)
+}
+
 fn forward_child_output<R, W>(
     mut reader: R,
     mut writer: W,
     stream_name: &'static str,
 ) -> ForwardStats
 where
-    R: BufRead,
+    R: Read,
     W: Write,
 {
     let mut stats = ForwardStats::default();
-    let mut buffer = String::new();
-    loop {
-        buffer.clear();
-        match reader.read_line(&mut buffer) {
-            Ok(0) => break,
-            Ok(bytes) => {
-                stats.bytes_read += bytes;
-                if stats.write_failed {
-                    continue;
+    let mut counting_writer = CountingWriter {
+        inner: &mut writer,
+        written: 0,
+    };
+
+    match io::copy(&mut reader, &mut counting_writer) {
+        Ok(bytes) => {
+            stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
+            stats.bytes_read = clamp_u64_to_usize(bytes);
+        }
+        Err(err) => {
+            stats.write_failed = true;
+            stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
+            stats.bytes_read = clamp_u64_to_usize(counting_writer.written);
+            tracing::debug!(
+                "Failed to write child {stream_name} output to parent: {err}; discarding remaining bytes"
+            );
+            match io::copy(&mut reader, &mut io::sink()) {
+                Ok(drained) => {
+                    let drained_bytes = clamp_u64_to_usize(drained);
+                    stats.bytes_read = stats.bytes_read.saturating_add(drained_bytes);
                 }
-                match writer.write_all(buffer.as_bytes()) {
-                    Ok(()) => stats.bytes_written += buffer.len(),
-                    Err(err) => {
-                        stats.write_failed = true;
-                        tracing::debug!(
-                            "Failed to write child {stream_name} output to parent: {err}; discarding remaining bytes"
-                        );
-                    }
+                Err(drain_err) => {
+                    tracing::debug!(
+                        "Failed to drain child {stream_name} output after writer closed: {drain_err}"
+                    );
                 }
-            }
-            Err(err) => {
-                tracing::debug!(
-                    "Failed to read child {stream_name} output: {err}; stopping forwarder"
-                );
-                break;
             }
         }
     }
+
     stats
 }
 
