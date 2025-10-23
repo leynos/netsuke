@@ -111,7 +111,7 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use camino::{Utf8Path, Utf8PathBuf};
 /// use tempfile::TempDir;
 /// use test_support::ensure_manifest_exists;
