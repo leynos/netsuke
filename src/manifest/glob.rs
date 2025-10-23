@@ -391,8 +391,9 @@ fn is_wildcard_continuation_char(ch: char) -> bool {
 ///
 /// # Panics
 ///
-/// Panics if pattern normalisation fails to record the derived pattern, which
-/// indicates a logic error in the validator.
+/// Does not panic. If pattern normalisation fails to record the derived pattern
+/// (a logic error in the validator), the function falls back to the raw pattern
+/// in release builds whilst firing a debug assertion in debug builds.
 pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
