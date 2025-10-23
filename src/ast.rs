@@ -155,19 +155,19 @@ pub enum Recipe {
     },
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRecipe {
+    command: Option<String>,
+    script: Option<String>,
+    rule: Option<StringOrList>,
+}
+
 impl<'de> Deserialize<'de> for Recipe {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct RawRecipe {
-            command: Option<String>,
-            script: Option<String>,
-            rule: Option<StringOrList>,
-        }
-
         let raw = RawRecipe::deserialize(deserializer)?;
         let RawRecipe {
             command: command_opt,
