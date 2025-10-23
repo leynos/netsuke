@@ -161,6 +161,7 @@ impl<'de> Deserialize<'de> for Recipe {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
         struct RawRecipe {
             command: Option<String>,
             script: Option<String>,
