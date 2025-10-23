@@ -64,7 +64,13 @@ fn create_test_dirs(base: &Path, dirs: &[&str]) -> Result<()> {
 
 #[fixture]
 fn temp_dir() -> tempfile::TempDir {
-    tempfile::tempdir().unwrap_or_else(|err| panic!("create temp dir: {err}"))
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture should fail fast when temp directory creation fails"
+    )]
+    {
+        tempfile::tempdir().expect("create temp dir")
+    }
 }
 
 #[rstest]
