@@ -1,19 +1,15 @@
-#![allow(
-    clippy::expect_used,
-    reason = "YAML error tests use expect for diagnostics"
-)]
-
 //! Regression tests for YAML parse errors.
 //!
 //! These tests ensure diagnostics include line numbers and optional hints, and
 //! that rendering is stable across terminals.
 
+use anyhow::{Context, Result, bail, ensure};
 use netsuke::manifest;
 use rstest::rstest;
 use strip_ansi_escapes::strip;
 
-fn normalise_report(report: &str) -> String {
-    String::from_utf8(strip(report.as_bytes())).expect("utf8")
+fn normalise_report(report: &str) -> Result<String> {
+    String::from_utf8(strip(report.as_bytes())).context("YAML diagnostic should be valid UTF-8")
 }
 
 #[rstest]
@@ -89,15 +85,18 @@ fn normalise_report(report: &str) -> String {
     "not: yaml: at all: %$#@!",
     &["YAML parse error", "line 1, column 1"],
 )]
-fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) {
-    let err = manifest::from_str(yaml).expect_err("parse should fail");
+fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str]) -> Result<()> {
+    let Err(err) = manifest::from_str(yaml) else {
+        bail!("parse should fail");
+    };
     let msg = normalise_report(
         &err.chain()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join("\n"),
-    );
+    )?;
     for needle in needles {
-        assert!(msg.contains(needle), "missing: {needle}\nmessage: {msg}");
+        ensure!(msg.contains(needle), "missing: {needle}\nmessage: {msg}");
     }
+    Ok(())
 }

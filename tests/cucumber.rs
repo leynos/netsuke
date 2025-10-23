@@ -1,8 +1,3 @@
-#![allow(
-    clippy::expect_used,
-    reason = "Cucumber harness uses expect for scenario setup failures"
-)]
-
 //! Cucumber test runner and world state.
 
 use anyhow::{Context, Result};
@@ -108,7 +103,9 @@ impl CliWorld {
         };
 
         if self.extract_host_from_stdlib_url().is_some() {
-            server.join().expect("HTTP server thread panicked");
+            if let Err(err) = server.join() {
+                tracing::warn!("HTTP server thread panicked: {err:?}");
+            }
             self.stdlib_url = None;
             return;
         }

@@ -5,7 +5,6 @@
 #![allow(
     clippy::shadow_reuse,
     clippy::shadow_unrelated,
-    clippy::expect_used,
     reason = "Cucumber step macros rebind capture names and steps prefer expect"
 )]
 
