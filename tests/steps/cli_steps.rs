@@ -2,12 +2,6 @@
 //!
 //! This module provides step definitions that test the command-line interface
 //! parsing and validation using the Cucumber framework.
-#![allow(
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    reason = "Cucumber step macros rebind capture names and steps prefer expect"
-)]
-
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
 use clap::Parser;
