@@ -1,8 +1,7 @@
 //! Steps for preparing file-system fixtures used in Jinja tests.
-#![allow(
+#![expect(
     clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    reason = "Cucumber step macros rebind capture names and steps prefer expect"
+    reason = "Cucumber step macros capture identifiers that shadow locals"
 )]
 
 use crate::CliWorld;
