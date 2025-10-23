@@ -74,15 +74,11 @@ where
         if read == 0 {
             break;
         }
-        if let Some(chunk) = buffer.get(..read) {
-            hasher.update(chunk);
-        } else {
+        let chunk = buffer.get(..read).unwrap_or_else(|| {
             debug_assert!(false, "read beyond buffer capacity: {read} bytes");
-            let end = read.min(buffer.len());
-            if let Some(chunk) = buffer.get(..end) {
-                hasher.update(chunk);
-            }
-        }
+            buffer.as_slice()
+        });
+        hasher.update(chunk);
     }
     Ok(encode_hex(&hasher.finalize()))
 }
