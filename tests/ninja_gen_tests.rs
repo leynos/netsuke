@@ -1,8 +1,3 @@
-#![allow(
-    clippy::expect_used,
-    reason = "integration tests prefer expect for expressive failures"
-)]
-
 //! Unit tests for Ninja file generation.
 //!
 //! Snapshot tests use `insta` to ensure the emitted manifest remains stable.
@@ -10,6 +5,7 @@
 //! multiple inputs and outputs, complex dependency relationships, and edge
 //! cases like empty build graphs.
 
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use insta::{Settings, assert_snapshot};
@@ -48,7 +44,13 @@ fn ninja_integration_setup() -> Option<TempDir> {
     if skip_if_ninja_unavailable() {
         None
     } else {
-        Some(tempdir().expect("temp dir"))
+        match tempdir() {
+            Ok(dir) => Some(dir),
+            Err(err) => {
+                tracing::warn!("skipping test: failed to create temp dir: {err}");
+                None
+            }
+        }
     }
 }
 
@@ -133,24 +135,29 @@ fn generate_ninja_scenarios(
     #[case] edge: BuildEdge,
     #[case] target_path: Utf8PathBuf,
     #[case] expected: &str,
-) {
+) -> Result<()> {
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(target_path, edge);
 
-    let ninja = generate(&graph).expect("generate ninja");
-    assert_eq!(ninja, expected);
+    let ninja = generate(&graph)?;
+    ensure!(
+        ninja == expected,
+        "generated ninja manifest did not match expectation"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn generate_empty_graph() {
+fn generate_empty_graph() -> Result<()> {
     let graph = BuildGraph::default();
-    let ninja = generate(&graph).expect("generate ninja");
-    assert!(ninja.is_empty());
+    let ninja = generate(&graph)?;
+    ensure!(ninja.is_empty(), "expected empty ninja manifest");
+    Ok(())
 }
 
 #[rstest]
-fn generate_multiline_script_snapshot() {
+fn generate_multiline_script_snapshot() -> Result<()> {
     let mut graph = BuildGraph::default();
     graph.actions.insert(
         "script".into(),
@@ -179,7 +186,7 @@ fn generate_multiline_script_snapshot() {
     );
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
-    let ninja = generate(&graph).expect("generate ninja");
+    let ninja = generate(&graph)?;
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -188,10 +195,11 @@ fn generate_multiline_script_snapshot() {
     settings.bind(|| {
         assert_snapshot!("multiline_script_ninja", &ninja);
     });
-    assert!(
+    ensure!(
         ninja.contains("printf %b") && ninja.contains("\\n"),
-        "script should use printf %b with encoded newlines",
+        "script should use printf %b with encoded newlines"
     );
+    Ok(())
 }
 
 /// Integration scenarios to confirm Ninja executes commands correctly.
@@ -291,59 +299,68 @@ fn ninja_integration_tests(
     #[case] target_name: Utf8PathBuf,
     #[case] ninja_args: Vec<&str>,
     #[case] assertion: AssertionType,
-) {
+) -> Result<()> {
     let Some(dir) = ninja_integration_setup else {
-        return;
+        return Ok(());
     };
-    let dir_path =
-        Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8 ninja tempdir");
+    let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+        .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
 
     let output = edge
         .explicit_outputs
         .first()
-        .expect("explicit output")
+        .context("edge should have at least one explicit output")?
         .clone();
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(output.clone(), edge);
     graph.default_targets.push(output);
 
-    let ninja = generate(&graph).expect("generate ninja");
-    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority()).expect("open ninja tempdir");
+    let ninja = generate(&graph)?;
+    let handle = Dir::open_ambient_dir(&dir_path, ambient_authority())
+        .with_context(|| format!("open ambient dir for temp workspace at {dir_path}"))?;
     handle
         .write("build.ninja", ninja.as_bytes())
-        .expect("write ninja");
+        .context("write ninja build file")?;
     let status = Command::new("ninja")
         .args(&ninja_args)
         .current_dir(dir_path.as_std_path())
         .status()
-        .expect("run ninja");
+        .context("invoke ninja")?;
 
     match assertion {
-        AssertionType::StatusSuccess => assert!(status.success()),
+        AssertionType::StatusSuccess => {
+            ensure!(status.success(), "ninja invocation should succeed");
+        }
         AssertionType::FileExists => {
-            assert!(status.success());
+            ensure!(status.success(), "ninja invocation should succeed");
             let exists = handle
                 .try_exists(target_name.as_str())
-                .expect("check target existence");
-            assert!(
+                .with_context(|| format!("check existence of {target_name}"))?;
+            ensure!(
                 exists,
                 "expected {} to exist after ninja invocation",
                 &target_name
             );
         }
         AssertionType::FileContent(expected) => {
-            assert!(status.success());
+            ensure!(status.success(), "ninja invocation should succeed");
             let content = handle
                 .read_to_string(target_name.as_str())
-                .expect("read target file");
-            assert_eq!(content.trim(), expected);
+                .with_context(|| format!("read target file {target_name}"))?;
+            ensure!(
+                content.trim() == expected,
+                "expected file content '{}', got '{}'",
+                expected,
+                content.trim()
+            );
         }
     }
+    Ok(())
 }
 
 #[rstest]
-fn errors_when_action_missing() {
+fn errors_when_action_missing() -> Result<()> {
     let mut graph = BuildGraph::default();
     let edge = BuildEdge {
         action_id: "missing".into(),
@@ -355,12 +372,18 @@ fn errors_when_action_missing() {
         always: false,
     };
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
-    let err = generate(&graph).expect_err("missing action");
-    assert!(matches!(err, NinjaGenError::MissingAction { id } if id == "missing"));
+    let Err(err) = generate(&graph) else {
+        bail!("expected missing action to error");
+    };
+    ensure!(
+        matches!(err, NinjaGenError::MissingAction { ref id } if id == "missing"),
+        "unexpected error variant: {err:?}"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn generate_format_error() {
+fn generate_format_error() -> Result<()> {
     use std::fmt::{self, Write};
 
     struct FailWriter;
@@ -394,6 +417,12 @@ fn generate_format_error() {
     graph.targets.insert(Utf8PathBuf::from("out"), edge);
 
     let mut writer = FailWriter;
-    let err = generate_into(&graph, &mut writer).expect_err("format error");
-    assert!(matches!(err, NinjaGenError::Format(_)));
+    let Err(err) = generate_into(&graph, &mut writer) else {
+        bail!("expected format error when writer fails");
+    };
+    ensure!(
+        matches!(err, NinjaGenError::Format(_)),
+        "unexpected error: {err:?}"
+    );
+    Ok(())
 }

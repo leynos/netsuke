@@ -1,13 +1,9 @@
-#![allow(
-    clippy::expect_used,
-    reason = "CLI tests employ expect for explicit failure messages"
-)]
-
 //! Unit tests for CLI argument parsing and validation.
 //!
 //! This module exercises the command-line interface defined in [`netsuke::cli`]
 //! using `rstest` for parameterised coverage of success and error scenarios.
 
+use anyhow::{Context, Result, ensure};
 use clap::Parser;
 use clap::error::ErrorKind;
 use netsuke::cli::{BuildArgs, Cli, Commands};
@@ -48,13 +44,22 @@ fn parse_cli(
     #[case] jobs: Option<usize>,
     #[case] verbose: bool,
     #[case] expected_cmd: Commands,
-) {
+) -> Result<()> {
     let cli = Cli::parse_from_with_default(argv.clone());
-    assert_eq!(cli.file, file);
-    assert_eq!(cli.directory, directory);
-    assert_eq!(cli.jobs, jobs);
-    assert_eq!(cli.verbose, verbose);
-    assert_eq!(cli.command.expect("command should be set"), expected_cmd);
+    ensure!(cli.file == file, "parsed file should match input");
+    ensure!(
+        cli.directory == directory,
+        "parsed directory should match input"
+    );
+    ensure!(cli.jobs == jobs, "parsed jobs should match input");
+    ensure!(cli.verbose == verbose, "verbose flag should match input");
+    let command = cli.command.context("command should be set")?;
+    ensure!(
+        command == expected_cmd,
+        "parsed command should match expected {:?}",
+        expected_cmd
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -63,7 +68,15 @@ fn parse_cli(
 #[case(vec!["netsuke", "-j", "notanumber"], ErrorKind::ValueValidation)]
 #[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
 #[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]
-fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) {
-    let err = Cli::try_parse_from(argv).expect_err("unexpected success");
-    assert_eq!(err.kind(), expected_error);
+fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) -> Result<()> {
+    let err = Cli::try_parse_from(argv)
+        .err()
+        .context("parser should reject invalid arguments")?;
+    ensure!(
+        err.kind() == expected_error,
+        "expected error kind {:?}, got {:?}",
+        expected_error,
+        err.kind()
+    );
+    Ok(())
 }

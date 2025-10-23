@@ -1,10 +1,6 @@
-#![allow(
-    clippy::expect_used,
-    reason = "ninja env tests prefer expect for readability"
-)]
-
 //! Tests for overriding the `NINJA_ENV` variable via a mock environment.
 
+use anyhow::{Context, Result, ensure};
 use mockable::MockEnv;
 use ninja_env::NINJA_ENV;
 use rstest::{fixture, rstest};
@@ -19,7 +15,7 @@ fn ninja_tmp() -> PathBuf {
 
 #[rstest]
 #[serial]
-fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) {
+fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) -> Result<()> {
     let before = std::env::var_os(NINJA_ENV);
     let original = before
         .as_ref()
@@ -30,16 +26,24 @@ fn override_ninja_env_sets_and_restores(ninja_tmp: PathBuf) {
         .returning(move |_| original.clone().ok_or(std::env::VarError::NotPresent));
     {
         let _guard = override_ninja_env(&env, ninja_tmp.as_path());
-        let after = std::env::var_os(NINJA_ENV).expect("NINJA_ENV should be set after override");
-        assert_eq!(after, ninja_tmp.as_os_str());
+        let after = std::env::var_os(NINJA_ENV)
+            .with_context(|| "NINJA_ENV should be set after override")?;
+        ensure!(
+            after == ninja_tmp.as_os_str(),
+            "NINJA_ENV after override should equal provided path"
+        );
     }
     let restored = std::env::var_os(NINJA_ENV);
-    assert_eq!(restored, before);
+    ensure!(
+        restored == before,
+        "NINJA_ENV should be restored after guard drop"
+    );
+    Ok(())
 }
 
 #[rstest]
 #[serial]
-fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) {
+fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) -> Result<()> {
     let before = std::env::var_os(NINJA_ENV);
     let mut env = MockEnv::new();
     env.expect_raw()
@@ -47,10 +51,17 @@ fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) {
         .returning(|_| Err(std::env::VarError::NotPresent));
     {
         let _guard = override_ninja_env(&env, ninja_tmp.as_path());
-        let after = std::env::var_os(NINJA_ENV).expect("NINJA_ENV should be set after override");
-        assert_eq!(after, ninja_tmp.as_os_str());
+        let after = std::env::var_os(NINJA_ENV)
+            .with_context(|| "NINJA_ENV should be set after override")?;
+        ensure!(
+            after == ninja_tmp.as_os_str(),
+            "NINJA_ENV after override should equal provided path"
+        );
     }
-    assert!(std::env::var_os(NINJA_ENV).is_none());
+    ensure!(
+        std::env::var_os(NINJA_ENV).is_none(),
+        "NINJA_ENV should be cleared after guard drop"
+    );
 
     // Restore original global state for isolation
     {
@@ -63,4 +74,5 @@ fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) {
             unsafe { std::env::remove_var(NINJA_ENV) };
         }
     }
+    Ok(())
 }
