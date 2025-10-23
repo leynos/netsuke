@@ -119,6 +119,13 @@ mod tests {
     use super::*;
     use minijinja::Environment;
 
+    fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
+        doc.get("targets")
+            .and_then(|v| v.as_array())
+            .map(Vec::as_slice)
+            .context("targets sequence missing")
+    }
+
     #[test]
     fn expand_foreach_expands_sequence_values() -> Result<()> {
         let env = Environment::new();
@@ -132,10 +139,7 @@ mod tests {
       static: keep",
         )?;
         expand_foreach(&mut doc, &env)?;
-        let targets = doc
-            .get("targets")
-            .and_then(|v| v.as_array())
-            .context("targets sequence missing")?;
+        let targets = targets(&doc)?;
         anyhow::ensure!(targets.len() == 2, "expected two targets");
         for (idx, target) in targets.iter().enumerate() {
             let map = target.as_object().context("target map")?;
@@ -173,10 +177,7 @@ mod tests {
     when: 'item > 1'",
         )?;
         expand_foreach(&mut doc, &env)?;
-        let targets = doc
-            .get("targets")
-            .and_then(|v| v.as_array())
-            .context("targets sequence missing")?;
+        let targets = targets(&doc)?;
         anyhow::ensure!(targets.len() == 2, "expected filtered targets");
         let indexes: Vec<u64> = targets
             .iter()
@@ -216,10 +217,7 @@ mod tests {
 ";
         let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
         expand_foreach(&mut doc, &env)?;
-        let targets = doc
-            .get("targets")
-            .and_then(|v| v.as_array())
-            .context("targets sequence missing")?;
+        let targets = targets(&doc)?;
         anyhow::ensure!(targets.len() == 2, "expected expanded targets");
         for target in targets {
             let map = target.as_object().context("target object")?;
