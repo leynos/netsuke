@@ -4,17 +4,11 @@
     reason = "Cucumber step macros rebind capture names"
 )]
 
+use super::common::build_graph_available;
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
 use cucumber::{then, when};
 use netsuke::ninja_gen;
-
-fn build_graph(world: &CliWorld) -> Result<&netsuke::ir::BuildGraph> {
-    world
-        .build_graph
-        .as_ref()
-        .context("build graph should be available")
-}
 
 /// Assert that optional Ninja output or error content contains an expected fragment.
 fn assert_contains(
@@ -32,7 +26,7 @@ fn assert_contains(
 
 #[when("the ninja file is generated")]
 fn generate_ninja(world: &mut CliWorld) -> Result<()> {
-    let graph = build_graph(world)?;
+    let graph = build_graph_available(world)?;
     match ninja_gen::generate(graph) {
         Ok(n) => {
             world.ninja = Some(n);

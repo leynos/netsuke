@@ -4,24 +4,11 @@
     reason = "Cucumber step macros rebind capture names"
 )]
 
+use super::common::{build_graph_generated, build_graph_generated_mut};
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
 use cucumber::{given, then, when};
 use netsuke::ir::BuildGraph;
-
-fn graph(world: &CliWorld) -> Result<&BuildGraph> {
-    world
-        .build_graph
-        .as_ref()
-        .context("build graph should have been generated")
-}
-
-fn graph_mut(world: &mut CliWorld) -> Result<&mut BuildGraph> {
-    world
-        .build_graph
-        .as_mut()
-        .context("build graph should have been generated")
-}
 
 fn assert_generation_attempted(world: &CliWorld) -> Result<()> {
     match (world.build_graph.is_some(), world.manifest_error.is_some()) {
@@ -38,7 +25,7 @@ fn create_graph(world: &mut CliWorld) {
 
 #[then(expr = "the graph has {int} actions")]
 fn graph_actions(world: &mut CliWorld, count: usize) -> Result<()> {
-    let g = graph(world)?;
+    let g = build_graph_generated(world)?;
     ensure!(
         g.actions.len() == count,
         "expected {count} actions, found {}",
@@ -49,7 +36,7 @@ fn graph_actions(world: &mut CliWorld, count: usize) -> Result<()> {
 
 #[then(expr = "the graph has {int} targets")]
 fn graph_targets(world: &mut CliWorld, count: usize) -> Result<()> {
-    let g = graph(world)?;
+    let g = build_graph_generated(world)?;
     ensure!(
         g.targets.len() == count,
         "expected {count} targets, found {}",
@@ -60,7 +47,7 @@ fn graph_targets(world: &mut CliWorld, count: usize) -> Result<()> {
 
 #[then(expr = "the graph has {int} default targets")]
 fn graph_defaults(world: &mut CliWorld, count: usize) -> Result<()> {
-    let g = graph(world)?;
+    let g = build_graph_generated(world)?;
     ensure!(
         g.default_targets.len() == count,
         "expected {count} default targets, found {}",
@@ -93,13 +80,13 @@ fn compile_manifest(world: &mut CliWorld, path: String) {
 
 #[when("its contents are checked")]
 fn graph_checked(world: &mut CliWorld) -> Result<()> {
-    let _ = graph(world)?;
+    let _ = build_graph_generated(world)?;
     Ok(())
 }
 
 #[when("the graph contents are checked")]
 fn graph_contents_checked(world: &mut CliWorld) -> Result<()> {
-    let _ = graph(world)?;
+    let _ = build_graph_generated(world)?;
     Ok(())
 }
 
@@ -119,7 +106,7 @@ fn ir_generation_fails(world: &mut CliWorld) -> Result<()> {
 
 #[when("an action is removed from the graph")]
 fn remove_action(world: &mut CliWorld) -> Result<()> {
-    let graph = graph_mut(world)?;
+    let graph = build_graph_generated_mut(world)?;
     let first_action = graph.targets.values().next().map(|e| e.action_id.clone());
     if let Some(id) = first_action {
         graph.actions.remove(&id);
