@@ -75,11 +75,11 @@ fn touch_manifest_ninja_validation() -> Result<()> {
         run_ok(&mut cmd)
     };
 
-    let _ = ninja_cmd(&["-t", "rules"])?;
-    let _ = ninja_cmd(&["-t", "targets", "all"])?;
-    let _ = ninja_cmd(&["-t", "query", "out/a"])?;
+    ninja_cmd(&["-t", "rules"])?;
+    ninja_cmd(&["-t", "targets", "all"])?;
+    ninja_cmd(&["-t", "query", "out/a"])?;
 
-    let _ = ninja_cmd(&["-w", "phonycycle=err", "-d", "stats"])?;
+    ninja_cmd(&["-w", "phonycycle=err", "-d", "stats"])?;
     let second = ninja_cmd(&["-n", "-d", "explain", "-v"])?;
     ensure!(
         second.contains("no work to do"),
