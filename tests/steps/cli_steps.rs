@@ -35,11 +35,11 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
     }
 }
 
-fn extract_build(world: &CliWorld) -> Result<(&Vec<String>, &Option<PathBuf>)> {
+fn extract_build(world: &CliWorld) -> Result<(&[String], &Option<PathBuf>)> {
     let cli = world.cli.as_ref().context("CLI has not been parsed")?;
     let command = cli.command.as_ref().context("CLI command missing")?;
     match command {
-        Commands::Build(args) => Ok((&args.targets, &args.emit)),
+        Commands::Build(args) => Ok((args.targets.as_slice(), &args.emit)),
         other => Err(anyhow!("expected build command, got {other:?}")),
     }
 }
