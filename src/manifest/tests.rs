@@ -121,7 +121,7 @@ fn register_macro_handles_arguments(
     #[case] body: &str,
     #[case] template: &str,
     #[case] expected: &str,
-    mut strict_env: Environment,
+    mut strict_env: Environment<'static>,
 ) -> AnyResult<()> {
     let macro_def = MacroDefinition {
         signature: signature.to_owned(),
@@ -134,7 +134,7 @@ fn register_macro_handles_arguments(
 }
 
 #[rstest]
-fn call_macro_value_supports_kwargs(mut strict_env: Environment) -> AnyResult<()> {
+fn call_macro_value_supports_kwargs(mut strict_env: Environment<'static>) -> AnyResult<()> {
     strict_env.add_template(
         "macro",
         "{% macro greet(name='friend') %}hi {{ name }}{% endmacro %}",
@@ -157,7 +157,7 @@ fn call_macro_value_supports_kwargs(mut strict_env: Environment) -> AnyResult<()
 }
 
 #[rstest]
-fn register_macro_is_reusable(mut strict_env: Environment) -> AnyResult<()> {
+fn register_macro_is_reusable(mut strict_env: Environment<'static>) -> AnyResult<()> {
     let macro_def = MacroDefinition {
         signature: "echo(text)".to_owned(),
         body: "{{ text }}".to_owned(),
@@ -175,7 +175,7 @@ fn register_macro_is_reusable(mut strict_env: Environment) -> AnyResult<()> {
 }
 
 #[rstest]
-fn register_manifest_macros_validates_shape(mut strict_env: Environment) -> AnyResult<()> {
+fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>) -> AnyResult<()> {
     let mut mapping = ManifestMap::new();
     mapping.insert(
         "macros".into(),
@@ -197,7 +197,7 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment) -> AnyR
 
 #[rstest]
 fn register_manifest_macros_rejects_non_string_values(
-    mut strict_env: Environment,
+    mut strict_env: Environment<'static>,
 ) -> AnyResult<()> {
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
@@ -246,7 +246,7 @@ macros:
 }
 
 #[rstest]
-fn register_manifest_macros_requires_body(mut strict_env: Environment) -> AnyResult<()> {
+fn register_manifest_macros_requires_body(mut strict_env: Environment<'static>) -> AnyResult<()> {
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
     let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
@@ -264,7 +264,9 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment) -> AnyRes
 }
 
 #[rstest]
-fn register_manifest_macros_supports_multiple(mut strict_env: Environment) -> AnyResult<()> {
+fn register_manifest_macros_supports_multiple(
+    mut strict_env: Environment<'static>,
+) -> AnyResult<()> {
     let yaml = serde_saphyr::from_str::<ManifestValue>(
         "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",
     )?;

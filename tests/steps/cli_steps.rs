@@ -1,4 +1,8 @@
 //! Cucumber step definitions for CLI behaviour-driven testing.
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind capture names"
+)]
 //!
 //! This module provides step definitions that test the command-line interface
 //! parsing and validation using the Cucumber framework.

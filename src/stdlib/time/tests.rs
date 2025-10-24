@@ -6,7 +6,7 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use minijinja::{Environment, context, value::Value};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use time::{Duration, OffsetDateTime, macros::datetime};
 
 fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
@@ -14,7 +14,8 @@ fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
     Ok(compiled.eval(context! {})?)
 }
 
-fn build_env() -> Environment<'static> {
+#[fixture]
+fn env() -> Environment<'static> {
     let mut env = Environment::new();
     register_functions(&mut env);
     env
@@ -45,8 +46,7 @@ fn get_iso8601_property(value: &Value) -> Result<String> {
 }
 
 #[rstest]
-fn now_defaults_to_utc() -> Result<()> {
-    let env = build_env();
+fn now_defaults_to_utc(env: Environment<'static>) -> Result<()> {
     let value = eval_expression(&env, "now()")?;
     let captured = value_as_timestamp(&value)?;
     let now = OffsetDateTime::now_utc();
@@ -57,8 +57,7 @@ fn now_defaults_to_utc() -> Result<()> {
 }
 
 #[rstest]
-fn now_applies_custom_offset() -> Result<()> {
-    let env = build_env();
+fn now_applies_custom_offset(env: Environment<'static>) -> Result<()> {
     let value = eval_expression(&env, "now(offset='+02:30')")?;
     let captured = value_as_timestamp(&value)?;
     let offset = UtcOffset::from_hms(2, 30, 0)?;
@@ -73,8 +72,7 @@ fn now_applies_custom_offset() -> Result<()> {
 #[case::minutes_out_of_range("+01:60")]
 #[case::seconds_out_of_range("+01:01:61")]
 #[case::empty("")]
-fn now_rejects_invalid_offset(#[case] offset: &str) -> Result<()> {
-    let env = build_env();
+fn now_rejects_invalid_offset(env: Environment<'static>, #[case] offset: &str) -> Result<()> {
     let expr = format!("now(offset='{offset}')");
     let compiled = env.compile_expression(&expr)?;
     match compiled.eval(context! {}) {
@@ -87,8 +85,7 @@ fn now_rejects_invalid_offset(#[case] offset: &str) -> Result<()> {
 }
 
 #[rstest]
-fn timedelta_defaults_to_zero() -> Result<()> {
-    let env = build_env();
+fn timedelta_defaults_to_zero(env: Environment<'static>) -> Result<()> {
     let value = eval_expression(&env, "timedelta()")?;
     let duration = value_as_duration(&value)?;
     ensure!(duration.is_zero(), "duration {duration:?} should be zero");
@@ -96,8 +93,7 @@ fn timedelta_defaults_to_zero() -> Result<()> {
 }
 
 #[rstest]
-fn timedelta_accumulates_components() -> Result<()> {
-    let env = build_env();
+fn timedelta_accumulates_components(env: Environment<'static>) -> Result<()> {
     let value = eval_expression(
         &env,
         "timedelta(days=1, hours=2, minutes=30, seconds=5, milliseconds=750, microseconds=250, nanoseconds=1)",
@@ -130,10 +126,10 @@ fn timedelta_accumulates_components() -> Result<()> {
 )]
 #[case("timedelta(nanoseconds=-1)", Duration::nanoseconds(-1))]
 fn timedelta_supports_negative_values(
+    env: Environment<'static>,
     #[case] expr: &str,
     #[case] expected: Duration,
 ) -> Result<()> {
-    let env = build_env();
     let value = eval_expression(&env, expr)?;
     let duration = value_as_duration(&value)?;
     ensure!(duration == expected);
@@ -141,8 +137,7 @@ fn timedelta_supports_negative_values(
 }
 
 #[rstest]
-fn timedelta_detects_overflow() -> Result<()> {
-    let env = build_env();
+fn timedelta_detects_overflow(env: Environment<'static>) -> Result<()> {
     let compiled = env.compile_expression("timedelta(days=9223372036854775807)")?;
     match compiled.eval(context! {}) {
         Ok(value) => Err(anyhow!("expected overflow but evaluated to {value:?}")),

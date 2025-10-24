@@ -62,12 +62,18 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
 /// with the extracted macro name. The template name is synthesised using the
 /// provided index to ensure uniqueness.
 ///
+/// # Lifetimes
+///
+/// The macro cache stores compiled template state for the lifetime of the
+/// process, so the environment must be `'static`. Callers that hold a shorter
+/// lived [`Environment`] should clone the macro body rather than caching it.
+///
 /// # Errors
 ///
 /// Returns an error if the macro signature is invalid or template compilation
 /// fails.
 pub(crate) fn register_macro(
-    env: &mut Environment,
+    env: &mut Environment<'static>,
     macro_def: &MacroDefinition,
     index: usize,
 ) -> Result<()> {
@@ -97,7 +103,10 @@ pub(crate) fn register_macro(
 ///
 /// Returns an error if the YAML shape is invalid, any macro signature is
 /// malformed, or template compilation fails.
-pub(crate) fn register_manifest_macros(doc: &ManifestValue, env: &mut Environment) -> Result<()> {
+pub(crate) fn register_manifest_macros(
+    doc: &ManifestValue,
+    env: &mut Environment<'static>,
+) -> Result<()> {
     let Some(macros) = doc.get("macros").cloned() else {
         return Ok(());
     };
@@ -306,8 +315,8 @@ impl MacroInstance {
         let value = state.lookup(macro_name).ok_or_else(|| {
             anyhow::anyhow!("macro '{macro_name}' missing from compiled template")
         })?;
-        // SAFETY: manifest macros are registered in an `Environment<'static>` so the
-        // template bytecode outlives the cache.
+        // SAFETY: `register_macro` requires an `Environment<'static>`, so the template
+        // bytecode outlives the cached state stored in the macro instance.
         let state_static: State<'static, 'static> = unsafe { mem::transmute(state) };
         Ok(Self {
             state: MacroStateGuard::new(state_static),

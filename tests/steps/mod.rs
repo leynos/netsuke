@@ -2,12 +2,6 @@
 //!
 //! Provides helpers for stable error text (e.g., `display_error_chain`) used by
 //! step definitions.
-#![allow(
-    clippy::shadow_reuse,
-    clippy::shadow_unrelated,
-    reason = "Cucumber step macros rebind capture names and steps prefer expect"
-)]
-
 mod cli_steps;
 #[cfg(unix)]
 mod fs_steps;

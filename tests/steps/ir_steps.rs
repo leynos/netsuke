@@ -1,4 +1,8 @@
 //! Step definitions for `BuildGraph` scenarios.
+#![expect(
+    clippy::shadow_reuse,
+    reason = "Cucumber step macros rebind capture names"
+)]
 
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
