@@ -38,24 +38,18 @@ impl HttpServerConfig {
     /// * `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS` – polling interval used when
     ///   waiting for readiness in milliseconds.
     pub fn from_env() -> Self {
-        Self {
-            accept_timeout: duration_from_env(
-                "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS",
-                Duration::from_secs(10),
-            ),
-            read_timeout: duration_from_env(
-                "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS",
-                Duration::from_secs(5),
-            ),
-            // Prevent busy-spin when overrides specify a zero-millisecond poll
-            // interval. Tests only need millisecond precision, so clamp to at
-            // least 1 ms.
-            poll_interval: duration_from_env(
-                "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS",
-                Duration::from_millis(10),
-            )
-            .max(Duration::from_millis(1)),
-        }
+        let mut config = Self::default();
+        config.accept_timeout =
+            duration_from_env("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS", config.accept_timeout);
+        config.read_timeout =
+            duration_from_env("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", config.read_timeout);
+        // Prevent busy-spin when overrides specify a zero-millisecond poll
+        // interval. Tests only need millisecond precision, so clamp to at
+        // least 1 ms.
+        config.poll_interval =
+            duration_from_env("NETSUKE_TEST_HTTP_POLL_INTERVAL_MS", config.poll_interval)
+                .max(Duration::from_millis(1));
+        config
     }
 
     fn accept_deadline(&self) -> Instant {
@@ -153,7 +147,10 @@ pub fn spawn_http_server_with_config(
         .expect("set listener non-blocking");
     let addr = listener.local_addr().expect("local addr");
     let url = format!("http://{addr}");
-    let handle = thread::spawn(move || run_http_server(listener, body, config));
+    let handle = thread::Builder::new()
+        .name("netsuke-http-fixture".into())
+        .spawn(move || run_http_server(listener, body, config))
+        .expect("spawn http fixture thread");
     (
         url,
         HttpServer {
@@ -164,7 +161,12 @@ pub fn spawn_http_server_with_config(
 }
 
 fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig) {
-    let mut stream = accept_connection(&listener, config.accept_deadline(), config.poll_interval);
+    let mut stream = accept_connection(
+        &listener,
+        config.accept_deadline(),
+        config.poll_interval,
+        config.accept_timeout,
+    );
     stream
         .set_nonblocking(true)
         .expect("set stream non-blocking");
@@ -178,9 +180,17 @@ fn is_past_deadline(deadline: Instant) -> bool {
     Instant::now() >= deadline
 }
 
-fn should_retry_accept(err: &io::Error, deadline: Instant) -> bool {
+fn should_retry_accept(
+    err: &io::Error,
+    deadline: Instant,
+    poll_interval: Duration,
+    accept_timeout: Duration,
+) -> bool {
     if is_past_deadline(deadline) {
-        panic!("timed out waiting for fetch test connection");
+        panic!(
+            "timed out waiting for fetch test connection (accept_timeout={:?}, poll_interval={:?})",
+            accept_timeout, poll_interval
+        );
     }
     err.kind() == io::ErrorKind::WouldBlock
 }
@@ -189,11 +199,12 @@ fn accept_connection(
     listener: &TcpListener,
     deadline: Instant,
     poll_interval: Duration,
+    accept_timeout: Duration,
 ) -> TcpStream {
     loop {
         match listener.accept() {
             Ok((stream, _)) => return stream,
-            Err(err) if should_retry_accept(&err, deadline) => {
+            Err(err) if should_retry_accept(&err, deadline, poll_interval, accept_timeout) => {
                 thread::sleep(poll_interval);
             }
             Err(err) => panic!("failed to accept connection: {err}"),

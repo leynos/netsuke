@@ -115,7 +115,7 @@ impl StdlibConfig {
         }
     }
 
-    pub(super) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
+    pub(crate) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
         if relative.as_str().is_empty() {
             bail!("fetch cache path must not be empty");
         }
