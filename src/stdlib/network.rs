@@ -289,19 +289,7 @@ mod tests {
         let (_temp, root, path) = cache_workspace?;
         let file_path = path.join("file");
         fs::write(file_path.as_std_path(), b"data").context("write file placeholder")?;
-        match open_cache_dir(&root, file_path.as_path()) {
-            Ok(dir) => Err(anyhow!(
-                "expected file path to fail but received directory {dir:?}"
-            )),
-            Err(err) => {
-                ensure!(
-                    err.kind() == ErrorKind::InvalidOperation,
-                    "unexpected error kind {kind:?}",
-                    kind = err.kind()
-                );
-                Ok(())
-            }
-        }
+        assert_open_cache_dir_rejects(root.as_ref(), file_path.as_path(), "file path")
     }
 
     #[rstest]
