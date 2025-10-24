@@ -25,13 +25,10 @@ fn run_ok(cmd: &mut Command) -> Result<String> {
 
 #[test]
 fn touch_manifest_ninja_validation() -> Result<()> {
-    if let Err(failures) =
+    if let Err(err) =
         ensure_binaries_available(&[("ninja", &["--version"]), ("python3", &["--version"])])
     {
-        tracing::warn!(
-            "skipping test: required binaries unavailable: {}",
-            failures.join(", ")
-        );
+        tracing::warn!("skipping test: required binaries unavailable: {}", err);
         return Ok(());
     }
     let manifest_yaml = r#"

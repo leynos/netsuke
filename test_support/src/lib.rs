@@ -48,6 +48,25 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::{NamedTempFile, TempDir};
 
+#[derive(Debug)]
+pub enum ProbesError {
+    Failures(Vec<String>),
+}
+
+impl std::fmt::Display for ProbesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProbesError::Failures(failures) => write!(
+                f,
+                "Required binaries missing or failing: {}",
+                failures.join(", ")
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ProbesError {}
+
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
 /// Returns the temporary directory and the path to the executable.
@@ -113,11 +132,11 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
 /// ```rust,no_run
 /// use test_support::ensure_binaries_available;
 ///
-/// if let Err(failures) = ensure_binaries_available(&[("ninja", &["--version"])]) {
-///     eprintln!("skipping test: {failures:?}");
+/// if let Err(err) = ensure_binaries_available(&[("ninja", &["--version"])]) {
+///     eprintln!("skipping test: {err}");
 /// }
 /// ```
-pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), Vec<String>> {
+pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), ProbesError> {
     let mut failures = Vec::new();
 
     for (program, args) in probes {
@@ -135,7 +154,7 @@ pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), Vec<S
     if failures.is_empty() {
         Ok(())
     } else {
-        Err(failures)
+        Err(ProbesError::Failures(failures))
     }
 }
 
