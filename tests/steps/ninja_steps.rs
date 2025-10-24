@@ -59,6 +59,7 @@ fn ninja_command_tokens(
     command_index: usize,
     expected_tokens: String,
 ) -> Result<()> {
+    ensure!(command_index > 0, "command index must be >= 1");
     let ninja = world
         .ninja
         .as_ref()
@@ -67,8 +68,9 @@ fn ninja_command_tokens(
         .lines()
         .filter(|l| l.trim_start().starts_with("command ="))
         .collect();
+    let index = command_index - 1;
     let line = commands
-        .get(command_index - 1)
+        .get(index)
         .with_context(|| format!("command index {command_index} out of range"))?;
     let command = line.trim_start().trim_start_matches("command = ");
     let words =
