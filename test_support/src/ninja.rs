@@ -1,43 +1,22 @@
 //! Helpers for working with the system `ninja` binary in integration tests.
 
-use std::fmt;
 use std::process::{Command, ExitStatus};
 use tempfile::{TempDir, tempdir};
+use thiserror::Error;
 
 /// Errors that can occur when preparing Ninja-backed integration tests.
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum NinjaWorkspaceError {
     /// The `ninja --version` probe failed to spawn, most likely because Ninja
     /// is not present in `PATH`.
-    ProbeSpawn(std::io::Error),
+    #[error("failed to spawn `ninja --version`: {0}")]
+    ProbeSpawn(#[source] std::io::Error),
     /// `ninja --version` executed but returned a non-success status.
+    #[error("`ninja --version` returned non-success status: {0}")]
     ProbeFailed(ExitStatus),
     /// Creating the temporary workspace failed.
-    Workspace(std::io::Error),
-}
-
-impl fmt::Display for NinjaWorkspaceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ProbeSpawn(err) => {
-                write!(f, "failed to spawn `ninja --version`: {err}")
-            }
-            Self::ProbeFailed(status) => {
-                write!(f, "`ninja --version` exited with status {status}")
-            }
-            Self::Workspace(err) => write!(f, "failed to create ninja workspace: {err}"),
-        }
-    }
-}
-
-impl std::error::Error for NinjaWorkspaceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::ProbeSpawn(err) => Some(err),
-            Self::ProbeFailed(_) => None,
-            Self::Workspace(err) => Some(err),
-        }
-    }
+    #[error("failed to create temporary ninja workspace: {0}")]
+    Workspace(#[source] std::io::Error),
 }
 
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {

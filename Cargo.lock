@@ -2135,6 +2135,7 @@ dependencies = [
  "ninja_env",
  "sha2",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
