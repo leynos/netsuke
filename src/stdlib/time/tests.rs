@@ -46,7 +46,9 @@ fn get_iso8601_property(value: &Value) -> Result<String> {
     let iso = obj
         .get_value(&Value::from("iso8601"))
         .context("iso8601 attribute missing")?;
-    Ok(iso.to_string())
+    iso.as_str()
+        .map(ToOwned::to_owned)
+        .context("iso8601 attribute is not a string")
 }
 
 #[rstest]
