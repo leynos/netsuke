@@ -91,7 +91,6 @@ shadow_same                         = "deny"
 shadow_unrelated                    = "deny"
 str_to_string                       = "deny"
 string_lit_as_bytes                 = "deny"
-#tests_outside_test_module           = "deny"
 try_err                             = "deny"
 unneeded_field_pattern              = "deny"
 use_self                            = "deny"
@@ -100,8 +99,8 @@ use_self                            = "deny"
 float_arithmetic                    = "deny"
 
 [lints.rust]
-missing_docs             = "deny"
-missing_crate_level_docs = "deny"
+missing_docs                        = "deny"
+missing_crate_level_docs            = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
