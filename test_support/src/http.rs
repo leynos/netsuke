@@ -12,6 +12,10 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub(crate) const ENV_HTTP_ACCEPT_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS";
+pub(crate) const ENV_HTTP_READ_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_READ_TIMEOUT_MS";
+pub(crate) const ENV_HTTP_POLL_INTERVAL_MS: &str = "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS";
+
 #[cfg(test)]
 use std::sync::{Mutex, OnceLock};
 
@@ -40,15 +44,13 @@ impl HttpServerConfig {
     pub fn from_env() -> Self {
         let mut config = Self::default();
         config.accept_timeout =
-            duration_from_env("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS", config.accept_timeout);
-        config.read_timeout =
-            duration_from_env("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", config.read_timeout);
+            duration_from_env(ENV_HTTP_ACCEPT_TIMEOUT_MS, config.accept_timeout);
+        config.read_timeout = duration_from_env(ENV_HTTP_READ_TIMEOUT_MS, config.read_timeout);
         // Prevent busy-spin when overrides specify a zero-millisecond poll
         // interval. Tests only need millisecond precision, so clamp to at
         // least 1 ms.
-        config.poll_interval =
-            duration_from_env("NETSUKE_TEST_HTTP_POLL_INTERVAL_MS", config.poll_interval)
-                .max(Duration::from_millis(1));
+        config.poll_interval = duration_from_env(ENV_HTTP_POLL_INTERVAL_MS, config.poll_interval)
+            .max(Duration::from_millis(1));
         config
     }
 
@@ -296,6 +298,7 @@ fn clear_duration_warnings() {
 #[cfg(test)]
 mod tests {
     use super::{
+        ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
         HttpServerConfig, clear_duration_warnings, duration_from_env, take_duration_warnings,
     };
 
@@ -306,9 +309,9 @@ mod tests {
     fn from_env_applies_overrides() {
         let _lock = EnvLock::acquire();
         clear_duration_warnings();
-        let accept = EnvVarGuard::set("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS", "1500");
-        let read = EnvVarGuard::set("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", "750");
-        let poll = EnvVarGuard::set("NETSUKE_TEST_HTTP_POLL_INTERVAL_MS", "25");
+        let accept = EnvVarGuard::set(ENV_HTTP_ACCEPT_TIMEOUT_MS, "1500");
+        let read = EnvVarGuard::set(ENV_HTTP_READ_TIMEOUT_MS, "750");
+        let poll = EnvVarGuard::set(ENV_HTTP_POLL_INTERVAL_MS, "25");
 
         let config = HttpServerConfig::from_env();
         assert_eq!(config.accept_timeout, Duration::from_millis(1500));
@@ -328,7 +331,7 @@ mod tests {
     fn from_env_clamps_zero_poll_interval() {
         let _lock = EnvLock::acquire();
         clear_duration_warnings();
-        let poll = EnvVarGuard::set("NETSUKE_TEST_HTTP_POLL_INTERVAL_MS", "0");
+        let poll = EnvVarGuard::set(ENV_HTTP_POLL_INTERVAL_MS, "0");
 
         let config = HttpServerConfig::from_env();
         assert_eq!(config.poll_interval, Duration::from_millis(1));
@@ -344,11 +347,8 @@ mod tests {
     fn duration_from_env_returns_default_for_missing() {
         let _lock = EnvLock::acquire();
         clear_duration_warnings();
-        let guard = EnvVarGuard::remove("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS");
-        let duration = duration_from_env(
-            "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS",
-            Duration::from_secs(3),
-        );
+        let guard = EnvVarGuard::remove(ENV_HTTP_ACCEPT_TIMEOUT_MS);
+        let duration = duration_from_env(ENV_HTTP_ACCEPT_TIMEOUT_MS, Duration::from_secs(3));
         assert_eq!(duration, Duration::from_secs(3));
         assert!(
             take_duration_warnings().is_empty(),
@@ -361,16 +361,13 @@ mod tests {
     fn duration_from_env_reports_invalid_values() {
         let _lock = EnvLock::acquire();
         clear_duration_warnings();
-        let guard = EnvVarGuard::set("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS", "not-a-number");
-        let duration = duration_from_env(
-            "NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS",
-            Duration::from_secs(3),
-        );
+        let guard = EnvVarGuard::set(ENV_HTTP_ACCEPT_TIMEOUT_MS, "not-a-number");
+        let duration = duration_from_env(ENV_HTTP_ACCEPT_TIMEOUT_MS, Duration::from_secs(3));
         assert_eq!(duration, Duration::from_secs(3));
         let warnings = take_duration_warnings();
         assert_eq!(warnings.len(), 1);
         assert!(
-            warnings[0].contains("NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS"),
+            warnings[0].contains(ENV_HTTP_ACCEPT_TIMEOUT_MS),
             "warning should mention the variable name"
         );
         assert!(
@@ -384,9 +381,8 @@ mod tests {
     fn duration_from_env_trims_whitespace() {
         let _lock = EnvLock::acquire();
         clear_duration_warnings();
-        let guard = EnvVarGuard::set("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", "  2500  ");
-        let duration =
-            duration_from_env("NETSUKE_TEST_HTTP_READ_TIMEOUT_MS", Duration::from_secs(3));
+        let guard = EnvVarGuard::set(ENV_HTTP_READ_TIMEOUT_MS, "  2500  ");
+        let duration = duration_from_env(ENV_HTTP_READ_TIMEOUT_MS, Duration::from_secs(3));
         assert_eq!(duration, Duration::from_millis(2500));
         assert!(
             take_duration_warnings().is_empty(),
