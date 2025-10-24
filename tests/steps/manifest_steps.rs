@@ -67,10 +67,7 @@ fn assert_parsed(world: &CliWorld) -> Result<()> {
 
 fn get_target(world: &CliWorld, index: usize) -> Result<&Target> {
     ensure!(index > 0, "target index is 1-based");
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     manifest
         .targets
         .get(index - 1)
@@ -214,10 +211,7 @@ fn when_item_checked(world: &mut CliWorld, item: String) -> Result<()> {
     reason = "Cucumber step requires owned String"
 )]
 fn manifest_version(world: &mut CliWorld, version: String) -> Result<()> {
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let actual = manifest.netsuke_version.to_string();
     assert_field_eq("manifest", "version", actual.as_str(), version.as_str())
 }
@@ -261,10 +255,7 @@ fn target_not_always(world: &mut CliWorld, index: usize) -> Result<()> {
 
 #[then("the first action is phony")]
 fn first_action_phony(world: &mut CliWorld) -> Result<()> {
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let first = manifest
         .actions
         .first()
@@ -305,10 +296,7 @@ fn manifest_error_contains(world: &mut CliWorld, text: String) -> Result<()> {
     reason = "Cucumber step requires owned String"
 )]
 fn first_rule_name(world: &mut CliWorld, name: String) -> Result<()> {
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let rule = manifest
         .rules
         .first()
@@ -327,20 +315,14 @@ fn first_target_command(world: &mut CliWorld, command: String) -> Result<()> {
 
 #[then(expr = "the manifest has {int} targets")]
 fn manifest_has_targets(world: &mut CliWorld, count: usize) -> Result<()> {
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let actual = manifest.targets.len();
     assert_manifest_collection_len(world, "targets", actual, count)
 }
 
 #[then(expr = "the manifest has {int} macros")]
 fn manifest_has_macros(world: &mut CliWorld, count: usize) -> Result<()> {
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let actual = manifest.macros.len();
     assert_manifest_collection_len(world, "macros", actual, count)
 }
@@ -352,10 +334,7 @@ fn manifest_has_macros(world: &mut CliWorld, count: usize) -> Result<()> {
 )]
 fn macro_signature_is(world: &mut CliWorld, index: usize, signature: String) -> Result<()> {
     ensure!(index > 0, "macros use 1-based index");
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let macro_def = manifest
         .macros
         .get(index - 1)
@@ -380,10 +359,7 @@ fn manifest_has_targets_named(world: &mut CliWorld, names: String) -> Result<()>
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect();
-    let manifest = world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")?;
+    let manifest = manifest(world)?;
     let actual: BTreeSet<String> = manifest
         .targets
         .iter()
@@ -416,6 +392,13 @@ fn assert_target_command(world: &CliWorld, index: usize, command: &str) -> Resul
         }
         other => bail!("Expected command recipe, got: {other:?}"),
     }
+}
+
+fn manifest(world: &CliWorld) -> Result<&netsuke::ast::NetsukeManifest> {
+    world
+        .manifest
+        .as_ref()
+        .context("manifest has not been parsed")
 }
 
 fn assert_target_index(world: &CliWorld, index: usize, expected: usize) -> Result<()> {
