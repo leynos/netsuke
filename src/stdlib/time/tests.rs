@@ -30,7 +30,7 @@ fn value_as_timestamp(value: &Value) -> Result<OffsetDateTime> {
         .as_object()
         .and_then(|obj| obj.downcast_ref::<TimestampValue>())
         .map(|stored| stored.datetime)
-        .ok_or_else(|| anyhow!("value is not a timestamp object"))
+        .ok_or_else(|| anyhow!("value is not a timestamp object: {value:?}"))
 }
 
 fn value_as_duration(value: &Value) -> Result<Duration> {
@@ -38,7 +38,7 @@ fn value_as_duration(value: &Value) -> Result<Duration> {
         .as_object()
         .and_then(|obj| obj.downcast_ref::<TimeDeltaValue>())
         .map(|stored| stored.duration)
-        .ok_or_else(|| anyhow!("value is not a duration object"))
+        .ok_or_else(|| anyhow!("value is not a duration object: {value:?}"))
 }
 
 fn get_iso8601_property(value: &Value) -> Result<String> {
