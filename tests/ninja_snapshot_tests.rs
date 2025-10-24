@@ -63,8 +63,9 @@ fn touch_manifest_ninja_validation() -> Result<()> {
     let input_dir = dir.path().join("in");
     fs::create_dir_all(&input_dir)
         .with_context(|| format!("create directory {}", input_dir.display()))?;
-    fs::write(dir.path().join("in/a"), "")
-        .with_context(|| format!("write input file in {}", input_dir.display()))?;
+    let input_file = input_dir.join("a");
+    fs::write(&input_file, "")
+        .with_context(|| format!("write input file {}", input_file.display()))?;
 
     let ninja_cmd = |args: &[&str]| {
         let mut cmd = Command::new("ninja");
