@@ -139,11 +139,15 @@ fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::M
     }
 }
 
+fn normalized_or_raw(p: &GlobPattern) -> &str {
+    p.normalized.as_deref().unwrap_or_else(|| {
+        debug_assert!(false, "normalised pattern must be present");
+        p.raw.as_str()
+    })
+}
+
 fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
-    let candidate = pattern
-        .normalized
-        .as_deref()
-        .unwrap_or(pattern.raw.as_str());
+    let candidate = normalized_or_raw(pattern);
     let path = Utf8Path::new(candidate);
     if path.is_absolute() {
         Dir::open_ambient_dir("/", ambient_authority())
@@ -420,10 +424,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     }
 
     pattern_state.normalized = Some(normalized);
-    let normalized_pattern = pattern_state.normalized.as_deref().unwrap_or_else(|| {
-        debug_assert!(false, "normalized pattern must be present");
-        pattern_state.raw.as_str()
-    });
+    let normalized_pattern = normalized_or_raw(&pattern_state);
 
     let root = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
