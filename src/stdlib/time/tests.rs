@@ -7,7 +7,7 @@ use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use minijinja::{Environment, context, value::Value};
 use rstest::{fixture, rstest};
-use time::{Duration, OffsetDateTime, macros::datetime};
+use time::{Duration, OffsetDateTime, UtcOffset, macros::datetime};
 
 fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
     let compiled = env.compile_expression(expr)?;
