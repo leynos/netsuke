@@ -44,6 +44,11 @@ fn extract_build(world: &CliWorld) -> Result<(&[String], &Option<PathBuf>)> {
     }
 }
 
+fn get_command(world: &CliWorld) -> Result<&Commands> {
+    let cli = world.cli.as_ref().context("CLI has not been parsed")?;
+    cli.command.as_ref().context("CLI command missing")
+}
+
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"
@@ -78,8 +83,7 @@ fn command_is_build(world: &mut CliWorld) -> Result<()> {
 
 #[then("the command is clean")]
 fn command_is_clean(world: &mut CliWorld) -> Result<()> {
-    let cli = world.cli.as_ref().context("CLI has not been parsed")?;
-    let command = cli.command.as_ref().context("CLI command missing")?;
+    let command = get_command(world)?;
     ensure!(
         matches!(command, Commands::Clean),
         "command should be clean"
@@ -89,8 +93,7 @@ fn command_is_clean(world: &mut CliWorld) -> Result<()> {
 
 #[then("the command is graph")]
 fn command_is_graph(world: &mut CliWorld) -> Result<()> {
-    let cli = world.cli.as_ref().context("CLI has not been parsed")?;
-    let command = cli.command.as_ref().context("CLI command missing")?;
+    let command = get_command(world)?;
     ensure!(
         matches!(command, Commands::Graph),
         "command should be graph"
@@ -100,8 +103,7 @@ fn command_is_graph(world: &mut CliWorld) -> Result<()> {
 
 #[then("the command is manifest")]
 fn command_is_manifest(world: &mut CliWorld) -> Result<()> {
-    let cli = world.cli.as_ref().context("CLI has not been parsed")?;
-    let command = cli.command.as_ref().context("CLI command missing")?;
+    let command = get_command(world)?;
     ensure!(
         matches!(command, Commands::Manifest { .. }),
         "command should be manifest"
