@@ -174,6 +174,17 @@ fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig
     }
 }
 
+fn is_past_deadline(deadline: Instant) -> bool {
+    Instant::now() >= deadline
+}
+
+fn should_retry_accept(err: &io::Error, deadline: Instant) -> bool {
+    if is_past_deadline(deadline) {
+        panic!("timed out waiting for fetch test connection");
+    }
+    err.kind() == io::ErrorKind::WouldBlock
+}
+
 fn accept_connection(
     listener: &TcpListener,
     deadline: Instant,
@@ -182,10 +193,7 @@ fn accept_connection(
     loop {
         match listener.accept() {
             Ok((stream, _)) => return stream,
-            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                if Instant::now() >= deadline {
-                    panic!("timed out waiting for fetch test connection");
-                }
+            Err(err) if should_retry_accept(&err, deadline) => {
                 thread::sleep(poll_interval);
             }
             Err(err) => panic!("failed to accept connection: {err}"),
