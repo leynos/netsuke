@@ -120,6 +120,10 @@ impl CliWorld {
     /// When the stdlib URL contains a host, the server is always joined.
     /// If the host cannot be extracted, strict mode panics while lenient mode
     /// warns and leaves the server to drop naturally.
+    #[expect(
+        clippy::panic,
+        reason = "strict teardown must visibly fail when host extraction breaks"
+    )]
     fn shutdown_http_server_with(&mut self, mode: HttpShutdownMode) {
         let Some(server) = self.http_server.take() else {
             self.stdlib_url = None;
