@@ -72,6 +72,7 @@ fn touch_manifest_ninja_validation() -> Result<()> {
         let mut cmd = Command::new("ninja");
         cmd.arg("-f").arg(&build_file).args(args);
         cmd.current_dir(&dir);
+        tracing::debug!(build_file = %build_file.display(), args = ?args, "running ninja");
         run_ok(&mut cmd)
     };
 
