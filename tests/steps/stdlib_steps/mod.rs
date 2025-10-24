@@ -20,7 +20,9 @@ pub(crate) use assertions::*;
     unused_imports,
     reason = "Re-export step functions for Cucumber discovery"
 )]
-pub(crate) use parsing::{extract_host_from_url, parse_expected_offset, parse_iso_timestamp, server_host};
+pub(crate) use parsing::{
+    extract_host_from_url, parse_expected_offset, parse_iso_timestamp, server_host,
+};
 #[expect(
     unused_imports,
     reason = "Re-export step functions for Cucumber discovery"

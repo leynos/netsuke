@@ -193,7 +193,7 @@ mod tests {
     };
 
     use crate::stdlib::DEFAULT_FETCH_CACHE_DIR;
-    use camino::Utf8PathBuf;
+    use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use minijinja::value::{Kwargs, Value};
     use rstest::{fixture, rstest};
@@ -215,6 +215,23 @@ mod tests {
         FetchCache {
             root,
             relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+        }
+    }
+
+    /// Assert that `open_cache_dir` rejects the provided path with an invalid-operation error.
+    fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, description: &str) -> Result<()> {
+        match open_cache_dir(root, path) {
+            Ok(dir) => Err(anyhow!(
+                "expected {description} to fail but received directory {dir:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
         }
     }
 
@@ -246,19 +263,7 @@ mod tests {
     #[rstest]
     fn open_cache_dir_rejects_empty_path(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
         let (_temp, root, _path) = cache_workspace?;
-        match open_cache_dir(&root, Utf8Path::new("")) {
-            Ok(dir) => Err(anyhow!(
-                "expected empty path to fail but received directory {dir:?}"
-            )),
-            Err(err) => {
-                ensure!(
-                    err.kind() == ErrorKind::InvalidOperation,
-                    "unexpected error kind {kind:?}",
-                    kind = err.kind()
-                );
-                Ok(())
-            }
-        }
+        assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new(""), "empty path")
     }
 
     #[rstest]
@@ -266,37 +271,17 @@ mod tests {
         cache_workspace: Result<CacheWorkspace>,
     ) -> Result<()> {
         let (_temp, root, _path) = cache_workspace?;
-        match open_cache_dir(&root, Utf8Path::new("/etc/netsuke-cache")) {
-            Ok(dir) => Err(anyhow!(
-                "expected absolute path to fail but received directory {dir:?}"
-            )),
-            Err(err) => {
-                ensure!(
-                    err.kind() == ErrorKind::InvalidOperation,
-                    "unexpected error kind {kind:?}",
-                    kind = err.kind()
-                );
-                Ok(())
-            }
-        }
+        assert_open_cache_dir_rejects(
+            root.as_ref(),
+            Utf8Path::new("/etc/netsuke-cache"),
+            "absolute path",
+        )
     }
 
     #[rstest]
     fn open_cache_dir_rejects_parent_paths(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
         let (_temp, root, _path) = cache_workspace?;
-        match open_cache_dir(&root, Utf8Path::new("../escape")) {
-            Ok(dir) => Err(anyhow!(
-                "expected parent path to fail but received directory {dir:?}"
-            )),
-            Err(err) => {
-                ensure!(
-                    err.kind() == ErrorKind::InvalidOperation,
-                    "unexpected error kind {kind:?}",
-                    kind = err.kind()
-                );
-                Ok(())
-            }
-        }
+        assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new("../escape"), "parent path")
     }
 
     #[rstest]
