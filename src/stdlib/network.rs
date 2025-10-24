@@ -284,6 +284,25 @@ mod tests {
         assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new("../escape"), "parent path")
     }
 
+    /// Write an entry to the cache directory and assert it exists within the workspace.
+    fn assert_cache_entry_exists(
+        dir: Dir,
+        cache_relative: &Utf8Path,
+        workspace: &Utf8Path,
+        entry_name: &str,
+    ) -> Result<()> {
+        dir.write(entry_name, b"data")
+            .context("write cache entry")?;
+        drop(dir);
+        let entry = workspace.join(cache_relative).join(entry_name);
+        ensure!(
+            fs::metadata(entry.as_std_path()).is_ok(),
+            "entry {} should exist",
+            entry
+        );
+        Ok(())
+    }
+
     #[rstest]
     fn open_cache_dir_errors_for_file_path(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
         let (_temp, root, path) = cache_workspace?;
@@ -298,16 +317,7 @@ mod tests {
     ) -> Result<()> {
         let (_temp, root, path) = cache_workspace?;
         let dir = open_cache_dir(&root, Utf8Path::new("cache"))?;
-        dir.write("entry", b"data")
-            .context("write cache entry to relative directory")?;
-        drop(dir);
-        let entry = path.join("cache").join("entry");
-        ensure!(
-            fs::metadata(entry.as_std_path()).is_ok(),
-            "cache entry {} should exist",
-            entry
-        );
-        Ok(())
+        assert_cache_entry_exists(dir, Utf8Path::new("cache"), path.as_path(), "entry")
     }
 
     #[rstest]
@@ -348,15 +358,11 @@ mod tests {
         let (_temp, root, path) = cache_workspace?;
         let cache = make_cache(root);
         let dir = cache.open_dir()?;
-        dir.write("entry", b"data")
-            .context("write entry to default cache directory")?;
-        drop(dir);
-        let entry = path.join(DEFAULT_FETCH_CACHE_DIR).join("entry");
-        ensure!(
-            fs::metadata(entry.as_std_path()).is_ok(),
-            "entry {} should exist",
-            entry
-        );
-        Ok(())
+        assert_cache_entry_exists(
+            dir,
+            Utf8Path::new(DEFAULT_FETCH_CACHE_DIR),
+            path.as_path(),
+            "entry",
+        )
     }
 }
