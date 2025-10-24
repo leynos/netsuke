@@ -14,9 +14,10 @@ use test_support::ensure_binaries_available;
 
 fn run_ok(cmd: &mut Command) -> Result<String> {
     let out = cmd.output().context("failed to spawn command")?;
+    let status = out.status;
     ensure!(
-        out.status.success(),
-        "command failed: {}",
+        status.success(),
+        "command failed with status {status}: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     let stdout = String::from_utf8(out.stdout).context("stdout must be valid UTF-8")?;
