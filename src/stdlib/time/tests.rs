@@ -10,8 +10,12 @@ use rstest::{fixture, rstest};
 use time::{Duration, OffsetDateTime, UtcOffset, macros::datetime};
 
 fn eval_expression(env: &Environment<'_>, expr: &str) -> Result<Value> {
-    let compiled = env.compile_expression(expr)?;
-    Ok(compiled.eval(context! {})?)
+    let compiled = env
+        .compile_expression(expr)
+        .with_context(|| format!("compiling expression: {expr}"))?;
+    compiled
+        .eval(context! {})
+        .with_context(|| format!("evaluating expression: {expr}"))
 }
 
 #[fixture]
