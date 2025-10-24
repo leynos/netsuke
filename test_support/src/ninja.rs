@@ -1,6 +1,8 @@
 //! Helpers for working with the system `ninja` binary in integration tests.
 
 use std::process::{Command, ExitStatus};
+use std::thread;
+use std::time::{Duration, Instant};
 use tempfile::{TempDir, tempdir};
 use thiserror::Error;
 
@@ -20,15 +22,34 @@ pub enum NinjaWorkspaceError {
 }
 
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
-    let output = Command::new("ninja")
+    let mut child = Command::new("ninja")
         .arg("--version")
-        .output()
+        .spawn()
         .map_err(NinjaWorkspaceError::ProbeSpawn)?;
 
-    if !output.status.success() {
-        return Err(NinjaWorkspaceError::ProbeFailed(output.status));
+    let timeout = Duration::from_secs(2);
+    let poll_sleep = Duration::from_millis(50);
+    let start = Instant::now();
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if status.success() {
+                    return Ok(());
+                }
+                return Err(NinjaWorkspaceError::ProbeFailed(status));
+            }
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let status = child.wait().map_err(NinjaWorkspaceError::ProbeSpawn)?;
+                    return Err(NinjaWorkspaceError::ProbeFailed(status));
+                }
+                thread::sleep(poll_sleep);
+            }
+            Err(err) => return Err(NinjaWorkspaceError::ProbeSpawn(err)),
+        }
     }
-    Ok(())
 }
 
 /// Ensure Ninja is available and return a temporary directory for integration
