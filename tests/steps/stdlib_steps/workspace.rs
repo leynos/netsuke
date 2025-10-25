@@ -84,14 +84,13 @@ pub(crate) fn http_server_returning(world: &mut CliWorld, body: ServerBody) -> R
 #[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
 pub(crate) fn write_stdlib_file(
     world: &mut CliWorld,
-    path: String,
-    contents: String,
+    path: RelativePath,
+    contents: FileContent,
 ) -> Result<()> {
     let root = ensure_workspace(world)?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let relative_path = TemplatePath::from(path);
-    let file_content = FileContent::from(contents);
+    let relative_path = TemplatePath::from(path.into_path_buf());
     if let Some(parent) = relative_path
         .as_path()
         .parent()
@@ -102,7 +101,7 @@ pub(crate) fn write_stdlib_file(
             .context("create stdlib fixture directories")?;
     }
     handle
-        .write(relative_path.as_path(), file_content.as_bytes())
+        .write(relative_path.as_path(), contents.into_bytes())
         .context("write stdlib fixture file")?;
     Ok(())
 }

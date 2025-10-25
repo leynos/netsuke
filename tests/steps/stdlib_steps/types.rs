@@ -101,6 +101,11 @@ impl FileContent {
     pub(crate) const fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
+
+    /// Consume the wrapper and return owned bytes for writing to disk.
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
+        self.0.into_bytes()
+    }
 }
 
 impl AsRef<[u8]> for FileContent {
@@ -118,6 +123,14 @@ impl From<String> for FileContent {
 impl From<&str> for FileContent {
     fn from(value: &str) -> Self {
         Self(value.to_owned())
+    }
+}
+
+impl FromStr for FileContent {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
     }
 }
 
