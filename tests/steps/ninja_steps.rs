@@ -40,35 +40,6 @@ impl ExpectedFragment {
     }
 }
 
-#[derive(Debug)]
-struct ExpectedTokens(String);
-
-impl From<String> for ExpectedTokens {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl AsRef<str> for ExpectedTokens {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl FromStr for ExpectedTokens {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Ok(Self(s.to_owned()))
-    }
-}
-
-impl ExpectedTokens {
-    fn into_inner(self) -> String {
-        self.0
-    }
-}
-
 /// Assert that optional Ninja output or error content contains an expected fragment.
 fn assert_contains(
     content: Option<&String>,
@@ -109,14 +80,17 @@ fn ninja_contains(world: &mut CliWorld, expected_fragment: ExpectedFragment) -> 
     )
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String"
+)]
 #[then(expr = "shlex splitting command {int} yields {string}")]
 fn ninja_command_tokens(
     world: &mut CliWorld,
     command_index: usize,
-    expected_tokens: ExpectedTokens,
+    expected_tokens: String,
 ) -> Result<()> {
     ensure!(command_index > 0, "command index must be >= 1");
-    let expected_tokens = expected_tokens.into_inner();
     let ninja = world
         .ninja
         .as_ref()
@@ -146,7 +120,7 @@ fn ninja_command_tokens(
 }
 
 #[then(expr = "shlex splitting the command yields {string}")]
-fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: ExpectedTokens) -> Result<()> {
+fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: String) -> Result<()> {
     ninja_command_tokens(world, 2, expected_tokens)
 }
 
