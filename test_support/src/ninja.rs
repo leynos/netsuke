@@ -1,6 +1,6 @@
 //! Helpers for working with the system `ninja` binary in integration tests.
 
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::{TempDir, tempdir};
@@ -16,6 +16,9 @@ pub enum NinjaWorkspaceError {
     /// `ninja --version` executed but returned a non-success status.
     #[error("`ninja --version` returned non-success status: {0}")]
     ProbeFailed(ExitStatus),
+    /// `ninja --version` did not exit before the timeout elapsed.
+    #[error("`ninja --version` timed out after {0:?}")]
+    ProbeTimeout(Duration),
     /// Creating the temporary workspace failed.
     #[error("failed to create temporary ninja workspace: {0}")]
     Workspace(#[source] std::io::Error),
@@ -24,6 +27,8 @@ pub enum NinjaWorkspaceError {
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
     let mut child = Command::new("ninja")
         .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .map_err(NinjaWorkspaceError::ProbeSpawn)?;
 
@@ -41,9 +46,9 @@ fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
-                    let _ = child.kill();
-                    let status = child.wait().map_err(NinjaWorkspaceError::ProbeSpawn)?;
-                    return Err(NinjaWorkspaceError::ProbeFailed(status));
+                    child.kill().map_err(NinjaWorkspaceError::ProbeSpawn)?;
+                    child.wait().map_err(NinjaWorkspaceError::ProbeSpawn)?;
+                    return Err(NinjaWorkspaceError::ProbeTimeout(timeout));
                 }
                 thread::sleep(poll_sleep);
             }
