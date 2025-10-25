@@ -10,54 +10,73 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use rstest::rstest;
 use std::path::PathBuf;
 
+struct CliCase {
+    argv: Vec<&'static str>,
+    file: PathBuf,
+    directory: Option<PathBuf>,
+    jobs: Option<usize>,
+    verbose: bool,
+    expected_cmd: Commands,
+}
+
 #[rstest]
-#[case(vec!["netsuke"], PathBuf::from("Netsukefile"), None, None, false, Commands::Build(BuildArgs { emit: None, targets: Vec::new() }))]
-#[case(
-    vec!["netsuke", "--file", "alt.yml", "-C", "work", "-j", "4", "build", "a", "b"],
-    PathBuf::from("alt.yml"),
-    Some(PathBuf::from("work")),
-    Some(4),
-    false,
-    Commands::Build(BuildArgs { emit: None, targets: vec!["a".into(), "b".into()] }),
-)]
-#[case(vec!["netsuke", "--verbose"], PathBuf::from("Netsukefile"), None, None, true, Commands::Build(BuildArgs { emit: None, targets: Vec::new() }))]
-#[case(
-    vec!["netsuke", "build", "--emit", "out.ninja", "a"],
-    PathBuf::from("Netsukefile"),
-    None,
-    None,
-    false,
-    Commands::Build(BuildArgs { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] }),
-)]
-#[case(
-    vec!["netsuke", "manifest", "out.ninja"],
-    PathBuf::from("Netsukefile"),
-    None,
-    None,
-    false,
-    Commands::Manifest { file: PathBuf::from("out.ninja") },
-)]
-fn parse_cli(
-    #[case] argv: Vec<&str>,
-    #[case] file: PathBuf,
-    #[case] directory: Option<PathBuf>,
-    #[case] jobs: Option<usize>,
-    #[case] verbose: bool,
-    #[case] expected_cmd: Commands,
-) -> Result<()> {
-    let cli = Cli::parse_from_with_default(argv.clone());
-    ensure!(cli.file == file, "parsed file should match input");
+#[case(CliCase {
+    argv: vec!["netsuke"],
+    file: PathBuf::from("Netsukefile"),
+    directory: None,
+    jobs: None,
+    verbose: false,
+    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--file", "alt.yml", "-C", "work", "-j", "4", "build", "a", "b"],
+    file: PathBuf::from("alt.yml"),
+    directory: Some(PathBuf::from("work")),
+    jobs: Some(4),
+    verbose: false,
+    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: vec!["a".into(), "b".into()] }),
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--verbose"],
+    file: PathBuf::from("Netsukefile"),
+    directory: None,
+    jobs: None,
+    verbose: true,
+    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "build", "--emit", "out.ninja", "a"],
+    file: PathBuf::from("Netsukefile"),
+    directory: None,
+    jobs: None,
+    verbose: false,
+    expected_cmd: Commands::Build(BuildArgs { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] }),
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "manifest", "out.ninja"],
+    file: PathBuf::from("Netsukefile"),
+    directory: None,
+    jobs: None,
+    verbose: false,
+    expected_cmd: Commands::Manifest { file: PathBuf::from("out.ninja") },
+})]
+fn parse_cli(#[case] case: CliCase) -> Result<()> {
+    let cli = Cli::parse_from_with_default(case.argv.clone());
+    ensure!(cli.file == case.file, "parsed file should match input");
     ensure!(
-        cli.directory == directory,
+        cli.directory == case.directory,
         "parsed directory should match input"
     );
-    ensure!(cli.jobs == jobs, "parsed jobs should match input");
-    ensure!(cli.verbose == verbose, "verbose flag should match input");
+    ensure!(cli.jobs == case.jobs, "parsed jobs should match input");
+    ensure!(
+        cli.verbose == case.verbose,
+        "verbose flag should match input"
+    );
     let command = cli.command.context("command should be set")?;
     ensure!(
-        command == expected_cmd,
+        command == case.expected_cmd,
         "parsed command should match expected {:?}",
-        expected_cmd
+        case.expected_cmd
     );
     Ok(())
 }

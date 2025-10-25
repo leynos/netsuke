@@ -58,7 +58,7 @@ pub(crate) fn interpolate_command(
 /// assert!(is_identifier_char('a'));
 /// assert!(!is_identifier_char('-'));
 /// ```
-fn is_identifier_char(ch: char) -> bool {
+const fn is_identifier_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
 

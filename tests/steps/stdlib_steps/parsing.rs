@@ -17,21 +17,37 @@ pub(crate) fn parse_iso_timestamp(raw: &str) -> Result<OffsetDateTime> {
         .with_context(|| format!("parse ISO8601 timestamp from '{raw}'"))
 }
 
-pub(crate) fn parse_expected_offset(raw: &str) -> Result<UtcOffset> {
-    if raw.eq_ignore_ascii_case("z") {
-        return Ok(UtcOffset::UTC);
-    }
-
+/// Extract the sign multiplier and slice away the sign character from an
+/// expected UTC offset string.
+fn parse_sign(raw: &str) -> Result<(i8, &str)> {
     let mut chars = raw.chars();
     let first = chars
         .next()
         .ok_or_else(|| anyhow!("unsupported offset format: {raw}"))?;
     let rest = chars.as_str();
-    let (sign, rest) = match first {
-        '+' => (1, rest),
-        '-' => (-1, rest),
+    match first {
+        '+' => Ok((1, rest)),
+        '-' => Ok((-1, rest)),
         _ => bail!("unsupported offset format: {raw}"),
-    };
+    }
+}
+
+/// Parse an optional minutes or seconds component, defaulting to zero when the
+/// component is not supplied.
+fn parse_optional_component(part: Option<&str>, component_name: &str, raw: &str) -> Result<i8> {
+    part.map_or(Ok(0), |value| {
+        value
+            .parse()
+            .with_context(|| format!("parse {component_name} component from '{raw}'"))
+    })
+}
+
+pub(crate) fn parse_expected_offset(raw: &str) -> Result<UtcOffset> {
+    if raw.eq_ignore_ascii_case("z") {
+        return Ok(UtcOffset::UTC);
+    }
+
+    let (sign, rest) = parse_sign(raw)?;
 
     let mut parts = rest.split(':');
     let hours: i8 = parts
@@ -39,16 +55,8 @@ pub(crate) fn parse_expected_offset(raw: &str) -> Result<UtcOffset> {
         .ok_or_else(|| anyhow!("offset missing hour component: {raw}"))?
         .parse()
         .with_context(|| format!("parse hour component from '{raw}'"))?;
-    let minutes: i8 = parts.next().map_or(Ok(0), |value| {
-        value
-            .parse()
-            .with_context(|| format!("parse minute component from '{raw}'"))
-    })?;
-    let seconds: i8 = parts.next().map_or(Ok(0), |value| {
-        value
-            .parse()
-            .with_context(|| format!("parse second component from '{raw}'"))
-    })?;
+    let minutes: i8 = parse_optional_component(parts.next(), "minute", raw)?;
+    let seconds: i8 = parse_optional_component(parts.next(), "second", raw)?;
 
     UtcOffset::from_hms(sign * hours, sign * minutes, sign * seconds)
         .with_context(|| format!("offset components out of range in '{raw}'"))

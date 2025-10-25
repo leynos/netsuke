@@ -69,13 +69,21 @@ impl BuildGraph {
                         actions,
                         tmpl.recipe.clone(),
                         tmpl.description.clone(),
-                        &inputs,
-                        &outputs,
+                        ActionBindings {
+                            inputs: &inputs,
+                            outputs: &outputs,
+                        },
                     )?
                 }
-                Recipe::Command { .. } | Recipe::Script { .. } => {
-                    register_action(actions, target.recipe.clone(), None, &inputs, &outputs)?
-                }
+                Recipe::Command { .. } | Recipe::Script { .. } => register_action(
+                    actions,
+                    target.recipe.clone(),
+                    None,
+                    ActionBindings {
+                        inputs: &inputs,
+                        outputs: &outputs,
+                    },
+                )?,
             };
 
             let edge = BuildEdge {
@@ -117,16 +125,21 @@ impl BuildGraph {
     }
 }
 
+#[derive(Clone, Copy)]
+struct ActionBindings<'a> {
+    inputs: &'a [Utf8PathBuf],
+    outputs: &'a [Utf8PathBuf],
+}
+
 fn register_action(
     actions: &mut HashMap<String, Action>,
     recipe: Recipe,
     description: Option<String>,
-    inputs: &[Utf8PathBuf],
-    outputs: &[Utf8PathBuf],
+    bindings: ActionBindings<'_>,
 ) -> Result<String, IrGenError> {
     let resolved_recipe = match recipe {
         Recipe::Command { command } => {
-            let interpolated = interpolate_command(&command, inputs, outputs)?;
+            let interpolated = interpolate_command(&command, bindings.inputs, bindings.outputs)?;
             Recipe::Command {
                 command: interpolated,
             }

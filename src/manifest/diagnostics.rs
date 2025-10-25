@@ -23,7 +23,7 @@ impl ManifestSource {
 
     /// View the stored source contents as a string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
@@ -72,7 +72,7 @@ impl ManifestName {
 
     /// Access the label as a borrowed string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }

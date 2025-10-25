@@ -15,6 +15,13 @@ use std::fs;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock, hash, http};
 
+struct MacroRenderCase<'a> {
+    signature: &'a str,
+    body: &'a str,
+    template: &'a str,
+    expected: &'a str,
+}
+
 struct CurrentDirGuard {
     original: std::path::PathBuf,
     _lock: EnvLock,
@@ -90,46 +97,57 @@ fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) -> An
 }
 
 #[rstest]
-#[case("greet()", "Hello", "{{ greet() }}", "Hello")]
-#[case("echo(text='hi')", "{{ text }}", "{{ echo() }}", "hi")]
-#[case(
-    "joiner(items)",
-    "{{ items | join(',') }}",
-    "{{ joiner(['a', 'b', 'c']) }}",
-    "a,b,c"
-)]
-#[case(
-    "show(name, excited=false)",
-    "{{ name ~ ('!' if excited else '') }}",
-    "{{ show('Netsuke', excited=true) }}",
-    "Netsuke!"
-)]
-#[case(
-    "salute(name='friend')",
-    "Hello {{ name }}",
-    "{{ salute(name='Ada') }}",
-    "Hello Ada"
-)]
-#[case(
-    "wrap(prefix, caller)",
-    "{{ prefix }}{{ caller() }}",
-    "{% call wrap('Hi ') %}World{% endcall %}",
-    "Hi World"
-)]
+#[case(MacroRenderCase {
+    signature: "greet()",
+    body: "Hello",
+    template: "{{ greet() }}",
+    expected: "Hello",
+})]
+#[case(MacroRenderCase {
+    signature: "echo(text='hi')",
+    body: "{{ text }}",
+    template: "{{ echo() }}",
+    expected: "hi",
+})]
+#[case(MacroRenderCase {
+    signature: "joiner(items)",
+    body: "{{ items | join(',') }}",
+    template: "{{ joiner(['a', 'b', 'c']) }}",
+    expected: "a,b,c",
+})]
+#[case(MacroRenderCase {
+    signature: "show(name, excited=false)",
+    body: "{{ name ~ ('!' if excited else '') }}",
+    template: "{{ show('Netsuke', excited=true) }}",
+    expected: "Netsuke!",
+})]
+#[case(MacroRenderCase {
+    signature: "salute(name='friend')",
+    body: "Hello {{ name }}",
+    template: "{{ salute(name='Ada') }}",
+    expected: "Hello Ada",
+})]
+#[case(MacroRenderCase {
+    signature: "wrap(prefix, caller)",
+    body: "{{ prefix }}{{ caller() }}",
+    template: "{% call wrap('Hi ') %}World{% endcall %}",
+    expected: "Hi World",
+})]
 fn register_macro_handles_arguments(
-    #[case] signature: &str,
-    #[case] body: &str,
-    #[case] template: &str,
-    #[case] expected: &str,
+    #[case] case: MacroRenderCase,
     mut strict_env: Environment<'static>,
 ) -> AnyResult<()> {
     let macro_def = MacroDefinition {
-        signature: signature.to_owned(),
-        body: body.to_owned(),
+        signature: case.signature.to_owned(),
+        body: case.body.to_owned(),
     };
     register_macro(&mut strict_env, &macro_def, 0)?;
-    let rendered = render_with(&strict_env, template)?;
-    ensure!(rendered == expected, "expected {expected}, got {rendered}");
+    let rendered = render_with(&strict_env, case.template)?;
+    ensure!(
+        rendered == case.expected,
+        "expected {}, got {rendered}",
+        case.expected
+    );
     Ok(())
 }
 

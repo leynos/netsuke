@@ -36,16 +36,16 @@ pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetecti
     }
 }
 
-struct CycleDetector<'a> {
-    targets: &'a HashMap<Utf8PathBuf, BuildEdge>,
+struct CycleDetector<'targets> {
+    targets: &'targets HashMap<Utf8PathBuf, BuildEdge>,
     stack: Vec<Utf8PathBuf>,
     states: HashMap<Utf8PathBuf, VisitState>,
     missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
 }
 
-impl<'a> CycleDetector<'a> {
-    fn new(targets: &'a HashMap<Utf8PathBuf, BuildEdge>) -> Self {
-        Self {
+impl CycleDetector<'_> {
+    fn new(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
+        CycleDetector {
             targets,
             stack: Vec::new(),
             states: HashMap::new(),
@@ -80,22 +80,14 @@ impl<'a> CycleDetector<'a> {
 
         self.stack.push(node.clone());
 
-        if let Some(edge) = self.targets.get(&node) {
-            for dep in &edge.inputs {
-                if !self.targets.contains_key(dep) {
-                    tracing::debug!(
-                        missing = %dep,
-                        dependent = %node,
-                        "skipping dependency missing from targets during cycle detection",
-                    );
-                    self.missing_dependencies.push((node.clone(), dep.clone()));
-                    continue;
-                }
-
-                if let Some(cycle) = self.visit(dep.clone()) {
-                    return Some(cycle);
-                }
-            }
+        if let Some(cycle) = self
+            .targets
+            .get(&node)
+            .into_iter()
+            .flat_map(|edge| edge.inputs.iter())
+            .find_map(|dep| self.visit_dependency(&node, dep))
+        {
+            return Some(cycle);
         }
 
         self.stack.pop();
@@ -109,8 +101,36 @@ impl<'a> CycleDetector<'a> {
     }
 
     #[cfg(test)]
-    fn find_cycle(targets: &'a HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
+    fn find_cycle(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
         analyse(targets).cycle
+    }
+}
+
+impl CycleDetector<'_> {
+    fn record_missing_dependency(&mut self, node: &Utf8PathBuf, dep: &Utf8PathBuf) -> bool {
+        if self.targets.contains_key(dep) {
+            return false;
+        }
+
+        tracing::debug!(
+            missing = %dep,
+            dependent = %node,
+            "skipping dependency missing from targets during cycle detection",
+        );
+        self.missing_dependencies.push((node.clone(), dep.clone()));
+        true
+    }
+
+    fn visit_dependency(
+        &mut self,
+        node: &Utf8PathBuf,
+        dep: &Utf8PathBuf,
+    ) -> Option<Vec<Utf8PathBuf>> {
+        if self.record_missing_dependency(node, dep) {
+            return None;
+        }
+
+        self.visit(dep.clone())
     }
 }
 

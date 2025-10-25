@@ -60,13 +60,15 @@ allow_attributes                    = "deny"
 allow_attributes_without_reason     = "deny"
 blanket_clippy_restriction_lints    = "deny"
 cognitive_complexity                = "deny"
+needless_pass_by_value              = "deny"
+implicit_hasher                     = "deny"
 
 # 2. debugging leftovers
 dbg_macro                           = "deny"
 print_stdout                        = "deny"
 print_stderr                        = "deny"
 
-# 3. panic-prone operations
+# 2. panic-prone operations
 unwrap_used                         = "deny"
 expect_used                         = "deny"
 indexing_slicing                    = "deny"
@@ -97,6 +99,20 @@ use_self                            = "deny"
 
 # 6. numerical foot-guns
 float_arithmetic                    = "deny"
+cast_possible_truncation            = "deny"
+cast_possible_wrap                  = "deny"
+cast_precision_loss                 = "deny"
+lossy_float_literal                 = "deny"
+
+# 7. API ergonomics
+missing_const_for_fn                = "deny"
+must_use_candidate                  = "deny"
+unused_async                        = "deny"
+
+# 8. Error handling
+missing_panics_doc                  = "deny"
+error_impl_error                    = "deny"
+result_large_err                    = "deny"
 
 [lints.rust]
 missing_docs                        = "deny"

@@ -304,7 +304,7 @@ struct TimestampValue {
 }
 
 impl TimestampValue {
-    fn new(datetime: OffsetDateTime) -> Self {
+    const fn new(datetime: OffsetDateTime) -> Self {
         Self { datetime }
     }
 
@@ -341,7 +341,7 @@ struct TimeDeltaValue {
 }
 
 impl TimeDeltaValue {
-    fn new(duration: Duration) -> Self {
+    const fn new(duration: Duration) -> Self {
         Self { duration }
     }
 

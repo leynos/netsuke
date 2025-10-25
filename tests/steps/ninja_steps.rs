@@ -9,6 +9,65 @@ use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
 use cucumber::{then, when};
 use netsuke::ninja_gen;
+use std::str::FromStr;
+
+#[derive(Debug)]
+struct ExpectedFragment(String);
+
+impl From<String> for ExpectedFragment {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<str> for ExpectedFragment {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for ExpectedFragment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+impl ExpectedFragment {
+    fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+#[derive(Debug)]
+struct ExpectedTokens(String);
+
+impl From<String> for ExpectedTokens {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<str> for ExpectedTokens {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for ExpectedTokens {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+impl ExpectedTokens {
+    fn into_inner(self) -> String {
+        self.0
+    }
+}
 
 /// Assert that optional Ninja output or error content contains an expected fragment.
 fn assert_contains(
@@ -41,25 +100,23 @@ fn generate_ninja(world: &mut CliWorld) -> Result<()> {
 }
 
 #[then(expr = "the ninja file contains {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
-fn ninja_contains(world: &mut CliWorld, expected_fragment: String) -> Result<()> {
-    assert_contains(world.ninja.as_ref(), &expected_fragment, "ninja content")
+fn ninja_contains(world: &mut CliWorld, expected_fragment: ExpectedFragment) -> Result<()> {
+    let expected_fragment = expected_fragment.into_inner();
+    assert_contains(
+        world.ninja.as_ref(),
+        expected_fragment.as_ref(),
+        "ninja content",
+    )
 }
 
 #[then(expr = "shlex splitting command {int} yields {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
 fn ninja_command_tokens(
     world: &mut CliWorld,
     command_index: usize,
-    expected_tokens: String,
+    expected_tokens: ExpectedTokens,
 ) -> Result<()> {
     ensure!(command_index > 0, "command index must be >= 1");
+    let expected_tokens = expected_tokens.into_inner();
     let ninja = world
         .ninja
         .as_ref()
@@ -89,19 +146,16 @@ fn ninja_command_tokens(
 }
 
 #[then(expr = "shlex splitting the command yields {string}")]
-fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: String) -> Result<()> {
+fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: ExpectedTokens) -> Result<()> {
     ninja_command_tokens(world, 2, expected_tokens)
 }
 
 #[then(expr = "ninja generation fails with {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned String arguments"
-)]
-fn ninja_generation_fails(world: &mut CliWorld, expected_fragment: String) -> Result<()> {
+fn ninja_generation_fails(world: &mut CliWorld, expected_fragment: ExpectedFragment) -> Result<()> {
+    let expected_fragment = expected_fragment.into_inner();
     assert_contains(
         world.ninja_error.as_ref(),
-        &expected_fragment,
+        expected_fragment.as_ref(),
         "ninja error",
     )
 }

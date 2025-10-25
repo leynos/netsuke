@@ -25,6 +25,14 @@ enum AssertionType {
     StatusSuccess,
 }
 
+struct NinjaIntegrationCase {
+    action: Action,
+    edge: BuildEdge,
+    target_name: Utf8PathBuf,
+    ninja_args: Vec<&'static str>,
+    assertion: AssertionType,
+}
+
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
 #[fixture]
 fn ninja_integration_setup() -> Option<TempDir> {
@@ -187,8 +195,8 @@ fn generate_multiline_script_snapshot() -> Result<()> {
 
 /// Integration scenarios to confirm Ninja executes commands correctly.
 #[rstest]
-#[case::multiline_script_valid(
-    Action {
+#[case::multiline_script_valid(NinjaIntegrationCase {
+    action: Action {
         recipe: Recipe::Script { script: "echo one\necho two".into() },
         description: None,
         depfile: None,
@@ -196,7 +204,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         pool: None,
         restat: false,
     },
-    BuildEdge {
+    edge: BuildEdge {
         action_id: "script".into(),
         inputs: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
@@ -205,12 +213,12 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
-    vec!["-n"],
-    AssertionType::StatusSuccess,
-)]
-#[case::script_with_percent(
-    Action {
+    target_name: Utf8PathBuf::from("out"),
+    ninja_args: vec!["-n"],
+    assertion: AssertionType::StatusSuccess,
+})]
+#[case::script_with_percent(NinjaIntegrationCase {
+    action: Action {
         recipe: Recipe::Script { script: "echo 100% > out".into() },
         description: None,
         depfile: None,
@@ -218,7 +226,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         pool: None,
         restat: false,
     },
-    BuildEdge {
+    edge: BuildEdge {
         action_id: "percent".into(),
         inputs: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
@@ -227,12 +235,12 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
-    vec!["out"],
-    AssertionType::FileContent("100%".into()),
-)]
-#[case::script_with_backtick(
-    Action {
+    target_name: Utf8PathBuf::from("out"),
+    ninja_args: vec!["out"],
+    assertion: AssertionType::FileContent("100%".into()),
+})]
+#[case::script_with_backtick(NinjaIntegrationCase {
+    action: Action {
         recipe: Recipe::Script { script: "echo `echo hi` > out".into() },
         description: None,
         depfile: None,
@@ -240,7 +248,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         pool: None,
         restat: false,
     },
-    BuildEdge {
+    edge: BuildEdge {
         action_id: "tick".into(),
         inputs: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
@@ -249,12 +257,12 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         phony: false,
         always: false,
     },
-    Utf8PathBuf::from("out"),
-    vec!["out"],
-    AssertionType::FileContent("hi".into()),
-)]
-#[case::phony_action_executes_command(
-    Action {
+    target_name: Utf8PathBuf::from("out"),
+    ninja_args: vec!["out"],
+    assertion: AssertionType::FileContent("hi".into()),
+})]
+#[case::phony_action_executes_command(NinjaIntegrationCase {
+    action: Action {
         recipe: Recipe::Command { command: "touch action-called.txt".into() },
         description: None,
         depfile: None,
@@ -262,7 +270,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         pool: None,
         restat: false,
     },
-    BuildEdge {
+    edge: BuildEdge {
         action_id: "hello".into(),
         inputs: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("say-hello")],
@@ -271,17 +279,13 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         phony: true,
         always: false,
     },
-    Utf8PathBuf::from("action-called.txt"),
-    vec!["say-hello"],
-    AssertionType::FileExists,
-)]
+    target_name: Utf8PathBuf::from("action-called.txt"),
+    ninja_args: vec!["say-hello"],
+    assertion: AssertionType::FileExists,
+})]
 fn ninja_integration_tests(
     ninja_integration_setup: Option<TempDir>,
-    #[case] action: Action,
-    #[case] edge: BuildEdge,
-    #[case] target_name: Utf8PathBuf,
-    #[case] ninja_args: Vec<&str>,
-    #[case] assertion: AssertionType,
+    #[case] case: NinjaIntegrationCase,
 ) -> Result<()> {
     let Some(dir) = ninja_integration_setup else {
         return Ok(());
@@ -289,11 +293,24 @@ fn ninja_integration_tests(
     let dir_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
         .map_err(|path| anyhow::anyhow!("temp dir path {:?} is not UTF-8", path))?;
 
+    let NinjaIntegrationCase {
+        action,
+        edge,
+        target_name,
+        ninja_args,
+        assertion,
+    } = case;
+
     let output = edge
         .explicit_outputs
         .first()
         .context("edge should have at least one explicit output")?
         .clone();
+    ensure!(
+        output == target_name,
+        "expected edge output '{}' to match test target '{target_name}'",
+        output
+    );
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(output.clone(), edge);

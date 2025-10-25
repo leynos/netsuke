@@ -1,7 +1,15 @@
 //! Step definitions for Ninja process execution.
+// NOTE: These module-level allowances cannot be narrowed while we rely on the
+// cucumber macros, which repeatedly shadow captured identifiers and rely on
+// `expect()` for concise failure reporting. Once the step suite migrates to
+// `rstest-bdd` we can delete these expectations entirely.
 #![expect(
     clippy::shadow_reuse,
     reason = "Cucumber step macros rebind capture names"
+)]
+#![expect(
+    clippy::expect_used,
+    reason = "Test steps favour `expect` for compact failure messages"
 )]
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow, ensure};
@@ -38,8 +46,8 @@ fn install_test_ninja(
 /// Creates a fake ninja executable that exits with the given status code.
 #[given(expr = "a fake ninja executable that exits with {int}")]
 fn install_fake_ninja(world: &mut CliWorld, exit_code: i32) -> Result<()> {
-    let exit_code: u8 =
-        u8::try_from(exit_code).context("exit code must be between 0 and 255 for fake_ninja")?;
+    let exit_code: u8 = u8::try_from(exit_code)
+        .expect("exit code must be between 0 and 255 for fake_ninja");
     let (dir, path) = fake_ninja(exit_code)?;
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path)
@@ -168,10 +176,6 @@ fn command_should_fail(world: &mut CliWorld) -> Result<()> {
 }
 
 /// Asserts that the command failed and the error message matches the expected value.
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "cucumber step parameters require owned Strings"
-)]
 #[then(expr = "the command should fail with error {string}")]
 fn command_should_fail_with_error(world: &mut CliWorld, expected_fragment: String) -> Result<()> {
     ensure!(
@@ -181,9 +185,10 @@ fn command_should_fail_with_error(world: &mut CliWorld, expected_fragment: Strin
     let actual = world
         .run_error
         .as_ref()
-        .context("expected an error message, but none was recorded")?;
+        .expect("expected an error message, but none was recorded");
+    let expected_fragment = expected_fragment.into_boxed_str();
     ensure!(
-        actual.contains(&expected_fragment),
+        actual.contains(&*expected_fragment),
         "expected error message to contain '{expected_fragment}', but was '{actual}'",
     );
     Ok(())

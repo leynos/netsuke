@@ -218,14 +218,7 @@ fn make_macro_fn(
         for key in macro_kwargs.args() {
             let mut value = macro_kwargs.peek::<Value>(key)?;
             if key == "caller" {
-                if value.as_object().is_some() {
-                    value = Value::from_object(CallerAdapter::new(state, value));
-                } else {
-                    return Err(Error::new(
-                        ErrorKind::InvalidOperation,
-                        format!("'caller' argument must be callable, got {}", value.kind()),
-                    ));
-                }
+                value = adapt_caller_argument(state, value)?;
             }
             entries.push((key.to_owned(), value));
         }
@@ -256,6 +249,17 @@ fn make_macro_fn(
     }
 }
 
+fn adapt_caller_argument(state: &State, value: Value) -> Result<Value, Error> {
+    if value.as_object().is_some() {
+        Ok(Value::from_object(CallerAdapter::new(state, value)))
+    } else {
+        Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("'caller' argument must be callable, got {}", value.kind()),
+        ))
+    }
+}
+
 /// Cache of compiled macro state for repeated invocations.
 #[derive(Debug)]
 struct MacroCache {
@@ -265,7 +269,7 @@ struct MacroCache {
 }
 
 impl MacroCache {
-    fn new(template_name: String, macro_name: String) -> Self {
+    const fn new(template_name: String, macro_name: String) -> Self {
         Self {
             template_name,
             macro_name,
@@ -354,6 +358,10 @@ impl MacroStateGuard {
         Self { ptr: ptr_non_null }
     }
 
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Macro state guard relies on pointer dereferencing not supported in const contexts"
+    )]
     fn as_ref(&self) -> &State<'static, 'static> {
         unsafe { self.ptr.as_ref() }
     }

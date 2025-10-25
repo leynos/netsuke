@@ -180,7 +180,7 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-fn should_preserve_backslash_for_bracket(next: char) -> bool {
+const fn should_preserve_backslash_for_bracket(next: char) -> bool {
     matches!(next, '[' | ']' | '{' | '}')
 }
 
@@ -249,7 +249,7 @@ fn process_escape_sequence(it: &mut std::iter::Peekable<std::str::Chars<'_>>, ou
 }
 
 #[cfg(unix)]
-fn get_escape_replacement(ch: char) -> &'static str {
+const fn get_escape_replacement(ch: char) -> &'static str {
     match ch {
         '*' => "[*]",
         '?' => "[?]",
@@ -267,7 +267,7 @@ struct BraceValidator {
 }
 
 impl BraceValidator {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             state: BraceValidationState {
                 depth: 0,
@@ -318,6 +318,10 @@ impl BraceValidator {
         None
     }
 
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "brace validator mutates state at runtime; const adds no value"
+    )]
     fn handle_character_class(&mut self, context: &CharContext) {
         match context.ch {
             '[' if !context.in_class => self.state.in_class = true,
