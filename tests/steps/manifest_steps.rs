@@ -74,6 +74,13 @@ fn get_target(world: &CliWorld, index: usize) -> Result<&Target> {
         .with_context(|| format!("missing target {index}"))
 }
 
+fn manifest(world: &CliWorld) -> Result<&netsuke::ast::NetsukeManifest> {
+    world
+        .manifest
+        .as_ref()
+        .context("manifest has not been parsed")
+}
+
 fn assert_manifest_collection_len(
     world: &CliWorld,
     collection_name: &str,
@@ -401,13 +408,6 @@ fn assert_target_command(world: &CliWorld, index: usize, command: &str) -> Resul
         }
         other => bail!("Expected command recipe, got: {other:?}"),
     }
-}
-
-fn manifest(world: &CliWorld) -> Result<&netsuke::ast::NetsukeManifest> {
-    world
-        .manifest
-        .as_ref()
-        .context("manifest has not been parsed")
 }
 
 fn assert_target_index(world: &CliWorld, index: usize, expected: usize) -> Result<()> {
