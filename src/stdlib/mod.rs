@@ -15,7 +15,7 @@ mod network;
 mod path;
 mod time;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, bail};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
 use cap_std::fs::FileTypeExt;
@@ -91,7 +91,10 @@ impl StdlibConfig {
     ///
     /// Returns an error when the provided path is empty, absolute, or attempts
     /// to escape the workspace via parent components.
-    pub fn with_fetch_cache_relative(mut self, relative: impl Into<Utf8PathBuf>) -> Result<Self> {
+    pub fn with_fetch_cache_relative(
+        mut self,
+        relative: impl Into<Utf8PathBuf>,
+    ) -> anyhow::Result<Self> {
         let relative = relative.into();
         Self::validate_cache_relative(&relative)?;
         self.fetch_cache_relative = relative;
@@ -112,24 +115,30 @@ impl StdlibConfig {
         }
     }
 
-    fn validate_cache_relative(relative: &Utf8Path) -> Result<()> {
-        ensure!(
-            !relative.as_str().is_empty(),
-            "fetch cache path must not be empty",
-        );
-        ensure!(
-            !relative.is_absolute(),
-            "fetch cache path must be relative to the workspace",
-        );
-        for component in relative.components() {
-            ensure!(
-                !matches!(
-                    component,
-                    Utf8Component::ParentDir | Utf8Component::Prefix(_)
-                ),
-                "fetch cache path must stay within the workspace",
+    pub(crate) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
+        if relative.as_str().is_empty() {
+            bail!("fetch cache path must not be empty");
+        }
+
+        if relative.is_absolute() {
+            bail!(
+                "fetch cache path '{}' must be relative to the workspace",
+                relative
             );
         }
+
+        for component in relative.components() {
+            if matches!(
+                component,
+                Utf8Component::ParentDir | Utf8Component::Prefix(_)
+            ) {
+                bail!(
+                    "fetch cache path '{}' must stay within the workspace",
+                    relative
+                );
+            }
+        }
+
         Ok(())
     }
 }
@@ -194,7 +203,7 @@ impl StdlibState {
 /// Returns an error when the current working directory cannot be opened using
 /// capability-based I/O. This occurs when the process lacks permission to read
 /// the directory or if it no longer exists.
-pub fn register(env: &mut Environment<'_>) -> Result<StdlibState> {
+pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     let root = Dir::open_ambient_dir(".", ambient_authority())
         .context("open current directory for stdlib registration")?;
     Ok(register_with_config(env, StdlibConfig::new(root)))
@@ -308,4 +317,44 @@ fn is_device(ft: fs::FileType) -> bool {
 #[cfg(not(unix))]
 fn is_device(_ft: fs::FileType) -> bool {
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StdlibConfig;
+
+    use camino::Utf8Path;
+
+    #[test]
+    fn validate_cache_relative_rejects_empty() {
+        let err = StdlibConfig::validate_cache_relative(Utf8Path::new(""))
+            .expect_err("empty path should fail");
+        assert_eq!(err.to_string(), "fetch cache path must not be empty");
+    }
+
+    #[test]
+    fn validate_cache_relative_rejects_absolute_paths() {
+        let err = StdlibConfig::validate_cache_relative(Utf8Path::new("/cache"))
+            .expect_err("absolute path should fail");
+        assert_eq!(
+            err.to_string(),
+            "fetch cache path '/cache' must be relative to the workspace"
+        );
+    }
+
+    #[test]
+    fn validate_cache_relative_rejects_parent_components() {
+        let err = StdlibConfig::validate_cache_relative(Utf8Path::new("../escape"))
+            .expect_err("parent components should fail");
+        assert_eq!(
+            err.to_string(),
+            "fetch cache path '../escape' must stay within the workspace"
+        );
+    }
+
+    #[test]
+    fn validate_cache_relative_accepts_workspace_relative_paths() {
+        StdlibConfig::validate_cache_relative(Utf8Path::new("nested/cache"))
+            .expect("relative path should be accepted");
+    }
 }

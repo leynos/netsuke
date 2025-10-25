@@ -20,7 +20,7 @@
 
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
 use anyhow::{Context, Result, anyhow};
-use camino::Utf8PathBuf;
+use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
@@ -163,24 +163,24 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 mod tests;
 
 fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
+    let parent = match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    };
     let manifest_label = path
         .file_name()
         .and_then(|name| name.to_str())
         .map_or_else(|| path.display().to_string(), str::to_owned);
-    let resolved = fs::canonicalize(parent).unwrap_or_else(|_| parent.to_path_buf());
-    let workspace_display = resolved.display().to_string();
-    let workspace = Utf8PathBuf::from_path_buf(resolved).map_err(|_| {
+    let utf8_parent = Utf8Path::from_path(parent).ok_or_else(|| {
         anyhow!(
-            "manifest workspace directory '{workspace_display}' for manifest {manifest_label} contains non-UTF-8 components"
+            "manifest '{}' path '{}' contains non-UTF-8 components",
+            manifest_label,
+            path.display()
         )
     })?;
-    let dir = Dir::open_ambient_dir(&workspace, ambient_authority()).with_context(|| {
+    let dir = Dir::open_ambient_dir(utf8_parent, ambient_authority()).with_context(|| {
         format!(
-            "failed to open manifest workspace directory {workspace} for manifest {manifest_label}"
+            "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"
         )
     })?;
     Ok(StdlibConfig::new(dir))
