@@ -17,10 +17,12 @@ pub(crate) const ENV_HTTP_READ_TIMEOUT_MS: &str = "NETSUKE_TEST_HTTP_READ_TIMEOU
 pub(crate) const ENV_HTTP_POLL_INTERVAL_MS: &str = "NETSUKE_TEST_HTTP_POLL_INTERVAL_MS";
 
 #[cfg(test)]
-use std::sync::{Mutex, OnceLock};
+use std::{cell::RefCell, thread_local};
 
 #[cfg(test)]
-static DURATION_WARNINGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+thread_local! {
+    static DURATION_WARNINGS: RefCell<Vec<String>> = RefCell::new(Vec::new());
+}
 
 /// Configuration for HTTP fixtures, including timeouts used during polling.
 #[derive(Debug, Clone)]
@@ -40,7 +42,8 @@ impl HttpServerConfig {
     /// * `NETSUKE_TEST_HTTP_READ_TIMEOUT_MS` – deadline for reading the request
     ///   body in milliseconds.
     /// * `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS` – polling interval used when
-    ///   waiting for readiness in milliseconds.
+    ///   waiting for readiness in milliseconds. Values below 1 ms are clamped
+    ///   to 1 ms to avoid busy-spinning.
     pub fn from_env() -> Self {
         let mut config = Self::default();
         config.accept_timeout =
@@ -121,6 +124,7 @@ impl Drop for HttpServer {
 /// - `NETSUKE_TEST_HTTP_ACCEPT_TIMEOUT_MS`
 /// - `NETSUKE_TEST_HTTP_READ_TIMEOUT_MS`
 /// - `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS`
+///   (values below 1 ms are clamped to 1 ms to avoid busy-spinning)
 ///
 /// # Panics
 /// See [`spawn_http_server_with_config`] for potential panic conditions.
@@ -283,30 +287,19 @@ fn log_duration_parse_error(var: &str, value: &str, err: &dyn fmt::Display) {
 
 #[cfg(test)]
 fn record_duration_warning(message: String) {
-    let warnings = DURATION_WARNINGS.get_or_init(|| Mutex::new(Vec::new()));
-    warnings
-        .lock()
-        .expect("duration warnings lock")
-        .push(message);
+    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().push(message));
 }
 
 #[cfg(test)]
 fn take_duration_warnings() -> Vec<String> {
-    let warnings = DURATION_WARNINGS.get_or_init(|| Mutex::new(Vec::new()));
-    std::mem::take(&mut *warnings.lock().expect("duration warnings lock"))
-}
-
-#[cfg(test)]
-fn clear_duration_warnings() {
-    let _ = take_duration_warnings();
+    DURATION_WARNINGS.with(|warnings| warnings.borrow_mut().drain(..).collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
-        HttpServerConfig, accept_connection, clear_duration_warnings, duration_from_env,
-        take_duration_warnings,
+        HttpServerConfig, accept_connection, duration_from_env, take_duration_warnings,
     };
 
     use crate::{EnvVarGuard, env_lock::EnvLock};
@@ -319,7 +312,10 @@ mod tests {
     #[test]
     fn from_env_applies_overrides() {
         let _lock = EnvLock::acquire();
-        clear_duration_warnings();
+        assert!(
+            take_duration_warnings().is_empty(),
+            "warnings buffer should start empty"
+        );
         let accept = EnvVarGuard::set(ENV_HTTP_ACCEPT_TIMEOUT_MS, "1500");
         let read = EnvVarGuard::set(ENV_HTTP_READ_TIMEOUT_MS, "750");
         let poll = EnvVarGuard::set(ENV_HTTP_POLL_INTERVAL_MS, "25");
@@ -341,7 +337,10 @@ mod tests {
     #[test]
     fn from_env_clamps_zero_poll_interval() {
         let _lock = EnvLock::acquire();
-        clear_duration_warnings();
+        assert!(
+            take_duration_warnings().is_empty(),
+            "warnings buffer should start empty"
+        );
         let poll = EnvVarGuard::set(ENV_HTTP_POLL_INTERVAL_MS, "0");
 
         let config = HttpServerConfig::from_env();
@@ -357,7 +356,10 @@ mod tests {
     #[test]
     fn duration_from_env_returns_default_for_missing() {
         let _lock = EnvLock::acquire();
-        clear_duration_warnings();
+        assert!(
+            take_duration_warnings().is_empty(),
+            "warnings buffer should start empty"
+        );
         let guard = EnvVarGuard::remove(ENV_HTTP_ACCEPT_TIMEOUT_MS);
         let duration = duration_from_env(ENV_HTTP_ACCEPT_TIMEOUT_MS, Duration::from_secs(3));
         assert_eq!(duration, Duration::from_secs(3));
@@ -371,7 +373,10 @@ mod tests {
     #[test]
     fn duration_from_env_reports_invalid_values() {
         let _lock = EnvLock::acquire();
-        clear_duration_warnings();
+        assert!(
+            take_duration_warnings().is_empty(),
+            "warnings buffer should start empty"
+        );
         let guard = EnvVarGuard::set(ENV_HTTP_ACCEPT_TIMEOUT_MS, "not-a-number");
         let duration = duration_from_env(ENV_HTTP_ACCEPT_TIMEOUT_MS, Duration::from_secs(3));
         assert_eq!(duration, Duration::from_secs(3));
@@ -391,7 +396,10 @@ mod tests {
     #[test]
     fn duration_from_env_trims_whitespace() {
         let _lock = EnvLock::acquire();
-        clear_duration_warnings();
+        assert!(
+            take_duration_warnings().is_empty(),
+            "warnings buffer should start empty"
+        );
         let guard = EnvVarGuard::set(ENV_HTTP_READ_TIMEOUT_MS, "  2500  ");
         let duration = duration_from_env(ENV_HTTP_READ_TIMEOUT_MS, Duration::from_secs(3));
         assert_eq!(duration, Duration::from_millis(2500));

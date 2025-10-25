@@ -112,15 +112,14 @@ fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
 }
 
 fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
-    let utf_path = relative;
-    if let Err(err) = StdlibConfig::validate_cache_relative(utf_path) {
+    if let Err(err) = StdlibConfig::validate_cache_relative(relative) {
         return Err(Error::new(ErrorKind::InvalidOperation, err.to_string()));
     }
 
-    root.create_dir_all(utf_path)
-        .map_err(|err| io_error("create cache dir", utf_path, &err))?;
-    root.open_dir(utf_path)
-        .map_err(|err| io_error("open cache dir", utf_path, &err))
+    root.create_dir_all(relative)
+        .map_err(|err| io_error("create cache dir", relative, &err))?;
+    root.open_dir(relative)
+        .map_err(|err| io_error("open cache dir", relative, &err))
 }
 
 fn read_cached(dir: &Dir, name: &str) -> Result<Option<Vec<u8>>, Error> {
