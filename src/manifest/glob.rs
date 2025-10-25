@@ -140,10 +140,9 @@ fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::M
 }
 
 fn normalized_or_raw(p: &GlobPattern) -> &str {
-    p.normalized.as_deref().unwrap_or_else(|| {
-        debug_assert!(false, "normalised pattern must be present");
-        p.raw.as_str()
-    })
+    p.normalized
+        .as_deref()
+        .unwrap_or_else(|| panic!("normalised pattern must be present after validation"))
 }
 
 fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
@@ -399,9 +398,8 @@ fn is_wildcard_continuation_char(ch: char) -> bool {
 ///
 /// # Panics
 ///
-/// Does not panic. If pattern normalisation fails to record the derived pattern
-/// (a logic error in the validator), the function falls back to the raw pattern
-/// in release builds whilst firing a debug assertion in debug builds.
+/// Panics if pattern normalisation fails to record the derived pattern, which
+/// indicates a logic error in the validator.
 pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
