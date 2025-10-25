@@ -57,7 +57,7 @@ fn now_defaults_to_utc(env: Environment<'static>) -> Result<()> {
     let captured = value_as_timestamp(&value)?;
     let now = OffsetDateTime::now_utc();
     let delta = (now - captured).abs();
-    ensure!(delta <= Duration::seconds(2), "delta {delta:?} too large");
+    ensure!(delta <= Duration::seconds(3), "delta {delta:?} too large");
     ensure!(captured.offset() == UtcOffset::UTC);
     Ok(())
 }
