@@ -27,6 +27,7 @@ pub enum NinjaWorkspaceError {
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
     let mut child = Command::new("ninja")
         .arg("--version")
+        .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -46,8 +47,12 @@ fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
-                    child.kill().map_err(NinjaWorkspaceError::ProbeSpawn)?;
-                    child.wait().map_err(NinjaWorkspaceError::ProbeSpawn)?;
+                    match child.kill() {
+                        Ok(_) | Err(_) => {}
+                    }
+                    match child.wait() {
+                        Ok(_) | Err(_) => {}
+                    }
                     return Err(NinjaWorkspaceError::ProbeTimeout(timeout));
                 }
                 thread::sleep(poll_sleep);
