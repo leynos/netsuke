@@ -1,3 +1,5 @@
+//! Assertions shared by stdlib-related Cucumber steps, providing
+//! reusable checks for rendered output, errors, and cache behaviour.
 use crate::CliWorld;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
