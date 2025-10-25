@@ -97,9 +97,9 @@ impl StdlibConfig {
         mut self,
         relative: impl Into<Utf8PathBuf>,
     ) -> anyhow::Result<Self> {
-        let relative = relative.into();
-        Self::validate_cache_relative(&relative)?;
-        self.fetch_cache_relative = relative;
+        let relative_path = relative.into();
+        Self::validate_cache_relative(&relative_path)?;
+        self.fetch_cache_relative = relative_path;
         Ok(self)
     }
 

@@ -318,13 +318,10 @@ mod tests {
         let kwargs =
             Kwargs::from_iter([(String::from("cache_dir"), Value::from(".netsuke/cache"))]);
         let impure = Arc::new(AtomicBool::new(false));
-        let err = match fetch("http://127.0.0.1:9", &kwargs, &impure, &cache) {
-            Ok(_) => {
-                return Err(anyhow!(
-                    "expected cache_dir keyword to fail but request succeeded"
-                ))
-            }
-            Err(err) => err,
+        let Err(err) = fetch("http://127.0.0.1:9", &kwargs, &impure, &cache) else {
+            return Err(anyhow!(
+                "expected cache_dir keyword to fail but request succeeded"
+            ));
         };
         ensure!(
             err.kind() == ErrorKind::TooManyArguments,
