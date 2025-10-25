@@ -1,3 +1,5 @@
+//! Helpers for preparing stdlib workspaces during Cucumber scenarios, wiring
+//! up temporary directories, fixtures, and environment overrides for tests.
 use crate::CliWorld;
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
