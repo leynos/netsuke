@@ -115,8 +115,12 @@ error_impl_error                    = "deny"
 result_large_err                    = "deny"
 
 [lints.rust]
-missing_docs                        = "deny"
-missing_crate_level_docs            = "deny"
+unknown_lints = "deny"
+renamed_and_removed_lints = "deny"
+missing_docs = "deny"
+
+[lints.rustdoc]
+missing_crate_level_docs = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
