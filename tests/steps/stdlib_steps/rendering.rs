@@ -21,7 +21,7 @@ pub(crate) fn render_template_with_context(
     let config = StdlibConfig::new(workspace);
     let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
-    world.stdlib_state = Some(state.clone());
+    world.stdlib_state = Some(state);
     let render = env.render_str(template.as_str(), ctx);
     match render {
         Ok(output) => {
