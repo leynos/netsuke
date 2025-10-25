@@ -261,27 +261,16 @@ mod tests {
     }
 
     #[rstest]
-    fn open_cache_dir_rejects_empty_path(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
-        let (_temp, root, _path) = cache_workspace?;
-        assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new(""), "empty path")
-    }
-
-    #[rstest]
-    fn open_cache_dir_rejects_absolute_paths(
+    #[case("", "empty path")]
+    #[case("/etc/netsuke-cache", "absolute path")]
+    #[case("../escape", "parent path")]
+    fn open_cache_dir_rejects_invalid_paths(
         cache_workspace: Result<CacheWorkspace>,
+        #[case] path: &str,
+        #[case] description: &str,
     ) -> Result<()> {
         let (_temp, root, _path) = cache_workspace?;
-        assert_open_cache_dir_rejects(
-            root.as_ref(),
-            Utf8Path::new("/etc/netsuke-cache"),
-            "absolute path",
-        )
-    }
-
-    #[rstest]
-    fn open_cache_dir_rejects_parent_paths(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
-        let (_temp, root, _path) = cache_workspace?;
-        assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new("../escape"), "parent path")
+        assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new(path), description)
     }
 
     /// Write an entry to the cache directory and assert it exists within the workspace.
