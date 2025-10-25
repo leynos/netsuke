@@ -1,5 +1,8 @@
 //! Cucumber step implementations for stdlib path, file, network, and command helpers.
 
+// NOTE: These module-level expectations cannot be scoped more narrowly while
+// we rely on cucumber's step macros; they repeatedly shadow captured names.
+// We will remove the allowance once the suite migrates to `rstest-bdd`.
 #![expect(
     clippy::shadow_reuse,
     reason = "Cucumber step macros reuse parameter identifiers for captures"

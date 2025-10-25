@@ -60,10 +60,10 @@ fn remove_action(world: &mut CliWorld) -> Result<()> {
 mod build_graph_steps {
     #![expect(
         clippy::shadow_reuse,
-        reason = "Cucumber step macros rebind capture names",
+        reason = "Cucumber step macros rebind capture names"
     )]
 
-    use super::{build_graph_generated, CliWorld, Context, Result, ensure, BuildGraph};
+    use super::{BuildGraph, CliWorld, Context, Result, build_graph_generated, ensure};
     use cucumber::{given, then, when};
 
     #[then(expr = "the graph has {int} actions")]
@@ -101,7 +101,7 @@ mod build_graph_steps {
 
     #[expect(
         clippy::needless_pass_by_value,
-        reason = "Cucumber requires owned String arguments",
+        reason = "Cucumber requires owned String arguments"
     )]
     #[given(expr = "the manifest file {string} is compiled to IR")]
     #[when(expr = "the manifest file {string} is compiled to IR")]

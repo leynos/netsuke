@@ -21,20 +21,18 @@ mod redaction;
 
 pub use file_io::*;
 pub use paths::*;
-// Re-export redaction helpers only for doctests so the examples compile without
-// introducing unused imports in normal builds.
-#[cfg(doctest)]
-pub use redaction::*;
-
 use redaction::{CommandArg, redact_sensitive_args};
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
 #[cfg(doctest)]
 pub mod doc {
+    pub use super::redaction::{
+        CommandArg, contains_sensitive_keyword, is_sensitive_arg, redact_argument,
+        redact_sensitive_args,
+    };
     pub use super::{
-        CommandArg, contains_sensitive_keyword, create_temp_ninja_file, is_sensitive_arg,
-        redact_argument, redact_sensitive_args, resolve_ninja_program, resolve_ninja_program_utf8,
+        create_temp_ninja_file, resolve_ninja_program, resolve_ninja_program_utf8,
         write_ninja_file, write_ninja_file_utf8,
     };
 }
