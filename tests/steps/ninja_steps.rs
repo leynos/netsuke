@@ -16,7 +16,7 @@ use std::str::FromStr;
 struct ExpectedFragment(String);
 
 /// Expected command tokens represented as a comma-separated string.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ExpectedTokens(String);
 
 impl From<String> for ExpectedFragment {
@@ -136,9 +136,14 @@ fn ninja_command_tokens(
     Ok(())
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
 #[then(expr = "shlex splitting the command yields {string}")]
 fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: ExpectedTokens) -> Result<()> {
-    ninja_command_tokens(world, 2, expected_tokens)
+    let tokens = expected_tokens.clone();
+    ninja_command_tokens(world, 2, tokens)
 }
 
 #[then(expr = "ninja generation fails with {string}")]

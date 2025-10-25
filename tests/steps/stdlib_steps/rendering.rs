@@ -11,7 +11,7 @@ use super::workspace::{ensure_workspace, resolve_template_path};
 
 pub(crate) fn render_template_with_context(
     world: &mut CliWorld,
-    template: TemplateContent,
+    template: &TemplateContent,
     ctx: Value,
 ) -> Result<()> {
     let root = ensure_workspace(world)?;
@@ -22,8 +22,7 @@ pub(crate) fn render_template_with_context(
     let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
     world.stdlib_state = Some(state);
-    let template = template.into_inner();
-    let render = env.render_str(&template, ctx);
+    let render = env.render_str(template.as_str(), ctx);
     match render {
         Ok(output) => {
             world.stdlib_output = Some(output);
@@ -39,13 +38,17 @@ pub(crate) fn render_template_with_context(
 
 fn render_template(
     world: &mut CliWorld,
-    template: TemplateContent,
+    template: &TemplateContent,
     path: &TemplatePath,
 ) -> Result<()> {
     let ctx = context!(path => path.as_path().as_str());
     render_template_with_context(world, template, ctx)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
 #[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
 pub(crate) fn render_stdlib_template(
     world: &mut CliWorld,
@@ -54,17 +57,25 @@ pub(crate) fn render_stdlib_template(
 ) -> Result<()> {
     let root = ensure_workspace(world)?;
     let target = resolve_template_path(root.as_path(), relative_path);
-    render_template(world, template_content, &target)
+    render_template(world, &template_content, &target)
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
 #[when(regex = r#"^I render the stdlib template "(.+)"$"#)]
 pub(crate) fn render_stdlib_template_without_path(
     world: &mut CliWorld,
     template_content: TemplateContent,
 ) -> Result<()> {
-    render_template_with_context(world, template_content, context! {})
+    render_template_with_context(world, &template_content, context! {})
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
 #[when(regex = r#"^I render "(.+)" with stdlib url$"#)]
 pub(crate) fn render_stdlib_template_with_url(
     world: &mut CliWorld,
@@ -74,9 +85,13 @@ pub(crate) fn render_stdlib_template_with_url(
         .stdlib_url
         .clone()
         .context("expected stdlib HTTP server to be initialised")?;
-    render_template_with_context(world, template_content, context!(url => url))
+    render_template_with_context(world, &template_content, context!(url => url))
 }
 
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
 #[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib command helper$"#)]
 pub(crate) fn render_stdlib_template_with_command(
     world: &mut CliWorld,
@@ -86,5 +101,5 @@ pub(crate) fn render_stdlib_template_with_command(
         .stdlib_command
         .clone()
         .context("expected stdlib command helper to be compiled")?;
-    render_template_with_context(world, template_content, context!(cmd => command))
+    render_template_with_context(world, &template_content, context!(cmd => command))
 }
