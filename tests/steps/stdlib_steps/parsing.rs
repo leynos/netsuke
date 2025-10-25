@@ -8,10 +8,24 @@ pub(crate) fn server_host(url: &str) -> Option<&str> {
 }
 
 pub(crate) fn extract_host_from_url(url: &str) -> Option<&str> {
-    let addr = url
-        .strip_prefix("http://")
-        .or_else(|| url.strip_prefix("https://"))?;
-    addr.split('/').next()
+    const HTTP_LEN: usize = 7;
+    const HTTPS_LEN: usize = 8;
+
+    if let Some(prefix) = url.get(..HTTP_LEN)
+        && prefix.eq_ignore_ascii_case("http://")
+    {
+        let (_, rest) = url.split_at(HTTP_LEN);
+        return rest.split('/').next();
+    }
+
+    if let Some(prefix) = url.get(..HTTPS_LEN)
+        && prefix.eq_ignore_ascii_case("https://")
+    {
+        let (_, rest) = url.split_at(HTTPS_LEN);
+        return rest.split('/').next();
+    }
+
+    None
 }
 
 pub(crate) fn parse_iso_timestamp(raw: &str) -> Result<OffsetDateTime> {
