@@ -11,7 +11,7 @@ use super::workspace::{ensure_workspace, resolve_template_path};
 
 pub(crate) fn render_template_with_context(
     world: &mut CliWorld,
-    template: &TemplateContent,
+    template: TemplateContent,
     ctx: Value,
 ) -> Result<()> {
     let root = ensure_workspace(world)?;
@@ -22,7 +22,8 @@ pub(crate) fn render_template_with_context(
     let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
     world.stdlib_state = Some(state);
-    let render = env.render_str(template.as_str(), ctx);
+    let template = template.into_inner();
+    let render = env.render_str(&template, ctx);
     match render {
         Ok(output) => {
             world.stdlib_output = Some(output);
@@ -38,7 +39,7 @@ pub(crate) fn render_template_with_context(
 
 fn render_template(
     world: &mut CliWorld,
-    template: &TemplateContent,
+    template: TemplateContent,
     path: &TemplatePath,
 ) -> Result<()> {
     let ctx = context!(path => path.as_path().as_str());
@@ -48,47 +49,42 @@ fn render_template(
 #[when(regex = r#"^I render "(.+)" with stdlib path "(.+)"$"#)]
 pub(crate) fn render_stdlib_template(
     world: &mut CliWorld,
-    template_source: String,
-    raw_path: String,
+    template_content: TemplateContent,
+    relative_path: RelativePath,
 ) -> Result<()> {
     let root = ensure_workspace(world)?;
-    let template_content = TemplateContent::from(template_source);
-    let relative_path = RelativePath::from(raw_path);
-    let target = resolve_template_path(root.as_path(), &relative_path);
-    render_template(world, &template_content, &target)
+    let target = resolve_template_path(root.as_path(), relative_path);
+    render_template(world, template_content, &target)
 }
 
 #[when(regex = r#"^I render the stdlib template "(.+)"$"#)]
 pub(crate) fn render_stdlib_template_without_path(
     world: &mut CliWorld,
-    template_source: String,
+    template_content: TemplateContent,
 ) -> Result<()> {
-    let template_content = TemplateContent::from(template_source);
-    render_template_with_context(world, &template_content, context! {})
+    render_template_with_context(world, template_content, context! {})
 }
 
 #[when(regex = r#"^I render "(.+)" with stdlib url$"#)]
 pub(crate) fn render_stdlib_template_with_url(
     world: &mut CliWorld,
-    template_source: String,
+    template_content: TemplateContent,
 ) -> Result<()> {
     let url = world
         .stdlib_url
         .clone()
         .context("expected stdlib HTTP server to be initialised")?;
-    let template_content = TemplateContent::from(template_source);
-    render_template_with_context(world, &template_content, context!(url => url))
+    render_template_with_context(world, template_content, context!(url => url))
 }
 
 #[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib command helper$"#)]
 pub(crate) fn render_stdlib_template_with_command(
     world: &mut CliWorld,
-    template_source: String,
+    template_content: TemplateContent,
 ) -> Result<()> {
     let command = world
         .stdlib_command
         .clone()
         .context("expected stdlib command helper to be compiled")?;
-    let template_content = TemplateContent::from(template_source);
-    render_template_with_context(world, &template_content, context!(cmd => command))
+    render_template_with_context(world, template_content, context!(cmd => command))
 }

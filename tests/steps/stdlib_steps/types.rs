@@ -2,6 +2,7 @@
 //! rendering inputs and outputs, keeping step definitions ergonomic while
 //! preserving invariants such as UTF-8 paths.
 use camino::{Utf8Path, Utf8PathBuf};
+use std::{convert::Infallible, str::FromStr};
 
 /// Owned UTF-8 path used by stdlib step definitions for workspace templates.
 #[derive(Debug, Clone)]
@@ -59,6 +60,10 @@ impl TemplateContent {
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
 }
 
 impl AsRef<str> for TemplateContent {
@@ -76,6 +81,14 @@ impl From<String> for TemplateContent {
 impl From<&str> for TemplateContent {
     fn from(value: &str) -> Self {
         Self(value.to_owned())
+    }
+}
+
+impl FromStr for TemplateContent {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
     }
 }
 
@@ -118,8 +131,8 @@ impl RelativePath {
         &self.0
     }
 
-    pub(crate) fn to_path_buf(&self) -> Utf8PathBuf {
-        Utf8PathBuf::from(self.as_str())
+    pub(crate) fn into_path_buf(self) -> Utf8PathBuf {
+        Utf8PathBuf::from(self.0)
     }
 }
 
@@ -138,5 +151,173 @@ impl From<&str> for RelativePath {
 impl AsRef<str> for RelativePath {
     fn as_ref(&self) -> &str {
         self.as_str()
+    }
+}
+
+impl FromStr for RelativePath {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+/// Expected output text for stdlib assertion steps.
+#[derive(Debug, Clone)]
+pub(crate) struct ExpectedOutput(String);
+
+impl ExpectedOutput {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl AsRef<str> for ExpectedOutput {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<String> for ExpectedOutput {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for ExpectedOutput {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl FromStr for ExpectedOutput {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+/// Expected fragment of error text for stdlib assertion steps.
+#[derive(Debug, Clone)]
+pub(crate) struct ExpectedFragment(String);
+
+impl ExpectedFragment {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl AsRef<str> for ExpectedFragment {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<String> for ExpectedFragment {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for ExpectedFragment {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl FromStr for ExpectedFragment {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+/// HTTP response body for test server fixtures.
+#[derive(Debug, Clone)]
+pub(crate) struct ServerBody(String);
+
+impl ServerBody {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl AsRef<str> for ServerBody {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<String> for ServerBody {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for ServerBody {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl FromStr for ServerBody {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
+/// Expected timezone offset text for timestamp assertion steps.
+#[derive(Debug, Clone)]
+pub(crate) struct ExpectedOffset(String);
+
+impl ExpectedOffset {
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl AsRef<str> for ExpectedOffset {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl From<String> for ExpectedOffset {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for ExpectedOffset {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl FromStr for ExpectedOffset {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
     }
 }

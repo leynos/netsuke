@@ -11,7 +11,7 @@ use test_support::{
     env::set_var,
 };
 
-use super::types::{FileContent, RelativePath, TemplatePath};
+use super::types::{FileContent, RelativePath, ServerBody, TemplatePath};
 
 const LINES_FIXTURE: &str = concat!("one\n", "two\n", "three\n",);
 
@@ -73,7 +73,8 @@ pub(crate) fn failing_stdlib_command_helper(world: &mut CliWorld) -> Result<()> 
 }
 
 #[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
-pub(crate) fn http_server_returning(world: &mut CliWorld, body: String) -> Result<()> {
+pub(crate) fn http_server_returning(world: &mut CliWorld, body: ServerBody) -> Result<()> {
+    let body = body.into_inner();
     world
         .start_http_server(body)
         .context("start stdlib HTTP fixture")?;
@@ -124,11 +125,11 @@ pub(crate) fn home_points_to_stdlib_root(world: &mut CliWorld) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn resolve_template_path(root: &Utf8Path, raw: &RelativePath) -> TemplatePath {
+pub(crate) fn resolve_template_path(root: &Utf8Path, raw: RelativePath) -> TemplatePath {
     if raw.as_str().starts_with('~') {
-        return TemplatePath::from(raw.as_str().to_owned());
+        return TemplatePath::from(raw.into_path_buf());
     }
-    let candidate = raw.to_path_buf();
+    let candidate = raw.into_path_buf();
     if candidate.is_absolute() {
         TemplatePath::from(candidate)
     } else {

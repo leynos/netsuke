@@ -1,8 +1,8 @@
 //! Cucumber step implementations for stdlib path, file, network, and command helpers.
 
-// NOTE: These module-level expectations cannot be scoped more narrowly while
-// we rely on cucumber's step macros; they repeatedly shadow captured names.
-// We will remove the allowance once the suite migrates to `rstest-bdd`.
+// NOTE: This module-level allowance cannot be scoped more narrowly while we
+// rely on cucumber's step macros; they repeatedly shadow captured names.
+// We will address the allowance when the suite migrates to `rstest-bdd`.
 #![expect(
     clippy::shadow_reuse,
     reason = "Cucumber step macros reuse parameter identifiers for captures"
@@ -35,7 +35,10 @@ pub(crate) use rendering::*;
     unused_imports,
     reason = "Re-export step functions for Cucumber discovery"
 )]
-pub(crate) use types::{FileContent, RelativePath, TemplateContent, TemplatePath};
+pub(crate) use types::{
+    ExpectedFragment, ExpectedOffset, ExpectedOutput, FileContent, RelativePath, ServerBody,
+    TemplateContent, TemplatePath,
+};
 #[expect(
     unused_imports,
     reason = "Re-export step functions for Cucumber discovery"

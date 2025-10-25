@@ -9,21 +9,22 @@ use test_support::hash;
 use time::{Duration, OffsetDateTime, UtcOffset};
 
 use super::parsing::{parse_expected_offset, parse_iso_timestamp};
-use super::types::RelativePath;
+use super::types::{ExpectedFragment, ExpectedOffset, ExpectedOutput, RelativePath};
 
 #[then(regex = r#"^the stdlib output is "(.+)"$"#)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned capture arguments"
-)]
-pub(crate) fn assert_stdlib_output(world: &mut CliWorld, expected_output: String) -> Result<()> {
+pub(crate) fn assert_stdlib_output(
+    world: &mut CliWorld,
+    expected_output: ExpectedOutput,
+) -> Result<()> {
+    let expected_output = expected_output.into_inner();
     let output = world
         .stdlib_output
         .as_ref()
         .context("expected stdlib output to be available")?;
     ensure!(
-        output == &expected_output,
-        "expected stdlib output '{expected_output}', got '{output}'"
+        output == expected_output.as_str(),
+        "expected stdlib output '{expected}', got '{output}'",
+        expected = expected_output
     );
     Ok(())
 }
@@ -48,18 +49,19 @@ fn stdlib_output(world: &CliWorld) -> Result<&str> {
 }
 
 #[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned capture arguments"
-)]
-pub(crate) fn assert_stdlib_error(world: &mut CliWorld, expected_fragment: String) -> Result<()> {
+pub(crate) fn assert_stdlib_error(
+    world: &mut CliWorld,
+    expected_fragment: ExpectedFragment,
+) -> Result<()> {
+    let expected_fragment = expected_fragment.into_inner();
     let error = world
         .stdlib_error
         .as_ref()
         .context("expected stdlib error")?;
     ensure!(
-        error.contains(&expected_fragment),
-        "error `{error}` should contain `{expected_fragment}`",
+        error.contains(expected_fragment.as_str()),
+        "error `{error}` should contain `{expected}`",
+        expected = expected_fragment
     );
     Ok(())
 }
@@ -122,11 +124,10 @@ pub(crate) fn assert_stdlib_output_is_root(world: &mut CliWorld) -> Result<()> {
 #[then(regex = r#"^the stdlib output is the workspace path "(.+)"$"#)]
 pub(crate) fn assert_stdlib_output_is_workspace_path(
     world: &mut CliWorld,
-    relative_path: String,
+    relative_path: RelativePath,
 ) -> Result<()> {
     let (root, output) = stdlib_root_and_output(world)?;
-    let relative_path = RelativePath::from(relative_path);
-    let expected = root.join(relative_path.to_path_buf());
+    let expected = root.join(relative_path.into_path_buf());
     ensure!(
         output == expected.as_str(),
         "expected output '{}', got '{output}'",
@@ -153,21 +154,19 @@ pub(crate) fn assert_stdlib_output_is_utc_timestamp(world: &mut CliWorld) -> Res
 }
 
 #[then(regex = r#"^the stdlib output offset is "(.+)"$"#)]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber requires owned capture arguments"
-)]
 pub(crate) fn assert_stdlib_output_offset(
     world: &mut CliWorld,
-    expected_offset_text: String,
+    expected_offset_text: ExpectedOffset,
 ) -> Result<()> {
+    let expected_offset_text = expected_offset_text.into_inner();
     let output = stdlib_output(world)?;
     let parsed = parse_iso_timestamp(output)?;
     let expected_offset = parse_expected_offset(&expected_offset_text)?;
     ensure!(
         parsed.offset() == expected_offset,
-        "timestamp `{output}` offset {:?} did not match expected {expected_offset_text}",
-        parsed.offset()
+        "timestamp `{output}` offset {:?} did not match expected {expected}",
+        parsed.offset(),
+        expected = expected_offset_text
     );
     Ok(())
 }
