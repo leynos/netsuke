@@ -207,7 +207,13 @@ fn accept_connection(
         match listener.accept() {
             Ok((stream, _)) => return stream,
             Err(err) if should_retry_accept(&err, deadline, poll_interval, accept_timeout) => {
-                thread::sleep(poll_interval);
+                let now = Instant::now();
+                let remaining = if deadline > now {
+                    deadline - now
+                } else {
+                    Duration::from_millis(0)
+                };
+                thread::sleep(remaining.min(poll_interval));
             }
             Err(err) => panic!("failed to accept connection: {err}"),
         }
@@ -299,11 +305,16 @@ fn clear_duration_warnings() {
 mod tests {
     use super::{
         ENV_HTTP_ACCEPT_TIMEOUT_MS, ENV_HTTP_POLL_INTERVAL_MS, ENV_HTTP_READ_TIMEOUT_MS,
-        HttpServerConfig, clear_duration_warnings, duration_from_env, take_duration_warnings,
+        HttpServerConfig, accept_connection, clear_duration_warnings, duration_from_env,
+        take_duration_warnings,
     };
 
     use crate::{EnvVarGuard, env_lock::EnvLock};
-    use std::time::Duration;
+    use std::{
+        net::TcpListener,
+        panic,
+        time::{Duration, Instant},
+    };
 
     #[test]
     fn from_env_applies_overrides() {
@@ -389,5 +400,40 @@ mod tests {
             "whitespace-only padding should not trigger warnings",
         );
         drop(guard);
+    }
+
+    #[test]
+    fn accept_connection_respects_accept_timeout() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+        listener
+            .set_nonblocking(true)
+            .expect("set listener non-blocking");
+
+        let accept_timeout = Duration::from_millis(20);
+        let poll_interval = Duration::from_millis(200);
+        let start = Instant::now();
+        let deadline = start + accept_timeout;
+
+        let result = panic::catch_unwind(|| {
+            let _ = accept_connection(&listener, deadline, poll_interval, accept_timeout);
+        });
+        assert!(
+            result.is_err(),
+            "accept_connection should panic when no client connects",
+        );
+
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed >= accept_timeout,
+            "panic should not occur before the accept timeout (elapsed {:?}, timeout {:?})",
+            elapsed,
+            accept_timeout,
+        );
+        assert!(
+            elapsed < accept_timeout + Duration::from_millis(50),
+            "panic should not overshoot the accept timeout by an entire poll interval: {:?} vs {:?}",
+            elapsed,
+            poll_interval,
+        );
     }
 }
