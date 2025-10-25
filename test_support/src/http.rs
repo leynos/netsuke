@@ -208,6 +208,15 @@ fn should_retry_accept(
     )
 }
 
+fn remaining_until_deadline(deadline: Instant) -> Duration {
+    let now = Instant::now();
+    if deadline > now {
+        deadline - now
+    } else {
+        Duration::from_millis(0)
+    }
+}
+
 fn accept_connection(
     listener: &TcpListener,
     deadline: Instant,
@@ -218,12 +227,7 @@ fn accept_connection(
         match listener.accept() {
             Ok((stream, _)) => return stream,
             Err(err) if should_retry_accept(&err, deadline, poll_interval, accept_timeout) => {
-                let now = Instant::now();
-                let remaining = if deadline > now {
-                    deadline - now
-                } else {
-                    Duration::from_millis(0)
-                };
+                let remaining = remaining_until_deadline(deadline);
                 thread::sleep(remaining.min(poll_interval));
             }
             Err(err) => panic!("failed to accept connection: {err}"),
