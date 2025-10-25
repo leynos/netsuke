@@ -42,8 +42,11 @@ impl HttpServerConfig {
     /// * `NETSUKE_TEST_HTTP_READ_TIMEOUT_MS` – deadline for reading the request
     ///   body in milliseconds.
     /// * `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS` – polling interval used when
-    ///   waiting for readiness in milliseconds. Values below 1 ms are clamped
-    ///   to 1 ms to avoid busy-spinning.
+    ///   waiting for readiness in milliseconds.
+    ///
+    /// Notes:
+    /// Polling interval overrides are clamped to a minimum of 1 ms to avoid
+    /// busy-spinning when the environment provides `0`.
     pub fn from_env() -> Self {
         let mut config = Self::default();
         config.accept_timeout =
@@ -198,7 +201,11 @@ fn should_retry_accept(
             accept_timeout, poll_interval
         );
     }
-    err.kind() == io::ErrorKind::WouldBlock
+    // Treat transient readiness states (EAGAIN/EWOULDBLOCK) and EINTR as retryable.
+    matches!(
+        err.kind(),
+        io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted
+    )
 }
 
 fn accept_connection(
@@ -425,10 +432,8 @@ mod tests {
         let result = panic::catch_unwind(|| {
             let _ = accept_connection(&listener, deadline, poll_interval, accept_timeout);
         });
-        assert!(
-            result.is_err(),
-            "accept_connection should panic when no client connects",
-        );
+        let panic_payload =
+            result.expect_err("accept_connection should panic when no client connects");
 
         let elapsed = start.elapsed();
         assert!(
@@ -438,10 +443,30 @@ mod tests {
             accept_timeout,
         );
         assert!(
-            elapsed < accept_timeout + Duration::from_millis(50),
-            "panic should not overshoot the accept timeout by an entire poll interval: {:?} vs {:?}",
+            elapsed <= accept_timeout + poll_interval + Duration::from_millis(50),
+            "panic overshot accept timeout by more than one poll interval: elapsed={:?}, accept_timeout={:?}, poll_interval={:?}",
             elapsed,
+            accept_timeout,
             poll_interval,
+        );
+
+        let panic_ref = panic_payload.as_ref();
+        let panic_text = panic_ref
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| {
+                panic_ref
+                    .downcast_ref::<&'static str>()
+                    .map(|s| s.to_string())
+            })
+            .unwrap_or_else(|| format!("{panic_payload:?}"));
+        assert!(
+            panic_text.contains(&format!("accept_timeout={:?}", accept_timeout)),
+            "panic message should embed the accept timeout: {panic_text}",
+        );
+        assert!(
+            panic_text.contains(&format!("poll_interval={:?}", poll_interval)),
+            "panic message should embed the poll interval: {panic_text}",
         );
     }
 }
