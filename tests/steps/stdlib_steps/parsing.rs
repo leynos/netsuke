@@ -1,3 +1,5 @@
+//! Parsing helpers for stdlib Cucumber steps, covering timestamp and offset
+//! formats used in output assertions and server host extraction.
 use anyhow::{Context, Result, anyhow, bail};
 use time::{OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
 
