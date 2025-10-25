@@ -48,8 +48,10 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::{NamedTempFile, TempDir};
 
+/// Errors returned when probing for required binaries on the test host.
 #[derive(Debug)]
 pub enum ProbesError {
+    /// One or more probes failed; each string describes the failing command.
     Failures(Vec<String>),
 }
 
