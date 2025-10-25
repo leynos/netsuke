@@ -11,8 +11,13 @@ use cucumber::{then, when};
 use netsuke::ninja_gen;
 use std::str::FromStr;
 
+/// A fragment of expected content for assertion in Ninja output or errors.
 #[derive(Debug)]
 struct ExpectedFragment(String);
+
+/// Expected command tokens represented as a comma-separated string.
+#[derive(Debug)]
+struct ExpectedTokens(String);
 
 impl From<String> for ExpectedFragment {
     fn from(value: String) -> Self {
@@ -26,7 +31,19 @@ impl AsRef<str> for ExpectedFragment {
     }
 }
 
-impl FromStr for ExpectedFragment {
+impl From<String> for ExpectedTokens {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl AsRef<str> for ExpectedTokens {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl FromStr for ExpectedTokens {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
@@ -34,9 +51,11 @@ impl FromStr for ExpectedFragment {
     }
 }
 
-impl ExpectedFragment {
-    fn into_inner(self) -> String {
-        self.0
+impl FromStr for ExpectedFragment {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        Ok(Self(s.to_owned()))
     }
 }
 
@@ -72,23 +91,19 @@ fn generate_ninja(world: &mut CliWorld) -> Result<()> {
 
 #[then(expr = "the ninja file contains {string}")]
 fn ninja_contains(world: &mut CliWorld, expected_fragment: ExpectedFragment) -> Result<()> {
-    let expected_fragment = expected_fragment.into_inner();
-    assert_contains(
-        world.ninja.as_ref(),
-        expected_fragment.as_ref(),
-        "ninja content",
-    )
+    {
+        let expected = expected_fragment.as_ref();
+        assert_contains(world.ninja.as_ref(), expected, "ninja content")?;
+    }
+    drop(expected_fragment);
+    Ok(())
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String"
-)]
 #[then(expr = "shlex splitting command {int} yields {string}")]
 fn ninja_command_tokens(
     world: &mut CliWorld,
     command_index: usize,
-    expected_tokens: String,
+    expected_tokens: ExpectedTokens,
 ) -> Result<()> {
     ensure!(command_index > 0, "command index must be >= 1");
     let ninja = world
@@ -106,10 +121,12 @@ fn ninja_command_tokens(
     let command = line.trim_start().trim_start_matches("command = ");
     let words =
         shlex::split(command).ok_or_else(|| anyhow!("failed to split command '{command}'"))?;
-    let expected: Vec<String> = expected_tokens
+    let expected_tokens_ref = expected_tokens.as_ref();
+    let expected: Vec<String> = expected_tokens_ref
         .split(',')
         .map(|w| w.trim().replace("\\n", "\n"))
         .collect();
+    drop(expected_tokens);
     ensure!(
         words == expected,
         "expected tokens {:?}, got {:?}",
@@ -120,18 +137,18 @@ fn ninja_command_tokens(
 }
 
 #[then(expr = "shlex splitting the command yields {string}")]
-fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: String) -> Result<()> {
+fn ninja_first_command_tokens(world: &mut CliWorld, expected_tokens: ExpectedTokens) -> Result<()> {
     ninja_command_tokens(world, 2, expected_tokens)
 }
 
 #[then(expr = "ninja generation fails with {string}")]
 fn ninja_generation_fails(world: &mut CliWorld, expected_fragment: ExpectedFragment) -> Result<()> {
-    let expected_fragment = expected_fragment.into_inner();
-    assert_contains(
-        world.ninja_error.as_ref(),
-        expected_fragment.as_ref(),
-        "ninja error",
-    )
+    {
+        let expected = expected_fragment.as_ref();
+        assert_contains(world.ninja_error.as_ref(), expected, "ninja error")?;
+    }
+    drop(expected_fragment);
+    Ok(())
 }
 
 #[then("ninja generation fails mentioning the removed action id")]
