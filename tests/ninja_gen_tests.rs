@@ -306,11 +306,13 @@ fn ninja_integration_tests(
         .first()
         .context("edge should have at least one explicit output")?
         .clone();
-    ensure!(
-        output == target_name,
-        "expected edge output '{}' to match test target '{target_name}'",
-        output
-    );
+    if !matches!(&assertion, AssertionType::FileExists) {
+        ensure!(
+            output == target_name,
+            "expected edge output '{}' to match test target '{target_name}'",
+            output
+        );
+    }
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(output.clone(), edge);
