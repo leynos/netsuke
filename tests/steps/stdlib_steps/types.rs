@@ -1,3 +1,6 @@
+//! Test-only wrapper types that provide lightweight structure around stdlib
+//! rendering inputs and outputs, keeping step definitions ergonomic while
+//! preserving invariants such as UTF-8 paths.
 use camino::{Utf8Path, Utf8PathBuf};
 
 #[derive(Debug, Clone)]
