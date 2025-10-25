@@ -363,7 +363,16 @@ fn manifest_has_targets_named(world: &mut CliWorld, names: String) -> Result<()>
     let actual: BTreeSet<String> = manifest
         .targets
         .iter()
-        .map(|t| get_string_from_string_or_list(&t.name, "name"))
+        .enumerate()
+        .map(|(i, target)| {
+            get_string_from_string_or_list(&target.name, "name").with_context(|| {
+                format!(
+                    "failed to extract name for target at index {} (raw: {:?})",
+                    i + 1,
+                    target
+                )
+            })
+        })
         .collect::<Result<_>>()?;
     let missing: BTreeSet<_> = expected.difference(&actual).cloned().collect();
     let extra: BTreeSet<_> = actual.difference(&expected).cloned().collect();
