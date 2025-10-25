@@ -1,3 +1,4 @@
+//! Render-related stdlib step helpers used by Cucumber scenarios.
 use crate::CliWorld;
 use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
