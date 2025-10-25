@@ -5,7 +5,7 @@
 //! downstream template evaluation.
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
-use minijinja::{Environment, context, value::Value};
+use minijinja::{Environment, ErrorKind, context, value::Value};
 use rstest::{fixture, rstest};
 use time::{Duration, OffsetDateTime, UtcOffset, macros::datetime};
 
