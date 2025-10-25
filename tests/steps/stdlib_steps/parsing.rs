@@ -59,6 +59,8 @@ fn parse_optional_component(part: Option<&str>, component_name: &str, raw: &str)
 }
 
 pub(crate) fn parse_expected_offset(raw: &str) -> Result<UtcOffset> {
+    let raw = raw.trim();
+
     if raw.eq_ignore_ascii_case("z") {
         return Ok(UtcOffset::UTC);
     }
@@ -66,13 +68,19 @@ pub(crate) fn parse_expected_offset(raw: &str) -> Result<UtcOffset> {
     let (sign, rest) = parse_sign(raw)?;
 
     let mut parts = rest.split(':');
-    let hours: i8 = parts
+    let hours_part = parts
         .next()
         .ok_or_else(|| anyhow!("offset missing hour component: {raw}"))?
+        .trim();
+    let hours: i8 = hours_part
         .parse()
         .with_context(|| format!("parse hour component from '{raw}'"))?;
     let minutes: i8 = parse_optional_component(parts.next(), "minute", raw)?;
     let seconds: i8 = parse_optional_component(parts.next(), "second", raw)?;
+
+    if parts.next().is_some() {
+        bail!("offset contains unexpected component: {raw}");
+    }
 
     UtcOffset::from_hms(sign * hours, sign * minutes, sign * seconds)
         .with_context(|| format!("offset components out of range in '{raw}'"))
