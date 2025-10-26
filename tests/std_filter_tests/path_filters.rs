@@ -1,3 +1,9 @@
+//! Path filter tests for the standard filter library.
+//!
+//! Tests for path manipulation filters including dirname, relative_to,
+//! with_suffix, realpath, and expanduser. Each test validates filter
+//! behaviour with various inputs and error conditions.
+
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
