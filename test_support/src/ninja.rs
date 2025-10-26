@@ -24,6 +24,13 @@ pub enum NinjaWorkspaceError {
     Workspace(#[source] std::io::Error),
 }
 
+/// Best-effort cleanup of a child process that has timed out. Attempts to kill the process and
+/// wait for it to exit, ignoring any errors.
+fn cleanup_timed_out_child(child: &mut std::process::Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
     let mut child = Command::new("ninja")
         .arg("--version")
@@ -47,12 +54,7 @@ fn probe_ninja() -> Result<(), NinjaWorkspaceError> {
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {
-                    match child.kill() {
-                        Ok(_) | Err(_) => {}
-                    }
-                    match child.wait() {
-                        Ok(_) | Err(_) => {}
-                    }
+                    cleanup_timed_out_child(&mut child);
                     return Err(NinjaWorkspaceError::ProbeTimeout(timeout));
                 }
                 thread::sleep(poll_sleep);
