@@ -28,6 +28,24 @@ impl Cli {
     /// assert!(policy.evaluate(&url).is_ok());
     /// ```
     ///
+    /// ```rust
+    /// use netsuke::cli::{BuildArgs, Cli, Commands};
+    ///
+    /// let cli = Cli {
+    ///     file: "Netsukefile".into(),
+    ///     directory: None,
+    ///     jobs: None,
+    ///     verbose: false,
+    ///     fetch_allow_scheme: vec![String::from("http")],
+    ///     fetch_allow_host: vec![String::from("bad host")],
+    ///     fetch_block_host: Vec::new(),
+    ///     fetch_default_deny: false,
+    ///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
+    /// };
+    /// let err = cli.network_policy().unwrap_err();
+    /// assert!(err.to_string().contains("host pattern"));
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error when any provided scheme or host pattern is invalid.

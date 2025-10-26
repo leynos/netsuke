@@ -98,6 +98,10 @@ impl NetworkPolicy {
     /// Host patterns accept either exact hostnames or `*.example.com`
     /// wildcards. Subsequent calls append to the allowlist.
     ///
+    /// Patterns must be ASCII (or punycode) to match the `url::Url`
+    /// representation. Unicode domains should be converted to punycode
+    /// before being passed to the policy.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -217,21 +221,21 @@ impl NetworkPolicy {
             .filter(|host| !host.is_empty())
             .ok_or(NetworkPolicyViolation::MissingHost)?;
         if self
-            .allowed_hosts
-            .as_ref()
-            .is_some_and(|allowlist| !allowlist.iter().any(|pattern| pattern.matches(host)))
-        {
-            return Err(NetworkPolicyViolation::HostNotAllowlisted {
-                host: host.to_owned(),
-            });
-        }
-
-        if self
             .blocked_hosts
             .iter()
             .any(|pattern| pattern.matches(host))
         {
             return Err(NetworkPolicyViolation::HostBlocked {
+                host: host.to_owned(),
+            });
+        }
+
+        if self
+            .allowed_hosts
+            .as_ref()
+            .is_some_and(|allowlist| !allowlist.iter().any(|pattern| pattern.matches(host)))
+        {
+            return Err(NetworkPolicyViolation::HostNotAllowlisted {
                 host: host.to_owned(),
             });
         }
@@ -277,28 +281,50 @@ struct HostPattern {
     pattern: String,
     wildcard: bool,
 }
+pub(crate) fn normalise_host_pattern(pattern: &str) -> anyhow::Result<(String, bool)> {
+    let trimmed = pattern.trim();
+    ensure!(!trimmed.is_empty(), "host pattern must not be empty");
+    ensure!(
+        !trimmed.contains("://"),
+        "host pattern '{trimmed}' must not include a scheme",
+    );
+    ensure!(
+        !trimmed.contains('/'),
+        "host pattern '{trimmed}' must not contain '/'",
+    );
+
+    let (wildcard, host_body) = if let Some(suffix) = trimmed.strip_prefix("*.") {
+        ensure!(
+            !suffix.is_empty(),
+            "wildcard host pattern '{trimmed}' must include a suffix",
+        );
+        (true, suffix)
+    } else {
+        (false, trimmed)
+    };
+
+    let normalised = host_body.to_ascii_lowercase();
+    for label in normalised.split('.') {
+        ensure!(
+            !label.is_empty(),
+            "host pattern '{trimmed}' must not contain empty labels",
+        );
+        ensure!(
+            label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'),
+            "host pattern '{trimmed}' contains invalid characters",
+        );
+        ensure!(
+            !label.starts_with('-') && !label.ends_with('-'),
+            "host pattern '{trimmed}' must not start or end labels with '-'",
+        );
+    }
+
+    Ok((normalised, wildcard))
+}
 
 impl HostPattern {
     fn parse(pattern: &str) -> anyhow::Result<Self> {
-        let trimmed = pattern.trim();
-        ensure!(!trimmed.is_empty(), "host pattern must not be empty");
-        ensure!(
-            !trimmed.contains("://"),
-            "host pattern '{trimmed}' must not include a scheme",
-        );
-        ensure!(
-            !trimmed.contains('/'),
-            "host pattern '{trimmed}' must not contain '/'",
-        );
-        let (wildcard, normalised) = if let Some(suffix) = trimmed.strip_prefix("*.") {
-            ensure!(
-                !suffix.is_empty(),
-                "wildcard host pattern '{trimmed}' must include a suffix",
-            );
-            (true, suffix.to_ascii_lowercase())
-        } else {
-            (false, trimmed.to_ascii_lowercase())
-        };
+        let (normalised, wildcard) = normalise_host_pattern(pattern)?;
         Ok(Self {
             pattern: normalised,
             wildcard,
@@ -359,6 +385,20 @@ mod tests {
             "expected match={expected} for {host} against {pattern}",
         );
         Ok(())
+    }
+
+    #[rstest]
+    #[case("-example.com")]
+    #[case("example-.com")]
+    #[case("exa mple.com")]
+    #[case("*.bad-.test")]
+    fn host_pattern_rejects_invalid_shapes(#[case] pattern: &str) {
+        let err = HostPattern::parse(pattern).expect_err("invalid pattern should fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("host pattern"),
+            "error message should mention host pattern validation: {message}"
+        );
     }
 
     #[rstest]

@@ -164,9 +164,7 @@ fn call_macro_value_supports_kwargs(mut strict_env: Environment<'static>) -> Any
         .lookup("greet")
         .context("macro value missing")?
         .clone();
-    let kwargs = [(String::from("name"), Value::from("Ada"))]
-        .into_iter()
-        .collect::<Kwargs>();
+    let kwargs = Kwargs::from_iter([("name".to_owned(), Value::from("Ada"))]);
     let rendered = call_macro_value(&state, &value, &[], Some(kwargs))?;
     ensure!(
         rendered.to_string() == "hi Ada",
@@ -327,7 +325,10 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let _cwd_guard = CurrentDirGuard::change_to(&outside)?;
     let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);
 
-    let policy = NetworkPolicy::default().allow_scheme("http")?;
+    let policy = NetworkPolicy::default()
+        .deny_all_hosts()
+        .allow_hosts(["127.0.0.1", "localhost"])?
+        .allow_scheme("http")?;
     let manifest = super::from_path_with_policy(&manifest_path, policy)?;
     if let Err(err) = server.join() {
         return Err(anyhow!("join server thread panicked: {err:?}"));

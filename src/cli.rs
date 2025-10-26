@@ -20,6 +20,63 @@ fn parse_jobs(s: &str) -> Result<usize, String> {
     }
 }
 
+fn parse_scheme(s: &str) -> Result<String, String> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return Err(String::from("scheme must not be empty"));
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    {
+        return Err(format!("invalid scheme '{s}'"));
+    }
+    Ok(trimmed.to_ascii_lowercase())
+}
+
+fn parse_host_pattern(s: &str) -> Result<String, String> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return Err(String::from("host pattern must not be empty"));
+    }
+    if trimmed.contains("://") {
+        return Err(format!("host pattern '{s}' must not include a scheme"));
+    }
+    if trimmed.contains('/') {
+        return Err(format!("host pattern '{s}' must not contain '/'"));
+    }
+
+    let (wildcard, body) = if let Some(suffix) = trimmed.strip_prefix("*.") {
+        if suffix.is_empty() {
+            return Err(format!("wildcard host pattern '{s}' must include a suffix"));
+        }
+        (true, suffix)
+    } else {
+        (false, trimmed)
+    };
+
+    let normalised = body.to_ascii_lowercase();
+    for label in normalised.split('.') {
+        if label.is_empty() {
+            return Err(format!("host pattern '{s}' must not contain empty labels"));
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(format!("host pattern '{s}' contains invalid characters"));
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(format!(
+                "host pattern '{s}' must not start or end labels with '-'"
+            ));
+        }
+    }
+
+    if wildcard {
+        Ok(format!("*.{normalised}"))
+    } else {
+        Ok(normalised)
+    }
+}
+
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
@@ -41,15 +98,27 @@ pub struct Cli {
     pub verbose: bool,
 
     /// Additional URL schemes allowed for the `fetch` helper.
-    #[arg(long = "fetch-allow-scheme", value_name = "SCHEME")]
+    #[arg(
+        long = "fetch-allow-scheme",
+        value_name = "SCHEME",
+        value_parser = parse_scheme
+    )]
     pub fetch_allow_scheme: Vec<String>,
 
     /// Hostnames that must be explicitly allowed for network access.
-    #[arg(long = "fetch-allow-host", value_name = "HOST")]
+    #[arg(
+        long = "fetch-allow-host",
+        value_name = "HOST",
+        value_parser = parse_host_pattern
+    )]
     pub fetch_allow_host: Vec<String>,
 
     /// Hostnames that are always blocked, even when allowed elsewhere.
-    #[arg(long = "fetch-block-host", value_name = "HOST")]
+    #[arg(
+        long = "fetch-block-host",
+        value_name = "HOST",
+        value_parser = parse_host_pattern
+    )]
     pub fetch_block_host: Vec<String>,
 
     /// Deny all hosts by default; only allow the declared allowlist.

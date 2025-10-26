@@ -95,6 +95,39 @@ fn fetch_function_allows_wildcard_hosts(http_policy: Result<NetworkPolicy>) -> R
 }
 
 #[rstest]
+fn fetch_function_rejects_not_allowlisted_hosts(
+    http_policy: Result<NetworkPolicy>,
+) -> Result<()> {
+    let policy = http_policy?.deny_all_hosts();
+    let (mut env, mut state) = env_with_policy(policy)?;
+    state.reset_impure();
+    fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
+    let tmpl = env
+        .get_template("fetch")
+        .context("fetch template 'fetch'")?;
+    let err = match tmpl.render(context!(url => "http://127.0.0.1")) {
+        Ok(output) => bail!(
+            "expected fetch to reject not-allowlisted host but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "policy violations should surface as InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("not allowlisted"),
+        "error should mention allowlist failure: {err}"
+    );
+    ensure!(
+        !state.is_impure(),
+        "policy rejection must not mark template impure"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn fetch_function_respects_cache(http_policy: Result<NetworkPolicy>) -> Result<()> {
     let temp_dir = tempdir().context("create fetch cache tempdir")?;
     let temp_root = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())

@@ -6,7 +6,6 @@
 //! explicit.
 
 mod policy;
-
 pub use self::policy::{NetworkPolicy, NetworkPolicyViolation};
 
 use std::{
