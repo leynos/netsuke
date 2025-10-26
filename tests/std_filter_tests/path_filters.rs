@@ -151,8 +151,7 @@ where
         });
         with_clean_env_vars(home, move || {
             let FilterSuccessSpec { name, template, path } = spec;
-            let result = fallible::render(env, name, template, path)
-                .with_context(|| format!("render template '{}'", name))?;
+            let result = fallible::render(env, name, template, path)?;
             let expected_value = expected(root);
             ensure!(
                 result == expected_value,
