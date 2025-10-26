@@ -7,10 +7,8 @@ use super::*;
 use crate::ast::{MacroDefinition, Recipe};
 use crate::stdlib::NetworkPolicy;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
-use minijinja::{
-    Environment,
-    value::{Kwargs, Value},
-};
+use minijinja::value::{Kwargs, Value};
+use minijinja::{Environment, UndefinedBehavior};
 use rstest::{fixture, rstest};
 use std::fs;
 use tempfile::tempdir;
