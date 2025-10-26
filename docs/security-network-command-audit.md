@@ -31,8 +31,8 @@ introduces, and concrete remediation tasks that would harden the helpers.
   - Provide an allowlist / blocklist mechanism (e.g. only `https://` hosts or
     specific domains) and allow administrators to disable outbound requests
     entirely for untrusted manifests.
-  - **Remediation:** outbound requests now default to `https://` and are vetted
-    against `--fetch-allow-scheme`, `--fetch-allow-host`, and
+  - **Remediation:** outbound requests now default to `https://` and are
+    vetted against `--fetch-allow-scheme`, `--fetch-allow-host`, and
     `--fetch-block-host` CLI options. `--fetch-default-deny` switches the
     policy to "block by default" with an explicit allowlist. Policy violations
     surface as `InvalidOperation` errors without opening a network connection.

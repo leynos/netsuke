@@ -75,3 +75,9 @@ Feature: CLI parsing
     When the CLI is parsed with invalid arguments "-j notanumber"
     Then an error should be returned
     And the error message should contain "notanumber"
+
+  Scenario: Blocklist overrides allowlist for network policy flags
+    When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"
+    Then parsing succeeds
+    And the CLI network policy rejects "https://example.com" with "host 'example.com' is blocked"
+

@@ -5,16 +5,32 @@ use std::{fs, io};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{context, ErrorKind};
+use minijinja::{context, Environment, ErrorKind};
 use netsuke::stdlib::{NetworkPolicy, StdlibConfig};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
 use super::support::fallible;
 use test_support::{hash, http};
 
+#[fixture]
+fn http_policy() -> Result<NetworkPolicy> {
+    NetworkPolicy::default().allow_scheme("http")
+}
+
+fn env_with_policy(policy: NetworkPolicy) -> Result<(Environment<'static>, netsuke::stdlib::StdlibState)> {
+    fallible::stdlib_env_with_config(StdlibConfig::default().with_network_policy(policy))
+}
+
+fn env_with_workspace_policy(
+    workspace: Dir,
+    policy: NetworkPolicy,
+) -> Result<(Environment<'static>, netsuke::stdlib::StdlibState)> {
+    fallible::stdlib_env_with_config(StdlibConfig::new(workspace).with_network_policy(policy))
+}
+
 #[rstest]
-fn fetch_function_downloads_content() -> Result<()> {
+fn fetch_function_downloads_content(http_policy: Result<NetworkPolicy>) -> Result<()> {
     let (url, server) = match http::spawn_http_server("payload") {
         Ok(pair) => pair,
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
@@ -25,11 +41,9 @@ fn fetch_function_downloads_content() -> Result<()> {
         }
         Err(err) => bail!("failed to spawn HTTP server: {err}"),
     };
-    let policy = NetworkPolicy::default()
-        .allow_scheme("http")?
+    let policy = http_policy?
         .block_host("169.254.169.254")?;
-    let config = StdlibConfig::default().with_network_policy(policy);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    let (mut env, mut state) = env_with_policy(policy)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
     let tmpl = env
@@ -50,7 +64,39 @@ fn fetch_function_downloads_content() -> Result<()> {
 }
 
 #[rstest]
-fn fetch_function_respects_cache() -> Result<()> {
+fn fetch_function_allows_wildcard_hosts(http_policy: Result<NetworkPolicy>) -> Result<()> {
+    let (url, server) = match http::spawn_http_server("wildcard") {
+        Ok(pair) => pair,
+        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
+            tracing::warn!(
+                "Skipping fetch_function_allows_wildcard_hosts: cannot bind HTTP listener ({err})"
+            );
+            return Ok(());
+        }
+        Err(err) => bail!("failed to spawn HTTP server: {err}"),
+    };
+    let policy = http_policy?
+        .deny_all_hosts()
+        .allow_hosts(["*.0.0.1"])?;
+    let (mut env, mut state) = env_with_policy(policy)?;
+    state.reset_impure();
+    fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
+    let tmpl = env
+        .get_template("fetch")
+        .context("fetch template 'fetch'")?;
+    let rendered = tmpl
+        .render(context!(url => url.clone()))
+        .context("render fetch template")?;
+    ensure!(rendered == "wildcard", "expected wildcard but rendered {rendered}");
+    ensure!(state.is_impure(), "network fetch should mark template impure");
+    server
+        .join()
+        .map_err(|err| anyhow!("HTTP server thread panicked: {err:?}"))?;
+    Ok(())
+}
+
+#[rstest]
+fn fetch_function_respects_cache(http_policy: Result<NetworkPolicy>) -> Result<()> {
     let temp_dir = tempdir().context("create fetch cache tempdir")?;
     let temp_root = Utf8PathBuf::from_path_buf(temp_dir.path().to_path_buf())
         .map_err(|path| anyhow!("temporary root is not valid UTF-8: {path:?}"))?;
@@ -66,9 +112,8 @@ fn fetch_function_respects_cache() -> Result<()> {
     };
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority())
         .context("open fetch cache workspace")?;
-    let policy = NetworkPolicy::default().allow_scheme("http")?;
-    let config = StdlibConfig::new(workspace).with_network_policy(policy);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    let policy = http_policy?;
+    let (mut env, mut state) = env_with_workspace_policy(workspace, policy)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_cache", "{{ fetch(url, cache=true) }}")?;
     let tmpl = env
@@ -107,10 +152,9 @@ fn fetch_function_respects_cache() -> Result<()> {
 }
 
 #[rstest]
-fn fetch_function_reports_errors() -> Result<()> {
-    let policy = NetworkPolicy::default().allow_scheme("http")?;
-    let config = StdlibConfig::default().with_network_policy(policy);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+fn fetch_function_reports_errors(http_policy: Result<NetworkPolicy>) -> Result<()> {
+    let policy = http_policy?;
+    let (mut env, mut state) = env_with_policy(policy)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_fail", "{{ fetch(url) }}")?;
     let tmpl = env
@@ -139,10 +183,9 @@ fn fetch_function_reports_errors() -> Result<()> {
 }
 
 #[rstest]
-fn fetch_function_rejects_template_cache_dir() -> Result<()> {
-    let policy = NetworkPolicy::default().allow_scheme("http")?;
-    let config = StdlibConfig::default().with_network_policy(policy);
-    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+fn fetch_function_rejects_template_cache_dir(http_policy: Result<NetworkPolicy>) -> Result<()> {
+    let policy = http_policy?;
+    let (mut env, mut state) = env_with_policy(policy)?;
     state.reset_impure();
     fallible::register_template(
         &mut env,
