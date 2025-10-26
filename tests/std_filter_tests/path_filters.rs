@@ -1,3 +1,9 @@
+//! Path filter tests for the standard filter library.
+//!
+//! Tests for path manipulation filters including dirname, relative_to,
+//! with_suffix, realpath, and expanduser. Each test validates filter
+//! behaviour with various inputs and error conditions.
+
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -50,6 +56,16 @@ struct TemplateErrorSpec<'a> {
     template: &'a str,
     context: Value,
     expectation: TemplateErrorExpectation<'a>,
+}
+
+/// Specification for a filter success test case.
+struct FilterSuccessSpec<'a> {
+    /// Template name for registration.
+    name: &'static str,
+    /// Template source code.
+    template: &'static str,
+    /// Path value to pass to the template.
+    path: &'a Utf8PathBuf,
 }
 
 /// Helper for error testing with custom template
@@ -119,9 +135,7 @@ where
 fn assert_filter_success_with_env<F>(
     filter_workspace: Workspace,
     home_value: Option<&str>,
-    name: &'static str,
-    template: &'static str,
-    path: &Utf8PathBuf,
+    spec: FilterSuccessSpec<'_>,
     expected: F,
 ) -> Result<()>
 where
@@ -135,9 +149,9 @@ where
                 value
             }
         });
-        with_clean_env_vars(home, || {
-            let result = fallible::render(env, name, template, path)
-                .with_context(|| format!("render template '{name}'"))?;
+        with_clean_env_vars(home, move || {
+            let FilterSuccessSpec { name, template, path } = spec;
+            let result = fallible::render(env, name, template, path)?;
             let expected_value = expected(root);
             ensure!(
                 result == expected_value,
@@ -439,9 +453,11 @@ fn expanduser_filter() -> Result<()> {
     assert_filter_success_with_env(
         workspace,
         Some(""),
-        "expanduser",
-        "{{ path | expanduser }}",
-        &path,
+        FilterSuccessSpec {
+            name: "expanduser",
+            template: "{{ path | expanduser }}",
+            path: &path,
+        },
         |root| root.join("workspace").as_str().to_owned(),
     )
 }
