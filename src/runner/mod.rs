@@ -6,7 +6,7 @@
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
 use std::borrow::Cow;
 use std::path::Path;
@@ -23,17 +23,21 @@ mod process;
 pub use process::doc;
 pub use process::run_ninja;
 
+/// Wrapper around generated Ninja manifest text.
 #[derive(Debug, Clone)]
 pub struct NinjaContent(String);
 impl NinjaContent {
+    /// Store the provided Ninja manifest string.
     #[must_use]
-    pub fn new(content: String) -> Self {
+    pub const fn new(content: String) -> Self {
         Self(content)
     }
+    /// Borrow the underlying manifest text.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+    /// Consume the wrapper returning the owned manifest string.
     #[must_use]
     pub fn into_string(self) -> String {
         self.0
@@ -46,16 +50,19 @@ impl NinjaContent {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildTargets<'a>(&'a [String]);
 impl<'a> BuildTargets<'a> {
+    /// Wrap a borrowed list of command-line target names.
     #[must_use]
-    pub fn new(targets: &'a [String]) -> Self {
+    pub const fn new(targets: &'a [String]) -> Self {
         Self(targets)
     }
+    /// Return the underlying slice of target names.
     #[must_use]
-    pub fn as_slice(&self) -> &'a [String] {
+    pub const fn as_slice(&self) -> &'a [String] {
         self.0
     }
+    /// Indicate whether no explicit targets were provided.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -163,7 +170,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 /// assert!(ninja.as_str().contains("rule"));
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
-    let manifest_path = resolve_manifest_path(cli);
+    let manifest_path = resolve_manifest_path(cli)?;
     let manifest = manifest::from_path(manifest_path.as_std_path())
         .with_context(|| format!("loading manifest at {manifest_path}"))?;
     if tracing::enabled!(tracing::Level::DEBUG) {
@@ -177,22 +184,25 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 
 /// Determine the manifest path respecting the CLI's directory option.
 ///
+/// # Errors
+/// Returns an error when the CLI `file` or `directory` paths are not valid UTF-8.
+///
 /// # Examples
 /// ```ignore
 /// use crate::cli::Cli;
 /// use crate::runner::resolve_manifest_path;
 /// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
-/// assert!(resolve_manifest_path(&cli).as_str().ends_with("Netsukefile"));
+/// let path = resolve_manifest_path(&cli).expect("valid manifest path");
+/// assert!(path.as_str().ends_with("Netsukefile"));
 /// ```
-#[must_use]
-fn resolve_manifest_path(cli: &Cli) -> Utf8PathBuf {
-    let file =
-        Utf8PathBuf::from_path_buf(cli.file.clone()).expect("manifest path must be valid UTF-8");
+fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
+    let file = Utf8PathBuf::from_path_buf(cli.file.clone())
+        .map_err(|path| anyhow!("manifest path '{path:?}' must be valid UTF-8"))?;
     if let Some(dir) = &cli.directory {
         let base = Utf8PathBuf::from_path_buf(dir.clone())
-            .expect("manifest directory must be valid UTF-8");
-        base.join(file)
+            .map_err(|path| anyhow!("manifest directory '{path:?}' must be valid UTF-8"))?;
+        Ok(base.join(&file))
     } else {
-        file
+        Ok(file)
     }
 }

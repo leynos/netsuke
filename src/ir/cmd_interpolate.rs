@@ -25,9 +25,15 @@ pub(crate) fn interpolate_command(
         paths
             .iter()
             .map(|p| {
-                // Utf8PathBuf guarantees UTF-8; avoid lossy conversion.
+                // Utf8PathBuf guarantees UTF-8, and shell quoting should preserve it.
                 let bytes: Vec<u8> = p.as_str().quoted(Sh);
-                String::from_utf8(bytes).expect("utf-8 shell quoting")
+                match String::from_utf8(bytes) {
+                    Ok(text) => text,
+                    Err(err) => {
+                        debug_assert!(false, "shell quoting produced non UTF-8 bytes: {err}");
+                        String::from_utf8_lossy(err.as_bytes()).into_owned()
+                    }
+                }
             })
             .collect()
     }
@@ -52,7 +58,7 @@ pub(crate) fn interpolate_command(
 /// assert!(is_identifier_char('a'));
 /// assert!(!is_identifier_char('-'));
 /// ```
-fn is_identifier_char(ch: char) -> bool {
+const fn is_identifier_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_'
 }
 

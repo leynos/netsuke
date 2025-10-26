@@ -4,56 +4,85 @@
 //! These tests exercise the filters end-to-end through a configured template
 //! environment to ensure we keep parity between unit expectations and rendered
 //! output, especially across error handling scenarios.
-use minijinja::{ErrorKind, context, value::Value};
+use anyhow::{bail, ensure, Context, Result};
+use minijinja::{context, value::Value, ErrorKind};
 use rstest::rstest;
 use serde::Serialize;
 
-use super::support::{register_template, stdlib_env};
+use super::support::fallible;
 
 #[rstest]
-fn uniq_removes_duplicate_strings() {
-    let mut env = stdlib_env();
-    register_template(&mut env, "uniq", "{{ values | uniq | join(',') }}");
-    let template = env.get_template("uniq").expect("template");
+fn uniq_removes_duplicate_strings() -> Result<()> {
+    let mut env = fallible::stdlib_env()?;
+    fallible::register_template(&mut env, "uniq", "{{ values | uniq | join(',') }}")?;
+    let template = env
+        .get_template("uniq")
+        .context("fetch template 'uniq'")?;
     let output = template
         .render(context!(values => vec!["a", "a", "b", "b", "c"]))
-        .expect("render uniq");
-    assert_eq!(output, "a,b,c");
-}
-
-#[rstest]
-fn uniq_rejects_non_iterables() {
-    let env = stdlib_env();
-    let result = env.render_str("{{ value | uniq }}", context!(value => 1));
-    let err = result.expect_err("uniq should reject scalars");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("is not iterable"),
-        "error should mention non-iterable input: {err}",
+        .context("render template 'uniq'")?;
+    ensure!(
+        output == "a,b,c",
+        "uniq should collapse duplicates, but rendered {output}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn flatten_flattens_deeply_nested_lists() {
-    let mut env = stdlib_env();
-    register_template(&mut env, "flatten", "{{ values | flatten | join(',') }}");
-    let template = env.get_template("flatten").expect("template");
+fn uniq_rejects_non_iterables() -> Result<()> {
+    let env = fallible::stdlib_env()?;
+    let err = match env.render_str("{{ value | uniq }}", context!(value => 1)) {
+        Ok(output) => bail!("expected uniq to reject scalars but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "uniq should report InvalidOperation, but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("is not iterable"),
+        "error should mention non-iterable input: {err}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn flatten_flattens_deeply_nested_lists() -> Result<()> {
+    let mut env = fallible::stdlib_env()?;
+    fallible::register_template(&mut env, "flatten", "{{ values | flatten | join(',') }}")?;
+    let template = env
+        .get_template("flatten")
+        .context("fetch template 'flatten'")?;
     let output = template
         .render(context!(values => vec![vec![vec!["one"], vec!["two"]], vec![vec!["three"]]]))
-        .expect("render flatten");
-    assert_eq!(output, "one,two,three");
+        .context("render template 'flatten'")?;
+    ensure!(
+        output == "one,two,three",
+        "flatten should concatenate items, but rendered {output}"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn flatten_errors_on_scalar_items() {
-    let env = stdlib_env();
-    let result = env.render_str("{{ [[1], 2] | flatten }}", context! {});
-    let err = result.expect_err("flatten should reject scalar items");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("flatten expected sequence items"),
-        "error should describe the invalid item: {err}",
+fn flatten_errors_on_scalar_items() -> Result<()> {
+    let env = fallible::stdlib_env()?;
+    let err = match env.render_str("{{ [[1], 2] | flatten }}", context! {}) {
+        Ok(output) => bail!(
+            "expected flatten to reject scalar items but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "flatten should report InvalidOperation, but was {:?}",
+        err.kind()
     );
+    ensure!(
+        err.to_string().contains("flatten expected sequence items"),
+        "error should describe the invalid item: {err}"
+    );
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -63,8 +92,8 @@ struct Item<'a> {
 }
 
 #[rstest]
-fn group_by_partitions_struct_fields() {
-    let env = stdlib_env();
+fn group_by_partitions_struct_fields() -> Result<()> {
+    let env = fallible::stdlib_env()?;
     let template = "{{ (values | group_by('class')).a | length }}:{{ (values | group_by('class')).b | length }}";
     let values = vec![
         Item {
@@ -82,13 +111,14 @@ fn group_by_partitions_struct_fields() {
     ];
     let output = env
         .render_str(template, context!(values => values))
-        .expect("render group_by");
-    assert_eq!(output, "2:1");
+        .context("render group_by by struct attribute")?;
+    ensure!(output == "2:1", "expected '2:1' but rendered {output}");
+    Ok(())
 }
 
 #[rstest]
-fn group_by_reads_mapping_entries() {
-    let env = stdlib_env();
+fn group_by_reads_mapping_entries() -> Result<()> {
+    let env = fallible::stdlib_env()?;
     let template = "{{ (values | group_by('kind')).tool | length }}";
     let values = vec![
         context!(kind => "tool", name => "saw"),
@@ -97,29 +127,31 @@ fn group_by_reads_mapping_entries() {
     ];
     let output = env
         .render_str(template, context!(values => values))
-        .expect("render group_by mappings");
-    assert_eq!(output, "2");
+        .context("render group_by on mapping items")?;
+    ensure!(output == "2", "expected two 'tool' items but rendered {output}");
+    Ok(())
 }
 
 #[rstest]
-fn group_by_preserves_insertion_order() {
-    let env = stdlib_env();
+fn group_by_preserves_insertion_order() -> Result<()> {
+    let env = fallible::stdlib_env()?;
     let template = "{{ values | group_by('kind') | list | join(',') }}";
     let values = vec![context!(kind => 1), context!(kind => 2)];
     let output = env
         .render_str(template, context!(values => values))
-        .expect("render group_by ordering");
-    assert_eq!(output, "1,2");
+        .context("render group_by preserves order")?;
+    ensure!(output == "1,2", "expected '1,2' ordering but rendered {output}");
+    Ok(())
 }
 
 #[rstest]
-fn group_by_supports_non_string_keys() {
+fn group_by_supports_non_string_keys() -> Result<()> {
     #[derive(Serialize)]
     struct Item {
         kind: Value,
     }
 
-    let env = stdlib_env();
+    let env = fallible::stdlib_env()?;
     let template = "{{ (values | group_by('kind'))[1] | length }}";
     let values = vec![
         Item {
@@ -134,8 +166,9 @@ fn group_by_supports_non_string_keys() {
     ];
     let output = env
         .render_str(template, context!(values => values))
-        .expect("render group_by non-string keys");
-    assert_eq!(output, "2");
+        .context("render group_by with non-string keys")?;
+    ensure!(output == "2", "expected two entries with key 1 but rendered {output}");
+    Ok(())
 }
 
 #[rstest]
@@ -149,17 +182,27 @@ fn group_by_errors_for_invalid_attributes(
     #[case] attribute: &str,
     #[case] expected_fragment: &str,
     #[case] description: &str,
-) {
-    let env = stdlib_env();
+) -> Result<()> {
+    let env = fallible::stdlib_env()?;
     let template = format!("{{{{ values | group_by('{attribute}') }}}}");
     let result = env.render_str(
         &template,
         context!(values => vec![Item { class: "a", name: "alpha" }]),
     );
-    let err = result.expect_err(description);
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains(expected_fragment),
-        "error should contain fragment `{expected_fragment}` but was: {err}",
+    let err = match result {
+        Ok(output) => bail!(
+            "expected group_by to fail ({description}), but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "group_by should report InvalidOperation, but was {:?}",
+        err.kind()
     );
+    ensure!(
+        err.to_string().contains(expected_fragment),
+        "error should mention `{expected_fragment}` but was: {err}"
+    );
+    Ok(())
 }

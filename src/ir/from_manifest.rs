@@ -69,13 +69,21 @@ impl BuildGraph {
                         actions,
                         tmpl.recipe.clone(),
                         tmpl.description.clone(),
-                        &inputs,
-                        &outputs,
+                        ActionBindings {
+                            inputs: &inputs,
+                            outputs: &outputs,
+                        },
                     )?
                 }
-                Recipe::Command { .. } | Recipe::Script { .. } => {
-                    register_action(actions, target.recipe.clone(), None, &inputs, &outputs)?
-                }
+                Recipe::Command { .. } | Recipe::Script { .. } => register_action(
+                    actions,
+                    target.recipe.clone(),
+                    None,
+                    ActionBindings {
+                        inputs: &inputs,
+                        outputs: &outputs,
+                    },
+                )?,
             };
 
             let edge = BuildEdge {
@@ -107,9 +115,9 @@ impl BuildGraph {
             cycle,
             missing_dependencies,
         } = cycle::analyse(&self.targets);
-        if let Some(cycle) = cycle {
+        if let Some(detected_cycle) = cycle {
             return Err(IrGenError::CircularDependency {
-                cycle,
+                cycle: detected_cycle,
                 missing_dependencies,
             });
         }
@@ -117,16 +125,21 @@ impl BuildGraph {
     }
 }
 
+#[derive(Clone, Copy)]
+struct ActionBindings<'a> {
+    inputs: &'a [Utf8PathBuf],
+    outputs: &'a [Utf8PathBuf],
+}
+
 fn register_action(
     actions: &mut HashMap<String, Action>,
     recipe: Recipe,
     description: Option<String>,
-    inputs: &[Utf8PathBuf],
-    outputs: &[Utf8PathBuf],
+    bindings: ActionBindings<'_>,
 ) -> Result<String, IrGenError> {
-    let recipe = match recipe {
+    let resolved_recipe = match recipe {
         Recipe::Command { command } => {
-            let interpolated = interpolate_command(&command, inputs, outputs)?;
+            let interpolated = interpolate_command(&command, bindings.inputs, bindings.outputs)?;
             Recipe::Command {
                 command: interpolated,
             }
@@ -134,7 +147,7 @@ fn register_action(
         other => other,
     };
     let action = Action {
-        recipe,
+        recipe: resolved_recipe,
         description,
         depfile: None,
         deps_format: None,
@@ -183,12 +196,12 @@ fn resolve_rule(
             let mut rules = to_string_vec(rule);
             if rules.is_empty() {
                 Err(IrGenError::EmptyRule {
-                    target_name: target_name.to_string(),
+                    target_name: target_name.to_owned(),
                 })
             } else {
                 rules.sort();
                 Err(IrGenError::MultipleRules {
-                    target_name: target_name.to_string(),
+                    target_name: target_name.to_owned(),
                     rules,
                 })
             }
@@ -198,8 +211,8 @@ fn resolve_rule(
                 .get(name)
                 .cloned()
                 .ok_or_else(|| IrGenError::RuleNotFound {
-                    target_name: target_name.to_string(),
-                    rule_name: name.to_string(),
+                    target_name: target_name.to_owned(),
+                    rule_name: name.to_owned(),
                 })
         },
     )

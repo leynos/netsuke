@@ -42,18 +42,18 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
             "macro signature '{signature}' is missing an identifier"
         ));
     }
-    let Some((name, _rest)) = trimmed.split_once('(') else {
+    let Some((name_segment, _rest)) = trimmed.split_once('(') else {
         return Err(anyhow::anyhow!(
             "macro signature '{signature}' must include parameter list"
         ));
     };
-    let name = name.trim();
-    if name.is_empty() {
+    let identifier = name_segment.trim();
+    if identifier.is_empty() {
         return Err(anyhow::anyhow!(
             "macro signature '{signature}' is missing an identifier"
         ));
     }
-    Ok(name.to_string())
+    Ok(identifier.to_owned())
 }
 
 /// Register a single manifest macro in the Jinja environment.
@@ -62,12 +62,18 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
 /// with the extracted macro name. The template name is synthesised using the
 /// provided index to ensure uniqueness.
 ///
+/// # Lifetimes
+///
+/// The macro cache stores compiled template state for the lifetime of the
+/// process, so the environment must be `'static`. Callers that hold a shorter
+/// lived [`Environment`] should clone the macro body rather than caching it.
+///
 /// # Errors
 ///
 /// Returns an error if the macro signature is invalid or template compilation
 /// fails.
 pub(crate) fn register_macro(
-    env: &mut Environment,
+    env: &mut Environment<'static>,
     macro_def: &MacroDefinition,
     index: usize,
 ) -> Result<()> {
@@ -97,7 +103,10 @@ pub(crate) fn register_macro(
 ///
 /// Returns an error if the YAML shape is invalid, any macro signature is
 /// malformed, or template compilation fails.
-pub(crate) fn register_manifest_macros(doc: &ManifestValue, env: &mut Environment) -> Result<()> {
+pub(crate) fn register_manifest_macros(
+    doc: &ManifestValue,
+    env: &mut Environment<'static>,
+) -> Result<()> {
     let Some(macros) = doc.get("macros").cloned() else {
         return Ok(());
     };
@@ -145,10 +154,10 @@ pub(crate) fn call_macro_value(
 ) -> Result<Value, Error> {
     kwargs.map_or_else(
         || macro_value.call(state, positional),
-        |kwargs| {
+        |macro_kwargs| {
             let mut call_args = Vec::with_capacity(positional.len() + 1);
             call_args.extend_from_slice(positional);
-            call_args.push(Value::from(kwargs));
+            call_args.push(Value::from(macro_kwargs));
             macro_value.call(state, call_args.as_slice())
         },
     )
@@ -192,25 +201,26 @@ pub(crate) fn call_macro_value(
 fn make_macro_fn(
     cache: Arc<MacroCache>,
 ) -> impl Fn(&State, Rest<Value>, Kwargs) -> Result<Value, Error> {
-    move |state, Rest(args), kwargs| {
-        let macro_instance = cache.instance();
+    move |state, Rest(args), macro_kwargs| {
+        let macro_instance = cache.instance().ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!(
+                    "macro '{}' from template '{}' must be initialised before use",
+                    cache.macro_name, cache.template_name
+                ),
+            )
+        })?;
         // MiniJinja requires keyword arguments to be appended as a trailing
         // `Kwargs` value within the positional slice. Build that value lazily so
         // we avoid allocating when no keywords were supplied.
         let mut entries: Vec<(String, Value)> = Vec::new();
-        for key in kwargs.args() {
-            let mut value = kwargs.peek::<Value>(key)?;
+        for key in macro_kwargs.args() {
+            let mut value = macro_kwargs.peek::<Value>(key)?;
             if key == "caller" {
-                if value.as_object().is_some() {
-                    value = Value::from_object(CallerAdapter::new(state, value));
-                } else {
-                    return Err(Error::new(
-                        ErrorKind::InvalidOperation,
-                        format!("'caller' argument must be callable, got {}", value.kind()),
-                    ));
-                }
+                value = adapt_caller_argument(state, value)?;
             }
-            entries.push((key.to_string(), value));
+            entries.push((key.to_owned(), value));
         }
         let maybe_kwargs = if entries.is_empty() {
             None
@@ -239,6 +249,17 @@ fn make_macro_fn(
     }
 }
 
+fn adapt_caller_argument(state: &State, value: Value) -> Result<Value, Error> {
+    if value.as_object().is_some() {
+        Ok(Value::from_object(CallerAdapter::new(state, value)))
+    } else {
+        Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("'caller' argument must be callable, got {}", value.kind()),
+        ))
+    }
+}
+
 /// Cache of compiled macro state for repeated invocations.
 #[derive(Debug)]
 struct MacroCache {
@@ -248,7 +269,7 @@ struct MacroCache {
 }
 
 impl MacroCache {
-    fn new(template_name: String, macro_name: String) -> Self {
+    const fn new(template_name: String, macro_name: String) -> Self {
         Self {
             template_name,
             macro_name,
@@ -259,15 +280,15 @@ impl MacroCache {
     fn prepare(&self, env: &Environment) -> Result<()> {
         if self.instance.get().is_none() {
             let instance = MacroInstance::new(env, &self.template_name, &self.macro_name)?;
-            let _ = self.instance.set(instance);
+            if let Err(returned_instance) = self.instance.set(instance) {
+                drop(returned_instance);
+            }
         }
         Ok(())
     }
 
-    fn instance(&self) -> &MacroInstance {
-        self.instance
-            .get()
-            .expect("macro instance must be initialised before use")
+    fn instance(&self) -> Option<&MacroInstance> {
+        self.instance.get()
     }
 }
 
@@ -298,8 +319,8 @@ impl MacroInstance {
         let value = state.lookup(macro_name).ok_or_else(|| {
             anyhow::anyhow!("macro '{macro_name}' missing from compiled template")
         })?;
-        // SAFETY: manifest macros are registered in an `Environment<'static>` so the
-        // template bytecode outlives the cache.
+        // SAFETY: `register_macro` requires an `Environment<'static>`, so the template
+        // bytecode outlives the cached state stored in the macro instance.
         let state_static: State<'static, 'static> = unsafe { mem::transmute(state) };
         Ok(Self {
             state: MacroStateGuard::new(state_static),
@@ -330,10 +351,17 @@ struct MacroStateGuard {
 impl MacroStateGuard {
     fn new(state: State<'static, 'static>) -> Self {
         let boxed = Box::new(state);
-        let ptr = NonNull::new(Box::into_raw(boxed)).expect("macro state pointer");
-        Self { ptr }
+        let ptr = Box::into_raw(boxed);
+        let ptr_non_null = NonNull::new(ptr).unwrap_or_else(|| {
+            panic!("Box::into_raw cannot return a null pointer");
+        });
+        Self { ptr: ptr_non_null }
     }
 
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Macro state guard relies on pointer dereferencing not supported in const contexts"
+    )]
     fn as_ref(&self) -> &State<'static, 'static> {
         unsafe { self.ptr.as_ref() }
     }

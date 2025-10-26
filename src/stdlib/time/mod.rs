@@ -279,10 +279,15 @@ fn finalize_duration_buffer(mut buffer: String, time_section: &str) -> String {
 }
 
 fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
-    let seconds = u64::try_from(seconds)
-        .expect("seconds must be non-negative when formatting from absolute duration remainder");
+    let seconds_u64 = u64::try_from(seconds).unwrap_or_else(|_| {
+        debug_assert!(
+            false,
+            "seconds must be non-negative when formatting from absolute duration remainder"
+        );
+        seconds.unsigned_abs()
+    });
     if nanos == 0 {
-        return format!("{seconds}S");
+        return format!("{seconds_u64}S");
     }
 
     let mut fraction = format!("{nanos:09}");
@@ -290,7 +295,7 @@ fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
         fraction.pop();
     }
 
-    format!("{seconds}.{fraction}S")
+    format!("{seconds_u64}.{fraction}S")
 }
 
 #[derive(Clone, Copy)]
@@ -299,7 +304,7 @@ struct TimestampValue {
 }
 
 impl TimestampValue {
-    fn new(datetime: OffsetDateTime) -> Self {
+    const fn new(datetime: OffsetDateTime) -> Self {
         Self { datetime }
     }
 
@@ -336,7 +341,7 @@ struct TimeDeltaValue {
 }
 
 impl TimeDeltaValue {
-    fn new(duration: Duration) -> Self {
+    const fn new(duration: Duration) -> Self {
         Self { duration }
     }
 

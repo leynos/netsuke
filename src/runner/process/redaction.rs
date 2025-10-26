@@ -5,7 +5,7 @@
 pub struct CommandArg(String);
 impl CommandArg {
     #[must_use]
-    pub fn new(arg: String) -> Self {
+    pub const fn new(arg: String) -> Self {
         Self(arg)
     }
     #[must_use]

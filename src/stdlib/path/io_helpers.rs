@@ -21,7 +21,7 @@ pub(super) fn io_to_error(path: &Utf8Path, action: &str, err: io::Error) -> Erro
     Error::new(ErrorKind::InvalidOperation, message).with_source(err)
 }
 
-fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
+const fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
     match kind {
         IoErrorKind::NotFound => "not found",
         IoErrorKind::PermissionDenied => "permission denied",

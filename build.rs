@@ -92,7 +92,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .into());
     }
-    let version = env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION must be set");
+    let version = env::var("CARGO_PKG_VERSION").map_err(
+        |_| "CARGO_PKG_VERSION must be set by Cargo; cannot render manual page without it.",
+    )?;
 
     let man = Man::new(cmd)
         .section("1")
@@ -103,11 +105,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let page_name = format!("{cargo_bin}.1");
     write_man_page(&buf, &out_dir, &page_name)?;
     if let Some(extra_dir) = env::var_os("OUT_DIR") {
-        let extra_dir = PathBuf::from(extra_dir);
-        if let Err(err) = write_man_page(&buf, &extra_dir, &page_name) {
+        let extra_dir_path = PathBuf::from(extra_dir);
+        if let Err(err) = write_man_page(&buf, &extra_dir_path, &page_name) {
             println!(
                 "cargo:warning=Failed to stage manual page in OUT_DIR ({}): {err}",
-                extra_dir.display()
+                extra_dir_path.display()
             );
         }
     }

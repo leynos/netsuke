@@ -1,5 +1,6 @@
 //! Tests for generating `BuildGraph` from a manifest.
 
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use netsuke::{
     ir::{BuildGraph, IrGenError},
@@ -8,26 +9,50 @@ use netsuke::{
 use rstest::rstest;
 
 #[rstest]
-fn minimal_manifest_to_ir() {
-    let manifest = manifest::from_path("tests/data/minimal.yml").expect("load");
-    let graph = BuildGraph::from_manifest(&manifest).expect("ir");
-    assert_eq!(graph.actions.len(), 1);
-    assert_eq!(graph.targets.len(), 1);
+fn minimal_manifest_to_ir() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/minimal.yml")?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    ensure!(
+        graph.actions.len() == 1,
+        "expected one action, got {}",
+        graph.actions.len()
+    );
+    ensure!(
+        graph.targets.len() == 1,
+        "expected one target, got {}",
+        graph.targets.len()
+    );
+    Ok(())
 }
 
 #[rstest]
-fn duplicate_rules_emit_distinct_actions() {
-    let manifest = manifest::from_path("tests/data/duplicate_rules.yml").expect("load");
-    let graph = BuildGraph::from_manifest(&manifest).expect("ir");
-    assert_eq!(graph.actions.len(), 2);
-    assert_eq!(graph.targets.len(), 2);
+fn duplicate_rules_emit_distinct_actions() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/duplicate_rules.yml")?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    ensure!(
+        graph.actions.len() == 2,
+        "expected two actions, got {}",
+        graph.actions.len()
+    );
+    ensure!(
+        graph.targets.len() == 2,
+        "expected two targets, got {}",
+        graph.targets.len()
+    );
+    Ok(())
 }
 
 #[rstest]
-fn missing_rule_fails() {
-    let manifest = manifest::from_path("tests/data/missing_rule.yml").expect("load");
-    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
-    assert!(matches!(err, IrGenError::RuleNotFound { .. }));
+fn missing_rule_fails() -> Result<()> {
+    let manifest = manifest::from_path("tests/data/missing_rule.yml")?;
+    let err = BuildGraph::from_manifest(&manifest)
+        .err()
+        .context("expected missing rule to produce an error")?;
+    ensure!(
+        matches!(err, IrGenError::RuleNotFound { .. }),
+        "expected missing rule diagnostic, got {err:?}"
+    );
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -70,12 +95,22 @@ enum ExpectedError {
     "tests/data/circular.yml",
     ExpectedError::CircularDependency(vec!["a".into(), "b".into(), "a".into()])
 )]
-fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedError) {
-    let manifest = manifest::from_path(manifest_path).expect("load");
-    let err = BuildGraph::from_manifest(&manifest).expect_err("error");
+fn manifest_error_cases(
+    #[case] manifest_path: &str,
+    #[case] expected: ExpectedError,
+) -> Result<()> {
+    let manifest = manifest::from_path(manifest_path)?;
+    let err = BuildGraph::from_manifest(&manifest)
+        .err()
+        .with_context(|| format!("expected {manifest_path} to produce an error"))?;
     match (err, expected) {
         (IrGenError::DuplicateOutput { outputs }, ExpectedError::DuplicateOutput(exp_outputs)) => {
-            assert_eq!(outputs, exp_outputs);
+            ensure!(
+                outputs == exp_outputs,
+                "unexpected duplicate outputs: got {:?}, expected {:?}",
+                outputs,
+                exp_outputs
+            );
         }
         (
             IrGenError::MultipleRules { target_name, rules },
@@ -84,14 +119,28 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
                 rules: exp_rules,
             },
         ) => {
-            assert_eq!(target_name, exp_target);
-            assert_eq!(rules, exp_rules);
+            ensure!(
+                target_name == exp_target,
+                "unexpected target: got {target_name}, expected {exp_target}"
+            );
+            ensure!(
+                rules == exp_rules,
+                "unexpected rules: got {:?}, expected {:?}",
+                rules,
+                exp_rules
+            );
         }
         (IrGenError::EmptyRule { target_name }, ExpectedError::EmptyRule(exp_target)) => {
-            assert_eq!(target_name, exp_target);
+            ensure!(
+                target_name == exp_target,
+                "unexpected target: got {target_name}, expected {exp_target}"
+            );
         }
         (IrGenError::RuleNotFound { rule_name, .. }, ExpectedError::RuleNotFound(exp_rule)) => {
-            assert_eq!(rule_name, exp_rule);
+            ensure!(
+                rule_name == exp_rule,
+                "unexpected rule: got {rule_name}, expected {exp_rule}"
+            );
         }
         (
             IrGenError::CircularDependency {
@@ -100,7 +149,7 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
             },
             ExpectedError::CircularDependency(exp_cycle),
         ) => {
-            assert!(
+            ensure!(
                 missing_dependencies.is_empty(),
                 "missing dependencies should be empty in manifest fixtures"
             );
@@ -109,8 +158,14 @@ fn manifest_error_cases(#[case] manifest_path: &str, #[case] expected: ExpectedE
             let mut actual = cycle;
             expected_cycle.sort();
             actual.sort();
-            assert_eq!(actual, expected_cycle);
+            ensure!(
+                actual == expected_cycle,
+                "unexpected dependency cycle: got {:?}, expected {:?}",
+                actual,
+                expected_cycle
+            );
         }
-        (other, exp) => panic!("expected {exp:?} but got {other:?}"),
+        (other, exp) => bail!("expected {exp:?} but got {other:?}"),
     }
+    Ok(())
 }

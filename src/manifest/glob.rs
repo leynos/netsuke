@@ -56,14 +56,14 @@ fn create_glob_error(context: &GlobErrorContext, details: Option<String>) -> Err
             ),
         ),
         GlobErrorType::InvalidPattern => {
-            let detail = details.unwrap_or_else(|| "unknown pattern error".to_string());
+            let detail = details.unwrap_or_else(|| "unknown pattern error".to_owned());
             Error::new(
                 ErrorKind::SyntaxError,
                 format!("invalid glob pattern '{}': {detail}", context.pattern),
             )
         }
         GlobErrorType::IoError => {
-            let detail = details.unwrap_or_else(|| "unknown IO error".to_string());
+            let detail = details.unwrap_or_else(|| "unknown IO error".to_owned());
             let message = if detail.starts_with("glob ") {
                 detail
             } else {
@@ -93,7 +93,7 @@ fn process_glob_entry(
                         position: pattern.raw.len(),
                         error_type: GlobErrorType::IoError,
                     },
-                    Some("glob matched a non-UTF-8 path".to_string()),
+                    Some("glob matched a non-UTF-8 path".to_owned()),
                 )
             })?;
             let metadata = fetch_metadata(root, &utf_path).map_err(|err| {
@@ -139,11 +139,14 @@ fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::M
     }
 }
 
-fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
-    let candidate = pattern
-        .normalized
+fn normalized_or_raw(p: &GlobPattern) -> &str {
+    p.normalized
         .as_deref()
-        .unwrap_or(pattern.raw.as_str());
+        .unwrap_or_else(|| panic!("normalised pattern must be present after validation"))
+}
+
+fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
+    let candidate = normalized_or_raw(pattern);
     let path = Utf8Path::new(candidate);
     if path.is_absolute() {
         Dir::open_ambient_dir("/", ambient_authority())
@@ -176,7 +179,7 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-fn should_preserve_backslash_for_bracket(next: char) -> bool {
+const fn should_preserve_backslash_for_bracket(next: char) -> bool {
     matches!(next, '[' | ']' | '{' | '}')
 }
 
@@ -245,7 +248,7 @@ fn process_escape_sequence(it: &mut std::iter::Peekable<std::str::Chars<'_>>, ou
 }
 
 #[cfg(unix)]
-fn get_escape_replacement(ch: char) -> &'static str {
+const fn get_escape_replacement(ch: char) -> &'static str {
     match ch {
         '*' => "[*]",
         '?' => "[?]",
@@ -263,7 +266,7 @@ struct BraceValidator {
 }
 
 impl BraceValidator {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             state: BraceValidationState {
                 depth: 0,
@@ -314,6 +317,10 @@ impl BraceValidator {
         None
     }
 
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "brace validator mutates state at runtime; const adds no value"
+    )]
     fn handle_character_class(&mut self, context: &CharContext) {
         match context.ch {
             '[' if !context.in_class => self.state.in_class = true,
@@ -403,7 +410,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     };
 
     let mut pattern_state = GlobPattern {
-        raw: pattern.to_string(),
+        raw: pattern.to_owned(),
         normalized: None,
     };
 
@@ -419,10 +426,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     }
 
     pattern_state.normalized = Some(normalized);
-    let normalized_pattern = pattern_state
-        .normalized
-        .as_deref()
-        .expect("normalized pattern must be present");
+    let normalized_pattern = normalized_or_raw(&pattern_state);
 
     let root = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
@@ -459,6 +463,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Context, Result, anyhow, ensure};
 
     #[test]
     fn validate_brace_matching_accepts_balanced_braces() {
@@ -470,31 +475,51 @@ mod tests {
     }
 
     #[test]
-    fn validate_brace_matching_rejects_unmatched_closing() {
+    fn validate_brace_matching_rejects_unmatched_closing() -> Result<()> {
         let pattern = GlobPattern {
             raw: "foo}".into(),
             normalized: None,
         };
-        let err = validate_brace_matching(&pattern).expect_err("expected error");
-        assert_eq!(err.kind(), ErrorKind::SyntaxError);
+        match validate_brace_matching(&pattern) {
+            Ok(()) => Err(anyhow!(
+                "validate_brace_matching should fail for pattern {:?}",
+                pattern.raw
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::SyntaxError,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 
     #[cfg(unix)]
     #[test]
-
-    fn process_glob_entry_rejects_non_utf8_paths() {
+    fn process_glob_entry_rejects_non_utf8_paths() -> Result<()> {
         use cap_std::{ambient_authority, fs::Dir};
         use std::ffi::OsString;
         use std::os::unix::ffi::OsStringExt;
 
-        let root = Dir::open_ambient_dir("/", ambient_authority()).expect("open root dir");
+        let root =
+            Dir::open_ambient_dir("/", ambient_authority()).context("open ambient root dir")?;
         let path = std::path::PathBuf::from(OsString::from_vec(b"bad\xFF".to_vec()));
         let pattern = GlobPattern {
             raw: "pattern".into(),
             normalized: None,
         };
-        let err =
-            process_glob_entry(Ok(path), pattern, &root).expect_err("expected non-UTF-8 error");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        match process_glob_entry(Ok(path), pattern, &root) {
+            Ok(value) => Err(anyhow!("expected non-UTF-8 error but received {value:?}")),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 }

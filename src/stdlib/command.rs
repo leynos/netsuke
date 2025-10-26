@@ -36,7 +36,7 @@
 //! enables arbitrary code execution.
 
 use std::{
-    fmt::{self, Write as FmtWrite},
+    fmt::{self},
     io::{self, Read, Write},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
@@ -265,7 +265,13 @@ fn quote(arg: &str) -> Result<String, QuoteError> {
     }
 
     let bytes = arg.quoted(Sh);
-    Ok(String::from_utf8(bytes).expect("quoted args are valid UTF-8"))
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(text),
+        Err(err) => {
+            debug_assert!(false, "quoted args must be valid UTF-8: {err}");
+            Ok(String::from_utf8_lossy(err.as_bytes()).into_owned())
+        }
+    }
 }
 
 fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
@@ -343,10 +349,16 @@ fn cleanup_readers(
     stderr_reader: &mut Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
     stdin_handle: &mut Option<thread::JoinHandle<io::Result<()>>>,
 ) {
-    let _ = join_reader(stdout_reader.take());
-    let _ = join_reader(stderr_reader.take());
-    if let Some(handle) = stdin_handle.take() {
-        let _ = handle.join();
+    if let Err(err) = join_reader(stdout_reader.take()) {
+        tracing::warn!("failed to join stdout reader: {err}");
+    }
+    if let Err(err) = join_reader(stderr_reader.take()) {
+        tracing::warn!("failed to join stderr reader: {err}");
+    }
+    if let Some(handle) = stdin_handle.take()
+        && let Err(join_err) = handle.join()
+    {
+        tracing::warn!("stdin writer thread panicked: {join_err:?}");
     }
 }
 
@@ -406,7 +418,9 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
                 "command '{command}' in template '{template}' failed: {source} (command closed input early)"
             );
             if let Some(code) = status {
-                let _ = FmtWrite::write_fmt(&mut msg, format_args!("; exited with status {code}"));
+                msg.push_str("; exited with status ");
+                let code_text = code.to_string();
+                msg.push_str(&code_text);
             } else {
                 msg.push_str("; terminated by signal");
             }
@@ -465,7 +479,9 @@ fn wait_for_exit(child: &mut Child, timeout: Duration) -> Result<ExitStatus, Com
         {
             return Err(CommandFailure::Io(err));
         }
-        let _ = child.wait();
+        if let Err(err) = child.wait() {
+            tracing::warn!("failed to reap timed-out command: {err}");
+        }
         Err(CommandFailure::Timeout(timeout))
     }
 }
@@ -486,8 +502,8 @@ where
 fn join_reader(handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>) -> io::Result<Vec<u8>> {
     handle.map_or_else(
         || Ok(Vec::new()),
-        |handle| {
-            handle
+        |join_handle| {
+            join_handle
                 .join()
                 .map_err(|_| io::Error::other("pipe reader panicked"))?
         },
@@ -495,8 +511,8 @@ fn join_reader(handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>) -> io::R
 }
 
 fn append_stderr(message: &mut String, stderr: &[u8]) {
-    let stderr = String::from_utf8_lossy(stderr);
-    let trimmed = stderr.trim();
+    let stderr_text = String::from_utf8_lossy(stderr);
+    let trimmed = stderr_text.trim();
     if !trimmed.is_empty() {
         message.push_str(": ");
         message.push_str(trimmed);
@@ -507,33 +523,52 @@ fn append_stderr(message: &mut String, stderr: &[u8]) {
 mod tests {
     #[cfg(windows)]
     #[test]
-    fn quote_escapes_cmd_metacharacters() {
+    fn quote_escapes_cmd_metacharacters() -> anyhow::Result<()> {
         use super::{QuoteError, quote};
+        use anyhow::ensure;
 
-        assert_eq!(quote("simple").unwrap(), "simple");
-        assert_eq!(quote("").unwrap(), "\"\"");
-        assert_eq!(quote("needs space").unwrap(), "\"needs space\"");
-        assert_eq!(quote("pipe|test").unwrap(), "\"pipe^|test\"");
-        assert_eq!(quote("redir<test").unwrap(), "\"redir^<test\"");
-        assert_eq!(quote("redir>test").unwrap(), "\"redir^>test\"");
-        assert_eq!(quote("caret^test").unwrap(), "\"caret^^test\"");
-        assert_eq!(quote("tab\ttab").unwrap(), "\"tab\ttab\"");
-        assert_eq!(quote("report&del *.txt").unwrap(), "\"report^&del *.txt\"");
-        assert_eq!(quote("%TEMP%").unwrap(), "\"%%TEMP%%\"");
-        assert_eq!(quote("echo!boom").unwrap(), "\"echo^!boom\"");
-        assert_eq!(quote("say \"hi\"").unwrap(), "\"say ^\"hi^\"\"");
-        assert_eq!(quote("\"").unwrap(), "\"^\"\"");
-        assert_eq!(quote("foo\"bar\"baz").unwrap(), "\"foo^\"bar^\"baz\"");
-        assert_eq!(quote("!DELAYED!").unwrap(), "\"^!DELAYED^!\"");
-        assert_eq!(quote("\"!VAR!\"").unwrap(), "\"^\"^!VAR^!^\"\"");
-        assert_eq!(
-            quote(r##"C:\path\"ending"##).unwrap(),
-            r#""C:\path\^"ending""#,
-        );
-        assert_eq!(quote("line\nbreak"), Err(QuoteError::ContainsLineBreak));
-        assert_eq!(
-            quote("carriage\rreturn"),
-            Err(QuoteError::ContainsLineBreak)
-        );
+        let success_cases = [
+            ("simple", "simple"),
+            ("", "\"\""),
+            ("needs space", "\"needs space\""),
+            ("pipe|test", "\"pipe^|test\""),
+            ("redir<test", "\"redir^<test\""),
+            ("redir>test", "\"redir^>test\""),
+            ("caret^test", "\"caret^^test\""),
+            ("tab\ttab", "\"tab\ttab\""),
+            ("report&del *.txt", "\"report^&del *.txt\""),
+            ("%TEMP%", "\"%%TEMP%%\""),
+            ("echo!boom", "\"echo^!boom\""),
+            ("say \"hi\"", "\"say ^\"hi^\"\""),
+            ("\"", "\"^\"\""),
+            ("foo\"bar\"baz", "\"foo^\"bar^\"baz\""),
+            ("!DELAYED!", "\"^!DELAYED^!\""),
+            ("\"!VAR!\"", "\"^\"^!VAR^!^\"\""),
+            (r#"C:\path\"ending"#, r#""C:\path\^"ending""#),
+        ];
+
+        for (input, expected) in success_cases {
+            let actual = quote(input)?;
+            ensure!(
+                actual == expected,
+                "quote({input:?}) -> {actual:?}, expected {expected:?}"
+            );
+        }
+
+        let error_cases = [
+            ("line\nbreak", QuoteError::ContainsLineBreak),
+            ("carriage\rreturn", QuoteError::ContainsLineBreak),
+        ];
+
+        for (input, expected) in error_cases {
+            let err = quote(input).expect_err(&format!(
+                "quote({input:?}) succeeded but expected error {expected:?}"
+            ));
+            ensure!(
+                err == expected,
+                "quote({input:?}) returned error {err:?}, expected {expected:?}"
+            );
+        }
+        Ok(())
     }
 }

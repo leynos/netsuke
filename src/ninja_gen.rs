@@ -12,10 +12,16 @@ use std::collections::HashSet;
 use std::fmt::{self, Display, Formatter, Write};
 use thiserror::Error;
 
+/// Errors produced while rendering Ninja manifests.
 #[derive(Debug, Error)]
 pub enum NinjaGenError {
+    /// The build graph referenced an action that was not defined.
     #[error("action '{id}' referenced by build edge was not found")]
-    MissingAction { id: String },
+    MissingAction {
+        /// Identifier of the missing action referenced by a build edge.
+        id: String,
+    },
+    /// Formatting the Ninja output failed.
     #[error("failed to format Ninja output")]
     Format(#[from] fmt::Error),
 }
@@ -55,8 +61,12 @@ macro_rules! write_flag {
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
 /// });
-/// let text = netsuke::ninja_gen::generate(&graph).expect("generate ninja");
+/// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
+/// let text = netsuke::ninja_gen::generate(&graph)?;
 /// assert!(text.contains("rule a"));
+/// # Ok(())
+/// # })();
+/// # assert!(result.is_ok());
 /// ```
 ///
 /// # Errors
@@ -89,8 +99,12 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     phony: false, always: false
 /// });
 /// let mut out = String::new();
-/// netsuke::ninja_gen::generate_into(&graph, &mut out).expect("format ninja");
+/// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
+/// netsuke::ninja_gen::generate_into(&graph, &mut out)?;
 /// assert!(out.contains("build out: a"));
+/// # Ok(())
+/// # })();
+/// # assert!(result.is_ok());
 /// ```
 ///
 /// # Errors
@@ -173,34 +187,68 @@ struct NamedAction<'a> {
     action: &'a crate::ir::Action,
 }
 
-impl Display for NamedAction<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(f, "rule {}", self.id)?;
+impl NamedAction<'_> {
+    fn write_recipe(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.action.recipe {
             Recipe::Command { command } => {
-                debug_assert!(
-                    shlex::split(command).is_some(),
-                    "invalid command: {command}"
-                );
-                writeln!(f, "  command = {command}")?;
+                Self::assert_shell_command(command);
+                writeln!(f, "  command = {command}")
             }
-            Recipe::Script { script } => {
-                // Ninja commands must be single-line. Encode newlines and
-                // reconstruct the original script with `printf %b` piped into
-                // a fresh shell to preserve expected expansions.
-                let escaped = escape_script(script);
-                let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
-                debug_assert!(shlex::split(&cmd).is_some(), "invalid command: {cmd}");
-                writeln!(f, "  command = {cmd}")?;
-            }
-            Recipe::Rule { .. } => unreachable!("rules do not reference other rules"),
+            Recipe::Script { script } => Self::write_script_command(f, script),
+            Recipe::Rule { .. } => Self::reject_rule_recipe(),
         }
+    }
+
+    fn write_script_command(f: &mut Formatter<'_>, script: &str) -> fmt::Result {
+        // Ninja commands must be single-line. Encode newlines and reconstruct the
+        // original script with `printf %b` piped into a fresh shell to preserve
+        // expected expansions.
+        let escaped = escape_script(script);
+        let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
+        Self::assert_shell_command(&cmd);
+        writeln!(f, "  command = {cmd}")
+    }
+
+    fn write_metadata(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write_kv!(f, "description", &self.action.description);
         write_kv!(f, "depfile", &self.action.depfile);
         write_kv!(f, "deps", &self.action.deps_format);
         write_kv!(f, "pool", &self.action.pool);
         write_flag!(f, "restat", self.action.restat);
         writeln!(f)
+    }
+
+    fn assert_shell_command(command: &str) {
+        // `shlex::split` approximates POSIX shell parsing; keep this debug-only
+        // sanity guard to catch obviously malformed commands during development.
+        debug_assert!(
+            shlex::split(command).is_some(),
+            "invalid command: {command}"
+        );
+    }
+
+    #[cold]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "debug builds intentionally panic to expose rule recursion"
+    )]
+    #[expect(
+        clippy::manual_assert,
+        reason = "debug-only guard escalates to panic for visibility"
+    )]
+    fn reject_rule_recipe() -> fmt::Result {
+        if cfg!(debug_assertions) {
+            panic!("rules do not reference other rules");
+        }
+        Err(fmt::Error)
+    }
+}
+
+impl Display for NamedAction<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        writeln!(f, "rule {}", self.id)?;
+        self.write_recipe(f)?;
+        self.write_metadata(f)
     }
 }
 
@@ -233,10 +281,11 @@ impl Display for DisplayEdge<'_> {
 mod tests {
     use super::*;
     use crate::ir::{Action, BuildEdge, BuildGraph};
+    use anyhow::{Result, ensure};
     use rstest::rstest;
 
     #[rstest]
-    fn generate_simple_ninja() {
+    fn generate_simple_ninja() -> Result<()> {
         let action = Action {
             recipe: Recipe::Command {
                 command: "echo hi".into(),
@@ -261,13 +310,60 @@ mod tests {
         graph.targets.insert(Utf8PathBuf::from("out"), edge);
         graph.default_targets.push(Utf8PathBuf::from("out"));
 
-        let ninja = generate(&graph).expect("generate ninja");
+        let ninja = generate(&graph)?;
         let expected = concat!(
             "rule a\n",
             "  command = echo hi\n\n",
             "build out: a in\n\n",
             "default out\n"
         );
-        assert_eq!(ninja, expected);
+        ensure!(
+            ninja == expected,
+            "expected Ninja manifest:\n{expected}\nactual:\n{ninja}"
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn generate_script_ninja_round_trips() -> Result<()> {
+        let script = "echo 'a b' && echo \"$HOME\" && printf %s \"`whoami`\"\n# line";
+        let action = Action {
+            recipe: Recipe::Script {
+                script: script.into(),
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        };
+        let edge = BuildEdge {
+            action_id: "a".into(),
+            inputs: Vec::new(),
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            phony: false,
+            always: false,
+        };
+        let mut graph = BuildGraph::default();
+        graph.actions.insert("a".into(), action);
+        graph.targets.insert(Utf8PathBuf::from("out"), edge);
+
+        let ninja = generate(&graph)?;
+        ensure!(ninja.contains("rule a"));
+        ensure!(ninja.contains("command = /bin/sh -e -c"));
+        ensure!(ninja.contains("echo '\"'\"'a b'\"'\"'"));
+        ensure!(ninja.contains("\\\"\\$HOME\\\""));
+        ensure!(ninja.contains("\\`whoami\\`"));
+        ensure!(ninja.contains("printf %b"));
+        ensure!(ninja.contains("\\n# line' | /bin/sh -e"));
+        Ok(())
+    }
+
+    #[test]
+    fn assert_shell_command_tolerates_complex_syntax() {
+        let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
+        NamedAction::assert_shell_command(command);
     }
 }

@@ -6,6 +6,7 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= markdownlint
 NIXIE ?= nixie
+RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -22,6 +23,7 @@ target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
 lint: ## Run Clippy with warnings denied
+	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
 
 typecheck: ## Type-check staging scripts with ty

@@ -20,6 +20,8 @@ pub mod env_lock;
 pub mod env_var_guard;
 pub mod hash;
 pub mod http;
+pub mod manifest;
+pub mod ninja;
 pub mod path_guard;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
@@ -37,12 +39,35 @@ mod error;
 /// with ": ", to produce deterministic text for test assertions.
 pub use error::display_error_chain;
 
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8};
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use tempfile::{NamedTempFile, TempDir};
+
+/// Errors returned when probing for required binaries on the test host.
+#[derive(Debug)]
+pub enum ProbesError {
+    /// One or more probes failed; each string describes the failing command.
+    Failures(Vec<String>),
+}
+
+impl std::fmt::Display for ProbesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProbesError::Failures(failures) => write!(
+                f,
+                "Required binaries missing or failing: {}",
+                failures.join(", ")
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ProbesError {}
 
 /// Create a fake Ninja executable that exits with `exit_code`.
 ///
@@ -62,9 +87,8 @@ use tempfile::{NamedTempFile, TempDir};
 /// // Prepend `dir.path()` to PATH via your env helper, then spawn `ninja`.
 /// // When `dir` is dropped, the fake executable is removed.
 /// ```
-pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
-    let dir = TempDir::new()
-        .unwrap_or_else(|e| panic!("fake_ninja: failed to create temporary directory: {e}"));
+pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
+    let dir = TempDir::new().context("fake_ninja: create temporary directory")?;
 
     #[cfg(unix)]
     let path = dir.path().join("ninja");
@@ -73,50 +97,67 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 
     #[cfg(unix)]
     {
-        let mut file = File::create(&path).unwrap_or_else(|e| {
-            panic!(
-                "fake_ninja: failed to create script {}: {e}",
-                path.display()
-            )
-        });
-        writeln!(file, "#!/bin/sh\nexit {}", exit_code).unwrap_or_else(|e| {
-            panic!("fake_ninja: failed to write script {}: {e}", path.display())
-        });
+        let mut file = File::create(&path)
+            .with_context(|| format!("fake_ninja: create script {}", path.display()))?;
+        writeln!(file, "#!/bin/sh\nexit {}", exit_code)
+            .with_context(|| format!("fake_ninja: write script {}", path.display()))?;
         use std::os::unix::fs::PermissionsExt;
         let mut perms = fs::metadata(&path)
-            .unwrap_or_else(|e| {
-                panic!(
-                    "fake_ninja: failed to read metadata {}: {e}",
-                    path.display()
-                )
-            })
+            .with_context(|| format!("fake_ninja: read metadata {}", path.display()))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&path, perms).unwrap_or_else(|e| {
-            panic!(
-                "fake_ninja: failed to set permissions {}: {e}",
-                path.display()
-            )
-        });
+        fs::set_permissions(&path, perms)
+            .with_context(|| format!("fake_ninja: set permissions {}", path.display()))?;
     }
 
     #[cfg(windows)]
     {
-        let mut file = File::create(&path).unwrap_or_else(|e| {
-            panic!(
-                "fake_ninja: failed to create batch file {}: {e}",
-                path.display()
-            )
-        });
-        writeln!(file, "@echo off\r\nexit /B {}", exit_code).unwrap_or_else(|e| {
-            panic!(
-                "fake_ninja: failed to write batch file {}: {e}",
-                path.display()
-            )
-        });
+        let mut file = File::create(&path)
+            .with_context(|| format!("fake_ninja: create batch file {}", path.display()))?;
+        writeln!(file, "@echo off\r\nexit /B {}", exit_code)
+            .with_context(|| format!("fake_ninja: write batch file {}", path.display()))?;
     }
 
-    (dir, path)
+    Ok((dir, path))
+}
+
+/// Probe that required binaries are available in `PATH`.
+///
+/// Each entry provides the programme name and the arguments used to probe it,
+/// typically `["--version"]`. The function returns `Ok(())` when every command
+/// spawns and exits successfully. Failures yield `Err` containing
+/// human-readable descriptions so callers can surface an appropriate skip
+/// message.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use test_support::ensure_binaries_available;
+///
+/// if let Err(err) = ensure_binaries_available(&[("ninja", &["--version"])]) {
+///     eprintln!("skipping test: {err}");
+/// }
+/// ```
+pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), ProbesError> {
+    let mut failures = Vec::new();
+
+    for (program, args) in probes {
+        let probe = Command::new(program).args(*args).output();
+        match probe {
+            Ok(output) if output.status.success() => {}
+            Ok(output) => failures.push(format!(
+                "`{program}` exited with status {status}",
+                status = output.status
+            )),
+            Err(err) => failures.push(format!("failed to spawn `{program}`: {err}")),
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(ProbesError::Failures(failures))
+    }
 }
 
 /// Resolve `cli_file` relative to `temp_dir` and ensure it exists.
@@ -133,7 +174,7 @@ pub fn fake_ninja(exit_code: u8) -> (TempDir, PathBuf) {
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use camino::{Utf8Path, Utf8PathBuf};
 /// use tempfile::TempDir;
 /// use test_support::ensure_manifest_exists;
@@ -303,47 +344,56 @@ fn find_existing_ancestor<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Context, Result, anyhow};
     use camino::Utf8Path;
     use std::fs;
     use std::io;
     use tempfile::TempDir;
 
     #[test]
-    fn existing_directory_manifest_path_is_rejected() {
-        let temp = TempDir::new().expect("temp dir");
-        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+    fn existing_directory_manifest_path_is_rejected() -> Result<()> {
+        let temp = TempDir::new().context("create temp dir")?;
+        let temp_path = Utf8Path::from_path(temp.path())
+            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
         let dir = temp.path().join("dir");
-        fs::create_dir(&dir).expect("create dir");
+        fs::create_dir(&dir).context("create directory placeholder")?;
 
         let err = ensure_manifest_exists(temp_path, Utf8Path::new("dir"))
-            .expect_err("existing directory");
+            .expect_err("existing directory should be rejected");
         assert_eq!(err.kind(), io::ErrorKind::NotADirectory);
         let msg = err.to_string();
-        assert!(msg.contains(dir.to_str().expect("utf-8")), "message: {msg}");
+        let dir_str = dir
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("dir path is not valid UTF-8"))?;
+        assert!(msg.contains(dir_str), "message: {msg}");
+        Ok(())
     }
 
     #[test]
-    fn read_only_parent_reports_target_path() {
-        let temp = TempDir::new().expect("temp dir");
-        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+    fn read_only_parent_reports_target_path() -> Result<()> {
+        let temp = TempDir::new().context("create temp dir")?;
+        let temp_path = Utf8Path::from_path(temp.path())
+            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
         let parent = temp.path().join("parent");
-        fs::write(&parent, b"file").expect("parent file");
+        fs::write(&parent, b"file").context("write placeholder parent file")?;
         let manifest = parent.join("manifest.yml");
 
         let err = ensure_manifest_exists(temp_path, Utf8Path::new("parent/manifest.yml"))
-            .expect_err("non-dir parent");
+            .expect_err("non-directory parent should error");
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
         let msg = err.to_string();
-        assert!(
-            msg.contains(manifest.to_str().expect("utf-8")),
-            "message: {msg}"
-        );
+        let manifest_str = manifest
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("manifest path is not valid UTF-8"))?;
+        assert!(msg.contains(manifest_str), "message: {msg}");
+        Ok(())
     }
 
     #[test]
-    fn creates_missing_parent_directory_and_manifest() {
-        let temp = TempDir::new().expect("temp dir");
-        let temp_path = Utf8Path::from_path(temp.path()).expect("utf-8 path");
+    fn creates_missing_parent_directory_and_manifest() -> Result<()> {
+        let temp = TempDir::new().context("create temp dir")?;
+        let temp_path = Utf8Path::from_path(temp.path())
+            .ok_or_else(|| anyhow::anyhow!("temp path is not valid UTF-8"))?;
 
         // Parent directory does not exist beforehand.
         let cli_file = Utf8Path::new("missing/subdir/manifest.yml");
@@ -353,19 +403,25 @@ mod tests {
             "precondition: path should not exist"
         );
 
-        let manifest_path = ensure_manifest_exists(temp_path, cli_file).expect("create manifest");
+        let manifest_path =
+            ensure_manifest_exists(temp_path, cli_file).context("create manifest when missing")?;
         assert_eq!(manifest_path, expected_path);
         assert!(manifest_path.exists(), "manifest file should exist");
         assert!(
-            manifest_path.parent().expect("has parent").exists(),
+            manifest_path
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("manifest path missing parent"))?
+                .exists(),
             "parent directory should be created"
         );
 
         // Sanity check that content was written, not an empty file.
-        let contents = std::fs::read_to_string(manifest_path.as_std_path()).expect("read manifest");
+        let contents = std::fs::read_to_string(manifest_path.as_std_path())
+            .context("read manifest contents")?;
         assert!(
             contents.contains("netsuke_version:"),
             "unexpected manifest contents: {contents}"
         );
+        Ok(())
     }
 }

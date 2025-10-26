@@ -85,62 +85,106 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
 mod tests {
     use super::*;
     use crate::runner::NinjaContent;
+    use anyhow::{Context, Result, ensure};
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs as cap_fs};
     use std::io::{Read, Seek, SeekFrom};
 
     #[test]
-    fn create_temp_ninja_file_supports_reopen() {
+    fn create_temp_ninja_file_supports_reopen() -> Result<()> {
         let content = NinjaContent::new(String::from("rule cc"));
-        let file = create_temp_ninja_file(&content).expect("create temp file");
+        let file = create_temp_ninja_file(&content)?;
 
-        let mut reopened = file.reopen().expect("reopen temp file");
+        let mut reopened = file.reopen().context("reopen temp file")?;
         let mut written = String::new();
         reopened
             .read_to_string(&mut written)
-            .expect("read reopened temp file");
-        assert_eq!(written, content.as_str());
+            .context("read reopened temp file")?;
+        ensure!(
+            written == content.as_str(),
+            "reopened file contents '{written}' did not match '{expected}'",
+            expected = content.as_str()
+        );
 
-        let metadata = std::fs::metadata(file.path()).expect("query temp file metadata");
-        assert_eq!(metadata.len(), content.as_str().len() as u64);
-        assert!(file.path().to_string_lossy().ends_with(".ninja"));
+        let metadata = std::fs::metadata(file.path()).context("query temp file metadata")?;
+        ensure!(
+            metadata.len() == content.as_str().len() as u64,
+            "expected size {} but observed {}",
+            content.as_str().len(),
+            metadata.len()
+        );
+        let temp_display = file.path().display().to_string();
+        let has_ninja_ext = file
+            .path()
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ninja"));
+        ensure!(
+            has_ninja_ext,
+            "temporary path should end with .ninja: {temp_display}"
+        );
 
         reopened
             .seek(SeekFrom::Start(0))
-            .expect("rewind reopened temp file");
+            .context("rewind reopened temp file")?;
         written.clear();
         reopened
             .read_to_string(&mut written)
-            .expect("re-read reopened temp file");
-        assert_eq!(written, content.as_str());
+            .context("re-read reopened temp file")?;
+        ensure!(
+            written == content.as_str(),
+            "re-read file contents '{written}' did not match '{expected}'",
+            expected = content.as_str()
+        );
+        Ok(())
     }
 
     #[test]
-    fn write_ninja_file_utf8_creates_parent_directories() {
-        let temp = tempfile::tempdir().expect("create temp dir");
-        let dir =
-            cap_fs::Dir::open_ambient_dir(temp.path(), ambient_authority()).expect("open temp dir");
+    fn write_ninja_file_utf8_creates_parent_directories() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
+        let dir = cap_fs::Dir::open_ambient_dir(temp.path(), ambient_authority())
+            .context("open temp dir")?;
         let nested = Utf8PathBuf::from("nested/build.ninja");
         let content = NinjaContent::new(String::from("build all: phony"));
 
-        write_ninja_file_utf8(&dir, &nested, &content).expect("write ninja file");
+        write_ninja_file_utf8(&dir, &nested, &content)?;
 
         let nested_path = temp.path().join("nested").join("build.ninja");
-        let written = std::fs::read_to_string(&nested_path).expect("read nested file");
-        assert_eq!(written, content.as_str());
-        assert!(nested_path.parent().expect("parent path").exists());
+        let written = std::fs::read_to_string(&nested_path).context("read nested file")?;
+        ensure!(
+            written == content.as_str(),
+            "nested file contents '{written}' did not match '{expected}'",
+            expected = content.as_str()
+        );
+        let parent = nested_path.parent().context("determine parent path")?;
+        ensure!(
+            parent.exists(),
+            "expected parent directory {} to exist",
+            parent.display()
+        );
+        Ok(())
     }
 
     #[test]
-    fn write_ninja_file_handles_absolute_paths() {
-        let temp = tempfile::tempdir().expect("create temp dir");
+    fn write_ninja_file_handles_absolute_paths() -> Result<()> {
+        let temp = tempfile::tempdir().context("create temp dir")?;
         let nested = temp.path().join("nested").join("build.ninja");
         let content = NinjaContent::new(String::from("build all: phony"));
 
-        write_ninja_file(&nested, &content).expect("write ninja file");
+        write_ninja_file(&nested, &content)?;
 
-        let written = std::fs::read_to_string(&nested).expect("read nested file");
-        assert_eq!(written, content.as_str());
-        assert!(nested.parent().expect("parent path").exists());
+        let written = std::fs::read_to_string(&nested).context("read nested file")?;
+        ensure!(
+            written == content.as_str(),
+            "absolute path file contents '{written}' did not match '{expected}'",
+            expected = content.as_str()
+        );
+        let parent = nested.parent().context("determine parent path")?;
+        ensure!(
+            parent.exists(),
+            "expected parent directory {} to exist",
+            parent.display()
+        );
+        Ok(())
     }
 }

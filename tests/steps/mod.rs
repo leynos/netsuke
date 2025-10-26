@@ -2,8 +2,8 @@
 //!
 //! Provides helpers for stable error text (e.g., `display_error_chain`) used by
 //! step definitions.
-
 mod cli_steps;
+mod common;
 #[cfg(unix)]
 mod fs_steps;
 mod ir_steps;

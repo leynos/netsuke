@@ -3,6 +3,7 @@
 //! Provides fixtures and utilities for managing `PATH` and writing minimal
 //! manifests.
 
+use anyhow::{Context, Result};
 use mockable::{DefaultEnv, Env, MockEnv};
 use ninja_env::NINJA_ENV;
 use std::{
@@ -172,7 +173,7 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
 /// Mutating `PATH` is `unsafe` in Rust 2024 because it alters process globals.
 /// `EnvLock` serialises access and `PathGuard` rolls back the change, keeping
 /// the unsafety scoped to a single test.
-pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
+pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> Result<PathGuard> {
     let original = env.raw("PATH").ok();
     let original_os = original.clone().map(OsString::from);
     let mut paths: Vec<_> = original_os
@@ -180,11 +181,12 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> PathGuard {
         .map(|os| std::env::split_paths(os).collect())
         .unwrap_or_default();
     paths.insert(0, dir.to_path_buf());
-    let new_path = std::env::join_paths(&paths).expect("Failed to join PATH entries");
+    let new_path = std::env::join_paths(&paths)
+        .with_context(|| format!("failed to join PATH entries with {}", dir.display()))?;
     let _lock = EnvLock::acquire();
     // SAFETY: `EnvLock` serialises mutations and the guard restores on drop.
     unsafe { env.set_var("PATH", &new_path) };
-    PathGuard::new(original_os)
+    Ok(PathGuard::new(original_os))
 }
 
 /// Guard that restores `NINJA_ENV` to its previous value on drop.

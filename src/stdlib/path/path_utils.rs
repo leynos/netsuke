@@ -12,7 +12,7 @@ use super::fs_utils::{ParentDir, open_parent_dir};
 use super::io_helpers::io_to_error;
 
 pub(super) fn basename(path: &Utf8Path) -> String {
-    path.file_name().unwrap_or(path.as_str()).to_string()
+    path.file_name().unwrap_or(path.as_str()).to_owned()
 }
 
 pub(super) fn dirname(path: &Utf8Path) -> String {
@@ -54,7 +54,7 @@ pub(super) fn with_suffix(
 
 pub(super) fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Error> {
     path.strip_prefix(root)
-        .map(|p| p.as_str().to_string())
+        .map(|p| p.as_str().to_owned())
         .map_err(|_| {
             Error::new(
                 ErrorKind::InvalidOperation,
@@ -108,7 +108,7 @@ pub(super) fn expanduser(raw: &str) -> Result<String, Error> {
         let home = resolve_home()?;
         Ok(format!("{home}{stripped}"))
     } else {
-        Ok(raw.to_string())
+        Ok(raw.to_owned())
     }
 }
 
