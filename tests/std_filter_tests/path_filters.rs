@@ -52,6 +52,16 @@ struct TemplateErrorSpec<'a> {
     expectation: TemplateErrorExpectation<'a>,
 }
 
+/// Specification for a filter success test case.
+struct FilterSuccessSpec<'a> {
+    /// Template name for registration.
+    name: &'static str,
+    /// Template source code.
+    template: &'static str,
+    /// Path value to pass to the template.
+    path: &'a Utf8PathBuf,
+}
+
 /// Helper for error testing with custom template
 fn assert_template_error(env: &mut Environment<'_>, spec: TemplateErrorSpec<'_>) -> Result<()> {
     fallible::register_template(env, spec.name, spec.template)?;
@@ -119,9 +129,7 @@ where
 fn assert_filter_success_with_env<F>(
     filter_workspace: Workspace,
     home_value: Option<&str>,
-    name: &'static str,
-    template: &'static str,
-    path: &Utf8PathBuf,
+    spec: FilterSuccessSpec<'_>,
     expected: F,
 ) -> Result<()>
 where
@@ -136,8 +144,8 @@ where
             }
         });
         with_clean_env_vars(home, || {
-            let result = fallible::render(env, name, template, path)
-                .with_context(|| format!("render template '{name}'"))?;
+            let result = fallible::render(env, spec.name, spec.template, spec.path)
+                .with_context(|| format!("render template '{}'", spec.name))?;
             let expected_value = expected(root);
             ensure!(
                 result == expected_value,
@@ -439,9 +447,11 @@ fn expanduser_filter() -> Result<()> {
     assert_filter_success_with_env(
         workspace,
         Some(""),
-        "expanduser",
-        "{{ path | expanduser }}",
-        &path,
+        FilterSuccessSpec {
+            name: "expanduser",
+            template: "{{ path | expanduser }}",
+            path: &path,
+        },
         |root| root.join("workspace").as_str().to_owned(),
     )
 }
