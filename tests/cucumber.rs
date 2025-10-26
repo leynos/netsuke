@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use cucumber::World;
+use netsuke::stdlib::{NetworkPolicy, StdlibState};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::{collections::HashMap, ffi::OsString, net::TcpListener};
@@ -43,9 +44,11 @@ pub struct CliWorld {
     /// Error from the last stdlib render.
     pub stdlib_error: Option<String>,
     /// Stdlib impurity state captured for the last render.
-    pub stdlib_state: Option<netsuke::stdlib::StdlibState>,
+    pub stdlib_state: Option<StdlibState>,
     /// Quoted command string for stdlib shell scenarios.
     pub stdlib_command: Option<String>,
+    /// Custom network policy applied during stdlib rendering scenarios.
+    pub stdlib_policy: Option<NetworkPolicy>,
     /// Last HTTP server fixture started by stdlib steps.
     pub http_server: Option<http::HttpServer>,
     /// URL exposed by the active HTTP server fixture.

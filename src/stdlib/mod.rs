@@ -15,6 +15,8 @@ mod network;
 mod path;
 mod time;
 
+pub use network::NetworkPolicy;
+
 use anyhow::{Context, bail};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
@@ -52,6 +54,7 @@ pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
 pub struct StdlibConfig {
     workspace_root: Arc<Dir>,
     fetch_cache_relative: Utf8PathBuf,
+    network_policy: NetworkPolicy,
 }
 
 impl StdlibConfig {
@@ -84,6 +87,7 @@ impl StdlibConfig {
         Self {
             workspace_root: Arc::new(workspace_root),
             fetch_cache_relative: default,
+            network_policy: NetworkPolicy::default(),
         }
     }
 
@@ -103,6 +107,28 @@ impl StdlibConfig {
         Ok(self)
     }
 
+    /// Replace the default network policy with a custom configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use cap_std::{ambient_authority, fs_utf8::Dir};
+    /// use netsuke::stdlib::{NetworkPolicy, StdlibConfig};
+    ///
+    /// let dir = Dir::open_ambient_dir(".", ambient_authority())
+    ///     .expect("open workspace");
+    /// let policy = NetworkPolicy::default()
+    ///     .allow_scheme("http")
+    ///     .expect("allow http");
+    /// let config = StdlibConfig::new(dir).with_network_policy(policy);
+    /// assert_eq!(config.fetch_cache_relative().as_str(), ".netsuke/fetch");
+    /// ```
+    #[must_use]
+    pub fn with_network_policy(mut self, policy: NetworkPolicy) -> Self {
+        self.network_policy = policy;
+        self
+    }
+
     /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
     pub fn fetch_cache_relative(&self) -> &Utf8Path {
@@ -114,6 +140,7 @@ impl StdlibConfig {
         NetworkConfig {
             cache_root: self.workspace_root,
             cache_relative: self.fetch_cache_relative,
+            policy: self.network_policy,
         }
     }
 
@@ -158,6 +185,7 @@ impl Default for StdlibConfig {
 pub(crate) struct NetworkConfig {
     pub(crate) cache_root: Arc<Dir>,
     pub(crate) cache_relative: Utf8PathBuf,
+    pub(crate) policy: NetworkPolicy,
 }
 
 /// Captures mutable state shared between stdlib helpers.

@@ -10,6 +10,7 @@
 
 mod assertions;
 mod parsing;
+mod policy;
 mod rendering;
 mod types;
 mod workspace;
@@ -26,6 +27,11 @@ pub(crate) use assertions::*;
 pub(crate) use parsing::{
     extract_host_from_url, parse_expected_offset, parse_iso_timestamp, server_host,
 };
+#[expect(
+    unused_imports,
+    reason = "Re-export step functions for Cucumber discovery"
+)]
+pub(crate) use policy::*;
 #[expect(
     unused_imports,
     reason = "Re-export step functions for Cucumber discovery"

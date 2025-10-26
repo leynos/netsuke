@@ -40,6 +40,22 @@ pub struct Cli {
     #[arg(short, long)]
     pub verbose: bool,
 
+    /// Additional URL schemes allowed for the `fetch` helper.
+    #[arg(long = "fetch-allow-scheme", value_name = "SCHEME")]
+    pub fetch_allow_scheme: Vec<String>,
+
+    /// Hostnames that must be explicitly allowed for network access.
+    #[arg(long = "fetch-allow-host", value_name = "HOST")]
+    pub fetch_allow_host: Vec<String>,
+
+    /// Hostnames that are always blocked, even when allowed elsewhere.
+    #[arg(long = "fetch-block-host", value_name = "HOST")]
+    pub fetch_block_host: Vec<String>,
+
+    /// Deny all hosts by default; only allow the declared allowlist.
+    #[arg(long = "fetch-default-deny")]
+    pub fetch_default_deny: bool,
+
     /// Optional subcommand to execute; defaults to `build` when omitted.
     #[command(subcommand)]
     pub command: Option<Commands>,

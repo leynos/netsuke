@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{context, ErrorKind};
-use netsuke::stdlib::StdlibConfig;
+use netsuke::stdlib::{NetworkPolicy, StdlibConfig};
 use rstest::rstest;
 use tempfile::tempdir;
 
@@ -25,7 +25,11 @@ fn fetch_function_downloads_content() -> Result<()> {
         }
         Err(err) => bail!("failed to spawn HTTP server: {err}"),
     };
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")?
+        .block_host("169.254.169.254")?;
+    let config = StdlibConfig::default().with_network_policy(policy);
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
     let tmpl = env
@@ -62,7 +66,8 @@ fn fetch_function_respects_cache() -> Result<()> {
     };
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority())
         .context("open fetch cache workspace")?;
-    let config = StdlibConfig::new(workspace);
+    let policy = NetworkPolicy::default().allow_scheme("http")?;
+    let config = StdlibConfig::new(workspace).with_network_policy(policy);
     let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_cache", "{{ fetch(url, cache=true) }}")?;
@@ -103,7 +108,9 @@ fn fetch_function_respects_cache() -> Result<()> {
 
 #[rstest]
 fn fetch_function_reports_errors() -> Result<()> {
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let policy = NetworkPolicy::default().allow_scheme("http")?;
+    let config = StdlibConfig::default().with_network_policy(policy);
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_fail", "{{ fetch(url) }}")?;
     let tmpl = env
@@ -133,7 +140,9 @@ fn fetch_function_reports_errors() -> Result<()> {
 
 #[rstest]
 fn fetch_function_rejects_template_cache_dir() -> Result<()> {
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    let policy = NetworkPolicy::default().allow_scheme("http")?;
+    let config = StdlibConfig::default().with_network_policy(policy);
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();
     fallible::register_template(
         &mut env,

@@ -4,6 +4,7 @@
 //! resources with optional on-disk caching.
 
 use std::{
+    collections::BTreeSet,
     io::{self, Read},
     sync::{
         Arc,
@@ -13,6 +14,7 @@ use std::{
 };
 
 use super::{NetworkConfig, StdlibConfig, value_from_bytes};
+use anyhow::{bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::Dir;
 use minijinja::{
@@ -20,6 +22,289 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 use sha2::{Digest, Sha256};
+use url::Url;
+
+/// Declarative allow- and deny-list policy for outbound network requests.
+///
+/// The policy validates URL schemes and hostnames before a request is
+/// dispatched. By default only HTTPS requests are permitted; callers can
+/// extend this to support other schemes or restrict hosts.
+///
+/// # Examples
+///
+/// ```rust
+/// use netsuke::stdlib::NetworkPolicy;
+/// use url::Url;
+///
+/// let policy = NetworkPolicy::default();
+/// let url = Url::parse("https://example.com/data.txt").unwrap();
+/// assert!(policy.evaluate(&url).is_ok());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NetworkPolicy {
+    allowed_schemes: BTreeSet<String>,
+    allowed_hosts: Option<Vec<HostPattern>>,
+    blocked_hosts: Vec<HostPattern>,
+}
+
+impl NetworkPolicy {
+    /// Create a policy that allows only HTTPS requests.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::stdlib::NetworkPolicy;
+    /// use url::Url;
+    ///
+    /// let policy = NetworkPolicy::https_only();
+    /// let allowed = Url::parse("https://example.com").unwrap();
+    /// let denied = Url::parse("http://example.com").unwrap();
+    /// assert!(policy.evaluate(&allowed).is_ok());
+    /// assert!(policy.evaluate(&denied).is_err());
+    /// ```
+    #[must_use]
+    pub fn https_only() -> Self {
+        let mut schemes = BTreeSet::new();
+        schemes.insert(String::from("https"));
+        Self {
+            allowed_schemes: schemes,
+            allowed_hosts: None,
+            blocked_hosts: Vec::new(),
+        }
+    }
+
+    /// Permit an additional URL scheme such as `http`.
+    ///
+    /// The scheme is lower-cased internally. Invalid scheme characters cause an
+    /// error, allowing CLI validation to surface clear diagnostics.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::stdlib::NetworkPolicy;
+    /// use url::Url;
+    ///
+    /// let policy = NetworkPolicy::default()
+    ///     .allow_scheme("http")
+    ///     .expect("add http scheme");
+    /// let url = Url::parse("http://localhost").unwrap();
+    /// assert!(policy.evaluate(&url).is_ok());
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the scheme is empty or contains invalid
+    /// characters.
+    pub fn allow_scheme(mut self, scheme: impl AsRef<str>) -> anyhow::Result<Self> {
+        let candidate = scheme.as_ref();
+        ensure!(!candidate.is_empty(), "scheme must not be empty");
+        ensure!(
+            candidate
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')),
+            "scheme '{candidate}' contains invalid characters",
+        );
+        self.allowed_schemes.insert(candidate.to_ascii_lowercase());
+        Ok(self)
+    }
+
+    /// Restrict requests to hosts that match the supplied patterns.
+    ///
+    /// Host patterns accept either exact hostnames or `*.example.com`
+    /// wildcards. Subsequent calls append to the allowlist.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::stdlib::NetworkPolicy;
+    /// use url::Url;
+    ///
+    /// let policy = NetworkPolicy::default()
+    ///     .allow_hosts(["example.com", "*.example.org"])
+    ///     .unwrap();
+    /// let allowed = Url::parse("https://sub.example.org").unwrap();
+    /// let denied = Url::parse("https://unauthorised.test").unwrap();
+    /// assert!(policy.evaluate(&allowed).is_ok());
+    /// assert!(policy.evaluate(&denied).is_err());
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any host pattern is invalid or when the resulting
+    /// allowlist would be empty.
+    pub fn allow_hosts<I, S>(mut self, hosts: I) -> anyhow::Result<Self>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut patterns = self.allowed_hosts.take().unwrap_or_default();
+        for host in hosts {
+            patterns.push(HostPattern::parse(host.as_ref())?);
+        }
+        if patterns.is_empty() {
+            bail!("host allowlist must contain at least one entry");
+        }
+        self.allowed_hosts = Some(patterns);
+        Ok(self)
+    }
+
+    /// Block every host until an allowlist is provided.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::stdlib::NetworkPolicy;
+    /// use url::Url;
+    ///
+    /// let policy = NetworkPolicy::default()
+    ///     .deny_all_hosts()
+    ///     .allow_hosts(["example.com"])
+    ///     .unwrap();
+    /// let allowed = Url::parse("https://example.com").unwrap();
+    /// let denied = Url::parse("https://other.test").unwrap();
+    /// assert!(policy.evaluate(&allowed).is_ok());
+    /// assert!(policy.evaluate(&denied).is_err());
+    /// ```
+    #[must_use]
+    pub fn deny_all_hosts(mut self) -> Self {
+        self.allowed_hosts = Some(Vec::new());
+        self
+    }
+
+    /// Append a host pattern to the blocklist.
+    ///
+    /// Blocked hosts are denied even when the allowlist permits them.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::stdlib::NetworkPolicy;
+    /// use url::Url;
+    ///
+    /// let policy = NetworkPolicy::default()
+    ///     .block_host("169.254.169.254")
+    ///     .unwrap();
+    /// let denied = Url::parse("https://169.254.169.254").unwrap();
+    /// assert!(policy.evaluate(&denied).is_err());
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the host pattern is invalid.
+    pub fn block_host(mut self, host: impl AsRef<str>) -> anyhow::Result<Self> {
+        let pattern = HostPattern::parse(host.as_ref())?;
+        self.blocked_hosts.push(pattern);
+        Ok(self)
+    }
+
+    /// Validate the supplied URL against the configured policy.
+    ///
+    /// Returns `Ok(())` when the scheme and host are permitted and `Err`
+    /// detailing the violated rule otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use netsuke::stdlib::NetworkPolicy;
+    /// use url::Url;
+    ///
+    /// let policy = NetworkPolicy::default();
+    /// let valid = Url::parse("https://example.com").unwrap();
+    /// let invalid = Url::parse("http://example.com").unwrap();
+    /// assert!(policy.evaluate(&valid).is_ok());
+    /// assert!(policy.evaluate(&invalid).is_err());
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the scheme is disallowed, the host is missing or
+    /// not on the allowlist, or the host matches a blocklist entry.
+    pub fn evaluate(&self, url: &Url) -> Result<(), String> {
+        let scheme = url.scheme();
+        if !self.allowed_schemes.contains(scheme) {
+            return Err(format!("scheme '{scheme}' is not permitted"));
+        }
+
+        let host = url
+            .host_str()
+            .ok_or_else(|| String::from("URL must include a host"))?;
+        if self
+            .allowed_hosts
+            .as_ref()
+            .is_some_and(|allowlist| !allowlist.iter().any(|pattern| pattern.matches(host)))
+        {
+            return Err(format!("host '{host}' is not allowlisted"));
+        }
+
+        if self
+            .blocked_hosts
+            .iter()
+            .any(|pattern| pattern.matches(host))
+        {
+            return Err(format!("host '{host}' is blocked"));
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for NetworkPolicy {
+    fn default() -> Self {
+        Self::https_only()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HostPattern {
+    matcher: HostMatcher,
+}
+
+impl HostPattern {
+    fn parse(pattern: &str) -> anyhow::Result<Self> {
+        let trimmed = pattern.trim();
+        ensure!(!trimmed.is_empty(), "host pattern must not be empty");
+        ensure!(
+            !trimmed.contains("://"),
+            "host pattern '{trimmed}' must not include a scheme",
+        );
+        ensure!(
+            !trimmed.contains('/'),
+            "host pattern '{trimmed}' must not contain '/'",
+        );
+        let matcher = if let Some(suffix) = trimmed.strip_prefix("*.") {
+            ensure!(
+                !suffix.is_empty(),
+                "wildcard host pattern '{trimmed}' must include a suffix",
+            );
+            HostMatcher::Suffix(suffix.to_ascii_lowercase())
+        } else {
+            HostMatcher::Exact(trimmed.to_ascii_lowercase())
+        };
+        Ok(Self { matcher })
+    }
+
+    fn matches(&self, candidate: &str) -> bool {
+        let host = candidate.to_ascii_lowercase();
+        match &self.matcher {
+            HostMatcher::Exact(expected) => host == *expected,
+            HostMatcher::Suffix(suffix) => {
+                if host == *suffix {
+                    return true;
+                }
+                if let Some(prefix) = host.strip_suffix(suffix) {
+                    return prefix.ends_with('.') && prefix.len() > 1;
+                }
+                false
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum HostMatcher {
+    Exact(String),
+    Suffix(String),
+}
 
 #[derive(Clone)]
 struct FetchCache {
@@ -28,15 +313,38 @@ struct FetchCache {
 }
 
 impl FetchCache {
-    fn new(config: NetworkConfig) -> Self {
+    fn new(config: &NetworkConfig) -> Self {
         Self {
-            root: config.cache_root,
-            relative: config.cache_relative,
+            root: Arc::clone(&config.cache_root),
+            relative: config.cache_relative.clone(),
         }
     }
 
     fn open_dir(&self) -> Result<Dir, Error> {
         open_cache_dir(&self.root, &self.relative)
+    }
+}
+
+#[derive(Clone)]
+struct FetchContext {
+    cache: FetchCache,
+    policy: Arc<NetworkPolicy>,
+}
+
+impl FetchContext {
+    fn new(config: NetworkConfig) -> Self {
+        Self {
+            cache: FetchCache::new(&config),
+            policy: Arc::new(config.policy),
+        }
+    }
+
+    fn open_cache_dir(&self) -> Result<Dir, Error> {
+        self.cache.open_dir()
+    }
+
+    fn policy(&self) -> &NetworkPolicy {
+        self.policy.as_ref()
     }
 }
 
@@ -54,9 +362,9 @@ pub(crate) fn register_functions(
     impure: Arc<AtomicBool>,
     config: NetworkConfig,
 ) {
-    let cache = Arc::new(FetchCache::new(config));
+    let context = Arc::new(FetchContext::new(config));
     env.add_function("fetch", move |url: String, kwargs: Kwargs| {
-        fetch(&url, &kwargs, &impure, &cache)
+        fetch(&url, &kwargs, &impure, &context)
     });
 }
 
@@ -64,30 +372,44 @@ fn fetch(
     url: &str,
     kwargs: &Kwargs,
     impure: &Arc<AtomicBool>,
-    cache: &FetchCache,
+    context: &FetchContext,
 ) -> Result<Value, Error> {
     let use_cache = kwargs.get::<Option<bool>>("cache")?.unwrap_or(false);
     kwargs.assert_all_used()?;
 
+    let parsed = Url::parse(url).map_err(|err| {
+        Error::new(
+            ErrorKind::InvalidOperation,
+            format!("fetch URL '{url}' is invalid: {err}"),
+        )
+    })?;
+
+    if let Err(message) = context.policy().evaluate(&parsed) {
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!("fetch disallowed for '{url}': {message}"),
+        ));
+    }
+
     let bytes = if use_cache {
-        let dir = cache.open_dir()?;
+        let dir = context.open_cache_dir()?;
         let key = cache_key(url);
         if let Some(cached) = read_cached(&dir, &key)? {
             impure.store(true, Ordering::Relaxed);
             cached
         } else {
-            let data = fetch_remote(url, impure)?;
+            let data = fetch_remote(&parsed, impure)?;
             write_cache(&dir, &key, &data, impure)?;
             data
         }
     } else {
-        fetch_remote(url, impure)?
+        fetch_remote(&parsed, impure)?
     };
 
     Ok(value_from_bytes(bytes))
 }
 
-fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
+fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
     impure.store(true, Ordering::Relaxed);
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
@@ -95,10 +417,10 @@ fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
         .timeout_write(Duration::from_secs(30))
         .timeout(Duration::from_secs(60))
         .build();
-    let response = agent.get(url).call().map_err(|err| {
+    let response = agent.get(url.as_str()).call().map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,
-            format!("fetch failed for '{url}': {err}"),
+            format!("fetch failed for '{}': {err}", url.as_str()),
         )
     })?;
     let mut reader = response.into_reader();
@@ -106,7 +428,7 @@ fn fetch_remote(url: &str, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
     reader.read_to_end(&mut bytes).map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,
-            format!("failed to read response from '{url}': {err}"),
+            format!("failed to read response from '{}': {err}", url.as_str()),
         )
     })?;
     Ok(bytes)
@@ -211,11 +533,14 @@ mod tests {
         Ok((temp, Arc::new(dir), root_path))
     }
 
-    fn make_cache(root: Arc<Dir>) -> FetchCache {
-        FetchCache {
-            root,
-            relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
-        }
+    fn make_context(root: Arc<Dir>) -> Result<FetchContext> {
+        let policy = NetworkPolicy::default().allow_scheme("http")?;
+        let config = NetworkConfig {
+            cache_root: root,
+            cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+            policy,
+        };
+        Ok(FetchContext::new(config))
     }
 
     /// Assert that `open_cache_dir` rejects the provided path with an invalid-operation error.
@@ -241,6 +566,32 @@ mod tests {
             cache_key("http://example.com"),
             cache_key("http://example.com"),
         );
+    }
+
+    #[rstest]
+    fn network_policy_denies_http_scheme() {
+        let policy = NetworkPolicy::default();
+        let url = Url::parse("http://example.com").expect("parse url");
+        assert!(policy.evaluate(&url).is_err());
+    }
+
+    #[rstest]
+    fn network_policy_allowlist_blocks_other_hosts() -> Result<()> {
+        let policy = NetworkPolicy::default()
+            .allow_scheme("http")?
+            .deny_all_hosts()
+            .allow_hosts(["example.com"])?;
+        let allowed = Url::parse("http://example.com").expect("parse allowed");
+        let denied = Url::parse("http://other.test").expect("parse denied");
+        ensure!(
+            policy.evaluate(&allowed).is_ok(),
+            "allowlisted host should be permitted",
+        );
+        ensure!(
+            policy.evaluate(&denied).is_err(),
+            "non-allowlisted host should be rejected",
+        );
+        Ok(())
     }
 
     #[rstest]
@@ -314,11 +665,12 @@ mod tests {
         cache_workspace: Result<CacheWorkspace>,
     ) -> Result<()> {
         let (_temp, root, _path) = cache_workspace?;
-        let cache = make_cache(root);
-        let kwargs =
-            Kwargs::from_iter([(String::from("cache_dir"), Value::from(".netsuke/cache"))]);
+        let context = make_context(root)?;
+        let kwargs = [(String::from("cache_dir"), Value::from(".netsuke/cache"))]
+            .into_iter()
+            .collect::<Kwargs>();
         let impure = Arc::new(AtomicBool::new(false));
-        let Err(err) = fetch("http://127.0.0.1:9", &kwargs, &impure, &cache) else {
+        let Err(err) = fetch("http://127.0.0.1:9", &kwargs, &impure, &context) else {
             return Err(anyhow!(
                 "expected cache_dir keyword to fail but request succeeded"
             ));
@@ -342,13 +694,38 @@ mod tests {
     #[rstest]
     fn fetch_cache_opens_default_directory(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
         let (_temp, root, path) = cache_workspace?;
-        let cache = make_cache(root);
-        let dir = cache.open_dir()?;
+        let context = make_context(root)?;
+        let dir = context.open_cache_dir()?;
         assert_cache_entry_exists(
             dir,
             Utf8Path::new(DEFAULT_FETCH_CACHE_DIR),
             path.as_path(),
             "entry",
         )
+    }
+
+    #[rstest]
+    fn fetch_rejects_disallowed_scheme(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+        let (_temp, root, _path) = cache_workspace?;
+        let config = NetworkConfig {
+            cache_root: root,
+            cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+            policy: NetworkPolicy::default(),
+        };
+        let context = FetchContext::new(config);
+        let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
+        let impure = Arc::new(AtomicBool::new(false));
+        let Err(err) = fetch("http://example.com", &kwargs, &impure, &context) else {
+            return Err(anyhow!("expected fetch to reject http scheme"));
+        };
+        ensure!(
+            err.to_string().contains("scheme 'http' is not permitted"),
+            "error should mention disallowed scheme: {err}",
+        );
+        ensure!(
+            !impure.load(Ordering::Relaxed),
+            "policy rejection must not mark the template impure",
+        );
+        Ok(())
     }
 }

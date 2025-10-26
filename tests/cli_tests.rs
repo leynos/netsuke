@@ -16,6 +16,10 @@ struct CliCase {
     directory: Option<PathBuf>,
     jobs: Option<usize>,
     verbose: bool,
+    allow_scheme: Vec<String>,
+    allow_host: Vec<String>,
+    block_host: Vec<String>,
+    default_deny: bool,
     expected_cmd: Commands,
 }
 
@@ -26,6 +30,10 @@ struct CliCase {
     directory: None,
     jobs: None,
     verbose: false,
+    allow_scheme: Vec::new(),
+    allow_host: Vec::new(),
+    block_host: Vec::new(),
+    default_deny: false,
     expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
 })]
 #[case(CliCase {
@@ -34,6 +42,10 @@ struct CliCase {
     directory: Some(PathBuf::from("work")),
     jobs: Some(4),
     verbose: false,
+    allow_scheme: Vec::new(),
+    allow_host: Vec::new(),
+    block_host: Vec::new(),
+    default_deny: false,
     expected_cmd: Commands::Build(BuildArgs { emit: None, targets: vec!["a".into(), "b".into()] }),
 })]
 #[case(CliCase {
@@ -42,6 +54,10 @@ struct CliCase {
     directory: None,
     jobs: None,
     verbose: true,
+    allow_scheme: Vec::new(),
+    allow_host: Vec::new(),
+    block_host: Vec::new(),
+    default_deny: false,
     expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
 })]
 #[case(CliCase {
@@ -50,6 +66,10 @@ struct CliCase {
     directory: None,
     jobs: None,
     verbose: false,
+    allow_scheme: Vec::new(),
+    allow_host: Vec::new(),
+    block_host: Vec::new(),
+    default_deny: false,
     expected_cmd: Commands::Build(BuildArgs { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] }),
 })]
 #[case(CliCase {
@@ -58,7 +78,32 @@ struct CliCase {
     directory: None,
     jobs: None,
     verbose: false,
+    allow_scheme: Vec::new(),
+    allow_host: Vec::new(),
+    block_host: Vec::new(),
+    default_deny: false,
     expected_cmd: Commands::Manifest { file: PathBuf::from("out.ninja") },
+})]
+#[case(CliCase {
+    argv: vec![
+        "netsuke",
+        "--fetch-allow-scheme",
+        "http",
+        "--fetch-default-deny",
+        "--fetch-allow-host",
+        "example.com",
+        "--fetch-block-host",
+        "deny.test",
+    ],
+    file: PathBuf::from("Netsukefile"),
+    directory: None,
+    jobs: None,
+    verbose: false,
+    allow_scheme: vec![String::from("http")],
+    allow_host: vec![String::from("example.com")],
+    block_host: vec![String::from("deny.test")],
+    default_deny: true,
+    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
 })]
 fn parse_cli(#[case] case: CliCase) -> Result<()> {
     let cli = Cli::parse_from_with_default(case.argv.clone());
@@ -71,6 +116,22 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
     ensure!(
         cli.verbose == case.verbose,
         "verbose flag should match input"
+    );
+    ensure!(
+        cli.fetch_allow_scheme == case.allow_scheme,
+        "allow-scheme flags should match input"
+    );
+    ensure!(
+        cli.fetch_allow_host == case.allow_host,
+        "allow-host flags should match input"
+    );
+    ensure!(
+        cli.fetch_block_host == case.block_host,
+        "block-host flags should match input"
+    );
+    ensure!(
+        cli.fetch_default_deny == case.default_deny,
+        "default-deny flag should match input"
     );
     let command = cli.command.context("command should be set")?;
     ensure!(

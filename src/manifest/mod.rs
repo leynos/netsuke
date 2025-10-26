@@ -18,7 +18,10 @@
 //! fail with a [`ManifestError::Parse`] diagnostic, matching the Jinja context
 //! semantics and preventing ambiguous variable lookup.
 
-use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
+use crate::{
+    ast::NetsukeManifest,
+    stdlib::{NetworkPolicy, StdlibConfig},
+};
 use anyhow::{Context, Result, anyhow};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -153,18 +156,42 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// Returns an error if the file cannot be read or the YAML fails to parse.
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
+    from_path_with_policy(path, NetworkPolicy::default())
+}
+
+/// Load a [`NetsukeManifest`] from the given file path using an explicit network
+/// policy.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read or the YAML fails to parse.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use netsuke::manifest;
+/// use netsuke::stdlib::NetworkPolicy;
+///
+/// let policy = NetworkPolicy::default();
+/// let manifest = manifest::from_path_with_policy("Netsukefile", policy);
+/// assert!(manifest.is_ok());
+/// ```
+pub fn from_path_with_policy(
+    path: impl AsRef<Path>,
+    policy: NetworkPolicy,
+) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref)
         .with_context(|| format!("failed to read {}", path_ref.display()))?;
     let name = ManifestName::new(path_ref.display().to_string());
-    let config = stdlib_config_for_manifest(path_ref)?;
+    let config = stdlib_config_for_manifest(path_ref, policy)?;
     from_str_named(&data, &name, Some(config))
 }
 
 #[cfg(test)]
 mod tests;
 
-fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
+fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<StdlibConfig> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
@@ -185,5 +212,5 @@ fn stdlib_config_for_manifest(path: &Path) -> Result<StdlibConfig> {
             "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"
         )
     })?;
-    Ok(StdlibConfig::new(dir))
+    Ok(StdlibConfig::new(dir).with_network_policy(policy))
 }

@@ -5,6 +5,7 @@
 
 pub mod ast;
 pub mod cli;
+mod cli_policy;
 pub(crate) mod diagnostics;
 pub mod hasher;
 pub mod ir;
