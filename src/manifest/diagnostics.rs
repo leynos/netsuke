@@ -15,13 +15,15 @@ use thiserror::Error;
 pub struct ManifestSource(String);
 
 impl ManifestSource {
+    /// Construct a new manifest source buffer from any owned string type.
     #[must_use]
     pub fn new(src: impl Into<String>) -> Self {
         Self(src.into())
     }
 
+    /// View the stored source contents as a string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
@@ -62,13 +64,15 @@ impl std::fmt::Display for ManifestSource {
 pub struct ManifestName(String);
 
 impl ManifestName {
+    /// Construct a diagnostic label describing the manifest being processed.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
+    /// Access the label as a borrowed string slice.
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
@@ -119,12 +123,14 @@ fn byte_index_components(src: &str, line: u64, column: u64) -> usize {
     let mut offset = 0usize;
     for (idx, segment) in src.split_inclusive('\n').enumerate() {
         if idx == target_line {
-            let line = segment.strip_suffix('\n').unwrap_or(segment);
-            let line = line.strip_suffix('\r').unwrap_or(line);
-            let column_offset = line
+            let without_newline = segment.strip_suffix('\n').unwrap_or(segment);
+            let cleaned_line = without_newline
+                .strip_suffix('\r')
+                .unwrap_or(without_newline);
+            let column_offset = cleaned_line
                 .char_indices()
                 .nth(target_column)
-                .map_or(line.len(), |(byte_idx, _)| byte_idx);
+                .map_or(cleaned_line.len(), |(byte_idx, _)| byte_idx);
             return offset + column_offset;
         }
         offset += segment.len();
@@ -167,9 +173,11 @@ struct YamlDiagnostic {
     message: String,
 }
 
-fn has_tab_indent(src: &ManifestSource, loc: Option<Location>) -> bool {
-    let Some(loc) = loc else { return false };
-    let line_idx = usize::try_from(loc.line().saturating_sub(1)).unwrap_or(usize::MAX);
+fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
+    let Some(actual_loc) = location else {
+        return false;
+    };
+    let line_idx = usize::try_from(actual_loc.line().saturating_sub(1)).unwrap_or(usize::MAX);
     let line = src.as_ref().lines().nth(line_idx).unwrap_or("");
     line.chars()
         .take_while(|c| c.is_whitespace())
@@ -199,11 +207,13 @@ fn hint_for(err_str: &str, src: &ManifestSource, loc: Option<Location>) -> Optio
 /// assert_eq!(format!("{err}"), "manifest parse error");
 /// ```
 pub enum ManifestError {
+    /// Manifest parsing failed and produced the supplied diagnostic.
     #[error("manifest parse error")]
     #[diagnostic(code(netsuke::manifest::parse))]
     Parse {
         #[source]
         #[diagnostic_source]
+        /// Underlying diagnostic reported by the parser or validator.
         source: Box<dyn Diagnostic + Send + Sync + 'static>,
     },
 }
@@ -232,7 +242,7 @@ pub fn map_yaml_error(
     }
 
     Box::new(YamlDiagnostic {
-        src: NamedSource::new(name.as_ref(), src.as_ref().to_string()),
+        src: NamedSource::new(name.as_ref(), src.as_ref().to_owned()),
         span,
         help: hint,
         source: err,
@@ -271,59 +281,89 @@ pub fn map_data_error(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Context, Result, anyhow, ensure};
     use std::error::Error as StdError;
 
     #[test]
-    fn map_yaml_error_includes_tab_hint() {
+    fn map_yaml_error_includes_tab_hint() -> Result<()> {
         let src = ManifestSource::from("\tkey: \"unterminated");
-        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
-            .expect_err("expected parse error");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!(
+                "expected YAML parse error for source {:?}",
+                src.as_str()
+            ));
+        };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
         let msg = diag.to_string();
-        assert!(msg.contains("Use spaces for indentation"), "message: {msg}");
+        ensure!(
+            msg.contains("Use spaces for indentation"),
+            "message missing tab hint: {msg}"
+        );
+        Ok(())
     }
 
     #[test]
-    fn map_yaml_error_defaults_location_when_missing() {
+    fn map_yaml_error_defaults_location_when_missing() -> Result<()> {
         let src = ManifestSource::from("foo: [1");
         let err = serde_saphyr::Error::Eof {
             location: serde_saphyr::Location::UNKNOWN,
         };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
-        assert!(diag.to_string().contains("line 1, column 1"));
+        ensure!(
+            diag.to_string().contains("line 1, column 1"),
+            "diagnostic should default to line 1 column 1"
+        );
+        Ok(())
     }
 
     #[test]
-    fn map_yaml_error_span_skips_carriage_return() {
+    fn map_yaml_error_span_skips_carriage_return() -> Result<()> {
         let src = ManifestSource::from("targets:\r\n  - name: hi\r\n    command echo\r\n");
-        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
-            .expect_err("expected parse error");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!("expected parse error for carriage-return input"));
+        };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
         let yaml_diag = (&*diag as &(dyn StdError + 'static))
             .downcast_ref::<YamlDiagnostic>()
-            .expect("expected YAML diagnostic");
-        let span = yaml_diag.span.expect("span present");
+            .ok_or_else(|| anyhow!("expected YAML diagnostic"))?;
+        let span = yaml_diag.span.context("span present")?;
         let offset = span.offset();
         if let Some(byte) = src.as_ref().as_bytes().get(offset) {
-            assert_ne!(*byte, b'\r');
+            ensure!(*byte != b'\r', "span should skip carriage returns");
         }
+        Ok(())
     }
 
     #[test]
-    fn location_to_index_handles_utf8() {
+    fn location_to_index_handles_utf8() -> Result<()> {
         // café: 'é' is multi-byte
         let src = ManifestSource::from("café: [\n");
-        let err = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
-            .expect_err("expected parse error");
-        let loc = err.location().expect("location present");
+        let Err(err) = serde_saphyr::from_str::<crate::manifest::ManifestValue>(src.as_ref())
+        else {
+            return Err(anyhow!("expected parse error for UTF-8 test"));
+        };
+        let loc = err.location().context("location present")?;
         let idx = location_to_index(&src, loc);
-        assert!(src.as_ref().is_char_boundary(idx));
-        let e_idx = src.as_ref().find('é').expect("contains é");
-        assert!(idx > e_idx, "index {idx} must follow é at {e_idx}");
-        assert!(idx <= src.as_ref().len());
+        ensure!(
+            src.as_ref().is_char_boundary(idx),
+            "index {idx} should align to char boundary"
+        );
+        let e_idx = src
+            .as_ref()
+            .find('é')
+            .ok_or_else(|| anyhow!("source should contain 'é'"))?;
+        ensure!(idx > e_idx, "index {idx} must follow é at {e_idx}");
+        ensure!(
+            idx <= src.as_ref().len(),
+            "index {idx} should fall within source length {}",
+            src.as_ref().len()
+        );
+        Ok(())
     }
 }
 

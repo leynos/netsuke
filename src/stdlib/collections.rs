@@ -28,7 +28,7 @@ impl GroupedValues {
         for key in groups.keys() {
             if let Some(label) = key.as_str() {
                 string_keys
-                    .entry(label.to_string())
+                    .entry(label.to_owned())
                     .or_insert_with(|| key.clone());
             }
         }
@@ -117,7 +117,7 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
     if attr.trim().is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "group_by requires a non-empty attribute".to_string(),
+            "group_by requires a non-empty attribute".to_owned(),
         ));
     }
 
@@ -160,6 +160,7 @@ fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
     use minijinja::context;
     use rstest::rstest;
 
@@ -170,32 +171,51 @@ mod tests {
     }
 
     #[rstest]
-    fn uniq_filter_removes_duplicates() {
+    fn uniq_filter_removes_duplicates() -> Result<()> {
         let ctx = context! { values => vec![1, 1, 2, 2, 3, 1] };
-        let result = render_filter("values | uniq", ctx).expect("uniq result");
-        let iter = result.try_iter().expect("iter");
-        let collected: Vec<_> = iter.map(|value| value.to_string()).collect();
-        assert_eq!(collected, vec!["1", "2", "3"]);
+        let result = render_filter("values | uniq", ctx)?;
+        let iter = result.try_iter()?;
+        let collected: Vec<_> = iter.map(|value| format!("{value}")).collect();
+        ensure!(
+            collected == ["1", "2", "3"],
+            "uniq filter output {collected:?} did not match expectation"
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn flatten_filter_flattens_deeply_nested_sequences() {
+    fn flatten_filter_flattens_deeply_nested_sequences() -> Result<()> {
         let ctx = context! { values => vec![vec![vec![1], vec![2]], vec![vec![3]]] };
-        let result = render_filter("values | flatten", ctx).expect("flatten result");
-        let iter = result.try_iter().expect("iter");
-        let collected: Vec<_> = iter.map(|value| value.to_string()).collect();
-        assert_eq!(collected, vec!["1", "2", "3"]);
+        let result = render_filter("values | flatten", ctx)?;
+        let iter = result.try_iter()?;
+        let collected: Vec<_> = iter.map(|value| format!("{value}")).collect();
+        ensure!(
+            collected == ["1", "2", "3"],
+            "flatten filter output {collected:?} did not match expectation"
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn flatten_filter_rejects_scalars() {
+    fn flatten_filter_rejects_scalars() -> Result<()> {
         let ctx = context! { values => vec!["a", "b"] };
-        let err = render_filter("values | flatten", ctx).expect_err("flatten error");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        match render_filter("values | flatten", ctx) {
+            Ok(value) => Err(anyhow!(
+                "flatten should error for scalars but returned {value:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 
     #[rstest]
-    fn group_by_filter_clusters_items_and_preserves_key_types() {
+    fn group_by_filter_clusters_items_and_preserves_key_types() -> Result<()> {
         #[derive(serde::Serialize)]
         struct Item {
             kind: Value,
@@ -207,29 +227,39 @@ mod tests {
             Item { kind: Value::from(1), value: "two" },
             Item { kind: Value::from("label"), value: "three" },
         ]};
-        let result = render_filter("values | group_by('kind')", ctx).expect("group_by result");
+        let result = render_filter("values | group_by('kind')", ctx)?;
 
-        let numeric_group = result
-            .get_item(&Value::from(1))
-            .expect("numeric group")
-            .try_iter()
-            .expect("iter")
-            .count();
-        let labelled_group = result
-            .get_attr("label")
-            .expect("labelled group")
-            .try_iter()
-            .expect("iter")
-            .count();
+        let numeric_iter = result.get_item(&Value::from(1))?.try_iter()?;
+        let numeric_group = numeric_iter.count();
+        let labelled_iter = result.get_attr("label")?.try_iter()?;
+        let labelled_group = labelled_iter.count();
 
-        assert_eq!(numeric_group, 2);
-        assert_eq!(labelled_group, 1);
+        ensure!(
+            numeric_group == 2,
+            "expected numeric group length 2 but observed {numeric_group}"
+        );
+        ensure!(
+            labelled_group == 1,
+            "expected labelled group length 1 but observed {labelled_group}"
+        );
+        Ok(())
     }
 
     #[rstest]
-    fn group_by_filter_rejects_empty_attribute() {
+    fn group_by_filter_rejects_empty_attribute() -> Result<()> {
         let ctx = context! { values => vec![context!(kind => "tool")] };
-        let err = render_filter("values | group_by('')", ctx).expect_err("group_by error");
-        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        match render_filter("values | group_by('')", ctx) {
+            Ok(value) => Err(anyhow!(
+                "group_by should reject empty attribute but returned {value:?}"
+            )),
+            Err(err) => {
+                ensure!(
+                    err.kind() == ErrorKind::InvalidOperation,
+                    "unexpected error kind {kind:?}",
+                    kind = err.kind()
+                );
+                Ok(())
+            }
+        }
     }
 }

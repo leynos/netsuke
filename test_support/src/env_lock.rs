@@ -15,8 +15,9 @@ pub struct EnvLock {
 impl EnvLock {
     /// Acquire the global lock serialising environment mutations.
     pub fn acquire() -> Self {
-        Self {
-            _guard: ENV_LOCK.lock().expect("env lock"),
-        }
+        let guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        Self { _guard: guard }
     }
 }

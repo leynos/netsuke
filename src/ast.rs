@@ -48,6 +48,16 @@ where
     Ok(actions)
 }
 
+/// Definition of a reusable manifest macro registered with `MiniJinja`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct MacroDefinition {
+    /// Full macro signature as accepted by `MiniJinja`.
+    pub signature: String,
+    /// Body of the macro written using YAML block style.
+    pub body: String,
+}
+
 /// Top-level manifest structure parsed from a `Netsukefile`.
 ///
 /// Each field mirrors a key in the YAML manifest. Optional collections default
@@ -69,15 +79,6 @@ where
 /// assert_eq!(manifest.targets.len(), 1);
 /// # Ok(()) }
 /// ```
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct MacroDefinition {
-    /// Full macro signature as accepted by `MiniJinja`.
-    pub signature: String,
-    /// Body of the macro written using YAML block style.
-    pub body: String,
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NetsukeManifest {
@@ -138,11 +139,28 @@ pub struct Rule {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Recipe {
     /// A single shell command.
-    Command { command: String },
+    Command {
+        /// Shell command executed verbatim by Ninja.
+        command: String,
+    },
     /// An embedded multi-line script.
-    Script { script: String },
+    Script {
+        /// Shell script content rendered into a `printf %b` pipeline.
+        script: String,
+    },
     /// Invoke another named rule.
-    Rule { rule: StringOrList },
+    Rule {
+        /// Name or names of rules to execute.
+        rule: StringOrList,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRecipe {
+    command: Option<String>,
+    script: Option<String>,
+    rule: Option<StringOrList>,
 }
 
 impl<'de> Deserialize<'de> for Recipe {
@@ -150,40 +168,34 @@ impl<'de> Deserialize<'de> for Recipe {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        struct RawRecipe {
-            command: Option<String>,
-            script: Option<String>,
-            rule: Option<StringOrList>,
-        }
-
         let raw = RawRecipe::deserialize(deserializer)?;
-        let present: Vec<&str> = [
-            ("command", raw.command.is_some()),
-            ("script", raw.script.is_some()),
-            ("rule", raw.rule.is_some()),
-        ]
-        .into_iter()
-        .filter_map(|(name, is_present)| is_present.then_some(name))
-        .collect();
-
-        match present.as_slice() {
-            ["command"] => Ok(Self::Command {
-                command: raw.command.expect("checked"),
-            }),
-            ["script"] => Ok(Self::Script {
-                script: raw.script.expect("checked"),
-            }),
-            ["rule"] => Ok(Self::Rule {
-                rule: raw.rule.expect("checked"),
-            }),
-            [] => Err(serde::de::Error::custom(
+        let RawRecipe {
+            command: command_field,
+            script: script_field,
+            rule: rule_field,
+        } = raw;
+        match (command_field, script_field, rule_field) {
+            (Some(command), None, None) => Ok(Self::Command { command }),
+            (None, Some(script), None) => Ok(Self::Script { script }),
+            (None, None, Some(rule)) => Ok(Self::Rule { rule }),
+            (None, None, None) => Err(serde::de::Error::custom(
                 "missing one of command, script, or rule",
             )),
-            fields => Err(serde::de::Error::custom(format!(
-                "fields {} are mutually exclusive",
-                fields.join(", ")
-            ))),
+            (command_opt, script_opt, rule_opt) => {
+                let present: Vec<&str> = [
+                    ("command", command_opt.is_some()),
+                    ("script", script_opt.is_some()),
+                    ("rule", rule_opt.is_some()),
+                ]
+                .into_iter()
+                .filter_map(|(name, is_present)| is_present.then_some(name))
+                .collect();
+
+                Err(serde::de::Error::custom(format!(
+                    "fields {} are mutually exclusive",
+                    present.join(", ")
+                )))
+            }
         }
     }
 }

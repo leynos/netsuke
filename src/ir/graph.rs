@@ -22,15 +22,21 @@ pub struct BuildGraph {
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Action {
+    /// Recipe invoked by Ninja when this action is referenced.
     pub recipe: Recipe,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description used by Ninja's `description` flag.
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional depfile path provided to Ninja's `depfile` attribute.
     pub depfile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional dependency format (`deps`) such as `gcc`.
     pub deps_format: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional Ninja pool to throttle concurrent execution.
     pub pool: Option<String>,
+    /// Flag mirroring Ninja's `restat` behaviour for timestamp stability.
     pub restat: bool,
 }
 
@@ -101,7 +107,9 @@ pub enum IrGenError {
     /// ```
     #[error("rule '{rule_name}' referenced by target '{target_name}' was not found")]
     RuleNotFound {
+        /// Name of the target referencing the missing rule.
         target_name: String,
+        /// Rule identifier that was not declared.
         rule_name: String,
     },
 
@@ -118,13 +126,15 @@ pub enum IrGenError {
     /// if let IrGenError::MultipleRules { rules, .. } = err {
     ///     assert_eq!(
     ///         rules,
-    ///         vec!["c".to_string(), "cpp".to_string()]
+    ///         vec!["c".to_owned(), "cpp".to_owned()]
     ///     );
     /// }
     /// ```
     #[error("multiple rules for target '{target_name}': {rules:?}")]
     MultipleRules {
+        /// Name of the target that specified conflicting rules.
         target_name: String,
+        /// Set of rule identifiers provided simultaneously.
         rules: Vec<String>,
     },
 
@@ -141,7 +151,10 @@ pub enum IrGenError {
     /// );
     /// ```
     #[error("No rules specified for target {target_name}")]
-    EmptyRule { target_name: String },
+    EmptyRule {
+        /// Target lacking an associated rule.
+        target_name: String,
+    },
 
     /// Indicates that more than one build edge produces the same output file.
     ///
@@ -155,12 +168,15 @@ pub enum IrGenError {
     /// if let IrGenError::DuplicateOutput { outputs } = err {
     ///     assert_eq!(
     ///         outputs,
-    ///         vec!["obj.o".to_string()]
+    ///         vec!["obj.o".to_owned()]
     ///     );
     /// }
     /// ```
     #[error("duplicate target outputs: {outputs:?}")]
-    DuplicateOutput { outputs: Vec<String> },
+    DuplicateOutput {
+        /// Outputs produced by more than one build edge.
+        outputs: Vec<String>,
+    },
 
     /// Emitted when a cycle exists in the target graph.
     ///
@@ -182,7 +198,9 @@ pub enum IrGenError {
     /// ```
     #[error("circular dependency detected: {cycle:?}")]
     CircularDependency {
+        /// Sequence of outputs that forms the dependency cycle.
         cycle: Vec<Utf8PathBuf>,
+        /// Dependencies that could not be resolved during analysis.
         missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
     },
 
@@ -215,5 +233,10 @@ pub enum IrGenError {
     /// );
     /// ```
     #[error("command is not a valid shell command: {snippet}")]
-    InvalidCommand { command: String, snippet: String },
+    InvalidCommand {
+        /// Original command string provided in the manifest.
+        command: String,
+        /// Rendered snippet that failed validation.
+        snippet: String,
+    },
 }

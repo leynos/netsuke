@@ -97,7 +97,10 @@ impl HttpServer {
     /// Join the server thread and propagate any panic.
     pub fn join(mut self) -> thread::Result<()> {
         self.shutdown_listener();
-        self.handle.take().expect("server already joined").join()
+        match self.handle.take() {
+            Some(handle) => handle.join(),
+            None => Ok(()),
+        }
     }
 
     fn shutdown_listener(&self) {
@@ -129,46 +132,46 @@ impl Drop for HttpServer {
 /// - `NETSUKE_TEST_HTTP_POLL_INTERVAL_MS`
 ///   (values below 1 ms are clamped to 1 ms to avoid busy-spinning)
 ///
-/// # Panics
-/// See [`spawn_http_server_with_config`] for potential panic conditions.
-pub fn spawn_http_server(body: impl Into<String>) -> (String, HttpServer) {
+/// # Errors
+/// Returns an [`io::Error`] if the listener cannot be bound, switched to
+/// non-blocking mode, queried for its local address, or if the fixture thread
+/// fails to spawn.
+pub fn spawn_http_server(body: impl Into<String>) -> io::Result<(String, HttpServer)> {
     spawn_http_server_with_config(body, HttpServerConfig::from_env())
 }
 
 /// Spawn a single-use HTTP server using the provided configuration.
 ///
-/// # Panics
-///
-/// Panics if:
-/// - binding the listener fails (for example, when ephemeral ports are
-///   exhausted).
-/// - switching the listener or accepted stream to non-blocking mode fails.
-/// - accepting a connection or reading from the socket yields unexpected I/O
-///   errors.
+/// # Errors
+/// Propagates any [`io::Error`] encountered when binding the listener,
+/// switching it to non-blocking mode, querying its local address, or spawning
+/// the fixture thread. Subsequent operations may panic if unexpected I/O
+/// conditions occur while handling the client connection.
 pub fn spawn_http_server_with_config(
     body: impl Into<String>,
     config: HttpServerConfig,
-) -> (String, HttpServer) {
+) -> io::Result<(String, HttpServer)> {
     let body = body.into();
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind HTTP listener");
-    listener
-        .set_nonblocking(true)
-        .expect("set listener non-blocking");
-    let addr = listener.local_addr().expect("local addr");
+    let listener = TcpListener::bind(("127.0.0.1", 0))?;
+    listener.set_nonblocking(true)?;
+    let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
     let handle = thread::Builder::new()
         .name("netsuke-http-fixture".into())
-        .spawn(move || run_http_server(listener, body, config))
-        .expect("spawn http fixture thread");
-    (
+        .spawn(move || run_http_server(listener, body, config))?;
+    Ok((
         url,
         HttpServer {
             handle: Some(handle),
             addr,
         },
-    )
+    ))
 }
 
+#[expect(
+    clippy::panic,
+    reason = "test HTTP helper should fail fast when networking fails"
+)]
 fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig) {
     let mut stream = accept_connection(
         &listener,
@@ -176,9 +179,9 @@ fn run_http_server(listener: TcpListener, body: String, config: HttpServerConfig
         config.poll_interval,
         config.accept_timeout,
     );
-    stream
-        .set_nonblocking(true)
-        .expect("set stream non-blocking");
+    if let Err(err) = stream.set_nonblocking(true) {
+        panic!("failed to configure stream non-blocking: {err}");
+    }
     let bytes_read = read_request(&mut stream, config.read_deadline(), config.poll_interval);
     if bytes_read > 0 {
         write_response(&mut stream, &body);
@@ -217,6 +220,10 @@ fn remaining_until_deadline(deadline: Instant) -> Duration {
     }
 }
 
+#[expect(
+    clippy::panic,
+    reason = "tests panic when the helper cannot accept a client"
+)]
 fn accept_connection(
     listener: &TcpListener,
     deadline: Instant,
@@ -235,6 +242,7 @@ fn accept_connection(
     }
 }
 
+#[expect(clippy::panic, reason = "tests panic to surface unexpected IO errors")]
 fn try_read(stream: &mut TcpStream) -> Option<usize> {
     let mut buf = [0u8; 512];
     match stream.read(&mut buf) {

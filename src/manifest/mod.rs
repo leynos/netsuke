@@ -33,7 +33,9 @@ mod hints;
 mod jinja_macros;
 mod render;
 
+/// JSON representation of a manifest node after YAML and Jinja evaluation.
 pub type ManifestValue = serde_json::Value;
+/// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
 
 pub use diagnostics::{
@@ -99,7 +101,7 @@ fn from_str_named(
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
-    jinja.add_function("env", |name: String| env_var(&name));
+    jinja.add_function("env", |var_name: String| env_var(&var_name));
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = match stdlib_config {
         Some(config) => Ok(crate::stdlib::register_with_config(&mut jinja, config)),

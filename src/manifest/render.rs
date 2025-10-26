@@ -153,30 +153,50 @@ mod tests {
         })
     }
 
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_var(vars: &Vars, key: impl AsRef<str>) -> &str {
+        let key_ref = key.as_ref();
+        vars.get(key_ref)
+            .and_then(|value| value.as_str())
+            .unwrap_or_else(|| panic!("expected rendered var '{key_ref}'"))
+    }
+
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_string(value: &StringOrList, label: impl std::fmt::Display) -> &str {
+        match value {
+            StringOrList::String(item) => item,
+            other => panic!("expected {label} as string, got {other:?}"),
+        }
+    }
+
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_list(value: &StringOrList, label: impl std::fmt::Display) -> &[String] {
+        match value {
+            StringOrList::List(items) => items,
+            other => panic!("expected {label} as list, got {other:?}"),
+        }
+    }
+
+    #[expect(clippy::panic, reason = "panic for clearer test failures")]
+    fn expect_command(recipe: &Recipe, label: impl std::fmt::Display) -> &str {
+        match recipe {
+            Recipe::Command { command } => command,
+            other => panic!("expected {label} command recipe, got {other:?}"),
+        }
+    }
+
     fn assert_rendered_target(target: &Target) {
-        let vars = &target.vars;
-        let message = vars
-            .get("message")
-            .and_then(|v| v.as_str())
-            .expect("rendered message");
-        assert_eq!(message, "hello world");
-        match &target.name {
-            StringOrList::String(s) => assert_eq!(s, "hello world!"),
-            other => panic!("expected string name, got {other:?}"),
-        }
-        let rendered_sources = match &target.sources {
-            StringOrList::List(items) => items.clone(),
-            other => panic!("expected list sources, got {other:?}"),
-        };
-        assert_eq!(rendered_sources, vec!["world.txt".to_string()]);
-        match &target.recipe {
-            Recipe::Command { command } => assert_eq!(command, "hello world"),
-            other => panic!("expected command recipe, got {other:?}"),
-        }
-        match &target.order_only_deps {
-            StringOrList::List(items) => assert_eq!(items, &["world.meta".to_string()]),
-            other => panic!("expected order-only deps list, got {other:?}"),
-        }
+        assert_eq!(expect_var(&target.vars, "message"), "hello world");
+        assert_eq!(expect_string(&target.name, "target name"), "hello world!");
+        assert_eq!(
+            expect_list(&target.sources, "target sources"),
+            ["world.txt"]
+        );
+        assert_eq!(expect_command(&target.recipe, "target"), "hello world");
+        assert_eq!(
+            expect_list(&target.order_only_deps, "order-only deps"),
+            ["world.meta"]
+        );
     }
 
     fn assert_rendered_rule(rule: &Rule) {
@@ -186,7 +206,7 @@ mod tests {
             other => panic!("expected command recipe, got {other:?}"),
         }
         match &rule.deps {
-            StringOrList::List(items) => assert_eq!(items, &["hello world".to_string()]),
+            StringOrList::List(items) => assert_eq!(items, &["hello world".to_owned()]),
             other => panic!("expected deps list, got {other:?}"),
         }
     }
@@ -196,9 +216,12 @@ mod tests {
         let env = Environment::new();
         let manifest = sample_manifest()?;
         let rendered = render_manifest(manifest, &env)?;
-        let rendered_target = rendered.targets.first().expect("rendered target");
+        let rendered_target = rendered
+            .targets
+            .first()
+            .context("rendered target missing")?;
         assert_rendered_target(rendered_target);
-        let rendered_rule = rendered.rules.first().expect("rendered rule");
+        let rendered_rule = rendered.rules.first().context("rendered rule missing")?;
         assert_rendered_rule(rendered_rule);
         Ok(())
     }

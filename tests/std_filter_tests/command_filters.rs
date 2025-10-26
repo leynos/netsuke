@@ -1,6 +1,7 @@
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::{Environment, ErrorKind, context, value::Value};
+use minijinja::{context, value::Value, Environment, ErrorKind};
 use rstest::rstest;
 use tempfile::tempdir;
 use test_support::command_helper::{compile_failure_helper, compile_uppercase_helper};
@@ -8,7 +9,7 @@ use test_support::command_helper::{compile_failure_helper, compile_uppercase_hel
 #[cfg(windows)]
 use test_support::command_helper::compile_rust_helper;
 
-use super::support::stdlib_env_with_state;
+use super::support::fallible;
 
 struct CommandFixture {
     _temp: tempfile::TempDir,
@@ -18,20 +19,25 @@ struct CommandFixture {
 }
 
 impl CommandFixture {
-    fn new(compiler: impl Fn(&Dir, &Utf8PathBuf, &str) -> Utf8PathBuf, binary: &str) -> Self {
-        let temp = tempdir().expect("tempdir");
-        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8");
-        let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("dir");
-        let helper = compiler(&dir, &root, binary);
+    fn new(
+        compiler: CommandCompiler,
+        binary: &str,
+    ) -> Result<Self> {
+        let temp = tempdir().context("create command fixture tempdir")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("command fixture root is not valid UTF-8: {path:?}"))?;
+        let dir = Dir::open_ambient_dir(&root, ambient_authority())
+            .context("open command fixture directory")?;
+        let helper = compiler(&dir, &root, binary)?;
         let command = format!("\"{}\"", helper.as_str());
-        let (env, state) = stdlib_env_with_state();
+        let (env, mut state) = fallible::stdlib_env_with_state()?;
         state.reset_impure();
-        Self {
+        Ok(Self {
             _temp: temp,
             env,
             state,
             command,
-        }
+        })
     }
 
     fn env(&mut self) -> &mut Environment<'static> {
@@ -47,7 +53,7 @@ impl CommandFixture {
     }
 }
 
-type CommandCompiler = fn(&Dir, &Utf8PathBuf, &str) -> Utf8PathBuf;
+type CommandCompiler = fn(&Dir, &Utf8PathBuf, &str) -> Result<Utf8PathBuf>;
 
 enum ShellExpectation {
     Success(&'static str),
@@ -84,114 +90,147 @@ fn shell_filter_behaviour(
     #[case] template_name: &'static str,
     #[case] template_src: &'static str,
     #[case] expectation: ShellExpectation,
-) {
-    let mut fixture = CommandFixture::new(compiler, binary);
+) -> Result<()> {
+    let mut fixture = CommandFixture::new(compiler, binary)?;
     {
         let env = fixture.env();
-        env.add_template(template_name, template_src)
-            .expect("template");
+        fallible::register_template(env, template_name, template_src)?;
     }
     let command = fixture.command().to_owned();
     let template = {
         let env = fixture.env();
-        env.get_template(template_name).expect("get template")
+        env.get_template(template_name)
+            .with_context(|| format!("fetch template '{template_name}'"))?
     };
 
     match expectation {
         ShellExpectation::Success(expected) => {
             let rendered = template
                 .render(context!(cmd => command.clone()))
-                .expect("render shell");
-            assert_eq!(rendered, expected);
+                .context("render shell template")?;
+            ensure!(rendered == expected, "expected '{expected}' but rendered {rendered}");
         }
         ShellExpectation::Failure { substrings } => {
-            let err = template
-                .render(context!(cmd => command.clone()))
-                .expect_err("shell should propagate failures");
-            assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+            let err = match template.render(context!(cmd => command.clone())) {
+                Ok(output) => bail!(
+                    "expected shell to propagate failures but rendered {output}"
+                ),
+                Err(err) => err,
+            };
+            ensure!(
+                err.kind() == ErrorKind::InvalidOperation,
+                "shell should report InvalidOperation but was {:?}",
+                err.kind()
+            );
             let message = err.to_string();
             for needle in substrings {
-                assert!(
+                ensure!(
                     message.contains(needle),
-                    "error should mention {needle}: {message}",
+                    "error should mention {needle}: {message}"
                 );
             }
         }
     }
 
-    assert!(
+    ensure!(
         fixture.state().is_impure(),
-        "shell filter should mark template impure",
+        "shell filter should mark template impure"
     );
+    Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn shell_filter_times_out_long_commands() {
-    let (mut env, state) = stdlib_env_with_state();
+fn shell_filter_times_out_long_commands() -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
-    env.add_template("shell_timeout", "{{ '' | shell('sleep 10') }}")
-        .expect("template");
-    let template = env.get_template("shell_timeout").expect("get template");
-    let err = template
-        .render(context! {})
-        .expect_err("sleep should exceed shell timeout");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(state.is_impure(), "timeout should mark template impure");
-    assert!(
+    fallible::register_template(&mut env, "shell_timeout", "{{ '' | shell('sleep 10') }}")?;
+    let template = env
+        .get_template("shell_timeout")
+        .context("fetch template 'shell_timeout'")?;
+    let err = match template.render(context! {}) {
+        Ok(output) => bail!(
+            "expected shell timeout but command completed with output {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "shell timeout should report InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(state.is_impure(), "timeout should mark template impure");
+    ensure!(
         err.to_string().contains("timed out"),
-        "timeout error should mention duration: {err}",
+        "timeout error should mention duration: {err}"
     );
+    Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn shell_filter_tolerates_commands_that_close_stdin() {
-    let (mut env, state) = stdlib_env_with_state();
+fn shell_filter_tolerates_commands_that_close_stdin() -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
-    env.add_template(
+    fallible::register_template(
+        &mut env,
         "shell_head",
         "{{ 'alpha\\nbeta\\n' | shell('head -n1') | trim }}",
-    )
-    .expect("template");
-    let template = env.get_template("shell_head").expect("get template");
+    )?;
+    let template = env
+        .get_template("shell_head")
+        .context("fetch template 'shell_head'")?;
 
     let rendered = template
         .render(context! {})
-        .expect("head should exit successfully");
-    assert_eq!(rendered, "alpha");
-    assert!(
+        .context("render shell head template")?;
+    ensure!(rendered == "alpha", "expected 'alpha' but rendered {rendered}");
+    ensure!(
         state.is_impure(),
         "head command should mark template impure"
     );
+    Ok(())
 }
 
 #[rstest]
-fn grep_filter_filters_lines() {
-    let (mut env, state) = stdlib_env_with_state();
+fn grep_filter_filters_lines() -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
-    env.add_template("grep", "{{ 'alpha\\nbeta\\n' | grep('beta') | trim }}")
-        .expect("template");
-    let template = env.get_template("grep").expect("get template");
-    let rendered = template.render(context! {}).expect("render");
-    assert_eq!(rendered, "beta");
-    assert!(state.is_impure(), "grep should mark template impure");
+    fallible::register_template(&mut env, "grep", "{{ 'alpha\\nbeta\\n' | grep('beta') | trim }}")?;
+    let template = env
+        .get_template("grep")
+        .context("fetch template 'grep'")?;
+    let rendered = template
+        .render(context! {})
+        .context("render grep template")?;
+    ensure!(rendered == "beta", "expected 'beta' but rendered {rendered}");
+    ensure!(state.is_impure(), "grep should mark template impure");
+    Ok(())
 }
 
 #[rstest]
-fn grep_filter_rejects_invalid_flags() {
-    let (mut env, _state) = stdlib_env_with_state();
-    env.add_template("grep_invalid", "{{ 'alpha' | grep('a', [1, 2, 3]) }}")
-        .expect("template");
-    let template = env.get_template("grep_invalid").expect("get template");
-    let err = template
-        .render(context! {})
-        .expect_err("non-string flags should be rejected");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("grep flags must be strings"),
-        "error should explain invalid flags: {err}",
+fn grep_filter_rejects_invalid_flags() -> Result<()> {
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    fallible::register_template(&mut env, "grep_invalid", "{{ 'alpha' | grep('a', [1, 2, 3]) }}")?;
+    let template = env
+        .get_template("grep_invalid")
+        .context("fetch template 'grep_invalid'")?;
+    let err = match template.render(context! {}) {
+        Ok(output) => bail!(
+            "expected grep to reject non-string flags but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "grep should report InvalidOperation for invalid flags but was {:?}",
+        err.kind()
     );
+    ensure!(
+        err.to_string().contains("grep flags must be strings"),
+        "error should explain invalid flags: {err}"
+    );
+    Ok(())
 }
 
 fn empty_context() -> Value {
@@ -220,20 +259,30 @@ fn filters_reject_undefined_input(
     #[case] template_src: &str,
     #[case] context_fn: fn() -> Value,
     #[case] impure_message: &str,
-) {
-    let (mut env, state) = stdlib_env_with_state();
+) -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
-    env.add_template(name, template_src).expect("template");
-    let template = env.get_template(name).expect("get template");
-    let err = template
-        .render(context_fn())
-        .expect_err("filter should reject undefined input");
-    assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-    assert!(
-        err.to_string().contains("input value is undefined"),
-        "error should mention undefined input: {err}",
+    fallible::register_template(&mut env, name, template_src)?;
+    let template = env
+        .get_template(name)
+        .with_context(|| format!("fetch template '{name}'"))?;
+    let err = match template.render(context_fn()) {
+        Ok(output) => bail!(
+            "expected filter to reject undefined input but rendered {output}"
+        ),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "filter should report InvalidOperation for undefined input but was {:?}",
+        err.kind()
     );
-    assert!(state.is_impure(), "{impure_message}");
+    ensure!(
+        err.to_string().contains("input value is undefined"),
+        "error should mention undefined input: {err}"
+    );
+    ensure!(state.is_impure(), "{impure_message}");
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -271,52 +320,67 @@ const ARGS_STUB: &str = concat!(
 
 #[cfg(windows)]
 #[rstest]
-fn grep_on_windows_bypasses_shell(env_lock: EnvLock) {
+fn grep_on_windows_bypasses_shell(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
-    let temp = tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp");
-    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("open temp dir");
-    compile_rust_helper(&dir, &root, "grep", GREP_STUB);
+    let temp = tempdir().context("create windows grep tempdir")?;
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow!("windows grep root is not valid UTF-8: {path:?}"))?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open windows grep temp dir")?;
+    compile_rust_helper(&dir, &root, "grep", GREP_STUB)
+        .context("compile grep helper for windows tests")?;
 
     let mut path_value = OsString::from(root.as_str());
     path_value.push(";");
     path_value.push(std::env::var_os("PATH").unwrap_or_default());
     let _path = EnvVarGuard::set("PATH", &path_value);
 
-    let (mut env, state) = stdlib_env_with_state();
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
-    env.add_template(
+    fallible::register_template(
+        &mut env,
         "grep_win",
-        r#"{{ 'line1\nline2\n' | grep('^line2') | trim }}"#,
-    )
-    .expect("template");
-    let template = env.get_template("grep_win").expect("get template");
-    let rendered = template.render(context! {}).expect("render");
-    assert_eq!(rendered, "line2");
-    assert!(state.is_impure(), "grep should mark template impure");
+        r#"{{ 'line1
+line2
+' | grep('^line2') | trim }}"#,
+    )?;
+    let template = env
+        .get_template("grep_win")
+        .context("fetch template 'grep_win'")?;
+    let rendered = template
+        .render(context! {})
+        .context("render windows grep template")?;
+    ensure!(rendered == "line2", "expected 'line2' but rendered {rendered}");
+    ensure!(state.is_impure(), "grep should mark template impure");
+    Ok(())
 }
 
 #[cfg(windows)]
 #[rstest]
-fn shell_preserves_cmd_meta_characters(env_lock: EnvLock) {
+fn shell_preserves_cmd_meta_characters(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
-    let temp = tempdir().expect("tempdir");
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp");
-    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("open temp dir");
-    let exe = compile_rust_helper(&dir, &root, "echo_args", ARGS_STUB);
+    let temp = tempdir().context("create windows shell tempdir")?;
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow!("windows shell root is not valid UTF-8: {path:?}"))?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open windows shell temp dir")?;
+    let exe = compile_rust_helper(&dir, &root, "echo_args", ARGS_STUB)
+        .context("compile echo_args helper for windows tests")?;
 
     let command = format!("\"{}\" \"literal %%^!\"", exe);
-    let (mut env, state) = stdlib_env_with_state();
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
-    env.add_template("shell_meta", "{{ '' | shell(cmd) }}")
-        .expect("template");
-    let template = env.get_template("shell_meta").expect("get template");
+    fallible::register_template(&mut env, "shell_meta", "{{ '' | shell(cmd) }}")?;
+    let template = env
+        .get_template("shell_meta")
+        .context("fetch template 'shell_meta'")?;
     let rendered = template
         .render(context!(cmd => command))
-        .expect("render shell");
-    assert_eq!(rendered.trim(), "literal %^!");
-    assert!(
+        .context("render shell meta template")?;
+    ensure!(rendered.trim() == "literal %^!", "expected literal %^! but rendered {rendered}");
+    ensure!(
         state.is_impure(),
         "shell filter should mark template impure"
     );
+    Ok(())
 }
