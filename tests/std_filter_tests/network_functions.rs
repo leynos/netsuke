@@ -1,6 +1,6 @@
 //! Tests for stdlib network helpers covering fetch caching and failure paths.
 
-use std::{fs, io};
+use std::{any, fs, io};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::Utf8PathBuf;
@@ -29,20 +29,34 @@ fn env_with_workspace_policy(
     fallible::stdlib_env_with_config(StdlibConfig::new(workspace).with_network_policy(policy))
 }
 
-#[rstest]
-fn fetch_function_downloads_content(http_policy: Result<NetworkPolicy>) -> Result<()> {
-    let (url, server) = match http::spawn_http_server("payload") {
+fn test_fetch_with_policy<F>(
+    http_policy: Result<NetworkPolicy>,
+    content: &str,
+    policy_transform: F,
+    expected: &str,
+) -> Result<()>
+where
+    F: FnOnce(NetworkPolicy) -> Result<NetworkPolicy>,
+{
+    let transform_name = any::type_name::<F>();
+    let test_name = transform_name
+        .split("::{{")
+        .next()
+        .and_then(|prefix| prefix.rsplit("::").next())
+        .unwrap_or("fetch test");
+
+    let (url, server) = match http::spawn_http_server(content) {
         Ok(pair) => pair,
         Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
             tracing::warn!(
-                "Skipping fetch_function_downloads_content: cannot bind HTTP listener ({err})"
+                "Skipping {test_name}: cannot bind HTTP listener ({err})"
             );
             return Ok(());
         }
         Err(err) => bail!("failed to spawn HTTP server: {err}"),
     };
-    let policy = http_policy?
-        .block_host("169.254.169.254")?;
+
+    let policy = policy_transform(http_policy?)?;
     let (mut env, mut state) = env_with_policy(policy)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
@@ -52,11 +66,8 @@ fn fetch_function_downloads_content(http_policy: Result<NetworkPolicy>) -> Resul
     let rendered = tmpl
         .render(context!(url => url.clone()))
         .context("render fetch template")?;
-    ensure!(rendered == "payload", "expected payload but rendered {rendered}");
-    ensure!(
-        state.is_impure(),
-        "network fetch should mark template impure"
-    );
+    ensure!(rendered == expected, "expected {expected} but rendered {rendered}");
+    ensure!(state.is_impure(), "network fetch should mark template impure");
     server
         .join()
         .map_err(|err| anyhow!("HTTP server thread panicked: {err:?}"))?;
@@ -64,35 +75,23 @@ fn fetch_function_downloads_content(http_policy: Result<NetworkPolicy>) -> Resul
 }
 
 #[rstest]
+fn fetch_function_downloads_content(http_policy: Result<NetworkPolicy>) -> Result<()> {
+    test_fetch_with_policy(
+        http_policy,
+        "payload",
+        |policy| policy.block_host("169.254.169.254"),
+        "payload",
+    )
+}
+
+#[rstest]
 fn fetch_function_allows_wildcard_hosts(http_policy: Result<NetworkPolicy>) -> Result<()> {
-    let (url, server) = match http::spawn_http_server("wildcard") {
-        Ok(pair) => pair,
-        Err(err) if err.kind() == io::ErrorKind::PermissionDenied => {
-            tracing::warn!(
-                "Skipping fetch_function_allows_wildcard_hosts: cannot bind HTTP listener ({err})"
-            );
-            return Ok(());
-        }
-        Err(err) => bail!("failed to spawn HTTP server: {err}"),
-    };
-    let policy = http_policy?
-        .deny_all_hosts()
-        .allow_hosts(["*.0.0.1"])?;
-    let (mut env, mut state) = env_with_policy(policy)?;
-    state.reset_impure();
-    fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
-    let tmpl = env
-        .get_template("fetch")
-        .context("fetch template 'fetch'")?;
-    let rendered = tmpl
-        .render(context!(url => url.clone()))
-        .context("render fetch template")?;
-    ensure!(rendered == "wildcard", "expected wildcard but rendered {rendered}");
-    ensure!(state.is_impure(), "network fetch should mark template impure");
-    server
-        .join()
-        .map_err(|err| anyhow!("HTTP server thread panicked: {err:?}"))?;
-    Ok(())
+    test_fetch_with_policy(
+        http_policy,
+        "wildcard",
+        |policy| policy.deny_all_hosts().allow_hosts(["*.0.0.1"]),
+        "wildcard",
+    )
 }
 
 #[rstest]
