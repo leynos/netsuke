@@ -34,6 +34,40 @@ fn parse_scheme(s: &str) -> Result<String, String> {
     Ok(trimmed.to_ascii_lowercase())
 }
 
+fn parse_wildcard_prefix<'a>(trimmed: &'a str, original: &str) -> Result<(bool, &'a str), String> {
+    if let Some(suffix) = trimmed.strip_prefix("*.") {
+        if suffix.is_empty() {
+            return Err(format!(
+                "wildcard host pattern '{original}' must include a suffix"
+            ));
+        }
+        Ok((true, suffix))
+    } else {
+        Ok((false, trimmed))
+    }
+}
+
+fn validate_host_labels(normalised: &str, original: &str) -> Result<(), String> {
+    for label in normalised.split('.') {
+        if label.is_empty() {
+            return Err(format!(
+                "host pattern '{original}' must not contain empty labels"
+            ));
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(format!(
+                "host pattern '{original}' contains invalid characters"
+            ));
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(format!(
+                "host pattern '{original}' must not start or end labels with '-'"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn parse_host_pattern(s: &str) -> Result<String, String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
@@ -46,29 +80,9 @@ fn parse_host_pattern(s: &str) -> Result<String, String> {
         return Err(format!("host pattern '{s}' must not contain '/'"));
     }
 
-    let (wildcard, body) = if let Some(suffix) = trimmed.strip_prefix("*.") {
-        if suffix.is_empty() {
-            return Err(format!("wildcard host pattern '{s}' must include a suffix"));
-        }
-        (true, suffix)
-    } else {
-        (false, trimmed)
-    };
-
+    let (wildcard, body) = parse_wildcard_prefix(trimmed, s)?;
     let normalised = body.to_ascii_lowercase();
-    for label in normalised.split('.') {
-        if label.is_empty() {
-            return Err(format!("host pattern '{s}' must not contain empty labels"));
-        }
-        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Err(format!("host pattern '{s}' contains invalid characters"));
-        }
-        if label.starts_with('-') || label.ends_with('-') {
-            return Err(format!(
-                "host pattern '{s}' must not start or end labels with '-'"
-            ));
-        }
-    }
+    validate_host_labels(&normalised, s)?;
 
     if wildcard {
         Ok(format!("*.{normalised}"))
