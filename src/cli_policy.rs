@@ -24,7 +24,7 @@ impl Cli {
     ///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
     /// };
     /// let policy = cli.network_policy().expect("policy");
-    /// let url = url::Url::parse("http://localhost").unwrap();
+    /// let url = url::Url::parse("http://localhost").expect("parse URL");
     /// assert!(policy.evaluate(&url).is_ok());
     /// ```
     ///
@@ -56,9 +56,8 @@ impl Cli {
         }
 
         if self.fetch_default_deny {
-            if self.fetch_allow_host.is_empty() {
-                policy = policy.deny_all_hosts();
-            } else {
+            policy = policy.deny_all_hosts();
+            if !self.fetch_allow_host.is_empty() {
                 policy = policy.allow_hosts(&self.fetch_allow_host)?;
             }
         } else if !self.fetch_allow_host.is_empty() {

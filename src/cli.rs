@@ -48,7 +48,8 @@ fn parse_wildcard_prefix<'a>(trimmed: &'a str, original: &str) -> Result<(bool, 
 }
 
 fn validate_host_labels(normalised: &str, original: &str) -> Result<(), String> {
-    for label in normalised.split('.') {
+    let mut total_len = 0usize;
+    for (index, label) in normalised.split('.').enumerate() {
         if label.is_empty() {
             return Err(format!(
                 "host pattern '{original}' must not contain empty labels"
@@ -64,6 +65,17 @@ fn validate_host_labels(normalised: &str, original: &str) -> Result<(), String> 
                 "host pattern '{original}' must not start or end labels with '-'"
             ));
         }
+        if label.len() > 63 {
+            return Err(format!(
+                "host pattern '{original}' must not contain labels longer than 63 characters"
+            ));
+        }
+        total_len += label.len() + usize::from(index > 0);
+    }
+    if total_len > 255 {
+        return Err(format!(
+            "host pattern '{original}' must not exceed 255 characters in total"
+        ));
     }
     Ok(())
 }
@@ -82,7 +94,7 @@ fn parse_host_pattern(s: &str) -> Result<String, String> {
 
     let (wildcard, body) = parse_wildcard_prefix(trimmed, s)?;
     let normalised = body.to_ascii_lowercase();
-    validate_host_labels(&normalised, s)?;
+    validate_host_labels(&normalised, trimmed)?;
 
     if wildcard {
         Ok(format!("*.{normalised}"))

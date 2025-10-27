@@ -15,7 +15,9 @@ mod network;
 mod path;
 mod time;
 
-pub use network::{NetworkPolicy, NetworkPolicyViolation};
+pub use network::{
+    HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
+};
 
 use anyhow::{Context, bail};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};

@@ -5,7 +5,6 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{bail, ensure};
 use thiserror::Error;
 use url::Url;
 
@@ -22,7 +21,7 @@ use url::Url;
 /// use url::Url;
 ///
 /// let policy = NetworkPolicy::default();
-/// let url = Url::parse("https://example.com/data.txt").unwrap();
+/// let url = Url::parse("https://example.com/data.txt").expect("parse URL");
 /// assert!(policy.evaluate(&url).is_ok());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +29,82 @@ pub struct NetworkPolicy {
     allowed_schemes: BTreeSet<String>,
     allowed_hosts: Option<Vec<HostPattern>>,
     blocked_hosts: Vec<HostPattern>,
+}
+
+/// Reasons a network policy configuration failed to build.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum NetworkPolicyConfigError {
+    /// The supplied scheme was empty.
+    #[error("scheme must not be empty")]
+    EmptyScheme,
+    /// The supplied scheme contained invalid characters.
+    #[error("scheme '{scheme}' contains invalid characters")]
+    InvalidScheme {
+        /// The rejected scheme string.
+        scheme: String,
+    },
+    /// Attempted to enable default-deny without providing any allowlist entries.
+    #[error("host allowlist must contain at least one entry")]
+    EmptyAllowlist,
+    /// Host pattern parsing failed.
+    #[error(transparent)]
+    HostPattern(#[from] HostPatternError),
+}
+
+/// Errors emitted when parsing host allowlist/blocklist patterns.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum HostPatternError {
+    /// Input was empty or whitespace.
+    #[error("host pattern must not be empty")]
+    Empty,
+    /// The pattern erroneously included a URL scheme.
+    #[error("host pattern '{pattern}' must not include a scheme")]
+    ContainsScheme {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// The pattern contained path delimiters.
+    #[error("host pattern '{pattern}' must not contain '/'")]
+    ContainsSlash {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// Wildcard patterns must include a suffix after `*.`.
+    #[error("wildcard host pattern '{pattern}' must include a suffix")]
+    MissingSuffix {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// Patterns may not contain empty labels between dots.
+    #[error("host pattern '{pattern}' must not contain empty labels")]
+    EmptyLabel {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// Patterns must only contain alphanumeric characters or `-`.
+    #[error("host pattern '{pattern}' contains invalid characters")]
+    InvalidCharacters {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// Labels must not begin or end with a hyphen.
+    #[error("host pattern '{pattern}' must not start or end labels with '-'")]
+    InvalidLabelEdge {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// Individual labels may not exceed 63 characters.
+    #[error("host pattern '{pattern}' must not contain labels longer than 63 characters")]
+    LabelTooLong {
+        /// Original host pattern string.
+        pattern: String,
+    },
+    /// The full host (including dots) may not exceed 255 characters.
+    #[error("host pattern '{pattern}' must not exceed 255 characters in total")]
+    HostTooLong {
+        /// Original host pattern string.
+        pattern: String,
+    },
 }
 
 impl NetworkPolicy {
@@ -42,8 +117,8 @@ impl NetworkPolicy {
     /// use url::Url;
     ///
     /// let policy = NetworkPolicy::https_only();
-    /// let allowed = Url::parse("https://example.com").unwrap();
-    /// let denied = Url::parse("http://example.com").unwrap();
+    /// let allowed = Url::parse("https://example.com").expect("parse URL");
+    /// let denied = Url::parse("http://example.com").expect("parse URL");
     /// assert!(policy.evaluate(&allowed).is_ok());
     /// assert!(policy.evaluate(&denied).is_err());
     /// ```
@@ -72,7 +147,7 @@ impl NetworkPolicy {
     /// let policy = NetworkPolicy::default()
     ///     .allow_scheme("http")
     ///     .expect("add http scheme");
-    /// let url = Url::parse("http://localhost").unwrap();
+    /// let url = Url::parse("http://localhost").expect("parse URL");
     /// assert!(policy.evaluate(&url).is_ok());
     /// ```
     ///
@@ -80,15 +155,22 @@ impl NetworkPolicy {
     ///
     /// Returns an error when the scheme is empty or contains invalid
     /// characters.
-    pub fn allow_scheme(mut self, scheme: impl AsRef<str>) -> anyhow::Result<Self> {
+    pub fn allow_scheme(
+        mut self,
+        scheme: impl AsRef<str>,
+    ) -> Result<Self, NetworkPolicyConfigError> {
         let candidate = scheme.as_ref();
-        ensure!(!candidate.is_empty(), "scheme must not be empty");
-        ensure!(
-            candidate
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')),
-            "scheme '{candidate}' contains invalid characters",
-        );
+        if candidate.is_empty() {
+            return Err(NetworkPolicyConfigError::EmptyScheme);
+        }
+        if !candidate
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        {
+            return Err(NetworkPolicyConfigError::InvalidScheme {
+                scheme: candidate.to_owned(),
+            });
+        }
         self.allowed_schemes.insert(candidate.to_ascii_lowercase());
         Ok(self)
     }
@@ -110,9 +192,9 @@ impl NetworkPolicy {
     ///
     /// let policy = NetworkPolicy::default()
     ///     .allow_hosts(["example.com", "*.example.org"])
-    ///     .unwrap();
-    /// let allowed = Url::parse("https://sub.example.org").unwrap();
-    /// let denied = Url::parse("https://unauthorised.test").unwrap();
+    ///     .expect("configure host allowlist");
+    /// let allowed = Url::parse("https://sub.example.org").expect("parse URL");
+    /// let denied = Url::parse("https://unauthorised.test").expect("parse URL");
     /// assert!(policy.evaluate(&allowed).is_ok());
     /// assert!(policy.evaluate(&denied).is_err());
     /// ```
@@ -121,7 +203,7 @@ impl NetworkPolicy {
     ///
     /// Returns an error when any host pattern is invalid or when the resulting
     /// allowlist would be empty.
-    pub fn allow_hosts<I, S>(mut self, hosts: I) -> anyhow::Result<Self>
+    pub fn allow_hosts<I, S>(mut self, hosts: I) -> Result<Self, NetworkPolicyConfigError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -131,7 +213,7 @@ impl NetworkPolicy {
             patterns.push(HostPattern::parse(host.as_ref())?);
         }
         if patterns.is_empty() {
-            bail!("host allowlist must contain at least one entry");
+            return Err(NetworkPolicyConfigError::EmptyAllowlist);
         }
         self.allowed_hosts = Some(patterns);
         Ok(self)
@@ -148,9 +230,9 @@ impl NetworkPolicy {
     /// let policy = NetworkPolicy::default()
     ///     .deny_all_hosts()
     ///     .allow_hosts(["example.com"])
-    ///     .unwrap();
-    /// let allowed = Url::parse("https://example.com").unwrap();
-    /// let denied = Url::parse("https://other.test").unwrap();
+    ///     .expect("configure host allowlist");
+    /// let allowed = Url::parse("https://example.com").expect("parse URL");
+    /// let denied = Url::parse("https://other.test").expect("parse URL");
     /// assert!(policy.evaluate(&allowed).is_ok());
     /// assert!(policy.evaluate(&denied).is_err());
     /// ```
@@ -172,15 +254,15 @@ impl NetworkPolicy {
     ///
     /// let policy = NetworkPolicy::default()
     ///     .block_host("169.254.169.254")
-    ///     .unwrap();
-    /// let denied = Url::parse("https://169.254.169.254").unwrap();
+    ///     .expect("block metadata host");
+    /// let denied = Url::parse("https://169.254.169.254").expect("parse URL");
     /// assert!(policy.evaluate(&denied).is_err());
     /// ```
     ///
     /// # Errors
     ///
     /// Returns an error when the host pattern is invalid.
-    pub fn block_host(mut self, host: impl AsRef<str>) -> anyhow::Result<Self> {
+    pub fn block_host(mut self, host: impl AsRef<str>) -> Result<Self, NetworkPolicyConfigError> {
         let pattern = HostPattern::parse(host.as_ref())?;
         self.blocked_hosts.push(pattern);
         Ok(self)
@@ -198,8 +280,8 @@ impl NetworkPolicy {
     /// use url::Url;
     ///
     /// let policy = NetworkPolicy::default();
-    /// let valid = Url::parse("https://example.com").unwrap();
-    /// let invalid = Url::parse("http://example.com").unwrap();
+    /// let valid = Url::parse("https://example.com").expect("parse URL");
+    /// let invalid = Url::parse("http://example.com").expect("parse URL");
     /// assert!(policy.evaluate(&valid).is_ok());
     /// assert!(policy.evaluate(&invalid).is_err());
     /// ```
@@ -281,49 +363,69 @@ struct HostPattern {
     pattern: String,
     wildcard: bool,
 }
-pub(crate) fn normalise_host_pattern(pattern: &str) -> anyhow::Result<(String, bool)> {
+pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), HostPatternError> {
     let trimmed = pattern.trim();
-    ensure!(!trimmed.is_empty(), "host pattern must not be empty");
-    ensure!(
-        !trimmed.contains("://"),
-        "host pattern '{trimmed}' must not include a scheme",
-    );
-    ensure!(
-        !trimmed.contains('/'),
-        "host pattern '{trimmed}' must not contain '/'",
-    );
+    if trimmed.is_empty() {
+        return Err(HostPatternError::Empty);
+    }
+    if trimmed.contains("://") {
+        return Err(HostPatternError::ContainsScheme {
+            pattern: trimmed.to_owned(),
+        });
+    }
+    if trimmed.contains('/') {
+        return Err(HostPatternError::ContainsSlash {
+            pattern: trimmed.to_owned(),
+        });
+    }
 
     let (wildcard, host_body) = if let Some(suffix) = trimmed.strip_prefix("*.") {
-        ensure!(
-            !suffix.is_empty(),
-            "wildcard host pattern '{trimmed}' must include a suffix",
-        );
+        if suffix.is_empty() {
+            return Err(HostPatternError::MissingSuffix {
+                pattern: trimmed.to_owned(),
+            });
+        }
         (true, suffix)
     } else {
         (false, trimmed)
     };
 
     let normalised = host_body.to_ascii_lowercase();
-    for label in normalised.split('.') {
-        ensure!(
-            !label.is_empty(),
-            "host pattern '{trimmed}' must not contain empty labels",
-        );
-        ensure!(
-            label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'),
-            "host pattern '{trimmed}' contains invalid characters",
-        );
-        ensure!(
-            !label.starts_with('-') && !label.ends_with('-'),
-            "host pattern '{trimmed}' must not start or end labels with '-'",
-        );
+    let mut total_len = 0usize;
+    for (index, label) in normalised.split('.').enumerate() {
+        if label.is_empty() {
+            return Err(HostPatternError::EmptyLabel {
+                pattern: trimmed.to_owned(),
+            });
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(HostPatternError::InvalidCharacters {
+                pattern: trimmed.to_owned(),
+            });
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(HostPatternError::InvalidLabelEdge {
+                pattern: trimmed.to_owned(),
+            });
+        }
+        if label.len() > 63 {
+            return Err(HostPatternError::LabelTooLong {
+                pattern: trimmed.to_owned(),
+            });
+        }
+        total_len += label.len() + usize::from(index > 0);
+    }
+    if total_len > 255 {
+        return Err(HostPatternError::HostTooLong {
+            pattern: trimmed.to_owned(),
+        });
     }
 
     Ok((normalised, wildcard))
 }
 
 impl HostPattern {
-    fn parse(pattern: &str) -> anyhow::Result<Self> {
+    fn parse(pattern: &str) -> Result<Self, HostPatternError> {
         let (normalised, wildcard) = normalise_host_pattern(pattern)?;
         Ok(Self {
             pattern: normalised,
@@ -334,11 +436,9 @@ impl HostPattern {
     fn matches(&self, candidate: &str) -> bool {
         let host = candidate.to_ascii_lowercase();
         if self.wildcard {
-            if host == self.pattern {
-                return true;
-            }
             host.strip_suffix(&self.pattern)
-                .is_some_and(|prefix| prefix.ends_with('.') && prefix.len() > 1)
+                .and_then(|prefix| prefix.strip_suffix('.'))
+                .is_some_and(|prefix| !prefix.is_empty())
         } else {
             host == self.pattern
         }
@@ -371,7 +471,7 @@ mod tests {
     #[case("example.com", "example.com", true)]
     #[case("example.com", "sub.example.com", false)]
     #[case("*.example.com", "sub.example.com", true)]
-    #[case("*.example.com", "example.com", true)]
+    #[case("*.example.com", "example.com", false)]
     #[case("*.example.com", "deep.sub.example.com", true)]
     #[case("*.example.com", "other.com", false)]
     fn host_pattern_matches_expected(

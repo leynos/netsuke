@@ -185,8 +185,7 @@ fn fetch_function_respects_cache(http_policy: Result<NetworkPolicy>) -> Result<(
 
 #[rstest]
 fn fetch_function_reports_errors(http_policy: Result<NetworkPolicy>) -> Result<()> {
-    let policy = http_policy?;
-    let (mut env, mut state) = env_with_policy(policy)?;
+    let (mut env, mut state) = env_with_policy(http_policy?)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_fail", "{{ fetch(url) }}")?;
     let tmpl = env
@@ -216,8 +215,7 @@ fn fetch_function_reports_errors(http_policy: Result<NetworkPolicy>) -> Result<(
 
 #[rstest]
 fn fetch_function_rejects_template_cache_dir(http_policy: Result<NetworkPolicy>) -> Result<()> {
-    let policy = http_policy?;
-    let (mut env, mut state) = env_with_policy(policy)?;
+    let (mut env, mut state) = env_with_policy(http_policy?)?;
     state.reset_impure();
     fallible::register_template(
         &mut env,

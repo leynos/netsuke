@@ -6,7 +6,9 @@
 //! explicit.
 
 mod policy;
-pub use self::policy::{NetworkPolicy, NetworkPolicyViolation};
+pub use self::policy::{
+    HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
+};
 
 use std::{
     io::{self, Read},
@@ -392,6 +394,31 @@ mod tests {
         ensure!(
             err.to_string().contains("scheme 'http' is not permitted"),
             "error should mention disallowed scheme: {err}",
+        );
+        ensure!(
+            !impure.load(Ordering::Relaxed),
+            "policy rejection must not mark the template impure",
+        );
+        Ok(())
+    }
+
+    #[rstest]
+    fn fetch_rejects_not_allowlisted_host(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+        let (_temp, root, _path) = cache_workspace?;
+        let config = NetworkConfig {
+            cache_root: root,
+            cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+            policy: NetworkPolicy::default().deny_all_hosts(),
+        };
+        let context = FetchContext::new(config);
+        let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
+        let impure = Arc::new(AtomicBool::new(false));
+        let Err(err) = fetch("https://example.com", &kwargs, &impure, &context) else {
+            return Err(anyhow!("expected fetch to reject not-allowlisted host"));
+        };
+        ensure!(
+            err.to_string().contains("not allowlisted"),
+            "error should mention allowlist failure: {err}",
         );
         ensure!(
             !impure.load(Ordering::Relaxed),
