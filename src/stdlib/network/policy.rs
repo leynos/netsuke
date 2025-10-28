@@ -8,6 +8,8 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 use url::Url;
 
+use crate::host_pattern::{HostPatternError, normalise_host_pattern};
+
 /// Declarative allow- and deny-list policy for outbound network requests.
 ///
 /// The policy validates URL schemes and hostnames before a request is
@@ -49,62 +51,6 @@ pub enum NetworkPolicyConfigError {
     /// Host pattern parsing failed.
     #[error(transparent)]
     HostPattern(#[from] HostPatternError),
-}
-
-/// Errors emitted when parsing host allowlist/blocklist patterns.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum HostPatternError {
-    /// Input was empty or whitespace.
-    #[error("host pattern must not be empty")]
-    Empty,
-    /// The pattern erroneously included a URL scheme.
-    #[error("host pattern '{pattern}' must not include a scheme")]
-    ContainsScheme {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// The pattern contained path delimiters.
-    #[error("host pattern '{pattern}' must not contain '/'")]
-    ContainsSlash {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// Wildcard patterns must include a suffix after `*.`.
-    #[error("wildcard host pattern '{pattern}' must include a suffix")]
-    MissingSuffix {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// Patterns may not contain empty labels between dots.
-    #[error("host pattern '{pattern}' must not contain empty labels")]
-    EmptyLabel {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// Patterns must only contain alphanumeric characters or `-`.
-    #[error("host pattern '{pattern}' contains invalid characters")]
-    InvalidCharacters {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// Labels must not begin or end with a hyphen.
-    #[error("host pattern '{pattern}' must not start or end labels with '-'")]
-    InvalidLabelEdge {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// Individual labels may not exceed 63 characters.
-    #[error("host pattern '{pattern}' must not contain labels longer than 63 characters")]
-    LabelTooLong {
-        /// Original host pattern string.
-        pattern: String,
-    },
-    /// The full host (including dots) may not exceed 255 characters.
-    #[error("host pattern '{pattern}' must not exceed 255 characters in total")]
-    HostTooLong {
-        /// Original host pattern string.
-        pattern: String,
-    },
 }
 
 impl NetworkPolicy {
@@ -370,66 +316,6 @@ pub enum NetworkPolicyViolation {
 struct HostPattern {
     pattern: String,
     wildcard: bool,
-}
-pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), HostPatternError> {
-    let trimmed = pattern.trim();
-    if trimmed.is_empty() {
-        return Err(HostPatternError::Empty);
-    }
-    if trimmed.contains("://") {
-        return Err(HostPatternError::ContainsScheme {
-            pattern: trimmed.to_owned(),
-        });
-    }
-    if trimmed.contains('/') {
-        return Err(HostPatternError::ContainsSlash {
-            pattern: trimmed.to_owned(),
-        });
-    }
-
-    let (wildcard, host_body) = if let Some(suffix) = trimmed.strip_prefix("*.") {
-        if suffix.is_empty() {
-            return Err(HostPatternError::MissingSuffix {
-                pattern: trimmed.to_owned(),
-            });
-        }
-        (true, suffix)
-    } else {
-        (false, trimmed)
-    };
-
-    let normalised = host_body.to_ascii_lowercase();
-    let mut total_len = 0usize;
-    for (index, label) in normalised.split('.').enumerate() {
-        if label.is_empty() {
-            return Err(HostPatternError::EmptyLabel {
-                pattern: trimmed.to_owned(),
-            });
-        }
-        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Err(HostPatternError::InvalidCharacters {
-                pattern: trimmed.to_owned(),
-            });
-        }
-        if label.starts_with('-') || label.ends_with('-') {
-            return Err(HostPatternError::InvalidLabelEdge {
-                pattern: trimmed.to_owned(),
-            });
-        }
-        if label.len() > 63 {
-            return Err(HostPatternError::LabelTooLong {
-                pattern: trimmed.to_owned(),
-            });
-        }
-        total_len += label.len() + usize::from(index > 0);
-    }
-    if total_len > 255 {
-        return Err(HostPatternError::HostTooLong {
-            pattern: trimmed.to_owned(),
-        });
-    }
-
-    Ok((normalised, wildcard))
 }
 
 impl HostPattern {

@@ -6,9 +6,14 @@
 //! explicit.
 
 mod policy;
-pub use self::policy::{
-    HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
-};
+/// Network policy that controls which schemes and hosts the fetch helper may reach.
+pub use self::policy::NetworkPolicy;
+/// Error returned when constructing an invalid network policy configuration.
+pub use self::policy::NetworkPolicyConfigError;
+/// Error returned when a URL violates the active network policy.
+pub use self::policy::NetworkPolicyViolation;
+/// Error returned when parsing an invalid host pattern.
+pub use crate::host_pattern::HostPatternError;
 
 use std::{
     io::{self, Read},
@@ -182,6 +187,7 @@ fn io_error(action: &str, path: &Utf8Path, err: &io::Error) -> Error {
     )
 }
 
+/// Internal cache configuration and directory handle.
 #[derive(Clone)]
 struct FetchCache {
     root: Arc<Dir>,
@@ -196,11 +202,11 @@ impl FetchCache {
         }
     }
 
-    fn open_dir(&self) -> Result<Dir, Error> {
-        open_cache_dir(&self.root, &self.relative)
-    }
+    #[rustfmt::skip]
+    fn open_dir(&self) -> Result<Dir, Error> { open_cache_dir(&self.root, &self.relative) }
 }
 
+/// Encapsulates fetch cache and network policy for template function registration.
 #[derive(Clone)]
 struct FetchContext {
     cache: FetchCache,
@@ -215,13 +221,11 @@ impl FetchContext {
         }
     }
 
-    fn open_cache_dir(&self) -> Result<Dir, Error> {
-        self.cache.open_dir()
-    }
+    #[rustfmt::skip]
+    fn open_cache_dir(&self) -> Result<Dir, Error> { self.cache.open_dir() }
 
-    fn policy(&self) -> &NetworkPolicy {
-        self.policy.as_ref()
-    }
+    #[rustfmt::skip]
+    fn policy(&self) -> &NetworkPolicy { self.policy.as_ref() }
 }
 
 #[cfg(test)]
