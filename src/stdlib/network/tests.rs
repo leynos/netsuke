@@ -14,7 +14,10 @@ use std::{
 use crate::stdlib::DEFAULT_FETCH_CACHE_DIR;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use minijinja::value::{Kwargs, Value};
+use minijinja::{
+    ErrorKind,
+    value::{Kwargs, Value},
+};
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
@@ -154,51 +157,23 @@ fn fetch_cache_opens_default_directory(cache_workspace: Result<CacheWorkspace>) 
 #[rstest]
 fn fetch_rejects_disallowed_scheme(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
-    let config = NetworkConfig {
-        cache_root: root,
-        cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
-        policy: NetworkPolicy::default(),
-    };
-    let context = FetchContext::new(config);
-    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
-    let impure = Arc::new(AtomicBool::new(false));
-    let Err(err) = fetch("http://example.com", &kwargs, &impure, &context) else {
-        return Err(anyhow!("expected fetch to reject http scheme"));
-    };
-    ensure!(
-        err.to_string().contains("scheme 'http' is not permitted"),
-        "error should mention disallowed scheme: {err}",
-    );
-    ensure!(
-        !impure.load(Ordering::Relaxed),
-        "policy rejection must not mark the template impure",
-    );
-    Ok(())
+    assert_fetch_policy_rejection(
+        root,
+        NetworkPolicy::default(),
+        "http://example.com",
+        "scheme 'http' is not permitted",
+    )
 }
 
 #[rstest]
 fn fetch_rejects_not_allowlisted_host(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
-    let config = NetworkConfig {
-        cache_root: root,
-        cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
-        policy: NetworkPolicy::default().deny_all_hosts(),
-    };
-    let context = FetchContext::new(config);
-    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
-    let impure = Arc::new(AtomicBool::new(false));
-    let Err(err) = fetch("https://example.com", &kwargs, &impure, &context) else {
-        return Err(anyhow!("expected fetch to reject not-allowlisted host"));
-    };
-    ensure!(
-        err.to_string().contains("not allowlisted"),
-        "error should mention allowlist failure: {err}",
-    );
-    ensure!(
-        !impure.load(Ordering::Relaxed),
-        "policy rejection must not mark the template impure",
-    );
-    Ok(())
+    assert_fetch_policy_rejection(
+        root,
+        NetworkPolicy::default().deny_all_hosts(),
+        "https://example.com",
+        "not allowlisted",
+    )
 }
 
 fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, description: &str) -> Result<()> {
@@ -206,6 +181,39 @@ fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, description: &str)
     ensure!(
         err.to_string().contains(description),
         "error should mention {description}, got {err}",
+    );
+    Ok(())
+}
+
+fn assert_fetch_policy_rejection(
+    root: Arc<Dir>,
+    policy: NetworkPolicy,
+    url: &str,
+    expected_substring: &str,
+) -> Result<()> {
+    let config = NetworkConfig {
+        cache_root: root,
+        cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
+        policy,
+    };
+    let context = FetchContext::new(config);
+    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+    let Err(err) = fetch(url, &kwargs, &impure, &context) else {
+        return Err(anyhow!("expected fetch to reject '{url}'"));
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "fetch should report InvalidOperation on policy rejection but was {:?}",
+        err.kind(),
+    );
+    ensure!(
+        err.to_string().contains(expected_substring),
+        "error should mention expected substring '{expected_substring}': {err}",
+    );
+    ensure!(
+        !impure.load(Ordering::Relaxed),
+        "policy rejection must not mark the template impure",
     );
     Ok(())
 }

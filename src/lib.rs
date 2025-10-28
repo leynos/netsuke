@@ -8,6 +8,7 @@ pub mod cli;
 mod cli_policy;
 pub(crate) mod diagnostics;
 pub mod hasher;
+pub mod host_pattern;
 pub mod ir;
 pub mod manifest;
 pub mod ninja_gen;

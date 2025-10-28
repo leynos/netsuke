@@ -96,7 +96,9 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 fn parse_cli(#[case] case: CliCase) -> Result<()> {
-    let cli = Cli::parse_from_with_default(case.argv.clone());
+    let cli = Cli::try_parse_from(case.argv.clone())
+        .context("parse CLI arguments")?
+        .with_default_command();
     ensure!(cli.file == case.file, "parsed file should match input");
     ensure!(
         cli.directory == case.directory,

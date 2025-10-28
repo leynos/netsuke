@@ -180,6 +180,13 @@ impl NetworkPolicy {
     /// Host patterns accept either exact hostnames or `*.example.com`
     /// wildcards. Subsequent calls append to the allowlist.
     ///
+    /// By default the policy allows every host because
+    /// [`Self::default`] leaves default-deny disabled. Calling
+    /// [`Self::deny_all_hosts`] switches to default-deny mode and activates the
+    /// allowlist assembled via this method. Invoking `allow_hosts` beforehand
+    /// simply stages the patterns so the later default-deny transition applies
+    /// them immediately.
+    ///
     /// Patterns must be ASCII (or punycode) to match the `url::Url`
     /// representation. Unicode domains should be converted to punycode
     /// before being passed to the policy.
@@ -191,6 +198,7 @@ impl NetworkPolicy {
     /// use url::Url;
     ///
     /// let policy = NetworkPolicy::default()
+    ///     .deny_all_hosts()
     ///     .allow_hosts(["example.com", "*.example.org"])
     ///     .expect("configure host allowlist");
     /// let allowed = Url::parse("https://sub.example.org").expect("parse URL");

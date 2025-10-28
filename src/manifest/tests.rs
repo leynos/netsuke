@@ -325,11 +325,13 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let _cwd_guard = CurrentDirGuard::change_to(&outside)?;
     let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);
 
-    let policy = NetworkPolicy::default()
-        .deny_all_hosts()
-        .allow_hosts(["127.0.0.1", "localhost"])?
-        .allow_scheme("http")?;
-    let manifest = super::from_path_with_policy(&manifest_path, policy)?;
+    let manifest = super::from_path_with_policy(
+        &manifest_path,
+        NetworkPolicy::default()
+            .deny_all_hosts()
+            .allow_hosts(["127.0.0.1", "localhost"])?
+            .allow_scheme("http")?,
+    )?;
     if let Err(err) = server.join() {
         return Err(anyhow!("join server thread panicked: {err:?}"));
     }

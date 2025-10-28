@@ -11,11 +11,10 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 const FALLBACK_DATE: &str = "1970-01-01";
 
 #[path = "src/cli.rs"]
-#[expect(
-    dead_code,
-    reason = "Only type definitions are needed for man page generation"
-)]
 mod cli;
+
+#[path = "src/host_pattern.rs"]
+mod host_pattern;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {

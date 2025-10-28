@@ -33,7 +33,9 @@ impl Cli {
     ///     fetch_allow_host: vec![String::from("bad host")],
     ///     ..Cli::default()
     /// };
-    /// let err = cli.network_policy().unwrap_err();
+    /// let err = cli
+    ///     .network_policy()
+    ///     .expect_err("network_policy should reject invalid host pattern");
     /// assert!(err.to_string().contains("host pattern"));
     /// ```
     ///

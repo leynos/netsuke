@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, allow(dead_code))]
 //! Command line interface definition using clap.
 //!
 //! This module defines the [`Cli`] structure and its subcommands.
@@ -103,31 +104,10 @@ pub struct Cli {
 }
 
 impl Cli {
-    /// Parse command-line arguments, providing `build` as the default command.
-    #[must_use]
-    pub fn parse_with_default() -> Self {
-        Self::parse().with_default_command()
-    }
-
-    /// Parse the provided arguments, applying the default command when needed.
-    ///
-    /// # Panics
-    ///
-    /// Panics if argument parsing fails.
-    #[must_use]
-    pub fn parse_from_with_default<I, T>(args: I) -> Self
-    where
-        I: IntoIterator<Item = T>,
-        T: Into<std::ffi::OsString> + Clone,
-    {
-        Self::try_parse_from(args)
-            .unwrap_or_else(|e| panic!("CLI parsing failed: {e}"))
-            .with_default_command()
-    }
-
     /// Apply the default command if none was specified.
+    #[cfg_attr(doc, allow(dead_code))]
     #[must_use]
-    fn with_default_command(mut self) -> Self {
+    pub fn with_default_command(mut self) -> Self {
         if self.command.is_none() {
             self.command = Some(Commands::Build(BuildArgs {
                 emit: None,
@@ -149,13 +129,16 @@ impl Default for Cli {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
-            command: Some(Commands::Build(BuildArgs {
-                emit: None,
-                targets: Vec::new(),
-            })),
+            command: None,
         }
+        .with_default_command()
     }
 }
+
+#[cfg(docsrs)]
+const _: fn() = || {
+    let _ = Cli::default().with_default_command();
+};
 
 /// Arguments accepted by the `build` command.
 #[derive(Debug, Args, PartialEq, Eq, Clone)]

@@ -127,12 +127,14 @@ pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), Ho
     Ok((normalised, wildcard))
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HostPattern {
     pub(crate) pattern: String,
     pub(crate) wildcard: bool,
 }
 
+#[cfg(test)]
 impl HostPattern {
     pub(crate) fn parse(pattern: &str) -> Result<Self, HostPatternError> {
         let (normalised, wildcard) = normalise_host_pattern(pattern)?;

@@ -2,13 +2,14 @@
 //!
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
+use clap::Parser;
 use netsuke::{cli::Cli, runner};
 use std::process::ExitCode;
 use tracing::Level;
 use tracing_subscriber::fmt;
 
 fn main() -> ExitCode {
-    let cli = Cli::parse_with_default();
+    let cli = Cli::parse().with_default_command();
     let max_level = if cli.verbose {
         Level::DEBUG
     } else {

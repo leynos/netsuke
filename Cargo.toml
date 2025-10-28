@@ -51,6 +51,7 @@ url = "^2.5.0"
 [build-dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 clap_mangen = "0.2.29"
+thiserror = "1"
 time = { version = "0.3.44", features = ["formatting"] }
 
 [lints.clippy]
