@@ -144,8 +144,7 @@ fn fetch_function_respects_cache(http_policy: Result<NetworkPolicy>) -> Result<(
     };
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority())
         .context("open fetch cache workspace")?;
-    let policy = http_policy?;
-    let (mut env, mut state) = env_with_workspace_policy(workspace, policy)?;
+    let (mut env, mut state) = env_with_workspace_policy(workspace, http_policy?)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_cache", "{{ fetch(url, cache=true) }}")?;
     let tmpl = env
