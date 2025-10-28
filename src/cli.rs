@@ -6,6 +6,8 @@
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
+use crate::host_pattern::normalise_host_pattern;
+
 /// Maximum number of jobs accepted by the CLI.
 const MAX_JOBS: usize = 64;
 
@@ -34,72 +36,16 @@ fn parse_scheme(s: &str) -> Result<String, String> {
     Ok(trimmed.to_ascii_lowercase())
 }
 
-fn parse_wildcard_prefix<'a>(trimmed: &'a str, original: &str) -> Result<(bool, &'a str), String> {
-    if let Some(suffix) = trimmed.strip_prefix("*.") {
-        if suffix.is_empty() {
-            return Err(format!(
-                "wildcard host pattern '{original}' must include a suffix"
-            ));
-        }
-        Ok((true, suffix))
-    } else {
-        Ok((false, trimmed))
-    }
-}
-
-fn validate_host_labels(normalised: &str, original: &str) -> Result<(), String> {
-    let mut total_len = 0usize;
-    for (index, label) in normalised.split('.').enumerate() {
-        if label.is_empty() {
-            return Err(format!(
-                "host pattern '{original}' must not contain empty labels"
-            ));
-        }
-        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Err(format!(
-                "host pattern '{original}' contains invalid characters"
-            ));
-        }
-        if label.starts_with('-') || label.ends_with('-') {
-            return Err(format!(
-                "host pattern '{original}' must not start or end labels with '-'"
-            ));
-        }
-        if label.len() > 63 {
-            return Err(format!(
-                "host pattern '{original}' must not contain labels longer than 63 characters"
-            ));
-        }
-        total_len += label.len() + usize::from(index > 0);
-    }
-    if total_len > 255 {
-        return Err(format!(
-            "host pattern '{original}' must not exceed 255 characters in total"
-        ));
-    }
-    Ok(())
-}
-
 fn parse_host_pattern(s: &str) -> Result<String, String> {
-    let trimmed = s.trim();
-    if trimmed.is_empty() {
-        return Err(String::from("host pattern must not be empty"));
-    }
-    if trimmed.contains("://") {
-        return Err(format!("host pattern '{s}' must not include a scheme"));
-    }
-    if trimmed.contains('/') {
-        return Err(format!("host pattern '{s}' must not contain '/'"));
-    }
-
-    let (wildcard, body) = parse_wildcard_prefix(trimmed, s)?;
-    let normalised = body.to_ascii_lowercase();
-    validate_host_labels(&normalised, trimmed)?;
-
-    if wildcard {
-        Ok(format!("*.{normalised}"))
-    } else {
-        Ok(normalised)
+    match normalise_host_pattern(s) {
+        Ok((normalised, wildcard)) => {
+            if wildcard {
+                Ok(format!("*.{normalised}"))
+            } else {
+                Ok(normalised)
+            }
+        }
+        Err(err) => Err(err.to_string()),
     }
 }
 
@@ -189,6 +135,25 @@ impl Cli {
             }));
         }
         self
+    }
+}
+
+impl Default for Cli {
+    fn default() -> Self {
+        Self {
+            file: PathBuf::from("Netsukefile"),
+            directory: None,
+            jobs: None,
+            verbose: false,
+            fetch_allow_scheme: Vec::new(),
+            fetch_allow_host: Vec::new(),
+            fetch_block_host: Vec::new(),
+            fetch_default_deny: false,
+            command: Some(Commands::Build(BuildArgs {
+                emit: None,
+                targets: Vec::new(),
+            })),
+        }
     }
 }
 

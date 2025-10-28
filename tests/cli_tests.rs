@@ -25,83 +25,58 @@ struct CliCase {
     expected_cmd: Commands,
 }
 
-fn base_cli() -> Cli {
-    Cli {
-        file: PathBuf::from("Netsukefile"),
-        directory: None,
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
-        command: Some(Commands::Build(BuildArgs {
-            emit: None,
-            targets: Vec::new(),
-        })),
+impl Default for CliCase {
+    fn default() -> Self {
+        Self {
+            argv: Vec::new(),
+            file: PathBuf::from("Netsukefile"),
+            directory: None,
+            jobs: None,
+            verbose: false,
+            allow_scheme: Vec::new(),
+            allow_host: Vec::new(),
+            block_host: Vec::new(),
+            default_deny: false,
+            expected_cmd: Commands::Build(BuildArgs {
+                emit: None,
+                targets: Vec::new(),
+            }),
+        }
     }
 }
 
 #[rstest]
-#[case(CliCase {
-    argv: vec!["netsuke"],
-    file: PathBuf::from("Netsukefile"),
-    directory: None,
-    jobs: None,
-    verbose: false,
-    allow_scheme: Vec::new(),
-    allow_host: Vec::new(),
-    block_host: Vec::new(),
-    default_deny: false,
-    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
-})]
+#[case(CliCase { argv: vec!["netsuke"], ..CliCase::default() })]
 #[case(CliCase {
     argv: vec!["netsuke", "--file", "alt.yml", "-C", "work", "-j", "4", "build", "a", "b"],
     file: PathBuf::from("alt.yml"),
     directory: Some(PathBuf::from("work")),
     jobs: Some(4),
-    verbose: false,
-    allow_scheme: Vec::new(),
-    allow_host: Vec::new(),
-    block_host: Vec::new(),
-    default_deny: false,
-    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: vec!["a".into(), "b".into()] }),
+    expected_cmd: Commands::Build(BuildArgs {
+        emit: None,
+        targets: vec!["a".into(), "b".into()],
+    }),
+    ..CliCase::default()
 })]
 #[case(CliCase {
     argv: vec!["netsuke", "--verbose"],
-    file: PathBuf::from("Netsukefile"),
-    directory: None,
-    jobs: None,
     verbose: true,
-    allow_scheme: Vec::new(),
-    allow_host: Vec::new(),
-    block_host: Vec::new(),
-    default_deny: false,
-    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
+    ..CliCase::default()
 })]
 #[case(CliCase {
     argv: vec!["netsuke", "build", "--emit", "out.ninja", "a"],
-    file: PathBuf::from("Netsukefile"),
-    directory: None,
-    jobs: None,
-    verbose: false,
-    allow_scheme: Vec::new(),
-    allow_host: Vec::new(),
-    block_host: Vec::new(),
-    default_deny: false,
-    expected_cmd: Commands::Build(BuildArgs { emit: Some(PathBuf::from("out.ninja")), targets: vec!["a".into()] }),
+    expected_cmd: Commands::Build(BuildArgs {
+        emit: Some(PathBuf::from("out.ninja")),
+        targets: vec!["a".into()],
+    }),
+    ..CliCase::default()
 })]
 #[case(CliCase {
     argv: vec!["netsuke", "manifest", "out.ninja"],
-    file: PathBuf::from("Netsukefile"),
-    directory: None,
-    jobs: None,
-    verbose: false,
-    allow_scheme: Vec::new(),
-    allow_host: Vec::new(),
-    block_host: Vec::new(),
-    default_deny: false,
-    expected_cmd: Commands::Manifest { file: PathBuf::from("out.ninja") },
+    expected_cmd: Commands::Manifest {
+        file: PathBuf::from("out.ninja"),
+    },
+    ..CliCase::default()
 })]
 #[case(CliCase {
     argv: vec![
@@ -114,15 +89,11 @@ fn base_cli() -> Cli {
         "--fetch-block-host",
         "deny.test",
     ],
-    file: PathBuf::from("Netsukefile"),
-    directory: None,
-    jobs: None,
-    verbose: false,
     allow_scheme: vec![String::from("http")],
     allow_host: vec![String::from("example.com")],
     block_host: vec![String::from("deny.test")],
     default_deny: true,
-    expected_cmd: Commands::Build(BuildArgs { emit: None, targets: Vec::new() }),
+    ..CliCase::default()
 })]
 fn parse_cli(#[case] case: CliCase) -> Result<()> {
     let cli = Cli::parse_from_with_default(case.argv.clone());
@@ -163,7 +134,7 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
 
 #[rstest]
 fn cli_network_policy_defaults_to_https() -> Result<()> {
-    let cli = base_cli();
+    let cli = Cli::default();
     let policy = cli.network_policy()?;
     let https = Url::parse("https://example.com").expect("parse https URL");
     let http = Url::parse("http://example.com").expect("parse http URL");
@@ -185,8 +156,10 @@ fn cli_network_policy_defaults_to_https() -> Result<()> {
 
 #[rstest]
 fn cli_network_policy_default_deny_blocks_unknown_hosts() -> Result<()> {
-    let mut cli = base_cli();
-    cli.fetch_default_deny = true;
+    let mut cli = Cli {
+        fetch_default_deny: true,
+        ..Cli::default()
+    };
     cli.fetch_allow_host.push(String::from("example.com"));
     let policy = cli.network_policy()?;
     let allowed = Url::parse("https://example.com").expect("parse allowed URL");
@@ -209,7 +182,7 @@ fn cli_network_policy_default_deny_blocks_unknown_hosts() -> Result<()> {
 
 #[rstest]
 fn cli_network_policy_blocklist_overrides_allowlist() -> Result<()> {
-    let mut cli = base_cli();
+    let mut cli = Cli::default();
     cli.fetch_allow_host.push(String::from("example.com"));
     cli.fetch_block_host.push(String::from("example.com"));
     let policy = cli.network_policy()?;
@@ -233,7 +206,7 @@ fn cli_network_policy_blocklist_overrides_allowlist() -> Result<()> {
 
 #[rstest]
 fn cli_network_policy_rejects_invalid_host_patterns() {
-    let mut cli = base_cli();
+    let mut cli = Cli::default();
     cli.fetch_allow_host
         .push(String::from("http://example.com"));
     let err = cli

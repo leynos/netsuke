@@ -7,21 +7,18 @@ use anyhow::Result;
 impl Cli {
     /// Construct the network policy requested through CLI flags.
     ///
+    /// Allowlist entries only constrain outbound hosts after
+    /// `--fetch-default-deny` is provided. Without default-deny all hosts remain
+    /// permitted even when allowlist flags are present.
+    ///
     /// # Examples
     ///
     /// ```rust
-    /// use netsuke::cli::{BuildArgs, Cli, Commands};
+    /// use netsuke::cli::Cli;
     ///
     /// let cli = Cli {
-    ///     file: "Netsukefile".into(),
-    ///     directory: None,
-    ///     jobs: None,
-    ///     verbose: false,
     ///     fetch_allow_scheme: vec!["http".into()],
-    ///     fetch_allow_host: Vec::new(),
-    ///     fetch_block_host: Vec::new(),
-    ///     fetch_default_deny: false,
-    ///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
+    ///     ..Cli::default()
     /// };
     /// let policy = cli.network_policy().expect("policy");
     /// let url = url::Url::parse("http://localhost").expect("parse URL");
@@ -29,18 +26,12 @@ impl Cli {
     /// ```
     ///
     /// ```rust
-    /// use netsuke::cli::{BuildArgs, Cli, Commands};
+    /// use netsuke::cli::Cli;
     ///
     /// let cli = Cli {
-    ///     file: "Netsukefile".into(),
-    ///     directory: None,
-    ///     jobs: None,
-    ///     verbose: false,
     ///     fetch_allow_scheme: vec![String::from("http")],
     ///     fetch_allow_host: vec![String::from("bad host")],
-    ///     fetch_block_host: Vec::new(),
-    ///     fetch_default_deny: false,
-    ///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
+    ///     ..Cli::default()
     /// };
     /// let err = cli.network_policy().unwrap_err();
     /// assert!(err.to_string().contains("host pattern"));

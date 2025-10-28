@@ -6,7 +6,7 @@ use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{context, Environment, ErrorKind};
-use netsuke::stdlib::{NetworkPolicy, StdlibConfig};
+use netsuke::stdlib::{NetworkPolicy, StdlibConfig, StdlibState};
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
@@ -18,14 +18,14 @@ fn http_policy() -> Result<NetworkPolicy> {
     NetworkPolicy::default().allow_scheme("http")
 }
 
-fn env_with_policy(policy: NetworkPolicy) -> Result<(Environment<'static>, netsuke::stdlib::StdlibState)> {
+fn env_with_policy(policy: NetworkPolicy) -> Result<(Environment<'static>, StdlibState)> {
     fallible::stdlib_env_with_config(StdlibConfig::default().with_network_policy(policy))
 }
 
 fn env_with_workspace_policy(
     workspace: Dir,
     policy: NetworkPolicy,
-) -> Result<(Environment<'static>, netsuke::stdlib::StdlibState)> {
+) -> Result<(Environment<'static>, StdlibState)> {
     fallible::stdlib_env_with_config(StdlibConfig::new(workspace).with_network_policy(policy))
 }
 
@@ -74,6 +74,63 @@ where
     Ok(())
 }
 
+fn assert_fetch_error(
+    env: &mut Environment<'static>,
+    state: &mut StdlibState,
+    url: &str,
+    expected_sub: &str,
+    impure: bool,
+) -> Result<()> {
+    let tmpl = env
+        .get_template("fetch")
+        .context("fetch template 'fetch'")?;
+    let expectation = match expected_sub {
+        "not allowlisted" => "expected fetch to reject not-allowlisted host",
+        "fetch failed" => "expected fetch to report connection error",
+        other => {
+            return Err(anyhow!(
+                "unexpected expectation '{other}' for assert_fetch_error"
+            ));
+        }
+    };
+    let err = match tmpl.render(context!(url => url)) {
+        Ok(output) => bail!("{expectation} but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "fetch should report InvalidOperation on failure but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains(expected_sub),
+        "error should mention expected substring '{expected_sub}': {err}",
+    );
+    ensure!(
+        state.is_impure() == impure,
+        "impure state expected {impure} but was {}",
+        state.is_impure()
+    );
+    Ok(())
+}
+
+fn test_fetch_error_case<F>(
+    http_policy: Result<NetworkPolicy>,
+    policy_transform: F,
+    url: &str,
+    expected_sub: &str,
+    impure: bool,
+) -> Result<()>
+where
+    F: FnOnce(NetworkPolicy) -> Result<NetworkPolicy>,
+{
+    let policy = policy_transform(http_policy?)?;
+    let (mut env, mut state) = env_with_policy(policy)?;
+    state.reset_impure();
+    fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
+    assert_fetch_error(&mut env, &mut state, url, expected_sub, impure)
+}
+
 #[rstest]
 fn fetch_function_downloads_content(http_policy: Result<NetworkPolicy>) -> Result<()> {
     test_fetch_with_policy(
@@ -98,33 +155,13 @@ fn fetch_function_allows_wildcard_hosts(http_policy: Result<NetworkPolicy>) -> R
 fn fetch_function_rejects_not_allowlisted_hosts(
     http_policy: Result<NetworkPolicy>,
 ) -> Result<()> {
-    let policy = http_policy?.deny_all_hosts();
-    let (mut env, mut state) = env_with_policy(policy)?;
-    state.reset_impure();
-    fallible::register_template(&mut env, "fetch", "{{ fetch(url) }}")?;
-    let tmpl = env
-        .get_template("fetch")
-        .context("fetch template 'fetch'")?;
-    let err = match tmpl.render(context!(url => "http://127.0.0.1")) {
-        Ok(output) => bail!(
-            "expected fetch to reject not-allowlisted host but rendered {output}"
-        ),
-        Err(err) => err,
-    };
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "policy violations should surface as InvalidOperation but was {:?}",
-        err.kind()
-    );
-    ensure!(
-        err.to_string().contains("not allowlisted"),
-        "error should mention allowlist failure: {err}"
-    );
-    ensure!(
-        !state.is_impure(),
-        "policy rejection must not mark template impure"
-    );
-    Ok(())
+    test_fetch_error_case(
+        http_policy,
+        |policy| Ok(policy.deny_all_hosts()),
+        "http://127.0.0.1",
+        "not allowlisted",
+        false,
+    )
 }
 
 #[rstest]
@@ -184,32 +221,13 @@ fn fetch_function_respects_cache(http_policy: Result<NetworkPolicy>) -> Result<(
 
 #[rstest]
 fn fetch_function_reports_errors(http_policy: Result<NetworkPolicy>) -> Result<()> {
-    let (mut env, mut state) = env_with_policy(http_policy?)?;
-    state.reset_impure();
-    fallible::register_template(&mut env, "fetch_fail", "{{ fetch(url) }}")?;
-    let tmpl = env
-        .get_template("fetch_fail")
-        .context("fetch template 'fetch_fail'")?;
-    let err = match tmpl.render(context!(url => "http://127.0.0.1:9")) {
-        Ok(output) => bail!(
-            "expected fetch to report connection error but rendered {output}"
-        ),
-        Err(err) => err,
-    };
-    ensure!(
-        err.kind() == ErrorKind::InvalidOperation,
-        "fetch should report InvalidOperation on failure but was {:?}",
-        err.kind()
-    );
-    ensure!(
-        err.to_string().contains("fetch failed"),
-        "error should mention failure: {err}"
-    );
-    ensure!(
-        state.is_impure(),
-        "failed fetch should still mark template impure",
-    );
-    Ok(())
+    test_fetch_error_case(
+        http_policy,
+        |policy| Ok(policy),
+        "http://127.0.0.1:9",
+        "fetch failed",
+        true,
+    )
 }
 
 #[rstest]
