@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 use url::Url;
 
-use crate::host_pattern::{HostPatternError, normalise_host_pattern};
+use crate::host_pattern::{HostPattern, HostPatternError};
 
 /// Declarative allow- and deny-list policy for outbound network requests.
 ///
@@ -320,37 +320,11 @@ pub enum NetworkPolicyViolation {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct HostPattern {
-    pattern: String,
-    wildcard: bool,
-}
-
-impl HostPattern {
-    fn parse(pattern: &str) -> Result<Self, HostPatternError> {
-        let (normalised, wildcard) = normalise_host_pattern(pattern)?;
-        Ok(Self {
-            pattern: normalised,
-            wildcard,
-        })
-    }
-
-    fn matches(&self, candidate: &str) -> bool {
-        let host = candidate.to_ascii_lowercase();
-        if self.wildcard {
-            host.strip_suffix(&self.pattern)
-                .and_then(|prefix| prefix.strip_suffix('.'))
-                .is_some_and(|prefix| !prefix.is_empty())
-        } else {
-            host == self.pattern
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    use crate::host_pattern::HostPattern;
     use anyhow::{Result, ensure};
     use rstest::rstest;
 

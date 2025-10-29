@@ -1,4 +1,7 @@
-#![cfg_attr(docsrs, allow(dead_code))]
+#![cfg_attr(
+    docsrs,
+    expect(dead_code, reason = "conditional items for docs builds")
+)]
 //! Command line interface definition using clap.
 //!
 //! This module defines the [`Cli`] structure and its subcommands.
@@ -105,7 +108,7 @@ pub struct Cli {
 
 impl Cli {
     /// Apply the default command if none was specified.
-    #[cfg_attr(doc, allow(dead_code))]
+    #[cfg_attr(doc, expect(dead_code, reason = "exercised by Default impl"))]
     #[must_use]
     pub fn with_default_command(mut self) -> Self {
         if self.command.is_none() {

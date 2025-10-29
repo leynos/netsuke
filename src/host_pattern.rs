@@ -127,14 +127,12 @@ pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), Ho
     Ok((normalised, wildcard))
 }
 
-#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HostPattern {
     pub(crate) pattern: String,
     pub(crate) wildcard: bool,
 }
 
-#[cfg(test)]
 impl HostPattern {
     pub(crate) fn parse(pattern: &str) -> Result<Self, HostPatternError> {
         let (normalised, wildcard) = normalise_host_pattern(pattern)?;
@@ -147,6 +145,9 @@ impl HostPattern {
     pub(crate) fn matches(&self, candidate: &str) -> bool {
         let host = candidate.to_ascii_lowercase();
         if self.wildcard {
+            // Wildcard patterns match only subdomains, not the apex domain.
+            // Example: "*.example.com" matches "sub.example.com" but not
+            // "example.com".
             host.strip_suffix(&self.pattern)
                 .and_then(|prefix| prefix.strip_suffix('.'))
                 .is_some_and(|prefix| !prefix.is_empty())

@@ -346,7 +346,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         other => anyhow::bail!("expected command recipe, got {other:?}"),
     }
 
-    let parsed_url = Url::parse(&url).context("canonicalise manifest URL")?;
+    let parsed_url = Url::parse(&url).context("parse manifest URL")?;
     let cache_key = hash::sha256_hex(parsed_url.as_str().as_bytes());
     let cache_path = workspace.join(".netsuke").join("fetch").join(cache_key);
     anyhow::ensure!(
