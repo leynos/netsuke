@@ -6,7 +6,7 @@
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
-use crate::host_pattern::normalise_host_pattern;
+use crate::host_pattern::HostPattern;
 
 /// Maximum number of jobs accepted by the CLI.
 const MAX_JOBS: usize = 64;
@@ -41,17 +41,13 @@ fn parse_scheme(s: &str) -> Result<String, String> {
     Ok(trimmed.to_ascii_lowercase())
 }
 
-fn parse_host_pattern(s: &str) -> Result<String, String> {
-    match normalise_host_pattern(s) {
-        Ok((normalised, wildcard)) => {
-            if wildcard {
-                Ok(format!("*.{normalised}"))
-            } else {
-                Ok(normalised)
-            }
-        }
-        Err(err) => Err(err.to_string()),
-    }
+/// Parse a host pattern supplied via CLI flags.
+///
+/// The returned [`HostPattern`] retains both the wildcard flag and the
+/// normalised host body so downstream configuration can reuse the parsed
+/// structure without reparsing strings.
+fn parse_host_pattern(s: &str) -> Result<HostPattern, String> {
+    HostPattern::parse(s).map_err(|err| err.to_string())
 }
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
@@ -88,7 +84,7 @@ pub struct Cli {
         value_name = "HOST",
         value_parser = parse_host_pattern
     )]
-    pub fetch_allow_host: Vec<String>,
+    pub fetch_allow_host: Vec<HostPattern>,
 
     /// Hostnames that are always blocked, even when allowed elsewhere.
     #[arg(
@@ -96,7 +92,7 @@ pub struct Cli {
         value_name = "HOST",
         value_parser = parse_host_pattern
     )]
-    pub fetch_block_host: Vec<String>,
+    pub fetch_block_host: Vec<HostPattern>,
 
     /// Deny all hosts by default; only allow the declared allowlist.
     #[arg(long = "fetch-default-deny")]
@@ -137,11 +133,6 @@ impl Default for Cli {
         .with_default_command()
     }
 }
-
-#[cfg(docsrs)]
-const _: fn() = || {
-    let _ = Cli::default().with_default_command();
-};
 
 /// Arguments accepted by the `build` command.
 #[derive(Debug, Args, PartialEq, Eq, Clone)]

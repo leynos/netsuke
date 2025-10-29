@@ -127,14 +127,21 @@ pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), Ho
     Ok((normalised, wildcard))
 }
 
+/// Canonical host pattern storing the normalised body and wildcard flag.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct HostPattern {
+pub struct HostPattern {
     pub(crate) pattern: String,
     pub(crate) wildcard: bool,
 }
 
 impl HostPattern {
-    pub(crate) fn parse(pattern: &str) -> Result<Self, HostPatternError> {
+    /// Parse a host pattern into its canonical representation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the pattern is empty, includes invalid
+    /// characters, or uses a wildcard without a suffix.
+    pub fn parse(pattern: &str) -> Result<Self, HostPatternError> {
         let (normalised, wildcard) = normalise_host_pattern(pattern)?;
         Ok(Self {
             pattern: normalised,
@@ -154,6 +161,22 @@ impl HostPattern {
         } else {
             host == self.pattern
         }
+    }
+}
+
+impl<'a> TryFrom<&'a str> for HostPattern {
+    type Error = HostPatternError;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
+impl TryFrom<String> for HostPattern {
+    type Error = HostPatternError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::parse(&value)
     }
 }
 

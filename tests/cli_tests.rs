@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use clap::error::ErrorKind;
 use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::host_pattern::HostPattern;
 use netsuke::stdlib::NetworkPolicyViolation;
 use rstest::rstest;
 use std::path::PathBuf;
@@ -19,8 +20,8 @@ struct CliCase {
     jobs: Option<usize>,
     verbose: bool,
     allow_scheme: Vec<String>,
-    allow_host: Vec<String>,
-    block_host: Vec<String>,
+    allow_host: Vec<&'static str>,
+    block_host: Vec<&'static str>,
     default_deny: bool,
     expected_cmd: Commands,
 }
@@ -90,8 +91,8 @@ impl Default for CliCase {
         "deny.test",
     ],
     allow_scheme: vec![String::from("http")],
-    allow_host: vec![String::from("example.com")],
-    block_host: vec![String::from("deny.test")],
+    allow_host: vec!["example.com"],
+    block_host: vec!["deny.test"],
     default_deny: true,
     ..CliCase::default()
 })]
@@ -102,28 +103,44 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
     ensure!(cli.file == case.file, "parsed file should match input");
     ensure!(
         cli.directory == case.directory,
-        "parsed directory should match input"
+        "parsed directory should match input",
     );
     ensure!(cli.jobs == case.jobs, "parsed jobs should match input");
     ensure!(
         cli.verbose == case.verbose,
-        "verbose flag should match input"
+        "verbose flag should match input",
     );
     ensure!(
         cli.fetch_allow_scheme == case.allow_scheme,
-        "allow-scheme flags should match input"
+        "allow-scheme flags should match input",
     );
+    let expected_allow_host = case
+        .allow_host
+        .iter()
+        .map(|pattern| {
+            HostPattern::parse(pattern)
+                .with_context(|| format!("parse expected allow host '{pattern}'"))
+        })
+        .collect::<Result<Vec<_>>>()?;
     ensure!(
-        cli.fetch_allow_host == case.allow_host,
-        "allow-host flags should match input"
+        cli.fetch_allow_host == expected_allow_host,
+        "allow-host flags should match input",
     );
+    let expected_block_host = case
+        .block_host
+        .iter()
+        .map(|pattern| {
+            HostPattern::parse(pattern)
+                .with_context(|| format!("parse expected block host '{pattern}'"))
+        })
+        .collect::<Result<Vec<_>>>()?;
     ensure!(
-        cli.fetch_block_host == case.block_host,
-        "block-host flags should match input"
+        cli.fetch_block_host == expected_block_host,
+        "block-host flags should match input",
     );
     ensure!(
         cli.fetch_default_deny == case.default_deny,
-        "default-deny flag should match input"
+        "default-deny flag should match input",
     );
     let command = cli.command.context("command should be set")?;
     ensure!(
@@ -162,7 +179,8 @@ fn cli_network_policy_default_deny_blocks_unknown_hosts() -> Result<()> {
         fetch_default_deny: true,
         ..Cli::default()
     };
-    cli.fetch_allow_host.push(String::from("example.com"));
+    cli.fetch_allow_host
+        .push(HostPattern::parse("example.com").context("parse allow host pattern")?);
     let policy = cli.network_policy()?;
     let allowed = Url::parse("https://example.com").expect("parse allowed URL");
     let denied = Url::parse("https://unauthorised.test").expect("parse denied URL");
@@ -185,8 +203,10 @@ fn cli_network_policy_default_deny_blocks_unknown_hosts() -> Result<()> {
 #[rstest]
 fn cli_network_policy_blocklist_overrides_allowlist() -> Result<()> {
     let mut cli = Cli::default();
-    cli.fetch_allow_host.push(String::from("example.com"));
-    cli.fetch_block_host.push(String::from("example.com"));
+    cli.fetch_allow_host
+        .push(HostPattern::parse("example.com").context("parse allow host pattern")?);
+    cli.fetch_block_host
+        .push(HostPattern::parse("example.com").context("parse block host pattern")?);
     let policy = cli.network_policy()?;
     let url = Url::parse("https://example.com").expect("parse conflicting URL");
     let err = policy
@@ -207,15 +227,14 @@ fn cli_network_policy_blocklist_overrides_allowlist() -> Result<()> {
 }
 
 #[rstest]
-fn cli_network_policy_rejects_invalid_host_patterns() {
+fn cli_network_policy_rejects_invalid_scheme() {
     let mut cli = Cli::default();
-    cli.fetch_allow_host
-        .push(String::from("http://example.com"));
+    cli.fetch_allow_scheme.push(String::from("1http"));
     let err = cli
         .network_policy()
-        .expect_err("invalid host pattern should be rejected");
+        .expect_err("invalid scheme should be rejected");
     assert!(
-        err.to_string().contains("must not include a scheme"),
+        err.to_string().contains("invalid characters"),
         "unexpected error text: {err}",
     );
 }
@@ -223,6 +242,10 @@ fn cli_network_policy_rejects_invalid_host_patterns() {
 #[rstest]
 #[case(vec!["netsuke", "unknowncmd"], ErrorKind::InvalidSubcommand)]
 #[case(vec!["netsuke", "--file"], ErrorKind::InvalidValue)]
+#[case(
+    vec!["netsuke", "--fetch-allow-host", "bad host"],
+    ErrorKind::ValueValidation
+)]
 #[case(vec!["netsuke", "-j", "notanumber"], ErrorKind::ValueValidation)]
 #[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
 #[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]

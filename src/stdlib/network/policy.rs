@@ -112,10 +112,13 @@ impl NetworkPolicy {
         if candidate.is_empty() {
             return Err(NetworkPolicyConfigError::EmptyScheme);
         }
-        if !candidate
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
-        {
+        let mut chars = candidate.chars();
+        if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
+            return Err(NetworkPolicyConfigError::InvalidScheme {
+                scheme: candidate.to_owned(),
+            });
+        }
+        if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
             return Err(NetworkPolicyConfigError::InvalidScheme {
                 scheme: candidate.to_owned(),
             });
@@ -176,6 +179,27 @@ impl NetworkPolicy {
         Ok(self)
     }
 
+    /// Append pre-parsed host patterns to the allowlist.
+    ///
+    /// This variant avoids reparsing patterns that were validated elsewhere
+    /// (for example, by CLI flag parsers).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the resulting allowlist would be empty.
+    pub fn allow_host_patterns<I>(mut self, hosts: I) -> Result<Self, NetworkPolicyConfigError>
+    where
+        I: IntoIterator<Item = HostPattern>,
+    {
+        let mut patterns = self.allowed_hosts.take().unwrap_or_default();
+        patterns.extend(hosts);
+        if patterns.is_empty() {
+            return Err(NetworkPolicyConfigError::EmptyAllowlist);
+        }
+        self.allowed_hosts = Some(patterns);
+        Ok(self)
+    }
+
     /// Block every host until an allowlist is provided.
     ///
     /// Calling this method enables default-deny mode immediately. Any patterns
@@ -228,6 +252,13 @@ impl NetworkPolicy {
         let pattern = HostPattern::parse(host.as_ref())?;
         self.blocked_hosts.push(pattern);
         Ok(self)
+    }
+
+    /// Append a pre-parsed host pattern to the blocklist without reparsing.
+    #[must_use]
+    pub fn block_host_pattern(mut self, host: HostPattern) -> Self {
+        self.blocked_hosts.push(host);
+        self
     }
 
     /// Validate the supplied URL against the configured policy.

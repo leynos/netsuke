@@ -15,6 +15,7 @@ impl Cli {
     ///
     /// ```rust
     /// use netsuke::cli::Cli;
+    /// use netsuke::host_pattern::HostPattern;
     ///
     /// let cli = Cli {
     ///     fetch_allow_scheme: vec!["http".into()],
@@ -29,14 +30,14 @@ impl Cli {
     /// use netsuke::cli::Cli;
     ///
     /// let cli = Cli {
-    ///     fetch_allow_scheme: vec![String::from("http")],
-    ///     fetch_allow_host: vec![String::from("bad host")],
+    ///     fetch_allow_scheme: vec![String::from("http?")],
+    ///     fetch_allow_host: vec![HostPattern::parse("example.com").expect("parse host")],
     ///     ..Cli::default()
     /// };
     /// let err = cli
     ///     .network_policy()
-    ///     .expect_err("network_policy should reject invalid host pattern");
-    /// assert!(err.to_string().contains("host pattern"));
+    ///     .expect_err("network_policy should reject invalid scheme");
+    /// assert!(err.to_string().contains("invalid characters"));
     /// ```
     ///
     /// # Errors
@@ -51,14 +52,14 @@ impl Cli {
         if self.fetch_default_deny {
             policy = policy.deny_all_hosts();
             if !self.fetch_allow_host.is_empty() {
-                policy = policy.allow_hosts(&self.fetch_allow_host)?;
+                policy = policy.allow_host_patterns(self.fetch_allow_host.clone())?;
             }
         } else if !self.fetch_allow_host.is_empty() {
-            policy = policy.allow_hosts(&self.fetch_allow_host)?;
+            policy = policy.allow_host_patterns(self.fetch_allow_host.clone())?;
         }
 
         for host in &self.fetch_block_host {
-            policy = policy.block_host(host)?;
+            policy = policy.block_host_pattern(host.clone());
         }
 
         Ok(policy)
