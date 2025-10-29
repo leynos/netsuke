@@ -62,17 +62,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
         .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
     let cli = Cli {
         file: manifest_path.clone(),
-        directory: None,
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
-        command: Some(Commands::Build(BuildArgs {
-            emit: None,
-            targets: vec![],
-        })),
+        ..Cli::default()
     };
 
     let Err(err) = run(&cli) else {
@@ -92,20 +82,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
 
 #[rstest]
 fn run_ninja_not_found() -> Result<()> {
-    let cli = Cli {
-        file: PathBuf::from("Netsukefile"),
-        directory: None,
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
-        command: Some(Commands::Build(BuildArgs {
-            emit: None,
-            targets: vec![],
-        })),
-    };
+    let cli = Cli::default();
     let targets = BuildTargets::default();
     let err = run_ninja(
         Path::new("does-not-exist"),
@@ -131,16 +108,7 @@ fn run_executes_ninja_without_persisting_file() -> Result<()> {
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
-        command: Some(Commands::Build(BuildArgs {
-            emit: None,
-            targets: vec![],
-        })),
+        ..Cli::default()
     };
 
     run(&cli).context("expected run to succeed without emit path")?;
@@ -166,16 +134,11 @@ fn run_build_with_emit_keeps_file() -> Result<()> {
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
         command: Some(Commands::Build(BuildArgs {
             emit: Some(emit_path.clone()),
-            targets: vec![],
+            targets: Vec::new(),
         })),
+        ..Cli::default()
     };
 
     run(&cli).context("expected run to succeed with emit path")?;
@@ -216,16 +179,11 @@ fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
         command: Some(Commands::Build(BuildArgs {
             emit: Some(emit_path.clone()),
-            targets: vec![],
+            targets: Vec::new(),
         })),
+        ..Cli::default()
     };
 
     run(&cli).context("expected run to succeed with nested emit path")?;
@@ -244,15 +202,10 @@ fn run_manifest_subcommand_writes_file() -> Result<()> {
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
         command: Some(Commands::Manifest {
             file: output_path.clone(),
         }),
+        ..Cli::default()
     };
 
     run(&cli).context("expected manifest subcommand to succeed")?;
@@ -277,16 +230,7 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
-        jobs: None,
-        verbose: false,
-        fetch_allow_scheme: Vec::new(),
-        fetch_allow_host: Vec::new(),
-        fetch_block_host: Vec::new(),
-        fetch_default_deny: false,
-        command: Some(Commands::Build(BuildArgs {
-            emit: None,
-            targets: vec![],
-        })),
+        ..Cli::default()
     };
 
     run(&cli).context("expected run to use overridden NINJA_ENV")?;

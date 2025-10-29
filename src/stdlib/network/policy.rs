@@ -175,6 +175,11 @@ impl NetworkPolicy {
 
     /// Block every host until an allowlist is provided.
     ///
+    /// Calling this method enables default-deny mode immediately. Any patterns
+    /// accumulated through [`Self::allow_hosts`] beforehand become active once
+    /// default-deny is enabled, so callers may configure the allowlist in either
+    /// order.
+    ///
     /// # Examples
     ///
     /// ```rust
