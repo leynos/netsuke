@@ -1,10 +1,3 @@
-#![cfg_attr(
-    docsrs,
-    expect(
-        dead_code,
-        reason = "Docs.rs builds compile the CLI without executing commands"
-    )
-)]
 //! Command line interface definition using clap.
 //!
 //! This module defines the [`Cli`] structure and its subcommands.
@@ -29,15 +22,20 @@ fn parse_jobs(s: &str) -> Result<usize, String> {
     }
 }
 
+/// Parse and normalise a URI scheme provided via CLI flags.
+///
+/// Schemes must begin with an ASCII letter and may contain ASCII letters,
+/// digits, `+`, `-`, or `.` characters. The result is returned in lowercase.
 fn parse_scheme(s: &str) -> Result<String, String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
         return Err(String::from("scheme must not be empty"));
     }
-    if !trimmed
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
-    {
+    let mut chars = trimmed.chars();
+    if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
+        return Err(format!("scheme '{s}' must start with an ASCII letter"));
+    }
+    if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
         return Err(format!("invalid scheme '{s}'"));
     }
     Ok(trimmed.to_ascii_lowercase())
@@ -111,10 +109,6 @@ pub struct Cli {
 
 impl Cli {
     /// Apply the default command if none was specified.
-    #[cfg_attr(
-        docsrs,
-        expect(dead_code, reason = "Docs.rs builds do not invoke CLI defaults")
-    )]
     #[must_use]
     pub fn with_default_command(mut self) -> Self {
         if self.command.is_none() {

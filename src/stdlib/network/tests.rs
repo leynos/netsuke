@@ -21,10 +21,10 @@ use minijinja::{
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
-#[fixture]
 /// Creates a temporary cache workspace returning the tempdir, an ambient
 /// authority directory handle wrapped in `Arc`, and the UTF-8 path for cache
 /// assertions in fetch tests.
+#[fixture]
 fn cache_workspace() -> Result<(tempfile::TempDir, Arc<Dir>, Utf8PathBuf)> {
     let temp = tempdir().context("create fetch cache tempdir")?;
     let temp_path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -34,6 +34,7 @@ fn cache_workspace() -> Result<(tempfile::TempDir, Arc<Dir>, Utf8PathBuf)> {
     Ok((temp, Arc::new(dir), temp_path))
 }
 
+/// Builds a test `FetchContext` with the provided cache root and default policy.
 fn make_context(root: Arc<Dir>) -> FetchContext {
     let config = NetworkConfig {
         cache_root: root,
@@ -179,6 +180,7 @@ fn fetch_rejects_not_allowlisted_host(cache_workspace: Result<CacheWorkspace>) -
     )
 }
 
+/// Asserts that `open_cache_dir` rejects the `path` with an error message containing `description`.
 fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, description: &str) -> Result<()> {
     let err = open_cache_dir(root, path).expect_err("open_cache_dir should reject invalid path");
     ensure!(
@@ -188,6 +190,7 @@ fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, description: &str)
     Ok(())
 }
 
+/// Asserts that `fetch` rejects `url` under `policy` without marking the template impure.
 fn assert_fetch_policy_rejection(
     root: Arc<Dir>,
     policy: NetworkPolicy,
