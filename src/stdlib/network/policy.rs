@@ -1,3 +1,6 @@
+//! NOTE: This module intentionally exceeds the 400-line guideline because it
+//! integrates the public API documentation and embedded tests, so it should
+//! remain a single file.
 //! Network policy enforcement for outbound requests made by `fetch`.
 //!
 //! The policy keeps URL scheme and host validation separate from the I/O code
