@@ -22,6 +22,9 @@ use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
 #[fixture]
+/// Creates a temporary cache workspace returning the tempdir, an ambient
+/// authority directory handle wrapped in `Arc`, and the UTF-8 path for cache
+/// assertions in fetch tests.
 fn cache_workspace() -> Result<(tempfile::TempDir, Arc<Dir>, Utf8PathBuf)> {
     let temp = tempdir().context("create fetch cache tempdir")?;
     let temp_path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())

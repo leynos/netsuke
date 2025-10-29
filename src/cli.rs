@@ -1,6 +1,9 @@
 #![cfg_attr(
     docsrs,
-    expect(dead_code, reason = "conditional items for docs builds")
+    expect(
+        dead_code,
+        reason = "Docs.rs builds compile the CLI without executing commands"
+    )
 )]
 //! Command line interface definition using clap.
 //!
@@ -108,7 +111,10 @@ pub struct Cli {
 
 impl Cli {
     /// Apply the default command if none was specified.
-    #[cfg_attr(doc, expect(dead_code, reason = "exercised by Default impl"))]
+    #[cfg_attr(
+        docsrs,
+        expect(dead_code, reason = "Docs.rs builds do not invoke CLI defaults")
+    )]
     #[must_use]
     pub fn with_default_command(mut self) -> Self {
         if self.command.is_none() {
