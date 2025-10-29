@@ -79,7 +79,7 @@ fn fetch(
 
     let bytes = if use_cache {
         let dir = context.open_cache_dir()?;
-        let key = cache_key(url);
+        let key = cache_key(parsed.as_str());
         if let Some(cached) = read_cached(&dir, &key)? {
             impure.store(true, Ordering::Relaxed);
             cached

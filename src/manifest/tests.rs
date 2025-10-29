@@ -13,6 +13,7 @@ use rstest::{fixture, rstest};
 use std::fs;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock, hash, http};
+use url::Url;
 
 struct MacroRenderCase<'a> {
     signature: &'a str,
@@ -345,7 +346,8 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         other => anyhow::bail!("expected command recipe, got {other:?}"),
     }
 
-    let cache_key = hash::sha256_hex(url.as_bytes());
+    let parsed_url = Url::parse(&url).context("canonicalise manifest URL")?;
+    let cache_key = hash::sha256_hex(parsed_url.as_str().as_bytes());
     let cache_path = workspace.join(".netsuke").join("fetch").join(cache_key);
     anyhow::ensure!(
         cache_path.exists(),

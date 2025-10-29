@@ -7,6 +7,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::then;
 use test_support::hash;
 use time::{Duration, OffsetDateTime, UtcOffset};
+use url::Url;
 
 use super::parsing::{parse_expected_offset, parse_iso_timestamp};
 use super::types::{ExpectedFragment, ExpectedOffset, ExpectedOutput, RelativePath};
@@ -96,7 +97,8 @@ pub(crate) fn assert_fetch_cache_present(world: &mut CliWorld) -> Result<()> {
         .stdlib_url
         .as_ref()
         .context("expected stdlib url for cache check")?;
-    let key = hash::sha256_hex(url.as_bytes());
+    let parsed_url = Url::parse(url).context("canonicalise stdlib cache URL")?;
+    let key = hash::sha256_hex(parsed_url.as_str().as_bytes());
     let cache_path = root.join(".netsuke").join("fetch").join(key);
     let dir =
         Dir::open_ambient_dir(root, ambient_authority()).context("open stdlib workspace root")?;
