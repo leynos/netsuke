@@ -127,6 +127,19 @@ impl NetworkPolicy {
         Ok(self)
     }
 
+    fn extend_allowed_hosts<I>(mut self, patterns_iter: I) -> Result<Self, NetworkPolicyConfigError>
+    where
+        I: IntoIterator<Item = HostPattern>,
+    {
+        let mut patterns = self.allowed_hosts.take().unwrap_or_default();
+        patterns.extend(patterns_iter);
+        if patterns.is_empty() {
+            return Err(NetworkPolicyConfigError::EmptyAllowlist);
+        }
+        self.allowed_hosts = Some(patterns);
+        Ok(self)
+    }
+
     /// Restrict requests to hosts that match the supplied patterns.
     ///
     /// Host patterns accept either exact hostnames or `*.example.com`
@@ -163,20 +176,16 @@ impl NetworkPolicy {
     ///
     /// Returns an error when any host pattern is invalid or when the resulting
     /// allowlist would be empty.
-    pub fn allow_hosts<I, S>(mut self, hosts: I) -> Result<Self, NetworkPolicyConfigError>
+    pub fn allow_hosts<I, S>(self, hosts: I) -> Result<Self, NetworkPolicyConfigError>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut patterns = self.allowed_hosts.take().unwrap_or_default();
-        for host in hosts {
-            patterns.push(HostPattern::parse(host.as_ref())?);
-        }
-        if patterns.is_empty() {
-            return Err(NetworkPolicyConfigError::EmptyAllowlist);
-        }
-        self.allowed_hosts = Some(patterns);
-        Ok(self)
+        let parsed = hosts
+            .into_iter()
+            .map(|host| HostPattern::parse(host.as_ref()))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.extend_allowed_hosts(parsed)
     }
 
     /// Append pre-parsed host patterns to the allowlist.
@@ -187,17 +196,11 @@ impl NetworkPolicy {
     /// # Errors
     ///
     /// Returns an error when the resulting allowlist would be empty.
-    pub fn allow_host_patterns<I>(mut self, hosts: I) -> Result<Self, NetworkPolicyConfigError>
+    pub fn allow_host_patterns<I>(self, hosts: I) -> Result<Self, NetworkPolicyConfigError>
     where
         I: IntoIterator<Item = HostPattern>,
     {
-        let mut patterns = self.allowed_hosts.take().unwrap_or_default();
-        patterns.extend(hosts);
-        if patterns.is_empty() {
-            return Err(NetworkPolicyConfigError::EmptyAllowlist);
-        }
-        self.allowed_hosts = Some(patterns);
-        Ok(self)
+        self.extend_allowed_hosts(hosts)
     }
 
     /// Block every host until an allowlist is provided.
