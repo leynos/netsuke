@@ -358,57 +358,61 @@ pub enum NetworkPolicyViolation {
 mod tests {
     use super::*;
 
-    use crate::host_pattern::HostPattern;
     use anyhow::{Result, ensure};
     use rstest::rstest;
 
     #[rstest]
-    #[case("example.com", false)]
-    #[case("*.example.com", true)]
-    fn host_pattern_parse_detects_wildcard(
-        #[case] pattern: &str,
-        #[case] wildcard: bool,
-    ) -> Result<()> {
-        let parsed = HostPattern::parse(pattern)?;
-        ensure!(
-            parsed.wildcard == wildcard,
-            "expected wildcard {wildcard} for pattern {pattern}",
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    #[case("example.com", "example.com", true)]
-    #[case("example.com", "sub.example.com", false)]
-    #[case("*.example.com", "sub.example.com", true)]
-    #[case("*.example.com", "example.com", false)]
-    #[case("*.example.com", "deep.sub.example.com", true)]
-    #[case("*.example.com", "other.com", false)]
-    fn host_pattern_matches_expected(
-        #[case] pattern: &str,
-        #[case] host: &str,
-        #[case] expected: bool,
-    ) -> Result<()> {
-        let parsed = HostPattern::parse(pattern)?;
-        ensure!(
-            parsed.matches(host) == expected,
-            "expected match={expected} for {host} against {pattern}",
-        );
-        Ok(())
-    }
-
-    #[rstest]
-    #[case("-example.com")]
-    #[case("example-.com")]
-    #[case("exa mple.com")]
-    #[case("*.bad-.test")]
-    fn host_pattern_rejects_invalid_shapes(#[case] pattern: &str) {
-        let err = HostPattern::parse(pattern).expect_err("invalid pattern should fail");
-        let message = err.to_string();
+    #[case("http!")]
+    #[case("123abc")]
+    fn allow_scheme_rejects_invalid_input(#[case] scheme: &str) {
+        let err = NetworkPolicy::default()
+            .allow_scheme(scheme)
+            .expect_err("invalid schemes should be rejected");
         assert!(
-            message.contains("host pattern"),
-            "error message should mention host pattern validation: {message}"
+            matches!(
+                err,
+                NetworkPolicyConfigError::InvalidScheme { scheme: ref rejected }
+                    if rejected == scheme
+            ),
+            "expected InvalidScheme for '{scheme}', got {err:?}"
         );
+    }
+
+    #[rstest]
+    fn allow_hosts_appends_patterns() -> Result<()> {
+        let policy = NetworkPolicy::default()
+            .deny_all_hosts()
+            .allow_hosts(["example.com"])?
+            .allow_hosts(["*.example.org"])?;
+        let exact = Url::parse("https://example.com")?;
+        let wildcard = Url::parse("https://sub.example.org")?;
+        policy
+            .evaluate(&exact)
+            .expect("exact host should remain allowed");
+        policy
+            .evaluate(&wildcard)
+            .expect("wildcard host should be appended");
+        Ok(())
+    }
+
+    #[rstest]
+    fn allow_hosts_activates_allowlist() -> Result<()> {
+        let policy = NetworkPolicy::default().allow_hosts(["example.com"])?;
+        let allowed = Url::parse("https://example.com")?;
+        let denied = Url::parse("https://unauthorised.test")?;
+        policy
+            .evaluate(&allowed)
+            .expect("allowlisted host should pass");
+        let err = policy
+            .evaluate(&denied)
+            .expect_err("non-allowlisted host should be rejected");
+        ensure!(
+            err == NetworkPolicyViolation::HostNotAllowlisted {
+                host: String::from("unauthorised.test"),
+            },
+            "expected host unauthorised.test but was {err:?}",
+        );
+        Ok(())
     }
 
     #[rstest]

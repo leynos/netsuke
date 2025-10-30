@@ -28,6 +28,7 @@ impl Cli {
     ///
     /// ```rust
     /// use netsuke::cli::Cli;
+    /// use netsuke::host_pattern::HostPattern;
     ///
     /// let cli = Cli {
     ///     fetch_allow_scheme: vec![String::from("http?")],
@@ -54,8 +55,6 @@ impl Cli {
             if !self.fetch_allow_host.is_empty() {
                 policy = policy.allow_host_patterns(self.fetch_allow_host.clone())?;
             }
-        } else if !self.fetch_allow_host.is_empty() {
-            policy = policy.allow_host_patterns(self.fetch_allow_host.clone())?;
         }
 
         for host in &self.fetch_block_host {
