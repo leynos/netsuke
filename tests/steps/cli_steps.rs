@@ -7,11 +7,12 @@
 //! This module provides step definitions that test the command-line interface
 //! parsing and validation using the Cucumber framework.
 use crate::CliWorld;
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Parser;
 use cucumber::{given, then, when};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use std::path::PathBuf;
+use url::Url;
 
 fn apply_cli(world: &mut CliWorld, args: &str) {
     let tokens: Vec<String> = std::iter::once("netsuke".to_owned())
@@ -33,6 +34,11 @@ fn apply_cli(world: &mut CliWorld, args: &str) {
             world.cli_error = Some(e.to_string());
         }
     }
+}
+
+fn cli_network_policy(world: &CliWorld) -> Result<netsuke::stdlib::NetworkPolicy> {
+    let cli = world.cli.as_ref().context("CLI has not been parsed")?;
+    cli.network_policy().context("construct CLI network policy")
 }
 
 fn extract_build(world: &CliWorld) -> Result<(&[String], &Option<PathBuf>)> {
@@ -186,6 +192,39 @@ fn emit_path(world: &mut CliWorld, emit_path_str: String) -> Result<()> {
     );
     Ok(())
 }
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the CLI network policy allows {string}")]
+fn cli_policy_allows(world: &mut CliWorld, url: String) -> Result<()> {
+    let policy = cli_network_policy(world)?;
+    let parsed = Url::parse(&url).context("parse URL for CLI policy check")?;
+    ensure!(
+        policy.evaluate(&parsed).is_ok(),
+        "expected CLI policy to allow {url}",
+    );
+    Ok(())
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned String arguments"
+)]
+#[then(expr = "the CLI network policy rejects {string} with {string}")]
+fn cli_policy_rejects(world: &mut CliWorld, url: String, message: String) -> Result<()> {
+    let policy = cli_network_policy(world)?;
+    let parsed = Url::parse(&url).context("parse URL for CLI policy check")?;
+    let Err(err) = policy.evaluate(&parsed) else {
+        bail!("expected CLI policy to reject {url}");
+    };
+    ensure!(
+        err.to_string().contains(&message),
+        "expected error to mention '{message}', got '{err}'",
+    );
+    Ok(())
+}
+
 #[expect(
     clippy::needless_pass_by_value,
     reason = "Cucumber requires owned String arguments"

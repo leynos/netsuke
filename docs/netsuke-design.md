@@ -966,6 +966,12 @@ Implementation details:
   workspace. Remote fetches and cache writes mark the stdlib state as impure so
   callers can discard memoised renders, while cache hits remain pure and
   preserve memoised renders.
+- `fetch` validates URLs against a policy that allows only `https://` by
+  default. Operators can expand the allowlist with
+  `--fetch-allow-scheme <SCHEME>`, declare explicit host allowlists via
+  `--fetch-allow-host <HOST>` and `--fetch-default-deny`, and block individual
+  hosts through `--fetch-block-host <HOST>`. Policy failures abort before a
+  network call and leave the template marked pure.
 - `manifest::from_path` derives the workspace root from the manifest file's
   directory before registering the stdlib. This keeps caches scoped to the
   manifest tree even when the CLI evaluates a manifest from another working

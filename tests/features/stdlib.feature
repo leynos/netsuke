@@ -91,17 +91,35 @@ Feature: Template stdlib filters
 
   Scenario: fetch retrieves remote content and marks templates impure
     Given an HTTP server returning "payload"
+    And the stdlib network policy allows scheme "http"
     When I render "{{ fetch(url) }}" with stdlib url
     Then the stdlib output is "payload"
     And the stdlib template is impure
 
+  Scenario: fetch rejects non-HTTPS URLs by default
+    Given an HTTP server returning "payload"
+    When I render "{{ fetch(url) }}" with stdlib url
+    Then the stdlib error contains "scheme 'http' is not permitted"
+    And the stdlib template is pure
+
+  Scenario: fetch rejects hosts outside the allowlist
+    Given an HTTP server returning "payload"
+    And the stdlib network policy allows scheme "http"
+    And the stdlib network policy blocks all hosts by default
+    And the stdlib network policy allows host "example.com"
+    When I render "{{ fetch(url) }}" with stdlib url
+    Then the stdlib error contains "not allowlisted"
+    And the stdlib template is pure
+
   Scenario: fetch reports network errors
+    Given the stdlib network policy allows scheme "http"
     When I render the stdlib template "{{ fetch('http://127.0.0.1:9') }}"
     Then the stdlib error contains "fetch failed"
     And the stdlib template is impure
 
   Scenario: fetch caches responses inside the workspace
     Given an HTTP server returning "cached"
+    And the stdlib network policy allows scheme "http"
     When I render "{{ fetch(url, cache=true) }}" with stdlib url
     Then the stdlib output is "cached"
     And the stdlib template is impure

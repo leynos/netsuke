@@ -11,11 +11,12 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 const FALLBACK_DATE: &str = "1970-01-01";
 
 #[path = "src/cli.rs"]
-#[expect(
-    dead_code,
-    reason = "Only type definitions are needed for man page generation"
-)]
 mod cli;
+
+#[path = "src/host_pattern.rs"]
+mod host_pattern;
+
+use host_pattern::{HostPattern, HostPatternError};
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -63,6 +64,12 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Exercise the host pattern symbols so the shared module remains linked
+    // when the build script is compiled without tests.
+    const _: usize = std::mem::size_of::<HostPattern>();
+    let _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
+    let _: fn(&HostPattern, &str) -> bool = HostPattern::matches;
+
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");

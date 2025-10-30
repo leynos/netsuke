@@ -23,13 +23,19 @@ introduces, and concrete remediation tasks that would harden the helpers.
     `Dir` handle. Template code can no longer pass `cache_dir`, so per-template
     overrides now raise an error instead of redirecting caches outside the
     workspace.
-- [ ] **Outbound requests lack scheme and host validation.** Because `fetch`
-  accepts any URL, manifests can reach link-local metadata services (for
-  example, `http://169.254.169.254/`) or other internal resources, yielding
-  SSRF. *Remediation tasks:*
+- [x] **Outbound requests lack scheme and host validation.** *(Status:
+  remediated on 20 October 2025.)* Because `fetch` accepts any URL, manifests
+  can reach link-local metadata services (for example,
+  `http://169.254.169.254/`) or other internal resources, yielding SSRF.
+  *Remediation tasks:*
   - Provide an allowlist / blocklist mechanism (e.g. only `https://` hosts or
     specific domains) and allow administrators to disable outbound requests
     entirely for untrusted manifests.
+  - **Remediation:** outbound requests now default to `https://` and are
+    vetted against `--fetch-allow-scheme`, `--fetch-allow-host`, and
+    `--fetch-block-host` CLI options. `--fetch-default-deny` switches the
+    policy to "block by default" with an explicit allowlist. Policy violations
+    surface as `InvalidOperation` errors without opening a network connection.
 - [ ] **Response bodies are read without a size limit.** `fetch_remote` reads
   the entire HTTP response into memory before returning or caching it. An
   attacker controlling the endpoint can stream unbounded data and exhaust

@@ -115,7 +115,17 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// ```ignore
 /// use netsuke::cli::{BuildArgs, Cli};
 /// use netsuke::runner::handle_build;
-/// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
+/// let cli = Cli {
+///     file: "Netsukefile".into(),
+///     directory: None,
+///     jobs: None,
+///     verbose: false,
+///     fetch_allow_scheme: Vec::new(),
+///     fetch_allow_host: Vec::new(),
+///     fetch_block_host: Vec::new(),
+///     fetch_default_deny: false,
+///     command: None,
+/// };
 /// let args = BuildArgs { emit: None, targets: vec![] };
 /// handle_build(&cli, &args).unwrap();
 /// ```
@@ -164,6 +174,10 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 ///     directory: None,
 ///     jobs: None,
 ///     verbose: false,
+///     fetch_allow_scheme: Vec::new(),
+///     fetch_allow_host: Vec::new(),
+///     fetch_block_host: Vec::new(),
+///     fetch_default_deny: false,
 ///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
 /// };
 /// let ninja = generate_ninja(&cli).expect("generate");
@@ -171,7 +185,10 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli)?;
-    let manifest = manifest::from_path(manifest_path.as_std_path())
+    let policy = cli
+        .network_policy()
+        .context("derive network policy from CLI flags")?;
+    let manifest = manifest::from_path_with_policy(manifest_path.as_std_path(), policy)
         .with_context(|| format!("loading manifest at {manifest_path}"))?;
     if tracing::enabled!(tracing::Level::DEBUG) {
         let ast_json = serde_json::to_string_pretty(&manifest).context("serialising manifest")?;
@@ -191,7 +208,17 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 /// ```ignore
 /// use crate::cli::Cli;
 /// use crate::runner::resolve_manifest_path;
-/// let cli = Cli { file: "Netsukefile".into(), directory: None, jobs: None, verbose: false, command: None };
+/// let cli = Cli {
+///     file: "Netsukefile".into(),
+///     directory: None,
+///     jobs: None,
+///     verbose: false,
+///     fetch_allow_scheme: Vec::new(),
+///     fetch_allow_host: Vec::new(),
+///     fetch_block_host: Vec::new(),
+///     fetch_default_deny: false,
+///     command: None,
+/// };
 /// let path = resolve_manifest_path(&cli).expect("valid manifest path");
 /// assert!(path.as_str().ends_with("Netsukefile"));
 /// ```
