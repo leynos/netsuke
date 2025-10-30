@@ -126,3 +126,39 @@ fn evaluate_prefers_blocklist() -> Result<()> {
     );
     Ok(())
 }
+
+#[rstest]
+fn evaluate_blocklist_precedence_with_allowlist_wildcard() -> Result<()> {
+    let policy = NetworkPolicy::default()
+        .allow_hosts(["*.example.com"])?
+        .block_host("blocked.example.com")?;
+    let url = Url::parse("https://blocked.example.com")?;
+    let err = policy
+        .evaluate(&url)
+        .expect_err("blocklist should win when host matches both lists");
+    ensure!(
+        err == NetworkPolicyViolation::HostBlocked {
+            host: String::from("blocked.example.com"),
+        },
+        "expected blocklist to reject blocked.example.com but was {err:?}",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn evaluate_blocklist_precedence_with_wildcard() -> Result<()> {
+    let policy = NetworkPolicy::default()
+        .allow_hosts(["sub.example.com"])?
+        .block_host("*.example.com")?;
+    let url = Url::parse("https://sub.example.com")?;
+    let err = policy
+        .evaluate(&url)
+        .expect_err("blocklist should win when wildcard matches allowlisted host");
+    ensure!(
+        err == NetworkPolicyViolation::HostBlocked {
+            host: String::from("sub.example.com"),
+        },
+        "expected blocklist to reject sub.example.com but was {err:?}",
+    );
+    Ok(())
+}
