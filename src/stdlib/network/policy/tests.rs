@@ -7,6 +7,14 @@ use anyhow::{Result, ensure};
 use rstest::rstest;
 use url::Url;
 
+struct BlocklistPrecedenceCase<'a> {
+    allow_patterns: &'a [&'a str],
+    block_pattern: &'a str,
+    test_url: &'a str,
+    expected_blocked_host: &'a str,
+    failure_message: &'a str,
+}
+
 #[rstest]
 #[case("http!")]
 #[case("123abc")]
@@ -113,55 +121,45 @@ fn evaluate_respects_allowlist() -> Result<()> {
 }
 
 #[rstest]
-fn evaluate_prefers_blocklist() -> Result<()> {
+#[case(BlocklistPrecedenceCase {
+    allow_patterns: &["example.com"],
+    block_pattern: "example.com",
+    test_url: "https://example.com",
+    expected_blocked_host: "example.com",
+    failure_message: "blocklist should win when host appears in both lists",
+})]
+#[case(BlocklistPrecedenceCase {
+    allow_patterns: &["*.example.com"],
+    block_pattern: "blocked.example.com",
+    test_url: "https://blocked.example.com",
+    expected_blocked_host: "blocked.example.com",
+    failure_message: "blocklist should win when host matches allowlist wildcard",
+})]
+#[case(BlocklistPrecedenceCase {
+    allow_patterns: &["sub.example.com"],
+    block_pattern: "*.example.com",
+    test_url: "https://sub.example.com",
+    expected_blocked_host: "sub.example.com",
+    failure_message: "blocklist should win when wildcard matches allowlisted host",
+})]
+fn evaluate_blocklist_precedence(#[case] case: BlocklistPrecedenceCase<'_>) -> Result<()> {
+    let BlocklistPrecedenceCase {
+        allow_patterns,
+        block_pattern,
+        test_url,
+        expected_blocked_host,
+        failure_message,
+    } = case;
     let policy = NetworkPolicy::default()
-        .allow_hosts(["example.com"])?
-        .block_host("example.com")?;
-    let url = Url::parse("https://example.com")?;
-    let err = policy
-        .evaluate(&url)
-        .expect_err("blocklist should win when host appears in both lists");
+        .allow_hosts(allow_patterns.iter().copied())?
+        .block_host(block_pattern)?;
+    let url = Url::parse(test_url)?;
+    let err = policy.evaluate(&url).expect_err(failure_message);
     ensure!(
         err == NetworkPolicyViolation::HostBlocked {
-            host: String::from("example.com"),
+            host: String::from(expected_blocked_host),
         },
-        "expected blocklist to reject example.com but was {err:?}",
-    );
-    Ok(())
-}
-
-#[rstest]
-fn evaluate_blocklist_precedence_with_allowlist_wildcard() -> Result<()> {
-    let policy = NetworkPolicy::default()
-        .allow_hosts(["*.example.com"])?
-        .block_host("blocked.example.com")?;
-    let url = Url::parse("https://blocked.example.com")?;
-    let err = policy
-        .evaluate(&url)
-        .expect_err("blocklist should win when host matches both lists");
-    ensure!(
-        err == NetworkPolicyViolation::HostBlocked {
-            host: String::from("blocked.example.com"),
-        },
-        "expected blocklist to reject blocked.example.com but was {err:?}",
-    );
-    Ok(())
-}
-
-#[rstest]
-fn evaluate_blocklist_precedence_with_wildcard() -> Result<()> {
-    let policy = NetworkPolicy::default()
-        .allow_hosts(["sub.example.com"])?
-        .block_host("*.example.com")?;
-    let url = Url::parse("https://sub.example.com")?;
-    let err = policy
-        .evaluate(&url)
-        .expect_err("blocklist should win when wildcard matches allowlisted host");
-    ensure!(
-        err == NetworkPolicyViolation::HostBlocked {
-            host: String::from("sub.example.com"),
-        },
-        "expected blocklist to reject sub.example.com but was {err:?}",
+        "expected blocklist to reject {expected_blocked_host} but was {err:?}",
     );
     Ok(())
 }
