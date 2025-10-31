@@ -32,7 +32,7 @@ system.
 
 Netsuke is typically built from source using Cargo:
 
-```
+```sh
 cargo build --release
 # The executable will be in target/release/netsuke
 
@@ -52,7 +52,7 @@ default command is `build`.
 
 2. **Run Netsuke:** Execute the `netsuke` command.
 
-```
+```sh
 netsuke # Builds default targets defined in Netsukefile
 netsuke build target_name another_target # Builds specific targets
 
@@ -67,7 +67,7 @@ The `Netsukefile` is a YAML file describing your build process.
 
 ### Top-Level Structure
 
-```
+```yaml
 # Mandatory: Specifies the manifest format version
 netsuke_version: "1.0.0"
 
@@ -141,7 +141,7 @@ defaults:
 
 Rules encapsulate reusable build commands or scripts.
 
-```
+```yaml
 rules:
   - name: compile # Unique identifier for the rule
     # Recipe: Exactly one of 'command', 'script', or 'rule'
@@ -182,13 +182,16 @@ rules:
 
 Targets define *what* to build or *what action* to perform.
 
-```
+```yaml
 targets:
   # Example 1: Building an object file using a rule
-  - name: build/utils.o         # Output file(s). Can be a string or list.
-    rule: compile               # Rule to use (mutually exclusive with command/script)
+  - name: build/utils.o         # Output file(s).
+    # Can be a string or list.
+    rule: compile               # Rule to use.
+    # Mutually exclusive with command/script.
     sources: src/utils.c        # Input file(s). String or list.
-    deps:                       # Explicit dependencies (targets built before this one)
+    deps:                       # Explicit dependencies.
+    # Targets built before this one.
       - build/utils.h
     vars:                       # Target-local variables, override globals
       cflags: "-O0 -g"
@@ -196,21 +199,25 @@ targets:
   # Example 2: Linking an executable using an inline command
   - name: my_app
     command: "{{ cc }} build/main.o build/utils.o -o my_app"
-    sources:                    # Implicit dependencies derived from command/rule usage
+    sources:                    # Implicit dependencies derived from
+    # command/rule usage.
       - build/main.o
       - build/utils.o
-    order_only_deps:            # Dependencies built before, but changes don't trigger rebuild
-      - build_directory         # e.g., Ensure 'build/' exists
+    order_only_deps:            # Dependencies built before.
+    # Changes do not trigger rebuild.
+      - build_directory         # For example, ensure 'build/' exists.
 
   # Example 3: A phony action (can also be in top-level 'actions:')
   - name: package
-    phony: true                 # Doesn't represent a file, always considered out-of-date
+    phony: true                 # Doesn't represent a file.
+    # Always considered out-of-date.
     command: "tar czf package.tar.gz my_app"
     deps: my_app                # Depends on the 'my_app' target
 
   # Example 4: A target that always runs
   - name: timestamp
-    always: true                # Runs every time, regardless of inputs/outputs
+    always: true                # Runs every time.
+    # Regardless of inputs/outputs.
     command: "date > build/timestamp.txt"
 
 ```
@@ -251,8 +258,9 @@ dynamic capabilities to your manifest.
 
 - Expressions: `{{ 1 + 1 }}`, `{{ sources | map('basename') }}`
 
-- Control Structures (within specific keys like `foreach`, `when`, or inside
-  `macros`): `{% if enable %}...{% endif %}`, `{% for item in list %}...{% endfor %}`
+- Control Structures (within specific keys like `foreach`, `when`, or
+  inside `macros`): `{% if enable %}...{% endif %}`,
+  `{% for item in list %}...{% endfor %}`
 
 **Important:** Structural Jinja (`{% %}`) is generally **not** allowed directly
 within the YAML structure outside of `macros`. Logic should primarily be within
@@ -281,7 +289,7 @@ Netsuke processes the manifest in stages:
 
 These keys enable generating multiple similar targets programmatically.
 
-```
+```yaml
 targets:
   # Generate a target for each .c file in src/
   - foreach: glob('src/*.c')        # Jinja expression returning an iterable
@@ -306,11 +314,11 @@ targets:
 
 Define reusable Jinja logic in the top-level `macros` section.
 
-```
+```yaml
 macros:
-  - signature: "cc_cmd(src, obj, flags='')" # Jinja macro signature
-    body: |                                # Multi-line body
-      {{ cc }} {{ flags }} -c {{ src | shell_escape }} -o {{ obj | shell_escape }}
+    - signature: "cc_cmd(src, obj, flags='')" # Jinja macro signature
+      body: |                                # Multi-line body
+        {{ cc }} {{ flags }} -c {{ src|shell_escape }} -o {{ obj|shell_escape }}
 
 targets:
   - name: build/main.o
@@ -343,9 +351,9 @@ templates.
   `.iso8601`, `.unix_timestamp`, `.offset`.
 
 - `timedelta(...)`: Creates a duration object (e.g., for age comparisons).
-  Accepts
-  `weeks`, `days`, `hours`, `minutes`, `seconds`, `milliseconds`, `microseconds`, `nanoseconds`.
-  Exposes `.iso8601`, `.seconds`, `.nanoseconds`.
+  Accepts `weeks`, `days`, `hours`, `minutes`, `seconds`,
+  `milliseconds`, `microseconds`, `nanoseconds`. Exposes `.iso8601`,
+  `.seconds`, `.nanoseconds`.
 
 ### Key Filters
 
@@ -435,7 +443,7 @@ Use tests with the `is` keyword: `{% if path is file %}`
 
 Netsuke's CLI provides commands to manage your build.
 
-```
+```text
 netsuke [OPTIONS] [COMMAND] [TARGETS...]
 
 ```
