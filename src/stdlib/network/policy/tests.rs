@@ -1,3 +1,6 @@
+//! Integration-style tests for the network policy, covering host allow/block
+//! precedence and scheme validation behaviour.
+
 use super::*;
 
 use anyhow::{Result, ensure};

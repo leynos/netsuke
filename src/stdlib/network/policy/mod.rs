@@ -144,10 +144,10 @@ impl NetworkPolicy {
     ///
     /// By default the policy allows every host because
     /// [`Self::default`] leaves default-deny disabled. Calling
-    /// [`Self::deny_all_hosts`] switches to default-deny mode and activates the
-    /// allowlist assembled via this method. Invoking `allow_hosts` beforehand
-    /// simply stages the patterns so the later default-deny transition applies
-    /// them immediately.
+    /// [`Self::allow_hosts`] immediately activates the allowlist and causes any
+    /// host not matched by the supplied patterns to be rejected. As an
+    /// alternative, [`Self::deny_all_hosts`] enables default-deny mode with an
+    /// empty allowlist so patterns can be added incrementally afterwards.
     ///
     /// Patterns must be ASCII (or punycode) to match the `url::Url`
     /// representation. Unicode domains should be converted to punycode
