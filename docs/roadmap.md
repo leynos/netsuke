@@ -199,6 +199,27 @@ library, and CLI ergonomics.
     command for diagnostic codes, capturing the decision and rationale in the
     architecture docs.
 
+- [ ] **Executable Discovery Filter (`which`):**
+
+  - [ ] Implement the cross-platform `which` MiniJinja filter and matching
+    function alias, exposing `all`, `canonical`, `fresh`, and `cwd_mode`
+    keyword arguments that mirror the design document.
+
+  - [ ] Integrate the finder with the Stage 3/4 render cache by including
+    `PATH`, optional `PATHEXT`, current directory, and option flags in the
+    memoisation key while keeping the helper pure by default.
+
+  - [ ] Provide an LRU cache with metadata self-healing to avoid stale hits,
+    and honour `fresh=true` without discarding cached entries.
+
+  - [ ] Emit actionable `netsuke::jinja::which::not_found` and
+    `netsuke::jinja::which::args` diagnostics with PATH previews and
+    platform-appropriate hints.
+
+  - [ ] Cover POSIX and Windows behaviour, canonicalisation, list-all mode,
+    and cache validation with unit tests, plus MiniJinja fixtures that assert
+    deterministic renders across repeated invocations.
+
 - [ ] **Welcoming Onboarding and Defaults:**
 
   - [ ] Ensure running `netsuke` with no subcommand builds manifest defaults,
