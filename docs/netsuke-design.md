@@ -972,7 +972,7 @@ entries were inspected, a shortened preview of the path list, and platform
 appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
 Invalid arguments surface as `netsuke::jinja::which::args`.
 
-Unit tests cover POSIX and Windows specifics, canonicalisation, cache
+Unit tests cover POSIX and Windows specifics, canonicalization, cache
 validation, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.

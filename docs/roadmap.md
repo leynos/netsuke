@@ -216,7 +216,7 @@ library, and CLI ergonomics.
     `netsuke::jinja::which::args` diagnostics with PATH previews and
     platform-appropriate hints.
 
-  - [ ] Cover POSIX and Windows behaviour, canonicalisation, list-all mode,
+  - [ ] Cover POSIX and Windows behaviour, canonicalization, list-all mode,
     and cache validation with unit tests, plus MiniJinja fixtures that assert
     deterministic renders across repeated invocations.
 
