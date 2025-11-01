@@ -11,7 +11,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Parser;
 use cucumber::{given, then, when};
 use netsuke::cli::{BuildArgs, Cli, Commands};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use url::Url;
 
 fn apply_cli(world: &mut CliWorld, args: &str) {
@@ -125,7 +125,7 @@ fn command_is_manifest(world: &mut CliWorld) -> Result<()> {
 fn manifest_path(world: &mut CliWorld, manifest_path_str: String) -> Result<()> {
     let cli = world.cli.as_ref().context("CLI has not been parsed")?;
     ensure!(
-        cli.file == PathBuf::from(&manifest_path_str),
+        cli.file.as_path() == Path::new(&manifest_path_str),
         "expected manifest path {}, got {}",
         manifest_path_str,
         cli.file.display()
