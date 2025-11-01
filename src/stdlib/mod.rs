@@ -34,6 +34,8 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
 /// Default relative path for the fetch cache within the workspace.
 pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
+/// Default upper bound for network helper responses (8 MiB).
+pub(crate) const DEFAULT_FETCH_MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Configuration for registering Netsuke's standard library helpers.
 ///
@@ -57,6 +59,7 @@ pub struct StdlibConfig {
     workspace_root: Arc<Dir>,
     fetch_cache_relative: Utf8PathBuf,
     network_policy: NetworkPolicy,
+    fetch_max_response_bytes: u64,
 }
 
 impl StdlibConfig {
@@ -90,6 +93,7 @@ impl StdlibConfig {
             workspace_root: Arc::new(workspace_root),
             fetch_cache_relative: default,
             network_policy: NetworkPolicy::default(),
+            fetch_max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
         }
     }
 
@@ -131,6 +135,21 @@ impl StdlibConfig {
         self
     }
 
+    /// Override the maximum fetch response size in bytes.
+    ///
+    /// The limit protects renderers from unbounded downloads. Values must be
+    /// strictly positive; zero-byte responses remain permitted because they do
+    /// not consume the budget.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `max_bytes` is zero.
+    pub fn with_fetch_max_response_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
+        anyhow::ensure!(max_bytes > 0, "fetch response limit must be positive");
+        self.fetch_max_response_bytes = max_bytes;
+        Ok(self)
+    }
+
     /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
     pub fn fetch_cache_relative(&self) -> &Utf8Path {
@@ -143,6 +162,7 @@ impl StdlibConfig {
             cache_root: self.workspace_root,
             cache_relative: self.fetch_cache_relative,
             policy: self.network_policy,
+            max_response_bytes: self.fetch_max_response_bytes,
         }
     }
 
@@ -188,6 +208,7 @@ pub(crate) struct NetworkConfig {
     pub(crate) cache_root: Arc<Dir>,
     pub(crate) cache_relative: Utf8PathBuf,
     pub(crate) policy: NetworkPolicy,
+    pub(crate) max_response_bytes: u64,
 }
 
 /// Captures mutable state shared between stdlib helpers.

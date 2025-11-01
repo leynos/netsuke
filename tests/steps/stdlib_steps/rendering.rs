@@ -22,6 +22,11 @@ pub(crate) fn render_template_with_context(
     if let Some(policy) = world.stdlib_policy.clone() {
         config = config.with_network_policy(policy);
     }
+    if let Some(limit) = world.stdlib_fetch_max_bytes {
+        config = config
+            .with_fetch_max_response_bytes(limit)
+            .context("configure stdlib fetch response limit")?;
+    }
     let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
     world.stdlib_state = Some(state);

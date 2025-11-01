@@ -9,6 +9,7 @@
 )]
 
 mod assertions;
+mod config;
 mod parsing;
 mod policy;
 mod rendering;
@@ -20,6 +21,11 @@ mod workspace;
     reason = "Re-export step functions for Cucumber discovery"
 )]
 pub(crate) use assertions::*;
+#[expect(
+    unused_imports,
+    reason = "Re-export step functions for Cucumber discovery"
+)]
+pub(crate) use config::*;
 #[expect(
     unused_imports,
     reason = "Re-export step functions for Cucumber discovery"

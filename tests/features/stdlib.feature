@@ -125,6 +125,14 @@ Feature: Template stdlib filters
     And the stdlib template is impure
     And the stdlib workspace contains the fetch cache for stdlib url
 
+  Scenario: fetch rejects responses exceeding the configured limit
+    Given an HTTP server returning "0123456789012345678901234567890123456789"
+    And the stdlib network policy allows scheme "http"
+    And the stdlib fetch response limit is 32 bytes
+    When I render "{{ fetch(url) }}" with stdlib url
+    Then the stdlib error contains "configured limit of 32 bytes"
+    And the stdlib template is impure
+
   Scenario: fetch rejects cache_dir overrides
     Given an HTTP server returning "payload"
     When I render the stdlib template "{{ fetch(url, cache=true, cache_dir='.netsuke/cache') }}" with stdlib url
