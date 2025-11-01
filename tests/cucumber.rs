@@ -49,6 +49,8 @@ pub struct CliWorld {
     pub stdlib_command: Option<String>,
     /// Custom network policy applied during stdlib rendering scenarios.
     pub stdlib_policy: Option<NetworkPolicy>,
+    /// Maximum fetch response size configured for the active scenario.
+    pub stdlib_fetch_max_bytes: Option<u64>,
     /// Last HTTP server fixture started by stdlib steps.
     pub http_server: Option<http::HttpServer>,
     /// URL exposed by the active HTTP server fixture.
