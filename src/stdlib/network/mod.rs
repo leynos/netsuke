@@ -86,7 +86,8 @@ fn fetch(
             impure.store(true, Ordering::Relaxed);
             cached
         } else {
-            fetch_remote_with_cache(&parsed, impure, &dir, &key, limit)?
+            let cache = CacheEntry::new(&dir, &key);
+            fetch_remote_with_cache(&parsed, impure, limit, &cache)?
         }
     } else {
         fetch_remote(&parsed, impure, limit)?
@@ -100,28 +101,63 @@ fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u
     read_response(url, response.into_reader(), limit, None)
 }
 
+struct CacheEntry<'a> {
+    dir: &'a Dir,
+    name: &'a str,
+    path: Utf8PathBuf,
+}
+
+impl<'a> CacheEntry<'a> {
+    fn new(dir: &'a Dir, name: &'a str) -> Self {
+        Self {
+            dir,
+            name,
+            path: Utf8PathBuf::from(name),
+        }
+    }
+
+    fn path(&self) -> &Utf8Path {
+        self.path.as_path()
+    }
+
+    fn open_writer(&self) -> Result<File, Error> {
+        open_cache_writer(self.dir, self.path())
+    }
+
+    fn remove_file(&self) -> io::Result<()> {
+        self.dir.remove_file(self.path())
+    }
+
+    const fn name(&self) -> &str {
+        self.name
+    }
+}
+
 fn fetch_remote_with_cache(
     url: &Url,
     impure: &Arc<AtomicBool>,
-    dir: &Dir,
-    name: &str,
     limit: u64,
+    cache: &CacheEntry<'_>,
 ) -> Result<Vec<u8>, Error> {
     let response = dispatch_request(url, impure)?;
-    let path = Utf8Path::new(name);
-    let mut file = open_cache_writer(dir, path)?;
-    let mut sink: Option<&mut dyn Write> = Some(&mut file);
-    match read_response(url, response.into_reader(), limit, sink.take()) {
+    let mut file = cache.open_writer()?;
+    match read_response(url, response.into_reader(), limit, Some(&mut file)) {
         Ok(bytes) => {
             file.sync_all()
-                .map_err(|err| io_error("sync cache entry", path, &err))?;
+                .map_err(|err| io_error("sync cache entry", cache.path(), &err))?;
             Ok(bytes)
         }
         Err(err) => {
             drop(file);
-            if let Err(remove_err) = dir.remove_file(path) {
-                if remove_err.kind() != io::ErrorKind::NotFound {
-                    tracing::warn!("failed to clean up partial fetch cache '{name}': {remove_err}");
+            if let Err(remove_err) = cache.remove_file() {
+                match remove_err.kind() {
+                    io::ErrorKind::NotFound => {}
+                    _ => {
+                        tracing::warn!(
+                            "failed to clean up partial fetch cache '{}': {remove_err}",
+                            cache.name()
+                        );
+                    }
                 }
             }
             Err(err)
@@ -208,9 +244,18 @@ fn read_response(
         if total > limit {
             return Err(response_limit_error(url, limit));
         }
-        buffer.extend_from_slice(&chunk[..read]);
+        let bytes = chunk.get(..read).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!(
+                    "failed to read response from '{}': read beyond buffer capacity",
+                    url.as_str()
+                ),
+            )
+        })?;
+        buffer.extend_from_slice(bytes);
         if let Some(writer) = sink.as_deref_mut() {
-            writer.write_all(&chunk[..read]).map_err(|err| {
+            writer.write_all(bytes).map_err(|err| {
                 Error::new(
                     ErrorKind::InvalidOperation,
                     format!("failed to write cache entry for '{}': {err}", url.as_str()),
@@ -315,7 +360,7 @@ impl FetchContext {
     fn policy(&self) -> &NetworkPolicy { self.policy.as_ref() }
 
     #[rustfmt::skip]
-    fn max_response_bytes(&self) -> u64 { self.max_response_bytes }
+    const fn max_response_bytes(&self) -> u64 { self.max_response_bytes }
 }
 
 #[cfg(test)]

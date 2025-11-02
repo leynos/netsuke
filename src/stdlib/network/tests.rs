@@ -4,6 +4,7 @@ use super::*;
 
 use anyhow::{Context, Result, anyhow, ensure};
 use std::{
+    convert::TryFrom,
     fs,
     sync::{
         Arc,
@@ -53,6 +54,13 @@ fn make_context_with(root: Arc<Dir>, policy: NetworkPolicy, limit: u64) -> Fetch
         max_response_bytes: limit,
     };
     FetchContext::new(config)
+}
+
+fn limit_with_offset(limit: u64, offset: u64) -> usize {
+    let total = limit
+        .checked_add(offset)
+        .expect("test limit plus offset should not overflow");
+    usize::try_from(total).expect("test limit plus offset should fit into usize")
 }
 
 #[rstest]
@@ -173,7 +181,7 @@ fn fetch_cache_opens_default_directory(cache_workspace: Result<CacheWorkspace>) 
 fn fetch_rejects_responses_over_the_limit(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
     let limit = 16_u64;
-    let body = "x".repeat((limit + 1) as usize);
+    let body = "x".repeat(limit_with_offset(limit, 1));
     let (url, _server) =
         http::spawn_http_server(body).context("spawn HTTP server for oversized response test")?;
     let policy = NetworkPolicy::default()
@@ -248,7 +256,7 @@ fn fetch_clears_partial_cache_on_limit_error(
         .allow_scheme("http")
         .context("allow http scheme for cache failure test")?;
     let limit = 32_u64;
-    let body = "y".repeat((limit + 8) as usize);
+    let body = "y".repeat(limit_with_offset(limit, 8));
     let (url, _server) =
         http::spawn_http_server(body).context("spawn HTTP server for cache failure test")?;
     let context = make_context_with(Arc::clone(&root), policy, limit);
@@ -305,7 +313,7 @@ fn fetch_rejects_cached_entries_exceeding_limit(
     let cache_dir = context.open_cache_dir()?;
     let parsed = Url::parse(&url).context("parse cache URL for oversized entry test")?;
     let key = cache_key(parsed.as_str());
-    let oversized = "z".repeat((limit + 1) as usize);
+    let oversized = "z".repeat(limit_with_offset(limit, 1));
     cache_dir
         .write(Utf8Path::new(&key), oversized.as_bytes())
         .context("seed oversized cache entry")?;
