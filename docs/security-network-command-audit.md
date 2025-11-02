@@ -49,7 +49,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
     8 MiB) and aborts requests once the limit is exceeded, quoting the
     configured threshold in the error. Cached downloads stream directly to disk
     and partial files are cleaned up when errors occur; cache reads reuse the
-    same guard so stale oversized entries fail fast.
+    same guard, so stale oversized entries fail fast.
 
 ## Command helper findings
 
