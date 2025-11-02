@@ -32,7 +32,7 @@ system.
 
 Netsuke is typically built from source using Cargo:
 
-```
+```sh
 cargo build --release
 # The executable will be in target/release/netsuke
 
@@ -52,7 +52,7 @@ default command is `build`.
 
 2. **Run Netsuke:** Execute the `netsuke` command.
 
-```
+```sh
 netsuke # Builds default targets defined in Netsukefile
 netsuke build target_name another_target # Builds specific targets
 
@@ -67,7 +67,7 @@ The `Netsukefile` is a YAML file describing your build process.
 
 ### Top-Level Structure
 
-```
+```yaml
 # Mandatory: Specifies the manifest format version
 netsuke_version: "1.0.0"
 
@@ -117,8 +117,7 @@ defaults:
   indicating the manifest schema version. Parsed using `semver`.
 
 - `vars` (Optional): A mapping (dictionary) of global variables. Values can
-  be strings, numbers, booleans, or lists, accessible within Jinja
-  expressions.
+  be strings, numbers, booleans, or lists, accessible within Jinja expressions.
 
 - `macros` (Optional): A list of Jinja macro definitions. Each item has a
   `signature` (e.g., `"my_macro(arg1, arg2='default')"` ) and a multi-line
@@ -130,9 +129,8 @@ defaults:
   or logical targets).
 
 - `actions` (Optional): Similar to `targets`, but entries here are implicitly
-  treated as `phony: true` (meaning they don't necessarily correspond to a
-  file and should run when requested). Useful for tasks like `clean` or
-  `test`.
+  treated as `phony: true` (meaning they don't necessarily correspond to a file
+  and should run when requested). Useful for tasks like `clean` or `test`.
 
 - `defaults` (Optional): A list of target names (from `targets` or `actions`)
   to build when `netsuke` is run without specific targets.
@@ -141,7 +139,7 @@ defaults:
 
 Rules encapsulate reusable build commands or scripts.
 
-```
+```yaml
 rules:
   - name: compile # Unique identifier for the rule
     # Recipe: Exactly one of 'command', 'script', or 'rule'
@@ -158,15 +156,15 @@ rules:
 - `recipe`: The action to perform. Defined by one of:
 
   - `command`: A single shell command string. May contain `{{ ins }}`
-    (space-separated inputs) and `{{ outs }}` (space-separated outputs).
-    These specific placeholders are substituted *after* Jinja rendering but
-    *before* hashing the action. All other Jinja interpolations happen
-    first. The final command must be parseable by `shlex` (POSIX mode).
+    (space-separated inputs) and `{{ outs }}` (space-separated outputs). These
+    specific placeholders are substituted *after* Jinja rendering but *before*
+    hashing the action. All other Jinja interpolations happen first. The final
+    command must be parseable by `shlex` (POSIX mode).
 
   - `script`: A multi-line script (using YAML `|`). If it starts with `#!`,
-    it's executed directly. Otherwise, it's run via `/bin/sh -e` (or
-    PowerShell on Windows) by default. Interpolated variables are
-    automatically shell-escaped unless `| raw` is used.
+    it's executed directly. Otherwise, it's run via `/bin/sh -e` (or PowerShell
+    on Windows) by default. Interpolated variables are automatically
+    shell-escaped unless `| raw` is used.
 
   - `rule`: References another rule by name (less common within a rule
     definition).
@@ -175,14 +173,13 @@ rules:
   this rule runs. Can contain `{{ ins }}` / `{{ outs }}`.
 
 - `deps` (Optional): Specifies dependency file format (`gcc` or `msvc`) for
-  C/C++ header dependencies, generating Ninja's `depfile` and `deps`
-  attributes.
+  C/C++ header dependencies, generating Ninja's `depfile` and `deps` attributes.
 
 ## 5\. Defining Targets and Actions
 
 Targets define *what* to build or *what action* to perform.
 
-```
+```yaml
 targets:
   # Example 1: Building an object file using a rule
   - name: build/utils.o         # Output file(s). Can be a string or list.
@@ -252,7 +249,8 @@ dynamic capabilities to your manifest.
 - Expressions: `{{ 1 + 1 }}`, `{{ sources | map('basename') }}`
 
 - Control Structures (within specific keys like `foreach`, `when`, or inside
-  `macros`): `{% if enable %}...{% endif %}`, `{% for item in list %}...{% endfor %}`
+  `macros`): `{% if enable %}...{% endif %}`, `{% for item in list %}…{%
+  endfor %}`
 
 **Important:** Structural Jinja (`{% %}`) is generally **not** allowed directly
 within the YAML structure outside of `macros`. Logic should primarily be within
@@ -281,7 +279,7 @@ Netsuke processes the manifest in stages:
 
 These keys enable generating multiple similar targets programmatically.
 
-```
+```yaml
 targets:
   # Generate a target for each .c file in src/
   - foreach: glob('src/*.c')        # Jinja expression returning an iterable
@@ -306,7 +304,7 @@ targets:
 
 Define reusable Jinja logic in the top-level `macros` section.
 
-```
+```yaml
 macros:
   - signature: "cc_cmd(src, obj, flags='')" # Jinja macro signature
     body: |                                # Multi-line body
@@ -335,17 +333,16 @@ templates.
   Case-sensitive. Example: `{{ glob('src/**/*.c') }}`
 
 - `fetch(url, cache=False)`: Downloads content from a URL. If `cache=True`,
-  caches the result in `.netsuke/fetch` within the workspace based on URL
-  hash. Marks template as impure.
+  caches the result in `.netsuke/fetch` within the workspace based on URL hash.
+  Marks template as impure.
 
 - `now(offset=None)`: Returns the current time as a timezone-aware object
-  (defaults to UTC). `offset` can be '+HH:MM' or 'Z'. Exposes
-  `.iso8601`, `.unix_timestamp`, `.offset`.
+  (defaults to UTC). `offset` can be '+HH:MM' or 'Z'. Exposes `.iso8601`,
+  `.unix_timestamp`, `.offset`.
 
 - `timedelta(...)`: Creates a duration object (e.g., for age comparisons).
-  Accepts
-  `weeks`, `days`, `hours`, `minutes`, `seconds`, `milliseconds`, `microseconds`, `nanoseconds`.
-  Exposes `.iso8601`, `.seconds`, `.nanoseconds`.
+  Accepts `weeks`, `days`, `hours`, `minutes`, `seconds`, `milliseconds`,
+  `microseconds`, `nanoseconds`. Exposes `.iso8601`, `.seconds`, `.nanoseconds`.
 
 ### Key Filters
 
@@ -380,8 +377,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
 - `digest(len=8, alg='sha256')`: Truncated hex digest.
 
 - `shell_escape`: **Crucial for security.** Safely quotes a string for use as
-  a single shell argument. *Use this whenever interpolating paths or
-  variables into commands unless you are certain they are safe.*
+  a single shell argument. *Use this whenever interpolating paths or variables
+  into commands unless you are certain they are safe.*
 
 **Collection Filters:**
 
@@ -407,8 +404,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
 
 - `shell(command_string)`: Pipes the input value (string or bytes) as stdin
   to `command_string` executed via the system shell (`sh -c` or `cmd /C`).
-  Returns stdout. **Marks the template as impure.** Example:
-  `{{ user_list | shell('grep admin') }}`
+  Returns stdout. **Marks the template as impure.** Example: `{{ user_list |
+  shell('grep admin') }}`
 
 - `grep(pattern, flags=None)`: Filters input lines matching `pattern`.
   `flags` can be a string (e.g., `'-i'`) or list of strings. Implemented via
@@ -435,7 +432,7 @@ Use tests with the `is` keyword: `{% if path is file %}`
 
 Netsuke's CLI provides commands to manage your build.
 
-```
+```text
 netsuke [OPTIONS] [COMMAND] [TARGETS...]
 
 ```
@@ -487,8 +484,8 @@ manifest files:
   `vars`, `rules`, `targets`, and `defaults`.
 
 - `website.yml`: Builds a static website from Markdown files using Pandoc.
-  Shows `glob`, `foreach`, and path manipulation filters
-  (`basename`, `with_suffix`).
+  Shows `glob`, `foreach`, and path manipulation filters (`basename`,
+  `with_suffix`).
 
 - `photo_edit.yml`: Processes RAW photos with `darktable-cli` and creates a
   gallery. Uses `glob`, `foreach`, and `actions`.
@@ -507,8 +504,8 @@ kinds of build workflows effectively.
 Netsuke aims for clear and actionable error messages.
 
 - **YAML Errors:** If `Netsukefile` is invalid YAML, `serde-saphyr` provides
-  location info (line, column). Netsuke may add hints for common issues
-  (e.g., tabs vs spaces).
+  location info (line, column). Netsuke may add hints for common issues (e.g.,
+  tabs vs spaces).
 
 - **Schema Errors:** If the YAML structure doesn't match the expected schema
   (e.g., missing `targets`, unknown keys), errors indicate the structural
@@ -519,8 +516,8 @@ Netsuke aims for clear and actionable error messages.
   and potentially location information.
 
 - **IR Validation Errors:** Errors found during graph construction (e.g.,
-  missing rules, duplicate outputs, circular dependencies) are reported
-  before execution.
+  missing rules, duplicate outputs, circular dependencies) are reported before
+  execution.
 
 - **Build Failures:** If a command run by Ninja fails, Netsuke reports the
   failure, typically showing the command's output/error streams captured by
@@ -532,9 +529,9 @@ Use the `-v` flag for more detailed error context or internal logging.
 
 - **Command Injection:** Netsuke automatically shell-escapes variables
   interpolated into `command:` strings *unless* the `| raw` Jinja filter is
-  explicitly used. Avoid `| raw` unless you fully trust the variable's
-  content. File paths from `glob` or placeholders like `{{ ins }}` /
-  `{{ outs }}` are quoted safely.
+  explicitly used. Avoid `| raw` unless you fully trust the variable's content.
+  File paths from `glob` or placeholders like `{{ ins }}` / `{{ outs }}` are
+  quoted safely.
 
 - **`script:` Execution:** Scripts run via the specified interpreter
   (defaulting to `sh -e`). Ensure scripts handle inputs safely.
