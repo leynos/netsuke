@@ -918,6 +918,65 @@ Implementation notes:
 - `with_suffix` removes dotted suffix segments (default `n = 1`) before
   appending the provided suffix.
 
+#### Executable discovery filter (`which`)
+
+Netsuke ships a cross-platform `which` filter that deterministically resolves
+executables inside the MiniJinja environment without breaking the static graph
+or purity guarantees of Stages 3 and 4. The filter follows the data-first
+template discipline: it is used from string values and keeps all structural
+logic in Rust.
+
+- **Usage:** `{{ "gcc" | which(all=false, canonical=false, fresh=false,
+  cwd_mode="auto") }}`
+- **Alias:** A helper function `which(name, **kwargs)` mirrors the filter so
+  manifests can call it directly where piping would be unwieldy.
+- **Returns:** A string path when `all` is `false`, or a list of candidate
+  paths ordered by `PATH` precedence when `all` is `true`.
+
+The filter accepts four keyword arguments:
+
+- `all` *(bool, default `false`)* — emit every match, similar to `which -a`.
+- `canonical` *(bool, default `false`)* — resolve symlinks with
+  `std::fs::canonicalize` after discovery, deduplicating on canonical paths
+  while preserving discovery order.
+- `fresh` *(bool, default `false`)* — bypass the per-process cache for this
+  lookup without flushing previous entries.
+- `cwd_mode` *("auto" | "never" | "always", default `"auto"`)* — control how
+  the current working directory is injected into the search path.
+
+Semantics honour platform conventions while enforcing predictable behaviour:
+
+- On POSIX, names containing `/` skip `PATH` traversal and are validated
+  directly. Executability requires a regular file with at least one execute
+  bit. Empty `PATH` segments (leading, trailing, or `::`) map to the working
+  directory when `cwd_mode` is `"auto"` or `"always"`.
+- On Windows, the lookup respects `PATHEXT` when the command lacks an
+  extension. Comparisons are case-insensitive, results normalise both `\` and
+  `/`, and `cwd_mode` defaults to skipping the working directory to avoid the
+  platform’s surprise "search CWD first" rule. Opting in via `"always"`
+  restores that behaviour.
+- Canonicalisation happens after discovery and only when requested so that
+  manifests can balance reproducibility against host-specific absolute paths.
+
+The resolver keeps a small LRU cache keyed by the command, `PATH`, optional
+`PATHEXT`, working directory, and filter options. Cache hits are validated with
+cheap metadata probes so stale entries heal automatically. Because all inputs
+derive from the manifest or process environment, the helper remains effectively
+pure and the existing render cache simply incorporates `PATH`/`PATHEXT`/`CWD`
+into its key. Callers can request a bypass with `fresh=true` when they need to
+observe recent toolchain changes during a long session.
+
+Errors follow the design’s actionable diagnostic model. Missing executables
+raise `netsuke::jinja::which::not_found` with context on how many `PATH`
+entries were inspected, a shortened preview of the path list, and platform
+appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
+Invalid arguments surface as `netsuke::jinja::which::args`.
+
+Unit tests cover POSIX and Windows specifics, canonicalization, cache
+validation, and list-all semantics. Behavioural MiniJinja fixtures exercise the
+filter in Stage 3/4 renders to prove determinism across repeated invocations
+with identical environments.
+
 #### Generic collection filters
 
 | Filter                            | Purpose                                      |
