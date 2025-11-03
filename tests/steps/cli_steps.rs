@@ -157,7 +157,7 @@ fn first_target(world: &mut CliWorld, expected_target: String) -> Result<()> {
 fn working_directory(world: &mut CliWorld, directory: String) -> Result<()> {
     let cli = world.cli.as_ref().context("CLI has not been parsed")?;
     ensure!(
-        cli.directory.as_ref() == Some(&PathBuf::from(&directory)),
+        cli.directory.as_deref() == Some(Path::new(&directory)),
         "expected working directory {}, got {:?}",
         directory,
         cli.directory
@@ -185,7 +185,7 @@ fn job_count(world: &mut CliWorld, expected_jobs: usize) -> Result<()> {
 fn emit_path(world: &mut CliWorld, emit_path_str: String) -> Result<()> {
     let (_, emit) = extract_build(world)?;
     ensure!(
-        emit.as_ref() == Some(&PathBuf::from(&emit_path_str)),
+        emit.as_deref() == Some(Path::new(&emit_path_str)),
         "expected emit path {}, got {:?}",
         emit_path_str,
         emit
