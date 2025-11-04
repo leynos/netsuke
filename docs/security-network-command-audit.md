@@ -36,7 +36,7 @@ introduces, and concrete remediation tasks that would harden the helpers.
     `--fetch-block-host` CLI options. `--fetch-default-deny` switches the
     policy to "block by default" with an explicit allowlist. Policy violations
     surface as `InvalidOperation` errors without opening a network connection.
-- [ ] **Response bodies are read without a size limit.** `fetch_remote` reads
+- [x] **Response bodies are read without a size limit.** `fetch_remote` reads
   the entire HTTP response into memory before returning or caching it. An
   attacker controlling the endpoint can stream unbounded data and exhaust
   memory or disk. *Remediation tasks:*
@@ -45,6 +45,11 @@ introduces, and concrete remediation tasks that would harden the helpers.
     understand the constraint.
   - Stream large downloads directly to cache files without buffering the whole
     body in memory.
+  - **Remediation:** fetch now enforces a configurable byte budget (default
+    8 MiB) and aborts requests once the limit is exceeded, quoting the
+    configured threshold in the error. Cached downloads stream directly to disk
+    and partial files are cleaned up when errors occur; cache reads reuse the
+    same guard, so stale oversized entries fail fast.
 
 ## Command helper findings
 

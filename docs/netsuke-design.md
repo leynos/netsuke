@@ -1025,6 +1025,11 @@ Implementation details:
   workspace. Remote fetches and cache writes mark the stdlib state as impure so
   callers can discard memoised renders, while cache hits remain pure and
   preserve memoised renders.
+- `fetch` enforces a configurable response limit (default 8 MiB) and streams
+  cached downloads directly to disk. Exceeding the budget aborts the request
+  with an error that quotes the configured byte cap so template authors can
+  adjust their expectations. Cache reads reuse the same guard, preventing stale
+  oversized entries from leaking unbounded data back into the renderer.
 - `fetch` validates URLs against a policy that allows only `https://` by
   default. Operators can expand the allowlist with
   `--fetch-allow-scheme <SCHEME>`, declare explicit host allowlists via

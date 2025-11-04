@@ -16,7 +16,8 @@ pub use self::policy::NetworkPolicyViolation;
 pub use crate::host_pattern::HostPatternError;
 
 use std::{
-    io::{self, Read},
+    convert::TryFrom,
+    io::{self, Read, Write},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -26,7 +27,7 @@ use std::{
 
 use super::{NetworkConfig, StdlibConfig, value_from_bytes};
 use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::fs_utf8::Dir;
+use cap_std::fs_utf8::{Dir, File, OpenOptions};
 use minijinja::{
     Environment, Error, ErrorKind,
     value::{Kwargs, Value},
@@ -77,25 +78,94 @@ fn fetch(
         )
     })?;
 
+    let limit = context.max_response_bytes();
     let bytes = if use_cache {
         let dir = context.open_cache_dir()?;
         let key = cache_key(parsed.as_str());
-        if let Some(cached) = read_cached(&dir, &key)? {
+        if let Some(cached) = read_cached(&dir, &key, limit)? {
             impure.store(true, Ordering::Relaxed);
             cached
         } else {
-            let data = fetch_remote(&parsed, impure)?;
-            write_cache(&dir, &key, &data, impure)?;
-            data
+            let cache = CacheEntry::new(&dir, &key);
+            fetch_remote_with_cache(&parsed, impure, limit, &cache)?
         }
     } else {
-        fetch_remote(&parsed, impure)?
+        fetch_remote(&parsed, impure, limit)?
     };
 
     Ok(value_from_bytes(bytes))
 }
 
-fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
+fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u8>, Error> {
+    let response = dispatch_request(url, impure)?;
+    read_response(url, response.into_reader(), limit, None)
+}
+
+struct CacheEntry<'a> {
+    dir: &'a Dir,
+    name: &'a str,
+    path: Utf8PathBuf,
+}
+
+impl<'a> CacheEntry<'a> {
+    fn new(dir: &'a Dir, name: &'a str) -> Self {
+        Self {
+            dir,
+            name,
+            path: Utf8PathBuf::from(name),
+        }
+    }
+
+    fn path(&self) -> &Utf8Path {
+        self.path.as_path()
+    }
+
+    fn open_writer(&self) -> Result<File, Error> {
+        open_cache_writer(self.dir, self.path())
+    }
+
+    fn remove_file(&self) -> io::Result<()> {
+        self.dir.remove_file(self.path())
+    }
+
+    const fn name(&self) -> &str {
+        self.name
+    }
+}
+
+fn fetch_remote_with_cache(
+    url: &Url,
+    impure: &Arc<AtomicBool>,
+    limit: u64,
+    cache: &CacheEntry<'_>,
+) -> Result<Vec<u8>, Error> {
+    let response = dispatch_request(url, impure)?;
+    let mut file = cache.open_writer()?;
+    match read_response(url, response.into_reader(), limit, Some(&mut file)) {
+        Ok(bytes) => {
+            file.sync_all()
+                .map_err(|err| io_error("sync cache entry", cache.path(), &err))?;
+            Ok(bytes)
+        }
+        Err(err) => {
+            drop(file);
+            if let Err(remove_err) = cache.remove_file() {
+                match remove_err.kind() {
+                    io::ErrorKind::NotFound => {}
+                    _ => {
+                        tracing::warn!(
+                            "failed to clean up partial fetch cache '{}': {remove_err}",
+                            cache.name()
+                        );
+                    }
+                }
+            }
+            Err(err)
+        }
+    }
+}
+
+fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Response, Error> {
     impure.store(true, Ordering::Relaxed);
     let agent = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(10))
@@ -103,21 +173,12 @@ fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>) -> Result<Vec<u8>, Error> {
         .timeout_write(Duration::from_secs(30))
         .timeout(Duration::from_secs(60))
         .build();
-    let response = agent.get(url.as_str()).call().map_err(|err| {
+    agent.get(url.as_str()).call().map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,
             format!("fetch failed for '{}': {err}", url.as_str()),
         )
-    })?;
-    let mut reader = response.into_reader();
-    let mut bytes = Vec::new();
-    reader.read_to_end(&mut bytes).map_err(|err| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            format!("failed to read response from '{}': {err}", url.as_str()),
-        )
-    })?;
-    Ok(bytes)
+    })
 }
 
 fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
@@ -131,9 +192,18 @@ fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
         .map_err(|err| io_error("open cache dir", relative, &err))
 }
 
-fn read_cached(dir: &Dir, name: &str) -> Result<Option<Vec<u8>>, Error> {
-    match dir.open(name) {
+fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Error> {
+    let path = Utf8Path::new(name);
+    let mut options = OpenOptions::new();
+    options.read(true);
+    match dir.open_with(path, &options) {
         Ok(mut file) => {
+            let metadata = dir
+                .metadata(path)
+                .map_err(|err| io_error("stat cache entry", path, &err))?;
+            if metadata.len() > limit {
+                return Err(response_limit_error_from_cache(name, limit));
+            }
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).map_err(|err| {
                 Error::new(
@@ -151,14 +221,74 @@ fn read_cached(dir: &Dir, name: &str) -> Result<Option<Vec<u8>>, Error> {
     }
 }
 
-fn write_cache(dir: &Dir, name: &str, data: &[u8], impure: &Arc<AtomicBool>) -> Result<(), Error> {
-    impure.store(true, Ordering::Relaxed);
-    dir.write(name, data).map_err(|err| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            format!("failed to write cache entry '{name}': {err}"),
-        )
-    })
+fn read_response(
+    url: &Url,
+    mut reader: impl Read,
+    limit: u64,
+    mut sink: Option<&mut dyn Write>,
+) -> Result<Vec<u8>, Error> {
+    let mut total: u64 = 0;
+    let mut buffer = Vec::new();
+    let mut chunk = [0_u8; 8 * 1024];
+    loop {
+        let read = reader.read(&mut chunk).map_err(|err| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!("failed to read response from '{}': {err}", url.as_str()),
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        total = total.saturating_add(u64::try_from(read).unwrap_or(u64::MAX));
+        if total > limit {
+            return Err(response_limit_error(url, limit));
+        }
+        let bytes = chunk.get(..read).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!(
+                    "failed to read response from '{}': read beyond buffer capacity",
+                    url.as_str()
+                ),
+            )
+        })?;
+        buffer.extend_from_slice(bytes);
+        if let Some(writer) = sink.as_deref_mut() {
+            writer.write_all(bytes).map_err(|err| {
+                Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("failed to write cache entry for '{}': {err}", url.as_str()),
+                )
+            })?;
+        }
+    }
+    Ok(buffer)
+}
+
+fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(true).write(true);
+    dir.open_with(path, &options)
+        .map_err(|err| io_error("open cache entry", path, &err))
+}
+
+fn response_limit_error(url: &Url, limit: u64) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        format!(
+            "response from '{}' exceeded the configured limit of {} bytes",
+            url.as_str(),
+            limit
+        ),
+    )
+}
+
+fn response_limit_error_from_cache(name: &str, limit: u64) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        format!("cache entry '{name}' exceeded the configured fetch limit of {limit} bytes"),
+    )
 }
 
 fn cache_key(url: &str) -> String {
@@ -211,6 +341,7 @@ impl FetchCache {
 struct FetchContext {
     cache: FetchCache,
     policy: Arc<NetworkPolicy>,
+    max_response_bytes: u64,
 }
 
 impl FetchContext {
@@ -218,6 +349,7 @@ impl FetchContext {
         Self {
             cache: FetchCache::new(&config),
             policy: Arc::new(config.policy),
+            max_response_bytes: config.max_response_bytes,
         }
     }
 
@@ -226,6 +358,9 @@ impl FetchContext {
 
     #[rustfmt::skip]
     fn policy(&self) -> &NetworkPolicy { self.policy.as_ref() }
+
+    #[rustfmt::skip]
+    const fn max_response_bytes(&self) -> u64 { self.max_response_bytes }
 }
 
 #[cfg(test)]

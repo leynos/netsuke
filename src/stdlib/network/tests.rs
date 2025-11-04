@@ -4,6 +4,7 @@ use super::*;
 
 use anyhow::{Context, Result, anyhow, ensure};
 use std::{
+    convert::TryFrom,
     fs,
     sync::{
         Arc,
@@ -11,7 +12,7 @@ use std::{
     },
 };
 
-use crate::stdlib::DEFAULT_FETCH_CACHE_DIR;
+use crate::stdlib::{DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{
@@ -20,6 +21,8 @@ use minijinja::{
 };
 use rstest::{fixture, rstest};
 use tempfile::tempdir;
+use test_support::http;
+use url::Url;
 
 /// Creates a temporary cache workspace returning the tempdir, an ambient
 /// authority directory handle wrapped in `Arc`, and the UTF-8 path for cache
@@ -36,12 +39,28 @@ fn cache_workspace() -> Result<(tempfile::TempDir, Arc<Dir>, Utf8PathBuf)> {
 
 /// Builds a test `FetchContext` with the provided cache root and default policy.
 fn make_context(root: Arc<Dir>) -> FetchContext {
+    make_context_with(
+        root,
+        NetworkPolicy::default(),
+        DEFAULT_FETCH_MAX_RESPONSE_BYTES,
+    )
+}
+
+fn make_context_with(root: Arc<Dir>, policy: NetworkPolicy, limit: u64) -> FetchContext {
     let config = NetworkConfig {
         cache_root: root,
         cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
-        policy: NetworkPolicy::default(),
+        policy,
+        max_response_bytes: limit,
     };
     FetchContext::new(config)
+}
+
+fn limit_with_offset(limit: u64, offset: u64) -> usize {
+    let total = limit
+        .checked_add(offset)
+        .expect("test limit plus offset should not overflow");
+    usize::try_from(total).expect("test limit plus offset should fit into usize")
 }
 
 #[rstest]
@@ -159,6 +178,172 @@ fn fetch_cache_opens_default_directory(cache_workspace: Result<CacheWorkspace>) 
 }
 
 #[rstest]
+fn fetch_rejects_responses_over_the_limit(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+    let (_temp, root, _path) = cache_workspace?;
+    let limit = 16_u64;
+    let body = "x".repeat(limit_with_offset(limit, 1));
+    let (url, _server) =
+        http::spawn_http_server(body).context("spawn HTTP server for oversized response test")?;
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")
+        .context("allow http scheme for oversized response test")?;
+    let context = make_context_with(root, policy, limit);
+    let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+    let Err(err) = fetch(&url, &kwargs, &impure, &context) else {
+        return Err(anyhow!("expected fetch to reject response exceeding limit"));
+    };
+    ensure!(
+        err.to_string().contains("configured limit of 16 bytes"),
+        "error should describe limit: {err}",
+    );
+    ensure!(
+        impure.load(Ordering::Relaxed),
+        "oversized network response should mark the template impure",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn fetch_streams_responses_into_cache(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+    let (_temp, root, workspace) = cache_workspace?;
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")
+        .context("allow http scheme for cache streaming test")?;
+    let limit = 1024_u64;
+    let body = "cached response";
+    let (url, _server) =
+        http::spawn_http_server(body).context("spawn HTTP server for cache streaming test")?;
+    let context = make_context_with(Arc::clone(&root), policy, limit);
+    let kwargs = [(String::from("cache"), Value::from(true))]
+        .into_iter()
+        .collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+    let value = fetch(&url, &kwargs, &impure, &context)?;
+    ensure!(
+        value.as_bytes() == Some(body.as_bytes()),
+        "fetch should return response body",
+    );
+    ensure!(
+        impure.load(Ordering::Relaxed),
+        "successful fetch should mark template impure",
+    );
+    let cache_dir = context.open_cache_dir()?;
+    let parsed = Url::parse(&url).context("parse cache URL")?;
+    let key = cache_key(parsed.as_str());
+    let cached =
+        read_cached(&cache_dir, &key, limit)?.context("cached response should be present")?;
+    ensure!(
+        cached == body.as_bytes(),
+        "cache contents should match response"
+    );
+    let cache_path = workspace
+        .join(DEFAULT_FETCH_CACHE_DIR)
+        .join(Utf8Path::new(&key));
+    ensure!(
+        fs::metadata(cache_path.as_std_path()).is_ok(),
+        "cache entry should be written to disk",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn fetch_clears_partial_cache_on_limit_error(
+    cache_workspace: Result<CacheWorkspace>,
+) -> Result<()> {
+    let (_temp, root, workspace) = cache_workspace?;
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")
+        .context("allow http scheme for cache failure test")?;
+    let limit = 32_u64;
+    let body = "y".repeat(limit_with_offset(limit, 8));
+    let (url, _server) =
+        http::spawn_http_server(body).context("spawn HTTP server for cache failure test")?;
+    let context = make_context_with(Arc::clone(&root), policy, limit);
+    let kwargs = [(String::from("cache"), Value::from(true))]
+        .into_iter()
+        .collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+    let parsed = Url::parse(&url).context("parse cache URL for failure test")?;
+    let key = cache_key(parsed.as_str());
+    let Err(err) = fetch(&url, &kwargs, &impure, &context) else {
+        return Err(anyhow!(
+            "expected fetch to reject oversized cached response"
+        ));
+    };
+    ensure!(
+        err.to_string().contains("configured limit"),
+        "limit error should mention configured limit: {err}",
+    );
+    ensure!(
+        impure.load(Ordering::Relaxed),
+        "failed fetch should mark template impure",
+    );
+    let cache_dir = context.open_cache_dir()?;
+    ensure!(
+        cache_dir
+            .open(Utf8Path::new(&key))
+            .expect_err("oversized fetch should not leave cache entry")
+            .kind()
+            == io::ErrorKind::NotFound,
+        "partial cache file should be removed",
+    );
+    let cache_path = workspace
+        .join(DEFAULT_FETCH_CACHE_DIR)
+        .join(Utf8Path::new(&key));
+    ensure!(
+        fs::metadata(cache_path.as_std_path()).is_err(),
+        "no cache file should remain on disk",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn fetch_rejects_cached_entries_exceeding_limit(
+    cache_workspace: Result<CacheWorkspace>,
+) -> Result<()> {
+    let (_temp, root, workspace) = cache_workspace?;
+    let policy = NetworkPolicy::default()
+        .allow_scheme("http")
+        .context("allow http scheme for cached entry limit test")?;
+    let limit = 24_u64;
+    let (url, _server) = http::spawn_http_server("cached")
+        .context("spawn HTTP server for cached entry limit test")?;
+    let context = make_context_with(Arc::clone(&root), policy, limit);
+    let cache_dir = context.open_cache_dir()?;
+    let parsed = Url::parse(&url).context("parse cache URL for oversized entry test")?;
+    let key = cache_key(parsed.as_str());
+    let oversized = "z".repeat(limit_with_offset(limit, 1));
+    cache_dir
+        .write(Utf8Path::new(&key), oversized.as_bytes())
+        .context("seed oversized cache entry")?;
+    let kwargs = [(String::from("cache"), Value::from(true))]
+        .into_iter()
+        .collect::<Kwargs>();
+    let impure = Arc::new(AtomicBool::new(false));
+    let Err(err) = fetch(&url, &kwargs, &impure, &context) else {
+        return Err(anyhow!("expected fetch to reject oversized cache entry"));
+    };
+    ensure!(
+        err.to_string()
+            .contains("exceeded the configured fetch limit of 24 bytes"),
+        "error should mention cached entry limit: {err}",
+    );
+    ensure!(
+        !impure.load(Ordering::Relaxed),
+        "cache limit failure should not mark the template impure",
+    );
+    let cache_path = workspace
+        .join(DEFAULT_FETCH_CACHE_DIR)
+        .join(Utf8Path::new(&key));
+    ensure!(
+        fs::metadata(cache_path.as_std_path()).is_ok(),
+        "existing cache entry should remain for investigation",
+    );
+    Ok(())
+}
+
+#[rstest]
 fn fetch_rejects_disallowed_scheme(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
     assert_fetch_policy_rejection(
@@ -201,6 +386,7 @@ fn assert_fetch_policy_rejection(
         cache_root: root,
         cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
         policy,
+        max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
     };
     let context = FetchContext::new(config);
     let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
