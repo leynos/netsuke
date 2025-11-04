@@ -249,7 +249,7 @@ dynamic capabilities to your manifest.
 - Expressions: `{{ 1 + 1 }}`, `{{ sources | map('basename') }}`
 
 - Control Structures (within specific keys like `foreach`, `when`, or inside
-  `macros`): `{% if enable %}...{% endif %}`, `{% for item in list %}…{%
+  `macros`): `{% if enable %}…{% endif %}`, `{% for item in list %}…{%
   endfor %}`
 
 **Important:** Structural Jinja (`{% %}`) is generally **not** allowed directly
@@ -334,6 +334,10 @@ templates.
 
 - `fetch(url, cache=False)`: Downloads content from a URL. If `cache=True`,
   caches the result in `.netsuke/fetch` within the workspace based on URL hash.
+  Enforces a configurable maximum response size (default 8 MiB); requests abort
+  with an error quoting the configured threshold when the limit is exceeded.
+  Cached downloads stream directly to disk and remove partial files on error.
+  Configure the limit with `StdlibConfig::with_fetch_max_response_bytes`.
   Marks template as impure.
 
 - `now(offset=None)`: Returns the current time as a timezone-aware object
