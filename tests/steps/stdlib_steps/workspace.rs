@@ -7,7 +7,9 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::given;
 use std::ffi::OsStr;
 use test_support::{
-    command_helper::{compile_failure_helper, compile_uppercase_helper},
+    command_helper::{
+        compile_failure_helper, compile_large_output_helper, compile_uppercase_helper,
+    },
     env::set_var,
 };
 
@@ -68,6 +70,17 @@ pub(crate) fn failing_stdlib_command_helper(world: &mut CliWorld) -> Result<()> 
         .context("open stdlib workspace directory")?;
     let helper =
         compile_failure_helper(&handle, &root, "cmd_fail").context("compile failing helper")?;
+    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+    Ok(())
+}
+
+#[given("a large-output stdlib command helper")]
+pub(crate) fn large_output_stdlib_command_helper(world: &mut CliWorld) -> Result<()> {
+    let root = ensure_workspace(world)?;
+    let handle = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open stdlib workspace directory")?;
+    let helper = compile_large_output_helper(&handle, &root, "cmd_large")
+        .context("compile large-output helper")?;
     world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
     Ok(())
 }

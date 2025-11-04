@@ -36,6 +36,10 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 pub(crate) const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
 /// Default upper bound for network helper responses (8 MiB).
 pub(crate) const DEFAULT_FETCH_MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
+/// Default upper bound for captured command output (1 MiB).
+pub(crate) const DEFAULT_COMMAND_MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
+/// Default upper bound for streamed command output files (64 MiB).
+pub(crate) const DEFAULT_COMMAND_MAX_STREAM_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Configuration for registering Netsuke's standard library helpers.
 ///
@@ -60,6 +64,8 @@ pub struct StdlibConfig {
     fetch_cache_relative: Utf8PathBuf,
     network_policy: NetworkPolicy,
     fetch_max_response_bytes: u64,
+    command_max_output_bytes: u64,
+    command_max_stream_bytes: u64,
 }
 
 impl StdlibConfig {
@@ -94,6 +100,8 @@ impl StdlibConfig {
             fetch_cache_relative: default,
             network_policy: NetworkPolicy::default(),
             fetch_max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
+            command_max_output_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+            command_max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
         }
     }
 
@@ -150,20 +158,62 @@ impl StdlibConfig {
         Ok(self)
     }
 
+    /// Override the maximum captured command output size in bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `max_bytes` is zero.
+    pub fn with_command_max_output_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
+        anyhow::ensure!(max_bytes > 0, "command output limit must be positive");
+        self.command_max_output_bytes = max_bytes;
+        Ok(self)
+    }
+
+    /// Override the maximum streamed command output size in bytes.
+    ///
+    /// Streaming still enforces a ceiling to prevent helpers from exhausting
+    /// disk space. Configure the limit according to the largest expected
+    /// helper output.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `max_bytes` is zero.
+    pub fn with_command_max_stream_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
+        anyhow::ensure!(max_bytes > 0, "command stream limit must be positive");
+        self.command_max_stream_bytes = max_bytes;
+        Ok(self)
+    }
+
     /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
     pub fn fetch_cache_relative(&self) -> &Utf8Path {
         &self.fetch_cache_relative
     }
 
-    /// Consume the configuration and produce a `NetworkConfig` for the network module.
-    pub(crate) fn network_config(self) -> NetworkConfig {
-        NetworkConfig {
-            cache_root: self.workspace_root,
-            cache_relative: self.fetch_cache_relative,
-            policy: self.network_policy,
-            max_response_bytes: self.fetch_max_response_bytes,
-        }
+    /// Consume the configuration and expose component modules with owned state.
+    pub(crate) fn into_components(self) -> (NetworkConfig, command::CommandConfig) {
+        let Self {
+            workspace_root,
+            fetch_cache_relative,
+            network_policy,
+            fetch_max_response_bytes,
+            command_max_output_bytes,
+            command_max_stream_bytes,
+        } = self;
+
+        let network = NetworkConfig {
+            cache_root: workspace_root,
+            cache_relative: fetch_cache_relative,
+            policy: network_policy,
+            max_response_bytes: fetch_max_response_bytes,
+        };
+
+        let command = command::CommandConfig {
+            max_capture_bytes: command_max_output_bytes,
+            max_stream_bytes: command_max_stream_bytes,
+        };
+
+        (network, command)
     }
 
     pub(crate) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
@@ -286,8 +336,9 @@ pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> 
     path::register_filters(env);
     collections::register_filters(env);
     let impure = state.impure_flag();
-    network::register_functions(env, Arc::clone(&impure), config.network_config());
-    command::register(env, impure);
+    let (network_config, command_config) = config.into_components();
+    network::register_functions(env, Arc::clone(&impure), network_config);
+    command::register(env, impure, command_config);
     time::register_functions(env);
     state
 }

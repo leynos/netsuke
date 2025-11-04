@@ -1045,6 +1045,22 @@ Implementation details:
   shared `StdlibState` that flips an `impure` flag whenever these helpers
   execute so callers can detect templates that interacted with the outside
   world.
+- `shell` and `grep` enforce a configurable stdout capture limit (default
+  1 MiB) via `StdlibConfig::with_command_max_output_bytes`. Exceeding the limit
+  raises an error that quotes the configured budget so manifests can adjust.
+  Templates can request streaming by passing `{'mode': 'tempfile'}` as the
+  second filter argument. Streaming writes stdout to a temporary file guarded
+  by `StdlibConfig::with_command_max_stream_bytes`, which defaults to 64 MiB to
+  prevent runaway disk usage while still tolerating deliberate large outputs.
+- The command helpers manage pipe budgets using a `PipeSpec`/`PipeLimit`
+  tracker. Each pipe spawns a dedicated reader thread that records how many
+  bytes were drained and aborts once the configured limit is exceeded,
+  surfacing an `OutputLimit` diagnostic that names the stream and mode. When
+  streaming is requested the reader persists data to a temporary file, keeping
+  the limit in place so exceptionally large outputs are rejected before the
+  filesystem fills up. The `StdlibConfig::into_components` helper consumes the
+  builder and hands owned network/command configurations to the registration
+  routines, avoiding needless cloning of the capability handles.
 
 Custom external commands can be registered as additional filters. Those should
 be marked `pure` if safe for caching or `impure` otherwise.

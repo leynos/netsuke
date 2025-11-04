@@ -27,6 +27,16 @@ pub(crate) fn render_template_with_context(
             .with_fetch_max_response_bytes(limit)
             .context("configure stdlib fetch response limit")?;
     }
+    if let Some(limit) = world.stdlib_command_max_output_bytes {
+        config = config
+            .with_command_max_output_bytes(limit)
+            .context("configure stdlib command output limit")?;
+    }
+    if let Some(limit) = world.stdlib_command_stream_max_bytes {
+        config = config
+            .with_command_max_stream_bytes(limit)
+            .context("configure stdlib command stream limit")?;
+    }
     let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
     world.stdlib_state = Some(state);
@@ -110,4 +120,20 @@ pub(crate) fn render_stdlib_template_with_command(
         .clone()
         .context("expected stdlib command helper to be compiled")?;
     render_template_with_context(world, &template_content, context!(cmd => command))
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
+#[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib text$"#)]
+pub(crate) fn render_stdlib_template_with_text(
+    world: &mut CliWorld,
+    template_content: TemplateContent,
+) -> Result<()> {
+    let text = world
+        .stdlib_text
+        .clone()
+        .context("expected stdlib template text to be configured")?;
+    render_template_with_context(world, &template_content, context!(text => text))
 }

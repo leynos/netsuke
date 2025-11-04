@@ -1,10 +1,11 @@
 //! Assertions shared by stdlib-related Cucumber steps, providing
 //! reusable checks for rendered output, errors, and cache behaviour.
 use crate::CliWorld;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::then;
+use std::fs;
 use test_support::hash;
 use time::{Duration, OffsetDateTime, UtcOffset};
 use url::Url;
@@ -47,6 +48,10 @@ fn stdlib_output(world: &CliWorld) -> Result<&str> {
         .stdlib_output
         .as_deref()
         .context("expected stdlib output")
+}
+
+fn stdlib_output_path(world: &CliWorld) -> Result<&Utf8Path> {
+    stdlib_output(world).map(Utf8Path::new)
 }
 
 #[then(regex = r#"^the stdlib error contains "(.+)"$"#)]
@@ -169,6 +174,65 @@ pub(crate) fn assert_stdlib_output_offset(
         "timestamp `{output}` offset {:?} did not match expected {expected}",
         parsed.offset(),
         expected = expected_offset_text
+    );
+    Ok(())
+}
+
+#[then(regex = r"^the stdlib output file has at least (\d+) bytes$")]
+pub(crate) fn assert_stdlib_output_file_min_size(world: &mut CliWorld, minimum: u64) -> Result<()> {
+    let path = stdlib_output_path(world)?;
+    let metadata = fs::metadata(path.as_std_path())
+        .with_context(|| format!("stat stdlib output file {}", path.as_str()))?;
+    ensure!(
+        metadata.len() >= minimum,
+        "expected {} to contain at least {minimum} bytes but found {}",
+        path,
+        metadata.len(),
+    );
+    Ok(())
+}
+
+#[then(regex = r#"^the stdlib output file contains only "(.+)"$"#)]
+pub(crate) fn assert_stdlib_output_file_uniform(
+    world: &mut CliWorld,
+    expected: ExpectedOutput,
+) -> Result<()> {
+    let pattern = expected.into_inner();
+    ensure!(
+        pattern.chars().count() == 1,
+        "expected a single-character pattern but received '{pattern}'",
+    );
+    let bytes = pattern.as_bytes();
+    ensure!(
+        bytes.len() == 1,
+        "expected a single-byte pattern but received '{pattern}'",
+    );
+    let Some(target) = bytes.first().copied() else {
+        bail!("pattern should contain a single byte");
+    };
+    let path = stdlib_output_path(world)?;
+    let data = fs::read(path.as_std_path())
+        .with_context(|| format!("read stdlib output file {}", path.as_str()))?;
+    ensure!(
+        data.iter().all(|byte| *byte == target),
+        "expected {} to contain only '{pattern}'",
+        path,
+    );
+    Ok(())
+}
+
+#[then("the stdlib output file equals the stdlib text")]
+pub(crate) fn assert_stdlib_output_equals_text(world: &mut CliWorld) -> Result<()> {
+    let expected = world
+        .stdlib_text
+        .clone()
+        .context("expected stdlib template text to be configured")?;
+    let path = stdlib_output_path(world)?;
+    let data = fs::read_to_string(path.as_std_path())
+        .with_context(|| format!("read stdlib output file {}", path.as_str()))?;
+    ensure!(
+        data == expected,
+        "expected streamed output to match configured text"
     );
     Ok(())
 }

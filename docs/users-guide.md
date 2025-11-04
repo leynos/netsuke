@@ -249,8 +249,8 @@ dynamic capabilities to your manifest.
 - Expressions: `{{ 1 + 1 }}`, `{{ sources | map('basename') }}`
 
 - Control Structures (within specific keys like `foreach`, `when`, or inside
-  `macros`): `{% if enable %}…{% endif %}`, `{% for item in list %}…{%
-  endfor %}`
+  `macros`): `{% if enable %}…{% endif %}`, `{% for item in list %}…{% endfor
+  %}`
 
 **Important:** Structural Jinja (`{% %}`) is generally **not** allowed directly
 within the YAML structure outside of `macros`. Logic should primarily be within
@@ -337,8 +337,8 @@ templates.
   Enforces a configurable maximum response size (default 8 MiB); requests abort
   with an error quoting the configured threshold when the limit is exceeded.
   Cached downloads stream directly to disk and remove partial files on error.
-  Configure the limit with `StdlibConfig::with_fetch_max_response_bytes`.
-  Marks template as impure.
+  Configure the limit with `StdlibConfig::with_fetch_max_response_bytes`. Marks
+  template as impure.
 
 - `now(offset=None)`: Returns the current time as a timezone-aware object
   (defaults to UTC). `offset` can be '+HH:MM' or 'Z'. Exposes `.iso8601`,
@@ -408,12 +408,20 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
 
 - `shell(command_string)`: Pipes the input value (string or bytes) as stdin
   to `command_string` executed via the system shell (`sh -c` or `cmd /C`).
-  Returns stdout. **Marks the template as impure.** Example: `{{ user_list |
-  shell('grep admin') }}`
+  Returns stdout. **Marks the template as impure.** Example:
+  `{{ user_list | shell('grep admin') }}`. The captured stdout is limited to 1
+  MiB by default; configure a different budget with
+  `StdlibConfig::with_command_max_output_bytes`. Exceeding the limit raises an
+  `InvalidOperation` error that quotes the configured threshold. Templates can
+  pass an options mapping such as `{'mode': 'tempfile'}` to stream stdout into
+  a temporary file instead. The file path is returned to the template and
+  remains bounded by `StdlibConfig::with_command_max_stream_bytes` (default 64
+  MiB).
 
 - `grep(pattern, flags=None)`: Filters input lines matching `pattern`.
   `flags` can be a string (e.g., `'-i'`) or list of strings. Implemented via
-  `shell`. Marks template as impure.
+  `shell`. Marks template as impure. The same output and streaming limits apply
+  when `grep` emits large result sets.
 
 **Impurity:** Filters like `shell` and functions like `fetch` interact with the
 outside world. Netsuke tracks this "impurity". Impure templates might affect
