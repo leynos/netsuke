@@ -126,6 +126,25 @@ impl StdlibConfig {
         self
     }
 
+    /// Return the recorded absolute workspace root path, when available.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// # use cap_std::{ambient_authority, fs_utf8::Dir};
+    /// # use netsuke::stdlib::StdlibConfig;
+    /// let root = Dir::open_ambient_dir(".", ambient_authority()).expect("open workspace");
+    /// let config = StdlibConfig::new(root).with_workspace_root_path("/tmp/example".into());
+    /// assert_eq!(
+    ///     config.workspace_root_path().unwrap().as_str(),
+    ///     "/tmp/example"
+    /// );
+    /// ```
+    #[must_use]
+    pub fn workspace_root_path(&self) -> Option<&Utf8Path> {
+        self.workspace_root_path.as_deref()
+    }
+
     /// Override the relative cache directory within the workspace.
     ///
     /// # Errors

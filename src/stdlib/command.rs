@@ -1111,7 +1111,7 @@ mod tests {
     use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs_utf8::Dir};
-    use std::{fs, io::Cursor};
+    use std::{fs, io, io::Cursor};
     use tempfile::tempdir;
 
     #[cfg(windows)]
@@ -1256,6 +1256,25 @@ mod tests {
                 assert_eq!(limit, 8);
             }
             other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn command_tempdir_requires_workspace_root_path() {
+        let temp = tempdir().expect("create temp workspace for command");
+        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .expect("temp workspace should be valid UTF-8");
+        let dir =
+            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+        let config = CommandConfig::new(
+            DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+            DEFAULT_COMMAND_MAX_STREAM_BYTES,
+            Arc::new(dir),
+            None,
+        );
+        match config.create_tempfile("stdout") {
+            Ok(_) => panic!("command temp dir should require workspace root path"),
+            Err(err) => assert_eq!(err.kind(), io::ErrorKind::InvalidInput),
         }
     }
 }

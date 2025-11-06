@@ -11,6 +11,7 @@ use minijinja::value::{Kwargs, Value};
 use minijinja::{Environment, UndefinedBehavior};
 use rstest::{fixture, rstest};
 use std::fs;
+use std::path::Path;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock, hash, http};
 use url::Url;
@@ -291,6 +292,61 @@ fn register_manifest_macros_supports_multiple(
     register_manifest_macros(&yaml, &mut strict_env)?;
     let rendered = render_with(&strict_env, "{{ shout(greet('netsuke')) }}")?;
     ensure!(rendered.trim() == "HELLO NETSUKE");
+    Ok(())
+}
+
+#[rstest]
+fn stdlib_config_for_manifest_resolves_relative_workspace_root() -> AnyResult<()> {
+    let temp = tempdir().context("create temp workspace")?;
+    let _guard = CurrentDirGuard::change_to(temp.path())?;
+    let config = stdlib_config_for_manifest(Path::new("Netsukefile"), NetworkPolicy::default())?;
+    let recorded = config
+        .workspace_root_path()
+        .context("workspace root path should be recorded")?;
+    let expected = camino::Utf8Path::from_path(temp.path())
+        .context("temp workspace path should be valid UTF-8")?;
+    ensure!(
+        recorded == expected,
+        "expected workspace root {expected}, got {recorded}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn stdlib_config_for_manifest_resolves_absolute_workspace_root() -> AnyResult<()> {
+    let temp = tempdir().context("create temp workspace")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    let config = stdlib_config_for_manifest(&manifest_path, NetworkPolicy::default())?;
+    let recorded = config
+        .workspace_root_path()
+        .context("workspace root path should be recorded")?;
+    let expected = camino::Utf8Path::from_path(temp.path())
+        .context("temp workspace path should be valid UTF-8")?;
+    ensure!(
+        recorded == expected,
+        "expected workspace root {expected}, got {recorded}"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn stdlib_config_for_manifest_rejects_non_utf_workspace_root() -> AnyResult<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = tempdir().context("create temp workspace")?;
+    let invalid_component = OsString::from_vec(vec![0xFF]); // invalid standalone byte
+    let manifest_dir = temp.path().join(&invalid_component);
+    fs::create_dir_all(&manifest_dir)
+        .context("create manifest directory with invalid UTF-8 component")?;
+    let manifest_path = manifest_dir.join("manifest.yml");
+    let err = stdlib_config_for_manifest(&manifest_path, NetworkPolicy::default())
+        .expect_err("config should fail when workspace root contains non-UTF-8 components");
+    ensure!(
+        err.to_string().contains("contains non-UTF-8 components"),
+        "error should mention non-UTF-8 components but was {err}"
+    );
     Ok(())
 }
 
