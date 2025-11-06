@@ -100,6 +100,14 @@ Feature: Template stdlib filters
     And the stdlib output file contains only "x"
     And the stdlib template is impure
 
+  Scenario: shell filter enforces command stream limits
+    Given a large-output stdlib command helper
+    And the stdlib command output limit is 512 bytes
+    And the stdlib command stream limit is 1024 bytes
+    When I render the stdlib template "{{ '' | shell(cmd, {'mode': 'tempfile'}) }}" using the stdlib command helper
+    Then the stdlib error contains "stdout streaming limit of 1024 bytes"
+    And the stdlib template is impure
+
   Scenario: grep filter streams large output to a temporary file
     Given the stdlib command output limit is 512 bytes
     And the stdlib command stream limit is 200000 bytes
@@ -175,4 +183,3 @@ Feature: Template stdlib filters
     When I render the stdlib template "{{ fetch(url, cache=true, cache_dir='../cache') }}" with stdlib url
     Then the stdlib error contains "cache_dir"
     And the stdlib template is pure
-

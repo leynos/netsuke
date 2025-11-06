@@ -5,6 +5,14 @@
 //! impure so the caller can invalidate any caching layer that depends on pure
 //! template evaluation.
 //!
+//! # Output limits
+//!
+//! Capture and streaming helpers enforce configurable byte budgets to prevent
+//! helpers from exhausting memory or disk space. Callers configure distinct
+//! ceilings for `stdout` capture and streamed tempfile output through
+//! `StdlibConfig`, and the runtime raises descriptive errors when a command
+//! exceeds either limit.
+//!
 //! # Windows quoting strategy
 //!
 //! Windows does not ship a widely-used Rust crate that can reliably escape
@@ -37,6 +45,7 @@
 
 use std::{
     fmt::{self},
+    fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
@@ -48,15 +57,16 @@ use std::{
     time::Duration,
 };
 
-use super::value_from_bytes;
+use super::{DEFAULT_COMMAND_TEMP_DIR, value_from_bytes};
 use camino::Utf8PathBuf;
+use cap_std::fs_utf8::Dir;
 use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
 };
 #[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
-use tempfile::NamedTempFile;
+use tempfile::{Builder, NamedTempFile};
 use wait_timeout::ChildExt;
 
 #[cfg(windows)]
@@ -78,10 +88,74 @@ const SHELL_ARGS: &[&str] = &["-c"];
 // while still surfacing timeouts for misbehaving commands.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Size of the temporary buffer used when draining child process pipes.
+const PIPE_CHUNK_SIZE: usize = 8192;
+
 #[derive(Clone)]
 pub(crate) struct CommandConfig {
     pub(crate) max_capture_bytes: u64,
     pub(crate) max_stream_bytes: u64,
+    temp_dir: CommandTempDir,
+}
+
+impl CommandConfig {
+    pub(crate) fn new(
+        max_capture_bytes: u64,
+        max_stream_bytes: u64,
+        workspace_root: Arc<Dir>,
+        workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    ) -> Self {
+        Self {
+            max_capture_bytes,
+            max_stream_bytes,
+            temp_dir: CommandTempDir::new(workspace_root, workspace_root_path),
+        }
+    }
+
+    fn create_tempfile(&self, label: &str) -> io::Result<CommandTempFile> {
+        self.temp_dir.create(label)
+    }
+}
+
+#[derive(Clone)]
+struct CommandTempDir {
+    workspace_root: Arc<Dir>,
+    workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    relative: Utf8PathBuf,
+}
+
+impl CommandTempDir {
+    fn new(workspace_root: Arc<Dir>, workspace_root_path: Option<Arc<Utf8PathBuf>>) -> Self {
+        Self {
+            workspace_root,
+            workspace_root_path,
+            relative: Utf8PathBuf::from(DEFAULT_COMMAND_TEMP_DIR),
+        }
+    }
+
+    fn create(&self, label: &str) -> io::Result<CommandTempFile> {
+        self.workspace_root.create_dir_all(&self.relative)?;
+        let mut builder = Builder::new();
+        builder.prefix(label);
+        let file = if let Some(root_path) = &self.workspace_root_path {
+            let dir_path = root_path.join(&self.relative);
+            fs::create_dir_all(dir_path.as_std_path())?;
+            builder.tempfile_in(dir_path.as_std_path())?
+        } else {
+            builder.tempfile()?
+        };
+        Ok(CommandTempFile { file })
+    }
+}
+
+struct CommandTempFile {
+    file: NamedTempFile,
+}
+
+impl CommandTempFile {
+    fn into_file(self) -> NamedTempFile {
+        self.file
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,6 +175,20 @@ impl OutputStream {
         match self {
             Self::Stdout => "stdout",
             Self::Stderr => "stderr",
+        }
+    }
+
+    const fn tempfile_label(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+    }
+
+    const fn empty_tempfile_label(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout-empty",
+            Self::Stderr => "stderr-empty",
         }
     }
 }
@@ -248,33 +336,39 @@ impl Default for CommandOptions {
     }
 }
 
+#[derive(Debug)]
 enum StdoutResult {
     Bytes(Vec<u8>),
     Tempfile(Utf8PathBuf),
 }
 
+#[derive(Debug)]
 enum PipeOutcome {
     Bytes(Vec<u8>),
     Tempfile(Utf8PathBuf),
 }
 
-#[derive(Clone, Copy)]
-struct CommandContext<'a> {
-    config: &'a CommandConfig,
+#[derive(Clone)]
+struct CommandContext {
+    config: Arc<CommandConfig>,
     options: CommandOptions,
 }
 
-impl<'a> CommandContext<'a> {
-    const fn new(config: &'a CommandConfig, options: CommandOptions) -> Self {
+impl CommandContext {
+    fn new(config: Arc<CommandConfig>, options: CommandOptions) -> Self {
         Self { config, options }
     }
 
-    const fn stdout_mode(self) -> OutputMode {
+    const fn stdout_mode(&self) -> OutputMode {
         self.options.stdout_mode()
     }
 
-    const fn config(self) -> &'a CommandConfig {
-        self.config
+    fn config(&self) -> &CommandConfig {
+        &self.config
+    }
+
+    fn config_handle(&self) -> Arc<CommandConfig> {
+        Arc::clone(&self.config)
     }
 }
 
@@ -358,7 +452,7 @@ pub(crate) fn register(
         move |state: &State, value: Value, command: String, options: Option<Value>| {
             shell_flag.store(true, Ordering::Relaxed);
             let parsed = CommandOptions::from_value(options)?;
-            let context = CommandContext::new(shell_config.as_ref(), parsed);
+            let context = CommandContext::new(Arc::clone(&shell_config), parsed);
             execute_shell(state, &value, &command, context)
         },
     );
@@ -374,7 +468,7 @@ pub(crate) fn register(
               options: Option<Value>| {
             grep_flag.store(true, Ordering::Relaxed);
             let parsed = CommandOptions::from_value(options)?;
-            let context = CommandContext::new(grep_config.as_ref(), parsed);
+            let context = CommandContext::new(Arc::clone(&grep_config), parsed);
             let call = GrepCall::new(&pattern, flags);
             execute_grep(state, &value, call, context)
         },
@@ -385,7 +479,7 @@ fn execute_shell(
     state: &State,
     value: &Value,
     command: &str,
-    context: CommandContext<'_>,
+    context: CommandContext,
 ) -> Result<Value, Error> {
     let cmd = command.trim();
     if cmd.is_empty() {
@@ -408,7 +502,7 @@ fn execute_grep(
     state: &State,
     value: &Value,
     call: GrepCall<'_>,
-    context: CommandContext<'_>,
+    context: CommandContext,
 ) -> Result<Value, Error> {
     let GrepCall { pattern, flags } = call;
     if pattern.is_empty() {
@@ -580,7 +674,7 @@ fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
 fn run_command(
     command: &str,
     input: &[u8],
-    context: CommandContext<'_>,
+    context: CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(SHELL);
     cmd.args(SHELL_ARGS)
@@ -597,7 +691,7 @@ fn run_program(
     program: &str,
     args: &[String],
     input: &[u8],
-    context: CommandContext<'_>,
+    context: CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(program);
     cmd.args(args)
@@ -611,7 +705,7 @@ fn run_program(
 fn run_child(
     mut command: Command,
     input: &[u8],
-    context: CommandContext<'_>,
+    context: CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
     let mut stdin_handle = child.stdin.take().map(|mut stdin| {
@@ -628,8 +722,13 @@ fn run_child(
     let stdout_spec = PipeSpec::new(OutputStream::Stdout, context.stdout_mode(), stdout_limit);
     let stderr_spec = PipeSpec::new(OutputStream::Stderr, OutputMode::Capture, stderr_limit);
 
-    let mut stdout_reader = spawn_pipe_reader(child.stdout.take(), stdout_spec);
-    let mut stderr_reader = spawn_pipe_reader(child.stderr.take(), stderr_spec);
+    let stdout_config = context.config_handle();
+    let stderr_config = context.config_handle();
+
+    let mut stdout_reader =
+        spawn_pipe_reader(child.stdout.take(), stdout_spec, Arc::clone(&stdout_config));
+    let mut stderr_reader =
+        spawn_pipe_reader(child.stderr.take(), stderr_spec, Arc::clone(&stderr_config));
 
     let status = match wait_for_exit(&mut child, COMMAND_TIMEOUT) {
         Ok(status) => status,
@@ -639,8 +738,8 @@ fn run_child(
         }
     };
 
-    let stdout = join_reader(stdout_reader.take(), stdout_spec)?;
-    let stderr_outcome = join_reader(stderr_reader.take(), stderr_spec)?;
+    let stdout = join_reader(stdout_reader.take(), stdout_spec, stdout_config)?;
+    let stderr_outcome = join_reader(stderr_reader.take(), stderr_spec, stderr_config)?;
 
     let stderr = match stderr_outcome {
         PipeOutcome::Bytes(bytes) => bytes,
@@ -879,16 +978,18 @@ fn wait_for_exit(child: &mut Child, timeout: Duration) -> Result<ExitStatus, Com
 fn spawn_pipe_reader<R>(
     pipe: Option<R>,
     spec: PipeSpec,
+    config: Arc<CommandConfig>,
 ) -> Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>
 where
     R: Read + Send + 'static,
 {
-    pipe.map(|reader| thread::spawn(move || read_pipe(reader, spec)))
+    pipe.map(|reader| thread::spawn(move || read_pipe(reader, spec, config)))
 }
 
 fn join_reader(
     reader_handle: Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
     spec: PipeSpec,
+    config: Arc<CommandConfig>,
 ) -> Result<PipeOutcome, CommandFailure> {
     match reader_handle {
         Some(join_handle) => join_handle
@@ -896,7 +997,8 @@ fn join_reader(
             .map_err(|_| CommandFailure::Io(io::Error::other("pipe reader panicked")))?,
         None => {
             if matches!(spec.mode(), OutputMode::Tempfile) {
-                create_empty_tempfile().map(PipeOutcome::Tempfile)
+                create_empty_tempfile(&config, spec.stream().empty_tempfile_label())
+                    .map(PipeOutcome::Tempfile)
             } else {
                 Ok(PipeOutcome::Bytes(Vec::new()))
             }
@@ -904,23 +1006,37 @@ fn join_reader(
     }
 }
 
-fn read_pipe<R>(reader: R, spec: PipeSpec) -> Result<PipeOutcome, CommandFailure>
+/// Drains a child process pipe according to the provided `PipeSpec`, enforcing
+/// the configured byte limit and producing either in-memory bytes or a
+/// tempfile-backed outcome.
+fn read_pipe<R>(
+    reader: R,
+    spec: PipeSpec,
+    config: Arc<CommandConfig>,
+) -> Result<PipeOutcome, CommandFailure>
 where
     R: Read,
 {
     let limit = spec.into_limit();
     match spec.mode() {
         OutputMode::Capture => read_pipe_capture(reader, limit),
-        OutputMode::Tempfile => read_pipe_tempfile(reader, limit),
+        OutputMode::Tempfile => read_pipe_tempfile(
+            reader,
+            limit,
+            spec.stream().tempfile_label(),
+            config.as_ref(),
+        ),
     }
 }
 
+/// Reads a pipe into memory while enforcing the capture byte limit recorded in
+/// the `PipeLimit` tracker.
 fn read_pipe_capture<R>(mut reader: R, mut limit: PipeLimit) -> Result<PipeOutcome, CommandFailure>
 where
     R: Read,
 {
     let mut buf = Vec::new();
-    let mut chunk = [0_u8; 8192];
+    let mut chunk = [0_u8; PIPE_CHUNK_SIZE];
     loop {
         let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
         if read == 0 {
@@ -932,22 +1048,27 @@ where
     Ok(PipeOutcome::Bytes(buf))
 }
 
-fn read_pipe_tempfile<R>(mut reader: R, mut limit: PipeLimit) -> Result<PipeOutcome, CommandFailure>
+/// Streams a pipe into a tempfile rooted within the workspace, enforcing the
+/// streaming byte limit recorded in `PipeLimit` and returning the final path.
+fn read_pipe_tempfile<R>(
+    mut reader: R,
+    mut limit: PipeLimit,
+    label: &str,
+    config: &CommandConfig,
+) -> Result<PipeOutcome, CommandFailure>
 where
     R: Read,
 {
-    let mut file = NamedTempFile::new().map_err(CommandFailure::Io)?;
-    let mut chunk = [0_u8; 8192];
+    let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
+    let mut file = tempfile.into_file();
+    let mut chunk = [0_u8; PIPE_CHUNK_SIZE];
     loop {
         let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
         if read == 0 {
             break;
         }
         limit.record(read)?;
-        let slice = chunk
-            .get(..read)
-            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe read out of range")))?;
-        file.write_all(slice).map_err(CommandFailure::Io)?;
+        file.write_all(&chunk[..read]).map_err(CommandFailure::Io)?;
     }
     file.flush().map_err(CommandFailure::Io)?;
     let temp_path = file.into_temp_path();
@@ -958,8 +1079,12 @@ where
     Ok(PipeOutcome::Tempfile(utf8))
 }
 
-fn create_empty_tempfile() -> Result<Utf8PathBuf, CommandFailure> {
-    let file = NamedTempFile::new().map_err(CommandFailure::Io)?;
+fn create_empty_tempfile(
+    config: &CommandConfig,
+    label: &str,
+) -> Result<Utf8PathBuf, CommandFailure> {
+    let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
+    let file = tempfile.into_file();
     let path = file
         .into_temp_path()
         .keep()
@@ -978,12 +1103,34 @@ fn append_stderr(message: &mut String, stderr: &[u8]) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
+    use camino::Utf8PathBuf;
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use std::{fs, io::Cursor};
+    use tempfile::tempdir;
+
+    #[cfg(windows)]
+    use anyhow::{Result, ensure};
+
+    fn test_command_config() -> (tempfile::TempDir, CommandConfig) {
+        let temp = tempdir().expect("create command temp workspace");
+        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .expect("temp workspace should be valid UTF-8");
+        let dir =
+            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+        let config = CommandConfig::new(
+            DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+            DEFAULT_COMMAND_MAX_STREAM_BYTES,
+            Arc::new(dir),
+            Some(Arc::new(path)),
+        );
+        (temp, config)
+    }
+
     #[cfg(windows)]
     #[test]
-    fn quote_escapes_cmd_metacharacters() -> anyhow::Result<()> {
-        use super::{QuoteError, quote};
-        use anyhow::ensure;
-
+    fn quote_escapes_cmd_metacharacters() -> Result<()> {
         let success_cases = [
             ("simple", "simple"),
             ("", "\"\""),
@@ -1027,5 +1174,84 @@ mod tests {
             );
         }
         Ok(())
+    }
+
+    #[test]
+    fn read_pipe_capture_collects_bytes_within_limit() {
+        let data = b"payload".to_vec();
+        let outcome = read_pipe_capture(
+            Cursor::new(data.clone()),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Capture, 128).into_limit(),
+        )
+        .expect("capture should succeed within the configured limit");
+        match outcome {
+            PipeOutcome::Bytes(buf) => assert_eq!(buf, data),
+            PipeOutcome::Tempfile(_) => panic!("capture mode should emit bytes"),
+        }
+    }
+
+    #[test]
+    fn read_pipe_capture_reports_limit_exceedance() {
+        let err = read_pipe_capture(
+            Cursor::new(vec![0_u8; 16]),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Capture, 8).into_limit(),
+        )
+        .expect_err("capture should fail when it exceeds the configured limit");
+        match err {
+            CommandFailure::OutputLimit {
+                stream,
+                mode,
+                limit,
+            } => {
+                assert_eq!(stream, OutputStream::Stdout);
+                assert_eq!(mode, OutputMode::Capture);
+                assert_eq!(limit, 8);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_pipe_tempfile_writes_streamed_data() {
+        let payload = vec![b'x'; 32];
+        let (_temp_dir, config) = test_command_config();
+        let outcome = read_pipe_tempfile(
+            Cursor::new(payload.clone()),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 64).into_limit(),
+            "stdout",
+            &config,
+        )
+        .expect("streaming should succeed within the configured limit");
+        let path = match outcome {
+            PipeOutcome::Tempfile(path) => path,
+            PipeOutcome::Bytes(_) => panic!("streaming mode should emit a tempfile path"),
+        };
+        let disk = fs::read(path.as_std_path()).expect("read streamed output");
+        assert_eq!(disk, payload);
+        fs::remove_file(path.as_std_path()).expect("cleanup streamed file");
+    }
+
+    #[test]
+    fn read_pipe_tempfile_respects_stream_limit() {
+        let (_temp_dir, config) = test_command_config();
+        let err = read_pipe_tempfile(
+            Cursor::new(vec![b'y'; 32]),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 8).into_limit(),
+            "stdout",
+            &config,
+        )
+        .expect_err("streaming should fail when it exceeds the configured limit");
+        match err {
+            CommandFailure::OutputLimit {
+                stream,
+                mode,
+                limit,
+            } => {
+                assert_eq!(stream, OutputStream::Stdout);
+                assert_eq!(mode, OutputMode::Tempfile);
+                assert_eq!(limit, 8);
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }

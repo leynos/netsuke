@@ -18,7 +18,7 @@ pub(crate) fn render_template_with_context(
     let mut env = Environment::new();
     let workspace = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let mut config = StdlibConfig::new(workspace);
+    let mut config = StdlibConfig::new(workspace).with_workspace_root_path(root.clone());
     if let Some(policy) = world.stdlib_policy.clone() {
         config = config.with_network_policy(policy);
     }
