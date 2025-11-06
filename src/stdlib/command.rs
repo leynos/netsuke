@@ -904,49 +904,58 @@ fn join_reader(
     }
 }
 
-fn read_pipe<R>(mut reader: R, spec: PipeSpec) -> Result<PipeOutcome, CommandFailure>
+fn read_pipe<R>(reader: R, spec: PipeSpec) -> Result<PipeOutcome, CommandFailure>
 where
     R: Read,
 {
-    let mut limit = spec.into_limit();
+    let limit = spec.into_limit();
     match spec.mode() {
-        OutputMode::Capture => {
-            let mut buf = Vec::new();
-            let mut chunk = [0_u8; 8192];
-            loop {
-                let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
-                if read == 0 {
-                    break;
-                }
-                limit.record(read)?;
-                buf.extend(chunk.iter().take(read).copied());
-            }
-            Ok(PipeOutcome::Bytes(buf))
-        }
-        OutputMode::Tempfile => {
-            let mut file = NamedTempFile::new().map_err(CommandFailure::Io)?;
-            let mut chunk = [0_u8; 8192];
-            loop {
-                let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
-                if read == 0 {
-                    break;
-                }
-                limit.record(read)?;
-                let slice = chunk.get(..read).ok_or_else(|| {
-                    CommandFailure::Io(io::Error::other("pipe read out of range"))
-                })?;
-                file.write_all(slice).map_err(CommandFailure::Io)?;
-            }
-            file.flush().map_err(CommandFailure::Io)?;
-            let temp_path = file.into_temp_path();
-            let path = temp_path
-                .keep()
-                .map_err(|err| CommandFailure::Io(err.error))?;
-            let utf8 =
-                Utf8PathBuf::from_path_buf(path).map_err(CommandFailure::StreamPathNotUtf8)?;
-            Ok(PipeOutcome::Tempfile(utf8))
-        }
+        OutputMode::Capture => read_pipe_capture(reader, limit),
+        OutputMode::Tempfile => read_pipe_tempfile(reader, limit),
     }
+}
+
+fn read_pipe_capture<R>(mut reader: R, mut limit: PipeLimit) -> Result<PipeOutcome, CommandFailure>
+where
+    R: Read,
+{
+    let mut buf = Vec::new();
+    let mut chunk = [0_u8; 8192];
+    loop {
+        let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
+        if read == 0 {
+            break;
+        }
+        limit.record(read)?;
+        buf.extend(chunk.iter().take(read).copied());
+    }
+    Ok(PipeOutcome::Bytes(buf))
+}
+
+fn read_pipe_tempfile<R>(mut reader: R, mut limit: PipeLimit) -> Result<PipeOutcome, CommandFailure>
+where
+    R: Read,
+{
+    let mut file = NamedTempFile::new().map_err(CommandFailure::Io)?;
+    let mut chunk = [0_u8; 8192];
+    loop {
+        let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
+        if read == 0 {
+            break;
+        }
+        limit.record(read)?;
+        let slice = chunk
+            .get(..read)
+            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe read out of range")))?;
+        file.write_all(slice).map_err(CommandFailure::Io)?;
+    }
+    file.flush().map_err(CommandFailure::Io)?;
+    let temp_path = file.into_temp_path();
+    let path = temp_path
+        .keep()
+        .map_err(|err| CommandFailure::Io(err.error))?;
+    let utf8 = Utf8PathBuf::from_path_buf(path).map_err(CommandFailure::StreamPathNotUtf8)?;
+    Ok(PipeOutcome::Tempfile(utf8))
 }
 
 fn create_empty_tempfile() -> Result<Utf8PathBuf, CommandFailure> {
