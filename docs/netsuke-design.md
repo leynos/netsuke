@@ -1062,6 +1062,50 @@ Implementation details:
   builder and hands owned network/command configurations to the registration
   routines, avoiding needless cloning of the capability handles.
 
+```mermaid
+classDiagram
+    class read_pipe {
+        +read_pipe<R>(reader: R, spec: PipeSpec): Result<PipeOutcome, CommandFailure>
+    }
+    class read_pipe_capture {
+        +read_pipe_capture<R>(reader: R, limit: PipeLimit): Result<PipeOutcome, CommandFailure>
+    }
+    class read_pipe_tempfile {
+        +read_pipe_tempfile<R>(reader: R, limit: PipeLimit): Result<PipeOutcome, CommandFailure>
+    }
+    read_pipe --> read_pipe_capture : calls
+    read_pipe --> read_pipe_tempfile : calls
+    class PipeSpec {
+        +into_limit(): PipeLimit
+        +mode(): OutputMode
+    }
+    class PipeOutcome {
+        <<enum>>
+        Bytes(Vec<u8>)
+        Tempfile(Utf8PathBuf)
+    }
+    class CommandFailure {
+        <<enum>>
+        Io
+        StreamPathNotUtf8
+    }
+    class PipeLimit {
+        +record(read: usize): Result<(), CommandFailure>
+    }
+    class OutputMode {
+        <<enum>>
+        Capture
+        Tempfile
+    }
+    read_pipe ..> PipeSpec : uses
+    read_pipe_capture ..> PipeLimit : uses
+    read_pipe_tempfile ..> PipeLimit : uses
+    read_pipe_capture ..> PipeOutcome : returns
+    read_pipe_tempfile ..> PipeOutcome : returns
+    read_pipe_capture ..> CommandFailure : error
+    read_pipe_tempfile ..> CommandFailure : error
+```
+
 Custom external commands can be registered as additional filters. Those should
 be marked `pure` if safe for caching or `impure` otherwise.
 

@@ -212,5 +212,7 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
             "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"
         )
     })?;
-    Ok(StdlibConfig::new(dir).with_network_policy(policy))
+    Ok(StdlibConfig::new(dir)
+        .with_workspace_root_path(utf8_parent.to_path_buf())
+        .with_network_policy(policy))
 }
