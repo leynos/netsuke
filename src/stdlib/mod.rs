@@ -111,9 +111,18 @@ impl StdlibConfig {
     }
 
     /// Record the absolute workspace root path for capability-scoped helpers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `path` is not absolute.
     #[must_use]
     pub fn with_workspace_root_path(mut self, path: impl Into<Utf8PathBuf>) -> Self {
-        self.workspace_root_path = Some(path.into());
+        let workspace_path = path.into();
+        assert!(
+            workspace_path.is_absolute(),
+            "workspace root path must be absolute: {workspace_path}"
+        );
+        self.workspace_root_path = Some(workspace_path);
         self
     }
 

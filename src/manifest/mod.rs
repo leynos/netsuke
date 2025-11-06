@@ -23,11 +23,11 @@ use crate::{
     stdlib::{NetworkPolicy, StdlibConfig},
 };
 use anyhow::{Context, Result, anyhow};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::{fs, path::Path};
+use std::{env, fs, path::Path};
 
 mod diagnostics;
 mod expand;
@@ -207,12 +207,29 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
             path.display()
         )
     })?;
-    let dir = Dir::open_ambient_dir(utf8_parent, ambient_authority()).with_context(|| {
-        format!(
-            "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"
-        )
-    })?;
+    let workspace_root = if utf8_parent.is_absolute() {
+        utf8_parent.to_path_buf()
+    } else {
+        let cwd =
+            env::current_dir().context("resolve current directory for manifest workspace root")?;
+        let cwd_utf8 = Utf8PathBuf::from_path_buf(cwd).map_err(|invalid_path| {
+            anyhow!(
+                "current directory '{}' contains non-UTF-8 components",
+                invalid_path.display()
+            )
+        })?;
+        cwd_utf8.join(utf8_parent)
+    };
+    let workspace_root_for_error = workspace_root.clone();
+    let dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority()).with_context(
+        || {
+            format!(
+                "failed to open workspace directory '{workspace_root_for_error}' \
+                 for manifest '{manifest_label}'"
+            )
+        },
+    )?;
     Ok(StdlibConfig::new(dir)
-        .with_workspace_root_path(utf8_parent.to_path_buf())
+        .with_workspace_root_path(workspace_root)
         .with_network_policy(policy))
 }

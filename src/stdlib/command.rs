@@ -142,7 +142,10 @@ impl CommandTempDir {
             fs::create_dir_all(dir_path.as_std_path())?;
             builder.tempfile_in(dir_path.as_std_path())?
         } else {
-            builder.tempfile()?
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workspace root path must be configured for command tempfiles",
+            ));
         };
         Ok(CommandTempFile { file })
     }
@@ -1065,10 +1068,11 @@ where
             break;
         }
         limit.record(read)?;
-        let slice = chunk
-            .get(..read)
-            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe read out of range")))?;
-        file.write_all(slice).map_err(CommandFailure::Io)?;
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "Read::read guarantees `read` does not exceed `chunk.len()`"
+        )]
+        file.write_all(&chunk[..read]).map_err(CommandFailure::Io)?;
     }
     file.flush().map_err(CommandFailure::Io)?;
     let temp_path = file.into_temp_path();
