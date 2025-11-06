@@ -267,7 +267,7 @@ impl Default for StdlibConfig {
         let cwd =
             env::current_dir().unwrap_or_else(|err| panic!("resolve current directory: {err}"));
         let path = Utf8PathBuf::from_path_buf(cwd)
-            .unwrap_or_else(|path| panic!("cwd contains non-UTF-8 components: {path:?}"));
+            .unwrap_or_else(|path| panic!("cwd contains non-UTF-8 components: {}", path.display()));
         Self::new(root).with_workspace_root_path(path)
     }
 }

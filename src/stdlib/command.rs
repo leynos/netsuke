@@ -355,7 +355,7 @@ struct CommandContext {
 }
 
 impl CommandContext {
-    fn new(config: Arc<CommandConfig>, options: CommandOptions) -> Self {
+    const fn new(config: Arc<CommandConfig>, options: CommandOptions) -> Self {
         Self { config, options }
     }
 
@@ -453,7 +453,7 @@ pub(crate) fn register(
             shell_flag.store(true, Ordering::Relaxed);
             let parsed = CommandOptions::from_value(options)?;
             let context = CommandContext::new(Arc::clone(&shell_config), parsed);
-            execute_shell(state, &value, &command, context)
+            execute_shell(state, &value, &command, &context)
         },
     );
 
@@ -470,7 +470,7 @@ pub(crate) fn register(
             let parsed = CommandOptions::from_value(options)?;
             let context = CommandContext::new(Arc::clone(&grep_config), parsed);
             let call = GrepCall::new(&pattern, flags);
-            execute_grep(state, &value, call, context)
+            execute_grep(state, &value, call, &context)
         },
     );
 }
@@ -479,7 +479,7 @@ fn execute_shell(
     state: &State,
     value: &Value,
     command: &str,
-    context: CommandContext,
+    context: &CommandContext,
 ) -> Result<Value, Error> {
     let cmd = command.trim();
     if cmd.is_empty() {
@@ -502,7 +502,7 @@ fn execute_grep(
     state: &State,
     value: &Value,
     call: GrepCall<'_>,
-    context: CommandContext,
+    context: &CommandContext,
 ) -> Result<Value, Error> {
     let GrepCall { pattern, flags } = call;
     if pattern.is_empty() {
@@ -674,7 +674,7 @@ fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
 fn run_command(
     command: &str,
     input: &[u8],
-    context: CommandContext,
+    context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(SHELL);
     cmd.args(SHELL_ARGS)
@@ -691,7 +691,7 @@ fn run_program(
     program: &str,
     args: &[String],
     input: &[u8],
-    context: CommandContext,
+    context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(program);
     cmd.args(args)
@@ -705,7 +705,7 @@ fn run_program(
 fn run_child(
     mut command: Command,
     input: &[u8],
-    context: CommandContext,
+    context: &CommandContext,
 ) -> Result<StdoutResult, CommandFailure> {
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
     let mut stdin_handle = child.stdin.take().map(|mut stdin| {
@@ -738,8 +738,8 @@ fn run_child(
         }
     };
 
-    let stdout = join_reader(stdout_reader.take(), stdout_spec, stdout_config)?;
-    let stderr_outcome = join_reader(stderr_reader.take(), stderr_spec, stderr_config)?;
+    let stdout = join_reader(stdout_reader.take(), stdout_spec, stdout_config.as_ref())?;
+    let stderr_outcome = join_reader(stderr_reader.take(), stderr_spec, stderr_config.as_ref())?;
 
     let stderr = match stderr_outcome {
         PipeOutcome::Bytes(bytes) => bytes,
@@ -983,13 +983,13 @@ fn spawn_pipe_reader<R>(
 where
     R: Read + Send + 'static,
 {
-    pipe.map(|reader| thread::spawn(move || read_pipe(reader, spec, config)))
+    pipe.map(|reader| thread::spawn(move || read_pipe(reader, spec, config.as_ref())))
 }
 
 fn join_reader(
     reader_handle: Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
     spec: PipeSpec,
-    config: Arc<CommandConfig>,
+    config: &CommandConfig,
 ) -> Result<PipeOutcome, CommandFailure> {
     match reader_handle {
         Some(join_handle) => join_handle
@@ -997,7 +997,7 @@ fn join_reader(
             .map_err(|_| CommandFailure::Io(io::Error::other("pipe reader panicked")))?,
         None => {
             if matches!(spec.mode(), OutputMode::Tempfile) {
-                create_empty_tempfile(&config, spec.stream().empty_tempfile_label())
+                create_empty_tempfile(config, spec.stream().empty_tempfile_label())
                     .map(PipeOutcome::Tempfile)
             } else {
                 Ok(PipeOutcome::Bytes(Vec::new()))
@@ -1012,7 +1012,7 @@ fn join_reader(
 fn read_pipe<R>(
     reader: R,
     spec: PipeSpec,
-    config: Arc<CommandConfig>,
+    config: &CommandConfig,
 ) -> Result<PipeOutcome, CommandFailure>
 where
     R: Read,
@@ -1020,12 +1020,9 @@ where
     let limit = spec.into_limit();
     match spec.mode() {
         OutputMode::Capture => read_pipe_capture(reader, limit),
-        OutputMode::Tempfile => read_pipe_tempfile(
-            reader,
-            limit,
-            spec.stream().tempfile_label(),
-            config.as_ref(),
-        ),
+        OutputMode::Tempfile => {
+            read_pipe_tempfile(reader, limit, spec.stream().tempfile_label(), config)
+        }
     }
 }
 
@@ -1068,7 +1065,10 @@ where
             break;
         }
         limit.record(read)?;
-        file.write_all(&chunk[..read]).map_err(CommandFailure::Io)?;
+        let slice = chunk
+            .get(..read)
+            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe read out of range")))?;
+        file.write_all(slice).map_err(CommandFailure::Io)?;
     }
     file.flush().map_err(CommandFailure::Io)?;
     let temp_path = file.into_temp_path();
