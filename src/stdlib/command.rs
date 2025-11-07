@@ -1132,6 +1132,28 @@ mod tests {
         (temp, config)
     }
 
+    fn assert_output_limit_error(
+        outcome: Result<PipeOutcome, CommandFailure>,
+        expected_stream: OutputStream,
+        expected_mode: OutputMode,
+        expected_limit: u64,
+    ) {
+        let err =
+            outcome.expect_err("expected command to exceed the configured output limit for test");
+        match err {
+            CommandFailure::OutputLimit {
+                stream,
+                mode,
+                limit,
+            } => {
+                assert_eq!(stream, expected_stream);
+                assert_eq!(mode, expected_mode);
+                assert_eq!(limit, expected_limit);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn quote_escapes_cmd_metacharacters() -> Result<()> {
@@ -1196,23 +1218,11 @@ mod tests {
 
     #[test]
     fn read_pipe_capture_reports_limit_exceedance() {
-        let err = read_pipe_capture(
+        let outcome = read_pipe_capture(
             Cursor::new(vec![0_u8; 16]),
             PipeSpec::new(OutputStream::Stdout, OutputMode::Capture, 8).into_limit(),
-        )
-        .expect_err("capture should fail when it exceeds the configured limit");
-        match err {
-            CommandFailure::OutputLimit {
-                stream,
-                mode,
-                limit,
-            } => {
-                assert_eq!(stream, OutputStream::Stdout);
-                assert_eq!(mode, OutputMode::Capture);
-                assert_eq!(limit, 8);
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        );
+        assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Capture, 8);
     }
 
     #[test]
@@ -1238,25 +1248,13 @@ mod tests {
     #[test]
     fn read_pipe_tempfile_respects_stream_limit() {
         let (_temp_dir, config) = test_command_config();
-        let err = read_pipe_tempfile(
+        let outcome = read_pipe_tempfile(
             Cursor::new(vec![b'y'; 32]),
             PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 8).into_limit(),
             "stdout",
             &config,
-        )
-        .expect_err("streaming should fail when it exceeds the configured limit");
-        match err {
-            CommandFailure::OutputLimit {
-                stream,
-                mode,
-                limit,
-            } => {
-                assert_eq!(stream, OutputStream::Stdout);
-                assert_eq!(mode, OutputMode::Tempfile);
-                assert_eq!(limit, 8);
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        );
+        assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Tempfile, 8);
     }
 
     #[test]

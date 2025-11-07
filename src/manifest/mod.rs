@@ -191,6 +191,23 @@ pub fn from_path_with_policy(
 #[cfg(test)]
 mod tests;
 
+/// Resolve a potentially relative manifest parent path to an absolute UTF-8 workspace root.
+fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf> {
+    let workspace_base = if utf8_parent.is_absolute() {
+        utf8_parent.to_path_buf().into_std_path_buf()
+    } else {
+        env::current_dir()
+            .context("resolve current directory for manifest workspace root")?
+            .join(utf8_parent.as_std_path())
+    };
+    Utf8PathBuf::from_path_buf(workspace_base).map_err(|invalid| {
+        anyhow!(
+            "workspace root '{}' contains non-UTF-8 components",
+            invalid.display()
+        )
+    })
+}
+
 fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<StdlibConfig> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -207,22 +224,7 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
             path.display()
         )
     })?;
-    let workspace_base = if utf8_parent.is_absolute() {
-        utf8_parent.to_path_buf().into_std_path_buf()
-    } else {
-        env::current_dir()
-            .context("resolve current directory for manifest workspace root")?
-            .join(utf8_parent.as_std_path())
-    };
-    let workspace_root = match Utf8PathBuf::from_path_buf(workspace_base) {
-        Ok(valid) => valid,
-        Err(invalid) => {
-            return Err(anyhow!(
-                "workspace root '{}' contains non-UTF-8 components",
-                invalid.display()
-            ));
-        }
-    };
+    let workspace_root = resolve_absolute_workspace_root(utf8_parent)?;
     let dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority()).with_context(
         || {
             format!(

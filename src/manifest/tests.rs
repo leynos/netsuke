@@ -296,26 +296,20 @@ fn register_manifest_macros_supports_multiple(
 }
 
 #[rstest]
-fn stdlib_config_for_manifest_resolves_relative_workspace_root() -> AnyResult<()> {
+#[case(true)]
+#[case(false)]
+fn stdlib_config_for_manifest_resolves_workspace_root(#[case] use_relative: bool) -> AnyResult<()> {
     let temp = tempdir().context("create temp workspace")?;
-    let _guard = CurrentDirGuard::change_to(temp.path())?;
-    let config = stdlib_config_for_manifest(Path::new("Netsukefile"), NetworkPolicy::default())?;
-    let recorded = config
-        .workspace_root_path()
-        .context("workspace root path should be recorded")?;
-    let expected = camino::Utf8Path::from_path(temp.path())
-        .context("temp workspace path should be valid UTF-8")?;
-    ensure!(
-        recorded == expected,
-        "expected workspace root {expected}, got {recorded}"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn stdlib_config_for_manifest_resolves_absolute_workspace_root() -> AnyResult<()> {
-    let temp = tempdir().context("create temp workspace")?;
-    let manifest_path = temp.path().join("Netsukefile");
+    let _guard = if use_relative {
+        Some(CurrentDirGuard::change_to(temp.path())?)
+    } else {
+        None
+    };
+    let manifest_path = if use_relative {
+        Path::new("Netsukefile").to_path_buf()
+    } else {
+        temp.path().join("Netsukefile")
+    };
     let config = stdlib_config_for_manifest(&manifest_path, NetworkPolicy::default())?;
     let recorded = config
         .workspace_root_path()
