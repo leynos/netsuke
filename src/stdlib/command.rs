@@ -44,14 +44,12 @@
 //! enables arbitrary code execution.
 
 use std::{
-    fmt::{self},
-    fs,
+    fmt::{self, Write as FmtWrite},
     io::{self, Read, Write},
-    path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
     time::Duration,
@@ -59,14 +57,13 @@ use std::{
 
 use super::{DEFAULT_COMMAND_TEMP_DIR, value_from_bytes};
 use camino::Utf8PathBuf;
-use cap_std::fs_utf8::Dir;
+use cap_std::fs_utf8::{Dir, File as CapFile};
 use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
 };
 #[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
-use tempfile::{Builder, NamedTempFile};
 use wait_timeout::ChildExt;
 
 #[cfg(windows)]
@@ -90,6 +87,10 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Size of the temporary buffer used when draining child process pipes.
 const PIPE_CHUNK_SIZE: usize = 8192;
+
+const MAX_COMMAND_TEMPFILE_ATTEMPTS: usize = 32;
+
+static COMMAND_TEMPFILE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 pub(crate) struct CommandConfig {
@@ -134,30 +135,134 @@ impl CommandTempDir {
     }
 
     fn create(&self, label: &str) -> io::Result<CommandTempFile> {
-        self.workspace_root.create_dir_all(&self.relative)?;
-        let mut builder = Builder::new();
-        builder.prefix(label);
-        let file = if let Some(root_path) = &self.workspace_root_path {
-            let dir_path = root_path.join(&self.relative);
-            fs::create_dir_all(dir_path.as_std_path())?;
-            builder.tempfile_in(dir_path.as_std_path())?
-        } else {
+        let Some(root_path) = &self.workspace_root_path else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "workspace root path must be configured for command tempfiles",
             ));
         };
-        Ok(CommandTempFile { file })
+        self.workspace_root.create_dir_all(&self.relative)?;
+        let temp_dir = self.workspace_root.open_dir(&self.relative)?;
+        let mut options = cap_std::fs::OpenOptions::new();
+        options.read(true);
+        options.write(true);
+        options.create_new(true);
+        for _ in 0..MAX_COMMAND_TEMPFILE_ATTEMPTS {
+            let file_component = next_tempfile_component(label);
+            match temp_dir.open_with(&file_component, &options) {
+                Ok(file) => {
+                    let relative_path = self.relative.join(&file_component);
+                    let absolute_path = root_path.as_ref().join(relative_path.as_path());
+                    return Ok(CommandTempFile::new(
+                        file,
+                        Arc::clone(&self.workspace_root),
+                        relative_path,
+                        absolute_path,
+                    ));
+                }
+                Err(err) => match err.kind() {
+                    io::ErrorKind::AlreadyExists => {}
+                    _ => return Err(err),
+                },
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "unable to allocate unique command tempfile name",
+        ))
     }
 }
 
+fn next_tempfile_component(label: &str) -> Utf8PathBuf {
+    let counter = COMMAND_TEMPFILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let mut name = sanitize_label(label);
+    if !name.is_empty() {
+        name.push('-');
+    }
+    if let Err(err) = FmtWrite::write_fmt(&mut name, format_args!("{counter:016x}.tmp")) {
+        panic!("failed to format command tempfile suffix: {err}");
+    }
+    Utf8PathBuf::from(name)
+}
+
+fn sanitize_label(label: &str) -> String {
+    let mut sanitized = String::with_capacity(label.len());
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+            sanitized.push(ch);
+        } else {
+            sanitized.push('-');
+        }
+    }
+    if sanitized.is_empty() {
+        sanitized.push('t');
+    }
+    sanitized
+}
+
 struct CommandTempFile {
-    file: NamedTempFile,
+    file: Option<CapFile>,
+    workspace_root: Arc<Dir>,
+    relative_path: Utf8PathBuf,
+    absolute_path: Utf8PathBuf,
+    persisted: bool,
 }
 
 impl CommandTempFile {
-    fn into_file(self) -> NamedTempFile {
-        self.file
+    const fn new(
+        file: CapFile,
+        workspace_root: Arc<Dir>,
+        relative_path: Utf8PathBuf,
+        absolute_path: Utf8PathBuf,
+    ) -> Self {
+        Self {
+            file: Some(file),
+            workspace_root,
+            relative_path,
+            absolute_path,
+            persisted: false,
+        }
+    }
+
+    fn into_path(mut self) -> Utf8PathBuf {
+        self.persisted = true;
+        drop(self.file.take());
+        std::mem::take(&mut self.absolute_path)
+    }
+
+    fn file_mut(&mut self) -> &mut CapFile {
+        self.file.as_mut().map_or_else(
+            || panic!("temporary file closed before streaming completed"),
+            |file| file,
+        )
+    }
+}
+
+impl Write for CommandTempFile {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.file_mut().write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.file_mut().flush()
+    }
+}
+
+impl Drop for CommandTempFile {
+    fn drop(&mut self) {
+        if self.persisted {
+            return;
+        }
+        if let Some(file) = self.file.take() {
+            drop(file);
+        }
+        if let Err(err) = self.workspace_root.remove_file(&self.relative_path) {
+            tracing::warn!(
+                path = %self.relative_path,
+                ?err,
+                "failed to remove aborted command tempfile"
+            );
+        }
     }
 }
 
@@ -846,7 +951,6 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
             mode,
             limit,
         } => output_limit_error(location, LimitExceeded::new(stream, mode, limit)),
-        CommandFailure::StreamPathNotUtf8(path) => stream_path_error(location, &path),
         CommandFailure::Timeout(duration) => timeout_error(location, duration),
     }
 }
@@ -902,17 +1006,6 @@ fn output_limit_error(location: CommandLocation<'_>, exceeded: LimitExceeded) ->
     )
 }
 
-fn stream_path_error(location: CommandLocation<'_>, path: &Path) -> Error {
-    Error::new(
-        ErrorKind::InvalidOperation,
-        format!(
-            "{} produced a temporary output path that is not valid UTF-8: {}",
-            location.describe(),
-            path.display()
-        ),
-    )
-}
-
 fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -952,7 +1045,6 @@ enum CommandFailure {
         mode: OutputMode,
         limit: u64,
     },
-    StreamPathNotUtf8(PathBuf),
     Timeout(Duration),
 }
 
@@ -1059,8 +1151,7 @@ fn read_pipe_tempfile<R>(
 where
     R: Read,
 {
-    let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
-    let mut file = tempfile.into_file();
+    let mut tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
     let mut chunk = [0_u8; PIPE_CHUNK_SIZE];
     loop {
         let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
@@ -1072,15 +1163,13 @@ where
             clippy::indexing_slicing,
             reason = "Read::read guarantees `read` does not exceed `chunk.len()`"
         )]
-        file.write_all(&chunk[..read]).map_err(CommandFailure::Io)?;
+        tempfile
+            .write_all(&chunk[..read])
+            .map_err(CommandFailure::Io)?;
     }
-    file.flush().map_err(CommandFailure::Io)?;
-    let temp_path = file.into_temp_path();
-    let path = temp_path
-        .keep()
-        .map_err(|err| CommandFailure::Io(err.error))?;
-    let utf8 = Utf8PathBuf::from_path_buf(path).map_err(CommandFailure::StreamPathNotUtf8)?;
-    Ok(PipeOutcome::Tempfile(utf8))
+    tempfile.flush().map_err(CommandFailure::Io)?;
+    let path = tempfile.into_path();
+    Ok(PipeOutcome::Tempfile(path))
 }
 
 fn create_empty_tempfile(
@@ -1088,12 +1177,7 @@ fn create_empty_tempfile(
     label: &str,
 ) -> Result<Utf8PathBuf, CommandFailure> {
     let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
-    let file = tempfile.into_file();
-    let path = file
-        .into_temp_path()
-        .keep()
-        .map_err(|err| CommandFailure::Io(err.error))?;
-    Utf8PathBuf::from_path_buf(path).map_err(CommandFailure::StreamPathNotUtf8)
+    Ok(tempfile.into_path())
 }
 
 fn append_stderr(message: &mut String, stderr: &[u8]) {
