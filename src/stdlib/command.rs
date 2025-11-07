@@ -1115,10 +1115,7 @@ where
             .write_all(&chunk[..read])
             .map_err(CommandFailure::Io)?;
     }
-    tempfile
-        .as_file_mut()
-        .flush()
-        .map_err(CommandFailure::Io)?;
+    tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
     let path = tempfile.into_path().map_err(CommandFailure::Io)?;
     Ok(PipeOutcome::Tempfile(path))
 }
