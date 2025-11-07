@@ -221,6 +221,27 @@ fn run_manifest_subcommand_writes_file() -> Result<()> {
 }
 
 #[test]
+fn run_manifest_subcommand_accepts_relative_manifest_path() -> Result<()> {
+    let (temp, _manifest_path) = create_test_manifest()?;
+    let output_path = temp.path().join("relative.ninja");
+    let cli = Cli {
+        file: PathBuf::from("Netsukefile"),
+        directory: Some(temp.path().to_path_buf()),
+        command: Some(Commands::Manifest {
+            file: output_path.clone(),
+        }),
+        ..Cli::default()
+    };
+
+    run(&cli).context("expected manifest subcommand to accept relative manifest path")?;
+    ensure!(
+        output_path.exists(),
+        "manifest command should create output file for relative manifest path"
+    );
+    Ok(())
+}
+
+#[test]
 #[serial]
 fn run_respects_env_override_for_ninja() -> Result<()> {
     let (temp_dir, ninja_path) = fake_ninja(0u8)?;

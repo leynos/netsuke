@@ -71,6 +71,15 @@ fn render_with_single_context(
     render_template_with_context(world, template, ctx)
 }
 
+/// Macro to render a template using a string field from world.
+macro_rules! render_with_world_string_field {
+    ($world:expr, $template:expr, $key:literal, $field:ident, $error:literal) => {{
+        let __render_world = $world;
+        let value = __render_world.$field.clone().context($error)?;
+        render_with_single_context(__render_world, $template, $key, value)
+    }};
+}
+
 fn render_template(
     world: &mut CliWorld,
     template: &TemplateContent,
@@ -116,11 +125,13 @@ pub(crate) fn render_stdlib_template_with_url(
     world: &mut CliWorld,
     template_content: TemplateContent,
 ) -> Result<()> {
-    let url = world
-        .stdlib_url
-        .clone()
-        .context("expected stdlib HTTP server to be initialised")?;
-    render_with_single_context(world, &template_content, "url", url)
+    render_with_world_string_field!(
+        world,
+        &template_content,
+        "url",
+        stdlib_url,
+        "expected stdlib HTTP server to be initialised"
+    )
 }
 
 #[expect(
@@ -132,11 +143,13 @@ pub(crate) fn render_stdlib_template_with_command(
     world: &mut CliWorld,
     template_content: TemplateContent,
 ) -> Result<()> {
-    let command = world
-        .stdlib_command
-        .clone()
-        .context("expected stdlib command helper to be compiled")?;
-    render_with_single_context(world, &template_content, "cmd", command)
+    render_with_world_string_field!(
+        world,
+        &template_content,
+        "cmd",
+        stdlib_command,
+        "expected stdlib command helper to be compiled"
+    )
 }
 
 #[expect(
@@ -148,9 +161,11 @@ pub(crate) fn render_stdlib_template_with_text(
     world: &mut CliWorld,
     template_content: TemplateContent,
 ) -> Result<()> {
-    let text = world
-        .stdlib_text
-        .clone()
-        .context("expected stdlib template text to be configured")?;
-    render_with_single_context(world, &template_content, "text", text)
+    render_with_world_string_field!(
+        world,
+        &template_content,
+        "text",
+        stdlib_text,
+        "expected stdlib template text to be configured"
+    )
 }

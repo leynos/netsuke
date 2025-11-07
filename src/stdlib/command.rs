@@ -142,7 +142,10 @@ impl CommandTempDir {
             fs::create_dir_all(dir_path.as_std_path())?;
             builder.tempfile_in(dir_path.as_std_path())?
         } else {
-            builder.tempfile()?
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workspace root path must be configured for command tempfiles",
+            ));
         };
         Ok(CommandTempFile { file })
     }
@@ -1065,10 +1068,11 @@ where
             break;
         }
         limit.record(read)?;
-        let slice = chunk
-            .get(..read)
-            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe read out of range")))?;
-        file.write_all(slice).map_err(CommandFailure::Io)?;
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "Read::read guarantees `read` does not exceed `chunk.len()`"
+        )]
+        file.write_all(&chunk[..read]).map_err(CommandFailure::Io)?;
     }
     file.flush().map_err(CommandFailure::Io)?;
     let temp_path = file.into_temp_path();
@@ -1107,7 +1111,7 @@ mod tests {
     use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs_utf8::Dir};
-    use std::{fs, io::Cursor};
+    use std::{fs, io, io::Cursor};
     use tempfile::tempdir;
 
     #[cfg(windows)]
@@ -1126,6 +1130,28 @@ mod tests {
             Some(Arc::new(path)),
         );
         (temp, config)
+    }
+
+    fn assert_output_limit_error(
+        outcome: Result<PipeOutcome, CommandFailure>,
+        expected_stream: OutputStream,
+        expected_mode: OutputMode,
+        expected_limit: u64,
+    ) {
+        let err =
+            outcome.expect_err("expected command to exceed the configured output limit for test");
+        match err {
+            CommandFailure::OutputLimit {
+                stream,
+                mode,
+                limit,
+            } => {
+                assert_eq!(stream, expected_stream);
+                assert_eq!(mode, expected_mode);
+                assert_eq!(limit, expected_limit);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
     }
 
     #[cfg(windows)]
@@ -1192,23 +1218,11 @@ mod tests {
 
     #[test]
     fn read_pipe_capture_reports_limit_exceedance() {
-        let err = read_pipe_capture(
+        let outcome = read_pipe_capture(
             Cursor::new(vec![0_u8; 16]),
             PipeSpec::new(OutputStream::Stdout, OutputMode::Capture, 8).into_limit(),
-        )
-        .expect_err("capture should fail when it exceeds the configured limit");
-        match err {
-            CommandFailure::OutputLimit {
-                stream,
-                mode,
-                limit,
-            } => {
-                assert_eq!(stream, OutputStream::Stdout);
-                assert_eq!(mode, OutputMode::Capture);
-                assert_eq!(limit, 8);
-            }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        );
+        assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Capture, 8);
     }
 
     #[test]
@@ -1234,24 +1248,31 @@ mod tests {
     #[test]
     fn read_pipe_tempfile_respects_stream_limit() {
         let (_temp_dir, config) = test_command_config();
-        let err = read_pipe_tempfile(
+        let outcome = read_pipe_tempfile(
             Cursor::new(vec![b'y'; 32]),
             PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 8).into_limit(),
             "stdout",
             &config,
-        )
-        .expect_err("streaming should fail when it exceeds the configured limit");
-        match err {
-            CommandFailure::OutputLimit {
-                stream,
-                mode,
-                limit,
-            } => {
-                assert_eq!(stream, OutputStream::Stdout);
-                assert_eq!(mode, OutputMode::Tempfile);
-                assert_eq!(limit, 8);
-            }
-            other => panic!("unexpected error: {other:?}"),
+        );
+        assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Tempfile, 8);
+    }
+
+    #[test]
+    fn command_tempdir_requires_workspace_root_path() {
+        let temp = tempdir().expect("create temp workspace for command");
+        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .expect("temp workspace should be valid UTF-8");
+        let dir =
+            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+        let config = CommandConfig::new(
+            DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+            DEFAULT_COMMAND_MAX_STREAM_BYTES,
+            Arc::new(dir),
+            None,
+        );
+        match config.create_tempfile("stdout") {
+            Ok(_) => panic!("command temp dir should require workspace root path"),
+            Err(err) => assert_eq!(err.kind(), io::ErrorKind::InvalidInput),
         }
     }
 }

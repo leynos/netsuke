@@ -23,11 +23,11 @@ use crate::{
     stdlib::{NetworkPolicy, StdlibConfig},
 };
 use anyhow::{Context, Result, anyhow};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::{fs, path::Path};
+use std::{env, fs, path::Path};
 
 mod diagnostics;
 mod expand;
@@ -191,6 +191,23 @@ pub fn from_path_with_policy(
 #[cfg(test)]
 mod tests;
 
+/// Resolve a potentially relative manifest parent path to an absolute UTF-8 workspace root.
+fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf> {
+    let workspace_base = if utf8_parent.is_absolute() {
+        utf8_parent.to_path_buf().into_std_path_buf()
+    } else {
+        env::current_dir()
+            .context("resolve current directory for manifest workspace root")?
+            .join(utf8_parent.as_std_path())
+    };
+    Utf8PathBuf::from_path_buf(workspace_base).map_err(|invalid| {
+        anyhow!(
+            "workspace root '{}' contains non-UTF-8 components",
+            invalid.display()
+        )
+    })
+}
+
 fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<StdlibConfig> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
@@ -207,12 +224,16 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
             path.display()
         )
     })?;
-    let dir = Dir::open_ambient_dir(utf8_parent, ambient_authority()).with_context(|| {
-        format!(
-            "failed to open workspace directory '{utf8_parent}' for manifest '{manifest_label}'"
-        )
-    })?;
+    let workspace_root = resolve_absolute_workspace_root(utf8_parent)?;
+    let dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority()).with_context(
+        || {
+            format!(
+                "failed to open workspace directory '{workspace_root}' \
+                 for manifest '{manifest_label}'"
+            )
+        },
+    )?;
     Ok(StdlibConfig::new(dir)
-        .with_workspace_root_path(utf8_parent.to_path_buf())
+        .with_workspace_root_path(workspace_root)
         .with_network_policy(policy))
 }
