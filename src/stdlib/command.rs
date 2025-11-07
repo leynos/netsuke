@@ -47,7 +47,6 @@ use std::{
     fmt::{self},
     fs,
     io::{self, Read, Write},
-    path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
         Arc,
@@ -134,21 +133,45 @@ impl CommandTempDir {
     }
 
     fn create(&self, label: &str) -> io::Result<CommandTempFile> {
-        self.workspace_root.create_dir_all(&self.relative)?;
-        let mut builder = Builder::new();
-        builder.prefix(label);
-        let file = if let Some(root_path) = &self.workspace_root_path {
-            let dir_path = root_path.join(&self.relative);
-            fs::create_dir_all(dir_path.as_std_path())?;
-            builder.tempfile_in(dir_path.as_std_path())?
-        } else {
+        let Some(root_path) = &self.workspace_root_path else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "workspace root path must be configured for command tempfiles",
             ));
         };
-        Ok(CommandTempFile { file })
+        self.workspace_root.create_dir_all(&self.relative)?;
+        let dir_path = root_path.join(&self.relative);
+        fs::create_dir_all(dir_path.as_std_path())?;
+
+        let prefix = sanitize_label(label);
+        let mut builder = Builder::new();
+        builder.prefix(&prefix);
+        builder.suffix(".tmp");
+
+        let file = builder.tempfile_in(dir_path.as_std_path()).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!("failed to create command tempfile for '{label}': {err}"),
+            )
+        })?;
+
+        Ok(CommandTempFile::new(file))
     }
+}
+
+fn sanitize_label(label: &str) -> String {
+    let mut sanitized = String::with_capacity(label.len());
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+            sanitized.push(ch);
+        } else {
+            sanitized.push('-');
+        }
+    }
+    if sanitized.is_empty() {
+        sanitized.push('t');
+    }
+    sanitized
 }
 
 struct CommandTempFile {
@@ -156,8 +179,37 @@ struct CommandTempFile {
 }
 
 impl CommandTempFile {
-    fn into_file(self) -> NamedTempFile {
-        self.file
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "NamedTempFile creation is inherently runtime-only"
+    )]
+    fn new(file: NamedTempFile) -> Self {
+        Self { file }
+    }
+
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Mutable handles cannot be borrowed in const contexts"
+    )]
+    fn as_file_mut(&mut self) -> &mut NamedTempFile {
+        &mut self.file
+    }
+
+    #[cfg(test)]
+    fn path(&self) -> &std::path::Path {
+        self.file.path()
+    }
+
+    fn into_path(mut self) -> io::Result<Utf8PathBuf> {
+        self.file.flush()?;
+        let temp_path = self.file.into_temp_path();
+        let path = temp_path.keep().map_err(|err| err.error)?;
+        Utf8PathBuf::from_path_buf(path).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "command tempfile path is not valid UTF-8",
+            )
+        })
     }
 }
 
@@ -846,7 +898,6 @@ fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
             mode,
             limit,
         } => output_limit_error(location, LimitExceeded::new(stream, mode, limit)),
-        CommandFailure::StreamPathNotUtf8(path) => stream_path_error(location, &path),
         CommandFailure::Timeout(duration) => timeout_error(location, duration),
     }
 }
@@ -902,17 +953,6 @@ fn output_limit_error(location: CommandLocation<'_>, exceeded: LimitExceeded) ->
     )
 }
 
-fn stream_path_error(location: CommandLocation<'_>, path: &Path) -> Error {
-    Error::new(
-        ErrorKind::InvalidOperation,
-        format!(
-            "{} produced a temporary output path that is not valid UTF-8: {}",
-            location.describe(),
-            path.display()
-        ),
-    )
-}
-
 fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
@@ -952,7 +992,6 @@ enum CommandFailure {
         mode: OutputMode,
         limit: u64,
     },
-    StreamPathNotUtf8(PathBuf),
     Timeout(Duration),
 }
 
@@ -1059,8 +1098,7 @@ fn read_pipe_tempfile<R>(
 where
     R: Read,
 {
-    let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
-    let mut file = tempfile.into_file();
+    let mut tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
     let mut chunk = [0_u8; PIPE_CHUNK_SIZE];
     loop {
         let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
@@ -1072,15 +1110,14 @@ where
             clippy::indexing_slicing,
             reason = "Read::read guarantees `read` does not exceed `chunk.len()`"
         )]
-        file.write_all(&chunk[..read]).map_err(CommandFailure::Io)?;
+        tempfile
+            .as_file_mut()
+            .write_all(&chunk[..read])
+            .map_err(CommandFailure::Io)?;
     }
-    file.flush().map_err(CommandFailure::Io)?;
-    let temp_path = file.into_temp_path();
-    let path = temp_path
-        .keep()
-        .map_err(|err| CommandFailure::Io(err.error))?;
-    let utf8 = Utf8PathBuf::from_path_buf(path).map_err(CommandFailure::StreamPathNotUtf8)?;
-    Ok(PipeOutcome::Tempfile(utf8))
+    tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
+    let path = tempfile.into_path().map_err(CommandFailure::Io)?;
+    Ok(PipeOutcome::Tempfile(path))
 }
 
 fn create_empty_tempfile(
@@ -1088,12 +1125,7 @@ fn create_empty_tempfile(
     label: &str,
 ) -> Result<Utf8PathBuf, CommandFailure> {
     let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
-    let file = tempfile.into_file();
-    let path = file
-        .into_temp_path()
-        .keep()
-        .map_err(|err| CommandFailure::Io(err.error))?;
-    Utf8PathBuf::from_path_buf(path).map_err(CommandFailure::StreamPathNotUtf8)
+    tempfile.into_path().map_err(CommandFailure::Io)
 }
 
 fn append_stderr(message: &mut String, stderr: &[u8]) {
@@ -1130,6 +1162,35 @@ mod tests {
             Some(Arc::new(path)),
         );
         (temp, config)
+    }
+
+    #[test]
+    fn sanitize_label_replaces_disallowed_characters() {
+        assert_eq!(sanitize_label("std:out/..*"), "std-out----");
+    }
+
+    #[test]
+    fn command_tempfile_drop_removes_file() {
+        let (_temp_dir, config) = test_command_config();
+        let temp_path = {
+            let tempfile = config.create_tempfile("stdout").expect("create temp file");
+            tempfile.path().to_path_buf()
+        };
+        assert!(
+            !temp_path.exists(),
+            "temporary file should be removed on drop"
+        );
+    }
+
+    #[test]
+    fn command_tempfile_into_path_persists_file() {
+        let (_temp_dir, config) = test_command_config();
+        let tempfile = config.create_tempfile("stdout").expect("create temp file");
+        let expected = tempfile.path().to_path_buf();
+        let persisted = tempfile.into_path().expect("persist temp file");
+        assert_eq!(persisted.as_std_path(), expected.as_path());
+        assert!(persisted.as_std_path().exists());
+        fs::remove_file(persisted.as_std_path()).expect("cleanup persisted temp file");
     }
 
     fn assert_output_limit_error(

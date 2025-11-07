@@ -120,7 +120,7 @@ impl StdlibConfig {
         let workspace_path = path.into();
         assert!(
             workspace_path.is_absolute(),
-            "workspace root path must be absolute: {workspace_path}"
+            "with_workspace_root_path requires an absolute path, got: {workspace_path}"
         );
         self.workspace_root_path = Some(workspace_path);
         self
