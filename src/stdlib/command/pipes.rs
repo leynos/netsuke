@@ -6,15 +6,14 @@ use std::{
     thread,
 };
 
-use camino::Utf8PathBuf;
-
+#[cfg(test)]
+use super::config::OutputStream;
 use super::{
     config::{CommandConfig, OutputMode, PipeLimit, PipeSpec},
     error::CommandFailure,
     result::PipeOutcome,
 };
-#[cfg(test)]
-use super::config::OutputStream;
+use camino::Utf8PathBuf;
 
 const PIPE_CHUNK_SIZE: usize = 8192;
 
