@@ -18,7 +18,7 @@ pub(crate) fn render_template_with_context(
     let mut env = Environment::new();
     let workspace = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let mut config = StdlibConfig::new(workspace);
+    let mut config = StdlibConfig::new(workspace).with_workspace_root_path(root.clone());
     if let Some(policy) = world.stdlib_policy.clone() {
         config = config.with_network_policy(policy);
     }
@@ -26,6 +26,16 @@ pub(crate) fn render_template_with_context(
         config = config
             .with_fetch_max_response_bytes(limit)
             .context("configure stdlib fetch response limit")?;
+    }
+    if let Some(limit) = world.stdlib_command_max_output_bytes {
+        config = config
+            .with_command_max_output_bytes(limit)
+            .context("configure stdlib command output limit")?;
+    }
+    if let Some(limit) = world.stdlib_command_stream_max_bytes {
+        config = config
+            .with_command_max_stream_bytes(limit)
+            .context("configure stdlib command stream limit")?;
     }
     let state = stdlib::register_with_config(&mut env, config);
     state.reset_impure();
@@ -42,6 +52,32 @@ pub(crate) fn render_template_with_context(
         }
     }
     Ok(())
+}
+
+fn render_with_single_context(
+    world: &mut CliWorld,
+    template: &TemplateContent,
+    key: &str,
+    value: String,
+) -> Result<()> {
+    use minijinja::value::Value;
+    use std::collections::BTreeMap;
+
+    let ctx = Value::from_serialize(
+        [(key, value)]
+            .into_iter()
+            .collect::<BTreeMap<&str, String>>(),
+    );
+    render_template_with_context(world, template, ctx)
+}
+
+/// Macro to render a template using a string field from world.
+macro_rules! render_with_world_string_field {
+    ($world:expr, $template:expr, $key:literal, $field:ident, $error:literal) => {{
+        let __render_world = $world;
+        let value = __render_world.$field.clone().context($error)?;
+        render_with_single_context(__render_world, $template, $key, value)
+    }};
 }
 
 fn render_template(
@@ -89,11 +125,13 @@ pub(crate) fn render_stdlib_template_with_url(
     world: &mut CliWorld,
     template_content: TemplateContent,
 ) -> Result<()> {
-    let url = world
-        .stdlib_url
-        .clone()
-        .context("expected stdlib HTTP server to be initialised")?;
-    render_template_with_context(world, &template_content, context!(url => url))
+    render_with_world_string_field!(
+        world,
+        &template_content,
+        "url",
+        stdlib_url,
+        "expected stdlib HTTP server to be initialised"
+    )
 }
 
 #[expect(
@@ -105,9 +143,29 @@ pub(crate) fn render_stdlib_template_with_command(
     world: &mut CliWorld,
     template_content: TemplateContent,
 ) -> Result<()> {
-    let command = world
-        .stdlib_command
-        .clone()
-        .context("expected stdlib command helper to be compiled")?;
-    render_template_with_context(world, &template_content, context!(cmd => command))
+    render_with_world_string_field!(
+        world,
+        &template_content,
+        "cmd",
+        stdlib_command,
+        "expected stdlib command helper to be compiled"
+    )
+}
+
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber requires owned capture arguments"
+)]
+#[when(regex = r#"^I render the stdlib template "(.+)" using the stdlib text$"#)]
+pub(crate) fn render_stdlib_template_with_text(
+    world: &mut CliWorld,
+    template_content: TemplateContent,
+) -> Result<()> {
+    render_with_world_string_field!(
+        world,
+        &template_content,
+        "text",
+        stdlib_text,
+        "expected stdlib template text to be configured"
+    )
 }

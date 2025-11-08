@@ -63,12 +63,21 @@ introduces, and concrete remediation tasks that would harden the helpers.
   - Provide an allowlist-based command runner (e.g. declarative mapping of
     helper names to binaries) so manifests can reference vetted utilities
     without shell access.
-- [ ] **Helpers buffer stdout/stderr without limits.** Both filters capture the
-  entire command output into memory before returning it. A command that writes
-  an unbounded stream will lead to memory exhaustion or at least prolonged
-  blocking. *Remediation tasks:*
+- [x] **Helpers buffer stdout/stderr without limits.** *(Status: done.)* Both
+  filters capture the entire command output into memory before returning it. A
+  command that writes an unbounded stream will lead to memory exhaustion or at
+  least prolonged blocking. *Remediation tasks:*
   - Enforce maximum output sizes with clear errors when exceeded.
   - Stream results to temporary files when callers opt in to large outputs.
+  - **Remediation:** `StdlibConfig` now exposes
+    `with_command_max_output_bytes` and `with_command_max_stream_bytes` so
+    integrators can tailor command limits. The `shell` and `grep` filters
+    honour those limits, reporting the configured byte budget when commands
+    exceed it. Templates can request streaming by passing
+    `{'mode': 'tempfile'}` as an options argument, which spools stdout to a
+    temporary file guarded by the streaming limit. Pipe readers enforce their
+    budgets incrementally so long-running commands fail fast once the
+    configured allowance is exceeded.
 
 ## Next steps
 

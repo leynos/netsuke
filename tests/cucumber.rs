@@ -51,6 +51,12 @@ pub struct CliWorld {
     pub stdlib_policy: Option<NetworkPolicy>,
     /// Maximum fetch response size configured for the active scenario.
     pub stdlib_fetch_max_bytes: Option<u64>,
+    /// Maximum captured command output size configured for the scenario.
+    pub stdlib_command_max_output_bytes: Option<u64>,
+    /// Maximum streamed command output size configured for the scenario.
+    pub stdlib_command_stream_max_bytes: Option<u64>,
+    /// Text payload injected into stdlib templates for streaming scenarios.
+    pub stdlib_text: Option<String>,
     /// Last HTTP server fixture started by stdlib steps.
     pub http_server: Option<http::HttpServer>,
     /// URL exposed by the active HTTP server fixture.
@@ -176,6 +182,7 @@ impl Drop for CliWorld {
     fn drop(&mut self) {
         self.shutdown_http_server();
         self.restore_environment();
+        self.stdlib_text = None;
     }
 }
 

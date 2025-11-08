@@ -5,6 +5,14 @@
 //! impure so the caller can invalidate any caching layer that depends on pure
 //! template evaluation.
 //!
+//! # Output limits
+//!
+//! Capture and streaming helpers enforce configurable byte budgets to prevent
+//! helpers from exhausting memory or disk space. Callers configure distinct
+//! ceilings for `stdout` capture and streamed tempfile output through
+//! `StdlibConfig`, and the runtime raises descriptive errors when a command
+//! exceeds either limit.
+//!
 //! # Windows quoting strategy
 //!
 //! Windows does not ship a widely-used Rust crate that can reliably escape
@@ -37,6 +45,7 @@
 
 use std::{
     fmt::{self},
+    fs,
     io::{self, Read, Write},
     process::{Child, Command, ExitStatus, Stdio},
     sync::{
@@ -47,13 +56,16 @@ use std::{
     time::Duration,
 };
 
-use super::value_from_bytes;
+use super::{DEFAULT_COMMAND_TEMP_DIR, value_from_bytes};
+use camino::Utf8PathBuf;
+use cap_std::fs_utf8::Dir;
 use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
 };
 #[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
+use tempfile::{Builder, NamedTempFile};
 use wait_timeout::ChildExt;
 
 #[cfg(windows)]
@@ -75,6 +87,402 @@ const SHELL_ARGS: &[&str] = &["-c"];
 // while still surfacing timeouts for misbehaving commands.
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Size of the temporary buffer used when draining child process pipes.
+const PIPE_CHUNK_SIZE: usize = 8192;
+
+#[derive(Clone)]
+pub(crate) struct CommandConfig {
+    pub(crate) max_capture_bytes: u64,
+    pub(crate) max_stream_bytes: u64,
+    temp_dir: CommandTempDir,
+}
+
+impl CommandConfig {
+    pub(crate) fn new(
+        max_capture_bytes: u64,
+        max_stream_bytes: u64,
+        workspace_root: Arc<Dir>,
+        workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    ) -> Self {
+        Self {
+            max_capture_bytes,
+            max_stream_bytes,
+            temp_dir: CommandTempDir::new(workspace_root, workspace_root_path),
+        }
+    }
+
+    fn create_tempfile(&self, label: &str) -> io::Result<CommandTempFile> {
+        self.temp_dir.create(label)
+    }
+}
+
+#[derive(Clone)]
+struct CommandTempDir {
+    workspace_root: Arc<Dir>,
+    workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    relative: Utf8PathBuf,
+}
+
+impl CommandTempDir {
+    fn new(workspace_root: Arc<Dir>, workspace_root_path: Option<Arc<Utf8PathBuf>>) -> Self {
+        Self {
+            workspace_root,
+            workspace_root_path,
+            relative: Utf8PathBuf::from(DEFAULT_COMMAND_TEMP_DIR),
+        }
+    }
+
+    fn create(&self, label: &str) -> io::Result<CommandTempFile> {
+        let Some(root_path) = &self.workspace_root_path else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "workspace root path must be configured for command tempfiles",
+            ));
+        };
+        self.workspace_root.create_dir_all(&self.relative)?;
+        let dir_path = root_path.join(&self.relative);
+        fs::create_dir_all(dir_path.as_std_path())?;
+
+        let prefix = sanitize_label(label);
+        let mut builder = Builder::new();
+        builder.prefix(&prefix);
+        builder.suffix(".tmp");
+
+        let file = builder.tempfile_in(dir_path.as_std_path()).map_err(|err| {
+            io::Error::new(
+                err.kind(),
+                format!("failed to create command tempfile for '{label}': {err}"),
+            )
+        })?;
+
+        Ok(CommandTempFile::new(file))
+    }
+}
+
+fn sanitize_label(label: &str) -> String {
+    let mut sanitized = String::with_capacity(label.len());
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+            sanitized.push(ch);
+        } else {
+            sanitized.push('-');
+        }
+    }
+    if sanitized.is_empty() {
+        sanitized.push('t');
+    }
+    sanitized
+}
+
+struct CommandTempFile {
+    file: NamedTempFile,
+}
+
+impl CommandTempFile {
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "NamedTempFile creation is inherently runtime-only"
+    )]
+    fn new(file: NamedTempFile) -> Self {
+        Self { file }
+    }
+
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "Mutable handles cannot be borrowed in const contexts"
+    )]
+    fn as_file_mut(&mut self) -> &mut NamedTempFile {
+        &mut self.file
+    }
+
+    #[cfg(test)]
+    fn path(&self) -> &std::path::Path {
+        self.file.path()
+    }
+
+    fn into_path(mut self) -> io::Result<Utf8PathBuf> {
+        self.file.flush()?;
+        let temp_path = self.file.into_temp_path();
+        let path = temp_path.keep().map_err(|err| err.error)?;
+        Utf8PathBuf::from_path_buf(path).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "command tempfile path is not valid UTF-8",
+            )
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutputMode {
+    Capture,
+    Tempfile,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutputStream {
+    Stdout,
+    Stderr,
+}
+
+impl OutputStream {
+    const fn describe(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+    }
+
+    const fn tempfile_label(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+    }
+
+    const fn empty_tempfile_label(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout-empty",
+            Self::Stderr => "stderr-empty",
+        }
+    }
+}
+
+impl OutputMode {
+    const fn describe(self) -> &'static str {
+        match self {
+            Self::Capture => "capture",
+            Self::Tempfile => "streaming",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PipeSpec {
+    stream: OutputStream,
+    mode: OutputMode,
+    limit: u64,
+}
+
+impl PipeSpec {
+    const fn new(stream: OutputStream, mode: OutputMode, limit: u64) -> Self {
+        Self {
+            stream,
+            mode,
+            limit,
+        }
+    }
+
+    const fn stream(self) -> OutputStream {
+        self.stream
+    }
+
+    const fn mode(self) -> OutputMode {
+        self.mode
+    }
+
+    const fn limit(self) -> u64 {
+        self.limit
+    }
+
+    const fn into_limit(self) -> PipeLimit {
+        PipeLimit {
+            spec: self,
+            consumed: 0,
+        }
+    }
+}
+
+struct PipeLimit {
+    spec: PipeSpec,
+    consumed: u64,
+}
+
+impl PipeLimit {
+    fn record(&mut self, read: usize) -> Result<(), CommandFailure> {
+        let bytes = u64::try_from(read)
+            .map_err(|_| CommandFailure::Io(io::Error::other("pipe read size overflow")))?;
+        let new_total = self
+            .consumed
+            .checked_add(bytes)
+            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe output size overflow")))?;
+        if new_total > self.spec.limit() {
+            return Err(CommandFailure::OutputLimit {
+                stream: self.spec.stream(),
+                mode: self.spec.mode(),
+                limit: self.spec.limit(),
+            });
+        }
+        self.consumed = new_total;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CommandOptions {
+    stdout_mode: OutputMode,
+}
+
+impl CommandOptions {
+    fn from_value(options: Option<Value>) -> Result<Self, Error> {
+        let Some(raw) = options else {
+            return Ok(Self::default());
+        };
+
+        if raw.is_undefined() {
+            return Ok(Self::default());
+        }
+
+        match raw.kind() {
+            ValueKind::String => {
+                let Some(text) = raw.as_str() else {
+                    return Err(Error::new(
+                        ErrorKind::InvalidOperation,
+                        "command options string must be valid UTF-8",
+                    ));
+                };
+                Self::from_mode_str(text)
+            }
+            ValueKind::Map | ValueKind::Plain => {
+                let mode_value = raw.get_attr("mode")?;
+                if mode_value.is_undefined() {
+                    return Ok(Self::default());
+                }
+                let Some(mode) = mode_value.as_str() else {
+                    return Err(Error::new(
+                        ErrorKind::InvalidOperation,
+                        "command option 'mode' must be a string",
+                    ));
+                };
+                Self::from_mode_str(mode)
+            }
+            _ => Err(Error::new(
+                ErrorKind::InvalidOperation,
+                "command options must be a string or mapping",
+            )),
+        }
+    }
+
+    fn from_mode_str(mode: &str) -> Result<Self, Error> {
+        match mode {
+            "capture" => Ok(Self {
+                stdout_mode: OutputMode::Capture,
+            }),
+            "tempfile" | "stream" | "streaming" => Ok(Self {
+                stdout_mode: OutputMode::Tempfile,
+            }),
+            other => Err(Error::new(
+                ErrorKind::InvalidOperation,
+                format!("unsupported command output mode '{other}'"),
+            )),
+        }
+    }
+
+    const fn stdout_mode(self) -> OutputMode {
+        self.stdout_mode
+    }
+}
+
+impl Default for CommandOptions {
+    fn default() -> Self {
+        Self {
+            stdout_mode: OutputMode::Capture,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum StdoutResult {
+    Bytes(Vec<u8>),
+    Tempfile(Utf8PathBuf),
+}
+
+#[derive(Debug)]
+enum PipeOutcome {
+    Bytes(Vec<u8>),
+    Tempfile(Utf8PathBuf),
+}
+
+#[derive(Clone)]
+struct CommandContext {
+    config: Arc<CommandConfig>,
+    options: CommandOptions,
+}
+
+impl CommandContext {
+    const fn new(config: Arc<CommandConfig>, options: CommandOptions) -> Self {
+        Self { config, options }
+    }
+
+    const fn stdout_mode(&self) -> OutputMode {
+        self.options.stdout_mode()
+    }
+
+    fn config(&self) -> &CommandConfig {
+        &self.config
+    }
+
+    fn config_handle(&self) -> Arc<CommandConfig> {
+        Arc::clone(&self.config)
+    }
+}
+
+struct GrepCall<'a> {
+    pattern: &'a str,
+    flags: Option<Value>,
+}
+
+impl<'a> GrepCall<'a> {
+    const fn new(pattern: &'a str, flags: Option<Value>) -> Self {
+        Self { pattern, flags }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct CommandLocation<'a> {
+    template: &'a str,
+    command: &'a str,
+}
+
+impl<'a> CommandLocation<'a> {
+    const fn new(template: &'a str, command: &'a str) -> Self {
+        Self { template, command }
+    }
+
+    fn describe(self) -> String {
+        format!("command '{}' in template '{}'", self.command, self.template)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ExitDetails<'a> {
+    status: Option<i32>,
+    stderr: &'a [u8],
+}
+
+impl<'a> ExitDetails<'a> {
+    const fn new(status: Option<i32>, stderr: &'a [u8]) -> Self {
+        Self { status, stderr }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct LimitExceeded {
+    stream: OutputStream,
+    mode: OutputMode,
+    limit: u64,
+}
+
+impl LimitExceeded {
+    const fn new(stream: OutputStream, mode: OutputMode, limit: u64) -> Self {
+        Self {
+            stream,
+            mode,
+            limit,
+        }
+    }
+}
+
 /// Registers shell-oriented filters in the `MiniJinja` environment.
 ///
 /// The `shell` filter executes arbitrary shell commands and returns their
@@ -86,27 +494,48 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 ///
 /// Only use these filters with trusted templates. See the module-level
 /// documentation for further details about the associated risks.
-pub(crate) fn register(env: &mut minijinja::Environment<'_>, impure: Arc<AtomicBool>) {
+pub(crate) fn register(
+    env: &mut minijinja::Environment<'_>,
+    impure: Arc<AtomicBool>,
+    config: CommandConfig,
+) {
+    let shared_config = Arc::new(config);
     let shell_flag = Arc::clone(&impure);
+    let shell_config = Arc::clone(&shared_config);
     env.add_filter(
         "shell",
-        move |state: &State, value: Value, command: String| {
+        move |state: &State, value: Value, command: String, options: Option<Value>| {
             shell_flag.store(true, Ordering::Relaxed);
-            execute_shell(state, &value, &command)
+            let parsed = CommandOptions::from_value(options)?;
+            let context = CommandContext::new(Arc::clone(&shell_config), parsed);
+            execute_shell(state, &value, &command, &context)
         },
     );
 
     let grep_flag = impure;
+    let grep_config = Arc::clone(&shared_config);
     env.add_filter(
         "grep",
-        move |state: &State, value: Value, pattern: String, flags: Option<Value>| {
+        move |state: &State,
+              value: Value,
+              pattern: String,
+              flags: Option<Value>,
+              options: Option<Value>| {
             grep_flag.store(true, Ordering::Relaxed);
-            execute_grep(state, &value, &pattern, flags)
+            let parsed = CommandOptions::from_value(options)?;
+            let context = CommandContext::new(Arc::clone(&grep_config), parsed);
+            let call = GrepCall::new(&pattern, flags);
+            execute_grep(state, &value, call, &context)
         },
     );
 }
 
-fn execute_shell(state: &State, value: &Value, command: &str) -> Result<Value, Error> {
+fn execute_shell(
+    state: &State,
+    value: &Value,
+    command: &str,
+    context: &CommandContext,
+) -> Result<Value, Error> {
     let cmd = command.trim();
     if cmd.is_empty() {
         return Err(Error::new(
@@ -116,16 +545,21 @@ fn execute_shell(state: &State, value: &Value, command: &str) -> Result<Value, E
     }
 
     let input = to_bytes(value)?;
-    let output = run_command(cmd, &input).map_err(|err| command_error(err, state.name(), cmd))?;
-    Ok(value_from_bytes(output))
+    let output =
+        run_command(cmd, &input, context).map_err(|err| command_error(err, state.name(), cmd))?;
+    match output {
+        StdoutResult::Bytes(bytes) => Ok(value_from_bytes(bytes)),
+        StdoutResult::Tempfile(path) => Ok(Value::from(path.as_str())),
+    }
 }
 
 fn execute_grep(
     state: &State,
     value: &Value,
-    pattern: &str,
-    flags: Option<Value>,
+    call: GrepCall<'_>,
+    context: &CommandContext,
 ) -> Result<Value, Error> {
+    let GrepCall { pattern, flags } = call;
     if pattern.is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
@@ -139,14 +573,17 @@ fn execute_grep(
     let input = to_bytes(value)?;
 
     #[cfg(windows)]
-    let output = run_program("grep", &args, &input)
+    let output = run_program("grep", &args, &input, context)
         .map_err(|err| command_error(err, state.name(), &command))?;
 
     #[cfg(not(windows))]
-    let output =
-        run_command(&command, &input).map_err(|err| command_error(err, state.name(), &command))?;
+    let output = run_command(&command, &input, context)
+        .map_err(|err| command_error(err, state.name(), &command))?;
 
-    Ok(value_from_bytes(output))
+    match output {
+        StdoutResult::Bytes(bytes) => Ok(value_from_bytes(bytes)),
+        StdoutResult::Tempfile(path) => Ok(Value::from(path.as_str())),
+    }
 }
 
 fn collect_flag_args(flags: Option<Value>) -> Result<Vec<String>, Error> {
@@ -289,7 +726,11 @@ fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
     Ok(value.to_string().into_bytes())
 }
 
-fn run_command(command: &str, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
+fn run_command(
+    command: &str,
+    input: &[u8],
+    context: &CommandContext,
+) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(SHELL);
     cmd.args(SHELL_ARGS)
         .arg(command)
@@ -297,29 +738,52 @@ fn run_command(command: &str, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    run_child(cmd, input)
+    run_child(cmd, input, context)
 }
 
 #[cfg(windows)]
-fn run_program(program: &str, args: &[String], input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
+fn run_program(
+    program: &str,
+    args: &[String],
+    input: &[u8],
+    context: &CommandContext,
+) -> Result<StdoutResult, CommandFailure> {
     let mut cmd = Command::new(program);
     cmd.args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    run_child(cmd, input)
+    run_child(cmd, input, context)
 }
 
-fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailure> {
+fn run_child(
+    mut command: Command,
+    input: &[u8],
+    context: &CommandContext,
+) -> Result<StdoutResult, CommandFailure> {
     let mut child = command.spawn().map_err(CommandFailure::Spawn)?;
     let mut stdin_handle = child.stdin.take().map(|mut stdin| {
         let buffer = input.to_vec();
         thread::spawn(move || stdin.write_all(&buffer))
     });
 
-    let mut stdout_reader = spawn_pipe_reader(child.stdout.take());
-    let mut stderr_reader = spawn_pipe_reader(child.stderr.take());
+    let stdout_limit = match context.stdout_mode() {
+        OutputMode::Capture => context.config().max_capture_bytes,
+        OutputMode::Tempfile => context.config().max_stream_bytes,
+    };
+    let stderr_limit = context.config().max_capture_bytes;
+
+    let stdout_spec = PipeSpec::new(OutputStream::Stdout, context.stdout_mode(), stdout_limit);
+    let stderr_spec = PipeSpec::new(OutputStream::Stderr, OutputMode::Capture, stderr_limit);
+
+    let stdout_config = context.config_handle();
+    let stderr_config = context.config_handle();
+
+    let mut stdout_reader =
+        spawn_pipe_reader(child.stdout.take(), stdout_spec, Arc::clone(&stdout_config));
+    let mut stderr_reader =
+        spawn_pipe_reader(child.stderr.take(), stderr_spec, Arc::clone(&stderr_config));
 
     let status = match wait_for_exit(&mut child, COMMAND_TIMEOUT) {
         Ok(status) => status,
@@ -329,13 +793,24 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
         }
     };
 
-    let stdout = join_reader(stdout_reader.take()).map_err(CommandFailure::Io)?;
-    let stderr = join_reader(stderr_reader.take()).map_err(CommandFailure::Io)?;
+    let stdout = join_reader(stdout_reader.take(), stdout_spec, stdout_config.as_ref())?;
+    let stderr_outcome = join_reader(stderr_reader.take(), stderr_spec, stderr_config.as_ref())?;
+
+    let stderr = match stderr_outcome {
+        PipeOutcome::Bytes(bytes) => bytes,
+        PipeOutcome::Tempfile(path) => {
+            tracing::warn!(?path, "stderr reader returned a temp file; discarding path");
+            Vec::new()
+        }
+    };
 
     handle_stdin_result(stdin_handle.take(), status.code(), &stderr)?;
 
     if status.success() {
-        Ok(stdout)
+        Ok(match stdout {
+            PipeOutcome::Bytes(bytes) => StdoutResult::Bytes(bytes),
+            PipeOutcome::Tempfile(path) => StdoutResult::Tempfile(path),
+        })
     } else {
         Err(CommandFailure::Exit {
             status: status.code(),
@@ -345,20 +820,33 @@ fn run_child(mut command: Command, input: &[u8]) -> Result<Vec<u8>, CommandFailu
 }
 
 fn cleanup_readers(
-    stdout_reader: &mut Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
-    stderr_reader: &mut Option<thread::JoinHandle<io::Result<Vec<u8>>>>,
+    stdout_reader: &mut Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
+    stderr_reader: &mut Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
     stdin_handle: &mut Option<thread::JoinHandle<io::Result<()>>>,
 ) {
-    if let Err(err) = join_reader(stdout_reader.take()) {
-        tracing::warn!("failed to join stdout reader: {err}");
-    }
-    if let Err(err) = join_reader(stderr_reader.take()) {
-        tracing::warn!("failed to join stderr reader: {err}");
-    }
+    join_pipe_for_cleanup("stdout", stdout_reader);
+    join_pipe_for_cleanup("stderr", stderr_reader);
     if let Some(handle) = stdin_handle.take()
         && let Err(join_err) = handle.join()
     {
         tracing::warn!("stdin writer thread panicked: {join_err:?}");
+    }
+}
+
+fn join_pipe_for_cleanup(
+    label: &str,
+    reader_handle: &mut Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
+) {
+    if let Some(join_handle) = reader_handle.take() {
+        match join_handle.join() {
+            Ok(Ok(_)) => {}
+            Ok(Err(err)) => {
+                tracing::warn!(stream = label, ?err, "pipe reader failed during cleanup");
+            }
+            Err(join_err) => {
+                tracing::warn!(stream = label, ?join_err, "pipe reader thread panicked");
+            }
+        }
     }
 }
 
@@ -393,62 +881,100 @@ fn handle_stdin_result(
 }
 
 fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
+    let location = CommandLocation::new(template, command);
     match err {
-        CommandFailure::Spawn(spawn) => Error::new(
-            ErrorKind::InvalidOperation,
-            format!("failed to spawn command '{command}' in template '{template}': {spawn}"),
-        ),
-        CommandFailure::Io(io_err) => {
-            let pipe_msg = if io_err.kind() == io::ErrorKind::BrokenPipe {
-                " (command closed input early)"
-            } else {
-                ""
-            };
-            Error::new(
-                ErrorKind::InvalidOperation,
-                format!("command '{command}' in template '{template}' failed: {io_err}{pipe_msg}"),
-            )
-        }
+        CommandFailure::Spawn(spawn) => spawn_error(location, &spawn),
+        CommandFailure::Io(io_err) => io_error(location, &io_err),
         CommandFailure::BrokenPipe {
             source,
             status,
             stderr,
-        } => {
-            let mut msg = format!(
-                "command '{command}' in template '{template}' failed: {source} (command closed input early)"
-            );
-            if let Some(code) = status {
-                msg.push_str("; exited with status ");
-                let code_text = code.to_string();
-                msg.push_str(&code_text);
-            } else {
-                msg.push_str("; terminated by signal");
-            }
-            append_stderr(&mut msg, &stderr);
-            Error::new(ErrorKind::InvalidOperation, msg)
-        }
+        } => broken_pipe_error(location, &source, ExitDetails::new(status, &stderr)),
         CommandFailure::Exit { status, stderr } => {
-            let mut msg = status.map_or_else(
-                || format!("command '{command}' in template '{template}' terminated by signal"),
-                |code| {
-                    format!(
-                        "command '{command}' in template '{template}' exited with status {code}"
-                    )
-                },
-            );
-            append_stderr(&mut msg, &stderr);
-            Error::new(ErrorKind::InvalidOperation, msg)
+            exit_error(location, ExitDetails::new(status, &stderr))
         }
-        CommandFailure::Timeout(duration) => Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "command '{command}' in template '{template}' timed out after {}s",
-                duration.as_secs()
-            ),
-        ),
+        CommandFailure::OutputLimit {
+            stream,
+            mode,
+            limit,
+        } => output_limit_error(location, LimitExceeded::new(stream, mode, limit)),
+        CommandFailure::Timeout(duration) => timeout_error(location, duration),
     }
 }
 
+fn spawn_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        format!("failed to spawn {}: {err}", location.describe()),
+    )
+}
+
+fn io_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
+    let mut message = format!("{} failed: {err}", location.describe());
+    if err.kind() == io::ErrorKind::BrokenPipe {
+        message.push_str(" (command closed input early)");
+    }
+    Error::new(ErrorKind::InvalidOperation, message)
+}
+
+fn broken_pipe_error(
+    location: CommandLocation<'_>,
+    err: &io::Error,
+    details: ExitDetails<'_>,
+) -> Error {
+    let mut message = format!(
+        "{} failed: {err} (command closed input early)",
+        location.describe()
+    );
+    append_exit_status(&mut message, details.status);
+    append_stderr(&mut message, details.stderr);
+    Error::new(ErrorKind::InvalidOperation, message)
+}
+
+fn exit_error(location: CommandLocation<'_>, details: ExitDetails<'_>) -> Error {
+    let mut message = details.status.map_or_else(
+        || format!("{} terminated by signal", location.describe()),
+        |code| format!("{} exited with status {code}", location.describe()),
+    );
+    append_stderr(&mut message, details.stderr);
+    Error::new(ErrorKind::InvalidOperation, message)
+}
+
+fn output_limit_error(location: CommandLocation<'_>, exceeded: LimitExceeded) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        format!(
+            "{} exceeded {stream} {mode} limit of {limit} bytes",
+            location.describe(),
+            stream = exceeded.stream.describe(),
+            mode = exceeded.mode.describe(),
+            limit = exceeded.limit,
+        ),
+    )
+}
+
+fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        format!(
+            "{} timed out after {}s",
+            location.describe(),
+            duration.as_secs()
+        ),
+    )
+}
+
+fn append_exit_status(message: &mut String, status: Option<i32>) {
+    if let Some(code) = status {
+        message.push_str("; exited with status ");
+        let code_text = code.to_string();
+        message.push_str(&code_text);
+    } else {
+        message.push_str("; terminated by signal");
+    }
+}
+
+#[derive(Debug)]
 enum CommandFailure {
     Spawn(io::Error),
     Io(io::Error),
@@ -460,6 +986,11 @@ enum CommandFailure {
     Exit {
         status: Option<i32>,
         stderr: Vec<u8>,
+    },
+    OutputLimit {
+        stream: OutputStream,
+        mode: OutputMode,
+        limit: u64,
     },
     Timeout(Duration),
 }
@@ -486,28 +1017,115 @@ fn wait_for_exit(child: &mut Child, timeout: Duration) -> Result<ExitStatus, Com
     }
 }
 
-fn spawn_pipe_reader<R>(pipe: Option<R>) -> Option<thread::JoinHandle<io::Result<Vec<u8>>>>
+fn spawn_pipe_reader<R>(
+    pipe: Option<R>,
+    spec: PipeSpec,
+    config: Arc<CommandConfig>,
+) -> Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>
 where
     R: Read + Send + 'static,
 {
-    pipe.map(|mut reader| {
-        thread::spawn(move || {
-            let mut buf = Vec::new();
-            reader.read_to_end(&mut buf)?;
-            Ok(buf)
-        })
-    })
+    pipe.map(|reader| thread::spawn(move || read_pipe(reader, spec, config.as_ref())))
 }
 
-fn join_reader(handle: Option<thread::JoinHandle<io::Result<Vec<u8>>>>) -> io::Result<Vec<u8>> {
-    handle.map_or_else(
-        || Ok(Vec::new()),
-        |join_handle| {
-            join_handle
-                .join()
-                .map_err(|_| io::Error::other("pipe reader panicked"))?
-        },
-    )
+fn join_reader(
+    reader_handle: Option<thread::JoinHandle<Result<PipeOutcome, CommandFailure>>>,
+    spec: PipeSpec,
+    config: &CommandConfig,
+) -> Result<PipeOutcome, CommandFailure> {
+    match reader_handle {
+        Some(join_handle) => join_handle
+            .join()
+            .map_err(|_| CommandFailure::Io(io::Error::other("pipe reader panicked")))?,
+        None => {
+            if matches!(spec.mode(), OutputMode::Tempfile) {
+                create_empty_tempfile(config, spec.stream().empty_tempfile_label())
+                    .map(PipeOutcome::Tempfile)
+            } else {
+                Ok(PipeOutcome::Bytes(Vec::new()))
+            }
+        }
+    }
+}
+
+/// Drains a child process pipe according to the provided `PipeSpec`, enforcing
+/// the configured byte limit and producing either in-memory bytes or a
+/// tempfile-backed outcome.
+fn read_pipe<R>(
+    reader: R,
+    spec: PipeSpec,
+    config: &CommandConfig,
+) -> Result<PipeOutcome, CommandFailure>
+where
+    R: Read,
+{
+    let limit = spec.into_limit();
+    match spec.mode() {
+        OutputMode::Capture => read_pipe_capture(reader, limit),
+        OutputMode::Tempfile => {
+            read_pipe_tempfile(reader, limit, spec.stream().tempfile_label(), config)
+        }
+    }
+}
+
+/// Reads a pipe into memory while enforcing the capture byte limit recorded in
+/// the `PipeLimit` tracker.
+fn read_pipe_capture<R>(mut reader: R, mut limit: PipeLimit) -> Result<PipeOutcome, CommandFailure>
+where
+    R: Read,
+{
+    let mut buf = Vec::new();
+    let mut chunk = [0_u8; PIPE_CHUNK_SIZE];
+    loop {
+        let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
+        if read == 0 {
+            break;
+        }
+        limit.record(read)?;
+        buf.extend(chunk.iter().take(read).copied());
+    }
+    Ok(PipeOutcome::Bytes(buf))
+}
+
+/// Streams a pipe into a tempfile rooted within the workspace, enforcing the
+/// streaming byte limit recorded in `PipeLimit` and returning the final path.
+fn read_pipe_tempfile<R>(
+    mut reader: R,
+    mut limit: PipeLimit,
+    label: &str,
+    config: &CommandConfig,
+) -> Result<PipeOutcome, CommandFailure>
+where
+    R: Read,
+{
+    let mut tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
+    let mut chunk = [0_u8; PIPE_CHUNK_SIZE];
+    loop {
+        let read = reader.read(&mut chunk).map_err(CommandFailure::Io)?;
+        if read == 0 {
+            break;
+        }
+        limit.record(read)?;
+        #[expect(
+            clippy::indexing_slicing,
+            reason = "Read::read guarantees `read` does not exceed `chunk.len()`"
+        )]
+        tempfile
+            .as_file_mut()
+            .write_all(&chunk[..read])
+            .map_err(CommandFailure::Io)?;
+    }
+    tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
+    let path = tempfile.into_path().map_err(CommandFailure::Io)?;
+    Ok(PipeOutcome::Tempfile(path))
+}
+
+fn create_empty_tempfile(
+    config: &CommandConfig,
+    label: &str,
+) -> Result<Utf8PathBuf, CommandFailure> {
+    let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
+    tempfile.into_path().map_err(CommandFailure::Io)
 }
 
 fn append_stderr(message: &mut String, stderr: &[u8]) {
@@ -521,12 +1139,85 @@ fn append_stderr(message: &mut String, stderr: &[u8]) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
+    use camino::Utf8PathBuf;
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    use std::{fs, io, io::Cursor};
+    use tempfile::tempdir;
+
+    #[cfg(windows)]
+    use anyhow::{Result, ensure};
+
+    fn test_command_config() -> (tempfile::TempDir, CommandConfig) {
+        let temp = tempdir().expect("create command temp workspace");
+        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .expect("temp workspace should be valid UTF-8");
+        let dir =
+            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+        let config = CommandConfig::new(
+            DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+            DEFAULT_COMMAND_MAX_STREAM_BYTES,
+            Arc::new(dir),
+            Some(Arc::new(path)),
+        );
+        (temp, config)
+    }
+
+    #[test]
+    fn sanitize_label_replaces_disallowed_characters() {
+        assert_eq!(sanitize_label("std:out/..*"), "std-out----");
+    }
+
+    #[test]
+    fn command_tempfile_drop_removes_file() {
+        let (_temp_dir, config) = test_command_config();
+        let temp_path = {
+            let tempfile = config.create_tempfile("stdout").expect("create temp file");
+            tempfile.path().to_path_buf()
+        };
+        assert!(
+            !temp_path.exists(),
+            "temporary file should be removed on drop"
+        );
+    }
+
+    #[test]
+    fn command_tempfile_into_path_persists_file() {
+        let (_temp_dir, config) = test_command_config();
+        let tempfile = config.create_tempfile("stdout").expect("create temp file");
+        let expected = tempfile.path().to_path_buf();
+        let persisted = tempfile.into_path().expect("persist temp file");
+        assert_eq!(persisted.as_std_path(), expected.as_path());
+        assert!(persisted.as_std_path().exists());
+        fs::remove_file(persisted.as_std_path()).expect("cleanup persisted temp file");
+    }
+
+    fn assert_output_limit_error(
+        outcome: Result<PipeOutcome, CommandFailure>,
+        expected_stream: OutputStream,
+        expected_mode: OutputMode,
+        expected_limit: u64,
+    ) {
+        let err =
+            outcome.expect_err("expected command to exceed the configured output limit for test");
+        match err {
+            CommandFailure::OutputLimit {
+                stream,
+                mode,
+                limit,
+            } => {
+                assert_eq!(stream, expected_stream);
+                assert_eq!(mode, expected_mode);
+                assert_eq!(limit, expected_limit);
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
     #[cfg(windows)]
     #[test]
-    fn quote_escapes_cmd_metacharacters() -> anyhow::Result<()> {
-        use super::{QuoteError, quote};
-        use anyhow::ensure;
-
+    fn quote_escapes_cmd_metacharacters() -> Result<()> {
         let success_cases = [
             ("simple", "simple"),
             ("", "\"\""),
@@ -570,5 +1261,79 @@ mod tests {
             );
         }
         Ok(())
+    }
+
+    #[test]
+    fn read_pipe_capture_collects_bytes_within_limit() {
+        let data = b"payload".to_vec();
+        let outcome = read_pipe_capture(
+            Cursor::new(data.clone()),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Capture, 128).into_limit(),
+        )
+        .expect("capture should succeed within the configured limit");
+        match outcome {
+            PipeOutcome::Bytes(buf) => assert_eq!(buf, data),
+            PipeOutcome::Tempfile(_) => panic!("capture mode should emit bytes"),
+        }
+    }
+
+    #[test]
+    fn read_pipe_capture_reports_limit_exceedance() {
+        let outcome = read_pipe_capture(
+            Cursor::new(vec![0_u8; 16]),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Capture, 8).into_limit(),
+        );
+        assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Capture, 8);
+    }
+
+    #[test]
+    fn read_pipe_tempfile_writes_streamed_data() {
+        let payload = vec![b'x'; 32];
+        let (_temp_dir, config) = test_command_config();
+        let outcome = read_pipe_tempfile(
+            Cursor::new(payload.clone()),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 64).into_limit(),
+            "stdout",
+            &config,
+        )
+        .expect("streaming should succeed within the configured limit");
+        let path = match outcome {
+            PipeOutcome::Tempfile(path) => path,
+            PipeOutcome::Bytes(_) => panic!("streaming mode should emit a tempfile path"),
+        };
+        let disk = fs::read(path.as_std_path()).expect("read streamed output");
+        assert_eq!(disk, payload);
+        fs::remove_file(path.as_std_path()).expect("cleanup streamed file");
+    }
+
+    #[test]
+    fn read_pipe_tempfile_respects_stream_limit() {
+        let (_temp_dir, config) = test_command_config();
+        let outcome = read_pipe_tempfile(
+            Cursor::new(vec![b'y'; 32]),
+            PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 8).into_limit(),
+            "stdout",
+            &config,
+        );
+        assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Tempfile, 8);
+    }
+
+    #[test]
+    fn command_tempdir_requires_workspace_root_path() {
+        let temp = tempdir().expect("create temp workspace for command");
+        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .expect("temp workspace should be valid UTF-8");
+        let dir =
+            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+        let config = CommandConfig::new(
+            DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+            DEFAULT_COMMAND_MAX_STREAM_BYTES,
+            Arc::new(dir),
+            None,
+        );
+        match config.create_tempfile("stdout") {
+            Ok(_) => panic!("command temp dir should require workspace root path"),
+            Err(err) => assert_eq!(err.kind(), io::ErrorKind::InvalidInput),
+        }
     }
 }

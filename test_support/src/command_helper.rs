@@ -26,6 +26,17 @@ const FAILURE_SOURCE: &str = concat!(
     "}\n",
 );
 
+const LARGE_OUTPUT_SOURCE: &str = concat!(
+    "use std::io::{self, Write};\n",
+    "fn main() {\n",
+    "    let mut out = io::stdout();\n",
+    "    let chunk = [b'x'; 1024];\n",
+    "    for _ in 0..128 {\n",
+    "        out.write_all(&chunk).expect(\"stdout\");\n",
+    "    }\n",
+    "}\n",
+);
+
 /// Compile a helper binary that converts stdin to upper case and return the
 /// executable path.
 ///
@@ -69,6 +80,15 @@ pub fn compile_uppercase_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Re
 /// ```
 pub fn compile_failure_helper(dir: &Dir, root: &Utf8PathBuf, name: &str) -> Result<Utf8PathBuf> {
     compile_rust_helper(dir, root, name, FAILURE_SOURCE)
+}
+
+/// Compile a helper that writes a sizeable payload to stdout.
+pub fn compile_large_output_helper(
+    dir: &Dir,
+    root: &Utf8PathBuf,
+    name: &str,
+) -> Result<Utf8PathBuf> {
+    compile_rust_helper(dir, root, name, LARGE_OUTPUT_SOURCE)
 }
 
 /// Compile an arbitrary Rust helper source to an executable.

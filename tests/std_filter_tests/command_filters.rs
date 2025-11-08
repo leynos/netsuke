@@ -1,15 +1,21 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{context, value::Value, Environment, ErrorKind};
 use rstest::rstest;
 use tempfile::tempdir;
-use test_support::command_helper::{compile_failure_helper, compile_uppercase_helper};
+use test_support::command_helper::{
+    compile_failure_helper,
+    compile_large_output_helper,
+    compile_uppercase_helper,
+};
+use std::fs;
 
 #[cfg(windows)]
 use test_support::command_helper::compile_rust_helper;
 
 use super::support::fallible;
+use netsuke::stdlib::StdlibConfig;
 
 struct CommandFixture {
     _temp: tempfile::TempDir,
@@ -19,9 +25,10 @@ struct CommandFixture {
 }
 
 impl CommandFixture {
-    fn new(
+    fn with_config(
         compiler: CommandCompiler,
         binary: &str,
+        config: StdlibConfig,
     ) -> Result<Self> {
         let temp = tempdir().context("create command fixture tempdir")?;
         let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -30,7 +37,7 @@ impl CommandFixture {
             .context("open command fixture directory")?;
         let helper = compiler(&dir, &root, binary)?;
         let command = format!("\"{}\"", helper.as_str());
-        let (env, mut state) = fallible::stdlib_env_with_state()?;
+        let (env, mut state) = fallible::stdlib_env_with_config(config)?;
         state.reset_impure();
         Ok(Self {
             _temp: temp,
@@ -38,6 +45,13 @@ impl CommandFixture {
             state,
             command,
         })
+    }
+
+    fn new(
+        compiler: CommandCompiler,
+        binary: &str,
+    ) -> Result<Self> {
+        Self::with_config(compiler, binary, StdlibConfig::default())
     }
 
     fn env(&mut self) -> &mut Environment<'static> {
@@ -58,6 +72,16 @@ type CommandCompiler = fn(&Dir, &Utf8PathBuf, &str) -> Result<Utf8PathBuf>;
 enum ShellExpectation {
     Success(&'static str),
     Failure { substrings: &'static [&'static str] },
+}
+
+const STREAM_LINE_COUNT: usize = 32_768;
+
+fn streaming_match_payload() -> String {
+    let mut text = String::with_capacity(STREAM_LINE_COUNT * 6);
+    for _ in 0..STREAM_LINE_COUNT {
+        text.push_str("match\n");
+    }
+    text
 }
 
 #[cfg(windows)]
@@ -193,6 +217,187 @@ fn shell_filter_tolerates_commands_that_close_stdin() -> Result<()> {
 }
 
 #[rstest]
+fn shell_filter_enforces_output_limit() -> Result<()> {
+    let config = StdlibConfig::default()
+        .with_command_max_output_bytes(1024)?;
+    let mut fixture =
+        CommandFixture::with_config(compile_large_output_helper, "cmd_large", config)?;
+    {
+        let env = fixture.env();
+        fallible::register_template(env, "shell_large", "{{ '' | shell(cmd) }}")?;
+    }
+    let command = fixture.command().to_owned();
+    let template = {
+        let env = fixture.env();
+        env.get_template("shell_large")
+            .context("fetch template 'shell_large'")?
+    };
+    let err = match template.render(context!(cmd => command)) {
+        Ok(output) => bail!("expected shell output limit error but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "shell output limit should report InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("stdout capture limit of 1024 bytes"),
+        "limit error should mention configured budget: {err}"
+    );
+    ensure!(fixture.state().is_impure(), "limit error should mark template impure");
+    Ok(())
+}
+
+#[rstest]
+fn shell_filter_streams_to_tempfiles() -> Result<()> {
+    let config = StdlibConfig::default()
+        .with_command_max_output_bytes(512)?
+        .with_command_max_stream_bytes(200_000)?;
+    let mut fixture =
+        CommandFixture::with_config(compile_large_output_helper, "cmd_stream", config)?;
+    {
+        let env = fixture.env();
+        fallible::register_template(
+            env,
+            "shell_stream",
+            "{{ '' | shell(cmd, {'mode': 'tempfile'}) }}",
+        )?;
+    }
+    let command = fixture.command().to_owned();
+    let template = {
+        let env = fixture.env();
+        env.get_template("shell_stream")
+            .context("fetch template 'shell_stream'")?
+    };
+    let rendered = template
+        .render(context!(cmd => command))
+        .context("render shell streaming template")?;
+    ensure!(fixture.state().is_impure(), "streaming should mark template impure");
+    let path = Utf8Path::new(&rendered);
+    let data = fs::read(path.as_std_path()).with_context(|| {
+        format!("read streamed output from {}", path.as_str())
+    })?;
+    ensure!(
+        data.len() >= 65_000,
+        "expected streamed output to contain command data"
+    );
+    ensure!(
+        data.iter().all(|byte| *byte == b'x'),
+        "streamed file should contain the helper payload"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn shell_streaming_honours_size_limit() -> Result<()> {
+    let config = StdlibConfig::default()
+        .with_command_max_output_bytes(256)?
+        .with_command_max_stream_bytes(1024)?;
+    let mut fixture =
+        CommandFixture::with_config(compile_large_output_helper, "cmd_stream_limit", config)?;
+    {
+        let env = fixture.env();
+        fallible::register_template(
+            env,
+            "shell_stream_limit",
+            "{{ '' | shell(cmd, {'mode': 'tempfile'}) }}",
+        )?;
+    }
+    let command = fixture.command().to_owned();
+    let template = {
+        let env = fixture.env();
+        env.get_template("shell_stream_limit")
+            .context("fetch template 'shell_stream_limit'")?
+    };
+    let err = match template.render(context!(cmd => command)) {
+        Ok(output) => bail!("expected streaming limit error but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "streaming limit should report InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("stdout streaming limit of 1024 bytes"),
+        "streaming limit error should mention configured budget: {err}"
+    );
+    ensure!(fixture.state().is_impure(), "streaming limit should mark template impure");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[rstest]
+fn grep_filter_streams_to_tempfiles() -> Result<()> {
+    let config = StdlibConfig::default()
+        .with_command_max_output_bytes(512)?
+        .with_command_max_stream_bytes(200_000)?;
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    state.reset_impure();
+    fallible::register_template(
+        &mut env,
+        "grep_stream",
+        "{{ text | grep('match', none, {'mode': 'tempfile'}) }}",
+    )?;
+    let template = env
+        .get_template("grep_stream")
+        .context("fetch template 'grep_stream'")?;
+    let payload = streaming_match_payload();
+    let rendered = template
+        .render(context!(text => payload.clone()))
+        .context("render grep streaming template")?;
+    ensure!(state.is_impure(), "grep streaming should mark template impure");
+    let path = Utf8Path::new(rendered.as_str());
+    let metadata = fs::metadata(path.as_std_path())
+        .with_context(|| format!("stat streamed grep output {}", path))?;
+    ensure!(
+        metadata.len() >= payload.len() as u64,
+        "streamed grep output should retain payload size"
+    );
+    let contents = fs::read_to_string(path.as_std_path())
+        .with_context(|| format!("read streamed grep output {}", path))?;
+    ensure!(
+        contents == payload,
+        "streamed grep file should contain the helper payload"
+    );
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[rstest]
+fn grep_filter_enforces_output_limit() -> Result<()> {
+    let config = StdlibConfig::default()
+        .with_command_max_output_bytes(1024)?;
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    state.reset_impure();
+    let long_text = "x".repeat(2_500);
+    fallible::register_template(
+        &mut env,
+        "grep_limit",
+        "{{ text | grep('x') }}",
+    )?;
+    let template = env
+        .get_template("grep_limit")
+        .context("fetch template 'grep_limit'")?;
+    let err = match template.render(context!(text => long_text)) {
+        Ok(output) => bail!("expected grep output limit error but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "grep limit should report InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("stdout capture limit of 1024 bytes"),
+        "grep error should mention configured limit: {err}"
+    );
+    ensure!(state.is_impure(), "grep limit should mark template impure");
+    Ok(())
+}
+
+#[rstest]
 fn grep_filter_filters_lines() -> Result<()> {
     let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
@@ -309,6 +514,22 @@ const GREP_STUB: &str = concat!(
 );
 
 #[cfg(windows)]
+const GREP_STREAM_STUB: &str = concat!(
+    "use std::io::{self, Write};\n",
+    "fn main() {\n",
+    "    let pattern = std::env::args().last().expect(\"pattern\");\n",
+    "    if pattern != \"match\" {\n",
+    "        std::process::exit(1);\n",
+    "    }\n",
+    "    let mut out = io::stdout();\n",
+    "    let line = b\"match\\n\";\n",
+    "    for _ in 0..32_768 {\n",
+    "        out.write_all(line).expect(\"stdout\");\n",
+    "    }\n",
+    "}\n",
+);
+
+#[cfg(windows)]
 const ARGS_STUB: &str = concat!(
     "fn main() {\n",
     "    let mut args = std::env::args().skip(1);\n",
@@ -352,6 +573,57 @@ line2
         .context("render windows grep template")?;
     ensure!(rendered == "line2", "expected 'line2' but rendered {rendered}");
     ensure!(state.is_impure(), "grep should mark template impure");
+    Ok(())
+}
+
+#[cfg(windows)]
+#[rstest]
+fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
+    let _lock = env_lock;
+    let temp = tempdir().context("create windows grep stream tempdir")?;
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+        .map_err(|path| anyhow!("windows grep root is not valid UTF-8: {path:?}"))?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())
+        .context("open windows grep stream temp dir")?;
+    compile_rust_helper(&dir, &root, "grep", GREP_STREAM_STUB)
+        .context("compile streaming grep helper for windows tests")?;
+
+    let mut path_value = OsString::from(root.as_str());
+    path_value.push(";");
+    path_value.push(std::env::var_os("PATH").unwrap_or_default());
+    let _path = EnvVarGuard::set("PATH", &path_value);
+
+    let config = StdlibConfig::default()
+        .with_command_max_output_bytes(512)?
+        .with_command_max_stream_bytes(200_000)?;
+    let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
+    state.reset_impure();
+    fallible::register_template(
+        &mut env,
+        "grep_win_stream",
+        "{{ text | grep('match', none, {'mode': 'tempfile'}) }}",
+    )?;
+    let template = env
+        .get_template("grep_win_stream")
+        .context("fetch template 'grep_win_stream'")?;
+    let payload = streaming_match_payload();
+    let rendered = template
+        .render(context!(text => payload.clone()))
+        .context("render windows grep streaming template")?;
+    ensure!(state.is_impure(), "grep streaming should mark template impure");
+    let path = Utf8Path::new(rendered.as_str());
+    let metadata = fs::metadata(path.as_std_path())
+        .with_context(|| format!("stat streamed windows grep output {}", path))?;
+    ensure!(
+        metadata.len() >= payload.len() as u64,
+        "streamed grep output should retain payload size"
+    );
+    let contents = fs::read_to_string(path.as_std_path())
+        .with_context(|| format!("read streamed windows grep output {}", path))?;
+    ensure!(
+        contents == payload,
+        "streamed grep file should contain the helper payload"
+    );
     Ok(())
 }
 

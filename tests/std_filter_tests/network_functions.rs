@@ -24,9 +24,14 @@ fn env_with_policy(policy: NetworkPolicy) -> Result<(Environment<'static>, Stdli
 
 fn env_with_workspace_policy(
     workspace: Dir,
+    workspace_path: Utf8PathBuf,
     policy: NetworkPolicy,
 ) -> Result<(Environment<'static>, StdlibState)> {
-    fallible::stdlib_env_with_config(StdlibConfig::new(workspace).with_network_policy(policy))
+    fallible::stdlib_env_with_config(
+        StdlibConfig::new(workspace)
+            .with_workspace_root_path(workspace_path)
+            .with_network_policy(policy),
+    )
 }
 
 struct FetchTestContext<'env> {
@@ -220,7 +225,7 @@ fn fetch_function_respects_cache(http_policy: Result<NetworkPolicy>) -> Result<(
     };
     let workspace = Dir::open_ambient_dir(&temp_root, ambient_authority())
         .context("open fetch cache workspace")?;
-    let (mut env, mut state) = env_with_workspace_policy(workspace, http_policy?)?;
+    let (mut env, mut state) = env_with_workspace_policy(workspace, temp_root.clone(), http_policy?)?;
     state.reset_impure();
     fallible::register_template(&mut env, "fetch_cache", "{{ fetch(url, cache=true) }}")?;
     let tmpl = env
