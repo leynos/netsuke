@@ -1,6 +1,7 @@
-//! Error types and helpers for translating command failures into Jinja errors.
+//! Error types and helpers for translating command failures into `MiniJinja`
+//! errors.
 
-use std::{io, time::Duration};
+use std::{fmt::Write as _, io, time::Duration};
 
 use minijinja::{Error, ErrorKind};
 
@@ -122,9 +123,9 @@ fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
 
 fn append_exit_status(message: &mut String, status: Option<i32>) {
     if let Some(code) = status {
-        message.push_str("; exited with status ");
-        let code_text = code.to_string();
-        message.push_str(&code_text);
+        if write!(message, "; exited with status {code}").is_err() {
+            debug_assert!(false, "writing to String failed");
+        }
     } else {
         message.push_str("; terminated by signal");
     }
@@ -171,6 +172,74 @@ impl LimitExceeded {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spawn_errors_include_source() {
+        let err = command_error(
+            CommandFailure::Spawn(io::Error::new(io::ErrorKind::NotFound, "command not found")),
+            "template.html",
+            "missing_cmd",
+        );
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        let message = err.to_string();
+        assert!(
+            message.contains("failed to spawn"),
+            "spawn error should explain failure: {message}"
+        );
+        assert!(
+            message.contains("command not found"),
+            "spawn error should include io::Error text: {message}"
+        );
+    }
+
+    #[test]
+    fn io_errors_detect_broken_pipe() {
+        let err = command_error(
+            CommandFailure::Io(io::Error::new(io::ErrorKind::BrokenPipe, "pipe closed")),
+            "template.html",
+            "cat",
+        );
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        assert!(
+            err.to_string().contains("closed input early"),
+            "io error should mention closed input: {err}"
+        );
+    }
+
+    #[test]
+    fn broken_pipe_errors_include_exit_details() {
+        let err = command_error(
+            CommandFailure::BrokenPipe {
+                source: io::Error::new(io::ErrorKind::BrokenPipe, "pipe error"),
+                status: Some(1),
+                stderr: b"error message".to_vec(),
+            },
+            "template.html",
+            "grep",
+        );
+        let message = err.to_string();
+        assert!(message.contains("closed input early"));
+        assert!(message.contains("status 1"));
+        assert!(message.contains("error message"));
+    }
+
+    #[test]
+    fn output_limit_errors_describe_constraint() {
+        let err = command_error(
+            CommandFailure::OutputLimit {
+                stream: OutputStream::Stdout,
+                mode: OutputMode::Capture,
+                limit: 1024,
+            },
+            "template.html",
+            "cat",
+        );
+        let message = err.to_string();
+        assert!(message.contains("exceeded"));
+        assert!(message.contains("stdout"));
+        assert!(message.contains("capture"));
+        assert!(message.contains("1024"));
+    }
 
     #[test]
     fn exit_errors_include_status_and_stderr() {

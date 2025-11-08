@@ -93,6 +93,8 @@ fn sanitize_label(label: &str) -> String {
     sanitized
 }
 
+/// Controls how helper stdout is materialised (in-memory capture or streaming
+/// via a tempfile).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OutputMode {
     Capture,
@@ -100,6 +102,8 @@ pub(super) enum OutputMode {
 }
 
 impl OutputMode {
+    /// Returns the label used in diagnostics. For example,
+    /// `OutputMode::Capture.describe()` yields `"capture"`.
     pub(super) const fn describe(self) -> &'static str {
         match self {
             Self::Capture => "capture",
@@ -108,6 +112,8 @@ impl OutputMode {
     }
 }
 
+/// Distinguishes between the stdout and stderr pipes so limits and file names
+/// can be recorded accurately.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum OutputStream {
     Stdout,
@@ -115,6 +121,8 @@ pub(super) enum OutputStream {
 }
 
 impl OutputStream {
+    /// Returns the stream name used in human-readable errors (for example,
+    /// `OutputStream::Stdout.describe()` returns `"stdout"`).
     pub(super) const fn describe(self) -> &'static str {
         match self {
             Self::Stdout => "stdout",
@@ -122,6 +130,8 @@ impl OutputStream {
         }
     }
 
+    /// Provides a short label used to name streamed tempfile outputs
+    /// (e.g. `"stdout"`).
     pub(super) const fn tempfile_label(self) -> &'static str {
         match self {
             Self::Stdout => "stdout",
@@ -129,6 +139,7 @@ impl OutputStream {
         }
     }
 
+    /// Provides the label used when creating marker files for empty streams.
     pub(super) const fn empty_tempfile_label(self) -> &'static str {
         match self {
             Self::Stdout => "stdout-empty",
@@ -137,6 +148,7 @@ impl OutputStream {
     }
 }
 
+/// Encapsulates the stream, mode, and byte budget for a single pipe reader.
 #[derive(Clone, Copy)]
 pub(super) struct PipeSpec {
     stream: OutputStream,
@@ -145,6 +157,8 @@ pub(super) struct PipeSpec {
 }
 
 impl PipeSpec {
+    /// Constructs a new specification with a byte ceiling. `limit` is measured
+    /// in bytes as supplied through `StdlibConfig`.
     pub(super) const fn new(stream: OutputStream, mode: OutputMode, limit: u64) -> Self {
         Self {
             stream,
@@ -153,18 +167,22 @@ impl PipeSpec {
         }
     }
 
+    /// Returns the pipe (`stdout` or `stderr`) governed by this spec.
     pub(super) const fn stream(self) -> OutputStream {
         self.stream
     }
 
+    /// Returns whether the spec captures output in memory or streams to disk.
     pub(super) const fn mode(self) -> OutputMode {
         self.mode
     }
 
+    /// Returns the configured byte ceiling for this stream.
     pub(super) const fn limit(self) -> u64 {
         self.limit
     }
 
+    /// Converts the immutable spec into a mutable `PipeLimit` tracker.
     pub(super) const fn into_limit(self) -> PipeLimit {
         PipeLimit {
             spec: self,
@@ -173,12 +191,17 @@ impl PipeSpec {
     }
 }
 
+/// Tracks how many bytes have been consumed relative to a `PipeSpec`.
 pub(super) struct PipeLimit {
     spec: PipeSpec,
     consumed: u64,
 }
 
 impl PipeLimit {
+    /// Records a successful read of `read` bytes, returning an error if the
+    /// limit would be exceeded. For example, calling `record(512)` twice on a
+    /// 1024-byte spec succeeds, while the third call errors with
+    /// `CommandFailure::OutputLimit`.
     pub(super) fn record(&mut self, read: usize) -> Result<(), CommandFailure> {
         let bytes = u64::try_from(read)
             .map_err(|_| CommandFailure::Io(io::Error::other("pipe read size overflow")))?;
@@ -198,12 +221,16 @@ impl PipeLimit {
     }
 }
 
+/// Parsed view of the filter options provided by the template author.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct CommandOptions {
     stdout_mode: OutputMode,
 }
 
 impl CommandOptions {
+    /// Parses helper options supplied as either a string or mapping. Returns
+    /// `OutputMode::Capture` when the value is missing or `undefined`. For
+    /// example, passing `{ 'mode': 'tempfile' }` selects streaming mode.
     pub(super) fn from_value(options: Option<Value>) -> Result<Self, Error> {
         let Some(raw) = options else {
             return Ok(Self::default());
@@ -258,6 +285,8 @@ impl CommandOptions {
         }
     }
 
+    /// Returns the requested stdout mode so execution can choose between
+    /// capture and streaming.
     pub(super) const fn stdout_mode(self) -> OutputMode {
         self.stdout_mode
     }
