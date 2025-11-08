@@ -11,6 +11,7 @@ include = [
     "build.rs",
 ]
 license = "ISC"
+description = "A YAML-powered Ninja/Jinja hybrid build system."
 
 [features]
 default = []
