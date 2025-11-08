@@ -14,16 +14,26 @@ use crate::stdlib::DEFAULT_COMMAND_TEMP_DIR;
 
 use super::error::CommandFailure;
 
+/// Shared configuration for shell helpers, including capture limits and
+/// capability-scoped filesystem handles.
 #[derive(Clone)]
 pub(crate) struct CommandConfig {
+    /// Maximum number of bytes buffered in memory when capturing `stdout`.
     pub(crate) max_capture_bytes: u64,
+    /// Maximum number of bytes streamed into a tempfile when `stdout` or
+    /// `stderr` run in streaming mode.
     pub(crate) max_stream_bytes: u64,
+    /// Capability-scoped workspace root used to create temp directories.
     workspace_root: Arc<Dir>,
+    /// Absolute UTF-8 workspace root path for host-side filesystem access.
     workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    /// Relative directory (beneath the workspace root) for helper tempfiles.
     temp_relative: Utf8PathBuf,
 }
 
 impl CommandConfig {
+    /// Construct a new command configuration with byte budgets and workspace
+    /// handles. The two limits are interpreted in bytes.
     pub(crate) fn new(
         max_capture_bytes: u64,
         max_stream_bytes: u64,
@@ -39,6 +49,9 @@ impl CommandConfig {
         }
     }
 
+    /// Create a scoped tempfile for the supplied label beneath the configured
+    /// relative directory. Callers must flush before persisting with
+    /// `NamedTempFile::into_temp_path()`.
     pub(super) fn create_tempfile(&self, label: &str) -> io::Result<NamedTempFile> {
         let Some(root_path) = &self.workspace_root_path else {
             return Err(io::Error::new(

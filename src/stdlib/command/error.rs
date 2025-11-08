@@ -115,7 +115,7 @@ fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
         format!(
             "{} timed out after {}s",
             location.describe(),
-            duration.as_secs()
+            duration.as_secs_f64()
         ),
     )
 }
