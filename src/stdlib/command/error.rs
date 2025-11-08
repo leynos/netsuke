@@ -167,3 +167,44 @@ impl LimitExceeded {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exit_errors_include_status_and_stderr() {
+        let err = command_error(
+            CommandFailure::Exit {
+                status: Some(42),
+                stderr: b"boom!".to_vec(),
+            },
+            "template.html",
+            "echo",
+        );
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        let message = err.to_string();
+        assert!(
+            message.contains("status 42"),
+            "exit error should mention status: {message}"
+        );
+        assert!(
+            message.contains("boom!"),
+            "exit error should include stderr: {message}"
+        );
+    }
+
+    #[test]
+    fn timeout_errors_report_duration() {
+        let err = command_error(
+            CommandFailure::Timeout(Duration::from_secs(3)),
+            "template.html",
+            "sleep",
+        );
+        assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        assert!(
+            err.to_string().contains("3s"),
+            "timeout error should mention duration: {err}"
+        );
+    }
+}

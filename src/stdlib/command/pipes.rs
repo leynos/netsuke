@@ -14,6 +14,7 @@ use super::{
     result::PipeOutcome,
 };
 use camino::Utf8PathBuf;
+use tempfile::NamedTempFile;
 
 const PIPE_CHUNK_SIZE: usize = 8192;
 
@@ -153,7 +154,7 @@ where
             .map_err(CommandFailure::Io)?;
     }
     tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
-    let path = tempfile.into_path().map_err(CommandFailure::Io)?;
+    let path = persist_tempfile(tempfile)?;
     Ok(PipeOutcome::Tempfile(path))
 }
 
@@ -161,8 +162,9 @@ fn create_empty_tempfile(
     config: &CommandConfig,
     label: &str,
 ) -> Result<Utf8PathBuf, CommandFailure> {
-    let tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
-    tempfile.into_path().map_err(CommandFailure::Io)
+    let mut tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
+    tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
+    persist_tempfile(tempfile)
 }
 
 fn join_pipe_for_cleanup(
@@ -180,6 +182,19 @@ fn join_pipe_for_cleanup(
             }
         }
     }
+}
+
+fn persist_tempfile(tempfile: NamedTempFile) -> Result<Utf8PathBuf, CommandFailure> {
+    let temp_path = tempfile.into_temp_path();
+    let path = temp_path
+        .keep()
+        .map_err(|err| CommandFailure::Io(err.error))?;
+    Utf8PathBuf::from_path_buf(path).map_err(|_| {
+        CommandFailure::Io(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "command tempfile path is not valid UTF-8",
+        ))
+    })
 }
 
 #[cfg(test)]

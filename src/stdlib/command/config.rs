@@ -1,10 +1,6 @@
 //! Command helper configuration, option parsing, and pipe metadata.
 
-use std::{
-    fs,
-    io::{self, Write},
-    sync::Arc,
-};
+use std::{fs, io, sync::Arc};
 
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
@@ -22,7 +18,9 @@ use super::error::CommandFailure;
 pub(crate) struct CommandConfig {
     pub(crate) max_capture_bytes: u64,
     pub(crate) max_stream_bytes: u64,
-    temp_dir: CommandTempDir,
+    workspace_root: Arc<Dir>,
+    workspace_root_path: Option<Arc<Utf8PathBuf>>,
+    temp_relative: Utf8PathBuf,
 }
 
 impl CommandConfig {
@@ -35,94 +33,35 @@ impl CommandConfig {
         Self {
             max_capture_bytes,
             max_stream_bytes,
-            temp_dir: CommandTempDir::new(workspace_root, workspace_root_path),
-        }
-    }
-
-    pub(super) fn create_tempfile(&self, label: &str) -> io::Result<CommandTempFile> {
-        self.temp_dir.create(label)
-    }
-}
-
-#[derive(Clone)]
-struct CommandTempDir {
-    workspace_root: Arc<Dir>,
-    workspace_root_path: Option<Arc<Utf8PathBuf>>,
-    relative: Utf8PathBuf,
-}
-
-impl CommandTempDir {
-    fn new(workspace_root: Arc<Dir>, workspace_root_path: Option<Arc<Utf8PathBuf>>) -> Self {
-        Self {
             workspace_root,
             workspace_root_path,
-            relative: Utf8PathBuf::from(DEFAULT_COMMAND_TEMP_DIR),
+            temp_relative: Utf8PathBuf::from(DEFAULT_COMMAND_TEMP_DIR),
         }
     }
 
-    fn create(&self, label: &str) -> io::Result<CommandTempFile> {
+    pub(super) fn create_tempfile(&self, label: &str) -> io::Result<NamedTempFile> {
         let Some(root_path) = &self.workspace_root_path else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "workspace root path must be configured for command tempfiles",
             ));
         };
-        self.workspace_root.create_dir_all(&self.relative)?;
-        let dir_path = root_path.join(&self.relative);
+
+        self.workspace_root.create_dir_all(&self.temp_relative)?;
+        let dir_path = root_path.join(&self.temp_relative);
         fs::create_dir_all(dir_path.as_std_path())?;
 
         let prefix = sanitize_label(label);
-        let mut builder = Builder::new();
-        builder.prefix(&prefix);
-        builder.suffix(".tmp");
-
-        let file = builder.tempfile_in(dir_path.as_std_path()).map_err(|err| {
-            io::Error::new(
-                err.kind(),
-                format!("failed to create command tempfile for '{label}': {err}"),
-            )
-        })?;
-
-        Ok(CommandTempFile::new(file))
-    }
-}
-
-pub(super) struct CommandTempFile {
-    file: NamedTempFile,
-}
-
-impl CommandTempFile {
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "NamedTempFile creation is inherently runtime-only"
-    )]
-    fn new(file: NamedTempFile) -> Self {
-        Self { file }
-    }
-
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "Mutable handles cannot be borrowed in const contexts"
-    )]
-    pub(super) fn as_file_mut(&mut self) -> &mut NamedTempFile {
-        &mut self.file
-    }
-
-    #[cfg(test)]
-    pub(super) fn path(&self) -> &std::path::Path {
-        self.file.path()
-    }
-
-    pub(super) fn into_path(mut self) -> io::Result<Utf8PathBuf> {
-        self.file.flush()?;
-        let temp_path = self.file.into_temp_path();
-        let path = temp_path.keep().map_err(|err| err.error)?;
-        Utf8PathBuf::from_path_buf(path).map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                "command tempfile path is not valid UTF-8",
-            )
-        })
+        Builder::new()
+            .prefix(&prefix)
+            .suffix(".tmp")
+            .tempfile_in(dir_path.as_std_path())
+            .map_err(|err| {
+                io::Error::new(
+                    err.kind(),
+                    format!("failed to create command tempfile for '{label}': {err}"),
+                )
+            })
     }
 }
 
@@ -345,7 +284,9 @@ mod tests {
         let (_temp_dir, config) = test_command_config();
         let temp_path = {
             let tempfile = config.create_tempfile("stdout").expect("create temp file");
-            tempfile.path().to_path_buf()
+            let path = tempfile.path().to_path_buf();
+            assert!(path.exists(), "tempfile should exist while handle is alive");
+            path
         };
         assert!(
             !temp_path.exists(),
@@ -358,10 +299,14 @@ mod tests {
         let (_temp_dir, config) = test_command_config();
         let tempfile = config.create_tempfile("stdout").expect("create temp file");
         let expected = tempfile.path().to_path_buf();
-        let persisted = tempfile.into_path().expect("persist temp file");
-        assert_eq!(persisted.as_std_path(), expected.as_path());
-        assert!(persisted.as_std_path().exists());
-        fs::remove_file(persisted.as_std_path()).expect("cleanup persisted temp file");
+        let kept = tempfile
+            .into_temp_path()
+            .keep()
+            .map_err(|err| err.error)
+            .expect("persist temp file");
+        assert_eq!(kept.as_path(), expected.as_path());
+        assert!(kept.as_path().exists());
+        fs::remove_file(kept.as_path()).expect("cleanup persisted temp file");
     }
 
     #[test]

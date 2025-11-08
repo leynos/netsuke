@@ -135,3 +135,24 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(all(test, not(windows)))]
+mod non_windows_tests {
+    use super::*;
+
+    #[test]
+    fn quote_rejects_line_breaks_on_unix() {
+        let err = quote("line\nbreak").expect_err("line feeds should be rejected");
+        assert_eq!(err, QuoteError::ContainsLineBreak);
+    }
+
+    #[test]
+    fn quote_wraps_arguments_with_spaces() {
+        let quoted = quote("needs space").expect("quote should succeed");
+        assert_ne!(quoted, "needs space", "quote should escape spaces");
+        assert!(
+            quoted.contains('\'') || quoted.contains('"'),
+            "quote should include quoting characters: {quoted}"
+        );
+    }
+}
