@@ -217,16 +217,24 @@ impl PipeLimit {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "usize to u64 conversion cannot fail on 64-bit platforms; \
+              overflow on 32-bit systems indicates a logic error (reading >4GB in one call)"
+)]
 fn read_size_to_u64(read: usize) -> u64 {
-    u64::try_from(read)
-        .unwrap_or_else(|err| panic!("pipe read size overflow should be impossible: {err}"))
+    u64::try_from(read).expect("pipe read size overflow should be impossible")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "u64 addition overflow requires >18 exabytes; \
+              exceeding this indicates a logic error in limit enforcement"
+)]
 const fn add_checked(current: u64, delta: u64) -> u64 {
-    match current.checked_add(delta) {
-        Some(total) => total,
-        None => panic!("pipe output size overflow should be impossible"),
-    }
+    current
+        .checked_add(delta)
+        .expect("pipe output size overflow should be impossible")
 }
 
 /// Parsed view of the filter options provided by the template author.
