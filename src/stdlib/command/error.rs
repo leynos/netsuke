@@ -10,33 +10,55 @@ use super::{
     context::CommandLocation,
 };
 
+/// Represents command execution failures that can be surfaced to `MiniJinja`
+/// callers.
 #[derive(Debug)]
 pub(super) enum CommandFailure {
+    /// The process could not be spawned (executable missing, permission
+    /// failure, etc.).
     Spawn(io::Error),
+    /// An I/O error occurred while interacting with the running process.
     Io(io::Error),
+    /// The process closed stdin early while we were still writing input.
     BrokenPipe {
+        /// Underlying OS error.
         source: io::Error,
+        /// Exit status if the process reported one.
         status: Option<i32>,
+        /// Captured stderr bytes.
         stderr: Vec<u8>,
     },
+    /// The process exited with a non-zero status or was terminated by a signal.
     Exit {
+        /// Exit status (`None` when terminated by a signal).
         status: Option<i32>,
+        /// Captured stderr bytes.
         stderr: Vec<u8>,
     },
+    /// The process produced more data than the configured byte budget allows.
     OutputLimit {
+        /// Which pipe exceeded the budget.
         stream: OutputStream,
+        /// Whether capture or streaming mode was active.
         mode: OutputMode,
+        /// The configured byte ceiling that was exceeded.
         limit: u64,
     },
+    /// The process failed to exit before the timeout elapsed.
     Timeout(Duration),
 }
 
-impl From<io::Error> for CommandFailure {
-    fn from(err: io::Error) -> Self {
-        Self::Io(err)
-    }
-}
+#[rustfmt::skip]
+impl From<io::Error> for CommandFailure { fn from(err: io::Error) -> Self { Self::Io(err) } }
 
+/// Translates a `CommandFailure` into a `MiniJinja` `Error`, decorating the
+/// message with template and command context.
+///
+/// # Parameters
+///
+/// - `err`: the command failure to convert.
+/// - `template`: name of the template invoking the helper.
+/// - `command`: the command string being executed.
 pub(super) fn command_error(err: CommandFailure, template: &str, command: &str) -> Error {
     let location = CommandLocation::new(template, command);
     match err {
@@ -123,9 +145,8 @@ fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
 
 fn append_exit_status(message: &mut String, status: Option<i32>) {
     if let Some(code) = status {
-        if write!(message, "; exited with status {code}").is_err() {
-            debug_assert!(false, "writing to String failed");
-        }
+        write!(message, "; exited with status {code}")
+            .unwrap_or_else(|_| panic!("write to String cannot fail"));
     } else {
         message.push_str("; terminated by signal");
     }

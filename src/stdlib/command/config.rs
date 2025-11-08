@@ -203,12 +203,8 @@ impl PipeLimit {
     /// 1024-byte spec succeeds, while the third call errors with
     /// `CommandFailure::OutputLimit`.
     pub(super) fn record(&mut self, read: usize) -> Result<(), CommandFailure> {
-        let bytes = u64::try_from(read)
-            .map_err(|_| CommandFailure::Io(io::Error::other("pipe read size overflow")))?;
-        let new_total = self
-            .consumed
-            .checked_add(bytes)
-            .ok_or_else(|| CommandFailure::Io(io::Error::other("pipe output size overflow")))?;
+        let bytes = read_size_to_u64(read);
+        let new_total = add_checked(self.consumed, bytes);
         if new_total > self.spec.limit() {
             return Err(CommandFailure::OutputLimit {
                 stream: self.spec.stream(),
@@ -219,6 +215,16 @@ impl PipeLimit {
         self.consumed = new_total;
         Ok(())
     }
+}
+
+fn read_size_to_u64(read: usize) -> u64 {
+    u64::try_from(read).unwrap_or_else(|_| panic!("pipe read size overflow should be impossible"))
+}
+
+fn add_checked(current: u64, delta: u64) -> u64 {
+    current
+        .checked_add(delta)
+        .unwrap_or_else(|| panic!("pipe output size overflow should be impossible"))
 }
 
 /// Parsed view of the filter options provided by the template author.
