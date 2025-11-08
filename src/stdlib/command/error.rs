@@ -145,7 +145,10 @@ fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
 
 fn append_exit_status(message: &mut String, status: Option<i32>) {
     if let Some(code) = status {
-        write!(message, "; exited with status {code}").expect("write to String cannot fail");
+        assert!(
+            write!(message, "; exited with status {code}").is_ok(),
+            "write to String cannot fail"
+        );
     } else {
         message.push_str("; terminated by signal");
     }
