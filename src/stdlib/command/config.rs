@@ -218,13 +218,13 @@ impl PipeLimit {
 }
 
 fn read_size_to_u64(read: usize) -> u64 {
-    u64::try_from(read).unwrap_or_else(|_| panic!("pipe read size overflow should be impossible"))
+    u64::try_from(read).expect("pipe read size overflow should be impossible")
 }
 
 fn add_checked(current: u64, delta: u64) -> u64 {
     current
         .checked_add(delta)
-        .unwrap_or_else(|| panic!("pipe output size overflow should be impossible"))
+        .expect("pipe output size overflow should be impossible")
 }
 
 /// Parsed view of the filter options provided by the template author.
