@@ -217,6 +217,31 @@ fn shell_filter_tolerates_commands_that_close_stdin() -> Result<()> {
 }
 
 #[rstest]
+fn shell_filter_rejects_empty_command() -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    state.reset_impure();
+    fallible::register_template(&mut env, "shell_empty", "{{ 'hi' | shell('   ') }}")?;
+    let template = env
+        .get_template("shell_empty")
+        .context("fetch template 'shell_empty'")?;
+    let err = match template.render(context! {}) {
+        Ok(output) => bail!("expected shell to reject blank commands but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "shell should report InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("requires a non-empty command"),
+        "error should mention validation message: {err}"
+    );
+    ensure!(state.is_impure(), "shell should still mark template impure");
+    Ok(())
+}
+
+#[rstest]
 fn shell_filter_enforces_output_limit() -> Result<()> {
     let config = StdlibConfig::default()
         .with_command_max_output_bytes(1024)?;
@@ -435,6 +460,52 @@ fn grep_filter_rejects_invalid_flags() -> Result<()> {
         err.to_string().contains("grep flags must be strings"),
         "error should explain invalid flags: {err}"
     );
+    Ok(())
+}
+
+#[rstest]
+fn grep_filter_rejects_empty_pattern() -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    state.reset_impure();
+    fallible::register_template(&mut env, "grep_empty", "{{ 'alpha' | grep('') }}")?;
+    let template = env
+        .get_template("grep_empty")
+        .context("fetch template 'grep_empty'")?;
+    let err = match template.render(context! {}) {
+        Ok(output) => bail!("expected grep to reject empty patterns but rendered {output}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.kind() == ErrorKind::InvalidOperation,
+        "grep should report InvalidOperation but was {:?}",
+        err.kind()
+    );
+    ensure!(
+        err.to_string().contains("requires a search pattern"),
+        "error message should mention missing pattern: {err}"
+    );
+    ensure!(state.is_impure(), "grep should mark template impure");
+    Ok(())
+}
+
+#[cfg(not(windows))]
+#[rstest]
+fn grep_filter_handles_patterns_with_spaces() -> Result<()> {
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    state.reset_impure();
+    fallible::register_template(
+        &mut env,
+        "grep_space_pattern",
+        "{{ text | grep('needs space') | trim }}",
+    )?;
+    let template = env
+        .get_template("grep_space_pattern")
+        .context("fetch template 'grep_space_pattern'")?;
+    let rendered = template
+        .render(context!(text => "needs space\nother"))
+        .context("render grep space template")?;
+    ensure!(rendered == "needs space", "grep should match spaced pattern");
+    ensure!(state.is_impure(), "grep should mark template impure");
     Ok(())
 }
 
