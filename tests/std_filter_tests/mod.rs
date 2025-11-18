@@ -12,5 +12,7 @@ mod io_filters;
 mod network_functions;
 #[path = "std_filter_tests/path_filters.rs"]
 mod path_filters;
+#[path = "std_filter_tests/which_filter_tests.rs"]
+mod which_filter_tests;
 #[path = "std_filter_tests/support.rs"]
 mod support;

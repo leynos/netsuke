@@ -72,6 +72,33 @@ Feature: Template stdlib filters
     When I render "{{ ([{'name': 'one'}] | group_by('kind')) }}" with stdlib path "file"
     Then the stdlib error contains "could not resolve"
 
+  Scenario: which filter resolves the first PATH entry
+    And the stdlib executable "bin/primary/tool" exists
+    And the stdlib executable "bin/secondary/tool" exists
+    And the stdlib PATH entries are "bin/primary:bin/secondary"
+    When I render the stdlib template "{{ 'tool' | which }}"
+    Then the stdlib output is the workspace executable "bin/primary/tool"
+
+  Scenario: which filter lists every PATH match
+    And the stdlib executable "bin/path_a/tool" exists
+    And the stdlib executable "bin/path_b/tool" exists
+    And the stdlib PATH entries are "bin/path_a:bin/path_b"
+    When I render the stdlib template "{{ ('tool' | which(all=true))[0] }}"
+    Then the stdlib output is the workspace executable "bin/path_a/tool"
+    When I render the stdlib template "{{ ('tool' | which(all=true))[1] }}"
+    Then the stdlib output is the workspace executable "bin/path_b/tool"
+
+  Scenario: which function honours cwd_mode
+    And the stdlib executable "local/tool" exists
+    And the stdlib PATH entries are ""
+    When I render the stdlib template "{{ which('tool', cwd_mode='always') }}"
+    Then the stdlib output is the workspace executable "local/tool"
+
+  Scenario: which filter reports missing executables
+    And the stdlib PATH entries are ""
+    When I render the stdlib template "{{ 'absent' | which }}"
+    Then the stdlib error contains "netsuke::jinja::which::not_found"
+
   Scenario: shell filter transforms text and marks templates impure
     Given an uppercase stdlib command helper
     When I render the stdlib template "{{ 'hello' | shell(cmd) | trim }}" using the stdlib command helper

@@ -1,0 +1,158 @@
+use anyhow::{Context, Result, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
+use minijinja::{context, Environment};
+use rstest::rstest;
+use std::ffi::{OsStr, OsString};
+use test_support::{env::VarGuard, env_lock::EnvLock};
+
+use super::support::{self, fallible};
+
+struct PathEnv {
+    _lock: EnvLock,
+    path_guard: VarGuard,
+    #[cfg(windows)]
+    pathext_guard: VarGuard,
+}
+
+impl PathEnv {
+    fn new(entries: &[Utf8PathBuf]) -> Result<Self> {
+        let lock = EnvLock::acquire();
+        let joined = if entries.is_empty() {
+            OsString::new()
+        } else {
+            std::env::join_paths(entries.iter().map(|entry| entry.as_std_path()))
+                .context("join PATH entries")?
+        };
+        let path_guard = VarGuard::set("PATH", joined.as_os_str());
+        #[cfg(windows)]
+        let pathext_guard = VarGuard::set("PATHEXT", OsStr::new(".cmd;.exe"));
+        Ok(Self {
+            _lock: lock,
+            path_guard,
+            #[cfg(windows)]
+            pathext_guard,
+        })
+    }
+}
+
+fn write_tool(dir: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+    let filename = tool_name(name);
+    let path = dir.join(Utf8Path::new(&filename));
+    let parent = path
+        .parent()
+        .context("tool path should have a parent directory")?;
+    std::fs::create_dir_all(parent.as_std_path())
+        .with_context(|| format!("create parent for {:?}", path))?;
+    std::fs::write(path.as_std_path(), script_contents())
+        .with_context(|| format!("write fixture {:?}", path))?;
+    mark_executable(&path)?;
+    Ok(path)
+}
+
+#[cfg(unix)]
+fn mark_executable(path: &Utf8Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = std::fs::metadata(path.as_std_path())
+        .with_context(|| format!("stat {:?}", path))?
+        .permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(path.as_std_path(), perms)
+        .with_context(|| format!("chmod {:?}", path))
+}
+
+#[cfg(not(unix))]
+fn mark_executable(_path: &Utf8Path) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn tool_name(base: &str) -> String {
+    format!("{base}.cmd")
+}
+
+#[cfg(not(windows))]
+fn tool_name(base: &str) -> String {
+    base.to_owned()
+}
+
+fn script_contents() -> &'static [u8] {
+    #[cfg(windows)]
+    {
+        b"@echo off\r\n"
+    }
+    #[cfg(not(windows))]
+    {
+        b"#!/bin/sh\nexit 0\n"
+    }
+}
+
+fn render(env: &mut Environment<'_>, template: &str) -> Result<String> {
+    env.render_str(template, context! {})
+        .map_err(|err| anyhow!(err.to_string()))
+}
+
+#[rstest]
+fn which_filter_returns_first_match() -> Result<()> {
+    let (_temp, root) = support::filter_workspace()?;
+    let first = root.join("bin_first");
+    let second = root.join("bin_second");
+    std::fs::create_dir_all(first.as_std_path())?;
+    std::fs::create_dir_all(second.as_std_path())?;
+    write_tool(&first, "helper")?;
+    write_tool(&second, "helper")?;
+    let _path = PathEnv::new(&[first.clone(), second.clone()])?;
+    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
+    state.reset_impure();
+    let output = render(&mut env, "{{ 'helper' | which }}")?;
+    assert_eq!(output, first.join(Utf8Path::new(&tool_name("helper"))).as_str());
+    assert!(!state.is_impure());
+    drop(temp);
+    Ok(())
+}
+
+#[rstest]
+fn which_filter_all_returns_all_matches() -> Result<()> {
+    let (_temp, root) = support::filter_workspace()?;
+    let first = root.join("bin_a");
+    let second = root.join("bin_b");
+    std::fs::create_dir_all(first.as_std_path())?;
+    std::fs::create_dir_all(second.as_std_path())?;
+    write_tool(&first, "helper")?;
+    write_tool(&second, "helper")?;
+    let _path = PathEnv::new(&[first.clone(), second.clone()])?;
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let template = "{{ 'helper' | which(all=true) | join('|') }}";
+    let output = render(&mut env, template)?;
+    let expected = format!(
+        "{}|{}",
+        first.join(Utf8Path::new(&tool_name("helper"))).as_str(),
+        second.join(Utf8Path::new(&tool_name("helper"))).as_str()
+    );
+    assert_eq!(output, expected);
+    Ok(())
+}
+
+#[rstest]
+fn which_function_honours_cwd_mode() -> Result<()> {
+    let (_temp, root) = support::filter_workspace()?;
+    let tool = write_tool(&root, "local")?;
+    let _path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let template = "{{ which('local', cwd_mode='always') }}";
+    let output = render(&mut env, template)?;
+    assert_eq!(output, tool.as_str());
+    Ok(())
+}
+
+#[rstest]
+fn which_filter_reports_missing_command() -> Result<()> {
+    let (_temp, _root) = support::filter_workspace()?;
+    let _path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let err = env
+        .render_str("{{ 'absent' | which }}", context! {})
+        .unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains("netsuke::jinja::which::not_found"));
+    Ok(())
+}

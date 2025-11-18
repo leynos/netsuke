@@ -14,6 +14,7 @@ mod command;
 mod network;
 mod path;
 mod time;
+mod which;
 
 pub use network::{
     HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
@@ -390,6 +391,7 @@ pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> 
     register_file_tests(env);
     path::register_filters(env);
     collections::register_filters(env);
+    which::register(env);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);

@@ -12,6 +12,7 @@ use url::Url;
 
 use super::parsing::{parse_expected_offset, parse_iso_timestamp};
 use super::types::{ExpectedFragment, ExpectedOffset, ExpectedOutput, RelativePath};
+use super::workspace::resolve_executable_path;
 
 #[then(regex = r#"^the stdlib output is "(.+)"$"#)]
 pub(crate) fn assert_stdlib_output(
@@ -139,6 +140,21 @@ pub(crate) fn assert_stdlib_output_is_workspace_path(
         output == expected.as_str(),
         "expected output '{}', got '{output}'",
         expected
+    );
+    Ok(())
+}
+
+#[then(regex = r#"^the stdlib output is the workspace executable "(.+)"$"#)]
+pub(crate) fn assert_stdlib_output_is_workspace_executable(
+    world: &mut CliWorld,
+    relative_path: RelativePath,
+) -> Result<()> {
+    let relative = relative_path.into_path_buf();
+    let (root, output) = stdlib_root_and_output(world)?;
+    let expected = resolve_executable_path(root, relative.as_path());
+    ensure!(
+        output == expected.as_str(),
+        "expected stdlib output '{expected}' but was '{output}'"
     );
     Ok(())
 }

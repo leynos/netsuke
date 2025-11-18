@@ -951,9 +951,9 @@ Semantics honour platform conventions while enforcing predictable behaviour:
   bit. Empty `PATH` segments (leading, trailing, or `::`) map to the working
   directory when `cwd_mode` is `"auto"` or `"always"`.
 - On Windows, the lookup respects `PATHEXT` when the command lacks an
-  extension. Comparisons are case-insensitive, results normalise both `\` and
-  `/`, and `cwd_mode` defaults to skipping the working directory to avoid the
-  platform’s surprise "search CWD first" rule. Opting in via `"always"`
+  extension. Comparisons are case-insensitive, results normalise both slash
+  styles, and `cwd_mode` defaults to skipping the working directory to avoid
+  the platform’s surprise "search CWD first" rule. Opting in via `"always"`
   restores that behaviour.
 - Canonicalisation happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
@@ -976,6 +976,15 @@ Unit tests cover POSIX and Windows specifics, canonicalization, cache
 validation, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.
+
+Implementation mirrors the design with a small (64-entry) LRU cache keyed by
+the command name, current directory, `PATH`, optional `PATHEXT`, and every
+filter option aside from `fresh`. Cache hits validate metadata before returning
+so deleted or repointed binaries immediately trigger a re-scan, and
+`fresh=true` bypasses the cache without discarding previously memoised entries.
+Diagnostic errors embed the `netsuke::jinja::which::*` codes and print a
+trimmed preview of the scanned `PATH`, giving manifest authors clear
+troubleshooting hints on both Unix and Windows hosts.
 
 #### Generic collection filters
 
