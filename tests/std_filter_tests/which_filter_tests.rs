@@ -91,6 +91,44 @@ fn render(env: &mut Environment<'_>, template: &str) -> Result<String> {
         .map_err(|err| anyhow!(err.to_string()))
 }
 
+struct WhichTestFixture {
+    _temp: tempfile::TempDir,
+    env: Environment<'static>,
+    state: netsuke::stdlib::StdlibState,
+    paths: Vec<Utf8PathBuf>,
+    _path_env: PathEnv,
+}
+
+impl WhichTestFixture {
+    fn with_tool_in_dirs(tool_name: &str, dir_names: &[&str]) -> Result<Self> {
+        let (temp, root) = support::filter_workspace()?;
+        let mut dirs = Vec::new();
+        let mut tool_paths = Vec::new();
+        for dir_name in dir_names {
+            let dir = root.join(dir_name);
+            std::fs::create_dir_all(dir.as_std_path())?;
+            let tool_path = write_tool(&dir, tool_name)?;
+            dirs.push(dir);
+            tool_paths.push(tool_path);
+        }
+        let path_env = PathEnv::new(&dirs)?;
+        let (env, state) = fallible::stdlib_env_with_state()?;
+        Ok(Self {
+            _temp: temp,
+            env,
+            state,
+            paths: tool_paths,
+            _path_env: path_env,
+        })
+    }
+
+    fn render(&mut self, template: &str) -> Result<String> {
+        self.env
+            .render_str(template, context! {})
+            .map_err(|err| anyhow!(err.to_string()))
+    }
+}
+
 #[rstest]
 fn which_filter_returns_first_match() -> Result<()> {
     let (_temp, root) = support::filter_workspace()?;
