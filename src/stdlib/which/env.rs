@@ -1,6 +1,9 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
+#[cfg(windows)]
+use std::ffi::OsStr;
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(windows)]
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
 
@@ -136,7 +139,11 @@ pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, Error> {
 }
 
 #[cfg(windows)]
-pub(super) fn candidate_paths(dir: &Utf8Path, command: &str, pathext: &[String]) -> Vec<Utf8PathBuf> {
+pub(super) fn candidate_paths(
+    dir: &Utf8Path,
+    command: &str,
+    pathext: &[String],
+) -> Vec<Utf8PathBuf> {
     let mut paths = Vec::new();
     let base = dir.join(command);
     if Utf8Path::new(command).extension().is_some() {

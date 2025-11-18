@@ -1,7 +1,4 @@
-use minijinja::{
-    Error,
-    value::Kwargs,
-};
+use minijinja::{Error, value::Kwargs};
 
 use super::error::args_error;
 

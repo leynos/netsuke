@@ -17,15 +17,15 @@ use super::{
 pub(super) const CACHE_CAPACITY: usize = 64;
 
 #[derive(Clone, Debug)]
-pub(super) struct WhichResolver {
+pub(crate) struct WhichResolver {
     cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>,
 }
 
 impl WhichResolver {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         #[expect(
             clippy::unwrap_used,
-            reason = "cache capacity constant is greater than zero",
+            reason = "cache capacity constant is greater than zero"
         )]
         let capacity = NonZeroUsize::new(CACHE_CAPACITY).unwrap();
         Self {
@@ -33,7 +33,7 @@ impl WhichResolver {
         }
     }
 
-    pub(super) fn resolve(
+    pub(crate) fn resolve(
         &self,
         command: &str,
         options: &WhichOptions,

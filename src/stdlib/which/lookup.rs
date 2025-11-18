@@ -5,10 +5,12 @@ use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
 
 use super::{
-    env::{self, EnvSnapshot},
+    env::EnvSnapshot,
     error::{direct_not_found, not_found_error},
     options::WhichOptions,
 };
+#[cfg(windows)]
+use super::env;
 
 pub(super) fn lookup(
     command: &str,

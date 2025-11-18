@@ -131,40 +131,23 @@ impl WhichTestFixture {
 
 #[rstest]
 fn which_filter_returns_first_match() -> Result<()> {
-    let (_temp, root) = support::filter_workspace()?;
-    let first = root.join("bin_first");
-    let second = root.join("bin_second");
-    std::fs::create_dir_all(first.as_std_path())?;
-    std::fs::create_dir_all(second.as_std_path())?;
-    write_tool(&first, "helper")?;
-    write_tool(&second, "helper")?;
-    let _path = PathEnv::new(&[first.clone(), second.clone()])?;
-    let (mut env, mut state) = fallible::stdlib_env_with_state()?;
-    state.reset_impure();
-    let output = render(&mut env, "{{ 'helper' | which }}")?;
-    assert_eq!(output, first.join(Utf8Path::new(&tool_name("helper"))).as_str());
-    assert!(!state.is_impure());
-    drop(temp);
+    let mut fixture =
+        WhichTestFixture::with_tool_in_dirs("helper", &["bin_first", "bin_second"])?;
+    fixture.state.reset_impure();
+    let output = fixture.render("{{ 'helper' | which }}")?;
+    assert_eq!(output, fixture.paths[0].as_str());
+    assert!(!fixture.state.is_impure());
     Ok(())
 }
 
 #[rstest]
 fn which_filter_all_returns_all_matches() -> Result<()> {
-    let (_temp, root) = support::filter_workspace()?;
-    let first = root.join("bin_a");
-    let second = root.join("bin_b");
-    std::fs::create_dir_all(first.as_std_path())?;
-    std::fs::create_dir_all(second.as_std_path())?;
-    write_tool(&first, "helper")?;
-    write_tool(&second, "helper")?;
-    let _path = PathEnv::new(&[first.clone(), second.clone()])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
-    let template = "{{ 'helper' | which(all=true) | join('|') }}";
-    let output = render(&mut env, template)?;
+    let mut fixture = WhichTestFixture::with_tool_in_dirs("helper", &["bin_a", "bin_b"])?;
+    let output = fixture.render("{{ 'helper' | which(all=true) | join('|') }}")?;
     let expected = format!(
         "{}|{}",
-        first.join(Utf8Path::new(&tool_name("helper"))).as_str(),
-        second.join(Utf8Path::new(&tool_name("helper"))).as_str()
+        fixture.paths[0].as_str(),
+        fixture.paths[1].as_str()
     );
     assert_eq!(output, expected);
     Ok(())
