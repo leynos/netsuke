@@ -1,6 +1,6 @@
-use std::ffi::OsString;
 #[cfg(windows)]
 use std::ffi::OsStr;
+use std::ffi::OsString;
 
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(windows)]

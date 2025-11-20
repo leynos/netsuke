@@ -7,6 +7,58 @@ use test_support::{env::VarGuard, env_lock::EnvLock};
 
 use super::support::{self, fallible};
 
+#[derive(Debug, Clone)]
+struct ToolName(String);
+
+impl ToolName {
+    fn new(name: impl Into<String>) -> Self { Self(name.into()) }
+    fn as_str(&self) -> &str { &self.0 }
+}
+
+impl From<&str> for ToolName {
+    fn from(s: &str) -> Self { Self(s.to_owned()) }
+}
+
+impl AsRef<str> for ToolName {
+    fn as_ref(&self) -> &str { &self.0 }
+}
+
+#[derive(Debug, Clone)]
+struct DirName(String);
+
+impl DirName {
+    fn new(name: impl Into<String>) -> Self { Self(name.into()) }
+    fn as_str(&self) -> &str { &self.0 }
+}
+
+impl From<&str> for DirName {
+    fn from(s: &str) -> Self { Self(s.to_owned()) }
+}
+
+impl AsRef<str> for DirName {
+    fn as_ref(&self) -> &str { &self.0 }
+}
+
+impl AsRef<OsStr> for DirName {
+    fn as_ref(&self) -> &OsStr { OsStr::new(&self.0) }
+}
+
+#[derive(Debug, Clone)]
+struct Template(String);
+
+impl Template {
+    fn new(template: impl Into<String>) -> Self { Self(template.into()) }
+    fn as_str(&self) -> &str { &self.0 }
+}
+
+impl From<&str> for Template {
+    fn from(s: &str) -> Self { Self(s.to_owned()) }
+}
+
+impl AsRef<str> for Template {
+    fn as_ref(&self) -> &str { &self.0 }
+}
+
 struct PathEnv {
     _lock: EnvLock,
     path_guard: VarGuard,
@@ -35,7 +87,7 @@ impl PathEnv {
     }
 }
 
-fn write_tool(dir: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+fn write_tool(dir: &Utf8Path, name: &ToolName) -> Result<Utf8PathBuf> {
     let filename = tool_name(name);
     let path = dir.join(Utf8Path::new(&filename));
     let parent = path
@@ -66,13 +118,13 @@ fn mark_executable(_path: &Utf8Path) -> Result<()> {
 }
 
 #[cfg(windows)]
-fn tool_name(base: &str) -> String {
-    format!("{base}.cmd")
+fn tool_name(base: &ToolName) -> String {
+    format!("{}.cmd", base.as_str())
 }
 
 #[cfg(not(windows))]
-fn tool_name(base: &str) -> String {
-    base.to_owned()
+fn tool_name(base: &ToolName) -> String {
+    base.as_str().to_owned()
 }
 
 fn script_contents() -> &'static [u8] {
@@ -86,8 +138,8 @@ fn script_contents() -> &'static [u8] {
     }
 }
 
-fn render(env: &mut Environment<'_>, template: &str) -> Result<String> {
-    env.render_str(template, context! {})
+fn render(env: &mut Environment<'_>, template: &Template) -> Result<String> {
+    env.render_str(template.as_str(), context! {})
         .map_err(|err| anyhow!(err.to_string()))
 }
 
@@ -100,12 +152,12 @@ struct WhichTestFixture {
 }
 
 impl WhichTestFixture {
-    fn with_tool_in_dirs(tool_name: &str, dir_names: &[&str]) -> Result<Self> {
+    fn with_tool_in_dirs(tool_name: &ToolName, dir_names: &[DirName]) -> Result<Self> {
         let (temp, root) = support::filter_workspace()?;
         let mut dirs = Vec::new();
         let mut tool_paths = Vec::new();
         for dir_name in dir_names {
-            let dir = root.join(dir_name);
+            let dir = root.join(dir_name.as_str());
             std::fs::create_dir_all(dir.as_std_path())?;
             let tool_path = write_tool(&dir, tool_name)?;
             dirs.push(dir);
@@ -122,19 +174,21 @@ impl WhichTestFixture {
         })
     }
 
-    fn render(&mut self, template: &str) -> Result<String> {
+    fn render(&mut self, template: &Template) -> Result<String> {
         self.env
-            .render_str(template, context! {})
+            .render_str(template.as_str(), context! {})
             .map_err(|err| anyhow!(err.to_string()))
     }
 }
 
 #[rstest]
 fn which_filter_returns_first_match() -> Result<()> {
-    let mut fixture =
-        WhichTestFixture::with_tool_in_dirs("helper", &["bin_first", "bin_second"])?;
+    let mut fixture = WhichTestFixture::with_tool_in_dirs(
+        &ToolName::from("helper"),
+        &[DirName::from("bin_first"), DirName::from("bin_second")],
+    )?;
     fixture.state.reset_impure();
-    let output = fixture.render("{{ 'helper' | which }}")?;
+    let output = fixture.render(&Template::from("{{ 'helper' | which }}"))?;
     assert_eq!(output, fixture.paths[0].as_str());
     assert!(!fixture.state.is_impure());
     Ok(())
@@ -142,8 +196,11 @@ fn which_filter_returns_first_match() -> Result<()> {
 
 #[rstest]
 fn which_filter_all_returns_all_matches() -> Result<()> {
-    let mut fixture = WhichTestFixture::with_tool_in_dirs("helper", &["bin_a", "bin_b"])?;
-    let output = fixture.render("{{ 'helper' | which(all=true) | join('|') }}")?;
+    let mut fixture = WhichTestFixture::with_tool_in_dirs(
+        &ToolName::from("helper"),
+        &[DirName::from("bin_a"), DirName::from("bin_b")],
+    )?;
+    let output = fixture.render(&Template::from("{{ 'helper' | which(all=true) | join('|') }}"))?;
     let expected = format!(
         "{}|{}",
         fixture.paths[0].as_str(),
@@ -156,11 +213,11 @@ fn which_filter_all_returns_all_matches() -> Result<()> {
 #[rstest]
 fn which_function_honours_cwd_mode() -> Result<()> {
     let (_temp, root) = support::filter_workspace()?;
-    let tool = write_tool(&root, "local")?;
+    let tool = write_tool(&root, &ToolName::from("local"))?;
     let _path = PathEnv::new(&[])?;
     let (mut env, _state) = fallible::stdlib_env_with_state()?;
-    let template = "{{ which('local', cwd_mode='always') }}";
-    let output = render(&mut env, template)?;
+    let template = Template::from("{{ which('local', cwd_mode='always') }}");
+    let output = render(&mut env, &template)?;
     assert_eq!(output, tool.as_str());
     Ok(())
 }
