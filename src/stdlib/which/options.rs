@@ -2,8 +2,9 @@ use minijinja::{Error, value::Kwargs};
 
 use super::error::args_error;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(super) enum CwdMode {
+    #[default]
     Auto,
     Always,
     Never,
@@ -17,12 +18,6 @@ impl CwdMode {
             "never" => Some(Self::Never),
             _ => None,
         }
-    }
-}
-
-impl Default for CwdMode {
-    fn default() -> Self {
-        Self::Auto
     }
 }
 
