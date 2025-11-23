@@ -391,7 +391,10 @@ pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> 
     register_file_tests(env);
     path::register_filters(env);
     collections::register_filters(env);
-    which::register(env);
+    let which_cwd = config
+        .workspace_root_path()
+        .map(|path| Arc::new(path.to_path_buf()));
+    which::register(env, which_cwd);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);

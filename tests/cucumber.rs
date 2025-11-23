@@ -195,11 +195,17 @@ async fn main() {
         return;
     }
 
-    CliWorld::run("tests/features").await;
+    CliWorld::cucumber()
+        .max_concurrent_scenarios(1)
+        .run_and_exit("tests/features")
+        .await;
     #[cfg(unix)]
     {
         if block_device_exists() {
-            CliWorld::run("tests/features_unix").await;
+            CliWorld::cucumber()
+                .max_concurrent_scenarios(1)
+                .run_and_exit("tests/features_unix")
+                .await;
         } else {
             tracing::warn!("No block device in /dev; skipping Unix file-system features.");
         }

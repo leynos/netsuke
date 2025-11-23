@@ -19,10 +19,11 @@ pub(super) const CACHE_CAPACITY: usize = 64;
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
     cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>,
+    cwd_override: Option<Arc<Utf8PathBuf>>,
 }
 
 impl WhichResolver {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(cwd_override: Option<Arc<Utf8PathBuf>>) -> Self {
         #[expect(
             clippy::unwrap_used,
             reason = "cache capacity constant is greater than zero"
@@ -30,6 +31,7 @@ impl WhichResolver {
         let capacity = NonZeroUsize::new(CACHE_CAPACITY).unwrap();
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
+            cwd_override,
         }
     }
 
@@ -38,7 +40,7 @@ impl WhichResolver {
         command: &str,
         options: &WhichOptions,
     ) -> Result<Vec<Utf8PathBuf>, Error> {
-        let env = EnvSnapshot::capture()?;
+        let env = EnvSnapshot::capture(self.cwd_override.as_deref().map(Utf8PathBuf::as_path))?;
         let key = CacheKey::new(command, &env, options);
         if !options.fresh
             && let Some(cached) = self.try_cache(&key)

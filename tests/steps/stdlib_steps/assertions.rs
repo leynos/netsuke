@@ -37,18 +37,19 @@ fn stdlib_root_and_output(world: &CliWorld) -> Result<(&Utf8Path, &str)> {
         .stdlib_root
         .as_deref()
         .context("expected stdlib workspace root")?;
-    let output = world
-        .stdlib_output
-        .as_deref()
-        .context("expected stdlib output")?;
+    let output = stdlib_output(world)?;
     Ok((root, output))
 }
 
 fn stdlib_output(world: &CliWorld) -> Result<&str> {
-    world
-        .stdlib_output
-        .as_deref()
-        .context("expected stdlib output")
+    if let Some(output) = world.stdlib_output.as_deref() {
+        Ok(output)
+    } else {
+        if let Some(err) = &world.stdlib_error {
+            bail!("expected stdlib output; stdlib error present: {err}");
+        }
+        bail!("expected stdlib output");
+    }
 }
 
 fn stdlib_output_path(world: &CliWorld) -> Result<&Utf8Path> {

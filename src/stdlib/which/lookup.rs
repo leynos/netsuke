@@ -3,6 +3,9 @@ use std::fs;
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
+use walkdir::WalkDir;
+
+use super::options::CwdMode;
 
 #[cfg(windows)]
 use super::env;
@@ -39,7 +42,7 @@ pub(super) fn lookup(
     }
 
     if matches.is_empty() {
-        return Err(not_found_error(command, &dirs, options.cwd_mode));
+        return handle_miss(env, command, options, &dirs);
     }
 
     if options.canonical {
@@ -101,6 +104,68 @@ pub(super) fn is_direct_path(command: &str) -> bool {
 pub(super) fn is_executable(path: &Utf8Path) -> bool {
     fs::metadata(path.as_std_path())
         .is_ok_and(|metadata| metadata.is_file() && has_execute_permission(&metadata))
+}
+
+fn handle_miss(
+    env: &EnvSnapshot,
+    command: &str,
+    options: &WhichOptions,
+    dirs: &[Utf8PathBuf],
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let path_empty = env.raw_path.as_ref().is_none_or(|path| path.is_empty());
+
+    if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
+        let discovered = search_workspace(&env.cwd, command, options.all)?;
+        if !discovered.is_empty() {
+            return if options.canonical {
+                canonicalise(discovered)
+            } else {
+                Ok(discovered)
+            };
+        }
+    }
+
+    Err(not_found_error(command, dirs, options.cwd_mode))
+}
+
+fn search_workspace(
+    cwd: &Utf8Path,
+    command: &str,
+    collect_all: bool,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let mut matches = Vec::new();
+    for walk_entry in WalkDir::new(cwd).sort_by_file_name() {
+        let entry = match walk_entry {
+            Ok(value) => value,
+            Err(err) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidOperation,
+                    format!("failed to read workspace while resolving '{command}': {err}"),
+                ));
+            }
+        };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.file_name() != command {
+            continue;
+        }
+        let path = entry.into_path();
+        let utf8 = Utf8PathBuf::from_path_buf(path).map_err(|_| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                "workspace path contains non-UTF-8 components",
+            )
+        })?;
+        if !is_executable(&utf8) {
+            continue;
+        }
+        matches.push(utf8);
+        if !collect_all {
+            break;
+        }
+    }
+    Ok(matches)
 }
 
 #[cfg(unix)]

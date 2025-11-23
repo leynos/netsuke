@@ -20,8 +20,12 @@ pub(super) struct EnvSnapshot {
 }
 
 impl EnvSnapshot {
-    pub(super) fn capture() -> Result<Self, Error> {
-        let cwd = current_dir_utf8()?;
+    pub(super) fn capture(cwd_override: Option<&Utf8Path>) -> Result<Self, Error> {
+        let cwd = if let Some(override_cwd) = cwd_override {
+            override_cwd.to_path_buf()
+        } else {
+            current_dir_utf8()?
+        };
         let raw_path = std::env::var_os("PATH");
         let entries = parse_path_entries(raw_path.clone(), &cwd)?;
         #[cfg(windows)]
