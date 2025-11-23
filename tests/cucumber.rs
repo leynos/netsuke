@@ -197,14 +197,14 @@ async fn main() {
 
     CliWorld::cucumber()
         .max_concurrent_scenarios(1)
-        .run_and_exit("tests/features")
+        .run("tests/features")
         .await;
     #[cfg(unix)]
     {
         if block_device_exists() {
             CliWorld::cucumber()
                 .max_concurrent_scenarios(1)
-                .run_and_exit("tests/features_unix")
+                .run("tests/features_unix")
                 .await;
         } else {
             tracing::warn!("No block device in /dev; skipping Unix file-system features.");
