@@ -8,7 +8,7 @@ use std::fs;
 use tempfile::TempDir;
 #[cfg(windows)]
 use test_support::make_executable;
-use test_support::{env::VarGuard, write_exec};
+use test_support::{env::VarGuard, env_lock::EnvLock, write_exec};
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -36,39 +36,25 @@ fn workspace() -> TempWorkspace {
     TempWorkspace::new().expect("create utf8 temp workspace")
 }
 
+fn params<'a>(
+    collect_all: bool,
+    skip_dirs: &'a WorkspaceSkipList,
+) -> WorkspaceSearchParams<'a> {
+    WorkspaceSearchParams {
+        collect_all,
+        skip_dirs,
+    }
+}
+
 /// Helper to execute workspace search with platform-specific env handling.
 fn execute_workspace_search(
     workspace: &TempWorkspace,
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>> {
-    #[cfg(windows)]
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-
-    #[cfg(windows)]
-    let results = search_workspace(
-        workspace.root(),
-        "tool",
-        WorkspaceSearchParams {
-            collect_all,
-            skip_dirs,
-        },
-        &snapshot,
-    )?;
-
-    #[cfg(not(windows))]
-    let results = search_workspace(
-        workspace.root(),
-        "tool",
-        WorkspaceSearchParams {
-            collect_all,
-            skip_dirs,
-        },
-        (),
-    )?;
-
-    Ok(results)
+    search_workspace(&snapshot, "tool", params(collect_all, skip_dirs))
 }
 
 /// Helper to test that workspace search skips a specific directory.
@@ -133,7 +119,7 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
 
 #[rstest]
 fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) -> Result<()> {
-    let skip_dirs = [".git", "node_modules", ".idea", ".vscode"];
+    let skip_dirs = [".git", "node_modules", ".idea", ".vscode", "dist", "build"];
     for dir in skip_dirs {
         let path = workspace.root().join(dir);
         fs::create_dir_all(path.as_std_path()).context("mkdir skip dir")?;
@@ -148,7 +134,9 @@ fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) ->
 
 #[cfg(windows)]
 #[rstest]
-fn search_workspace_skips_directories_case_insensitively(workspace: TempWorkspace) -> Result<()> {
+fn search_workspace_skips_directories_case_insensitively(
+    workspace: TempWorkspace,
+) -> Result<()> {
     let skips = WorkspaceSkipList::default();
     test_workspace_skips_directory(
         &workspace,
@@ -175,6 +163,7 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
 
 #[rstest]
 fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Result<()> {
+    let _lock = EnvLock::acquire();
     let _guard = VarGuard::unset("PATH");
 
     let target = workspace.root().join("target");
@@ -221,6 +210,139 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
         results == vec![exec],
         "expected readable executable despite blocked dir"
     );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let _lock = EnvLock::acquire();
+    let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
+    let _guard = VarGuard::set("PATH", invalid_path);
+
+    let err = EnvSnapshot::capture(Some(workspace.root()))
+        .expect_err("invalid PATH should fail EnvSnapshot::capture");
+    let msg = err.to_string();
+
+    ensure!(
+        msg.contains("netsuke::jinja::which::args"),
+        "expected PATH parsing error, got: {msg}"
+    );
+    ensure!(
+        msg.contains("PATH entry #1"),
+        "expected PATH entry index in message, got: {msg}"
+    );
+
+    Ok(())
+}
+
+#[rstest]
+fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result<()> {
+    let bin = workspace.root().join("bin");
+    let tools = workspace.root().join("tools");
+    fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
+    fs::create_dir_all(tools.as_std_path()).context("mkdir tools")?;
+
+    let _lock = EnvLock::acquire();
+    let path_value = format!("{}:bin:tools", workspace.root());
+    let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(&path_value));
+
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()))
+        .context("capture env with relative PATH entries")?;
+    let resolved_dirs = snapshot.resolved_dirs(CwdMode::Never);
+
+    ensure!(
+        resolved_dirs.contains(&bin),
+        "resolved_dirs missing bin: {resolved_dirs:?}"
+    );
+    ensure!(
+        resolved_dirs.contains(&tools),
+        "resolved_dirs missing tools: {resolved_dirs:?}"
+    );
+
+    Ok(())
+}
+
+#[cfg(windows)]
+#[rstest]
+fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
+    let _lock = EnvLock::acquire();
+    let _path_guard = VarGuard::set("PATH", std::ffi::OsStr::new(workspace.root().as_str()));
+    let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new(""));
+
+    let snapshot =
+        EnvSnapshot::capture(Some(workspace.root())).context("capture env for empty PATHEXT")?;
+    let pathexts = snapshot.pathext();
+
+    assert!(
+        pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(".com")),
+        "default PATHEXT should include .COM",
+    );
+    assert!(
+        pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(".exe")),
+        "default PATHEXT should include .EXE",
+    );
+
+    Ok(())
+}
+
+#[cfg(windows)]
+#[rstest]
+fn pathext_without_leading_dots_is_normalised_and_deduplicated(
+    workspace: TempWorkspace,
+) -> Result<()> {
+    let _lock = EnvLock::acquire();
+    let _path_guard = VarGuard::set("PATH", std::ffi::OsStr::new(workspace.root().as_str()));
+    let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat"));
+
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()))?;
+    let mut pathexts = snapshot.pathext().to_vec();
+    pathexts.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+
+    let contains_ci = |needle: &str| pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(needle));
+
+    assert!(contains_ci(".COM"));
+    assert!(contains_ci(".EXE"));
+    assert!(contains_ci(".BAT"));
+
+    let mut lower: Vec<String> = pathexts
+        .iter()
+        .map(|ext| ext.to_ascii_lowercase())
+        .collect();
+    lower.sort_unstable();
+    lower.dedup();
+    assert_eq!(lower.len(), pathexts.len());
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let script = workspace.root().join("script.sh");
+    fs::write(script.as_std_path(), "#!/bin/sh\necho test\n").context("write script")?;
+    let mut perms = fs::metadata(script.as_std_path())
+        .context("stat script")?
+        .permissions();
+    perms.set_mode(0o644);
+    fs::set_permissions(script.as_std_path(), perms).context("chmod script")?;
+
+    let snapshot =
+        EnvSnapshot::capture(Some(workspace.root())).context("capture env for direct path")?;
+
+    let err = resolve_direct(script.as_str(), &snapshot, &WhichOptions::default())
+        .expect_err("non-executable direct path should fail");
+    let msg = err.to_string();
+
+    ensure!(
+        msg.contains("not executable"),
+        "expected not executable message: {msg}"
+    );
+
     Ok(())
 }
 

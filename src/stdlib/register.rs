@@ -127,7 +127,15 @@ const FILE_TESTS: &[FileTest] = &[
 ];
 
 #[cfg(not(unix))]
-const FILE_TESTS: &[FileTest] = &[("dir", is_dir), ("file", is_file), ("symlink", is_symlink)];
+const FILE_TESTS: &[FileTest] = &[
+    ("dir", is_dir),
+    ("file", is_file),
+    ("symlink", is_symlink),
+    ("pipe", is_fifo),
+    ("block_device", is_block_device),
+    ("char_device", is_char_device),
+    ("device", is_device),
+];
 
 fn register_file_tests(env: &mut Environment<'_>) {
     for &(name, pred) in FILE_TESTS {
@@ -158,9 +166,19 @@ fn is_fifo(ft: fs::FileType) -> bool {
     ft.is_fifo()
 }
 
+#[cfg(not(unix))]
+fn is_fifo(_ft: fs::FileType) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn is_block_device(ft: fs::FileType) -> bool {
     ft.is_block_device()
+}
+
+#[cfg(not(unix))]
+fn is_block_device(_ft: fs::FileType) -> bool {
+    false
 }
 
 #[cfg(unix)]
@@ -168,9 +186,19 @@ fn is_char_device(ft: fs::FileType) -> bool {
     ft.is_char_device()
 }
 
+#[cfg(not(unix))]
+fn is_char_device(_ft: fs::FileType) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
+}
+
+#[cfg(not(unix))]
+fn is_device(_ft: fs::FileType) -> bool {
+    false
 }
 
 #[cfg(test)]

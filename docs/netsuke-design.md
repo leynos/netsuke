@@ -962,7 +962,7 @@ The resolver keeps a small LRU cache keyed by the command, a fingerprint of
 `PATH`/`PATHEXT`, the working directory, and the cache-relevant options (`all`,
 `canonical`, `cwd_mode`). Entries are validated once at insertion; cache reads
 no longer re-probe executability, keeping the hot path lean. Because `fresh`
-only controls bypass behaviour it is stripped from the cache key so fresh
+only controls bypass behaviour, it is stripped from the cache key so fresh
 lookups still repopulate the cache for subsequent calls. The fingerprint means
 environment changes invalidate keys without cloning large strings, and the
 helper remains pure because all inputs still derive from the manifest or
@@ -984,6 +984,11 @@ Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
 reuse, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.
+
+Workspace fallback traversals are bounded to a depth of six, skip heavy
+directories such as `.git`, `target`, `node_modules`, `dist`, and `build`, and
+honour the `NETSUKE_WHICH_WORKSPACE` environment variable (set to
+`0`/`false`/`off` to disable) to avoid surprising latency on large trees.
 
 Sequence of the resolver when falling back to the workspace:
 

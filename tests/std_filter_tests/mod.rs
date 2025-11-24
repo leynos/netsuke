@@ -12,6 +12,8 @@ mod io_filters;
 mod network_functions;
 #[path = "std_filter_tests/path_filters.rs"]
 mod path_filters;
+#[path = "std_filter_tests/which_filter_common.rs"]
+mod which_filter_common;
 #[path = "std_filter_tests/which_filter_tests.rs"]
 mod which_filter_tests;
 #[path = "std_filter_tests/support.rs"]
