@@ -1111,6 +1111,57 @@ discarding previously memoised entries. Diagnostic errors embed the
 `PATH`, giving manifest authors clear troubleshooting hints on both Unix and
 Windows hosts.
 
+Figure: Which resolver control flow with cache lookups and workspace fallback.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant WhichResolver
+    participant Cache
+    participant EnvSnapshot
+    participant Lookup
+    participant Workspace
+
+    Caller->>WhichResolver: resolve(command, options)
+    activate WhichResolver
+
+    WhichResolver->>EnvSnapshot: capture(cwd_override)
+    activate EnvSnapshot
+    EnvSnapshot-->>WhichResolver: env snapshot
+    deactivate EnvSnapshot
+
+    WhichResolver->>Cache: compute key (command, fingerprint, cwd, options)
+
+    alt cache hit (unless fresh=true)
+        Cache-->>WhichResolver: cached matches
+    else cache miss or fresh
+        WhichResolver->>Lookup: lookup(command, env, options)
+        activate Lookup
+
+        alt direct path
+            Lookup->>Lookup: resolve_direct(command, env, options)
+        else PATH search
+            Lookup->>Lookup: iterate resolved_dirs, collect candidates
+        end
+
+        alt found
+            Lookup-->>WhichResolver: matches
+        else not found in PATH
+            Lookup->>Workspace: fallback search (if enabled)
+            activate Workspace
+            Workspace-->>Lookup: candidates from workspace
+            deactivate Workspace
+            Lookup-->>WhichResolver: matches or not_found error
+        end
+        deactivate Lookup
+
+        WhichResolver->>Cache: store(key, matches)
+    end
+
+    WhichResolver-->>Caller: Result<Vec<Utf8PathBuf>, Error>
+    deactivate WhichResolver
+```
+
 #### Generic collection filters
 
 | Filter                            | Purpose                                      |
