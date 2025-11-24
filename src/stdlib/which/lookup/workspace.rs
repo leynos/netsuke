@@ -8,9 +8,9 @@ use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
 
 #[cfg(windows)]
-use super::env;
-#[cfg(windows)]
 use super::EnvSnapshot;
+#[cfg(windows)]
+use super::env;
 use super::is_executable;
 
 pub(super) fn search_workspace(
