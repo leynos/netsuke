@@ -353,8 +353,9 @@ impl StdlibState {
 /// # Errors
 ///
 /// Returns an error when the current working directory cannot be opened using
-/// capability-based I/O. This occurs when the process lacks permission to read
-/// the directory or if it no longer exists.
+/// capability-based I/O (for example, when permissions are insufficient or the
+/// directory no longer exists) or when the current directory path contains
+/// non-UTF-8 components and cannot be converted into a UTF-8 workspace root.
 pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     let root = Dir::open_ambient_dir(".", ambient_authority())
         .context("open current directory for stdlib registration")?;

@@ -169,7 +169,7 @@ fn handle_miss(
     let path_empty = env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
-        let discovered = search_workspace(&env.cwd, command, options.all)?;
+        let discovered = search_workspace(&env.cwd, command, options.all, env)?;
         if !discovered.is_empty() {
             return if options.canonical {
                 canonicalise(discovered)
@@ -186,6 +186,7 @@ fn search_workspace(
     cwd: &Utf8Path,
     command: &str,
     collect_all: bool,
+    env: &EnvSnapshot,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     const SKIP_DIRS: &[&str] = &[".git", "target"];
     let mut matches = Vec::new();
@@ -218,7 +219,7 @@ fn search_workspace(
         if !entry.file_type().is_file() {
             continue;
         }
-        if entry.file_name() != command {
+        if !workspace_entry_matches(&entry, command, env) {
             continue;
         }
         let path = entry.into_path();
@@ -240,6 +241,35 @@ fn search_workspace(
         }
     }
     Ok(matches)
+}
+
+fn workspace_entry_matches(entry: &walkdir::DirEntry, command: &str, env: &EnvSnapshot) -> bool {
+    #[cfg(not(windows))]
+    let _ = env;
+    #[cfg(windows)]
+    {
+        let file_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+        let command_lower = command.to_ascii_lowercase();
+
+        if file_name == command_lower {
+            return true;
+        }
+
+        if command_lower.contains('.') {
+            return false;
+        }
+
+        let candidates = env::candidate_paths(Utf8Path::new(""), &command_lower, env.pathext());
+        candidates
+            .iter()
+            .filter_map(|candidate| Utf8Path::new(candidate.as_str()).file_name())
+            .any(|name| name.to_ascii_lowercase() == file_name)
+    }
+    #[cfg(not(windows))]
+    {
+        let file_name = entry.file_name().to_string_lossy();
+        file_name == command
+    }
 }
 
 #[cfg(unix)]
