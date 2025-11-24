@@ -309,7 +309,8 @@ fn process_workspace_entry(
 
 fn workspace_entry_matches(
     entry: &walkdir::DirEntry,
-    command: &str,
+    #[cfg(windows)] _command: &str,
+    #[cfg(not(windows))] command: &str,
     #[cfg(windows)] ctx: &WorkspaceMatchContext,
     #[cfg(not(windows))] _ctx: (),
 ) -> bool {
