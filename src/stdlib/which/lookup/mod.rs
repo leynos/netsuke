@@ -208,6 +208,7 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
+<<<<<<< HEAD
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
@@ -217,6 +218,10 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
             skip_dirs: ctx.workspace_skips,
         };
         let discovered = search_workspace(ctx.env, ctx.command, search)?;
+=======
+    if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
+        let discovered = search_workspace(env, command, options.all)?;
+>>>>>>> aadfa2e (feat(which): add workspace fallback and improve direct path resolution)
         if !discovered.is_empty() {
             return if ctx.options.canonical {
                 canonicalise(discovered)

@@ -5,39 +5,45 @@ use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
 
 use super::super::is_executable;
-use super::{
-    WORKSPACE_MAX_DEPTH, WorkspaceSearchParams, log_if_no_matches, should_visit_entry,
-    unwrap_or_log_error,
-};
+use super::{log_if_no_matches, should_visit_entry, unwrap_or_log_error, WORKSPACE_MAX_DEPTH};
 use crate::stdlib::which::env::EnvSnapshot;
 
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
-    params: WorkspaceSearchParams<'_>,
+    collect_all: bool,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
-    let mut matches = Vec::new();
-
-    for walk_entry in WalkDir::new(&env.cwd)
+    let walker = WalkDir::new(&env.cwd)
         .follow_links(false)
         .max_depth(WORKSPACE_MAX_DEPTH)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|entry| should_visit_entry(entry, params.skip_dirs))
-    {
+        .filter_entry(should_visit_entry);
+
+    let matches = collect_matching_executables(walker, command, collect_all)?;
+    log_if_no_matches(&matches, command);
+    Ok(matches)
+}
+
+fn collect_matching_executables(
+    walker: impl Iterator<Item = Result<walkdir::DirEntry, walkdir::Error>>,
+    command: &str,
+    collect_all: bool,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let mut matches = Vec::new();
+
+    for walk_entry in walker {
         let Some(entry) = unwrap_or_log_error(walk_entry, command) else {
             continue;
         };
 
         if let Some(path) = process_workspace_entry(entry, command)? {
             matches.push(path);
-            if !params.collect_all {
+            if !collect_all {
                 break;
             }
         }
     }
-
-    log_if_no_matches(&matches, command, params.skip_dirs);
 
     Ok(matches)
 }

@@ -6,10 +6,7 @@
 //! `register_with_config` entrypoints are re-exported from `netsuke::stdlib`
 //! alongside `StdlibConfig` and `NetworkConfig`.
 
-use super::{
-    StdlibConfig, StdlibState, collections, command, network, path, time,
-    which::{self, WhichConfig},
-};
+use super::{StdlibConfig, StdlibState, collections, command, network, path, time, which};
 use anyhow::Context;
 use camino::Utf8Path;
 #[cfg(unix)]
@@ -90,14 +87,10 @@ pub fn register_with_config(
     path::register_filters(env);
     collections::register_filters(env);
     let which_cache_capacity = config.which_cache_capacity();
-    let which_config = WhichConfig::new(
-        config
-            .workspace_root_path()
-            .map(|path| Arc::new(path.to_path_buf())),
-        which::WorkspaceSkipList::from_names(config.workspace_skip_dirs().iter()),
-        which_cache_capacity,
-    );
-    which::register(env, which_config);
+    let which_cwd = config
+        .workspace_root_path()
+        .map(|path| Arc::new(path.to_path_buf()));
+    which::register(env, which_cwd, which_cache_capacity);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
@@ -167,7 +160,6 @@ fn is_fifo(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-// Non-Unix platforms do not expose FIFOs; always report unsupported.
 fn is_fifo(_ft: fs::FileType) -> bool {
     false
 }
@@ -178,7 +170,6 @@ fn is_block_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-// Block devices are unavailable off Unix; deliberately return false.
 fn is_block_device(_ft: fs::FileType) -> bool {
     false
 }
@@ -189,7 +180,6 @@ fn is_char_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-// Char devices are unsupported on non-Unix platforms.
 fn is_char_device(_ft: fs::FileType) -> bool {
     false
 }
@@ -200,75 +190,6 @@ fn is_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
-// Aggregate device check stays false where device concepts do not exist.
 fn is_device(_ft: fs::FileType) -> bool {
     false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use anyhow::{Result, ensure};
-    use camino::Utf8PathBuf;
-    use minijinja::{Environment, context};
-    use tempfile::TempDir;
-    use test_support::{env::with_isolated_path, write_exec};
-
-    #[test]
-    fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {
-        with_isolated_path(std::ffi::OsStr::new(""), || -> Result<()> {
-            let temp = TempDir::new()?;
-            let root_path =
-                Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
-            let root_dir = Dir::open_ambient_dir(root_path.as_path(), ambient_authority())?;
-
-            let target = root_path.join("target");
-            std::fs::create_dir_all(target.as_std_path())?;
-            let exec = write_exec(target.as_path(), "tool")?;
-
-            let mut env = Environment::new();
-            let default_config =
-                StdlibConfig::new(root_dir.try_clone()?)?.with_workspace_root_path(&root_path)?;
-            register_with_config(&mut env, default_config)?;
-
-            env.add_template("t", "{{ which('tool') }}")?;
-            let render_err = env
-                .get_template("t")?
-                .render(context! {})
-                .expect_err("default skips should block target");
-            ensure!(
-                render_err
-                    .to_string()
-                    .contains("netsuke::jinja::which::not_found"),
-                "expected not_found error, got {render_err}"
-            );
-
-            let mut env_custom = Environment::new();
-            let custom_config = StdlibConfig::new(root_dir)?
-                .with_workspace_root_path(&root_path)?
-                .with_workspace_skip_dirs([".git"])?;
-            register_with_config(&mut env_custom, custom_config)?;
-            env_custom.add_template("t", "{{ which('tool') }}")?;
-            let rendered = env_custom.get_template("t")?.render(context! {})?;
-            ensure!(rendered == exec.as_str(), "expected resolved path");
-            Ok(())
-        })
-    }
-
-    #[cfg(not(unix))]
-    #[test]
-    fn non_unix_file_type_stubs_always_return_false() -> Result<()> {
-        let temp = TempDir::new()?;
-        let file_path = temp.path().join("file");
-        std::fs::write(&file_path, b"stub")?;
-        let metadata = std::fs::metadata(&file_path)?;
-        let ft = fs::FileType::from_std(metadata.file_type());
-
-        ensure!(!is_fifo(ft), "fifo should be unsupported");
-        ensure!(!is_block_device(ft), "block devices unsupported");
-        ensure!(!is_char_device(ft), "char devices unsupported");
-        ensure!(!is_device(ft), "device aggregate should be false");
-
-        Ok(())
-    }
 }
