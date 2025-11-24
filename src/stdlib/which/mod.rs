@@ -24,8 +24,8 @@ pub(crate) use options::WhichOptions;
 
 use error::args_error;
 
-pub(crate) fn register(env: &mut Environment<'_>) {
-    let resolver = Arc::new(WhichResolver::new());
+pub(crate) fn register(env: &mut Environment<'_>, cwd_override: Option<Arc<Utf8PathBuf>>) {
+    let resolver = Arc::new(WhichResolver::new(cwd_override));
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {

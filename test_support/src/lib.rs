@@ -23,6 +23,7 @@ pub mod http;
 pub mod manifest;
 pub mod ninja;
 pub mod path_guard;
+pub mod stdlib_assert;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
 /// Re-export of [`PathGuard`] for crate-level ergonomics in tests.

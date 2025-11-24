@@ -3,6 +3,9 @@ use std::fs;
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
+use walkdir::WalkDir;
+
+use super::options::CwdMode;
 
 #[cfg(windows)]
 use super::env;
@@ -39,7 +42,7 @@ pub(super) fn lookup(
     }
 
     if matches.is_empty() {
-        return Err(not_found_error(command, &dirs, options.cwd_mode));
+        return handle_miss(env, command, options, &dirs);
     }
 
     if options.canonical {
@@ -103,6 +106,88 @@ pub(super) fn is_executable(path: &Utf8Path) -> bool {
         .is_ok_and(|metadata| metadata.is_file() && has_execute_permission(&metadata))
 }
 
+fn handle_miss(
+    env: &EnvSnapshot,
+    command: &str,
+    options: &WhichOptions,
+    dirs: &[Utf8PathBuf],
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let path_empty = env.raw_path.as_ref().is_none_or(|path| path.is_empty());
+
+    if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
+        let discovered = search_workspace(&env.cwd, command, options.all)?;
+        if !discovered.is_empty() {
+            return if options.canonical {
+                canonicalise(discovered)
+            } else {
+                Ok(discovered)
+            };
+        }
+    }
+
+    Err(not_found_error(command, dirs, options.cwd_mode))
+}
+
+fn search_workspace(
+    cwd: &Utf8Path,
+    command: &str,
+    collect_all: bool,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    const SKIP_DIRS: &[&str] = &[".git", "target"];
+    let mut matches = Vec::new();
+    let walker = WalkDir::new(cwd)
+        .follow_links(false)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|entry| {
+            let ft = entry.file_type();
+            if ft.is_dir() {
+                let name = entry.file_name().to_string_lossy();
+                !SKIP_DIRS.iter().any(|skip| name == *skip)
+            } else {
+                true
+            }
+        });
+
+    for walk_entry in walker {
+        let entry = match walk_entry {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::debug!(
+                    %command,
+                    error = %err,
+                    "skipping unreadable workspace entry during which fallback"
+                );
+                continue;
+            }
+        };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.file_name() != command {
+            continue;
+        }
+        let path = entry.into_path();
+        let utf8 = Utf8PathBuf::from_path_buf(path).map_err(|path_buf| {
+            let lossy_path = path_buf.to_string_lossy();
+            Error::new(
+                ErrorKind::InvalidOperation,
+                format!(
+                    "workspace path contains non-UTF-8 components while resolving command '{command}': {lossy_path}"
+                ),
+            )
+        })?;
+        if !is_executable(&utf8) {
+            continue;
+        }
+        matches.push(utf8);
+        if !collect_all {
+            break;
+        }
+    }
+    Ok(matches)
+}
+
 #[cfg(unix)]
 fn has_execute_permission(metadata: &fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
@@ -135,4 +220,110 @@ pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, 
         }
     }
     Ok(resolved)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::{Context, Result, anyhow, ensure};
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[cfg(unix)]
+    fn make_executable(path: &Utf8Path) -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path.as_std_path())
+            .context("stat exec")?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path.as_std_path(), perms).context("chmod exec")
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(_path: &Utf8Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+        let path = root.join(name);
+        fs::write(path.as_std_path(), b"#!/bin/sh\n").context("write exec stub")?;
+        make_executable(&path)?;
+        Ok(path)
+    }
+
+    #[test]
+    fn search_workspace_returns_executable_and_skips_non_exec() -> Result<()> {
+        let temp = tempdir().context("create tempdir")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("utf8 path required, got {:?}", path))?;
+        let exec = write_exec(root.as_path(), "tool")?;
+        let non_exec = root.join("tool2");
+        fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
+
+        let results = search_workspace(root.as_path(), "tool", false)?;
+        ensure!(
+            results == vec![exec],
+            "expected executable to be discovered"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn search_workspace_collects_all_matches() -> Result<()> {
+        let temp = tempdir().context("create tempdir")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("utf8 path required, got {:?}", path))?;
+        let first = write_exec(root.as_path(), "tool")?;
+        let subdir = root.join("bin");
+        fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
+        let second = write_exec(subdir.as_path(), "tool")?;
+
+        let mut results = search_workspace(root.as_path(), "tool", true)?;
+        results.sort();
+        let mut expected = vec![first, second];
+        expected.sort();
+        ensure!(
+            results == expected,
+            "expected both executables to be returned"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn search_workspace_skips_heavy_directories() -> Result<()> {
+        let temp = tempdir().context("create tempdir")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("utf8 path required, got {:?}", path))?;
+        let heavy = root.join("target");
+        fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
+        write_exec(heavy.as_path(), "tool")?;
+
+        let results = search_workspace(root.as_path(), "tool", false)?;
+        ensure!(results.is_empty(), "expected target/ to be skipped");
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn search_workspace_ignores_unreadable_entries() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempdir().context("create tempdir")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("utf8 path required, got {:?}", path))?;
+        let blocked = root.join("blocked");
+        fs::create_dir_all(blocked.as_std_path()).context("mkdir blocked")?;
+        let mut perms = fs::metadata(blocked.as_std_path())
+            .context("stat blocked")?
+            .permissions();
+        perms.set_mode(0o000);
+        fs::set_permissions(blocked.as_std_path(), perms).context("chmod blocked")?;
+
+        let exec = write_exec(root.as_path(), "tool")?;
+        let results = search_workspace(root.as_path(), "tool", false)?;
+        ensure!(
+            results == vec![exec],
+            "expected readable executable despite blocked dir"
+        );
+        Ok(())
+    }
 }

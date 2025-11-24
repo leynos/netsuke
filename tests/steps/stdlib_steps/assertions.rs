@@ -7,6 +7,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::then;
 use std::fs;
 use test_support::hash;
+use test_support::stdlib_assert::stdlib_output_or_error;
 use time::{Duration, OffsetDateTime, UtcOffset};
 use url::Url;
 
@@ -37,18 +38,15 @@ fn stdlib_root_and_output(world: &CliWorld) -> Result<(&Utf8Path, &str)> {
         .stdlib_root
         .as_deref()
         .context("expected stdlib workspace root")?;
-    let output = world
-        .stdlib_output
-        .as_deref()
-        .context("expected stdlib output")?;
+    let output = stdlib_output(world)?;
     Ok((root, output))
 }
 
 fn stdlib_output(world: &CliWorld) -> Result<&str> {
-    world
-        .stdlib_output
-        .as_deref()
-        .context("expected stdlib output")
+    stdlib_output_or_error(
+        world.stdlib_output.as_deref(),
+        world.stdlib_error.as_deref(),
+    )
 }
 
 fn stdlib_output_path(world: &CliWorld) -> Result<&Utf8Path> {

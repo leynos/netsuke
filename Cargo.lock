@@ -1292,6 +1292,7 @@ dependencies = [
  "ureq",
  "url",
  "wait-timeout",
+ "walkdir",
 ]
 
 [[package]]
