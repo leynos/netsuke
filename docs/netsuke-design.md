@@ -969,6 +969,11 @@ helper remains pure because all inputs still derive from the manifest or
 process environment. Callers can request a bypass with `fresh=true` when they
 need to observe recent toolchain changes during a long session.
 
+Cache capacity defaults to 64 entries, covering typical PATH sizes without
+overcommitting memory, and can be tuned via
+`StdlibConfig::with_which_cache_capacity` for hosts with unusually large or
+tiny search paths. Zero is rejected to keep the cache usable.
+
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
 entries were inspected, a shortened preview of the path list, and platform

@@ -18,7 +18,8 @@ mod which;
 
 pub use config::{
     DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,
-    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, NetworkConfig, StdlibConfig,
+    DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES, DEFAULT_WHICH_CACHE_CAPACITY,
+    NetworkConfig, StdlibConfig,
 };
 pub use network::{
     HostPatternError, NetworkPolicy, NetworkPolicyConfigError, NetworkPolicyViolation,
