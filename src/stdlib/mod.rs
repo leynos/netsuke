@@ -362,10 +362,7 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     let path = Utf8PathBuf::from_path_buf(cwd).map_err(|path| {
         anyhow::anyhow!("current directory contains non-UTF-8 components: {path:?}")
     })?;
-    Ok(register_with_config(
-        env,
-        StdlibConfig::new(root).with_workspace_root_path(path),
-    ))
+    register_with_config(env, StdlibConfig::new(root).with_workspace_root_path(path))
 }
 
 /// Register stdlib helpers using an explicit configuration.
@@ -386,7 +383,15 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
 /// let mut env = Environment::new();
 /// let _state = stdlib::register_with_config(&mut env, StdlibConfig::new(dir));
 /// ```
-pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> StdlibState {
+///
+/// # Errors
+///
+/// Returns an error if stdlib components cannot be registered (for example,
+/// when the which resolver cache configuration is invalid).
+pub fn register_with_config(
+    env: &mut Environment<'_>,
+    config: StdlibConfig,
+) -> anyhow::Result<StdlibState> {
     let state = StdlibState::default();
     register_file_tests(env);
     path::register_filters(env);
@@ -394,13 +399,13 @@ pub fn register_with_config(env: &mut Environment<'_>, config: StdlibConfig) -> 
     let which_cwd = config
         .workspace_root_path()
         .map(|path| Arc::new(path.to_path_buf()));
-    which::register(env, which_cwd);
+    which::register(env, which_cwd)?;
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
     command::register(env, impure, command_config);
     time::register_functions(env);
-    state
+    Ok(state)
 }
 
 pub(crate) fn value_from_bytes(bytes: Vec<u8>) -> Value {

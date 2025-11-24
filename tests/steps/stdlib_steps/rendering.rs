@@ -37,7 +37,7 @@ pub(crate) fn render_template_with_context(
             .with_command_max_stream_bytes(limit)
             .context("configure stdlib command stream limit")?;
     }
-    let state = stdlib::register_with_config(&mut env, config);
+    let state = stdlib::register_with_config(&mut env, config)?;
     state.reset_impure();
     world.stdlib_state = Some(state);
     let render = env.render_str(template.as_str(), ctx);

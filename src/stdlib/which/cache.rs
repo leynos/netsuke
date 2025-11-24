@@ -9,7 +9,7 @@ use std::{
 
 use camino::Utf8PathBuf;
 use lru::LruCache;
-use minijinja::Error;
+use minijinja::{Error, ErrorKind};
 
 use super::{env::EnvSnapshot, lookup::lookup, options::WhichOptions};
 
@@ -22,13 +22,17 @@ pub(crate) struct WhichResolver {
 }
 
 impl WhichResolver {
-    pub(crate) fn new(cwd_override: Option<Arc<Utf8PathBuf>>) -> Self {
-        let capacity = NonZeroUsize::new(CACHE_CAPACITY)
-            .unwrap_or_else(|| panic!("CACHE_CAPACITY must be greater than zero"));
-        Self {
+    pub(crate) fn new(cwd_override: Option<Arc<Utf8PathBuf>>) -> Result<Self, Error> {
+        let capacity = NonZeroUsize::new(CACHE_CAPACITY).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                "which cache capacity must be greater than zero",
+            )
+        })?;
+        Ok(Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
             cwd_override,
-        }
+        })
     }
 
     pub(crate) fn resolve(

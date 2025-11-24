@@ -5,13 +5,11 @@ use anyhow::{Result, bail};
 /// error. This mirrors the behaviour of the Cucumber step assertions so unit
 /// tests can guard the branching logic.
 pub fn stdlib_output_or_error<'a>(output: Option<&'a str>, error: Option<&str>) -> Result<&'a str> {
-    if let Some(out) = output {
-        return Ok(out);
+    match (output, error) {
+        (Some(out), _) => Ok(out),
+        (None, Some(err)) => bail!("expected stdlib output; stdlib error present: {err}"),
+        (None, None) => bail!("expected stdlib output"),
     }
-    if let Some(err) = error {
-        bail!("expected stdlib output; stdlib error present: {err}");
-    }
-    bail!("expected stdlib output");
 }
 
 #[cfg(test)]
