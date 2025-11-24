@@ -5,9 +5,6 @@ use std::fs;
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
-#[cfg(windows)]
-use std::collections::HashSet;
-use walkdir::WalkDir;
 
 use super::options::CwdMode;
 
@@ -18,6 +15,8 @@ use super::{
     error::{direct_not_found, not_found_error},
     options::WhichOptions,
 };
+mod workspace;
+use workspace::search_workspace;
 
 /// Resolve `command` either as a direct path or by searching the environment's
 /// PATH, optionally canonicalising or collecting all matches.
@@ -218,147 +217,6 @@ fn handle_miss(
     }
 
     Err(not_found_error(command, dirs, options.cwd_mode))
-}
-
-/// Walk the workspace looking for executables when PATH is empty and the
-/// resolver is allowed to consult the current directory.
-fn search_workspace(
-    cwd: &Utf8Path,
-    command: &str,
-    collect_all: bool,
-    env: &EnvSnapshot,
-) -> Result<Vec<Utf8PathBuf>, Error> {
-    let mut matches = Vec::new();
-    #[cfg(not(windows))]
-    let _ = env;
-    #[cfg(windows)]
-    let match_ctx = prepare_workspace_match(command, env);
-    #[cfg(not(windows))]
-    let match_ctx = ();
-    let walker = WalkDir::new(cwd)
-        .follow_links(false)
-        .sort_by_file_name()
-        .into_iter()
-        .filter_entry(should_visit_entry);
-
-    for walk_entry in walker {
-        let entry = match walk_entry {
-            Ok(value) => value,
-            Err(err) => {
-                tracing::debug!(
-                    %command,
-                    error = %err,
-                    "skipping unreadable workspace entry during which fallback"
-                );
-                continue;
-            }
-        };
-        #[cfg(windows)]
-        let maybe_match = process_workspace_entry(entry, command, &match_ctx)?;
-        #[cfg(not(windows))]
-        let maybe_match = process_workspace_entry(entry, command, match_ctx)?;
-
-        if let Some(path) = maybe_match {
-            matches.push(path);
-            if !collect_all {
-                break;
-            }
-        }
-    }
-    Ok(matches)
-}
-
-const WORKSPACE_SKIP_DIRS: &[&str] = &[".git", "target"];
-
-fn should_visit_entry(entry: &walkdir::DirEntry) -> bool {
-    if !entry.file_type().is_dir() {
-        return true;
-    }
-    let name = entry.file_name().to_string_lossy();
-    !WORKSPACE_SKIP_DIRS.iter().any(|skip| name == *skip)
-}
-
-fn process_workspace_entry(
-    entry: walkdir::DirEntry,
-    command: &str,
-    #[cfg(windows)] ctx: &WorkspaceMatchContext,
-    #[cfg(not(windows))] ctx: (),
-) -> Result<Option<Utf8PathBuf>, Error> {
-    if !entry.file_type().is_file() {
-        return Ok(None);
-    }
-    #[cfg(windows)]
-    let matches_entry = workspace_entry_matches(&entry, command, ctx);
-    #[cfg(not(windows))]
-    let matches_entry = workspace_entry_matches(&entry, command, ctx);
-    if !matches_entry {
-        return Ok(None);
-    }
-    let path = entry.into_path();
-    let utf8 = Utf8PathBuf::from_path_buf(path).map_err(|path_buf| {
-        let lossy_path = path_buf.to_string_lossy();
-        Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "workspace path contains non-UTF-8 components while resolving command '{command}': {lossy_path}"
-            ),
-        )
-    })?;
-    Ok(is_executable(&utf8).then_some(utf8))
-}
-
-fn workspace_entry_matches(
-    entry: &walkdir::DirEntry,
-    #[cfg(windows)] _command: &str,
-    #[cfg(not(windows))] command: &str,
-    #[cfg(windows)] ctx: &WorkspaceMatchContext,
-    #[cfg(not(windows))] _ctx: (),
-) -> bool {
-    #[cfg(windows)]
-    {
-        let file_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if file_name == ctx.command_lower {
-            return true;
-        }
-        if ctx.command_has_ext {
-            return false;
-        }
-        ctx.basenames.contains(&file_name)
-    }
-    #[cfg(not(windows))]
-    {
-        let file_name = entry.file_name().to_string_lossy();
-        file_name == command
-    }
-}
-
-#[cfg(windows)]
-struct WorkspaceMatchContext {
-    command_lower: String,
-    command_has_ext: bool,
-    basenames: HashSet<String>,
-}
-
-#[cfg(windows)]
-fn prepare_workspace_match(command: &str, env: &EnvSnapshot) -> WorkspaceMatchContext {
-    let command_lower = command.to_ascii_lowercase();
-    let command_has_ext = command_lower.contains('.');
-    let mut basenames = HashSet::new();
-
-    if !command_has_ext {
-        let candidates = env::candidate_paths(Utf8Path::new(""), &command_lower, env.pathext());
-        for candidate in candidates {
-            if let Some(name) = Utf8Path::new(candidate.as_str()).file_name() {
-                basenames.insert(name.to_ascii_lowercase());
-            }
-        }
-    }
-
-    WorkspaceMatchContext {
-        command_lower,
-        command_has_ext,
-        basenames,
-    }
 }
 
 #[cfg(unix)]
