@@ -11,23 +11,31 @@ use camino::Utf8PathBuf;
 use lru::LruCache;
 use minijinja::Error;
 
-use super::{env::EnvSnapshot, lookup::lookup, options::WhichOptions};
+use super::{
+    env::EnvSnapshot,
+    lookup::{WorkspaceSkipList, lookup},
+    options::WhichOptions,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
     cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>,
     cwd_override: Option<Arc<Utf8PathBuf>>,
+    workspace_skips: WorkspaceSkipList,
 }
 
 impl WhichResolver {
     pub(crate) fn new(
         cwd_override: Option<Arc<Utf8PathBuf>>,
+        cwd_override: Option<Arc<Utf8PathBuf>>,
+        workspace_skips: WorkspaceSkipList,
         cache_capacity: NonZeroUsize,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, Error> {
+        Ok(Self {
             cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
-        }
+            workspace_skips,
+        })
     }
 
     pub(crate) fn resolve(
@@ -36,13 +44,13 @@ impl WhichResolver {
         options: &WhichOptions,
     ) -> Result<Vec<Utf8PathBuf>, Error> {
         let env = EnvSnapshot::capture(self.cwd_override.as_deref().map(Utf8PathBuf::as_path))?;
-        let key = CacheKey::new(command, &env, options);
+        let key = CacheKey::new(command, &env, options, &self.workspace_skips);
         if !options.fresh
             && let Some(cached) = self.try_cache(&key)
         {
             return Ok(cached);
         }
-        let matches = lookup(command, &env, options)?;
+        let matches = lookup(command, &env, options, &self.workspace_skips)?;
         self.store(key, matches.clone());
         Ok(matches)
     }
@@ -76,15 +84,22 @@ struct CacheKey {
     env_fingerprint: u64,
     cwd: Utf8PathBuf,
     options: WhichOptions,
+    workspace_skips: WorkspaceSkipList,
 }
 
 impl CacheKey {
-    fn new(command: &str, env: &EnvSnapshot, options: &WhichOptions) -> Self {
+    fn new(
+        command: &str,
+        env: &EnvSnapshot,
+        options: &WhichOptions,
+        workspace_skips: &WorkspaceSkipList,
+    ) -> Self {
         Self {
             command: command.to_owned(),
             env_fingerprint: env_fingerprint(env),
             cwd: env.cwd.clone(),
             options: options.cache_key_view(),
+            workspace_skips: workspace_skips.clone(),
         }
     }
 }
@@ -109,13 +124,18 @@ mod tests {
             env_fingerprint: 1,
             cwd: Utf8PathBuf::from("/"),
             options: WhichOptions::default(),
+            workspace_skips: WorkspaceSkipList::default(),
         }
     }
 
     #[rstest]
     fn cache_capacity_bounds_entries() {
-        let resolver =
-            WhichResolver::new(None, NonZeroUsize::new(1).expect("non-zero cache capacity"));
+        let resolver = WhichResolver::new(
+            None,
+            WorkspaceSkipList::default(),
+            NonZeroUsize::new(1).expect("non-zero cache capacity"),
+        )
+        .expect("construct resolver");
 
         let first_key = cache_key_for("first");
         let first_path = Utf8PathBuf::from("/bin/first");

@@ -16,7 +16,8 @@ use super::{
     options::WhichOptions,
 };
 mod workspace;
-use workspace::search_workspace;
+pub(crate) use workspace::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
+use workspace::{WorkspaceSearch, search_workspace};
 
 /// Resolve `command` either as a direct path or by searching the environment's
 /// PATH, optionally canonicalising or collecting all matches.
@@ -35,6 +36,7 @@ pub(super) fn lookup(
     command: &str,
     env: &EnvSnapshot,
     options: &WhichOptions,
+    workspace_skips: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     if is_direct_path(command) {
         return resolve_direct(command, env, options);
@@ -58,7 +60,13 @@ pub(super) fn lookup(
     }
 
     if matches.is_empty() {
-        return handle_miss(env, command, options, &dirs);
+        return handle_miss(HandleMissContext {
+            env,
+            command,
+            options,
+            dirs: &dirs,
+            workspace_skips,
+        });
     }
 
     if options.canonical {
@@ -197,21 +205,41 @@ pub(super) fn is_executable(path: &Utf8Path) -> bool {
         .is_ok_and(|metadata| metadata.is_file() && has_execute_permission(&metadata))
 }
 
-fn handle_miss(
-    env: &EnvSnapshot,
-    command: &str,
-    options: &WhichOptions,
-    dirs: &[Utf8PathBuf],
-) -> Result<Vec<Utf8PathBuf>, Error> {
-    let path_empty = env.raw_path.as_ref().is_none_or(|path| path.is_empty());
+#[derive(Clone, Copy)]
+struct HandleMissContext<'a> {
+    env: &'a EnvSnapshot,
+    command: &'a str,
+    options: &'a WhichOptions,
+    dirs: &'a [Utf8PathBuf],
+    workspace_skips: &'a WorkspaceSkipList,
+}
 
-    if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
+fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
+    let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
+
+    if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
         #[cfg(windows)]
-        let discovered = search_workspace(&env.cwd, command, options.all, env)?;
+        let discovered = search_workspace(
+            WorkspaceSearch {
+                cwd: ctx.env.cwd.as_path(),
+                command: ctx.command,
+                collect_all: ctx.options.all,
+                skip_dirs: ctx.workspace_skips,
+            },
+            ctx.env,
+        )?;
         #[cfg(not(windows))]
-        let discovered = search_workspace(&env.cwd, command, options.all, ())?;
+        let discovered = search_workspace(
+            WorkspaceSearch {
+                cwd: ctx.env.cwd.as_path(),
+                command: ctx.command,
+                collect_all: ctx.options.all,
+                skip_dirs: ctx.workspace_skips,
+            },
+            (),
+        )?;
         if !discovered.is_empty() {
-            return if options.canonical {
+            return if ctx.options.canonical {
                 canonicalise(discovered)
             } else {
                 Ok(discovered)
@@ -219,7 +247,7 @@ fn handle_miss(
         }
     }
 
-    Err(not_found_error(command, dirs, options.cwd_mode))
+    Err(not_found_error(ctx.command, ctx.dirs, ctx.options.cwd_mode))
 }
 
 #[cfg(unix)]

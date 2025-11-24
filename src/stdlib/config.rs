@@ -1,6 +1,6 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
-use super::{command, network::NetworkPolicy};
+use super::{command, network::NetworkPolicy, which::DEFAULT_WORKSPACE_SKIP_DIRS};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -30,6 +30,7 @@ pub struct StdlibConfig {
     command_max_output_bytes: u64,
     command_max_stream_bytes: u64,
     which_cache_capacity: NonZeroUsize,
+    workspace_skip_dirs: Vec<String>,
 }
 
 impl StdlibConfig {
@@ -57,6 +58,10 @@ impl StdlibConfig {
             command_max_output_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
             command_max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
             which_cache_capacity,
+            workspace_skip_dirs: DEFAULT_WORKSPACE_SKIP_DIRS
+                .iter()
+                .map(|dir| (*dir).to_owned())
+                .collect(),
         })
     }
 
@@ -155,11 +160,52 @@ impl StdlibConfig {
         self.which_cache_capacity = non_zero_capacity;
         Ok(self)
     }
+    /// Override the workspace directories skipped by the `which` fallback
+    /// search to avoid expensive scans.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when any entry is empty, navigates (for example `..`),
+    /// or contains path separators, because skip entries operate on directory
+    /// basenames.
+    pub fn with_workspace_skip_dirs<I, S>(mut self, dirs: I) -> anyhow::Result<Self>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut validated = Vec::new();
+        for dir in dirs {
+            let candidate = dir.as_ref().trim();
+            ensure!(
+                !candidate.is_empty(),
+                "workspace skip entries must not be empty"
+            );
+            ensure!(
+                !matches!(candidate, "." | ".."),
+                "workspace skip entries must name a directory, not navigation segments"
+            );
+            ensure!(
+                !candidate.contains(['/', '\\']),
+                "workspace skip entries must be basenames without separators"
+            );
+            if !validated.contains(&candidate.to_owned()) {
+                validated.push(candidate.to_owned());
+            }
+        }
+        self.workspace_skip_dirs = validated;
+        Ok(self)
+    }
 
     /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
     pub fn fetch_cache_relative(&self) -> &Utf8Path {
         &self.fetch_cache_relative
+    }
+
+    /// Directories skipped during `which` workspace fallback scans.
+    #[must_use]
+    pub fn workspace_skip_dirs(&self) -> &[String] {
+        &self.workspace_skip_dirs
     }
 
     /// Consume the configuration and expose component modules with owned state.
@@ -387,5 +433,32 @@ mod tests {
             .with_which_cache_capacity(0)
             .expect_err("zero capacity must be rejected");
         assert_eq!(err.to_string(), "which cache capacity must be positive");
+    }
+
+    #[rstest]
+    #[case(vec![""], "workspace skip entries must not be empty")]
+    #[case(vec![".."], "workspace skip entries must name a directory, not navigation segments")]
+    #[case(vec!["dir/name"], "workspace skip entries must be basenames without separators")]
+    #[case(vec!["dir\\name"], "workspace skip entries must be basenames without separators")]
+    fn workspace_skip_dirs_validate_inputs(
+        base_config: StdlibConfig,
+        #[case] entries: Vec<&str>,
+        #[case] message: &str,
+    ) {
+        let err = base_config
+            .with_workspace_skip_dirs(entries)
+            .expect_err("invalid skip entries should error");
+        assert_eq!(err.to_string(), message);
+    }
+
+    #[rstest]
+    fn workspace_skip_dirs_override_defaults(base_config: StdlibConfig) {
+        let config = base_config
+            .with_workspace_skip_dirs(["build", ".cache"])
+            .expect("configure skip dirs");
+        assert_eq!(
+            config.workspace_skip_dirs(),
+            &["build".to_owned(), ".cache".to_owned()]
+        );
     }
 }

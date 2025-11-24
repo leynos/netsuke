@@ -2,8 +2,10 @@
 
 #[cfg(windows)]
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
 
@@ -13,6 +15,66 @@ use super::EnvSnapshot;
 use super::env;
 use super::is_executable;
 
+/// Default set of workspace directories to skip during fallback scans.
+pub(crate) const DEFAULT_WORKSPACE_SKIP_DIRS: &[&str] =
+    &[".git", "target", "node_modules", ".idea", ".vscode"];
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct WorkspaceSkipList {
+    dirs: Arc<Vec<String>>,
+}
+
+/// Inputs for scanning the workspace during `which` fallback resolution.
+#[derive(Clone, Copy)]
+pub(super) struct WorkspaceSearch<'a> {
+    pub(super) cwd: &'a Utf8Path,
+    pub(super) command: &'a str,
+    pub(super) collect_all: bool,
+    pub(super) skip_dirs: &'a WorkspaceSkipList,
+}
+
+impl WorkspaceSkipList {
+    /// Build a skip list from the provided directory names, normalising for the
+    /// host platform and removing duplicates.
+    pub(crate) fn from_names(names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        let mut dedup = IndexSet::new();
+        for name in names {
+            let trimmed = name.as_ref().trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            dedup.insert(normalise_dir_name(trimmed));
+        }
+        let mut dirs: Vec<_> = dedup.into_iter().collect();
+        dirs.sort();
+        Self {
+            dirs: Arc::new(dirs),
+        }
+    }
+
+    /// Return `true` when a directory should be skipped during traversal.
+    pub(crate) fn should_skip(&self, name: &str) -> bool {
+        let normalised = normalise_dir_name(name);
+        self.dirs.contains(&normalised)
+    }
+}
+
+impl Default for WorkspaceSkipList {
+    fn default() -> Self {
+        Self::from_names(DEFAULT_WORKSPACE_SKIP_DIRS.iter().copied())
+    }
+}
+
+#[cfg(windows)]
+fn normalise_dir_name(name: &str) -> String {
+    name.to_ascii_lowercase()
+}
+
+#[cfg(not(windows))]
+fn normalise_dir_name(name: &str) -> String {
+    name.to_owned()
+}
+
 /// Recursively search the workspace rooted at `cwd` for executables matching
 /// `command`.
 ///
@@ -21,33 +83,32 @@ use super::is_executable;
 ///   expansion; other platforms: exact case-sensitive filename match).
 /// - `collect_all`: when `true`, return every match; otherwise stop after the
 ///   first executable.
+/// - `skip_dirs`: directory basenames to omit during traversal.
 /// - `env`: provided only on Windows to supply `PATHEXT` for matching.
 ///
 /// Skips unreadable entries, ignores heavy/VCS directories via
 /// `should_visit_entry`, and returns `Ok(Vec<Utf8PathBuf>)` containing the
 /// discovered executables or an `Error` if UTF-8 conversion fails.
 pub(super) fn search_workspace(
-    cwd: &Utf8Path,
-    command: &str,
-    collect_all: bool,
+    search: WorkspaceSearch<'_>,
     #[cfg(windows)] env: &EnvSnapshot,
     #[cfg(not(windows))] _env: (),
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     #[cfg(windows)]
-    let match_ctx = prepare_workspace_match(command, env);
+    let match_ctx = prepare_workspace_match(search.command, env);
     #[cfg(not(windows))]
     let match_ctx = ();
 
-    let entries = WalkDir::new(cwd)
+    let entries = WalkDir::new(search.cwd)
         .follow_links(false)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(should_visit_entry)
+        .filter_entry(|entry| should_visit_entry(entry, search.skip_dirs))
         .filter_map(|walk_entry| {
             walk_entry
                 .map_err(|err| {
                     tracing::debug!(
-                        %command,
+                        command = %search.command,
                         error = %err,
                         "skipping unreadable workspace entry during which fallback"
                     );
@@ -56,7 +117,7 @@ pub(super) fn search_workspace(
                 .ok()
         });
 
-    collect_workspace_matches(entries, command, collect_all, match_ctx)
+    collect_workspace_matches(entries, search.command, search.collect_all, match_ctx)
 }
 
 /// Collect executable matches from workspace traversal.
@@ -96,16 +157,14 @@ fn collect_workspace_matches(
     Ok(matches)
 }
 
-const WORKSPACE_SKIP_DIRS: &[&str] = &[".git", "target"];
-
 /// Allow traversal for all files and directories except heavy/VCS roots to
 /// keep workspace scans fast.
-fn should_visit_entry(entry: &walkdir::DirEntry) -> bool {
+fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &WorkspaceSkipList) -> bool {
     if !entry.file_type().is_dir() {
         return true;
     }
     let name = entry.file_name().to_string_lossy();
-    !WORKSPACE_SKIP_DIRS.iter().any(|skip| name == *skip)
+    !skip_dirs.should_skip(&name)
 }
 
 /// Process a single `walkdir::DirEntry`: ensure it is a file, apply the

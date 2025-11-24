@@ -1006,9 +1006,9 @@ sequenceDiagram
         "WhichResolver"-->>"Caller": "Ok(matches)"
     else "no matches in PATH"
         "Lookup"->>"HandleMiss": "handle_miss(env, command, options, dirs)"
-        "HandleMiss"->>"HandleMiss": "check if 'raw_path' is empty"
+            "HandleMiss"->>"HandleMiss": "check if 'raw_path' is empty"
         alt "PATH empty and 'cwd_mode' != 'Never'"
-            "HandleMiss"->>"SearchWorkspace": "search_workspace(env.cwd, command, options.all)"
+            "HandleMiss"->>"SearchWorkspace": "search_workspace(env.cwd, command, options.all, skip_dirs)"
             "SearchWorkspace"->>"SearchWorkspace": "walk workspace with 'WalkDir' and filter executables"
             "SearchWorkspace"-->>"HandleMiss": "discovered paths (possibly empty)"
             alt "discovered not empty"
@@ -1033,12 +1033,20 @@ sequenceDiagram
     end
 ```
 
+Workspace traversal honours a configurable skip list to avoid expensive scans
+of tool caches and IDE metadata. The default skips `.git`, `target`,
+`node_modules`, `.idea`, and `.vscode`, and callers can replace the list via
+`StdlibConfig::with_workspace_skip_dirs`. Entries are normalised
+case-insensitively on Windows so users can pass either casing without surprises.
+
 Structural view of the which module and configuration wiring:
 
 ```mermaid
 classDiagram
     class StdlibConfig {
         +workspace_root_path() -> Option<&Utf8Path>
+        +workspace_skip_dirs() -> &[String]
+        +which_cache_capacity() -> NonZeroUsize
     }
 
     class Environment {
@@ -1046,15 +1054,15 @@ classDiagram
     }
 
     class WhichModule {
-        +register(env: &mut Environment,
-                  cwd_override: Option<Arc<Utf8PathBuf>>,
-                  cache_capacity: NonZeroUsize)
+        +register(env: &mut Environment, config: WhichConfig)
     }
 
     class WhichResolver {
         -cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>
         -cwd_override: Option<Arc<Utf8PathBuf>>
+        -workspace_skips: WorkspaceSkipList
         +new(cwd_override: Option<Arc<Utf8PathBuf>>,
+             skips: WorkspaceSkipList,
              cache_capacity: NonZeroUsize) -> Result<WhichResolver, Error>
         +resolve(command: &str, options: &WhichOptions) -> Result<Vec<Utf8PathBuf>, Error>
     }
@@ -1072,6 +1080,17 @@ classDiagram
         +fresh: bool
     }
 
+    class WhichConfig {
+        +new(cwd_override: Option<Arc<Utf8PathBuf>>,
+             skips: WorkspaceSkipList,
+             cache_capacity: NonZeroUsize) -> WhichConfig
+    }
+
+    class WorkspaceSkipList {
+        +default() -> WorkspaceSkipList
+        +from_names(names: IntoIterator<str>) -> WorkspaceSkipList
+    }
+
     class CwdMode {
         <<enumeration>>
         +Never
@@ -1080,11 +1099,11 @@ classDiagram
 
     Environment --> StdlibConfig : uses
     Environment --> WhichModule : calls register
-    StdlibConfig --> WhichModule : provides workspace_root_path as cwd_override
-    StdlibConfig --> WhichModule : provides which cache capacity
-    WhichModule --> WhichResolver : constructs via new(cwd_override, cache_capacity)
+    StdlibConfig --> WhichModule : provides workspace_root_path, skip dirs, cache capacity
+    WhichModule --> WhichResolver : constructs via new(cwd_override, skips, cache_capacity)
     WhichResolver --> EnvSnapshot : calls capture(cwd_override)
     WhichResolver --> WhichOptions : reads lookup options
+    WhichResolver --> WorkspaceSkipList : reads traversal filters
     WhichOptions --> CwdMode : uses cwd_mode
 ```
 
