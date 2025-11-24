@@ -11,16 +11,73 @@ use tempfile::tempdir;
 use super::support::{self, fallible};
 use super::which_filter_common::*;
 
+fn render_and_assert_pure(
+    fixture: &mut WhichTestFixture,
+    template: &Template,
+) -> Result<String> {
+    fixture.state.reset_impure();
+    let output = fixture.render(template)?;
+    assert!(!fixture.state.is_impure());
+    Ok(output)
+}
+
+fn test_cache_after_removal(
+    fixture: &mut WhichTestFixture,
+    first_template: &Template,
+    second_template: &Template,
+    removed_path: &Utf8PathBuf,
+    expect_second_err: bool,
+) -> Result<()> {
+    fixture.state.reset_impure();
+    let first = fixture.render(first_template)?;
+    assert_eq!(first, removed_path.as_str());
+
+    std::fs::remove_file(removed_path)?;
+
+    fixture.state.reset_impure();
+    let second_result = fixture.render(second_template);
+
+    if expect_second_err {
+        let err = second_result.expect("expected fresh which lookup to fail after removal");
+        assert!(err.to_string().contains("not_found"));
+    } else {
+        let second = second_result?;
+        assert_eq!(second, removed_path.as_str());
+    }
+
+    Ok(())
+}
+
+fn test_duplicate_paths(
+    fixture: &mut WhichTestFixture,
+    canonical: bool,
+    expected_count: usize,
+) -> Result<()> {
+    let template = if canonical {
+        Template::from("{{ 'helper' | which(all=true, canonical=true) | join('|') }}")
+    } else {
+        Template::from("{{ 'helper' | which(all=true, canonical=false) | join('|') }}")
+    };
+
+    let output = render_and_assert_pure(fixture, &template)?;
+    let parts: Vec<&str> = output.split('|').collect();
+
+    assert_eq!(parts.len(), expected_count);
+    for part in &parts {
+        assert_eq!(*part, fixture.paths[0].as_str());
+    }
+
+    Ok(())
+}
+
 #[rstest]
 fn which_filter_returns_first_match() -> Result<()> {
     let mut fixture = WhichTestFixture::with_tool_in_dirs(
         &ToolName::from("helper"),
         &[DirName::from("bin_first"), DirName::from("bin_second")],
     )?;
-    fixture.state.reset_impure();
-    let output = fixture.render(&Template::from("{{ 'helper' | which }}"))?;
+    let output = render_and_assert_pure(&mut fixture, &Template::from("{{ 'helper' | which }}"))?;
     assert_eq!(output, fixture.paths[0].as_str());
-    assert!(!fixture.state.is_impure());
     Ok(())
 }
 
@@ -30,18 +87,13 @@ fn which_filter_uses_cached_result_when_executable_removed() -> Result<()> {
         &ToolName::from("helper"),
         &[DirName::from("bin_first"), DirName::from("bin_second")],
     )?;
-
-    fixture.state.reset_impure();
-    let first = fixture.render(&Template::from("{{ 'helper' | which }}"))?;
-    assert_eq!(first, fixture.paths[0].as_str());
-
-    std::fs::remove_file(&fixture.paths[0])?;
-    fixture.state.reset_impure();
-
-    let second = fixture.render(&Template::from("{{ 'helper' | which }}"))?;
-    assert_eq!(second, fixture.paths[0].as_str());
-
-    Ok(())
+    test_cache_after_removal(
+        &mut fixture,
+        &Template::from("{{ 'helper' | which }}"),
+        &Template::from("{{ 'helper' | which }}"),
+        &fixture.paths[0],
+        false,
+    )
 }
 
 #[rstest]
@@ -50,21 +102,13 @@ fn which_filter_fresh_bypasses_cache_after_executable_removed() -> Result<()> {
         &ToolName::from("helper"),
         &[DirName::from("bin_first"), DirName::from("bin_second")],
     )?;
-
-    fixture.state.reset_impure();
-    let first = fixture.render(&Template::from("{{ 'helper' | which }}"))?;
-    assert_eq!(first, fixture.paths[0].as_str());
-
-    std::fs::remove_file(&fixture.paths[0])?;
-    fixture.state.reset_impure();
-
-    let err = fixture
-        .render(&Template::from("{{ 'helper' | which(fresh=true) }}"))
-        .expect_err("expected fresh which lookup to fail after removal");
-
-    assert!(err.to_string().contains("not_found"));
-
-    Ok(())
+    test_cache_after_removal(
+        &mut fixture,
+        &Template::from("{{ 'helper' | which }}"),
+        &Template::from("{{ 'helper' | which(fresh=true) }}"),
+        &fixture.paths[0],
+        true,
+    )
 }
 
 #[rstest]
@@ -73,7 +117,10 @@ fn which_filter_all_returns_all_matches() -> Result<()> {
         &ToolName::from("helper"),
         &[DirName::from("bin_a"), DirName::from("bin_b")],
     )?;
-    let output = fixture.render(&Template::from("{{ 'helper' | which(all=true) | join('|') }}"))?;
+    let output = render_and_assert_pure(
+        &mut fixture,
+        &Template::from("{{ 'helper' | which(all=true) | join('|') }}"),
+    )?;
     let expected = format!(
         "{}|{}",
         fixture.paths[0].as_str(),
@@ -106,17 +153,7 @@ fn which_filter_all_with_duplicates_respects_canonical_false() -> Result<()> {
         &ToolName::from("helper"),
         &[DirName::from("bin"), DirName::from("bin")],
     )?;
-    fixture.state.reset_impure();
-    let output = fixture.render(&Template::from(
-        "{{ 'helper' | which(all=true, canonical=false) | join('|') }}",
-    ))?;
-
-    let path = fixture.paths[0].as_str();
-    let parts: Vec<&str> = output.split('|').collect();
-
-    assert_eq!(parts, vec![path, path]);
-    assert!(!fixture.state.is_impure());
-    Ok(())
+    test_duplicate_paths(&mut fixture, false, 2)
 }
 
 #[rstest]
@@ -125,17 +162,7 @@ fn which_filter_all_with_duplicates_deduplicates_canonicalised_paths() -> Result
         &ToolName::from("helper"),
         &[DirName::from("bin"), DirName::from("bin")],
     )?;
-    fixture.state.reset_impure();
-    let output = fixture.render(&Template::from(
-        "{{ 'helper' | which(all=true, canonical=true) | join('|') }}",
-    ))?;
-
-    let path = fixture.paths[0].as_str();
-    let parts: Vec<&str> = output.split('|').collect();
-
-    assert_eq!(parts, vec![path]);
-    assert!(!fixture.state.is_impure());
-    Ok(())
+    test_duplicate_paths(&mut fixture, true, 1)
 }
 
 #[rstest]

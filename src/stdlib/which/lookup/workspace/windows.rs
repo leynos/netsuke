@@ -25,34 +25,16 @@ pub(super) fn search_workspace(
         .into_iter()
         .filter_entry(|entry| should_visit_entry(entry, params.skip_dirs))
     {
-        let entry = match walk_entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                tracing::debug!(
-                    %command,
-                    error = %err,
-                    "skipping unreadable workspace entry during which fallback",
-                );
-                continue;
-            }
+        let Some(entry) = unwrap_or_log_error(walk_entry, command) else {
+            continue;
         };
 
-        if let Some(path) = process_workspace_entry(entry, command, &match_ctx)? {
-            matches.push(path);
-            if !params.collect_all {
-                break;
-            }
+        if should_stop_collecting(&mut matches, entry, command, &match_ctx, collect_all)? {
+            break;
         }
     }
 
-    if matches.is_empty() {
-        tracing::debug!(
-            %command,
-            max_depth = WORKSPACE_MAX_DEPTH,
-            skip = ?params.skip_dirs,
-            "workspace which fallback found no matches",
-        );
-    }
+    log_if_no_matches(&matches, command);
 
     Ok(matches)
 }
@@ -120,4 +102,54 @@ fn process_workspace_entry(
         )
     })?;
     Ok(is_executable(&utf8).then_some(utf8))
+}
+
+/// Convert a `WalkDir` result into an entry, logging and skipping unreadable
+/// paths to keep workspace traversal robust.
+fn unwrap_or_log_error(
+    walk_entry: Result<walkdir::DirEntry, walkdir::Error>,
+    command: &str,
+) -> Option<walkdir::DirEntry> {
+    match walk_entry {
+        Ok(entry) => Some(entry),
+        Err(err) => {
+            tracing::debug!(
+                %command,
+                error = %err,
+                "skipping unreadable workspace entry during which fallback",
+            );
+            None
+        }
+    }
+}
+
+/// Handle a single entry: record executable matches and signal early exit when
+/// `collect_all` is `false`.
+fn should_stop_collecting(
+    matches: &mut Vec<Utf8PathBuf>,
+    entry: walkdir::DirEntry,
+    command: &str,
+    ctx: &WorkspaceMatchContext,
+    collect_all: bool,
+) -> Result<bool, Error> {
+    if let Some(path) = process_workspace_entry(entry, command, ctx)? {
+        matches.push(path);
+        if !params.collect_all {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Emit a debug message when fallback traversal yields no matches, helping
+/// callers diagnose unexpected latency or misses.
+fn log_if_no_matches(matches: &[Utf8PathBuf], command: &str) {
+    if matches.is_empty() {
+        tracing::debug!(
+            %command,
+            max_depth = WORKSPACE_MAX_DEPTH,
+            skip = ?params.skip_dirs,
+            "workspace which fallback found no matches",
+        );
+    }
 }

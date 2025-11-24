@@ -13,25 +13,63 @@ pub(super) fn search_workspace(
     command: &str,
     params: WorkspaceSearchParams<'_>,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
-    let mut matches = Vec::new();
-
-    for walk_entry in WalkDir::new(&env.cwd)
+    let walker = WalkDir::new(&env.cwd)
         .follow_links(false)
         .max_depth(WORKSPACE_MAX_DEPTH)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|entry| should_visit_entry(entry, params.skip_dirs))
-    {
-        let entry = match walk_entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                tracing::debug!(
-                    %command,
-                    error = %err,
-                    "skipping unreadable workspace entry during which fallback",
-                );
-                continue;
-            }
+        .filter_entry(|entry| should_visit_entry(entry, params.skip_dirs));
+
+    let matches = collect_matching_executables(walker, command, collect_all)?;
+
+    log_if_empty(&matches, command);
+
+    Ok(matches)
+}
+
+/// Convert a `WalkDir` result into an entry, logging and skipping unreadable
+/// paths to keep workspace traversal resilient.
+fn unwrap_or_log_error(
+    walk_entry: Result<walkdir::DirEntry, walkdir::Error>,
+    command: &str,
+) -> Option<walkdir::DirEntry> {
+    match walk_entry {
+        Ok(entry) => Some(entry),
+        Err(err) => {
+            tracing::debug!(
+                %command,
+                error = %err,
+                "skipping unreadable workspace entry during which fallback",
+            );
+            None
+        }
+    }
+}
+
+/// Emit a debug log when the workspace traversal yields no executables.
+fn log_if_empty(matches: &[Utf8PathBuf], command: &str) {
+    if matches.is_empty() {
+        tracing::debug!(
+            %command,
+            max_depth = WORKSPACE_MAX_DEPTH,
+            skip = ?params.skip_dirs,
+            "workspace which fallback found no matches",
+        );
+    }
+}
+
+/// Traverse the workspace iterator, collecting executable matches and stopping
+/// early when `collect_all` is `false` and a match is discovered.
+fn collect_matching_executables(
+    entries: impl Iterator<Item = Result<walkdir::DirEntry, walkdir::Error>>,
+    command: &str,
+    collect_all: bool,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let mut matches = Vec::new();
+
+    for walk_entry in entries {
+        let Some(entry) = unwrap_or_log_error(walk_entry, command) else {
+            continue;
         };
 
         if let Some(path) = process_workspace_entry(entry, command)? {
@@ -40,15 +78,6 @@ pub(super) fn search_workspace(
                 break;
             }
         }
-    }
-
-    if matches.is_empty() {
-        tracing::debug!(
-            %command,
-            max_depth = WORKSPACE_MAX_DEPTH,
-            skip = ?params.skip_dirs,
-            "workspace which fallback found no matches",
-        );
     }
 
     Ok(matches)
