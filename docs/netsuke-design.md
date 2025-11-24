@@ -1100,17 +1100,6 @@ sequenceDiagram
     "TestRunner"-->>"Developer": "process exit code and output with improved diagnostics"
 ```
 
-Implementation mirrors the design with a small (64-entry) LRU cache keyed by
-the command name, current directory, a fingerprint of `PATH`/`PATHEXT`, and
-every filter option aside from `fresh`. Entries validate executability on
-insertion; cache reads skip revalidation, so stale binaries fall out only when
-the cache key changes (for example after a PATH update) or the entry is
-evicted. The `fresh=true` flag bypasses the cache for a single lookup without
-discarding previously memoised entries. Diagnostic errors embed the
-`netsuke::jinja::which::*` codes and print a trimmed preview of the scanned
-`PATH`, giving manifest authors clear troubleshooting hints on both Unix and
-Windows hosts.
-
 Figure: Which resolver control flow with cache lookups and workspace fallback.
 
 ```mermaid
