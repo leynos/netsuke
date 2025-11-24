@@ -8,7 +8,7 @@ use std::fs;
 use tempfile::TempDir;
 #[cfg(windows)]
 use test_support::make_executable;
-use test_support::{env::VarGuard, env_lock::EnvLock, write_exec};
+use test_support::{env::VarGuard, write_exec};
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -163,7 +163,6 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
 
 #[rstest]
 fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Result<()> {
-    let _lock = EnvLock::acquire();
     let _guard = VarGuard::unset("PATH");
 
     let target = workspace.root().join("target");
@@ -218,7 +217,6 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
 fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
-    let _lock = EnvLock::acquire();
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
     let _guard = VarGuard::set("PATH", invalid_path);
 
@@ -245,7 +243,6 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
     fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
     fs::create_dir_all(tools.as_std_path()).context("mkdir tools")?;
 
-    let _lock = EnvLock::acquire();
     let path_value = format!("{}:bin:tools", workspace.root());
     let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(&path_value));
 
@@ -268,7 +265,6 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
 #[cfg(windows)]
 #[rstest]
 fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
-    let _lock = EnvLock::acquire();
     let _path_guard = VarGuard::set("PATH", std::ffi::OsStr::new(workspace.root().as_str()));
     let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new(""));
 
@@ -293,7 +289,6 @@ fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
 fn pathext_without_leading_dots_is_normalised_and_deduplicated(
     workspace: TempWorkspace,
 ) -> Result<()> {
-    let _lock = EnvLock::acquire();
     let _path_guard = VarGuard::set("PATH", std::ffi::OsStr::new(workspace.root().as_str()));
     let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat"));
 
