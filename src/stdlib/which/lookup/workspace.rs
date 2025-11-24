@@ -45,6 +45,10 @@ pub(super) fn search_workspace(
     collect_workspace_matches(entries, command, collect_all, match_ctx)
 }
 
+/// Accumulates executable matches from workspace traversal, stopping early
+/// when `collect_all` is `false`. The iterator supplies already-filtered
+/// directory entries; platform-specific match contexts ensure consistent
+/// filename matching semantics.
 fn collect_workspace_matches(
     entries: impl Iterator<Item = walkdir::DirEntry>,
     command: &str,
@@ -73,6 +77,8 @@ fn collect_workspace_matches(
 
 const WORKSPACE_SKIP_DIRS: &[&str] = &[".git", "target"];
 
+/// Allow traversal for all files and directories except heavy/VCS roots to
+/// keep workspace scans fast.
 fn should_visit_entry(entry: &walkdir::DirEntry) -> bool {
     if !entry.file_type().is_dir() {
         return true;
@@ -83,8 +89,8 @@ fn should_visit_entry(entry: &walkdir::DirEntry) -> bool {
 
 fn process_workspace_entry(
     entry: walkdir::DirEntry,
+    command: &str,
     #[cfg(windows)] ctx: &WorkspaceMatchContext,
-    #[cfg(not(windows))] command: &str,
     #[cfg(not(windows))] ctx: (),
 ) -> Result<Option<Utf8PathBuf>, Error> {
     if !entry.file_type().is_file() {
@@ -111,6 +117,7 @@ fn process_workspace_entry(
 }
 
 #[cfg(windows)]
+/// Windows-only match context carrying normalised command state.
 #[derive(Clone)]
 struct WorkspaceMatchContext {
     command_lower: String,
@@ -119,6 +126,7 @@ struct WorkspaceMatchContext {
 }
 
 #[cfg(windows)]
+/// Perform case-insensitive matching or PATHEXT-expanded basename matching.
 fn workspace_entry_matches(entry: &walkdir::DirEntry, ctx: &WorkspaceMatchContext) -> bool {
     let file_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
     if file_name == ctx.command_lower {
@@ -131,12 +139,15 @@ fn workspace_entry_matches(entry: &walkdir::DirEntry, ctx: &WorkspaceMatchContex
 }
 
 #[cfg(not(windows))]
+/// Perform exact case-sensitive filename matching on non-Windows platforms.
 fn workspace_entry_matches(entry: &walkdir::DirEntry, command: &str, _ctx: ()) -> bool {
     let file_name = entry.file_name().to_string_lossy();
     file_name == command
 }
 
 #[cfg(windows)]
+/// Build the Windows match context by lowercasing the command and expanding
+/// PATHEXT suffixes when the command lacks an explicit extension.
 fn prepare_workspace_match(command: &str, env: &EnvSnapshot) -> WorkspaceMatchContext {
     let command_lower = command.to_ascii_lowercase();
     let command_has_ext = command_lower.contains('.');

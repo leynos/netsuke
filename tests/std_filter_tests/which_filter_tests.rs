@@ -1,3 +1,6 @@
+//! Integration tests for the `which` filter/function covering PATH resolution,
+//! canonicalisation, cwd behaviour, workspace fallback, and diagnostic output.
+
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{context, Environment};
