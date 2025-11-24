@@ -958,13 +958,16 @@ Semantics honour platform conventions while enforcing predictable behaviour:
 - Canonicalisation happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
 
-The resolver keeps a small LRU cache keyed by the command, `PATH`, optional
-`PATHEXT`, working directory, and filter options. Cache hits are validated with
-cheap metadata probes so stale entries heal automatically. Because all inputs
-derive from the manifest or process environment, the helper remains effectively
-pure and the existing render cache simply incorporates `PATH`/`PATHEXT`/`CWD`
-into its key. Callers can request a bypass with `fresh=true` when they need to
-observe recent toolchain changes during a long session.
+The resolver keeps a small LRU cache keyed by the command, a fingerprint of
+`PATH`/`PATHEXT`, the working directory, and the cache-relevant options (`all`,
+`canonical`, `cwd_mode`). Entries are validated once at insertion; cache reads
+no longer re-probe executability, keeping the hot path lean. Because `fresh`
+only controls bypass behaviour it is stripped from the cache key so fresh
+lookups still repopulate the cache for subsequent calls. The fingerprint means
+environment changes invalidate keys without cloning large strings, and the
+helper remains pure because all inputs still derive from the manifest or
+process environment. Callers can request a bypass with `fresh=true` when they
+need to observe recent toolchain changes during a long session.
 
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
@@ -972,8 +975,8 @@ entries were inspected, a shortened preview of the path list, and platform
 appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
 Invalid arguments surface as `netsuke::jinja::which::args`.
 
-Unit tests cover POSIX and Windows specifics, canonicalization, cache
-validation, and list-all semantics. Behavioural MiniJinja fixtures exercise the
+Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
+reuse, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.
 

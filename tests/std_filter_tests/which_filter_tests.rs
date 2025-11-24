@@ -213,6 +213,44 @@ fn which_filter_all_returns_all_matches() -> Result<()> {
 }
 
 #[rstest]
+fn which_filter_all_with_duplicates_respects_canonical_false() -> Result<()> {
+    let mut fixture = WhichTestFixture::with_tool_in_dirs(
+        &ToolName::from("helper"),
+        &[DirName::from("bin"), DirName::from("bin")],
+    )?;
+    fixture.state.reset_impure();
+    let output = fixture.render(&Template::from(
+        "{{ 'helper' | which(all=true, canonical=false) | join('|') }}",
+    ))?;
+
+    let path = fixture.paths[0].as_str();
+    let parts: Vec<&str> = output.split('|').collect();
+
+    assert_eq!(parts, vec![path, path]);
+    assert!(!fixture.state.is_impure());
+    Ok(())
+}
+
+#[rstest]
+fn which_filter_all_with_duplicates_deduplicates_canonicalised_paths() -> Result<()> {
+    let mut fixture = WhichTestFixture::with_tool_in_dirs(
+        &ToolName::from("helper"),
+        &[DirName::from("bin"), DirName::from("bin")],
+    )?;
+    fixture.state.reset_impure();
+    let output = fixture.render(&Template::from(
+        "{{ 'helper' | which(all=true, canonical=true) | join('|') }}",
+    ))?;
+
+    let path = fixture.paths[0].as_str();
+    let parts: Vec<&str> = output.split('|').collect();
+
+    assert_eq!(parts, vec![path]);
+    assert!(!fixture.state.is_impure());
+    Ok(())
+}
+
+#[rstest]
 fn which_function_honours_cwd_mode() -> Result<()> {
     let (_temp, root) = support::filter_workspace()?;
     let tool = write_tool(&root, &ToolName::from("local"))?;

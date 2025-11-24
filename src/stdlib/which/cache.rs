@@ -1,5 +1,8 @@
+//! LRU-backed cache for the `which` resolver to avoid repeat filesystem scans.
+
 use std::{
-    ffi::OsString,
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
     num::NonZeroUsize,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -8,11 +11,7 @@ use camino::Utf8PathBuf;
 use lru::LruCache;
 use minijinja::Error;
 
-use super::{
-    env::EnvSnapshot,
-    lookup::{is_executable, lookup},
-    options::{CwdMode, WhichOptions},
-};
+use super::{env::EnvSnapshot, lookup::lookup, options::WhichOptions};
 
 pub(super) const CACHE_CAPACITY: usize = 64;
 
@@ -24,11 +23,7 @@ pub(crate) struct WhichResolver {
 
 impl WhichResolver {
     pub(crate) fn new(cwd_override: Option<Arc<Utf8PathBuf>>) -> Self {
-        #[expect(
-            clippy::unwrap_used,
-            reason = "cache capacity constant is greater than zero"
-        )]
-        let capacity = NonZeroUsize::new(CACHE_CAPACITY).unwrap();
+        let capacity = NonZeroUsize::new(CACHE_CAPACITY).unwrap_or(NonZeroUsize::MIN);
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
             cwd_override,
@@ -54,14 +49,7 @@ impl WhichResolver {
 
     fn try_cache(&self, key: &CacheKey) -> Option<Vec<Utf8PathBuf>> {
         let mut guard = self.lock_cache();
-        match guard.get(key) {
-            Some(entry) if entry.is_valid() => Some(entry.matches.clone()),
-            Some(_) => {
-                guard.pop(key);
-                None
-            }
-            None => None,
-        }
+        guard.get(key).map(|entry| entry.matches.clone())
     }
 
     fn store(&self, key: CacheKey, matches: Vec<Utf8PathBuf>) {
@@ -82,48 +70,28 @@ struct CacheEntry {
     matches: Vec<Utf8PathBuf>,
 }
 
-impl CacheEntry {
-    fn is_valid(&self) -> bool {
-        self.matches
-            .iter()
-            .all(|path| is_executable(path.as_path()))
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct CacheKey {
     command: String,
-    path: Option<OsString>,
-    pathext: Option<OsString>,
+    env_fingerprint: u64,
     cwd: Utf8PathBuf,
-    options: CacheKeyOptions,
+    options: WhichOptions,
 }
 
 impl CacheKey {
     fn new(command: &str, env: &EnvSnapshot, options: &WhichOptions) -> Self {
         Self {
             command: command.to_owned(),
-            path: env.raw_path.clone(),
-            pathext: env.raw_pathext.clone(),
+            env_fingerprint: env_fingerprint(env),
             cwd: env.cwd.clone(),
-            options: CacheKeyOptions::from(options),
+            options: options.cache_key_view(),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct CacheKeyOptions {
-    all: bool,
-    canonical: bool,
-    cwd_mode: CwdMode,
-}
-
-impl From<&WhichOptions> for CacheKeyOptions {
-    fn from(value: &WhichOptions) -> Self {
-        Self {
-            all: value.all,
-            canonical: value.canonical,
-            cwd_mode: value.cwd_mode,
-        }
-    }
+fn env_fingerprint(env: &EnvSnapshot) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    env.raw_path.hash(&mut hasher);
+    env.raw_pathext.hash(&mut hasher);
+    hasher.finish()
 }

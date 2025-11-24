@@ -84,14 +84,14 @@ for unit tests.
 - Decide on the default attributes applied to generated tests (for example,
   stacking `#[scenario(...)]` with `#[tokio::test(flavor = "multi_thread")]`
   for steps that require Tokio). Document the pattern in
-  `docs/rstest-bdd- users-guide.md`.
+  `docs/rstest-bdd-users-guide.md`.
 
 ### Phase 2 – Fixture extraction and world bridging
 
 - Refactor `CliWorld` into plain data holders (for example `CliState`,
   `ManifestState`, `StdlibState`, `ProcessState`) that expose the smallest
   mutable surface required by each step. Each holder lives in
-  `tests/bdd/ fixtures.rs` (or similar) and is backed by `Arc<Mutex<...>>` when
+  `tests/bdd/fixtures.rs` (or similar) and is backed by `Arc<Mutex<...>>` when
   interior mutability is required.
 - Provide `#[rstest::fixture]` constructors for shared resources:
   - Temporary workspace plus `PathGuard` handling for PATH edits.
@@ -162,9 +162,9 @@ the cucumber equivalents once the new tests pass.
 - Remove `cucumber` (and `tokio` features added solely for the runner) from
   `Cargo.toml` along with the `[[test]]` entry that disables the default
   harness.
-- Drop cucumber-specific documentation such as `docs/behavioural-testing-in-
-  rust-with-cucumber.md
-  ` once rewritten, and update any references in the user guide and Orca/Ortho docs.
+- Drop cucumber-specific documentation such as
+  `docs/behavioural-testing-in-rust-with-cucumber.md` once rewritten, and
+  update any references in the user guide and Orca/Ortho docs.
 
 ### Phase 5 – Documentation, CI, and enablement
 

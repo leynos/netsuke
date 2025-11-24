@@ -1,3 +1,5 @@
+//! Parse and hold options for the `which` filter and function.
+
 use minijinja::{Error, value::Kwargs};
 
 use super::error::args_error;
@@ -12,16 +14,20 @@ pub(super) enum CwdMode {
 
 impl CwdMode {
     pub(super) fn parse(value: &str) -> Option<Self> {
-        match value {
-            "auto" => Some(Self::Auto),
-            "always" => Some(Self::Always),
-            "never" => Some(Self::Never),
-            _ => None,
-        }
+        parse_cwd_mode(value)
     }
 }
 
-#[derive(Clone, Debug, Default)]
+fn parse_cwd_mode(value: &str) -> Option<CwdMode> {
+    match value {
+        "auto" => Some(CwdMode::Auto),
+        "always" => Some(CwdMode::Always),
+        "never" => Some(CwdMode::Never),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub(crate) struct WhichOptions {
     pub(super) all: bool,
     pub(super) canonical: bool,
@@ -51,5 +57,11 @@ impl WhichOptions {
             fresh,
             cwd_mode: cwd_mode.unwrap_or_default(),
         })
+    }
+
+    pub(crate) fn cache_key_view(&self) -> Self {
+        let mut clone = self.clone();
+        clone.fresh = false;
+        clone
     }
 }

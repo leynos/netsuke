@@ -1,3 +1,5 @@
+//! Error helpers for the `MiniJinja` `which` filter/function.
+
 use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};

@@ -1,3 +1,5 @@
+//! Snapshot of PATH, PATHEXT, and current directory for the `which` resolver.
+
 #[cfg(windows)]
 use std::ffi::OsStr;
 use std::ffi::OsString;
