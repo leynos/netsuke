@@ -23,41 +23,52 @@ pub(super) fn search_workspace(
     let match_ctx = ();
     #[cfg(not(windows))]
     let _ = env;
-    let walker = WalkDir::new(cwd)
+
+    let entries = WalkDir::new(cwd)
         .follow_links(false)
         .sort_by_file_name()
         .into_iter()
         .filter_entry(should_visit_entry)
-        .filter_map(|walk_entry| match walk_entry {
-            Ok(entry) => Some(entry),
-            Err(err) => {
-                tracing::debug!(
-                    %command,
-                    error = %err,
-                    "skipping unreadable workspace entry during which fallback"
-                );
-                None
-            }
+        .filter_map(|walk_entry| {
+            walk_entry
+                .map_err(|err| {
+                    tracing::debug!(
+                        %command,
+                        error = %err,
+                        "skipping unreadable workspace entry during which fallback"
+                    );
+                    err
+                })
+                .ok()
         });
 
-    #[cfg(windows)]
-    let matches_iter = walker.filter_map(|entry| match process_workspace_entry(entry, &match_ctx) {
-        Ok(Some(path)) => Some(Ok(path)),
-        Ok(None) => None,
-        Err(err) => Some(Err(err)),
-    });
-    #[cfg(not(windows))]
-    let matches_iter = walker.filter_map(|entry| match process_workspace_entry(entry, command, match_ctx) {
-        Ok(Some(path)) => Some(Ok(path)),
-        Ok(None) => None,
-        Err(err) => Some(Err(err)),
-    });
+    collect_workspace_matches(entries, command, collect_all, match_ctx)
+}
 
-    if collect_all {
-        matches_iter.collect()
-    } else {
-        matches_iter.take(1).collect()
+fn collect_workspace_matches(
+    entries: impl Iterator<Item = walkdir::DirEntry>,
+    command: &str,
+    collect_all: bool,
+    #[cfg(windows)] match_ctx: WorkspaceMatchContext,
+    #[cfg(not(windows))] match_ctx: (),
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let mut matches = Vec::new();
+
+    for entry in entries {
+        #[cfg(windows)]
+        let maybe_match = process_workspace_entry(entry, command, &match_ctx)?;
+        #[cfg(not(windows))]
+        let maybe_match = process_workspace_entry(entry, command, match_ctx)?;
+
+        if let Some(path) = maybe_match {
+            matches.push(path);
+            if !collect_all {
+                break;
+            }
+        }
     }
+
+    Ok(matches)
 }
 
 const WORKSPACE_SKIP_DIRS: &[&str] = &[".git", "target"];
@@ -100,6 +111,7 @@ fn process_workspace_entry(
 }
 
 #[cfg(windows)]
+#[derive(Clone)]
 struct WorkspaceMatchContext {
     command_lower: String,
     command_has_ext: bool,
