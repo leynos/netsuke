@@ -19,8 +19,8 @@ The `rstest-bdd` project[^1][^2] exposes Given-When-Then macros that register
 steps alongside `rstest` fixtures and generate scenario tests with the regular
 test harness. Migrating unlocks a single runner (`cargo test`), reduces the
 amount of bespoke world state, and lets behaviour tests reuse the same
-fixtures, dependency-injection pattern, and lint configuration already in
-place for unit tests.
+fixtures, dependency-injection pattern, and lint configuration already in place
+for unit tests.
 
 ## Decision outcome (summary)
 
@@ -72,8 +72,9 @@ place for unit tests.
 ### Phase 1 – Harness foundation
 
 - Add `rstest-bdd = "0.1.0"` and `rstest-bdd-macros = { version = "0.1.0",
-  features = ["strict-compile-time-validation"] }` to the workspace
-  `dev-dependencies`. Keep `rstest` as the shared fixture provider.
+  features = ["strict-compile-time-validation"]
+  }` to the workspace `dev-dependencies`. Keep `rstest
+  ` as the shared fixture provider.
 - Introduce a `tests/bdd` module tree that will own scenario functions,
   feature-specific fixtures, and utilities for inserting values into the
   `StepContext`.
@@ -82,16 +83,16 @@ place for unit tests.
   both the migration branch and future contributors have one source of truth.
 - Decide on the default attributes applied to generated tests (for example,
   stacking `#[scenario(...)]` with `#[tokio::test(flavor = "multi_thread")]`
-  for steps that require Tokio). Document the pattern in `docs/rstest-bdd-
-  users-guide.md`.
+  for steps that require Tokio). Document the pattern in
+  `docs/rstest-bdd-users-guide.md`.
 
 ### Phase 2 – Fixture extraction and world bridging
 
 - Refactor `CliWorld` into plain data holders (for example `CliState`,
   `ManifestState`, `StdlibState`, `ProcessState`) that expose the smallest
-  mutable surface required by each step. Each holder lives in `tests/bdd/
-  fixtures.rs` (or similar) and is backed by `Arc<Mutex<...>>` when interior
-  mutability is required.
+  mutable surface required by each step. Each holder lives in
+  `tests/bdd/fixtures.rs` (or similar) and is backed by `Arc<Mutex<...>>` when
+  interior mutability is required.
 - Provide `#[rstest::fixture]` constructors for shared resources:
   - Temporary workspace plus `PathGuard` handling for PATH edits.
   - HTTP server guard that mirrors `start_http_server`/`shutdown_http_server`
@@ -161,9 +162,9 @@ the cucumber equivalents once the new tests pass.
 - Remove `cucumber` (and `tokio` features added solely for the runner) from
   `Cargo.toml` along with the `[[test]]` entry that disables the default
   harness.
-- Drop cucumber-specific documentation such as `docs/behavioural-testing-in-
-  rust-with-cucumber.md` once rewritten, and update any references in the user
-  guide and Orca/Ortho docs.
+- Drop cucumber-specific documentation such as
+  `docs/behavioural-testing-in-rust-with-cucumber.md` once rewritten, and
+  update any references in the user guide and Orca/Ortho docs.
 
 ### Phase 5 – Documentation, CI, and enablement
 
@@ -181,7 +182,7 @@ the cucumber equivalents once the new tests pass.
 
 ## Consequences and risks
 
-**Positive outcomes**
+### Positive outcomes
 
 - Behaviour tests run through the standard harness, so `make test` exercises
   them alongside unit tests and inherits the existing CI parallelism.
@@ -191,25 +192,21 @@ the cucumber equivalents once the new tests pass.
   (with `strict-compile-time-validation`), preventing silent drift between the
   feature files and the Rust implementation.
 
-**Risks and mitigations**
+### Risks and mitigations
 
 - *Risk:* Rewriting every step macro creates churn and may introduce subtle
-  regressions.
-  *Mitigation:* Port features in small slices, keep cucumber running until each
-  slice is validated, and rely on helpers shared between the old and new
-  harnesses to avoid behavioural drift.
+  regressions. *Mitigation:* Port features in small slices, keep cucumber
+  running until each slice is validated, and rely on helpers shared between the
+  old and new harnesses to avoid behavioural drift.
 - *Risk:* The new fixture structs may not cover all the cleanup logic handled
-  implicitly by `CliWorld::drop`.
-  *Mitigation:* Model teardown as RAII helpers (`ScopeGuard`-style fixtures) and
-  add explicit tests that assert destructors restore environment variables,
-  stop HTTP servers, and delete temp files.
+  implicitly by `CliWorld::drop`. *Mitigation:* Model teardown as RAII helpers
+  (`ScopeGuard`-style fixtures) and add explicit tests that assert destructors
+  restore environment variables, stop HTTP servers, and delete temp files.
 - *Risk:* Developers unfamiliar with `rstest-bdd` may struggle to add new
-  scenarios.
-  *Mitigation:* Expand the user guide with Netsuke-specific recipes and add a
-  `cargo bdd` section to the contributor docs.
+  scenarios. *Mitigation:* Expand the user guide with Netsuke-specific recipes
+  and add a `cargo bdd` section to the contributor docs.
 
 ## References
 
 [^1]: <https://github.com/leynos/rstest-bdd/tree/v0.1.0>
 [^2]: `docs/rstest-bdd-users-guide.md`
-

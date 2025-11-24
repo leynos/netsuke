@@ -951,20 +951,23 @@ Semantics honour platform conventions while enforcing predictable behaviour:
   bit. Empty `PATH` segments (leading, trailing, or `::`) map to the working
   directory when `cwd_mode` is `"auto"` or `"always"`.
 - On Windows, the lookup respects `PATHEXT` when the command lacks an
-  extension. Comparisons are case-insensitive, results normalise both `\` and
-  `/`, and `cwd_mode` defaults to skipping the working directory to avoid the
-  platform’s surprise "search CWD first" rule. Opting in via `"always"`
+  extension. Comparisons are case-insensitive, results normalise both slash
+  styles, and `cwd_mode` defaults to skipping the working directory to avoid
+  the platform’s surprise "search CWD first" rule. Opting in via `"always"`
   restores that behaviour.
 - Canonicalisation happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
 
-The resolver keeps a small LRU cache keyed by the command, `PATH`, optional
-`PATHEXT`, working directory, and filter options. Cache hits are validated with
-cheap metadata probes so stale entries heal automatically. Because all inputs
-derive from the manifest or process environment, the helper remains effectively
-pure and the existing render cache simply incorporates `PATH`/`PATHEXT`/`CWD`
-into its key. Callers can request a bypass with `fresh=true` when they need to
-observe recent toolchain changes during a long session.
+The resolver keeps a small LRU cache keyed by the command, a fingerprint of
+`PATH`/`PATHEXT`, the working directory, and the cache-relevant options (`all`,
+`canonical`, `cwd_mode`). Entries are validated once at insertion; cache reads
+no longer re-probe executability, keeping the hot path lean. Because `fresh`
+only controls bypass behaviour it is stripped from the cache key so fresh
+lookups still repopulate the cache for subsequent calls. The fingerprint means
+environment changes invalidate keys without cloning large strings, and the
+helper remains pure because all inputs still derive from the manifest or
+process environment. Callers can request a bypass with `fresh=true` when they
+need to observe recent toolchain changes during a long session.
 
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
@@ -972,10 +975,181 @@ entries were inspected, a shortened preview of the path list, and platform
 appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
 Invalid arguments surface as `netsuke::jinja::which::args`.
 
-Unit tests cover POSIX and Windows specifics, canonicalization, cache
-validation, and list-all semantics. Behavioural MiniJinja fixtures exercise the
+Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
+reuse, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.
+
+Sequence of the resolver when falling back to the workspace:
+
+```mermaid
+sequenceDiagram
+    participant "Caller" as "Caller"
+    participant "WhichResolver" as "WhichResolver"
+    participant "EnvSnapshot" as "EnvSnapshot"
+    participant "Lookup" as "lookup() in lookup.rs"
+    participant "HandleMiss" as "handle_miss()"
+    participant "SearchWorkspace" as "search_workspace()"
+
+    "Caller"->>"WhichResolver": "resolve(command, options)"
+    "WhichResolver"->>"EnvSnapshot": "capture(cwd_override)"
+    "EnvSnapshot"-->>"WhichResolver": "EnvSnapshot { cwd, raw_path }"
+    "WhichResolver"->>"Lookup": "lookup(env, command, options)"
+    "Lookup"->>"Lookup": "search PATH directories for matches"
+    alt "matches found"
+        "Lookup"-->>"WhichResolver": "Vec<Utf8PathBuf> (maybe canonicalised)"
+        "WhichResolver"-->>"Caller": "Ok(matches)"
+    else "no matches in PATH"
+        "Lookup"->>"HandleMiss": "handle_miss(env, command, options, dirs)"
+        "HandleMiss"->>"HandleMiss": "check if 'raw_path' is empty"
+        alt "PATH empty and 'cwd_mode' != 'Never'"
+            "HandleMiss"->>"SearchWorkspace": "search_workspace(env.cwd, command, options.all)"
+            "SearchWorkspace"->>"SearchWorkspace": "walk workspace with 'WalkDir' and filter executables"
+            "SearchWorkspace"-->>"HandleMiss": "discovered paths (possibly empty)"
+            alt "discovered not empty"
+                alt "options.canonical is true"
+                    "HandleMiss"->>"HandleMiss": "canonicalise(discovered)"
+                    "HandleMiss"-->>"Lookup": "canonical paths"
+                else "options.canonical is false"
+                    "HandleMiss"-->>"Lookup": "discovered paths"
+                end
+                "Lookup"-->>"WhichResolver": "Vec<Utf8PathBuf> from workspace"
+                "WhichResolver"-->>"Caller": "Ok(matches)"
+            else "discovered empty"
+                "HandleMiss"-->>"Lookup": "Error(not_found_error)"
+                "Lookup"-->>"WhichResolver": "Error"
+                "WhichResolver"-->>"Caller": "Err(not_found)"
+            end
+        else "PATH not empty or 'cwd_mode' is 'Never'"
+            "HandleMiss"-->>"Lookup": "Error(not_found_error)"
+            "Lookup"-->>"WhichResolver": "Error"
+            "WhichResolver"-->>"Caller": "Err(not_found)"
+        end
+    end
+```
+
+Structural view of the which module and configuration wiring:
+
+```mermaid
+classDiagram
+    class StdlibConfig {
+        +workspace_root_path() -> Option<&Utf8Path>
+    }
+
+    class Environment {
+        +register_with_config(config: StdlibConfig)
+    }
+
+    class WhichModule {
+        +register(env: &mut Environment, cwd_override: Option<Arc<Utf8PathBuf>>)
+    }
+
+    class WhichResolver {
+        -cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>
+        -cwd_override: Option<Arc<Utf8PathBuf>>
+        +new(cwd_override: Option<Arc<Utf8PathBuf>>) -> WhichResolver
+        +resolve(command: &str, options: &WhichOptions) -> Result<Vec<Utf8PathBuf>, Error>
+    }
+
+    class EnvSnapshot {
+        +cwd: Utf8PathBuf
+        +raw_path: Option<OsString>
+        +capture(cwd_override: Option<&Utf8Path>) -> Result<EnvSnapshot, Error>
+    }
+
+    class WhichOptions {
+        +cwd_mode: CwdMode
+        +canonical: bool
+        +all: bool
+        +fresh: bool
+    }
+
+    class CwdMode {
+        <<enumeration>>
+        +Never
+        +OtherModes
+    }
+
+    Environment --> StdlibConfig : uses
+    Environment --> WhichModule : calls register
+    StdlibConfig --> WhichModule : provides workspace_root_path as cwd_override
+    WhichModule --> WhichResolver : constructs via new(cwd_override)
+    WhichResolver --> EnvSnapshot : calls capture(cwd_override)
+    WhichResolver --> WhichOptions : reads lookup options
+    WhichOptions --> CwdMode : uses cwd_mode
+```
+
+### Cucumber execution flow
+
+```mermaid
+sequenceDiagram
+    actor "Developer" as "Developer"
+    participant "TestRunner" as "Rust test binary"
+    participant "CliWorld" as "CliWorld"
+    participant "Cucumber" as "Cucumber runner"
+    participant "FS" as "Feature files under 'tests/features'"
+
+    "Developer"->>"TestRunner": "run 'cargo test' (including cucumber tests)"
+    "TestRunner"->>"CliWorld": "create world instance"
+    "CliWorld"->>"CliWorld": "configure via 'cucumber()'"
+    "CliWorld"->>"Cucumber": "builder with 'max_concurrent_scenarios(1)'"
+    "Cucumber"->>"FS": "discover '.feature' files in 'tests/features'"
+    "Cucumber"->>"CliWorld": "execute scenarios sequentially (max 1)"
+    "CliWorld"-->>"Cucumber": "scenario results (stdout, stderr, exit codes)"
+    "Cucumber"-->>"TestRunner": "aggregate results and 'run_and_exit'"
+    "TestRunner"-->>"Developer": "process exit code and output with improved diagnostics"
+```
+
+Figure: Which resolver control flow with cache lookups and workspace fallback.
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant WhichResolver
+    participant Cache
+    participant EnvSnapshot
+    participant Lookup
+    participant Workspace
+
+    Caller->>WhichResolver: resolve(command, options)
+    activate WhichResolver
+
+    WhichResolver->>EnvSnapshot: capture(cwd_override)
+    activate EnvSnapshot
+    EnvSnapshot-->>WhichResolver: env snapshot
+    deactivate EnvSnapshot
+
+    WhichResolver->>Cache: compute key (command, fingerprint, cwd, options)
+
+    alt cache hit (unless fresh=true)
+        Cache-->>WhichResolver: cached matches
+    else cache miss or fresh
+        WhichResolver->>Lookup: lookup(command, env, options)
+        activate Lookup
+
+        alt direct path
+            Lookup->>Lookup: resolve_direct(command, env, options)
+        else PATH search
+            Lookup->>Lookup: iterate resolved_dirs, collect candidates
+        end
+
+        alt found
+            Lookup-->>WhichResolver: matches
+        else not found in PATH
+            Lookup->>Workspace: fallback search (if enabled)
+            activate Workspace
+            Workspace-->>Lookup: candidates from workspace
+            deactivate Workspace
+            Lookup-->>WhichResolver: matches or not_found error
+        end
+        deactivate Lookup
+
+        WhichResolver->>Cache: store(key, matches)
+    end
+
+    WhichResolver-->>Caller: Result<Vec<Utf8PathBuf>, Error>
+    deactivate WhichResolver
+```
 
 #### Generic collection filters
 

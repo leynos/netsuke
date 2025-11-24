@@ -29,7 +29,7 @@ it offers:
 
 - **Safety:** A pure Rust implementation with **no `unsafe` libyaml
   dependencies**([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums))([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)),
-  eliminating C library risks.
+   eliminating C library risks.
 
 - **Spec Compliance:** Full YAML 1.2 support (including proper handling of
   anchors and merge

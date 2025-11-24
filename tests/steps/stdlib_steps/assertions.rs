@@ -7,11 +7,13 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use cucumber::then;
 use std::fs;
 use test_support::hash;
+use test_support::stdlib_assert::stdlib_output_or_error;
 use time::{Duration, OffsetDateTime, UtcOffset};
 use url::Url;
 
 use super::parsing::{parse_expected_offset, parse_iso_timestamp};
 use super::types::{ExpectedFragment, ExpectedOffset, ExpectedOutput, RelativePath};
+use super::workspace::resolve_executable_path;
 
 #[then(regex = r#"^the stdlib output is "(.+)"$"#)]
 pub(crate) fn assert_stdlib_output(
@@ -36,18 +38,15 @@ fn stdlib_root_and_output(world: &CliWorld) -> Result<(&Utf8Path, &str)> {
         .stdlib_root
         .as_deref()
         .context("expected stdlib workspace root")?;
-    let output = world
-        .stdlib_output
-        .as_deref()
-        .context("expected stdlib output")?;
+    let output = stdlib_output(world)?;
     Ok((root, output))
 }
 
 fn stdlib_output(world: &CliWorld) -> Result<&str> {
-    world
-        .stdlib_output
-        .as_deref()
-        .context("expected stdlib output")
+    stdlib_output_or_error(
+        world.stdlib_output.as_deref(),
+        world.stdlib_error.as_deref(),
+    )
 }
 
 fn stdlib_output_path(world: &CliWorld) -> Result<&Utf8Path> {
@@ -139,6 +138,21 @@ pub(crate) fn assert_stdlib_output_is_workspace_path(
         output == expected.as_str(),
         "expected output '{}', got '{output}'",
         expected
+    );
+    Ok(())
+}
+
+#[then(regex = r#"^the stdlib output is the workspace executable "(.+)"$"#)]
+pub(crate) fn assert_stdlib_output_is_workspace_executable(
+    world: &mut CliWorld,
+    relative_path: RelativePath,
+) -> Result<()> {
+    let relative = relative_path.into_path_buf();
+    let (root, output) = stdlib_root_and_output(world)?;
+    let expected = resolve_executable_path(root, relative.as_path());
+    ensure!(
+        output == expected.as_str(),
+        "expected stdlib output '{expected}' but was '{output}'"
     );
     Ok(())
 }

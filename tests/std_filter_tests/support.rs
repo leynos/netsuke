@@ -39,7 +39,7 @@ pub(crate) mod fallible {
         config: StdlibConfig,
     ) -> Result<(Environment<'static>, StdlibState)> {
         let mut env = Environment::new();
-        let state = stdlib::register_with_config(&mut env, config);
+        let state = stdlib::register_with_config(&mut env, config)?;
         Ok((env, state))
     }
 

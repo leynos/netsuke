@@ -107,7 +107,7 @@ fn from_str_named(
     jinja.add_function("env", |var_name: String| env_var(&var_name));
     jinja.add_function("glob", |pattern: String| glob_paths(&pattern));
     let _stdlib_state = match stdlib_config {
-        Some(config) => Ok(crate::stdlib::register_with_config(&mut jinja, config)),
+        Some(config) => crate::stdlib::register_with_config(&mut jinja, config),
         None => crate::stdlib::register(&mut jinja),
     }?;
 
@@ -233,7 +233,7 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
             )
         },
     )?;
-    Ok(StdlibConfig::new(dir)
-        .with_workspace_root_path(workspace_root)
+    Ok(StdlibConfig::new(dir)?
+        .with_workspace_root_path(workspace_root)?
         .with_network_policy(policy))
 }

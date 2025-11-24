@@ -632,7 +632,7 @@ mastering doctests:
    July 15, 2025, <https://doc.rust-lang.org/rustdoc/documentation-tests.html>
 [^4]: Documentation tests - GitHub Pages, accessed on July 15, 2025,
    <https://ebarnard.github.io/2019-06-03-rust-smaller-trait-implementers-docs/rustdoc/documentation-tests.html>
-   <!-- mdformat off -->
+    <!-- mdformat off -->
 [^5]: Documentation tests - Massachusetts Institute of Technology, accessed on
       July 15, 2025,
       <https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/rustdoc/documentation-tests.html>

@@ -249,8 +249,8 @@ dynamic capabilities to your manifest.
 - Expressions: `{{ 1 + 1 }}`, `{{ sources | map('basename') }}`
 
 - Control Structures (within specific keys like `foreach`, `when`, or inside
-  `macros`): `{% if enable %}…{% endif %}`, `{% for item in list %}…{% endfor
-  %}`
+  `macros`): `{% if enable %}…{% endif %}`,
+  `{% for item in list %}…{% endfor %}`
 
 **Important:** Structural Jinja (`{% %}`) is generally **not** allowed directly
 within the YAML structure outside of `macros`. Logic should primarily be within
@@ -422,6 +422,27 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   `flags` can be a string (e.g., `'-i'`) or list of strings. Implemented via
   `shell`. Marks template as impure. The same output and streaming limits apply
   when `grep` emits large result sets.
+
+**Executable Discovery (`which`):**
+
+- `which` filter/function: Resolves executables using the current `PATH`
+  without marking the template as impure. Example: `{{ 'clang++' | which }}`
+  returns the first matching binary; the function alias
+  `{{ which('clang++') }}` is available if piping would be awkward.
+- Keyword arguments:
+  - `all` (default `false`): Return every match, ordered by `PATH`.
+  - `canonical` (default `false`): Resolve symlinks and deduplicate entries by
+    their canonical path.
+  - `fresh` (default `false`): Bypass the resolver cache for this lookup while
+    keeping previous entries available for future renders.
+  - `cwd_mode` (`auto` | `always` | `never`, default `auto`): Control whether
+    empty `PATH` segments (and, on Windows, the implicit current-directory
+    search) are honoured. Use `"always"` to force the working directory into
+    the search order when `PATH` is empty.
+- Errors include actionable diagnostic codes such as
+  `netsuke::jinja::which::not_found` along with a preview of the scanned
+  `PATH`. Supplying unknown keyword arguments or invalid values raises
+  `netsuke::jinja::which::args`.
 
 **Impurity:** Filters like `shell` and functions like `fetch` interact with the
 outside world. Netsuke tracks this "impurity". Impure templates might affect

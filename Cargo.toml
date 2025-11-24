@@ -35,7 +35,9 @@ md5 = { package = "md-5", version = "0.10", optional = true }
 itoa = "1"
 itertools = "0.12"
 indexmap = { version = "2.5", features = ["serde"] }
+lru = "0.16"
 glob = "0.3.3"
+walkdir = "2.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 serde_json = { version = "1", features = ["preserve_order"] }

@@ -171,6 +171,30 @@ impl FromStr for RelativePath {
     }
 }
 
+/// Colon-delimited PATH entries used by stdlib steps.
+#[derive(Debug, Clone)]
+pub(crate) struct PathEntries(String);
+
+impl PathEntries {
+    pub(crate) fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl From<String> for PathEntries {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl FromStr for PathEntries {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.to_owned()))
+    }
+}
+
 /// Expected output text for stdlib assertion steps.
 #[derive(Debug, Clone)]
 pub(crate) struct ExpectedOutput(String);
