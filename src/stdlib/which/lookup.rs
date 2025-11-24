@@ -65,13 +65,49 @@ pub(super) fn resolve_direct(
     } else {
         env.cwd.join(raw)
     };
-    if !is_executable(&resolved) {
-        return Err(direct_not_found(command, &resolved));
+    #[cfg(windows)]
+    {
+        let mut matches = Vec::new();
+        let candidates = if resolved.extension().is_some() {
+            vec![resolved]
+        } else {
+            env.pathext()
+                .iter()
+                .map(|ext| {
+                    let mut candidate = resolved.as_str().to_owned();
+                    candidate.push_str(ext);
+                    Utf8PathBuf::from(candidate)
+                })
+                .collect()
+        };
+        for candidate in candidates {
+            if !is_executable(&candidate) {
+                continue;
+            }
+            matches.push(candidate);
+            if !options.all {
+                break;
+            }
+        }
+        if matches.is_empty() {
+            return Err(direct_not_found(command, &resolved));
+        }
+        if options.canonical {
+            canonicalise(matches)
+        } else {
+            Ok(matches)
+        }
     }
-    if options.canonical {
-        canonicalise(vec![resolved])
-    } else {
-        Ok(vec![resolved])
+    #[cfg(not(windows))]
+    {
+        if !is_executable(&resolved) {
+            return Err(direct_not_found(command, &resolved));
+        }
+        if options.canonical {
+            canonicalise(vec![resolved])
+        } else {
+            Ok(vec![resolved])
+        }
     }
 }
 
@@ -342,6 +378,33 @@ mod tests {
         ensure!(
             results == vec![exec],
             "expected readable executable despite blocked dir"
+        );
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    #[rstest]
+    fn resolve_direct_appends_pathext(env: TempWorkspace) -> Result<()> {
+        let base = env.root().join("tools").join("gradlew");
+        fs::create_dir_all(base.parent().expect("tools dir").as_std_path())
+            .context("mkdir tools")?;
+        let exe = base.with_extension("bat");
+        fs::write(exe.as_std_path(), b"@echo off\r\n").context("write stub")?;
+        make_executable(&exe)?;
+
+        let snapshot = EnvSnapshot {
+            cwd: env.root.clone(),
+            raw_path: None,
+            raw_pathext: Some(".bat".into()),
+            entries: vec![],
+            pathext: vec![".bat".into()],
+        };
+
+        let matches = resolve_direct(".\\tools\\gradlew", &snapshot, &WhichOptions::default())?;
+
+        ensure!(
+            matches == vec![exe],
+            "expected PATHEXT to expand direct path; got {matches:?}"
         );
         Ok(())
     }
