@@ -5,6 +5,8 @@ use std::fs;
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
+#[cfg(windows)]
+use std::collections::HashSet;
 use walkdir::WalkDir;
 
 use super::options::CwdMode;
@@ -190,6 +192,12 @@ fn search_workspace(
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     const SKIP_DIRS: &[&str] = &[".git", "target"];
     let mut matches = Vec::new();
+    #[cfg(not(windows))]
+    let _ = env;
+    #[cfg(windows)]
+    let match_ctx = prepare_workspace_match(command, env);
+    #[cfg(not(windows))]
+    let match_ctx = ();
     let walker = WalkDir::new(cwd)
         .follow_links(false)
         .sort_by_file_name()
@@ -219,7 +227,11 @@ fn search_workspace(
         if !entry.file_type().is_file() {
             continue;
         }
-        if !workspace_entry_matches(&entry, command, env) {
+        #[cfg(windows)]
+        let matches_entry = workspace_entry_matches(&entry, command, &match_ctx);
+        #[cfg(not(windows))]
+        let matches_entry = workspace_entry_matches(&entry, command, match_ctx);
+        if !matches_entry {
             continue;
         }
         let path = entry.into_path();
@@ -243,32 +255,56 @@ fn search_workspace(
     Ok(matches)
 }
 
-fn workspace_entry_matches(entry: &walkdir::DirEntry, command: &str, env: &EnvSnapshot) -> bool {
-    #[cfg(not(windows))]
-    let _ = env;
+fn workspace_entry_matches(
+    entry: &walkdir::DirEntry,
+    command: &str,
+    #[cfg(windows)] ctx: &WorkspaceMatchContext,
+    #[cfg(not(windows))] _ctx: (),
+) -> bool {
     #[cfg(windows)]
     {
         let file_name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        let command_lower = command.to_ascii_lowercase();
-
-        if file_name == command_lower {
+        if file_name == ctx.command_lower {
             return true;
         }
-
-        if command_lower.contains('.') {
+        if ctx.command_has_ext {
             return false;
         }
-
-        let candidates = env::candidate_paths(Utf8Path::new(""), &command_lower, env.pathext());
-        candidates
-            .iter()
-            .filter_map(|candidate| Utf8Path::new(candidate.as_str()).file_name())
-            .any(|name| name.to_ascii_lowercase() == file_name)
+        ctx.basenames.contains(&file_name)
     }
     #[cfg(not(windows))]
     {
         let file_name = entry.file_name().to_string_lossy();
         file_name == command
+    }
+}
+
+#[cfg(windows)]
+struct WorkspaceMatchContext {
+    command_lower: String,
+    command_has_ext: bool,
+    basenames: HashSet<String>,
+}
+
+#[cfg(windows)]
+fn prepare_workspace_match(command: &str, env: &EnvSnapshot) -> WorkspaceMatchContext {
+    let command_lower = command.to_ascii_lowercase();
+    let command_has_ext = command_lower.contains('.');
+    let mut basenames = HashSet::new();
+
+    if !command_has_ext {
+        let candidates = env::candidate_paths(Utf8Path::new(""), &command_lower, env.pathext());
+        for candidate in candidates {
+            if let Some(name) = Utf8Path::new(candidate.as_str()).file_name() {
+                basenames.insert(name.to_ascii_lowercase());
+            }
+        }
+    }
+
+    WorkspaceMatchContext {
+        command_lower,
+        command_has_ext,
+        basenames,
     }
 }
 
