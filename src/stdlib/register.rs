@@ -1,4 +1,10 @@
 //! Registration entrypoints for wiring stdlib helpers into `MiniJinja`.
+//!
+//! Hooks file tests, path helpers, collection utilities, time functions,
+//! network fetch helpers, command wrappers, and the `which` filter/function
+//! into a single environment. The public `register` and
+//! `register_with_config` entrypoints are re-exported from `netsuke::stdlib`
+//! alongside `StdlibConfig` and `NetworkConfig`.
 
 use super::{StdlibConfig, StdlibState, collections, command, network, path, time, which};
 use anyhow::Context;
@@ -42,7 +48,10 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     let path = camino::Utf8PathBuf::from_path_buf(cwd).map_err(|path| {
         anyhow::anyhow!("current directory contains non-UTF-8 components: {path:?}")
     })?;
-    register_with_config(env, StdlibConfig::new(root).with_workspace_root_path(path))
+    register_with_config(
+        env,
+        StdlibConfig::new(root)?.with_workspace_root_path(path)?,
+    )
 }
 
 /// Register stdlib helpers using an explicit configuration.
@@ -61,7 +70,8 @@ pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
 /// let dir = Dir::open_ambient_dir(".", ambient_authority())
 ///     .expect("open workspace");
 /// let mut env = Environment::new();
-/// let _state = stdlib::register_with_config(&mut env, StdlibConfig::new(dir));
+/// let config = StdlibConfig::new(dir).expect("configure stdlib workspace");
+/// let _state = stdlib::register_with_config(&mut env, config);
 /// ```
 ///
 /// # Errors
@@ -97,22 +107,29 @@ pub fn value_from_bytes(bytes: Vec<u8>) -> Value {
     }
 }
 
-fn register_file_tests(env: &mut Environment<'_>) {
-    const TESTS: &[FileTest] = &[
-        ("dir", is_dir),
-        ("file", is_file),
-        ("symlink", is_symlink),
-        ("pipe", is_fifo),
-        ("block_device", is_block_device),
-        ("char_device", is_char_device),
-        ("device", is_device),
-    ];
+#[cfg(unix)]
+const FILE_TESTS: &[FileTest] = &[
+    ("dir", is_dir),
+    ("file", is_file),
+    ("symlink", is_symlink),
+    ("pipe", is_fifo),
+    ("block_device", is_block_device),
+    ("char_device", is_char_device),
+    ("device", is_device),
+];
 
-    for &(name, pred) in TESTS {
+#[cfg(not(unix))]
+const FILE_TESTS: &[FileTest] = &[("dir", is_dir), ("file", is_file), ("symlink", is_symlink)];
+
+fn register_file_tests(env: &mut Environment<'_>) {
+    for &(name, pred) in FILE_TESTS {
         env.add_test(name, move |val: Value| -> Result<bool, Error> {
             if let Some(s) = val.as_str() {
                 return path::file_type_matches(Utf8Path::new(s), pred);
             }
+            // Treat non-string inputs as a negative match to mirror MiniJinja's
+            // permissive truthiness semantics (for example `42 is odd` yields
+            // `false` rather than raising a type error).
             Ok(false)
         });
     }
@@ -132,34 +149,18 @@ fn is_symlink(ft: fs::FileType) -> bool {
 fn is_fifo(ft: fs::FileType) -> bool {
     ft.is_fifo()
 }
-#[cfg(not(unix))]
-fn is_fifo(_ft: fs::FileType) -> bool {
-    false
-}
 
 #[cfg(unix)]
 fn is_block_device(ft: fs::FileType) -> bool {
     ft.is_block_device()
-}
-#[cfg(not(unix))]
-fn is_block_device(_ft: fs::FileType) -> bool {
-    false
 }
 
 #[cfg(unix)]
 fn is_char_device(ft: fs::FileType) -> bool {
     ft.is_char_device()
 }
-#[cfg(not(unix))]
-fn is_char_device(_ft: fs::FileType) -> bool {
-    false
-}
 
 #[cfg(unix)]
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
-}
-#[cfg(not(unix))]
-fn is_device(_ft: fs::FileType) -> bool {
-    false
 }

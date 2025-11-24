@@ -1,8 +1,11 @@
 //! Standard library registration for `MiniJinja` templates.
 //!
-//! Wires file tests, path helpers, collection utilities, network helpers, and
-//! command wrappers into a single entrypoint so templates behave consistently
-//! across projects.
+//! Wires file tests, path helpers (including the `which` filter/function),
+//! collection utilities, time helpers, network helpers, and command wrappers
+//! into a single entrypoint so templates behave consistently across projects.
+//! Configuration and registration helpers are re-exported to keep integration
+//! points discoverable: `StdlibConfig`, `NetworkConfig`, `register`,
+//! `register_with_config`, and `value_from_bytes`.
 
 mod collections;
 mod command;

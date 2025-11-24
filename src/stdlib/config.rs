@@ -1,7 +1,7 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
 use super::{command, network::NetworkPolicy};
-use anyhow::bail;
+use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use std::{env, sync::Arc};
@@ -32,19 +32,18 @@ pub struct StdlibConfig {
 impl StdlibConfig {
     /// Create a configuration bound to `workspace_root`.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if Netsuke's built-in fetch cache directory constant fails
-    /// validation. This indicates a programming error and should never occur in
-    /// production builds.
-    #[must_use]
-    pub fn new(workspace_root: Dir) -> Self {
+    /// Returns an error if the default fetch cache path fails validation. This
+    /// indicates a programming error in the baked-in constant rather than a
+    /// runtime condition; callers should treat failures as impossible in
+    /// normal operation. The constructor itself never panics.
+    pub fn new(workspace_root: Dir) -> anyhow::Result<Self> {
         let default = Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR);
         // Rationale: the constant is static and validated for defence in depth.
-        if let Err(err) = Self::validate_cache_relative(&default) {
-            panic!("default fetch cache path should be valid: {err}");
-        }
-        Self {
+        Self::validate_cache_relative(&default)
+            .map_err(|err| anyhow!("default fetch cache path should be valid: {err}"))?;
+        Ok(Self {
             workspace_root: Arc::new(workspace_root),
             workspace_root_path: None,
             fetch_cache_relative: default,
@@ -52,20 +51,21 @@ impl StdlibConfig {
             fetch_max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
             command_max_output_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
             command_max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
-        }
+        })
     }
 
     /// Record the absolute workspace root path for capability-scoped helpers.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `path` is not absolute.
-    #[must_use]
-    pub fn with_workspace_root_path(mut self, path: impl Into<Utf8PathBuf>) -> Self {
-        let absolute = path.into();
-        assert!(absolute.is_absolute(), "workspace root must be absolute");
-        self.workspace_root_path = Some(absolute);
-        self
+    /// Returns an error if `path` is not absolute. This protects call sites
+    /// that derive the workspace from user input rather than assuming only
+    /// programmer-provided paths reach this builder.
+    pub fn with_workspace_root_path(mut self, path: impl AsRef<Utf8Path>) -> anyhow::Result<Self> {
+        let absolute = path.as_ref();
+        ensure!(absolute.is_absolute(), "workspace root must be absolute");
+        self.workspace_root_path = Some(absolute.to_owned());
+        Ok(self)
     }
 
     /// Override the network cache location relative to the workspace root.
@@ -74,9 +74,13 @@ impl StdlibConfig {
     ///
     /// Returns an error when the path is empty, absolute, or escapes the
     /// workspace via parent components.
-    pub fn with_fetch_cache_relative(mut self, relative_path: Utf8PathBuf) -> anyhow::Result<Self> {
-        Self::validate_cache_relative(&relative_path)?;
-        self.fetch_cache_relative = relative_path;
+    pub fn with_fetch_cache_relative(
+        mut self,
+        relative_path: impl AsRef<Utf8Path>,
+    ) -> anyhow::Result<Self> {
+        let relative = relative_path.as_ref();
+        Self::validate_cache_relative(relative)?;
+        self.fetch_cache_relative = relative.to_owned();
         Ok(self)
     }
 
@@ -93,7 +97,7 @@ impl StdlibConfig {
     ///
     /// Returns an error when `max_bytes` is zero.
     pub fn with_fetch_max_response_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
-        anyhow::ensure!(max_bytes > 0, "fetch response limit must be positive");
+        ensure!(max_bytes > 0, "fetch response limit must be positive");
         self.fetch_max_response_bytes = max_bytes;
         Ok(self)
     }
@@ -104,7 +108,7 @@ impl StdlibConfig {
     ///
     /// Returns an error when `max_bytes` is zero.
     pub fn with_command_max_output_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
-        anyhow::ensure!(max_bytes > 0, "command output limit must be positive");
+        ensure!(max_bytes > 0, "command output limit must be positive");
         self.command_max_output_bytes = max_bytes;
         Ok(self)
     }
@@ -115,7 +119,7 @@ impl StdlibConfig {
     ///
     /// Returns an error when `max_bytes` is zero.
     pub fn with_command_max_stream_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
-        anyhow::ensure!(max_bytes > 0, "command stream limit must be positive");
+        ensure!(max_bytes > 0, "command stream limit must be positive");
         self.command_max_stream_bytes = max_bytes;
         Ok(self)
     }
@@ -189,6 +193,14 @@ impl StdlibConfig {
 }
 
 impl Default for StdlibConfig {
+    /// Construct a configuration rooted at the ambient current directory.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the workspace root cannot be opened with capability-based
+    /// I/O, when the current directory cannot be resolved, or when the current
+    /// directory contains non-UTF-8 components. Call [`StdlibConfig::new`]
+    /// instead when you need an error-returning API.
     fn default() -> Self {
         let root = Dir::open_ambient_dir(".", ambient_authority())
             .unwrap_or_else(|err| panic!("open stdlib workspace root: {err}"));
@@ -196,7 +208,10 @@ impl Default for StdlibConfig {
             env::current_dir().unwrap_or_else(|err| panic!("resolve current directory: {err}"));
         let path = Utf8PathBuf::from_path_buf(cwd)
             .unwrap_or_else(|path| panic!("cwd contains non-UTF-8 components: {}", path.display()));
-        Self::new(root).with_workspace_root_path(path)
+        Self::new(root)
+            .unwrap_or_else(|err| panic!("default fetch cache path should be valid: {err}"))
+            .with_workspace_root_path(path)
+            .unwrap_or_else(|err| panic!("workspace root must be absolute: {err}"))
     }
 }
 
@@ -218,96 +233,94 @@ mod tests {
     use super::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, StdlibConfig};
     use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
+    use rstest::{fixture, rstest};
     use std::env;
 
-    #[test]
-    fn validate_cache_relative_rejects_empty() {
-        let err = StdlibConfig::validate_cache_relative(Utf8Path::new(""))
-            .expect_err("empty path should fail");
-        assert_eq!(err.to_string(), "fetch cache path must not be empty");
+    #[fixture]
+    fn workspace() -> (Dir, Utf8PathBuf) {
+        let dir =
+            Dir::open_ambient_dir(".", ambient_authority()).expect("open workspace root fixture");
+        let path = Utf8PathBuf::from_path_buf(
+            env::current_dir().expect("resolve cwd for workspace fixture"),
+        )
+        .expect("cwd should be valid UTF-8");
+        (dir, path)
     }
 
-    #[test]
-    fn validate_cache_relative_rejects_absolute_paths() {
-        let err = StdlibConfig::validate_cache_relative(Utf8Path::new("/cache"))
-            .expect_err("absolute path should fail");
-        assert_eq!(
-            err.to_string(),
-            "fetch cache path '/cache' must be relative to the workspace"
-        );
+    #[fixture]
+    fn base_config(#[from(workspace)] workspace: (Dir, Utf8PathBuf)) -> StdlibConfig {
+        let (dir, path) = workspace;
+        StdlibConfig::new(dir)
+            .expect("construct stdlib config")
+            .with_workspace_root_path(path)
+            .expect("record workspace root")
     }
 
-    #[test]
-    fn validate_cache_relative_rejects_parent_components() {
-        let err = StdlibConfig::validate_cache_relative(Utf8Path::new("../escape"))
-            .expect_err("parent components should fail");
-        assert_eq!(
-            err.to_string(),
-            "fetch cache path '../escape' must stay within the workspace"
-        );
+    #[rstest]
+    #[case(Utf8Path::new(""), "fetch cache path must not be empty")]
+    #[case(
+        Utf8Path::new("/cache"),
+        "fetch cache path '/cache' must be relative to the workspace"
+    )]
+    #[case(
+        Utf8Path::new("../escape"),
+        "fetch cache path '../escape' must stay within the workspace"
+    )]
+    fn validate_cache_relative_rejects_invalid_inputs(
+        #[case] path: &Utf8Path,
+        #[case] message: &str,
+    ) {
+        let err =
+            StdlibConfig::validate_cache_relative(path).expect_err("invalid paths should fail");
+        assert_eq!(err.to_string(), message);
     }
 
-    #[test]
+    #[rstest]
     fn validate_cache_relative_accepts_workspace_relative_paths() {
         StdlibConfig::validate_cache_relative(Utf8Path::new("nested/cache"))
             .expect("relative path should be accepted");
     }
 
-    #[test]
-    fn command_limits_default_to_constants() {
-        let config = StdlibConfig::default();
-        assert_eq!(
-            config.command_max_output_bytes,
-            DEFAULT_COMMAND_MAX_OUTPUT_BYTES
-        );
-        assert_eq!(
-            config.command_max_stream_bytes,
-            DEFAULT_COMMAND_MAX_STREAM_BYTES
-        );
+    #[rstest]
+    #[case::output(CommandLimitCase {
+        builder: StdlibConfig::with_command_max_output_bytes,
+        accessor: |cfg: &StdlibConfig| cfg.command_max_output_bytes,
+        default_value: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
+        updated: 2_048,
+        zero_err: "command output limit must be positive",
+    })]
+    #[case::stream(CommandLimitCase {
+        builder: StdlibConfig::with_command_max_stream_bytes,
+        accessor: |cfg: &StdlibConfig| cfg.command_max_stream_bytes,
+        default_value: DEFAULT_COMMAND_MAX_STREAM_BYTES,
+        updated: 65_536,
+        zero_err: "command stream limit must be positive",
+    })]
+    fn command_limit_builders_validate_and_update(
+        base_config: StdlibConfig,
+        #[case] case: CommandLimitCase,
+    ) {
+        assert_eq!((case.accessor)(&base_config), case.default_value);
+
+        let updated_config =
+            (case.builder)(base_config.clone(), case.updated).expect("positive limit");
+        assert_eq!((case.accessor)(&updated_config), case.updated);
+
+        let err = (case.builder)(base_config, 0).expect_err("zero-byte limits must be rejected");
+        assert_eq!(err.to_string(), case.zero_err);
     }
 
-    #[test]
-    fn command_output_limit_builder_updates_value() {
-        let config = StdlibConfig::default()
-            .with_command_max_output_bytes(2_048)
-            .expect("positive limits should succeed");
-        assert_eq!(config.command_max_output_bytes, 2_048);
+    struct CommandLimitCase {
+        builder: fn(StdlibConfig, u64) -> anyhow::Result<StdlibConfig>,
+        accessor: fn(&StdlibConfig) -> u64,
+        default_value: u64,
+        updated: u64,
+        zero_err: &'static str,
     }
 
-    #[test]
-    fn command_output_limit_builder_rejects_zero() {
-        let err = StdlibConfig::default()
-            .with_command_max_output_bytes(0)
-            .expect_err("zero-byte limits must be rejected");
-        assert_eq!(err.to_string(), "command output limit must be positive");
-    }
-
-    #[test]
-    fn command_stream_limit_builder_updates_value() {
-        let config = StdlibConfig::default()
-            .with_command_max_stream_bytes(65_536)
-            .expect("positive limits should succeed");
-        assert_eq!(config.command_max_stream_bytes, 65_536);
-    }
-
-    #[test]
-    fn command_stream_limit_builder_rejects_zero() {
-        let err = StdlibConfig::default()
-            .with_command_max_stream_bytes(0)
-            .expect_err("zero-byte limits must be rejected");
-        assert_eq!(err.to_string(), "command stream limit must be positive");
-    }
-
-    #[test]
-    fn command_limits_propagate_into_components() {
-        let dir = Dir::open_ambient_dir(".", ambient_authority())
-            .expect("open workspace root for config tests");
-        let path = Utf8PathBuf::from_path_buf(
-            env::current_dir().expect("resolve cwd for command config test"),
-        )
-        .expect("cwd should be valid UTF-8");
-        let config = StdlibConfig::new(dir)
-            .with_workspace_root_path(path)
+    #[rstest]
+    fn command_limits_propagate_into_components(base_config: StdlibConfig) {
+        let config = base_config
             .with_command_max_output_bytes(4_096)
             .expect("set capture limit")
             .with_command_max_stream_bytes(131_072)

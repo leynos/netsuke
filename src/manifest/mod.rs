@@ -233,7 +233,7 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
             )
         },
     )?;
-    Ok(StdlibConfig::new(dir)
-        .with_workspace_root_path(workspace_root)
+    Ok(StdlibConfig::new(dir)?
+        .with_workspace_root_path(workspace_root)?
         .with_network_policy(policy))
 }

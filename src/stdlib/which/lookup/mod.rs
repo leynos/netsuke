@@ -19,6 +19,19 @@ use super::{
     options::WhichOptions,
 };
 
+/// Resolve `command` either as a direct path or by searching the environment's
+/// PATH, optionally canonicalising or collecting all matches.
+///
+/// When `options.all` is `true`, every executable candidate is returned;
+/// otherwise resolution stops at the first match. The current working directory
+/// is injected according to `options.cwd_mode`. Results are canonicalised when
+/// requested, and cache-friendly options (such as `fresh`) are respected
+/// upstream by the resolver.
+///
+/// # Errors
+///
+/// Propagates filesystem errors during lookup and canonicalisation, and
+/// returns `netsuke::jinja::which::not_found` when no candidate is discovered.
 pub(super) fn lookup(
     command: &str,
     env: &EnvSnapshot,
@@ -56,6 +69,17 @@ pub(super) fn lookup(
     }
 }
 
+/// Resolve a command that already looks like a path (absolute or relative).
+///
+/// On Windows this honours `PATHEXT` when the path is missing an extension so
+/// callers can pass `.\gradlew` and still resolve `gradlew.bat`. On POSIX the
+/// candidate must already be executable. Canonicalisation is applied when
+/// requested in `options`.
+///
+/// # Errors
+///
+/// Returns `netsuke::jinja::which::not_found` when no matching executable is
+/// discovered.
 pub(super) fn resolve_direct(
     command: &str,
     env: &EnvSnapshot,
@@ -129,6 +153,12 @@ fn resolve_direct_posix(
     }
 }
 
+/// Push executable candidates into `matches`, optionally short-circuiting when
+/// only the first hit is required.
+///
+/// Returns `true` when at least one candidate was added and `collect_all` is
+/// `false`, signalling to callers that the search can stop; returns `false`
+/// otherwise.
 pub(super) fn push_matches(
     matches: &mut Vec<Utf8PathBuf>,
     candidates: Vec<Utf8PathBuf>,
@@ -146,6 +176,8 @@ pub(super) fn push_matches(
     false
 }
 
+/// Return `true` when the command string already includes path separators or,
+/// on Windows, a drive letter, meaning PATH traversal should be skipped.
 pub(super) fn is_direct_path(command: &str) -> bool {
     #[cfg(windows)]
     {
@@ -157,6 +189,10 @@ pub(super) fn is_direct_path(command: &str) -> bool {
     }
 }
 
+/// Check whether `path` points to an executable file.
+///
+/// On Unix this requires at least one execute bit. On other platforms it only
+/// verifies that the path exists and is a file.
 pub(super) fn is_executable(path: &Utf8Path) -> bool {
     fs::metadata(path.as_std_path())
         .is_ok_and(|metadata| metadata.is_file() && has_execute_permission(&metadata))
@@ -184,13 +220,14 @@ fn handle_miss(
     Err(not_found_error(command, dirs, options.cwd_mode))
 }
 
+/// Walk the workspace looking for executables when PATH is empty and the
+/// resolver is allowed to consult the current directory.
 fn search_workspace(
     cwd: &Utf8Path,
     command: &str,
     collect_all: bool,
     env: &EnvSnapshot,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
-    const SKIP_DIRS: &[&str] = &[".git", "target"];
     let mut matches = Vec::new();
     #[cfg(not(windows))]
     let _ = env;
@@ -202,15 +239,7 @@ fn search_workspace(
         .follow_links(false)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|entry| {
-            let ft = entry.file_type();
-            if ft.is_dir() {
-                let name = entry.file_name().to_string_lossy();
-                !SKIP_DIRS.iter().any(|skip| name == *skip)
-            } else {
-                true
-            }
-        });
+        .filter_entry(should_visit_entry);
 
     for walk_entry in walker {
         let entry = match walk_entry {
@@ -224,35 +253,58 @@ fn search_workspace(
                 continue;
             }
         };
-        if !entry.file_type().is_file() {
-            continue;
-        }
         #[cfg(windows)]
-        let matches_entry = workspace_entry_matches(&entry, command, &match_ctx);
+        let maybe_match = process_workspace_entry(entry, command, &match_ctx)?;
         #[cfg(not(windows))]
-        let matches_entry = workspace_entry_matches(&entry, command, match_ctx);
-        if !matches_entry {
-            continue;
-        }
-        let path = entry.into_path();
-        let utf8 = Utf8PathBuf::from_path_buf(path).map_err(|path_buf| {
-            let lossy_path = path_buf.to_string_lossy();
-            Error::new(
-                ErrorKind::InvalidOperation,
-                format!(
-                    "workspace path contains non-UTF-8 components while resolving command '{command}': {lossy_path}"
-                ),
-            )
-        })?;
-        if !is_executable(&utf8) {
-            continue;
-        }
-        matches.push(utf8);
-        if !collect_all {
-            break;
+        let maybe_match = process_workspace_entry(entry, command, match_ctx)?;
+
+        if let Some(path) = maybe_match {
+            matches.push(path);
+            if !collect_all {
+                break;
+            }
         }
     }
     Ok(matches)
+}
+
+const WORKSPACE_SKIP_DIRS: &[&str] = &[".git", "target"];
+
+fn should_visit_entry(entry: &walkdir::DirEntry) -> bool {
+    if !entry.file_type().is_dir() {
+        return true;
+    }
+    let name = entry.file_name().to_string_lossy();
+    !WORKSPACE_SKIP_DIRS.iter().any(|skip| name == *skip)
+}
+
+fn process_workspace_entry(
+    entry: walkdir::DirEntry,
+    command: &str,
+    #[cfg(windows)] ctx: &WorkspaceMatchContext,
+    #[cfg(not(windows))] ctx: (),
+) -> Result<Option<Utf8PathBuf>, Error> {
+    if !entry.file_type().is_file() {
+        return Ok(None);
+    }
+    #[cfg(windows)]
+    let matches_entry = workspace_entry_matches(&entry, command, ctx);
+    #[cfg(not(windows))]
+    let matches_entry = workspace_entry_matches(&entry, command, ctx);
+    if !matches_entry {
+        return Ok(None);
+    }
+    let path = entry.into_path();
+    let utf8 = Utf8PathBuf::from_path_buf(path).map_err(|path_buf| {
+        let lossy_path = path_buf.to_string_lossy();
+        Error::new(
+            ErrorKind::InvalidOperation,
+            format!(
+                "workspace path contains non-UTF-8 components while resolving command '{command}': {lossy_path}"
+            ),
+        )
+    })?;
+    Ok(is_executable(&utf8).then_some(utf8))
 }
 
 fn workspace_entry_matches(
@@ -319,6 +371,10 @@ fn has_execute_permission(metadata: &fs::Metadata) -> bool {
     metadata.is_file()
 }
 
+/// Canonicalise, de-duplicate, and UTF-8 validate discovered paths.
+///
+/// Returns an error when canonicalisation fails or when any canonical path
+/// cannot be represented as UTF-8.
 pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, Error> {
     let mut unique = IndexSet::new();
     let mut resolved = Vec::new();

@@ -28,8 +28,8 @@ fn env_with_workspace_policy(
     policy: NetworkPolicy,
 ) -> Result<(Environment<'static>, StdlibState)> {
     fallible::stdlib_env_with_config(
-        StdlibConfig::new(workspace)
-            .with_workspace_root_path(workspace_path)
+        StdlibConfig::new(workspace)?
+            .with_workspace_root_path(workspace_path)?
             .with_network_policy(policy),
     )
 }

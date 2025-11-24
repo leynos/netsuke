@@ -313,8 +313,8 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
 
     let config = StdlibConfig::new(
         Dir::open_ambient_dir(&root, ambient_authority()).context("open workspace")?,
-    )
-    .with_workspace_root_path(root.clone());
+    )?
+    .with_workspace_root_path(root.clone())?;
     let _path = PathEnv::new(&[])?;
     let (mut env, _state) = fallible::stdlib_env_with_config(config)?;
     let render_result = render(&mut env, &Template::from("{{ 'helper' | which }}"));
