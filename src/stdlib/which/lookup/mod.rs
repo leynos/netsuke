@@ -206,7 +206,10 @@ fn handle_miss(
     let path_empty = env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
+        #[cfg(windows)]
         let discovered = search_workspace(&env.cwd, command, options.all, env)?;
+        #[cfg(not(windows))]
+        let discovered = search_workspace(&env.cwd, command, options.all, ())?;
         if !discovered.is_empty() {
             return if options.canonical {
                 canonicalise(discovered)

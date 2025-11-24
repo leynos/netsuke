@@ -61,9 +61,13 @@ fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspa
     let non_exec = workspace.root().join("tool2");
     fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
 
+    #[cfg(windows)]
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    #[cfg(windows)]
     let results = search_workspace(workspace.root(), "tool", false, &snapshot)?;
+    #[cfg(not(windows))]
+    let results = search_workspace(workspace.root(), "tool", false, ())?;
     ensure!(
         results == vec![exec],
         "expected executable to be discovered"
@@ -78,9 +82,13 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
     fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
     let second = write_exec(subdir.as_path(), "tool")?;
 
+    #[cfg(windows)]
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    #[cfg(windows)]
     let mut results = search_workspace(workspace.root(), "tool", true, &snapshot)?;
+    #[cfg(not(windows))]
+    let mut results = search_workspace(workspace.root(), "tool", true, ())?;
     results.sort();
     let mut expected = vec![first, second];
     expected.sort();
@@ -97,9 +105,13 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
     fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
     write_exec(heavy.as_path(), "tool")?;
 
+    #[cfg(windows)]
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    #[cfg(windows)]
     let results = search_workspace(workspace.root(), "tool", false, &snapshot)?;
+    #[cfg(not(windows))]
+    let results = search_workspace(workspace.root(), "tool", false, ())?;
     ensure!(results.is_empty(), "expected target/ to be skipped");
     Ok(())
 }
@@ -117,9 +129,13 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
     fs::set_permissions(blocked.as_std_path(), perms).context("chmod blocked")?;
 
     let exec = write_exec(workspace.root(), "tool")?;
+    #[cfg(windows)]
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    #[cfg(windows)]
     let results = search_workspace(workspace.root(), "tool", false, &snapshot)?;
+    #[cfg(not(windows))]
+    let results = search_workspace(workspace.root(), "tool", false, ())?;
     ensure!(
         results == vec![exec],
         "expected readable executable despite blocked dir"
