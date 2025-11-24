@@ -23,7 +23,8 @@ pub(crate) struct WhichResolver {
 
 impl WhichResolver {
     pub(crate) fn new(cwd_override: Option<Arc<Utf8PathBuf>>) -> Self {
-        let capacity = NonZeroUsize::new(CACHE_CAPACITY).unwrap_or(NonZeroUsize::MIN);
+        let capacity = NonZeroUsize::new(CACHE_CAPACITY)
+            .unwrap_or_else(|| panic!("CACHE_CAPACITY must be greater than zero"));
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(capacity))),
             cwd_override,

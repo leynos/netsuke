@@ -67,47 +67,63 @@ pub(super) fn resolve_direct(
     };
     #[cfg(windows)]
     {
-        let mut matches = Vec::new();
-        let candidates = if resolved.extension().is_some() {
-            vec![resolved]
-        } else {
-            env.pathext()
-                .iter()
-                .map(|ext| {
-                    let mut candidate = resolved.as_str().to_owned();
-                    candidate.push_str(ext);
-                    Utf8PathBuf::from(candidate)
-                })
-                .collect()
-        };
-        for candidate in candidates {
-            if !is_executable(&candidate) {
-                continue;
-            }
-            matches.push(candidate);
-            if !options.all {
-                break;
-            }
-        }
-        if matches.is_empty() {
-            return Err(direct_not_found(command, &resolved));
-        }
-        if options.canonical {
-            canonicalise(matches)
-        } else {
-            Ok(matches)
-        }
+        resolve_direct_windows(command, &resolved, env, options)
     }
     #[cfg(not(windows))]
     {
-        if !is_executable(&resolved) {
-            return Err(direct_not_found(command, &resolved));
-        }
-        if options.canonical {
-            canonicalise(vec![resolved])
-        } else {
-            Ok(vec![resolved])
-        }
+        resolve_direct_posix(command, &resolved, options)
+    }
+}
+
+#[cfg(windows)]
+fn resolve_direct_windows(
+    command: &str,
+    resolved: &Utf8PathBuf,
+    env: &EnvSnapshot,
+    options: &WhichOptions,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let candidates = direct_candidates(resolved, env);
+    let mut matches = Vec::new();
+    let _ = push_matches(&mut matches, candidates, options.all);
+    if matches.is_empty() {
+        return Err(direct_not_found(command, resolved));
+    }
+    if options.canonical {
+        canonicalise(matches)
+    } else {
+        Ok(matches)
+    }
+}
+
+#[cfg(windows)]
+fn direct_candidates(resolved: &Utf8PathBuf, env: &EnvSnapshot) -> Vec<Utf8PathBuf> {
+    if resolved.extension().is_some() {
+        vec![resolved.clone()]
+    } else {
+        env.pathext()
+            .iter()
+            .map(|ext| {
+                let mut candidate = resolved.as_str().to_owned();
+                candidate.push_str(ext);
+                Utf8PathBuf::from(candidate)
+            })
+            .collect()
+    }
+}
+
+#[cfg(not(windows))]
+fn resolve_direct_posix(
+    command: &str,
+    resolved: &Utf8PathBuf,
+    options: &WhichOptions,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    if !is_executable(resolved) {
+        return Err(direct_not_found(command, resolved));
+    }
+    if options.canonical {
+        canonicalise(vec![resolved.clone()])
+    } else {
+        Ok(vec![resolved.clone()])
     }
 }
 

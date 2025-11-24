@@ -22,7 +22,10 @@ mod tests {
     fn returns_output_when_present() {
         let result = stdlib_output_or_error(Some("value"), None);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "value");
+        assert_eq!(
+            result.expect("expected stdlib_output_or_error to return output"),
+            "value"
+        );
     }
 
     #[test]

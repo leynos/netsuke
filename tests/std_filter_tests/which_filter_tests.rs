@@ -4,6 +4,7 @@ use minijinja::{context, Environment};
 use rstest::rstest;
 use std::ffi::{OsStr, OsString};
 use std::env;
+use netsuke::stdlib::StdlibConfig;
 use tempfile::tempdir;
 use test_support::{env::VarGuard, env_lock::EnvLock};
 
@@ -316,8 +317,9 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
     .with_workspace_root_path(root.clone());
     let _path = PathEnv::new(&[])?;
     let (mut env, _state) = fallible::stdlib_env_with_config(config)?;
-    let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
+    let render_result = render(&mut env, &Template::from("{{ 'helper' | which }}"));
     env::set_current_dir(orig_cwd).context("restore cwd")?;
+    let output = render_result?;
     assert_eq!(output, tool.as_str());
     Ok(())
 }

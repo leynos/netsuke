@@ -1101,13 +1101,15 @@ sequenceDiagram
 ```
 
 Implementation mirrors the design with a small (64-entry) LRU cache keyed by
-the command name, current directory, `PATH`, optional `PATHEXT`, and every
-filter option aside from `fresh`. Cache hits validate metadata before returning
-so deleted or repointed binaries immediately trigger a re-scan, and
-`fresh=true` bypasses the cache without discarding previously memoised entries.
-Diagnostic errors embed the `netsuke::jinja::which::*` codes and print a
-trimmed preview of the scanned `PATH`, giving manifest authors clear
-troubleshooting hints on both Unix and Windows hosts.
+the command name, current directory, a fingerprint of `PATH`/`PATHEXT`, and
+every filter option aside from `fresh`. Entries validate executability on
+insertion; cache reads skip revalidation, so stale binaries fall out only when
+the cache key changes (for example after a PATH update) or the entry is
+evicted. The `fresh=true` flag bypasses the cache for a single lookup without
+discarding previously memoised entries. Diagnostic errors embed the
+`netsuke::jinja::which::*` codes and print a trimmed preview of the scanned
+`PATH`, giving manifest authors clear troubleshooting hints on both Unix and
+Windows hosts.
 
 #### Generic collection filters
 
