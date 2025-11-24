@@ -13,6 +13,19 @@ use super::EnvSnapshot;
 use super::env;
 use super::is_executable;
 
+/// Recursively search the workspace rooted at `cwd` for executables matching
+/// `command`.
+///
+/// - `cwd`: workspace root to traverse (symlinks are not followed).
+/// - `command`: name to match (Windows: case-insensitive with `PATHEXT`
+///   expansion; other platforms: exact case-sensitive filename match).
+/// - `collect_all`: when `true`, return every match; otherwise stop after the
+///   first executable.
+/// - `env`: provided only on Windows to supply `PATHEXT` for matching.
+///
+/// Skips unreadable entries, ignores heavy/VCS directories via
+/// `should_visit_entry`, and returns `Ok(Vec<Utf8PathBuf>)` containing the
+/// discovered executables or an `Error` if UTF-8 conversion fails.
 pub(super) fn search_workspace(
     cwd: &Utf8Path,
     command: &str,
@@ -46,10 +59,17 @@ pub(super) fn search_workspace(
     collect_workspace_matches(entries, command, collect_all, match_ctx)
 }
 
-/// Accumulates executable matches from workspace traversal, stopping early
-/// when `collect_all` is `false`. The iterator supplies already-filtered
-/// directory entries; platform-specific match contexts ensure consistent
-/// filename matching semantics.
+/// Collect executable matches from workspace traversal.
+///
+/// Parameters:
+/// - `entries`: iterator of `walkdir::DirEntry` values to inspect.
+/// - `command`: command name used for platform-specific filename matching.
+/// - `collect_all`: when `false`, stops after the first executable match.
+/// - `match_ctx`: on Windows, a `WorkspaceMatchContext`; on other platforms,
+///   the unit type to align signatures.
+///
+/// Returns a `Result<Vec<Utf8PathBuf>, Error>` containing matched executable
+/// paths or an error when UTF-8 conversion fails.
 fn collect_workspace_matches(
     entries: impl Iterator<Item = walkdir::DirEntry>,
     command: &str,
