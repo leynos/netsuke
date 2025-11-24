@@ -977,6 +977,126 @@ validation, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
 with identical environments.
 
+Sequence of the resolver when falling back to the workspace:
+
+```mermaid
+sequenceDiagram
+    participant "Caller" as "Caller"
+    participant "WhichResolver" as "WhichResolver"
+    participant "EnvSnapshot" as "EnvSnapshot"
+    participant "Lookup" as "lookup() in lookup.rs"
+    participant "HandleMiss" as "handle_miss()"
+    participant "SearchWorkspace" as "search_workspace()"
+
+    "Caller"->>"WhichResolver": "resolve(command, options)"
+    "WhichResolver"->>"EnvSnapshot": "capture(cwd_override)"
+    "EnvSnapshot"-->>"WhichResolver": "EnvSnapshot { cwd, raw_path }"
+    "WhichResolver"->>"Lookup": "lookup(env, command, options)"
+    "Lookup"->>"Lookup": "search PATH directories for matches"
+    alt "matches found"
+        "Lookup"-->>"WhichResolver": "Vec<Utf8PathBuf> (maybe canonicalised)"
+        "WhichResolver"-->>"Caller": "Ok(matches)"
+    else "no matches in PATH"
+        "Lookup"->>"HandleMiss": "handle_miss(env, command, options, dirs)"
+        "HandleMiss"->>"HandleMiss": "check if 'raw_path' is empty"
+        alt "PATH empty and 'cwd_mode' != 'Never'"
+            "HandleMiss"->>"SearchWorkspace": "search_workspace(env.cwd, command, options.all)"
+            "SearchWorkspace"->>"SearchWorkspace": "walk workspace with 'WalkDir' and filter executables"
+            "SearchWorkspace"-->>"HandleMiss": "discovered paths (possibly empty)"
+            alt "discovered not empty"
+                alt "options.canonical is true"
+                    "HandleMiss"->>"HandleMiss": "canonicalise(discovered)"
+                    "HandleMiss"-->>"Lookup": "canonical paths"
+                else "options.canonical is false"
+                    "HandleMiss"-->>"Lookup": "discovered paths"
+                end
+                "Lookup"-->>"WhichResolver": "Vec<Utf8PathBuf> from workspace"
+                "WhichResolver"-->>"Caller": "Ok(matches)"
+            else "discovered empty"
+                "HandleMiss"-->>"Lookup": "Error(not_found_error)"
+                "Lookup"-->>"WhichResolver": "Error"
+                "WhichResolver"-->>"Caller": "Err(not_found)"
+            end
+        else "PATH not empty or 'cwd_mode' is 'Never'"
+            "HandleMiss"-->>"Lookup": "Error(not_found_error)"
+            "Lookup"-->>"WhichResolver": "Error"
+            "WhichResolver"-->>"Caller": "Err(not_found)"
+        end
+    end
+```
+
+Structural view of the which module and configuration wiring:
+
+```mermaid
+classDiagram
+    class StdlibConfig {
+        +workspace_root_path() -> Option<&Utf8Path>
+    }
+
+    class Environment {
+        +register_with_config(config: StdlibConfig)
+    }
+
+    class WhichModule {
+        +register(env: &mut Environment, cwd_override: Option<Arc<Utf8PathBuf>>)
+    }
+
+    class WhichResolver {
+        -cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>
+        -cwd_override: Option<Arc<Utf8PathBuf>>
+        +new(cwd_override: Option<Arc<Utf8PathBuf>>) -> WhichResolver
+        +resolve(command: &str, options: &WhichOptions) -> Result<Vec<Utf8PathBuf>, Error>
+    }
+
+    class EnvSnapshot {
+        +cwd: Utf8PathBuf
+        +raw_path: Option<OsString>
+        +capture(cwd_override: Option<&Utf8Path>) -> Result<EnvSnapshot, Error>
+    }
+
+    class WhichOptions {
+        +cwd_mode: CwdMode
+        +canonical: bool
+        +all: bool
+        +fresh: bool
+    }
+
+    class CwdMode {
+        <<enumeration>>
+        +Never
+        +OtherModes
+    }
+
+    Environment --> StdlibConfig : uses
+    Environment --> WhichModule : calls register
+    StdlibConfig --> WhichModule : provides workspace_root_path as cwd_override
+    WhichModule --> WhichResolver : constructs via new(cwd_override)
+    WhichResolver --> EnvSnapshot : calls capture(cwd_override)
+    WhichResolver --> WhichOptions : reads lookup options
+    WhichOptions --> CwdMode : uses cwd_mode
+```
+
+### Cucumber execution flow
+
+```mermaid
+sequenceDiagram
+    actor "Developer" as "Developer"
+    participant "TestRunner" as "Rust test binary"
+    participant "CliWorld" as "CliWorld"
+    participant "Cucumber" as "Cucumber runner"
+    participant "FS" as "Feature files under 'tests/features'"
+
+    "Developer"->>"TestRunner": "run 'cargo test' (including cucumber tests)"
+    "TestRunner"->>"CliWorld": "create world instance"
+    "CliWorld"->>"CliWorld": "configure via 'cucumber()'"
+    "CliWorld"->>"Cucumber": "builder with 'max_concurrent_scenarios(1)'"
+    "Cucumber"->>"FS": "discover '.feature' files in 'tests/features'"
+    "Cucumber"->>"CliWorld": "execute scenarios sequentially (max 1)"
+    "CliWorld"-->>"Cucumber": "scenario results (stdout, stderr, exit codes)"
+    "Cucumber"-->>"TestRunner": "aggregate results and 'run_and_exit'"
+    "TestRunner"-->>"Developer": "process exit code and output with improved diagnostics"
+```
+
 Implementation mirrors the design with a small (64-entry) LRU cache keyed by
 the command name, current directory, `PATH`, optional `PATHEXT`, and every
 filter option aside from `fresh`. Cache hits validate metadata before returning

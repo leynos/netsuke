@@ -3,6 +3,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{context, Environment};
 use rstest::rstest;
 use std::ffi::{OsStr, OsString};
+use std::env;
+use tempfile::tempdir;
 use test_support::{env::VarGuard, env_lock::EnvLock};
 
 use super::support::{self, fallible};
@@ -232,5 +234,52 @@ fn which_filter_reports_missing_command() -> Result<()> {
         .unwrap_err();
     let message = err.to_string();
     assert!(message.contains("netsuke::jinja::which::not_found"));
+    Ok(())
+}
+
+#[rstest]
+fn which_filter_falls_back_to_workspace_when_path_empty() -> Result<()> {
+    let (_temp, root) = support::filter_workspace()?;
+    let tool = write_tool(&root, &ToolName::from("helper"))?;
+    let _path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
+    assert_eq!(output, tool.as_str());
+    Ok(())
+}
+
+#[rstest]
+fn which_filter_skips_heavy_directories() -> Result<()> {
+    let (_temp, root) = support::filter_workspace()?;
+    let target = root.join("target");
+    std::fs::create_dir_all(target.as_std_path())?;
+    write_tool(&target, &ToolName::from("helper"))?;
+    let _path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let err = env
+        .render_str("{{ 'helper' | which }}", context! {})
+        .unwrap_err();
+    assert!(err.to_string().contains("not_found"));
+    Ok(())
+}
+
+#[rstest]
+fn which_resolver_honours_workspace_root_override() -> Result<()> {
+    use cap_std::{ambient_authority, fs_utf8::Dir};
+    let (_temp, root) = support::filter_workspace()?;
+    let tool = write_tool(&root, &ToolName::from("helper"))?;
+    let alt = tempdir().context("create alternate cwd")?;
+    let orig_cwd = env::current_dir().context("capture cwd")?;
+    env::set_current_dir(&alt).context("switch cwd")?;
+
+    let config = StdlibConfig::new(
+        Dir::open_ambient_dir(&root, ambient_authority()).context("open workspace")?,
+    )
+    .with_workspace_root_path(root.clone());
+    let _path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_config(config)?;
+    let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
+    env::set_current_dir(orig_cwd).context("restore cwd")?;
+    assert_eq!(output, tool.as_str());
     Ok(())
 }
