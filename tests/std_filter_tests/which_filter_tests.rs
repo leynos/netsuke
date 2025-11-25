@@ -25,10 +25,10 @@ fn test_cache_after_removal(
     fixture: &mut WhichTestFixture,
     first_template: &Template,
     second_template: &Template,
-    removed_path: &Utf8PathBuf,
     expect_second_err: bool,
 ) -> Result<()> {
     fixture.state.reset_impure();
+    let removed_path = &fixture.paths[0];
     let first = fixture.render(first_template)?;
     assert_eq!(first, removed_path.as_str());
 
@@ -91,7 +91,6 @@ fn which_filter_uses_cached_result_when_executable_removed() -> Result<()> {
         &mut fixture,
         &Template::from("{{ 'helper' | which }}"),
         &Template::from("{{ 'helper' | which }}"),
-        &fixture.paths[0],
         false,
     )
 }
@@ -106,7 +105,6 @@ fn which_filter_fresh_bypasses_cache_after_executable_removed() -> Result<()> {
         &mut fixture,
         &Template::from("{{ 'helper' | which }}"),
         &Template::from("{{ 'helper' | which(fresh=true) }}"),
-        &fixture.paths[0],
         true,
     )
 }

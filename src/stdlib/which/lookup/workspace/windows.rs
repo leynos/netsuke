@@ -7,7 +7,7 @@ use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
 
 use super::super::is_executable;
-use super::{WorkspaceSearchParams, WORKSPACE_MAX_DEPTH, should_visit_entry};
+use super::{WorkspaceSearchParams, WorkspaceSkipList, WORKSPACE_MAX_DEPTH, should_visit_entry};
 use crate::stdlib::which::env::{self, EnvSnapshot};
 
 pub(super) fn search_workspace(
@@ -16,7 +16,7 @@ pub(super) fn search_workspace(
     params: WorkspaceSearchParams<'_>,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     let match_ctx = WorkspaceMatchContext::new(command, env);
-    let mut matches = Vec::new();
+    let mut collector = CollectionState::new(params.collect_all);
 
     for walk_entry in WalkDir::new(&env.cwd)
         .follow_links(false)
@@ -29,14 +29,14 @@ pub(super) fn search_workspace(
             continue;
         };
 
-        if should_stop_collecting(&mut matches, entry, command, &match_ctx, collect_all)? {
+        if collector.try_add(entry, command, &match_ctx)? {
             break;
         }
     }
 
-    log_if_no_matches(&matches, command);
+    log_if_no_matches(&collector.matches, command, params.skip_dirs);
 
-    Ok(matches)
+    Ok(collector.matches)
 }
 
 #[derive(Clone)]
@@ -44,6 +44,40 @@ struct WorkspaceMatchContext {
     command_lower: String,
     command_has_ext: bool,
     basenames: HashSet<String>,
+}
+
+/// Encapsulates the state and logic for collecting matching executables during
+/// workspace traversal.
+struct CollectionState {
+    matches: Vec<Utf8PathBuf>,
+    collect_all: bool,
+}
+
+impl CollectionState {
+    fn new(collect_all: bool) -> Self {
+        Self {
+            matches: Vec::new(),
+            collect_all,
+        }
+    }
+
+    /// Process an entry and add it to matches if valid. Returns `true` if
+    /// collection should stop (i.e., a match was found and `collect_all` is
+    /// `false`).
+    fn try_add(
+        &mut self,
+        entry: walkdir::DirEntry,
+        command: &str,
+        ctx: &WorkspaceMatchContext,
+    ) -> Result<bool, Error> {
+        if let Some(path) = process_workspace_entry(entry, command, ctx)? {
+            self.matches.push(path);
+            if !self.collect_all {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
 }
 
 impl WorkspaceMatchContext {
@@ -123,32 +157,18 @@ fn unwrap_or_log_error(
     }
 }
 
-/// Handle a single entry: record executable matches and signal early exit when
-/// `collect_all` is `false`.
-fn should_stop_collecting(
-    matches: &mut Vec<Utf8PathBuf>,
-    entry: walkdir::DirEntry,
-    command: &str,
-    ctx: &WorkspaceMatchContext,
-    collect_all: bool,
-) -> Result<bool, Error> {
-    if let Some(path) = process_workspace_entry(entry, command, ctx)? {
-        matches.push(path);
-        if !params.collect_all {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 /// Emit a debug message when fallback traversal yields no matches, helping
 /// callers diagnose unexpected latency or misses.
-fn log_if_no_matches(matches: &[Utf8PathBuf], command: &str) {
+fn log_if_no_matches(
+    matches: &[Utf8PathBuf],
+    command: &str,
+    skip_dirs: &WorkspaceSkipList,
+) {
     if matches.is_empty() {
         tracing::debug!(
             %command,
             max_depth = WORKSPACE_MAX_DEPTH,
-            skip = ?params.skip_dirs,
+            skip = ?skip_dirs,
             "workspace which fallback found no matches",
         );
     }
