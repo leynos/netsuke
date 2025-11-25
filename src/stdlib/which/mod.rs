@@ -29,7 +29,7 @@ pub(crate) fn register(
     cwd_override: Option<Arc<Utf8PathBuf>>,
     cache_capacity: NonZeroUsize,
 ) -> Result<(), Error> {
-    let resolver = Arc::new(WhichResolver::new(cwd_override, cache_capacity.get())?);
+    let resolver = Arc::new(WhichResolver::new(cwd_override, cache_capacity)?);
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {

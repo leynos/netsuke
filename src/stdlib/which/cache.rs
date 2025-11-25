@@ -22,17 +22,18 @@ pub(crate) struct WhichResolver {
 impl WhichResolver {
     pub(crate) fn new(
         cwd_override: Option<Arc<Utf8PathBuf>>,
-        cache_capacity: usize,
+        cache_capacity: NonZeroUsize,
     ) -> Result<Self, Error> {
-        let capacity = NonZeroUsize::new(cache_capacity).ok_or_else(|| {
-            Error::new(
+        if cache_capacity.get() == 0 {
+            // Defensive guard: unreachable with NonZeroUsize but keeps the error surface stable.
+            return Err(Error::new(
                 ErrorKind::InvalidOperation,
-                "which cache capacity must be greater than zero",
-            )
-        })?;
+                "which cache capacity must be positive",
+            ));
+        }
 
         Ok(Self {
-            cache: Arc::new(Mutex::new(LruCache::new(capacity))),
+            cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
         })
     }
@@ -108,6 +109,7 @@ mod tests {
     use super::*;
     use camino::Utf8PathBuf;
     use rstest::rstest;
+    use std::num::NonZeroUsize;
 
     fn cache_key_for(command: &str) -> CacheKey {
         CacheKey {
@@ -120,7 +122,9 @@ mod tests {
 
     #[rstest]
     fn cache_capacity_bounds_entries() {
-        let resolver = WhichResolver::new(None, 1).expect("construct resolver");
+        let resolver =
+            WhichResolver::new(None, NonZeroUsize::new(1).expect("non-zero cache capacity"))
+                .expect("construct resolver");
 
         let first_key = cache_key_for("first");
         let first_path = Utf8PathBuf::from("/bin/first");

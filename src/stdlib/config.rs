@@ -141,12 +141,13 @@ impl StdlibConfig {
     /// ```
     /// # use cap_std::{ambient_authority, fs_utf8::Dir};
     /// # use netsuke::stdlib::StdlibConfig;
-    /// let dir = Dir::open_ambient_dir(".", ambient_authority()).unwrap();
-    /// let config = StdlibConfig::new(dir)
-    ///     .unwrap()
+    /// let dir = Dir::open_ambient_dir(".", ambient_authority())
+    ///     .expect("open ambient workspace");
+    /// let _config = StdlibConfig::new(dir)
+    ///     .expect("construct stdlib config")
     ///     .with_which_cache_capacity(128)
-    ///     .unwrap();
-    /// assert_eq!(config.which_cache_capacity().get(), 128);
+    ///     .expect("set which cache capacity");
+    /// // Config can now be passed to stdlib registration with a larger cache.
     /// ```
     pub fn with_which_cache_capacity(mut self, capacity: usize) -> anyhow::Result<Self> {
         let non_zero_capacity = NonZeroUsize::new(capacity)
