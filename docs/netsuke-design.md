@@ -969,6 +969,11 @@ helper remains pure because all inputs still derive from the manifest or
 process environment. Callers can request a bypass with `fresh=true` when they
 need to observe recent toolchain changes during a long session.
 
+Cache capacity defaults to 64 entries, covering typical PATH sizes without
+overcommitting memory, and can be tuned via
+`StdlibConfig::with_which_cache_capacity` for hosts with unusually large or
+tiny search paths. Zero is rejected to keep the cache usable.
+
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
 entries were inspected, a shortened preview of the path list, and platform
@@ -1041,13 +1046,16 @@ classDiagram
     }
 
     class WhichModule {
-        +register(env: &mut Environment, cwd_override: Option<Arc<Utf8PathBuf>>)
+        +register(env: &mut Environment,
+                  cwd_override: Option<Arc<Utf8PathBuf>>,
+                  cache_capacity: NonZeroUsize)
     }
 
     class WhichResolver {
         -cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>
         -cwd_override: Option<Arc<Utf8PathBuf>>
-        +new(cwd_override: Option<Arc<Utf8PathBuf>>) -> WhichResolver
+        +new(cwd_override: Option<Arc<Utf8PathBuf>>,
+             cache_capacity: NonZeroUsize) -> Result<WhichResolver, Error>
         +resolve(command: &str, options: &WhichOptions) -> Result<Vec<Utf8PathBuf>, Error>
     }
 
@@ -1073,7 +1081,8 @@ classDiagram
     Environment --> StdlibConfig : uses
     Environment --> WhichModule : calls register
     StdlibConfig --> WhichModule : provides workspace_root_path as cwd_override
-    WhichModule --> WhichResolver : constructs via new(cwd_override)
+    StdlibConfig --> WhichModule : provides which cache capacity
+    WhichModule --> WhichResolver : constructs via new(cwd_override, cache_capacity)
     WhichResolver --> EnvSnapshot : calls capture(cwd_override)
     WhichResolver --> WhichOptions : reads lookup options
     WhichOptions --> CwdMode : uses cwd_mode

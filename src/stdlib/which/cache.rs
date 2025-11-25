@@ -9,11 +9,9 @@ use std::{
 
 use camino::Utf8PathBuf;
 use lru::LruCache;
-use minijinja::{Error, ErrorKind};
+use minijinja::Error;
 
 use super::{env::EnvSnapshot, lookup::lookup, options::WhichOptions};
-
-pub(super) const CACHE_CAPACITY: usize = 64;
 
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
@@ -22,17 +20,14 @@ pub(crate) struct WhichResolver {
 }
 
 impl WhichResolver {
-    pub(crate) fn new(cwd_override: Option<Arc<Utf8PathBuf>>) -> Result<Self, Error> {
-        let capacity = NonZeroUsize::new(CACHE_CAPACITY).ok_or_else(|| {
-            Error::new(
-                ErrorKind::InvalidOperation,
-                "which cache capacity must be greater than zero",
-            )
-        })?;
-        Ok(Self {
-            cache: Arc::new(Mutex::new(LruCache::new(capacity))),
+    pub(crate) fn new(
+        cwd_override: Option<Arc<Utf8PathBuf>>,
+        cache_capacity: NonZeroUsize,
+    ) -> Self {
+        Self {
+            cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
-        })
+        }
     }
 
     pub(crate) fn resolve(
@@ -99,4 +94,42 @@ fn env_fingerprint(env: &EnvSnapshot) -> u64 {
     env.raw_path.hash(&mut hasher);
     env.raw_pathext.hash(&mut hasher);
     hasher.finish()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+    use rstest::rstest;
+    use std::num::NonZeroUsize;
+
+    fn cache_key_for(command: &str) -> CacheKey {
+        CacheKey {
+            command: command.to_owned(),
+            env_fingerprint: 1,
+            cwd: Utf8PathBuf::from("/"),
+            options: WhichOptions::default(),
+        }
+    }
+
+    #[rstest]
+    fn cache_capacity_bounds_entries() {
+        let resolver =
+            WhichResolver::new(None, NonZeroUsize::new(1).expect("non-zero cache capacity"));
+
+        let first_key = cache_key_for("first");
+        let first_path = Utf8PathBuf::from("/bin/first");
+        resolver.store(first_key.clone(), vec![first_path.clone()]);
+        assert_eq!(
+            resolver.try_cache(&first_key),
+            Some(vec![first_path.clone()])
+        );
+
+        let second_key = cache_key_for("second");
+        let second_path = Utf8PathBuf::from("/bin/second");
+        resolver.store(second_key.clone(), vec![second_path.clone()]);
+
+        assert!(resolver.try_cache(&first_key).is_none());
+        assert_eq!(resolver.try_cache(&second_key), Some(vec![second_path]));
+    }
 }

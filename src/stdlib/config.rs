@@ -4,7 +4,7 @@ use super::{command, network::NetworkPolicy};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use std::{env, sync::Arc};
+use std::{env, num::NonZeroUsize, sync::Arc};
 
 /// Default relative path for the fetch cache within the workspace.
 pub const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
@@ -16,6 +16,8 @@ pub const DEFAULT_COMMAND_MAX_OUTPUT_BYTES: u64 = 1024 * 1024;
 pub const DEFAULT_COMMAND_MAX_STREAM_BYTES: u64 = 64 * 1024 * 1024;
 /// Relative directory for command helper tempfiles.
 pub const DEFAULT_COMMAND_TEMP_DIR: &str = ".netsuke/tmp";
+/// Default capacity for the `which` resolver cache.
+pub const DEFAULT_WHICH_CACHE_CAPACITY: usize = 64;
 
 /// Configuration for registering Netsuke's standard library helpers.
 #[derive(Debug, Clone)]
@@ -27,6 +29,7 @@ pub struct StdlibConfig {
     fetch_max_response_bytes: u64,
     command_max_output_bytes: u64,
     command_max_stream_bytes: u64,
+    which_cache_capacity: NonZeroUsize,
 }
 
 impl StdlibConfig {
@@ -43,6 +46,8 @@ impl StdlibConfig {
         // Rationale: the constant is static and validated for defence in depth.
         Self::validate_cache_relative(&default)
             .map_err(|err| anyhow!("default fetch cache path should be valid: {err}"))?;
+        let which_cache_capacity = NonZeroUsize::new(DEFAULT_WHICH_CACHE_CAPACITY)
+            .ok_or_else(|| anyhow!("default which cache capacity should be positive"))?;
         Ok(Self {
             workspace_root: Arc::new(workspace_root),
             workspace_root_path: None,
@@ -51,6 +56,7 @@ impl StdlibConfig {
             fetch_max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
             command_max_output_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
             command_max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
+            which_cache_capacity,
         })
     }
 
@@ -124,6 +130,32 @@ impl StdlibConfig {
         Ok(self)
     }
 
+    /// Override the cache capacity for the `which` resolver.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `capacity` is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use cap_std::{ambient_authority, fs_utf8::Dir};
+    /// # use netsuke::stdlib::StdlibConfig;
+    /// let dir = Dir::open_ambient_dir(".", ambient_authority())
+    ///     .expect("open ambient workspace");
+    /// let _config = StdlibConfig::new(dir)
+    ///     .expect("construct stdlib config")
+    ///     .with_which_cache_capacity(128)
+    ///     .expect("set which cache capacity");
+    /// // Config can now be passed to stdlib registration with a larger cache.
+    /// ```
+    pub fn with_which_cache_capacity(mut self, capacity: usize) -> anyhow::Result<Self> {
+        let non_zero_capacity = NonZeroUsize::new(capacity)
+            .ok_or_else(|| anyhow!("which cache capacity must be positive"))?;
+        self.which_cache_capacity = non_zero_capacity;
+        Ok(self)
+    }
+
     /// The configured fetch cache directory relative to the workspace root.
     #[must_use]
     pub fn fetch_cache_relative(&self) -> &Utf8Path {
@@ -140,6 +172,7 @@ impl StdlibConfig {
             fetch_max_response_bytes,
             command_max_output_bytes,
             command_max_stream_bytes,
+            ..
         } = self;
 
         let command_root = Arc::clone(&workspace_root);
@@ -190,6 +223,10 @@ impl StdlibConfig {
     pub(crate) fn workspace_root_path(&self) -> Option<&Utf8Path> {
         self.workspace_root_path.as_deref()
     }
+
+    pub(crate) const fn which_cache_capacity(&self) -> NonZeroUsize {
+        self.which_cache_capacity
+    }
 }
 
 impl Default for StdlibConfig {
@@ -230,7 +267,10 @@ pub struct NetworkConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, StdlibConfig};
+    use super::{
+        DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES,
+        DEFAULT_WHICH_CACHE_CAPACITY, StdlibConfig,
+    };
     use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use rstest::{fixture, rstest};
@@ -328,5 +368,24 @@ mod tests {
         let (_network, command) = config.into_components();
         assert_eq!(command.max_capture_bytes, 4_096);
         assert_eq!(command.max_stream_bytes, 131_072);
+    }
+
+    #[rstest]
+    fn which_cache_capacity_validates_and_updates(base_config: StdlibConfig) {
+        assert_eq!(
+            base_config.which_cache_capacity().get(),
+            DEFAULT_WHICH_CACHE_CAPACITY
+        );
+
+        let updated = base_config
+            .clone()
+            .with_which_cache_capacity(5)
+            .expect("positive capacity should be accepted");
+        assert_eq!(updated.which_cache_capacity().get(), 5);
+
+        let err = base_config
+            .with_which_cache_capacity(0)
+            .expect_err("zero capacity must be rejected");
+        assert_eq!(err.to_string(), "which cache capacity must be positive");
     }
 }

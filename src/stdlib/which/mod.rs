@@ -5,7 +5,7 @@
 //! canonical paths, bypassing the resolver cache, and opt-in search of the
 //! current working directory.
 
-use std::sync::Arc;
+use std::{num::NonZeroUsize, sync::Arc};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{
@@ -27,8 +27,9 @@ use error::args_error;
 pub(crate) fn register(
     env: &mut Environment<'_>,
     cwd_override: Option<Arc<Utf8PathBuf>>,
-) -> Result<(), Error> {
-    let resolver = Arc::new(WhichResolver::new(cwd_override)?);
+    cache_capacity: NonZeroUsize,
+) {
+    let resolver = Arc::new(WhichResolver::new(cwd_override, cache_capacity));
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {
@@ -47,7 +48,6 @@ pub(crate) fn register(
             })
         });
     }
-    Ok(())
 }
 
 fn resolve_with(
