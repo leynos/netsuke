@@ -9,7 +9,7 @@ use std::{
 
 use camino::Utf8PathBuf;
 use lru::LruCache;
-use minijinja::{Error, ErrorKind};
+use minijinja::Error;
 
 use super::{env::EnvSnapshot, lookup::lookup, options::WhichOptions};
 
@@ -23,19 +23,11 @@ impl WhichResolver {
     pub(crate) fn new(
         cwd_override: Option<Arc<Utf8PathBuf>>,
         cache_capacity: NonZeroUsize,
-    ) -> Result<Self, Error> {
-        if cache_capacity.get() == 0 {
-            // Defensive guard: unreachable with NonZeroUsize but keeps the error surface stable.
-            return Err(Error::new(
-                ErrorKind::InvalidOperation,
-                "which cache capacity must be positive",
-            ));
-        }
-
-        Ok(Self {
+    ) -> Self {
+        Self {
             cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
-        })
+        }
     }
 
     pub(crate) fn resolve(
@@ -123,8 +115,7 @@ mod tests {
     #[rstest]
     fn cache_capacity_bounds_entries() {
         let resolver =
-            WhichResolver::new(None, NonZeroUsize::new(1).expect("non-zero cache capacity"))
-                .expect("construct resolver");
+            WhichResolver::new(None, NonZeroUsize::new(1).expect("non-zero cache capacity"));
 
         let first_key = cache_key_for("first");
         let first_path = Utf8PathBuf::from("/bin/first");
