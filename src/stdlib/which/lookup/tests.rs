@@ -68,6 +68,28 @@ fn workspace_search<'a>(
     }
 }
 
+/// Helper to execute workspace search with platform-specific env handling.
+fn execute_workspace_search(
+    workspace: &TempWorkspace,
+    collect_all: bool,
+    skip_dirs: &WorkspaceSkipList,
+) -> Result<Vec<Utf8PathBuf>> {
+    #[cfg(windows)]
+    let snapshot =
+        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+
+    #[cfg(windows)]
+    let results = search_workspace(
+        workspace_search(workspace, collect_all, skip_dirs),
+        &snapshot,
+    )?;
+
+    #[cfg(not(windows))]
+    let results = search_workspace(workspace_search(workspace, collect_all, skip_dirs), ())?;
+
+    Ok(results)
+}
+
 #[rstest]
 fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspace) -> Result<()> {
     let exec = write_exec(workspace.root(), "tool")?;
@@ -121,13 +143,7 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
     write_exec(heavy.as_path(), "tool")?;
     let skips = WorkspaceSkipList::default();
 
-    #[cfg(windows)]
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    #[cfg(windows)]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), &snapshot)?;
-    #[cfg(not(windows))]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), ())?;
+    let results = execute_workspace_search(&workspace, false, &skips)?;
     ensure!(results.is_empty(), "expected target/ to be skipped");
     Ok(())
 }
@@ -142,13 +158,7 @@ fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) ->
     }
     let skips = WorkspaceSkipList::default();
 
-    #[cfg(windows)]
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    #[cfg(windows)]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), &snapshot)?;
-    #[cfg(not(windows))]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), ())?;
+    let results = execute_workspace_search(&workspace, false, &skips)?;
     ensure!(results.is_empty(), "expected editor caches to be skipped");
     Ok(())
 }
@@ -160,13 +170,7 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
     let exec = write_exec(target.as_path(), "tool")?;
     let skips = WorkspaceSkipList::from_names([".git"]);
 
-    #[cfg(windows)]
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    #[cfg(windows)]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), &snapshot)?;
-    #[cfg(not(windows))]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), ())?;
+    let results = execute_workspace_search(&workspace, false, &skips)?;
     ensure!(
         results == vec![exec],
         "expected custom skip list to allow target/"
