@@ -4,7 +4,7 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
-use std::fs;
+use std::{ffi::OsStr, fs};
 use tempfile::TempDir;
 #[cfg(windows)]
 use test_support::make_executable;
@@ -52,6 +52,7 @@ fn execute_workspace_search(
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>> {
+    let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
     search_workspace(&snapshot, "tool", params(collect_all, skip_dirs))
@@ -326,6 +327,7 @@ fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) 
     perms.set_mode(0o644);
     fs::set_permissions(script.as_std_path(), perms).context("chmod script")?;
 
+    let _path_guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).context("capture env for direct path")?;
 

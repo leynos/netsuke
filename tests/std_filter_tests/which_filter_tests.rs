@@ -48,6 +48,24 @@ fn test_cache_after_removal(
     Ok(())
 }
 
+/// Helper to set up a fixture for cache removal tests and run the test.
+fn test_cache_behaviour_after_removal(
+    second_template_str: &str,
+    expect_second_err: bool,
+) -> Result<()> {
+    let mut fixture = WhichTestFixture::with_tool_in_dirs(
+        &ToolName::from("helper"),
+        &[DirName::from("bin_first"), DirName::from("bin_second")],
+    )?;
+
+    test_cache_after_removal(
+        &mut fixture,
+        &Template::from("{{ 'helper' | which }}"),
+        &Template::from(second_template_str),
+        expect_second_err,
+    )
+}
+
 fn test_duplicate_paths(
     fixture: &mut WhichTestFixture,
     canonical: bool,
@@ -70,6 +88,18 @@ fn test_duplicate_paths(
     Ok(())
 }
 
+/// Helper to test cwd_mode resolution with a given case variant.
+fn test_cwd_mode_resolution(cwd_mode_value: &str) -> Result<()> {
+    let (_temp, root) = support::filter_workspace()?;
+    let tool = write_tool(&root, &ToolName::from("local"))?;
+    let _path = PathEnv::new(&[])?;
+    let (mut env, _state) = fallible::stdlib_env_with_state()?;
+    let template = Template::from(format!("{{{{ which('local', cwd_mode='{cwd_mode_value}') }}}}"));
+    let output = render(&mut env, &template)?;
+    assert_eq!(output, tool.as_str());
+    Ok(())
+}
+
 #[rstest]
 fn which_filter_returns_first_match() -> Result<()> {
     let mut fixture = WhichTestFixture::with_tool_in_dirs(
@@ -83,30 +113,12 @@ fn which_filter_returns_first_match() -> Result<()> {
 
 #[rstest]
 fn which_filter_uses_cached_result_when_executable_removed() -> Result<()> {
-    let mut fixture = WhichTestFixture::with_tool_in_dirs(
-        &ToolName::from("helper"),
-        &[DirName::from("bin_first"), DirName::from("bin_second")],
-    )?;
-    test_cache_after_removal(
-        &mut fixture,
-        &Template::from("{{ 'helper' | which }}"),
-        &Template::from("{{ 'helper' | which }}"),
-        false,
-    )
+    test_cache_behaviour_after_removal("{{ 'helper' | which }}", false)
 }
 
 #[rstest]
 fn which_filter_fresh_bypasses_cache_after_executable_removed() -> Result<()> {
-    let mut fixture = WhichTestFixture::with_tool_in_dirs(
-        &ToolName::from("helper"),
-        &[DirName::from("bin_first"), DirName::from("bin_second")],
-    )?;
-    test_cache_after_removal(
-        &mut fixture,
-        &Template::from("{{ 'helper' | which }}"),
-        &Template::from("{{ 'helper' | which(fresh=true) }}"),
-        true,
-    )
+    test_cache_behaviour_after_removal("{{ 'helper' | which(fresh=true) }}", true)
 }
 
 #[rstest]
@@ -165,14 +177,7 @@ fn which_filter_all_with_duplicates_deduplicates_canonicalised_paths() -> Result
 
 #[rstest]
 fn which_function_honours_cwd_mode() -> Result<()> {
-    let (_temp, root) = support::filter_workspace()?;
-    let tool = write_tool(&root, &ToolName::from("local"))?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
-    let template = Template::from("{{ which('local', cwd_mode='always') }}");
-    let output = render(&mut env, &template)?;
-    assert_eq!(output, tool.as_str());
-    Ok(())
+    test_cwd_mode_resolution("always")
 }
 
 #[rstest]
@@ -200,14 +205,7 @@ fn which_function_rejects_invalid_cwd_mode() -> Result<()> {
 
 #[rstest]
 fn which_function_accepts_case_insensitive_cwd_mode() -> Result<()> {
-    let (_temp, root) = support::filter_workspace()?;
-    let tool = write_tool(&root, &ToolName::from("local"))?;
-    let _path = PathEnv::new(&[])?;
-    let (mut env, _state) = fallible::stdlib_env_with_state()?;
-    let template = Template::from("{{ which('local', cwd_mode='ALWAYS') }}");
-    let output = render(&mut env, &template)?;
-    assert_eq!(output, tool.as_str());
-    Ok(())
+    test_cwd_mode_resolution("ALWAYS")
 }
 
 #[rstest]
