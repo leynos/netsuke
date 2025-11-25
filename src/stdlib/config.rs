@@ -4,6 +4,7 @@ use super::{command, network::NetworkPolicy, which::DEFAULT_WORKSPACE_SKIP_DIRS}
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use indexmap::IndexSet;
 use std::{env, num::NonZeroUsize, sync::Arc};
 
 /// Default relative path for the fetch cache within the workspace.
@@ -173,7 +174,7 @@ impl StdlibConfig {
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let mut validated = Vec::new();
+        let mut validated = IndexSet::new();
         for dir in dirs {
             let candidate = dir.as_ref().trim();
             ensure!(
@@ -188,11 +189,9 @@ impl StdlibConfig {
                 !candidate.contains(['/', '\\']),
                 "workspace skip entries must be basenames without separators"
             );
-            if !validated.contains(&candidate.to_owned()) {
-                validated.push(candidate.to_owned());
-            }
+            validated.insert(candidate.to_owned());
         }
-        self.workspace_skip_dirs = validated;
+        self.workspace_skip_dirs = validated.into_iter().collect();
         Ok(self)
     }
 

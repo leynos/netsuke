@@ -2,7 +2,6 @@
 
 #[cfg(windows)]
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
@@ -19,23 +18,24 @@ use super::is_executable;
 pub(crate) const DEFAULT_WORKSPACE_SKIP_DIRS: &[&str] =
     &[".git", "target", "node_modules", ".idea", ".vscode"];
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WorkspaceSkipList {
-    dirs: Arc<Vec<String>>,
+    dirs: IndexSet<String>,
 }
 
-/// Inputs for scanning the workspace during `which` fallback resolution.
-#[derive(Clone, Copy)]
-pub(super) struct WorkspaceSearch<'a> {
-    pub(super) cwd: &'a Utf8Path,
-    pub(super) command: &'a str,
-    pub(super) collect_all: bool,
-    pub(super) skip_dirs: &'a WorkspaceSkipList,
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct WorkspaceSearchParams<'a> {
+    pub(crate) collect_all: bool,
+    pub(crate) skip_dirs: &'a WorkspaceSkipList,
 }
 
 impl WorkspaceSkipList {
     /// Build a skip list from the provided directory names, normalising for the
     /// host platform and removing duplicates.
+    ///
+    /// Empty or whitespace-only inputs are ignored; callers that require
+    /// strict validation should filter earlier (for example via
+    /// `StdlibConfig::with_workspace_skip_dirs`).
     pub(crate) fn from_names(names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
         let mut dedup = IndexSet::new();
         for name in names {
@@ -45,23 +45,26 @@ impl WorkspaceSkipList {
             }
             dedup.insert(normalise_dir_name(trimmed));
         }
-        let mut dirs: Vec<_> = dedup.into_iter().collect();
-        dirs.sort();
-        Self {
-            dirs: Arc::new(dirs),
-        }
+        Self { dirs: dedup }
     }
 
     /// Return `true` when a directory should be skipped during traversal.
     pub(crate) fn should_skip(&self, name: &str) -> bool {
-        let normalised = normalise_dir_name(name);
-        self.dirs.contains(&normalised)
+        self.dirs.contains(&normalise_dir_name(name))
     }
 }
 
 impl Default for WorkspaceSkipList {
     fn default() -> Self {
         Self::from_names(DEFAULT_WORKSPACE_SKIP_DIRS.iter().copied())
+    }
+}
+
+impl std::hash::Hash for WorkspaceSkipList {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for dir in &self.dirs {
+            dir.hash(state);
+        }
     }
 }
 
@@ -83,32 +86,36 @@ fn normalise_dir_name(name: &str) -> String {
 ///   expansion; other platforms: exact case-sensitive filename match).
 /// - `collect_all`: when `true`, return every match; otherwise stop after the
 ///   first executable.
-/// - `skip_dirs`: directory basenames to omit during traversal.
+/// - `skip_dirs`: directory basenames to omit during traversal. Empty inputs
+///   are ignored and callers should validate earlier layers when strictness is
+///   required.
 /// - `env`: provided only on Windows to supply `PATHEXT` for matching.
 ///
 /// Skips unreadable entries, ignores heavy/VCS directories via
 /// `should_visit_entry`, and returns `Ok(Vec<Utf8PathBuf>)` containing the
 /// discovered executables or an `Error` if UTF-8 conversion fails.
 pub(super) fn search_workspace(
-    search: WorkspaceSearch<'_>,
+    cwd: &Utf8Path,
+    command: &str,
+    params: WorkspaceSearchParams<'_>,
     #[cfg(windows)] env: &EnvSnapshot,
     #[cfg(not(windows))] _env: (),
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     #[cfg(windows)]
-    let match_ctx = prepare_workspace_match(search.command, env);
+    let match_ctx = prepare_workspace_match(command, env);
     #[cfg(not(windows))]
     let match_ctx = ();
 
-    let entries = WalkDir::new(search.cwd)
+    let entries = WalkDir::new(cwd)
         .follow_links(false)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(|entry| should_visit_entry(entry, search.skip_dirs))
+        .filter_entry(|entry| should_visit_entry(entry, params.skip_dirs))
         .filter_map(|walk_entry| {
             walk_entry
                 .map_err(|err| {
                     tracing::debug!(
-                        command = %search.command,
+                        %command,
                         error = %err,
                         "skipping unreadable workspace entry during which fallback"
                     );
@@ -117,7 +124,7 @@ pub(super) fn search_workspace(
                 .ok()
         });
 
-    collect_workspace_matches(entries, search.command, search.collect_all, match_ctx)
+    collect_workspace_matches(entries, command, params.collect_all, match_ctx)
 }
 
 /// Collect executable matches from workspace traversal.
@@ -268,5 +275,69 @@ fn prepare_workspace_match(command: &str, env: &EnvSnapshot) -> WorkspaceMatchCo
         command_lower,
         command_has_ext,
         basenames,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::{Result, ensure};
+    use tempfile::TempDir;
+
+    #[test]
+    fn default_skip_list_covers_common_heavy_dirs() {
+        let skips = WorkspaceSkipList::default();
+        assert!(skips.should_skip("target"));
+        assert!(skips.should_skip(".git"));
+        assert!(!skips.should_skip("src"));
+    }
+
+    #[test]
+    fn custom_skip_list_respects_configured_dirs() {
+        let skips = WorkspaceSkipList::from_names(["build", "dist"]);
+        assert!(skips.should_skip("build"));
+        assert!(skips.should_skip("dist"));
+        assert!(!skips.should_skip("target"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn skip_list_matching_is_case_insensitive_on_windows() {
+        let skips = WorkspaceSkipList::from_names(["TARGET", ".GIT"]);
+        assert!(skips.should_skip("target"));
+        assert!(skips.should_skip(".git"));
+    }
+
+    #[test]
+    fn should_visit_entry_respects_skip_list_for_directories_only() -> Result<()> {
+        let temp = TempDir::new()?;
+        let root = temp.path();
+        std::fs::create_dir(root.join("target"))?;
+        std::fs::write(root.join("tool"), b"bin")?;
+
+        let entries: Vec<_> = WalkDir::new(root)
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            .collect::<Result<_, _>>()?;
+        let skips = WorkspaceSkipList::default();
+        let mut saw_target = false;
+        let mut saw_tool = false;
+        for entry in entries {
+            let name = entry.file_name().to_string_lossy();
+            if name == "target" {
+                saw_target = true;
+                ensure!(!should_visit_entry(&entry, &skips));
+            }
+            if name == "tool" {
+                saw_tool = true;
+                ensure!(should_visit_entry(&entry, &skips));
+            }
+        }
+        ensure!(
+            saw_target && saw_tool,
+            "expected both entries to be visited"
+        );
+        Ok(())
     }
 }

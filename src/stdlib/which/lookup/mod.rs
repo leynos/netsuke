@@ -16,8 +16,8 @@ use super::{
     options::WhichOptions,
 };
 mod workspace;
-pub(crate) use workspace::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
-use workspace::{WorkspaceSearch, search_workspace};
+use workspace::search_workspace;
+pub(crate) use workspace::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSearchParams, WorkspaceSkipList};
 
 /// Resolve `command` either as a direct path or by searching the environment's
 /// PATH, optionally canonicalising or collecting all matches.
@@ -220,9 +220,9 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
     if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
         #[cfg(windows)]
         let discovered = search_workspace(
-            WorkspaceSearch {
-                cwd: ctx.env.cwd.as_path(),
-                command: ctx.command,
+            ctx.env.cwd.as_path(),
+            ctx.command,
+            WorkspaceSearchParams {
                 collect_all: ctx.options.all,
                 skip_dirs: ctx.workspace_skips,
             },
@@ -230,9 +230,9 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
         )?;
         #[cfg(not(windows))]
         let discovered = search_workspace(
-            WorkspaceSearch {
-                cwd: ctx.env.cwd.as_path(),
-                command: ctx.command,
+            ctx.env.cwd.as_path(),
+            ctx.command,
+            WorkspaceSearchParams {
                 collect_all: ctx.options.all,
                 skip_dirs: ctx.workspace_skips,
             },

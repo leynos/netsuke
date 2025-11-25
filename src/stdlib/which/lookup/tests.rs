@@ -55,19 +55,6 @@ fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
     Ok(path)
 }
 
-fn workspace_search<'a>(
-    workspace: &'a TempWorkspace,
-    collect_all: bool,
-    skip_dirs: &'a WorkspaceSkipList,
-) -> WorkspaceSearch<'a> {
-    WorkspaceSearch {
-        cwd: workspace.root(),
-        command: "tool",
-        collect_all,
-        skip_dirs,
-    }
-}
-
 /// Helper to execute workspace search with platform-specific env handling.
 fn execute_workspace_search(
     workspace: &TempWorkspace,
@@ -80,12 +67,25 @@ fn execute_workspace_search(
 
     #[cfg(windows)]
     let results = search_workspace(
-        workspace_search(workspace, collect_all, skip_dirs),
+        workspace.root(),
+        "tool",
+        WorkspaceSearchParams {
+            collect_all,
+            skip_dirs,
+        },
         &snapshot,
     )?;
 
     #[cfg(not(windows))]
-    let results = search_workspace(workspace_search(workspace, collect_all, skip_dirs), ())?;
+    let results = search_workspace(
+        workspace.root(),
+        "tool",
+        WorkspaceSearchParams {
+            collect_all,
+            skip_dirs,
+        },
+        (),
+    )?;
 
     Ok(results)
 }
@@ -97,13 +97,7 @@ fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspa
     fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
     let skips = WorkspaceSkipList::default();
 
-    #[cfg(windows)]
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    #[cfg(windows)]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), &snapshot)?;
-    #[cfg(not(windows))]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), ())?;
+    let results = execute_workspace_search(&workspace, false, &skips)?;
     ensure!(
         results == vec![exec],
         "expected executable to be discovered"
@@ -119,13 +113,7 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
     let second = write_exec(subdir.as_path(), "tool")?;
     let skips = WorkspaceSkipList::default();
 
-    #[cfg(windows)]
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    #[cfg(windows)]
-    let mut results = search_workspace(workspace_search(&workspace, true, &skips), &snapshot)?;
-    #[cfg(not(windows))]
-    let mut results = search_workspace(workspace_search(&workspace, true, &skips), ())?;
+    let mut results = execute_workspace_search(&workspace, true, &skips)?;
     results.sort();
     let mut expected = vec![first, second];
     expected.sort();
@@ -163,6 +151,22 @@ fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) ->
     Ok(())
 }
 
+#[cfg(windows)]
+#[rstest]
+fn search_workspace_skips_directories_case_insensitively(workspace: TempWorkspace) -> Result<()> {
+    let heavy = workspace.root().join("TARGET");
+    fs::create_dir_all(heavy.as_std_path()).context("mkdir TARGET")?;
+    write_exec(heavy.as_path(), "tool")?;
+    let skips = WorkspaceSkipList::default();
+
+    let results = execute_workspace_search(&workspace, false, &skips)?;
+    ensure!(
+        results.is_empty(),
+        "expected TARGET/ to be skipped case-insensitively"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> Result<()> {
     let target = workspace.root().join("target");
@@ -175,6 +179,41 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
         results == vec![exec],
         "expected custom skip list to allow target/"
     );
+    Ok(())
+}
+
+#[rstest]
+fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Result<()> {
+    let original_path = std::env::var_os("PATH");
+    unsafe { std::env::set_var("PATH", "") };
+
+    let target = workspace.root().join("target");
+    fs::create_dir_all(target.as_std_path()).context("mkdir target")?;
+    let exec = write_exec(target.as_path(), "tool")?;
+    let options = WhichOptions::default();
+
+    let env_default = EnvSnapshot::capture(Some(workspace.root())).expect("capture env");
+    let default_skips = WorkspaceSkipList::default();
+    let err = lookup("tool", &env_default, &options, &default_skips)
+        .expect_err("default skips should ignore target");
+    ensure!(
+        matches!(err.kind(), minijinja::ErrorKind::InvalidOperation),
+        "expected not_found error"
+    );
+
+    let env_custom = EnvSnapshot::capture(Some(workspace.root())).expect("capture env");
+    let custom_skips = WorkspaceSkipList::from_names([".git"]);
+    let results = lookup("tool", &env_custom, &options, &custom_skips)?;
+    ensure!(
+        results == vec![exec],
+        "expected discovery when target allowed"
+    );
+
+    if let Some(path) = original_path {
+        unsafe { std::env::set_var("PATH", path) };
+    } else {
+        unsafe { std::env::remove_var("PATH") };
+    }
     Ok(())
 }
 
@@ -192,13 +231,7 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
 
     let exec = write_exec(workspace.root(), "tool")?;
     let skips = WorkspaceSkipList::default();
-    #[cfg(windows)]
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    #[cfg(windows)]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), &snapshot)?;
-    #[cfg(not(windows))]
-    let results = search_workspace(workspace_search(&workspace, false, &skips), ())?;
+    let results = execute_workspace_search(&workspace, false, &skips)?;
     ensure!(
         results == vec![exec],
         "expected readable executable despite blocked dir"

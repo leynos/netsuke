@@ -27,7 +27,6 @@ pub(crate) struct WhichResolver {
 impl WhichResolver {
     pub(crate) fn new(
         cwd_override: Option<Arc<Utf8PathBuf>>,
-        cwd_override: Option<Arc<Utf8PathBuf>>,
         workspace_skips: WorkspaceSkipList,
         cache_capacity: NonZeroUsize,
     ) -> Result<Self, Error> {
@@ -114,9 +113,12 @@ fn env_fingerprint(env: &EnvSnapshot) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
+    use minijinja::ErrorKind;
     use rstest::rstest;
-    use std::num::NonZeroUsize;
+    use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
+    use tempfile::TempDir;
 
     fn cache_key_for(command: &str) -> CacheKey {
         CacheKey {
@@ -125,6 +127,20 @@ mod tests {
             cwd: Utf8PathBuf::from("/"),
             options: WhichOptions::default(),
             workspace_skips: WorkspaceSkipList::default(),
+        }
+    }
+
+    fn empty_path_env() -> Option<OsString> {
+        let original = std::env::var_os("PATH");
+        unsafe { std::env::set_var("PATH", "") };
+        original
+    }
+
+    fn restore_path(original: Option<OsString>) {
+        if let Some(value) = original {
+            unsafe { std::env::set_var("PATH", value) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
         }
     }
 
@@ -151,5 +167,79 @@ mod tests {
 
         assert!(resolver.try_cache(&first_key).is_none());
         assert_eq!(resolver.try_cache(&second_key), Some(vec![second_path]));
+    }
+
+    #[test]
+    fn cache_key_differs_when_skip_lists_differ() -> Result<()> {
+        let guard = empty_path_env();
+        let temp = TempDir::new()?;
+        let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
+        let env = EnvSnapshot::capture(Some(cwd.as_path()))?;
+        let options = WhichOptions::default();
+
+        let key_a = CacheKey::new(
+            "tool",
+            &env,
+            &options,
+            &WorkspaceSkipList::from_names(["target"]),
+        );
+        let key_b = CacheKey::new(
+            "tool",
+            &env,
+            &options,
+            &WorkspaceSkipList::from_names(["build"]),
+        );
+
+        ensure!(key_a != key_b, "skip lists must influence cache key");
+        restore_path(guard);
+        Ok(())
+    }
+
+    #[test]
+    fn resolver_applies_skip_list_during_resolution() -> Result<()> {
+        let guard = empty_path_env();
+        let temp = TempDir::new()?;
+        let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
+
+        let target = cwd.join("target");
+        std::fs::create_dir_all(target.as_std_path())?;
+        std::fs::write(target.join("tool").as_std_path(), b"#!/bin/sh\n")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = target.join("tool");
+            let mut perms = std::fs::metadata(path.as_std_path())?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(path.as_std_path(), perms)?;
+        }
+
+        let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
+        let resolver = WhichResolver::new(
+            Some(Arc::new(cwd.clone())),
+            WorkspaceSkipList::default(),
+            capacity,
+        )?;
+        let options = WhichOptions::default();
+        let err = resolver
+            .resolve("tool", &options)
+            .expect_err("default skip should ignore target");
+
+        ensure!(matches!(err.kind(), ErrorKind::InvalidOperation));
+
+        let resolver_custom = WhichResolver::new(
+            Some(Arc::new(cwd.clone())),
+            WorkspaceSkipList::from_names([".git"]),
+            capacity,
+        )?;
+        let matches = resolver_custom.resolve("tool", &options)?;
+        ensure!(
+            matches == vec![target.join("tool")],
+            "expected executable discovery when target not skipped"
+        );
+
+        restore_path(guard);
+        Ok(())
     }
 }

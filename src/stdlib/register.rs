@@ -172,3 +172,81 @@ fn is_char_device(ft: fs::FileType) -> bool {
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::{Result, ensure};
+    use camino::{Utf8Path, Utf8PathBuf};
+    use minijinja::{Environment, context};
+    use tempfile::TempDir;
+
+    fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+        let path = root.join(name);
+        std::fs::write(path.as_std_path(), b"#!/bin/sh\n")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(path.as_std_path())?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(path.as_std_path(), perms)?;
+        }
+        Ok(path)
+    }
+
+    fn set_empty_path() -> Option<std::ffi::OsString> {
+        let original = std::env::var_os("PATH");
+        unsafe { std::env::set_var("PATH", "") };
+        original
+    }
+
+    fn restore_path(original: Option<std::ffi::OsString>) {
+        if let Some(path) = original {
+            unsafe { std::env::set_var("PATH", path) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
+        }
+    }
+
+    #[test]
+    fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {
+        let guard = set_empty_path();
+        let temp = TempDir::new()?;
+        let root_path =
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
+        let root_dir = Dir::open_ambient_dir(root_path.as_path(), ambient_authority())?;
+
+        let target = root_path.join("target");
+        std::fs::create_dir_all(target.as_std_path())?;
+        let exec = write_exec(target.as_path(), "tool")?;
+
+        let mut env = Environment::new();
+        let default_config =
+            StdlibConfig::new(root_dir.try_clone()?)?.with_workspace_root_path(&root_path)?;
+        register_with_config(&mut env, default_config)?;
+
+        env.add_template("t", "{{ which('tool') }}")?;
+        let render_err = env
+            .get_template("t")?
+            .render(context! {})
+            .expect_err("default skips should block target");
+        ensure!(
+            render_err
+                .to_string()
+                .contains("netsuke::jinja::which::not_found"),
+            "expected not_found error, got {render_err}"
+        );
+
+        let mut env_custom = Environment::new();
+        let custom_config = StdlibConfig::new(root_dir)?
+            .with_workspace_root_path(&root_path)?
+            .with_workspace_skip_dirs([".git"])?;
+        register_with_config(&mut env_custom, custom_config)?;
+        env_custom.add_template("t", "{{ which('tool') }}")?;
+        let rendered = env_custom.get_template("t")?.render(context! {})?;
+        ensure!(rendered == exec.as_str(), "expected resolved path");
+
+        restore_path(guard);
+        Ok(())
+    }
+}
