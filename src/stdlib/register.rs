@@ -177,24 +177,11 @@ fn is_device(ft: fs::FileType) -> bool {
 mod tests {
     use super::*;
     use anyhow::{Result, ensure};
-    use camino::{Utf8Path, Utf8PathBuf};
+    use camino::Utf8PathBuf;
     use minijinja::{Environment, context};
     use std::ffi::OsStr;
     use tempfile::TempDir;
-    use test_support::env::VarGuard;
-
-    fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
-        let path = root.join(name);
-        std::fs::write(path.as_std_path(), b"#!/bin/sh\n")?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(path.as_std_path())?.permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(path.as_std_path(), perms)?;
-        }
-        Ok(path)
-    }
+    use test_support::{env::VarGuard, write_exec};
 
     #[test]
     fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {

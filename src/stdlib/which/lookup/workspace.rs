@@ -297,22 +297,27 @@ fn prepare_workspace_match(command: &str, env: &EnvSnapshot) -> WorkspaceMatchCo
 mod tests {
     use super::*;
     use anyhow::{Result, ensure};
+    use rstest::rstest;
     use tempfile::TempDir;
 
-    #[test]
-    fn default_skip_list_covers_common_heavy_dirs() {
-        let skips = WorkspaceSkipList::default();
-        assert!(skips.should_skip("target"));
-        assert!(skips.should_skip(".git"));
-        assert!(!skips.should_skip("src"));
-    }
-
-    #[test]
-    fn custom_skip_list_respects_configured_dirs() {
-        let skips = WorkspaceSkipList::from_names(["build", "dist"]);
-        assert!(skips.should_skip("build"));
-        assert!(skips.should_skip("dist"));
-        assert!(!skips.should_skip("target"));
+    #[rstest]
+    #[case::default_list(WorkspaceSkipList::default(), &["target", ".git"], &["src"])]
+    #[case::custom_list(
+        WorkspaceSkipList::from_names(["build", "dist"]),
+        &["build", "dist"],
+        &["target"],
+    )]
+    fn skip_list_respects_configured_dirs(
+        #[case] skips: WorkspaceSkipList,
+        #[case] should_skip: &[&str],
+        #[case] should_visit: &[&str],
+    ) {
+        for dir in should_skip {
+            assert!(skips.should_skip(dir), "expected {dir} to be skipped");
+        }
+        for dir in should_visit {
+            assert!(!skips.should_skip(dir), "expected {dir} to be visited");
+        }
     }
 
     #[cfg(windows)]
@@ -334,7 +339,8 @@ mod tests {
             .min_depth(1)
             .max_depth(1)
             .into_iter()
-            .collect::<Result<_, _>>()?;
+            .collect::<Result<_, _>>()
+            .expect("walkdir should iterate entries without error");
         let skips = WorkspaceSkipList::default();
         let mut saw_target = false;
         let mut saw_tool = false;

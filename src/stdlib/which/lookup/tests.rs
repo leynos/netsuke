@@ -6,7 +6,9 @@ use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
 use std::{ffi::OsStr, fs};
 use tempfile::TempDir;
-use test_support::env::VarGuard;
+use test_support::{env::VarGuard, write_exec};
+#[cfg(windows)]
+use test_support::make_executable;
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -32,28 +34,6 @@ impl TempWorkspace {
 #[fixture]
 fn workspace() -> TempWorkspace {
     TempWorkspace::new().expect("create utf8 temp workspace")
-}
-
-#[cfg(unix)]
-fn make_executable(path: &Utf8Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(path.as_std_path())
-        .context("stat exec")?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(path.as_std_path(), perms).context("chmod exec")
-}
-
-#[cfg(not(unix))]
-fn make_executable(_path: &Utf8Path) -> Result<()> {
-    Ok(())
-}
-
-fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
-    let path = root.join(name);
-    fs::write(path.as_std_path(), b"#!/bin/sh\n").context("write exec stub")?;
-    make_executable(&path)?;
-    Ok(path)
 }
 
 /// Helper to execute workspace search with platform-specific env handling.
@@ -95,14 +75,13 @@ fn execute_workspace_search(
 fn test_workspace_skips_directory(
     workspace: &TempWorkspace,
     dir_name: &str,
+    skips: &WorkspaceSkipList,
     assertion_msg: &str,
 ) -> Result<()> {
     let heavy = workspace.root().join(dir_name);
     fs::create_dir_all(heavy.as_std_path()).with_context(|| format!("mkdir {dir_name}"))?;
     write_exec(heavy.as_path(), "tool")?;
-    let skips = WorkspaceSkipList::default();
-
-    let results = execute_workspace_search(workspace, false, &skips)?;
+    let results = execute_workspace_search(workspace, false, skips)?;
     ensure!(results.is_empty(), "{}", assertion_msg);
     Ok(())
 }
@@ -143,7 +122,13 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
 
 #[rstest]
 fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<()> {
-    test_workspace_skips_directory(&workspace, "target", "expected target/ to be skipped")
+    let skips = WorkspaceSkipList::default();
+    test_workspace_skips_directory(
+        &workspace,
+        "target",
+        &skips,
+        "expected target/ to be skipped",
+    )
 }
 
 #[rstest]
@@ -164,9 +149,11 @@ fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) ->
 #[cfg(windows)]
 #[rstest]
 fn search_workspace_skips_directories_case_insensitively(workspace: TempWorkspace) -> Result<()> {
+    let skips = WorkspaceSkipList::default();
     test_workspace_skips_directory(
         &workspace,
         "TARGET",
+        &skips,
         "expected TARGET/ to be skipped case-insensitively",
     )
 }

@@ -436,6 +436,7 @@ mod tests {
 
     #[rstest]
     #[case(vec![""], "workspace skip entries must not be empty")]
+    #[case(vec!["."], "workspace skip entries must name a directory, not navigation segments")]
     #[case(vec![".."], "workspace skip entries must name a directory, not navigation segments")]
     #[case(vec!["dir/name"], "workspace skip entries must be basenames without separators")]
     #[case(vec!["dir\\name"], "workspace skip entries must be basenames without separators")]
