@@ -46,12 +46,12 @@ impl WhichConfig {
     }
 }
 
-pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) -> Result<(), Error> {
+pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
     let resolver = Arc::new(WhichResolver::new(
         config.cwd_override,
         config.workspace_skips,
         config.cache_capacity,
-    )?);
+    ));
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {
@@ -70,7 +70,6 @@ pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) -> Result
             })
         });
     }
-    Ok(())
 }
 
 fn resolve_with(

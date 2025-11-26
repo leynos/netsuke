@@ -13,7 +13,7 @@ use minijinja::Error;
 
 use super::{
     env::EnvSnapshot,
-    lookup::{lookup, WorkspaceSkipList},
+    lookup::{WorkspaceSkipList, lookup},
     options::WhichOptions,
 };
 
@@ -29,12 +29,12 @@ impl WhichResolver {
         cwd_override: Option<Arc<Utf8PathBuf>>,
         workspace_skips: WorkspaceSkipList,
         cache_capacity: NonZeroUsize,
-    ) -> Result<Self, Error> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
             workspace_skips,
-        })
+        }
     }
 
     pub(crate) fn resolve(
@@ -118,8 +118,8 @@ mod tests {
     use minijinja::ErrorKind;
     use rstest::rstest;
     use std::{num::NonZeroUsize, sync::Arc};
-    use test_support::{env::VarGuard, env_lock::EnvLock};
     use tempfile::TempDir;
+    use test_support::env::VarGuard;
 
     fn cache_key_for(command: &str) -> CacheKey {
         CacheKey {
@@ -137,8 +137,7 @@ mod tests {
             None,
             WorkspaceSkipList::default(),
             NonZeroUsize::new(1).expect("non-zero cache capacity"),
-        )
-        .expect("construct resolver");
+        );
 
         let first_key = cache_key_for("first");
         let first_path = Utf8PathBuf::from("/bin/first");
@@ -158,7 +157,6 @@ mod tests {
 
     #[test]
     fn cache_key_differs_when_skip_lists_differ() -> Result<()> {
-        let _lock = EnvLock::acquire();
         let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(""));
         let temp = TempDir::new()?;
         let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -185,7 +183,6 @@ mod tests {
 
     #[test]
     fn resolver_applies_skip_list_during_resolution() -> Result<()> {
-        let _lock = EnvLock::acquire();
         let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(""));
         let temp = TempDir::new()?;
         let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
@@ -208,7 +205,7 @@ mod tests {
             Some(Arc::new(cwd.clone())),
             WorkspaceSkipList::default(),
             capacity,
-        )?;
+        );
         let options = WhichOptions::default();
         let err = resolver
             .resolve("tool", &options)
@@ -220,7 +217,7 @@ mod tests {
             Some(Arc::new(cwd.clone())),
             WorkspaceSkipList::from_names([".git"]),
             capacity,
-        )?;
+        );
         let matches = resolver_custom.resolve("tool", &options)?;
         ensure!(
             matches == vec![target.join("tool")],
