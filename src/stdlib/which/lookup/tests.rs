@@ -90,6 +90,22 @@ fn execute_workspace_search(
     Ok(results)
 }
 
+/// Helper to test that workspace search skips a specific directory.
+fn test_workspace_skips_directory(
+    workspace: &TempWorkspace,
+    dir_name: &str,
+    assertion_msg: &str,
+) -> Result<()> {
+    let heavy = workspace.root().join(dir_name);
+    fs::create_dir_all(heavy.as_std_path()).with_context(|| format!("mkdir {dir_name}"))?;
+    write_exec(heavy.as_path(), "tool")?;
+    let skips = WorkspaceSkipList::default();
+
+    let results = execute_workspace_search(workspace, false, &skips)?;
+    ensure!(results.is_empty(), "{}", assertion_msg);
+    Ok(())
+}
+
 #[rstest]
 fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspace) -> Result<()> {
     let exec = write_exec(workspace.root(), "tool")?;
@@ -126,14 +142,7 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
 
 #[rstest]
 fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<()> {
-    let heavy = workspace.root().join("target");
-    fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
-    write_exec(heavy.as_path(), "tool")?;
-    let skips = WorkspaceSkipList::default();
-
-    let results = execute_workspace_search(&workspace, false, &skips)?;
-    ensure!(results.is_empty(), "expected target/ to be skipped");
-    Ok(())
+    test_workspace_skips_directory(&workspace, "target", "expected target/ to be skipped")
 }
 
 #[rstest]
@@ -154,17 +163,11 @@ fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) ->
 #[cfg(windows)]
 #[rstest]
 fn search_workspace_skips_directories_case_insensitively(workspace: TempWorkspace) -> Result<()> {
-    let heavy = workspace.root().join("TARGET");
-    fs::create_dir_all(heavy.as_std_path()).context("mkdir TARGET")?;
-    write_exec(heavy.as_path(), "tool")?;
-    let skips = WorkspaceSkipList::default();
-
-    let results = execute_workspace_search(&workspace, false, &skips)?;
-    ensure!(
-        results.is_empty(),
-        "expected TARGET/ to be skipped case-insensitively"
-    );
-    Ok(())
+    test_workspace_skips_directory(
+        &workspace,
+        "TARGET",
+        "expected TARGET/ to be skipped case-insensitively",
+    )
 }
 
 #[rstest]
