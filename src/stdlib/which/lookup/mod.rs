@@ -214,6 +214,26 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
+#[cfg(windows)]
+fn search_workspace_for_platform(
+    cwd: &Utf8Path,
+    command: &str,
+    params: WorkspaceSearchParams<'_>,
+    env: &EnvSnapshot,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    search_workspace(cwd, command, params, env)
+}
+
+#[cfg(not(windows))]
+fn search_workspace_for_platform(
+    cwd: &Utf8Path,
+    command: &str,
+    params: WorkspaceSearchParams<'_>,
+    _env: &EnvSnapshot,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    search_workspace(cwd, command, params, ())
+}
+
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
@@ -222,10 +242,8 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
             collect_all: ctx.options.all,
             skip_dirs: ctx.workspace_skips,
         };
-        #[cfg(windows)]
-        let discovered = search_workspace(ctx.env.cwd.as_path(), ctx.command, search, ctx.env)?;
-        #[cfg(not(windows))]
-        let discovered = search_workspace(ctx.env.cwd.as_path(), ctx.command, search, ())?;
+        let discovered =
+            search_workspace_for_platform(ctx.env.cwd.as_path(), ctx.command, search, ctx.env)?;
         if !discovered.is_empty() {
             return if ctx.options.canonical {
                 canonicalise(discovered)
