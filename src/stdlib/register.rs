@@ -179,7 +179,9 @@ mod tests {
     use anyhow::{Result, ensure};
     use camino::{Utf8Path, Utf8PathBuf};
     use minijinja::{Environment, context};
+    use std::ffi::OsStr;
     use tempfile::TempDir;
+    use test_support::{env::VarGuard, env_lock::EnvLock};
 
     fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
         let path = root.join(name);
@@ -194,23 +196,10 @@ mod tests {
         Ok(path)
     }
 
-    fn set_empty_path() -> Option<std::ffi::OsString> {
-        let original = std::env::var_os("PATH");
-        unsafe { std::env::set_var("PATH", "") };
-        original
-    }
-
-    fn restore_path(original: Option<std::ffi::OsString>) {
-        if let Some(path) = original {
-            unsafe { std::env::set_var("PATH", path) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
-        }
-    }
-
     #[test]
     fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {
-        let guard = set_empty_path();
+        let _lock = EnvLock::acquire();
+        let _guard = VarGuard::set("PATH", OsStr::new(""));
         let temp = TempDir::new()?;
         let root_path =
             Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
@@ -245,8 +234,6 @@ mod tests {
         env_custom.add_template("t", "{{ which('tool') }}")?;
         let rendered = env_custom.get_template("t")?.render(context! {})?;
         ensure!(rendered == exec.as_str(), "expected resolved path");
-
-        restore_path(guard);
         Ok(())
     }
 }

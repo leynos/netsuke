@@ -14,15 +14,26 @@ use super::EnvSnapshot;
 use super::env;
 use super::is_executable;
 
-/// Default set of workspace directories to skip during fallback scans.
+/// Default set of workspace directories to skip during workspace fallback
+/// scans. Callers can override or extend this list via `WorkspaceSkipList` to
+/// avoid expensive traversals of tool caches or IDE metadata.
 pub(crate) const DEFAULT_WORKSPACE_SKIP_DIRS: &[&str] =
     &[".git", "target", "node_modules", ".idea", ".vscode"];
 
+/// Normalised set of directory basenames that should be ignored during
+/// workspace traversal. Entries are lowercased on Windows to provide
+/// case-insensitive membership checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WorkspaceSkipList {
     dirs: IndexSet<String>,
 }
 
+/// Parameters used when scanning the workspace for executables.
+///
+/// - `collect_all`: whether to collect every match instead of short-circuiting
+///   after the first hit.
+/// - `skip_dirs`: reference to the `WorkspaceSkipList` applied during
+///   traversal.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct WorkspaceSearchParams<'a> {
     pub(crate) collect_all: bool,
@@ -69,11 +80,15 @@ impl std::hash::Hash for WorkspaceSkipList {
 }
 
 #[cfg(windows)]
+/// Lowercase directory names to ensure case-insensitive comparisons on Windows
+/// filesystems.
 fn normalise_dir_name(name: &str) -> String {
     name.to_ascii_lowercase()
 }
 
 #[cfg(not(windows))]
+/// Preserve directory names verbatim on POSIX because comparisons are
+/// case-sensitive.
 fn normalise_dir_name(name: &str) -> String {
     name.to_owned()
 }

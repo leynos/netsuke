@@ -1088,7 +1088,7 @@ classDiagram
 
     class WorkspaceSkipList {
         +default() -> WorkspaceSkipList
-        +from_names(names: IntoIterator<str>) -> WorkspaceSkipList
+        +from_names(names: IntoIterator<Item = impl AsRef<str>>) -> WorkspaceSkipList
     }
 
     class CwdMode {

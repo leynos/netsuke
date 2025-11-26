@@ -4,8 +4,9 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
-use std::fs;
+use std::{ffi::OsStr, fs};
 use tempfile::TempDir;
+use test_support::env::VarGuard;
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -187,8 +188,7 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
 
 #[rstest]
 fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Result<()> {
-    let original_path = std::env::var_os("PATH");
-    unsafe { std::env::set_var("PATH", "") };
+    let _guard = VarGuard::set("PATH", OsStr::new(""));
 
     let target = workspace.root().join("target");
     fs::create_dir_all(target.as_std_path()).context("mkdir target")?;
@@ -212,11 +212,6 @@ fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Res
         "expected discovery when target allowed"
     );
 
-    if let Some(path) = original_path {
-        unsafe { std::env::set_var("PATH", path) };
-    } else {
-        unsafe { std::env::remove_var("PATH") };
-    }
     Ok(())
 }
 

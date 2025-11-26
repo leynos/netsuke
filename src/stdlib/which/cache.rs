@@ -13,7 +13,7 @@ use minijinja::Error;
 
 use super::{
     env::EnvSnapshot,
-    lookup::{WorkspaceSkipList, lookup},
+    lookup::{lookup, WorkspaceSkipList},
     options::WhichOptions,
 };
 
@@ -117,7 +117,8 @@ mod tests {
     use camino::Utf8PathBuf;
     use minijinja::ErrorKind;
     use rstest::rstest;
-    use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
+    use std::{num::NonZeroUsize, sync::Arc};
+    use test_support::{env::VarGuard, env_lock::EnvLock};
     use tempfile::TempDir;
 
     fn cache_key_for(command: &str) -> CacheKey {
@@ -127,20 +128,6 @@ mod tests {
             cwd: Utf8PathBuf::from("/"),
             options: WhichOptions::default(),
             workspace_skips: WorkspaceSkipList::default(),
-        }
-    }
-
-    fn empty_path_env() -> Option<OsString> {
-        let original = std::env::var_os("PATH");
-        unsafe { std::env::set_var("PATH", "") };
-        original
-    }
-
-    fn restore_path(original: Option<OsString>) {
-        if let Some(value) = original {
-            unsafe { std::env::set_var("PATH", value) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
         }
     }
 
@@ -171,7 +158,8 @@ mod tests {
 
     #[test]
     fn cache_key_differs_when_skip_lists_differ() -> Result<()> {
-        let guard = empty_path_env();
+        let _lock = EnvLock::acquire();
+        let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(""));
         let temp = TempDir::new()?;
         let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
@@ -192,13 +180,13 @@ mod tests {
         );
 
         ensure!(key_a != key_b, "skip lists must influence cache key");
-        restore_path(guard);
         Ok(())
     }
 
     #[test]
     fn resolver_applies_skip_list_during_resolution() -> Result<()> {
-        let guard = empty_path_env();
+        let _lock = EnvLock::acquire();
+        let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(""));
         let temp = TempDir::new()?;
         let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
             .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
@@ -239,7 +227,6 @@ mod tests {
             "expected executable discovery when target not skipped"
         );
 
-        restore_path(guard);
         Ok(())
     }
 }

@@ -218,26 +218,14 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
+        let search = WorkspaceSearchParams {
+            collect_all: ctx.options.all,
+            skip_dirs: ctx.workspace_skips,
+        };
         #[cfg(windows)]
-        let discovered = search_workspace(
-            ctx.env.cwd.as_path(),
-            ctx.command,
-            WorkspaceSearchParams {
-                collect_all: ctx.options.all,
-                skip_dirs: ctx.workspace_skips,
-            },
-            ctx.env,
-        )?;
+        let discovered = search_workspace(ctx.env.cwd.as_path(), ctx.command, search, ctx.env)?;
         #[cfg(not(windows))]
-        let discovered = search_workspace(
-            ctx.env.cwd.as_path(),
-            ctx.command,
-            WorkspaceSearchParams {
-                collect_all: ctx.options.all,
-                skip_dirs: ctx.workspace_skips,
-            },
-            (),
-        )?;
+        let discovered = search_workspace(ctx.env.cwd.as_path(), ctx.command, search, ())?;
         if !discovered.is_empty() {
             return if ctx.options.canonical {
                 canonicalise(discovered)
