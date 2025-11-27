@@ -111,7 +111,7 @@ pub(super) fn resolve_direct(
         return Err(direct_not_found(command, &resolved));
     }
     if options.canonical {
-        canonicalise(vec![resolved.clone()])
+        canonicalise(vec![resolved])
     } else {
         Ok(vec![resolved])
     }
