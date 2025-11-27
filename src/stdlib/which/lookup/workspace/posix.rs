@@ -6,8 +6,8 @@ use walkdir::WalkDir;
 
 use super::super::is_executable;
 use super::{
-    WorkspaceSearchParams, log_if_no_matches, should_visit_entry, unwrap_or_log_error,
-    WORKSPACE_MAX_DEPTH,
+    WORKSPACE_MAX_DEPTH, WorkspaceSearchParams, log_if_no_matches, should_visit_entry,
+    unwrap_or_log_error,
 };
 use crate::stdlib::which::env::EnvSnapshot;
 

@@ -1,6 +1,6 @@
 //! Workspace fallback search helpers for the `which` resolver.
 
-use std::{env, hash::Hash};
+use std::env;
 
 use camino::Utf8PathBuf;
 use indexmap::IndexSet;
@@ -80,7 +80,7 @@ impl Default for WorkspaceSkipList {
 impl std::hash::Hash for WorkspaceSkipList {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         for dir in &self.dirs {
-            dir.hash(state);
+            std::hash::Hash::hash(dir, state);
         }
     }
 }
@@ -119,10 +119,7 @@ pub(super) fn search_workspace(
     platform_search_workspace(env, command, params)
 }
 
-pub(super) fn should_visit_entry(
-    entry: &walkdir::DirEntry,
-    skip_dirs: &WorkspaceSkipList,
-) -> bool {
+pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &WorkspaceSkipList) -> bool {
     if !entry.file_type().is_dir() {
         return true;
     }

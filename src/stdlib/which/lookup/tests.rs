@@ -8,7 +8,7 @@ use std::{ffi::OsStr, fs};
 use tempfile::TempDir;
 #[cfg(windows)]
 use test_support::make_executable;
-use test_support::{env::VarGuard, write_exec};
+use test_support::{env::VarGuard, env_lock::EnvLock, write_exec};
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -36,14 +36,34 @@ fn workspace() -> TempWorkspace {
     TempWorkspace::new().expect("create utf8 temp workspace")
 }
 
-fn params<'a>(
-    collect_all: bool,
-    skip_dirs: &'a WorkspaceSkipList,
-) -> WorkspaceSearchParams<'a> {
+fn params(collect_all: bool, skip_dirs: &WorkspaceSkipList) -> WorkspaceSearchParams<'_> {
     WorkspaceSearchParams {
         collect_all,
         skip_dirs,
     }
+}
+
+fn with_isolated_path<T>(value: &OsStr, action: impl FnOnce() -> T) -> T {
+    let lock = EnvLock::acquire();
+    let original = std::env::var_os("PATH");
+    unsafe {
+        std::env::set_var("PATH", value);
+    }
+
+    let outcome = action();
+
+    if let Some(orig) = original {
+        unsafe {
+            std::env::set_var("PATH", orig);
+        }
+    } else {
+        unsafe {
+            std::env::remove_var("PATH");
+        }
+    }
+
+    drop(lock);
+    outcome
 }
 
 /// Helper to execute workspace search with platform-specific env handling.
@@ -52,10 +72,15 @@ fn execute_workspace_search(
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>> {
-    let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    search_workspace(&snapshot, "tool", params(collect_all, skip_dirs))
+    with_isolated_path(OsStr::new(workspace.root().as_str()), || {
+        let snapshot =
+            EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+        Ok(search_workspace(
+            &snapshot,
+            "tool",
+            params(collect_all, skip_dirs),
+        )?)
+    })
 }
 
 /// Helper to test that workspace search skips a specific directory.
@@ -135,9 +160,7 @@ fn search_workspace_skips_common_editor_directories(workspace: TempWorkspace) ->
 
 #[cfg(windows)]
 #[rstest]
-fn search_workspace_skips_directories_case_insensitively(
-    workspace: TempWorkspace,
-) -> Result<()> {
+fn search_workspace_skips_directories_case_insensitively(workspace: TempWorkspace) -> Result<()> {
     let skips = WorkspaceSkipList::default();
     test_workspace_skips_directory(
         &workspace,
@@ -164,27 +187,30 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
 
 #[rstest]
 fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Result<()> {
-    let _guard = VarGuard::unset("PATH");
+    let (env_result, default_err, exec) = with_isolated_path(OsStr::new(""), || {
+        let target = workspace.root().join("target");
+        fs::create_dir_all(target.as_std_path()).context("mkdir target")?;
+        let exec = write_exec(target.as_path(), "tool")?;
+        let options = WhichOptions::default();
 
-    let target = workspace.root().join("target");
-    fs::create_dir_all(target.as_std_path()).context("mkdir target")?;
-    let exec = write_exec(target.as_path(), "tool")?;
-    let options = WhichOptions::default();
+        let env_default = EnvSnapshot::capture(Some(workspace.root())).expect("capture env");
+        let default_skips = WorkspaceSkipList::default();
+        let err = lookup("tool", &env_default, &options, &default_skips)
+            .expect_err("default skips should ignore target");
 
-    let env_default = EnvSnapshot::capture(Some(workspace.root())).expect("capture env");
-    let default_skips = WorkspaceSkipList::default();
-    let err = lookup("tool", &env_default, &options, &default_skips)
-        .expect_err("default skips should ignore target");
+        let env_custom = EnvSnapshot::capture(Some(workspace.root())).expect("capture env");
+        let custom_skips = WorkspaceSkipList::from_names([".git"]);
+        let results = lookup("tool", &env_custom, &options, &custom_skips)?;
+        Ok::<_, anyhow::Error>((results, err, exec))
+    })?;
+
     ensure!(
-        matches!(err.kind(), minijinja::ErrorKind::InvalidOperation),
+        matches!(default_err.kind(), minijinja::ErrorKind::InvalidOperation),
         "expected not_found error"
     );
 
-    let env_custom = EnvSnapshot::capture(Some(workspace.root())).expect("capture env");
-    let custom_skips = WorkspaceSkipList::from_names([".git"]);
-    let results = lookup("tool", &env_custom, &options, &custom_skips)?;
     ensure!(
-        results == vec![exec],
+        env_result == vec![exec],
         "expected discovery when target allowed"
     );
 
@@ -219,22 +245,22 @@ fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Resul
     use std::os::unix::ffi::OsStrExt;
 
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
-    let _guard = VarGuard::set("PATH", invalid_path);
 
-    let err = EnvSnapshot::capture(Some(workspace.root()))
-        .expect_err("invalid PATH should fail EnvSnapshot::capture");
-    let msg = err.to_string();
+    with_isolated_path(invalid_path, || {
+        let err = EnvSnapshot::capture(Some(workspace.root()))
+            .expect_err("invalid PATH should fail EnvSnapshot::capture");
+        let msg = err.to_string();
 
-    ensure!(
-        msg.contains("netsuke::jinja::which::args"),
-        "expected PATH parsing error, got: {msg}"
-    );
-    ensure!(
-        msg.contains("PATH entry #1"),
-        "expected PATH entry index in message, got: {msg}"
-    );
-
-    Ok(())
+        ensure!(
+            msg.contains("netsuke::jinja::which::args"),
+            "expected PATH parsing error, got: {msg}"
+        );
+        ensure!(
+            msg.contains("PATH entry #1"),
+            "expected PATH entry index in message, got: {msg}"
+        );
+        Ok(())
+    })
 }
 
 #[rstest]
@@ -250,11 +276,11 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
         std::path::Path::new("tools"),
     ])
     .context("join PATH entries")?;
-    let _guard = VarGuard::set("PATH", path_value.as_os_str());
-
-    let snapshot = EnvSnapshot::capture(Some(workspace.root()))
-        .context("capture env with relative PATH entries")?;
-    let resolved_dirs = snapshot.resolved_dirs(CwdMode::Never);
+    let resolved_dirs = with_isolated_path(path_value.as_os_str(), || {
+        let snapshot = EnvSnapshot::capture(Some(workspace.root()))
+            .context("capture env with relative PATH entries")?;
+        Ok::<_, anyhow::Error>(snapshot.resolved_dirs(CwdMode::Never))
+    })?;
 
     ensure!(
         resolved_dirs.contains(&bin),

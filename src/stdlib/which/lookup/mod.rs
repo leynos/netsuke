@@ -209,11 +209,7 @@ struct HandleMissContext<'a> {
 }
 
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
-    let path_empty = ctx
-        .env
-        .raw_path
-        .as_ref()
-        .map_or(true, |path| path.is_empty());
+    let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
         let search = WorkspaceSearchParams {

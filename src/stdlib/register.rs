@@ -209,11 +209,15 @@ mod tests {
     use minijinja::{Environment, context};
     use std::ffi::OsStr;
     use tempfile::TempDir;
-    use test_support::{env::VarGuard, write_exec};
+    use test_support::{env_lock::EnvLock, write_exec};
 
     #[test]
     fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {
-        let _guard = VarGuard::set("PATH", OsStr::new(""));
+        let lock = EnvLock::acquire();
+        let original_path = std::env::var_os("PATH");
+        unsafe {
+            std::env::set_var("PATH", OsStr::new(""));
+        }
         let temp = TempDir::new()?;
         let root_path =
             Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
@@ -248,6 +252,17 @@ mod tests {
         env_custom.add_template("t", "{{ which('tool') }}")?;
         let rendered = env_custom.get_template("t")?.render(context! {})?;
         ensure!(rendered == exec.as_str(), "expected resolved path");
+
+        if let Some(path) = original_path {
+            unsafe {
+                std::env::set_var("PATH", path);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var("PATH");
+            }
+        }
+        drop(lock);
         Ok(())
     }
 }
