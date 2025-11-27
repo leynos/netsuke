@@ -5,11 +5,40 @@ use anyhow::{Context, Result};
 use netsuke::stdlib::StdlibConfig;
 use rstest::rstest;
 use serde_json::Value;
-use std::env;
+use std::{env, path::PathBuf};
 use tempfile::tempdir;
+use test_support::env_lock::EnvLock;
 
 use super::support::{self, fallible};
 use super::which_filter_common::*;
+
+struct CurrentDirGuard {
+    original: PathBuf,
+    _lock: EnvLock,
+}
+
+impl CurrentDirGuard {
+    fn change_to(path: &std::path::Path) -> Result<Self> {
+        let lock = EnvLock::acquire();
+        let original = env::current_dir().context("capture current working directory")?;
+        env::set_current_dir(path).context("switch cwd")?;
+        Ok(Self {
+            original,
+            _lock: lock,
+        })
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        if let Err(err) = env::set_current_dir(&self.original) {
+            tracing::warn!(
+                "failed to restore working directory to {}: {err}",
+                self.original.display()
+            );
+        }
+    }
+}
 
 fn render_and_assert_pure(
     fixture: &mut WhichTestFixture,
@@ -253,8 +282,7 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
     let (_temp, root) = support::filter_workspace()?;
     let tool = write_tool(&root, &ToolName::from("helper"))?;
     let alt = tempdir().context("create alternate cwd")?;
-    let orig_cwd = env::current_dir().context("capture cwd")?;
-    env::set_current_dir(&alt).context("switch cwd")?;
+    let _cwd_guard = CurrentDirGuard::change_to(alt.path())?;
 
     let config = StdlibConfig::new(
         Dir::open_ambient_dir(&root, ambient_authority()).context("open workspace")?,
@@ -262,9 +290,7 @@ fn which_resolver_honours_workspace_root_override() -> Result<()> {
     .with_workspace_root_path(root.clone())?;
     let _path = PathEnv::new(&[])?;
     let (mut env, _state) = fallible::stdlib_env_with_config(config)?;
-    let render_result = render(&mut env, &Template::from("{{ 'helper' | which }}"));
-    env::set_current_dir(orig_cwd).context("restore cwd")?;
-    let output = render_result?;
+    let output = render(&mut env, &Template::from("{{ 'helper' | which }}"))?;
     assert_eq!(output, tool.as_str());
     Ok(())
 }
