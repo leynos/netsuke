@@ -4,7 +4,7 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
-use std::{ffi::OsStr, fs};
+use std::fs;
 use tempfile::TempDir;
 #[cfg(windows)]
 use test_support::make_executable;
@@ -175,7 +175,7 @@ fn search_workspace_uses_custom_skip_configuration(workspace: TempWorkspace) -> 
 
 #[rstest]
 fn lookup_respects_workspace_skip_configuration(workspace: TempWorkspace) -> Result<()> {
-    let _guard = VarGuard::set("PATH", OsStr::new(""));
+    let _guard = VarGuard::unset("PATH");
 
     let target = workspace.root().join("target");
     fs::create_dir_all(target.as_std_path()).context("mkdir target")?;
