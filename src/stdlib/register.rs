@@ -167,6 +167,7 @@ fn is_fifo(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
+// Non-Unix platforms do not expose FIFOs; always report unsupported.
 fn is_fifo(_ft: fs::FileType) -> bool {
     false
 }
@@ -177,6 +178,7 @@ fn is_block_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
+// Block devices are unavailable off Unix; deliberately return false.
 fn is_block_device(_ft: fs::FileType) -> bool {
     false
 }
@@ -187,6 +189,7 @@ fn is_char_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
+// Char devices are unsupported on non-Unix platforms.
 fn is_char_device(_ft: fs::FileType) -> bool {
     false
 }
@@ -197,6 +200,7 @@ fn is_device(ft: fs::FileType) -> bool {
 }
 
 #[cfg(not(unix))]
+// Aggregate device check stays false where device concepts do not exist.
 fn is_device(_ft: fs::FileType) -> bool {
     false
 }
@@ -263,6 +267,23 @@ mod tests {
             }
         }
         drop(lock);
+        Ok(())
+    }
+
+    #[cfg(not(unix))]
+    #[test]
+    fn non_unix_file_type_stubs_always_return_false() -> Result<()> {
+        let temp = TempDir::new()?;
+        let file_path = temp.path().join("file");
+        std::fs::write(&file_path, b"stub")?;
+        let metadata = std::fs::metadata(&file_path)?;
+        let ft = fs::FileType::from_std(metadata.file_type());
+
+        ensure!(!is_fifo(ft), "fifo should be unsupported");
+        ensure!(!is_block_device(ft), "block devices unsupported");
+        ensure!(!is_char_device(ft), "char devices unsupported");
+        ensure!(!is_device(ft), "device aggregate should be false");
+
         Ok(())
     }
 }

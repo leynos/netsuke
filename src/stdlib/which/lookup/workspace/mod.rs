@@ -5,6 +5,7 @@ use std::env;
 use camino::Utf8PathBuf;
 use indexmap::IndexSet;
 use minijinja::Error;
+use tracing::warn;
 
 use crate::stdlib::which::env::EnvSnapshot;
 
@@ -135,11 +136,11 @@ fn workspace_fallback_enabled() -> bool {
         }
         Err(env::VarError::NotPresent) => true,
         Err(env::VarError::NotUnicode(_)) => {
-            tracing::warn!(
+            warn!(
                 env = WORKSPACE_FALLBACK_ENV,
-                "workspace fallback disabled because env var is not valid UTF-8",
+                "workspace fallback enabled but env var is not valid UTF-8",
             );
-            false
+            true
         }
     }
 }
