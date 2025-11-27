@@ -118,6 +118,24 @@ pub struct VarGuard {
     inner: EnvGuard,
 }
 
+/// Run `action` with `PATH` temporarily set to `value`, restoring on drop and
+/// serialising mutations with `EnvLock`.
+pub fn with_isolated_path<T>(value: &OsStr, action: impl FnOnce() -> T) -> T {
+    let _lock = EnvLock::acquire();
+    let original = std::env::var_os("PATH");
+    // SAFETY: EnvLock serialises mutations to global process state.
+    unsafe { std::env::set_var("PATH", value) };
+
+    let output = action();
+
+    match original {
+        Some(orig) => unsafe { std::env::set_var("PATH", orig) },
+        None => unsafe { std::env::remove_var("PATH") },
+    }
+
+    output
+}
+
 impl VarGuard {
     /// Set `key` to `value`, returning a guard that resets it on drop.
     ///

@@ -1,6 +1,6 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
-use super::{command, network::NetworkPolicy, which::DEFAULT_WORKSPACE_SKIP_DIRS};
+use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -59,7 +59,7 @@ impl StdlibConfig {
             command_max_output_bytes: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
             command_max_stream_bytes: DEFAULT_COMMAND_MAX_STREAM_BYTES,
             which_cache_capacity,
-            workspace_skip_dirs: DEFAULT_WORKSPACE_SKIP_DIRS
+            workspace_skip_dirs: WORKSPACE_SKIP_DIRS
                 .iter()
                 .map(|dir| (*dir).to_owned())
                 .collect(),

@@ -119,7 +119,7 @@ mod tests {
     use rstest::rstest;
     use std::{num::NonZeroUsize, sync::Arc};
     use tempfile::TempDir;
-    use test_support::env::VarGuard;
+    use test_support::env::{VarGuard, with_isolated_path};
 
     fn cache_key_for(command: &str) -> CacheKey {
         CacheKey {
@@ -183,47 +183,48 @@ mod tests {
 
     #[test]
     fn resolver_applies_skip_list_during_resolution() -> Result<()> {
-        let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(""));
-        let temp = TempDir::new()?;
-        let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
+        with_isolated_path(std::ffi::OsStr::new(""), || -> Result<()> {
+            let temp = TempDir::new()?;
+            let cwd = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+                .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
 
-        let target = cwd.join("target");
-        std::fs::create_dir_all(target.as_std_path())?;
-        std::fs::write(target.join("tool").as_std_path(), b"#!/bin/sh\n")?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let path = target.join("tool");
-            let mut perms = std::fs::metadata(path.as_std_path())?.permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(path.as_std_path(), perms)?;
-        }
+            let target = cwd.join("target");
+            std::fs::create_dir_all(target.as_std_path())?;
+            std::fs::write(target.join("tool").as_std_path(), b"#!/bin/sh\n")?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let path = target.join("tool");
+                let mut perms = std::fs::metadata(path.as_std_path())?.permissions();
+                perms.set_mode(0o755);
+                std::fs::set_permissions(path.as_std_path(), perms)?;
+            }
 
-        let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
-        let resolver = WhichResolver::new(
-            Some(Arc::new(cwd.clone())),
-            WorkspaceSkipList::default(),
-            capacity,
-        );
-        let options = WhichOptions::default();
-        let err = resolver
-            .resolve("tool", &options)
-            .expect_err("default skip should ignore target");
+            let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
+            let resolver = WhichResolver::new(
+                Some(Arc::new(cwd.clone())),
+                WorkspaceSkipList::default(),
+                capacity,
+            );
+            let options = WhichOptions::default();
+            let err = resolver
+                .resolve("tool", &options)
+                .expect_err("default skip should ignore target");
 
-        ensure!(matches!(err.kind(), ErrorKind::InvalidOperation));
+            ensure!(matches!(err.kind(), ErrorKind::InvalidOperation));
 
-        let resolver_custom = WhichResolver::new(
-            Some(Arc::new(cwd.clone())),
-            WorkspaceSkipList::from_names([".git"]),
-            capacity,
-        );
-        let matches = resolver_custom.resolve("tool", &options)?;
-        ensure!(
-            matches == vec![target.join("tool")],
-            "expected executable discovery when target not skipped"
-        );
+            let resolver_custom = WhichResolver::new(
+                Some(Arc::new(cwd.clone())),
+                WorkspaceSkipList::from_names([".git"]),
+                capacity,
+            );
+            let matches = resolver_custom.resolve("tool", &options)?;
+            ensure!(
+                matches == vec![target.join("tool")],
+                "expected executable discovery when target not skipped"
+            );
 
-        Ok(())
+            Ok(())
+        })
     }
 }

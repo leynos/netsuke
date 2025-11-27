@@ -17,7 +17,7 @@ use super::{
 };
 mod workspace;
 use workspace::search_workspace;
-pub(crate) use workspace::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSearchParams, WorkspaceSkipList};
+pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 /// Resolve `command` either as a direct path or by searching the environment's
 /// PATH, optionally canonicalising or collecting all matches.
@@ -45,15 +45,8 @@ pub(super) fn lookup(
     let dirs = env.resolved_dirs(options.cwd_mode);
     let mut matches = Vec::new();
 
-    #[cfg(windows)]
-    let suffixes = env.pathext();
-
     for dir in &dirs {
-        #[cfg(windows)]
-        let candidates = env::candidate_paths(dir, command, suffixes);
-        #[cfg(not(windows))]
-        let candidates = vec![dir.join(command)];
-
+        let candidates = candidates_for_dir(env, dir, command);
         if push_matches(&mut matches, candidates, options.all) {
             break;
         }
@@ -87,44 +80,49 @@ pub(super) fn lookup(
 ///
 /// Returns `netsuke::jinja::which::not_found` when no matching executable is
 /// discovered.
+#[cfg(windows)]
 pub(super) fn resolve_direct(
     command: &str,
     env: &EnvSnapshot,
     options: &WhichOptions,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
-    let raw = Utf8Path::new(command);
-    let resolved = if raw.is_absolute() {
-        raw.to_path_buf()
-    } else {
-        env.cwd.join(raw)
-    };
-    #[cfg(windows)]
-    {
-        resolve_direct_windows(command, &resolved, env, options)
-    }
-    #[cfg(not(windows))]
-    {
-        resolve_direct_posix(command, &resolved, options)
-    }
-}
-
-#[cfg(windows)]
-fn resolve_direct_windows(
-    command: &str,
-    resolved: &Utf8PathBuf,
-    env: &EnvSnapshot,
-    options: &WhichOptions,
-) -> Result<Vec<Utf8PathBuf>, Error> {
-    let candidates = direct_candidates(resolved, env);
+    let resolved = normalize_direct_path(command, env);
+    let candidates = direct_candidates(&resolved, env);
     let mut matches = Vec::new();
     let _ = push_matches(&mut matches, candidates, options.all);
     if matches.is_empty() {
-        return Err(direct_not_found(command, resolved));
+        return Err(direct_not_found(command, &resolved));
     }
     if options.canonical {
         canonicalise(matches)
     } else {
         Ok(matches)
+    }
+}
+
+#[cfg(not(windows))]
+pub(super) fn resolve_direct(
+    command: &str,
+    env: &EnvSnapshot,
+    options: &WhichOptions,
+) -> Result<Vec<Utf8PathBuf>, Error> {
+    let resolved = normalize_direct_path(command, env);
+    if !is_executable(&resolved) {
+        return Err(direct_not_found(command, &resolved));
+    }
+    if options.canonical {
+        canonicalise(vec![resolved])
+    } else {
+        Ok(vec![resolved])
+    }
+}
+
+fn normalize_direct_path(command: &str, env: &EnvSnapshot) -> Utf8PathBuf {
+    let raw = Utf8Path::new(command);
+    if raw.is_absolute() {
+        raw.to_path_buf()
+    } else {
+        env.cwd.join(raw)
     }
 }
 
@@ -141,22 +139,6 @@ fn direct_candidates(resolved: &Utf8PathBuf, env: &EnvSnapshot) -> Vec<Utf8PathB
                 Utf8PathBuf::from(candidate)
             })
             .collect()
-    }
-}
-
-#[cfg(not(windows))]
-fn resolve_direct_posix(
-    command: &str,
-    resolved: &Utf8PathBuf,
-    options: &WhichOptions,
-) -> Result<Vec<Utf8PathBuf>, Error> {
-    if !is_executable(resolved) {
-        return Err(direct_not_found(command, resolved));
-    }
-    if options.canonical {
-        canonicalise(vec![resolved.clone()])
-    } else {
-        Ok(vec![resolved.clone()])
     }
 }
 
@@ -196,6 +178,18 @@ pub(super) fn is_direct_path(command: &str) -> bool {
     }
 }
 
+fn candidates_for_dir(env: &EnvSnapshot, dir: &Utf8Path, command: &str) -> Vec<Utf8PathBuf> {
+    #[cfg(windows)]
+    {
+        env::candidate_paths(dir, command, env.pathext())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = env;
+        vec![dir.join(command)]
+    }
+}
+
 /// Check whether `path` points to an executable file.
 ///
 /// On Unix this requires at least one execute bit. On other platforms it only
@@ -214,36 +208,12 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
-#[cfg(windows)]
-fn search_workspace_for_platform(
-    cwd: &Utf8Path,
-    command: &str,
-    params: WorkspaceSearchParams<'_>,
-    env: &EnvSnapshot,
-) -> Result<Vec<Utf8PathBuf>, Error> {
-    search_workspace(cwd, command, params, env)
-}
-
-#[cfg(not(windows))]
-fn search_workspace_for_platform(
-    cwd: &Utf8Path,
-    command: &str,
-    params: WorkspaceSearchParams<'_>,
-    _env: &EnvSnapshot,
-) -> Result<Vec<Utf8PathBuf>, Error> {
-    search_workspace(cwd, command, params, ())
-}
-
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
-        let search = WorkspaceSearchParams {
-            collect_all: ctx.options.all,
-            skip_dirs: ctx.workspace_skips,
-        };
         let discovered =
-            search_workspace_for_platform(ctx.env.cwd.as_path(), ctx.command, search, ctx.env)?;
+            search_workspace(ctx.env, ctx.command, ctx.options.all, ctx.workspace_skips)?;
         if !discovered.is_empty() {
             return if ctx.options.canonical {
                 canonicalise(discovered)
