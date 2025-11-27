@@ -211,63 +211,48 @@ mod tests {
     use anyhow::{Result, ensure};
     use camino::Utf8PathBuf;
     use minijinja::{Environment, context};
-    use std::ffi::OsStr;
     use tempfile::TempDir;
-    use test_support::{env_lock::EnvLock, write_exec};
+    use test_support::{env::with_isolated_path, write_exec};
 
     #[test]
     fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {
-        let lock = EnvLock::acquire();
-        let original_path = std::env::var_os("PATH");
-        unsafe {
-            std::env::set_var("PATH", OsStr::new(""));
-        }
-        let temp = TempDir::new()?;
-        let root_path =
-            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
-        let root_dir = Dir::open_ambient_dir(root_path.as_path(), ambient_authority())?;
+        with_isolated_path(std::ffi::OsStr::new(""), || -> Result<()> {
+            let temp = TempDir::new()?;
+            let root_path =
+                Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
+            let root_dir = Dir::open_ambient_dir(root_path.as_path(), ambient_authority())?;
 
-        let target = root_path.join("target");
-        std::fs::create_dir_all(target.as_std_path())?;
-        let exec = write_exec(target.as_path(), "tool")?;
+            let target = root_path.join("target");
+            std::fs::create_dir_all(target.as_std_path())?;
+            let exec = write_exec(target.as_path(), "tool")?;
 
-        let mut env = Environment::new();
-        let default_config =
-            StdlibConfig::new(root_dir.try_clone()?)?.with_workspace_root_path(&root_path)?;
-        register_with_config(&mut env, default_config)?;
+            let mut env = Environment::new();
+            let default_config =
+                StdlibConfig::new(root_dir.try_clone()?)?.with_workspace_root_path(&root_path)?;
+            register_with_config(&mut env, default_config)?;
 
-        env.add_template("t", "{{ which('tool') }}")?;
-        let render_err = env
-            .get_template("t")?
-            .render(context! {})
-            .expect_err("default skips should block target");
-        ensure!(
-            render_err
-                .to_string()
-                .contains("netsuke::jinja::which::not_found"),
-            "expected not_found error, got {render_err}"
-        );
+            env.add_template("t", "{{ which('tool') }}")?;
+            let render_err = env
+                .get_template("t")?
+                .render(context! {})
+                .expect_err("default skips should block target");
+            ensure!(
+                render_err
+                    .to_string()
+                    .contains("netsuke::jinja::which::not_found"),
+                "expected not_found error, got {render_err}"
+            );
 
-        let mut env_custom = Environment::new();
-        let custom_config = StdlibConfig::new(root_dir)?
-            .with_workspace_root_path(&root_path)?
-            .with_workspace_skip_dirs([".git"])?;
-        register_with_config(&mut env_custom, custom_config)?;
-        env_custom.add_template("t", "{{ which('tool') }}")?;
-        let rendered = env_custom.get_template("t")?.render(context! {})?;
-        ensure!(rendered == exec.as_str(), "expected resolved path");
-
-        if let Some(path) = original_path {
-            unsafe {
-                std::env::set_var("PATH", path);
-            }
-        } else {
-            unsafe {
-                std::env::remove_var("PATH");
-            }
-        }
-        drop(lock);
-        Ok(())
+            let mut env_custom = Environment::new();
+            let custom_config = StdlibConfig::new(root_dir)?
+                .with_workspace_root_path(&root_path)?
+                .with_workspace_skip_dirs([".git"])?;
+            register_with_config(&mut env_custom, custom_config)?;
+            env_custom.add_template("t", "{{ which('tool') }}")?;
+            let rendered = env_custom.get_template("t")?.render(context! {})?;
+            ensure!(rendered == exec.as_str(), "expected resolved path");
+            Ok(())
+        })
     }
 
     #[cfg(not(unix))]

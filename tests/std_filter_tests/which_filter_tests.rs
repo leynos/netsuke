@@ -244,7 +244,7 @@ fn which_filter_reports_missing_command() -> Result<()> {
     let (mut env, _state) = fallible::stdlib_env_with_state()?;
     let err = env
         .render_str("{{ 'absent' | which }}", context! {})
-        .unwrap_err();
+        .expect_err("render should fail for missing command");
     let message = err.to_string();
     assert!(message.contains("netsuke::jinja::which::not_found"));
     Ok(())
@@ -271,7 +271,7 @@ fn which_filter_skips_heavy_directories() -> Result<()> {
     let (mut env, _state) = fallible::stdlib_env_with_state()?;
     let err = env
         .render_str("{{ 'helper' | which }}", context! {})
-        .unwrap_err();
+        .expect_err("render should fail when tool is in skipped directory");
     assert!(err.to_string().contains("not_found"));
     Ok(())
 }
