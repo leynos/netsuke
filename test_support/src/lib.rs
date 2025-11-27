@@ -18,6 +18,7 @@ pub mod env;
 pub mod env_guard;
 pub mod env_lock;
 pub mod env_var_guard;
+pub mod exec;
 pub mod hash;
 pub mod http;
 pub mod manifest;
@@ -34,6 +35,9 @@ pub use env_var_guard::EnvVarGuard;
 
 /// Re-export of the generic environment guard utilities.
 pub use env_guard::{EnvGuard, Environment, StdEnv};
+
+/// Helpers for writing executable stubs and setting executable bits in tests.
+pub use exec::{make_executable, write_exec};
 
 mod error;
 /// Format an error and its sources (outermost → root) using `Display`, joined

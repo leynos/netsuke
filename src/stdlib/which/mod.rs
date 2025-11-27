@@ -18,18 +18,40 @@ mod env;
 mod error;
 mod lookup;
 mod options;
+pub(crate) use lookup::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 pub(crate) use cache::WhichResolver;
 pub(crate) use options::WhichOptions;
 
 use error::args_error;
 
-pub(crate) fn register(
-    env: &mut Environment<'_>,
-    cwd_override: Option<Arc<Utf8PathBuf>>,
-    cache_capacity: NonZeroUsize,
-) {
-    let resolver = Arc::new(WhichResolver::new(cwd_override, cache_capacity));
+#[derive(Clone, Debug)]
+pub(crate) struct WhichConfig {
+    pub(crate) cwd_override: Option<Arc<Utf8PathBuf>>,
+    pub(crate) workspace_skips: WorkspaceSkipList,
+    pub(crate) cache_capacity: NonZeroUsize,
+}
+
+impl WhichConfig {
+    pub(crate) const fn new(
+        cwd_override: Option<Arc<Utf8PathBuf>>,
+        workspace_skips: WorkspaceSkipList,
+        cache_capacity: NonZeroUsize,
+    ) -> Self {
+        Self {
+            cwd_override,
+            workspace_skips,
+            cache_capacity,
+        }
+    }
+}
+
+pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
+    let resolver = Arc::new(WhichResolver::new(
+        config.cwd_override,
+        config.workspace_skips,
+        config.cache_capacity,
+    ));
     {
         let filter_resolver = Arc::clone(&resolver);
         env.add_filter("which", move |value: Value, kwargs: Kwargs| {

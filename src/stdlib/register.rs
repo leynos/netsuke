@@ -6,7 +6,10 @@
 //! `register_with_config` entrypoints are re-exported from `netsuke::stdlib`
 //! alongside `StdlibConfig` and `NetworkConfig`.
 
-use super::{StdlibConfig, StdlibState, collections, command, network, path, time, which};
+use super::{
+    StdlibConfig, StdlibState, collections, command, network, path, time,
+    which::{self, WhichConfig},
+};
 use anyhow::Context;
 use camino::Utf8Path;
 #[cfg(unix)]
@@ -87,10 +90,14 @@ pub fn register_with_config(
     path::register_filters(env);
     collections::register_filters(env);
     let which_cache_capacity = config.which_cache_capacity();
-    let which_cwd = config
-        .workspace_root_path()
-        .map(|path| Arc::new(path.to_path_buf()));
-    which::register(env, which_cwd, which_cache_capacity);
+    let which_config = WhichConfig::new(
+        config
+            .workspace_root_path()
+            .map(|path| Arc::new(path.to_path_buf())),
+        which::WorkspaceSkipList::from_names(config.workspace_skip_dirs().iter()),
+        which_cache_capacity,
+    );
+    which::register(env, which_config);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);
@@ -164,4 +171,55 @@ fn is_char_device(ft: fs::FileType) -> bool {
 #[cfg(unix)]
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::{Result, ensure};
+    use camino::Utf8PathBuf;
+    use minijinja::{Environment, context};
+    use std::ffi::OsStr;
+    use tempfile::TempDir;
+    use test_support::{env::VarGuard, write_exec};
+
+    #[test]
+    fn register_with_config_honours_workspace_skip_dirs() -> Result<()> {
+        let _guard = VarGuard::set("PATH", OsStr::new(""));
+        let temp = TempDir::new()?;
+        let root_path =
+            Utf8PathBuf::from_path_buf(temp.path().to_path_buf()).expect("utf8 temp path");
+        let root_dir = Dir::open_ambient_dir(root_path.as_path(), ambient_authority())?;
+
+        let target = root_path.join("target");
+        std::fs::create_dir_all(target.as_std_path())?;
+        let exec = write_exec(target.as_path(), "tool")?;
+
+        let mut env = Environment::new();
+        let default_config =
+            StdlibConfig::new(root_dir.try_clone()?)?.with_workspace_root_path(&root_path)?;
+        register_with_config(&mut env, default_config)?;
+
+        env.add_template("t", "{{ which('tool') }}")?;
+        let render_err = env
+            .get_template("t")?
+            .render(context! {})
+            .expect_err("default skips should block target");
+        ensure!(
+            render_err
+                .to_string()
+                .contains("netsuke::jinja::which::not_found"),
+            "expected not_found error, got {render_err}"
+        );
+
+        let mut env_custom = Environment::new();
+        let custom_config = StdlibConfig::new(root_dir)?
+            .with_workspace_root_path(&root_path)?
+            .with_workspace_skip_dirs([".git"])?;
+        register_with_config(&mut env_custom, custom_config)?;
+        env_custom.add_template("t", "{{ which('tool') }}")?;
+        let rendered = env_custom.get_template("t")?.render(context! {})?;
+        ensure!(rendered == exec.as_str(), "expected resolved path");
+        Ok(())
+    }
 }
