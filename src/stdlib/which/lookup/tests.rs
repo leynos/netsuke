@@ -6,9 +6,9 @@ use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
 use std::{ffi::OsStr, fs};
 use tempfile::TempDir;
-use test_support::{env::VarGuard, write_exec};
 #[cfg(windows)]
 use test_support::make_executable;
+use test_support::{env::VarGuard, write_exec};
 
 struct TempWorkspace {
     root: Utf8PathBuf,
