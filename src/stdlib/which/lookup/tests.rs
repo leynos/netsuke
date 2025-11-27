@@ -244,8 +244,13 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
     fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
     fs::create_dir_all(tools.as_std_path()).context("mkdir tools")?;
 
-    let path_value = format!("{}:bin:tools", workspace.root());
-    let _guard = VarGuard::set("PATH", std::ffi::OsStr::new(&path_value));
+    let path_value = std::env::join_paths([
+        workspace.root().as_std_path(),
+        std::path::Path::new("bin"),
+        std::path::Path::new("tools"),
+    ])
+    .context("join PATH entries")?;
+    let _guard = VarGuard::set("PATH", path_value.as_os_str());
 
     let snapshot = EnvSnapshot::capture(Some(workspace.root()))
         .context("capture env with relative PATH entries")?;

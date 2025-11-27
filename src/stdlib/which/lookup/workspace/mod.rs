@@ -136,6 +136,49 @@ fn workspace_fallback_enabled() -> bool {
             let normalised = value.to_ascii_lowercase();
             !matches!(normalised.as_str(), "0" | "false" | "off")
         }
-        Err(env::VarError::NotPresent | env::VarError::NotUnicode(_)) => true,
+        Err(env::VarError::NotPresent) => true,
+        Err(env::VarError::NotUnicode(_)) => {
+            tracing::warn!(
+                env = WORKSPACE_FALLBACK_ENV,
+                "workspace fallback disabled because env var is not valid UTF-8",
+            );
+            false
+        }
+    }
+}
+
+/// Convert a walkdir item to an entry, logging and skipping unreadable paths to
+/// keep workspace traversal robust across platforms.
+pub(super) fn unwrap_or_log_error(
+    walk_entry: Result<walkdir::DirEntry, walkdir::Error>,
+    command: &str,
+) -> Option<walkdir::DirEntry> {
+    match walk_entry {
+        Ok(entry) => Some(entry),
+        Err(err) => {
+            tracing::debug!(
+                %command,
+                error = %err,
+                "skipping unreadable workspace entry during which fallback",
+            );
+            None
+        }
+    }
+}
+
+/// Emit a debug message when fallback traversal yields no matches, helping
+/// callers diagnose unexpected latency or misses.
+pub(super) fn log_if_no_matches(
+    matches: &[Utf8PathBuf],
+    command: &str,
+    skip_dirs: &WorkspaceSkipList,
+) {
+    if matches.is_empty() {
+        tracing::debug!(
+            %command,
+            max_depth = WORKSPACE_MAX_DEPTH,
+            skip = ?skip_dirs,
+            "workspace which fallback found no matches",
+        );
     }
 }

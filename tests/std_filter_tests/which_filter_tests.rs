@@ -38,7 +38,7 @@ fn test_cache_after_removal(
     let second_result = fixture.render(second_template);
 
     if expect_second_err {
-        let err = second_result.expect("expected fresh which lookup to fail after removal");
+        let err = second_result.expect_err("expected fresh which lookup to fail after removal");
         assert!(err.to_string().contains("not_found"));
     } else {
         let second = second_result?;
