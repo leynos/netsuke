@@ -6,7 +6,10 @@
 //! `register_with_config` entrypoints are re-exported from `netsuke::stdlib`
 //! alongside `StdlibConfig` and `NetworkConfig`.
 
-use super::{StdlibConfig, StdlibState, collections, command, network, path, time, which};
+use super::{
+    StdlibConfig, StdlibState, collections, command, network, path, time,
+    which::{self, WhichConfig, WorkspaceSkipList},
+};
 use anyhow::Context;
 use camino::Utf8Path;
 #[cfg(unix)]
@@ -87,10 +90,12 @@ pub fn register_with_config(
     path::register_filters(env);
     collections::register_filters(env);
     let which_cache_capacity = config.which_cache_capacity();
+    let which_skip_dirs = WorkspaceSkipList::from_names(config.workspace_skip_dirs());
     let which_cwd = config
         .workspace_root_path()
         .map(|path| Arc::new(path.to_path_buf()));
-    which::register(env, which_cwd, which_cache_capacity);
+    let which_config = WhichConfig::new(which_cwd, which_skip_dirs, which_cache_capacity);
+    which::register(env, which_config);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();
     network::register_functions(env, Arc::clone(&impure), network_config);

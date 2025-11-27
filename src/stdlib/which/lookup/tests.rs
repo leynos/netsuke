@@ -65,7 +65,7 @@ fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspa
     let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    let results = search_workspace(&snapshot, "tool", false)?;
+    let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
     ensure!(
         results == vec![exec],
         "expected executable to be discovered"
@@ -83,7 +83,7 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
     let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    let mut results = search_workspace(&snapshot, "tool", true)?;
+    let mut results = search_workspace(&snapshot, "tool", true, &WorkspaceSkipList::default())?;
     results.sort();
     let mut expected = vec![first, second];
     expected.sort();
@@ -103,7 +103,7 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
     let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    let results = search_workspace(&snapshot, "tool", false)?;
+    let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
     ensure!(results.is_empty(), "expected target/ to be skipped");
     Ok(())
 }
@@ -124,7 +124,7 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
     let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
     let snapshot =
         EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
-    let results = search_workspace(&snapshot, "tool", false)?;
+    let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
     ensure!(
         results == vec![exec],
         "expected readable executable despite blocked dir"

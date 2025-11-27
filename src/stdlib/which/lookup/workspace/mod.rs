@@ -3,7 +3,6 @@
 use std::{
     env,
     hash::{Hash, Hasher},
-    sync::OnceLock,
 };
 
 use camino::Utf8PathBuf;
@@ -23,7 +22,7 @@ use posix::search_workspace as platform_search_workspace;
 use windows::search_workspace as platform_search_workspace;
 
 pub(super) const WORKSPACE_MAX_DEPTH: usize = 6;
-pub(super) const WORKSPACE_SKIP_DIRS: &[&str] =
+pub(crate) const WORKSPACE_SKIP_DIRS: &[&str] =
     &[".git", "target", "node_modules", "dist", "build"];
 
 const WORKSPACE_FALLBACK_ENV: &str = "NETSUKE_WHICH_WORKSPACE";
@@ -34,7 +33,7 @@ pub(crate) struct WorkspaceSkipList {
 }
 
 impl WorkspaceSkipList {
-    fn default() -> Self {
+    fn from_defaults() -> Self {
         let mut dirs = IndexSet::new();
         for dir in WORKSPACE_SKIP_DIRS {
             dirs.insert((*dir).to_owned());
@@ -44,6 +43,20 @@ impl WorkspaceSkipList {
 
     fn contains(&self, name: &str) -> bool {
         self.dirs.contains(name)
+    }
+
+    /// Build a skip list from provided directory basenames, normalising and
+    /// de-duplicating entries.
+    pub(crate) fn from_names(names: impl IntoIterator<Item = impl AsRef<str>>) -> Self {
+        let mut dirs = IndexSet::new();
+        for name in names {
+            let trimmed = name.as_ref().trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            dirs.insert(normalise_name(trimmed));
+        }
+        Self { dirs }
     }
 }
 
@@ -57,12 +70,17 @@ impl Hash for WorkspaceSkipList {
     }
 }
 
-static WORKSPACE_SKIP_LIST: OnceLock<WorkspaceSkipList> = OnceLock::new();
+impl Default for WorkspaceSkipList {
+    fn default() -> Self {
+        Self::from_defaults()
+    }
+}
 
 pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
     collect_all: bool,
+    skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     if !workspace_fallback_enabled() {
         tracing::debug!(
@@ -76,19 +94,19 @@ pub(super) fn search_workspace(
     tracing::debug!(
         %command,
         max_depth = WORKSPACE_MAX_DEPTH,
-        skip = ?WORKSPACE_SKIP_DIRS,
+        skip = ?skip_dirs,
         "using workspace which fallback",
     );
 
-    platform_search_workspace(env, command, collect_all)
+    platform_search_workspace(env, command, collect_all, skip_dirs)
 }
 
-pub(super) fn should_visit_entry(entry: &walkdir::DirEntry) -> bool {
+pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &WorkspaceSkipList) -> bool {
     if !entry.file_type().is_dir() {
         return true;
     }
     let name = entry.file_name().to_string_lossy();
-    !skip_list().contains(&name)
+    !skip_dirs.contains(&name)
 }
 
 fn workspace_fallback_enabled() -> bool {
@@ -129,17 +147,27 @@ pub(super) fn unwrap_or_log_error(
 
 /// Emit a debug message when fallback traversal yields no matches, helping
 /// callers diagnose unexpected latency or misses.
-pub(super) fn log_if_no_matches(matches: &[Utf8PathBuf], command: &str) {
+pub(super) fn log_if_no_matches(
+    matches: &[Utf8PathBuf],
+    command: &str,
+    skip_dirs: &WorkspaceSkipList,
+) {
     if matches.is_empty() {
         tracing::debug!(
             %command,
             max_depth = WORKSPACE_MAX_DEPTH,
-            skip = ?WORKSPACE_SKIP_DIRS,
+            skip = ?skip_dirs,
             "workspace which fallback found no matches",
         );
     }
 }
 
-fn skip_list() -> &'static WorkspaceSkipList {
-    WORKSPACE_SKIP_LIST.get_or_init(WorkspaceSkipList::default)
+#[cfg(windows)]
+fn normalise_name(name: &str) -> String {
+    name.to_ascii_lowercase()
+}
+
+#[cfg(not(windows))]
+fn normalise_name(name: &str) -> String {
+    name.to_owned()
 }

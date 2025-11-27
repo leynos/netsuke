@@ -18,7 +18,7 @@ mod env;
 mod error;
 mod lookup;
 mod options;
-pub(crate) use lookup::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
+pub(crate) use lookup::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 pub(crate) use cache::WhichResolver;
 pub(crate) use options::WhichOptions;

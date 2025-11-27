@@ -7,7 +7,10 @@ use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
 
 use super::super::is_executable;
-use super::{log_if_no_matches, should_visit_entry, unwrap_or_log_error, WORKSPACE_MAX_DEPTH};
+use super::{
+    WORKSPACE_MAX_DEPTH, WorkspaceSkipList, log_if_no_matches, should_visit_entry,
+    unwrap_or_log_error,
+};
 use crate::stdlib::which::env::{self, EnvSnapshot};
 
 /// Encapsulates the state and logic for collecting matching executables during
@@ -49,6 +52,7 @@ pub(super) fn search_workspace(
     env: &EnvSnapshot,
     command: &str,
     collect_all: bool,
+    skip_dirs: &WorkspaceSkipList,
 ) -> Result<Vec<Utf8PathBuf>, Error> {
     let match_ctx = WorkspaceMatchContext::new(command, env);
     let mut collector = CollectionState::new(collect_all);
@@ -58,7 +62,7 @@ pub(super) fn search_workspace(
         .max_depth(WORKSPACE_MAX_DEPTH)
         .sort_by_file_name()
         .into_iter()
-        .filter_entry(should_visit_entry)
+        .filter_entry(|entry| should_visit_entry(entry, skip_dirs))
     {
         let Some(entry) = unwrap_or_log_error(walk_entry, command) else {
             continue;
@@ -69,7 +73,7 @@ pub(super) fn search_workspace(
         }
     }
 
-    log_if_no_matches(&collector.matches, command);
+    log_if_no_matches(&collector.matches, command, skip_dirs);
 
     Ok(collector.matches)
 }

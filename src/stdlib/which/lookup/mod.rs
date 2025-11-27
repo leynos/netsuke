@@ -17,7 +17,7 @@ use super::{
 };
 mod workspace;
 use workspace::search_workspace;
-pub(crate) use workspace::{DEFAULT_WORKSPACE_SKIP_DIRS, WorkspaceSearchParams, WorkspaceSkipList};
+pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 /// Resolve `command` either as a direct path or by searching the environment's
 /// PATH, optionally canonicalising or collecting all matches.
@@ -208,20 +208,12 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
-<<<<<<< HEAD
 fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
-        let search = WorkspaceSearchParams {
-            collect_all: ctx.options.all,
-            skip_dirs: ctx.workspace_skips,
-        };
-        let discovered = search_workspace(ctx.env, ctx.command, search)?;
-=======
-    if path_empty && !matches!(options.cwd_mode, CwdMode::Never) {
-        let discovered = search_workspace(env, command, options.all)?;
->>>>>>> aadfa2e (feat(which): add workspace fallback and improve direct path resolution)
+        let discovered =
+            search_workspace(ctx.env, ctx.command, ctx.options.all, ctx.workspace_skips)?;
         if !discovered.is_empty() {
             return if ctx.options.canonical {
                 canonicalise(discovered)
