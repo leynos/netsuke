@@ -17,7 +17,7 @@ use normalize::force_literal_escapes;
 #[derive(Debug, Clone)]
 pub struct GlobPattern {
     pub raw: String,
-    pub normalized: Option<String>,
+    pub normalized: String,
 }
 
 pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
@@ -43,34 +43,21 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    let mut pattern_state = GlobPattern {
-        raw: pattern.to_owned(),
-        normalized: None,
-    };
-
-    validate_brace_matching(&pattern_state)?;
+    validate_brace_matching(pattern)?;
 
     #[cfg(unix)]
-    let mut normalized = normalize_separators(&pattern_state.raw);
+    let mut normalized = normalize_separators(pattern);
     #[cfg(not(unix))]
-    let normalized = normalize_separators(&pattern_state.raw);
+    let normalized = normalize_separators(pattern);
     #[cfg(unix)]
     {
         normalized = force_literal_escapes(&normalized);
     }
 
-    pattern_state.normalized = Some(normalized);
-    let normalized_pattern = pattern_state.normalized.as_deref().ok_or_else(|| {
-        create_glob_error(
-            &GlobErrorContext {
-                pattern: pattern_state.raw.clone(),
-                error_char: char::from(0),
-                position: 0,
-                error_type: GlobErrorType::InvalidPattern,
-            },
-            Some("pattern normalisation missing after validation".to_owned()),
-        )
-    })?;
+    let pattern_state = GlobPattern {
+        raw: pattern.to_owned(),
+        normalized: normalized.clone(),
+    };
 
     let root = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
@@ -84,7 +71,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         )
     })?;
 
-    let entries = glob_with(normalized_pattern, opts).map_err(|e| {
+    let entries = glob_with(&pattern_state.normalized, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw.clone(),
@@ -97,7 +84,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     })?;
     let mut paths = Vec::new();
     for entry in entries {
-        if let Some(p) = process_glob_entry(entry, pattern_state.clone(), &root)? {
+        if let Some(p) = process_glob_entry(entry, &pattern_state, &root)? {
             paths.push(p);
         }
     }

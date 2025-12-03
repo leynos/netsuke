@@ -16,7 +16,7 @@ pub(super) fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
 
 pub(super) fn process_glob_entry(
     entry: GlobEntryResult,
-    pattern: GlobPattern,
+    pattern: &GlobPattern,
     root: &Dir,
 ) -> std::result::Result<Option<String>, Error> {
     match entry {
@@ -50,7 +50,7 @@ pub(super) fn process_glob_entry(
         }
         Err(e) => Err(create_glob_error(
             &GlobErrorContext {
-                pattern: pattern.raw,
+                pattern: pattern.raw.clone(),
                 error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::IoError,
@@ -75,8 +75,10 @@ fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::M
     }
 }
 
+#[expect(
+    clippy::missing_const_for_fn,
+    reason = "wrapper kept non-const for clarity; const adds no value"
+)]
 fn normalized_or_raw(p: &GlobPattern) -> &str {
-    p.normalized
-        .as_deref()
-        .unwrap_or_else(|| panic!("normalised pattern must be present after validation"))
+    p.normalized.as_str()
 }
