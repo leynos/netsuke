@@ -5,7 +5,7 @@ use cap_std::{ambient_authority, fs::Dir};
 use minijinja::Error;
 
 pub(super) fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
-    let candidate = normalized_or_raw(pattern);
+    let candidate = pattern.normalized.as_str();
     let path = Utf8Path::new(candidate);
     if path.is_absolute() {
         Dir::open_ambient_dir("/", ambient_authority())
@@ -71,12 +71,4 @@ fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::M
     } else {
         root.metadata(path)
     }
-}
-
-#[expect(
-    clippy::missing_const_for_fn,
-    reason = "wrapper kept non-const for clarity; const adds no value"
-)]
-fn normalized_or_raw(p: &GlobPattern) -> &str {
-    p.normalized.as_str()
 }

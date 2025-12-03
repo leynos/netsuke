@@ -166,6 +166,8 @@ impl MacroStateGuard {
     fn new(state: State<'static, 'static>) -> anyhow::Result<Self> {
         let boxed = Box::new(state);
         let ptr = Box::into_raw(boxed);
+        // SAFETY: Box::into_raw never returns null for non-ZST types, but we
+        // handle the impossible case defensively.
         let ptr_non_null = NonNull::new(ptr)
             .ok_or_else(|| anyhow::anyhow!("Box::into_raw returned null pointer"))?;
         Ok(Self { ptr: ptr_non_null })

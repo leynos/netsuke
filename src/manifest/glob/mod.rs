@@ -51,7 +51,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
     let pattern_state = GlobPattern {
         raw: pattern.to_owned(),
-        normalized: normalized.clone(),
+        normalized,
     };
 
     let root = open_root_dir(&pattern_state).map_err(|e| {
