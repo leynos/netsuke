@@ -250,9 +250,15 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment<'static>) 
 fn register_manifest_macros_supports_multiple(
     mut strict_env: Environment<'static>,
 ) -> AnyResult<()> {
-    let yaml = serde_saphyr::from_str::<ManifestValue>(
-        "macros:\n  - signature: \"greet(name)\"\n    body: |\n      Hello {{ name }}\n  - signature: \"shout(text)\"\n    body: |\n      {{ text | upper }}\n",
-    )?;
+    let yaml = serde_saphyr::from_str::<ManifestValue>(concat!(
+        "macros:\n",
+        "  - signature: \"greet(name)\"\n",
+        "    body: |\n",
+        "      Hello {{ name }}\n",
+        "  - signature: \"shout(text)\"\n",
+        "    body: |\n",
+        "      {{ text | upper }}\n",
+    ))?;
     register_manifest_macros(&yaml, &mut strict_env)?;
     let rendered = render_with(&strict_env, "{{ shout(greet('netsuke')) }}")?;
     ensure!(rendered.trim() == "HELLO NETSUKE");

@@ -88,7 +88,7 @@ pub(crate) fn register_macro(
 
     let cache = Arc::new(MacroCache::new(template_name, name.clone()));
     cache.prepare(env)?;
-    env.add_function(name.clone(), make_macro_fn(cache));
+    env.add_function(name, make_macro_fn(cache));
     Ok(())
 }
 

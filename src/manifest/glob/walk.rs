@@ -46,7 +46,7 @@ pub(super) fn process_glob_entry(
             if !metadata.is_file() {
                 return Ok(None);
             }
-            Ok(Some(utf_path.as_str().replace(char::from(0x5c), "/")))
+            Ok(Some(utf_path.as_str().replace('\\', "/")))
         }
         Err(e) => Err(create_glob_error(
             &GlobErrorContext {
@@ -62,9 +62,7 @@ pub(super) fn process_glob_entry(
 
 fn fetch_metadata(root: &Dir, path: &Utf8Path) -> std::io::Result<cap_std::fs::Metadata> {
     if path.is_absolute() {
-        let stripped = path
-            .as_str()
-            .trim_start_matches(|c| c == char::from(0x2f) || c == char::from(0x5c));
+        let stripped = path.as_str().trim_start_matches(['/', '\\']);
         if stripped.is_empty() {
             root.metadata(Utf8Path::new("."))
         } else {

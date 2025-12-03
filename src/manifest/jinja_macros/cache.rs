@@ -137,7 +137,7 @@ impl MacroInstance {
         // bytecode outlives the cached state stored in the macro instance.
         let state_static: State<'static, 'static> = unsafe { mem::transmute(state) };
         Ok(Self {
-            state: MacroStateGuard::new(state_static),
+            state: MacroStateGuard::new(state_static)?,
             value,
             owner_thread: std::thread::current().id(),
         })
@@ -163,13 +163,12 @@ struct MacroStateGuard {
 }
 
 impl MacroStateGuard {
-    fn new(state: State<'static, 'static>) -> Self {
+    fn new(state: State<'static, 'static>) -> anyhow::Result<Self> {
         let boxed = Box::new(state);
         let ptr = Box::into_raw(boxed);
-        let ptr_non_null = NonNull::new(ptr).unwrap_or_else(|| {
-            panic!("Box::into_raw cannot return a null pointer");
-        });
-        Self { ptr: ptr_non_null }
+        let ptr_non_null = NonNull::new(ptr)
+            .ok_or_else(|| anyhow::anyhow!("Box::into_raw returned null pointer"))?;
+        Ok(Self { ptr: ptr_non_null })
     }
 
     #[expect(

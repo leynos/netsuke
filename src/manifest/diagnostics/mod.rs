@@ -1,4 +1,10 @@
 //! Translates manifest parsing errors into actionable diagnostics.
+//!
+//! This module wraps raw parser outputs in domain-friendly types:
+//! [`ManifestSource`] retains the YAML content, [`ManifestName`] labels the
+//! origin, and mapping helpers (e.g. [`map_yaml_error`], [`map_data_error`])
+//! convert parser and deserialisation failures into rich [`miette`]
+//! diagnostics with spans, hints, and stable diagnostic codes.
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -120,9 +126,9 @@ pub enum ManifestError {
     #[error("manifest parse error")]
     #[diagnostic(code(netsuke::manifest::parse))]
     Parse {
+        /// Underlying diagnostic reported by the parser or validator.
         #[source]
         #[diagnostic_source]
-        /// Underlying diagnostic reported by the parser or validator.
         source: Box<dyn Diagnostic + Send + Sync + 'static>,
     },
 }
@@ -145,10 +151,7 @@ pub fn map_data_error(
     err: serde_json::Error,
     name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
-    let message = format!(
-        "[netsuke::manifest::structure] manifest structure error in {}: {err}",
-        name.as_ref()
-    );
+    let message = format!("manifest structure error in {}: {err}", name.as_ref());
     Box::new(DataDiagnostic {
         source: err,
         message,

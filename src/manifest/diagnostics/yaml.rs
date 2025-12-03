@@ -1,4 +1,10 @@
 //! YAML parsing diagnostics and helper utilities.
+//!
+//! This module converts `serde_saphyr` parse errors into [`miette`]
+//! diagnostics with source spans and contextual hints for common YAML
+//! mistakes such as tab indentation. The public entry point is
+//! [`map_yaml_error`], which accepts a manifest name and source buffer to
+//! generate actionable error messages for callers.
 use super::{ManifestName, ManifestSource};
 use crate::manifest::hints::YAML_HINTS;
 use miette::{Diagnostic, NamedSource, SourceSpan};
