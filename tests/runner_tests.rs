@@ -38,6 +38,21 @@ fn ninja_with_exit_code(
     Ok((ninja_dir, guard))
 }
 
+/// Shared setup for tests that rely on `NINJA_ENV`.
+///
+/// Returns the fake ninja directory, temp project directory, constructed CLI,
+/// and the guard keeping `NINJA_ENV` set for the test duration.
+fn setup_ninja_env_test() -> Result<(tempfile::TempDir, tempfile::TempDir, Cli, NinjaEnvGuard)> {
+    let (ninja_dir, guard) = ninja_in_env()?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+    Ok((ninja_dir, temp, cli, guard))
+}
+
 /// Create a temporary project with a Netsukefile from `minimal.yml`.
 fn create_test_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
     let temp = tempfile::tempdir().context("create temp dir for test manifest")?;
@@ -95,13 +110,7 @@ fn run_ninja_not_found() -> Result<()> {
 
 #[rstest]
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
-    let (_ninja_dir, _guard) = ninja_in_env()?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        ..Cli::default()
-    };
+    let (_ninja_dir, temp, cli, _guard) = setup_ninja_env_test()?;
 
     run(&cli).context("expected run to succeed without emit path")?;
 
@@ -243,13 +252,7 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
 
 #[rstest]
 fn run_succeeds_with_checking_ninja_env() -> Result<()> {
-    let (ninja_dir, _guard) = ninja_in_env()?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        ..Cli::default()
-    };
+    let (ninja_dir, _temp, cli, _guard) = setup_ninja_env_test()?;
 
     run(&cli).context("expected run to succeed using NINJA_ENV check binary")?;
     ensure!(
