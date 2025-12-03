@@ -13,7 +13,11 @@ use std::{
     path::Path,
 };
 
-use crate::{env_guard::EnvGuard, env_lock::EnvLock, path_guard::PathGuard};
+use crate::{
+    env_guard::{EnvGuard, StdEnv},
+    env_lock::EnvLock,
+    path_guard::PathGuard,
+};
 
 /// Alias for the real process environment.
 pub type SystemEnv = DefaultEnv;
@@ -240,10 +244,12 @@ pub struct NinjaEnvGuard {
 pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
     let lock = EnvLock::acquire();
     let original = env.raw(NINJA_ENV).ok().map(OsString::from);
-    // SAFETY: `EnvLock` serialises the mutation and the guard restores on drop.
+    // SAFETY: `EnvLock` is held for the guard's lifetime; `with_env_and_lock`
+    // restores the original value on drop without re-locking, avoiding parallel
+    // races while the guard is alive.
     unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
     NinjaEnvGuard {
-        inner: EnvGuard::new_unlocked(NINJA_ENV, original),
+        inner: EnvGuard::with_env_and_lock(NINJA_ENV, original, StdEnv::default(), false),
         _lock: lock,
     }
 }

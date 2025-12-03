@@ -240,3 +240,40 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
     run(&cli).context("expected run to prefer NINJA_ENV over PATH entry")?;
     Ok(())
 }
+
+#[rstest]
+fn run_succeeds_with_checking_ninja_env() -> Result<()> {
+    let (ninja_dir, _guard) = ninja_in_env()?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+
+    run(&cli).context("expected run to succeed using NINJA_ENV check binary")?;
+    ensure!(
+        ninja_dir.path().join("ninja").exists(),
+        "fake ninja should remain present"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn run_fails_with_failing_ninja_env() -> Result<()> {
+    let (_ninja_dir, _guard) = ninja_with_exit_code(7)?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+
+    let err = run(&cli).expect_err("expected run to fail when NINJA_ENV ninja exits non-zero");
+    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    ensure!(
+        messages.iter().any(|m| m.contains("ninja exited")),
+        "error should report ninja exit status, got: {messages:?}"
+    );
+    Ok(())
+}

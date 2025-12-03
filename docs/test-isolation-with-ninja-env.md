@@ -39,7 +39,8 @@ Inject the fixture into tests that need a controlled Ninja binary:
 fn run_build_uses_fake_ninja(
     (_, _guard): (tempfile::TempDir, NinjaEnvGuard),
 ) {
-    // run the CLI here; the guard restores NINJA_ENV on drop
+    // run the command-line interface (CLI) here; the guard restores NINJA_ENV
+    // on drop
 }
 ```
 
