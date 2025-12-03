@@ -4,11 +4,10 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::{fixture, rstest};
-use serial_test::serial;
 use std::path::{Path, PathBuf};
 use test_support::{
     check_ninja,
-    env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
+    env::{NinjaEnvGuard, SystemEnv, override_ninja_env, prepend_dir_to_path},
     fake_ninja,
 };
 
@@ -224,11 +223,13 @@ fn run_manifest_subcommand_accepts_relative_manifest_path() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn run_respects_env_override_for_ninja() -> Result<()> {
-    let (_temp_dir, ninja_path) = fake_ninja(0u8)?;
+    let (_temp_dir_env, ninja_env_path) = fake_ninja(0u8)?;
+    let (temp_dir_path, _ninja_path_on_path) = fake_ninja(1u8)?;
     let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, &ninja_path);
+    let _path_guard =
+        prepend_dir_to_path(&env, temp_dir_path.path()).context("prepend failing ninja to PATH")?;
+    let _env_guard = override_ninja_env(&env, &ninja_env_path);
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
@@ -236,7 +237,6 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected run to use overridden NINJA_ENV")?;
-    drop(guard);
+    run(&cli).context("expected run to prefer NINJA_ENV over PATH entry")?;
     Ok(())
 }

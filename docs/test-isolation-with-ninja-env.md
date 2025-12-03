@@ -51,3 +51,10 @@ fn run_build_uses_fake_ninja(
   resources.
 - Don't add `#[serial]` purely to protect `PATH` mutations; prefer the fixture
   above to keep tests parallel-friendly.
+
+## Precedence over `PATH`
+
+`NINJA_ENV` should override any `ninja` found on `PATH`. When asserting this in
+tests, place a failing fake Ninja on `PATH` with `prepend_dir_to_path` and set
+`NINJA_ENV` to a working fake Ninja via `override_ninja_env`. The test should
+pass only if `NINJA_ENV` is respected.
