@@ -207,17 +207,19 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> Result<PathGuard> {
     Ok(PathGuard::new(original_os))
 }
 
-/// Guard that restores `NINJA_ENV` to its previous value on drop.
-#[derive(Debug)]
+/// Guard that restores `NINJA_ENV` to its previous value and holds `EnvLock` for
+/// its entire lifetime to prevent parallel mutation races.
 pub struct NinjaEnvGuard {
     inner: EnvGuard,
+    _lock: EnvLock,
 }
 
 /// Override the `NINJA_ENV` variable with `path`, returning a guard that resets it.
 ///
 /// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates process-global
-/// state. `EnvLock` serialises the mutation and the guard restores the prior
-/// value, confining the unsafety to the scope of the guard.
+/// state. `EnvLock` serialises the mutation and the guard retains the lock for
+/// its entire lifetime, restoring the prior value on drop. Holding the lock
+/// prevents parallel tests from interleaving writes to `NINJA_ENV`.
 ///
 /// # Examples
 ///
@@ -236,12 +238,13 @@ pub struct NinjaEnvGuard {
 /// assert!(std::env::var(NINJA_ENV).is_err());
 /// ```
 pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
-    let _lock = EnvLock::acquire();
+    let lock = EnvLock::acquire();
     let original = env.raw(NINJA_ENV).ok().map(OsString::from);
     // SAFETY: `EnvLock` serialises the mutation and the guard restores on drop.
     unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
     NinjaEnvGuard {
-        inner: EnvGuard::new(NINJA_ENV, original),
+        inner: EnvGuard::new_unlocked(NINJA_ENV, original),
+        _lock: lock,
     }
 }
 
