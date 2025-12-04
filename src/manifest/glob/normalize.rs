@@ -9,7 +9,7 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
         while let Some(c) = it.next() {
             if c == '\\' {
                 out.push(process_backslash(&mut it, native));
-            } else if c == '/' {
+            } else if c == '/' || c == '\\' {
                 out.push(native);
             } else {
                 out.push(c);
@@ -78,7 +78,10 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-fn process_escape_sequence(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
+pub(super) fn process_escape_sequence(
+    it: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    out: &mut String,
+) {
     if let Some(&next) = it.peek() {
         let repl = get_escape_replacement(next);
         if repl == "\\" {

@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
 use std::{ffi::OsStr, fs};
 use tempfile::TempDir;
-use test_support::env::VarGuard;
+use test_support::env::{VarGuard, with_isolated_path};
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -138,22 +138,22 @@ fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Resul
     use std::os::unix::ffi::OsStrExt;
 
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
-    let _guard = VarGuard::set("PATH", invalid_path);
+    with_isolated_path(invalid_path, || -> Result<()> {
+        let err = EnvSnapshot::capture(Some(workspace.root()))
+            .expect_err("invalid PATH should fail EnvSnapshot::capture");
+        let msg = err.to_string();
 
-    let err = EnvSnapshot::capture(Some(workspace.root()))
-        .expect_err("invalid PATH should fail EnvSnapshot::capture");
-    let msg = err.to_string();
+        ensure!(
+            msg.contains("netsuke::jinja::which::args"),
+            "expected PATH parsing error, got: {msg}"
+        );
+        ensure!(
+            msg.contains("PATH entry #1"),
+            "expected PATH entry index in message, got: {msg}"
+        );
 
-    ensure!(
-        msg.contains("netsuke::jinja::which::args"),
-        "expected PATH parsing error, got: {msg}"
-    );
-    ensure!(
-        msg.contains("PATH entry #1"),
-        "expected PATH entry index in message, got: {msg}"
-    );
-
-    Ok(())
+        Ok(())
+    })
 }
 
 #[rstest]

@@ -6,7 +6,9 @@ mod normalize;
 mod validate;
 mod walk;
 
-use errors::{GlobErrorContext, GlobErrorType, create_glob_error, create_unmatched_brace_error};
+pub(crate) use validate::{BraceValidationState, BraceValidator, CharContext};
+
+use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
@@ -17,10 +19,17 @@ use normalize::force_literal_escapes;
 #[derive(Debug, Clone)]
 pub struct GlobPattern {
     pub raw: String,
-    pub normalized: String,
+    pub normalized: Option<String>,
 }
 
 pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
+
+pub(super) fn normalized_or_raw(pattern: &GlobPattern) -> &str {
+    pattern
+        .normalized
+        .as_deref()
+        .unwrap_or_else(|| panic!("normalised pattern must be present after validation"))
+}
 
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
 ///
@@ -29,6 +38,11 @@ pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobErr
 /// Returns an error when the pattern is syntactically invalid, when
 /// capability-restricted filesystem access fails, or when a match contains
 /// non-UTF-8 data.
+///
+/// # Panics
+///
+/// Panics if pattern normalisation fails to record the derived pattern, which
+/// indicates a logic error in the validator.
 pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
@@ -38,20 +52,24 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    validate_brace_matching(pattern)?;
+    let mut pattern_state = GlobPattern {
+        raw: pattern.to_owned(),
+        normalized: None,
+    };
+
+    validate_brace_matching(&pattern_state)?;
 
     #[cfg(unix)]
-    let normalized = {
-        let normalized = normalize_separators(pattern);
-        force_literal_escapes(&normalized)
-    };
+    let mut normalized = normalize_separators(&pattern_state.raw);
+    #[cfg(unix)]
+    {
+        normalized = force_literal_escapes(&normalized);
+    }
     #[cfg(not(unix))]
-    let normalized = normalize_separators(pattern);
+    let normalized = normalize_separators(&pattern_state.raw);
 
-    let pattern_state = GlobPattern {
-        raw: pattern.to_owned(),
-        normalized,
-    };
+    pattern_state.normalized = Some(normalized);
+    let normalized_pattern = normalized_or_raw(&pattern_state);
 
     let root = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
@@ -65,7 +83,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         )
     })?;
 
-    let entries = glob_with(&pattern_state.normalized, opts).map_err(|e| {
+    let entries = glob_with(normalized_pattern, opts).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw.clone(),

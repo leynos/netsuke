@@ -1,5 +1,8 @@
 //! Filesystem traversal helpers for glob expansion.
-use super::{GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error};
+use super::{
+    GlobEntryResult, GlobErrorContext, GlobErrorType, GlobPattern, create_glob_error,
+    normalized_or_raw,
+};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::Error;
@@ -9,7 +12,7 @@ use minijinja::Error;
 /// Returns the filesystem root for absolute patterns and the current working
 /// directory for relative patterns.
 pub(super) fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
-    let candidate = pattern.normalized.as_str();
+    let candidate = normalized_or_raw(pattern);
     let path = Utf8Path::new(candidate);
     if path.is_absolute() {
         Dir::open_ambient_dir("/", ambient_authority())
