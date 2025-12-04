@@ -1,13 +1,15 @@
 //! Tests for brace validation and glob expansion helpers.
 
-use super::normalize::{force_literal_escapes, normalize_separators, process_escape_sequence};
+use super::normalize::normalize_separators;
+#[cfg(unix)]
+use super::normalize::{force_literal_escapes, process_escape_sequence};
 use super::validate::{BraceValidator, CharContext, validate_brace_matching};
 use super::walk::process_glob_entry;
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use tempfile::tempdir;
 
 fn pattern(raw: &str) -> GlobPattern {
@@ -17,6 +19,7 @@ fn pattern(raw: &str) -> GlobPattern {
     }
 }
 
+#[fixture]
 fn build_validator() -> BraceValidator {
     BraceValidator::new()
 }

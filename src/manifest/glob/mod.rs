@@ -1,4 +1,4 @@
-//! Utilities for normalising and validating manifest glob patterns.
+//! Utilities for normalizing and validating manifest glob patterns.
 use minijinja::Error;
 
 mod errors;
@@ -22,11 +22,18 @@ pub struct GlobPattern {
 
 pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
-pub(super) fn normalized_or_raw(pattern: &GlobPattern) -> &str {
-    pattern
-        .normalized
-        .as_deref()
-        .unwrap_or_else(|| panic!("normalised pattern must be present after validation"))
+pub(super) fn normalized_or_raw(pattern: &GlobPattern) -> Result<&str, Error> {
+    pattern.normalized.as_deref().ok_or_else(|| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern.raw.clone(),
+                error_char: '\0',
+                position: 0,
+                error_type: GlobErrorType::InvalidPattern,
+            },
+            Some("normalized pattern must be present after validation".to_owned()),
+        )
+    })
 }
 
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
@@ -34,13 +41,8 @@ pub(super) fn normalized_or_raw(pattern: &GlobPattern) -> &str {
 /// # Errors
 ///
 /// Returns an error when the pattern is syntactically invalid, when
-/// capability-restricted filesystem access fails, or when a match contains
-/// non-UTF-8 data.
-///
-/// # Panics
-///
-/// Panics if pattern normalisation fails to record the derived pattern, which
-/// indicates a logic error in the validator.
+/// capability-restricted filesystem access fails, when a match contains
+/// non-UTF-8 data, or when normalization fails to record the derived pattern.
 pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     use glob::{MatchOptions, glob_with};
 
@@ -67,19 +69,9 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     let normalized = normalize_separators(&pattern_state.raw);
 
     pattern_state.normalized = Some(normalized);
-    let normalized_pattern = normalized_or_raw(&pattern_state);
+    let normalized_pattern = normalized_or_raw(&pattern_state)?;
 
-    let root = open_root_dir(&pattern_state).map_err(|e| {
-        create_glob_error(
-            &GlobErrorContext {
-                pattern: pattern_state.raw.clone(),
-                error_char: char::from(0),
-                position: 0,
-                error_type: GlobErrorType::IoError,
-            },
-            Some(e.to_string()),
-        )
-    })?;
+    let root = open_root_dir(&pattern_state)?;
 
     let entries = glob_with(normalized_pattern, opts).map_err(|e| {
         create_glob_error(
