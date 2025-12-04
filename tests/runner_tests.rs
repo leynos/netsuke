@@ -4,45 +4,59 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::runner::{BuildTargets, run, run_ninja};
 use rstest::{fixture, rstest};
-use serial_test::serial;
 use std::path::{Path, PathBuf};
 use test_support::{
     check_ninja,
-    env::{SystemEnv, override_ninja_env, prepend_dir_to_path},
+    env::{NinjaEnvGuard, SystemEnv, override_ninja_env, prepend_dir_to_path},
     fake_ninja,
-    path_guard::PathGuard,
 };
 
-/// Fixture: Put a fake `ninja` (that checks for a build file) on `PATH`.
+/// Fixture: point `NINJA_ENV` at a fake `ninja` that validates `-f` files.
 ///
-/// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates
-/// process-global state. `EnvLock` serialises the mutation and the returned
-/// [`PathGuard`] restores the prior value, so the risk is confined to this test.
+/// Using `NINJA_ENV` avoids mutating `PATH`, letting tests run in parallel
+/// without trampling each other's environment.
 ///
-/// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
+/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
 #[fixture]
-fn ninja_in_path() -> Result<(tempfile::TempDir, PathBuf, PathGuard)> {
+fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
     let env = SystemEnv::new();
-    let guard = prepend_dir_to_path(&env, ninja_dir.path())?;
+    let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
 }
 
-/// Fixture: Put a fake `ninja` with a specific exit code on `PATH`.
+/// Fixture: point `NINJA_ENV` at a fake `ninja` with a configurable exit code.
 ///
-/// The default exit code is 0 but may be customised via `#[with(...)]`. The
-/// fixture uses `EnvLock` and [`PathGuard`] to tame the `unsafe` `set_var` call,
-/// mirroring [`ninja_in_path`].
-///
-/// Returns: (tempdir holding ninja, `ninja_path`, PATH guard)
+/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
 #[fixture]
 fn ninja_with_exit_code(
     #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, PathBuf, PathGuard)> {
+) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
     let env = SystemEnv::new();
-    let guard = prepend_dir_to_path(&env, ninja_dir.path())?;
+    let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
+}
+
+/// Shared setup for tests that rely on `NINJA_ENV`.
+///
+/// Returns the fake ninja directory, temp project directory, constructed CLI,
+/// and the guard keeping `NINJA_ENV` set for the test duration.
+fn setup_ninja_env_test() -> Result<(
+    tempfile::TempDir,
+    PathBuf,
+    tempfile::TempDir,
+    Cli,
+    NinjaEnvGuard,
+)> {
+    let (ninja_dir, ninja_path, guard) = ninja_in_env()?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+    Ok((ninja_dir, ninja_path, temp, cli, guard))
 }
 
 /// Create a temporary project with a Netsukefile from `minimal.yml`.
@@ -101,15 +115,8 @@ fn run_ninja_not_found() -> Result<()> {
 }
 
 #[rstest]
-#[serial]
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
-    let (_ninja_dir, ninja_path, _guard) = ninja_in_path()?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        ..Cli::default()
-    };
+    let (_ninja_dir, _ninja_path, temp, cli, _guard) = setup_ninja_env_test()?;
 
     run(&cli).context("expected run to succeed without emit path")?;
 
@@ -118,17 +125,13 @@ fn run_executes_ninja_without_persisting_file() -> Result<()> {
         !temp.path().join("build.ninja").exists(),
         "build.ninja should not persist when emit path unset"
     );
-
-    // Drop the fake ninja artefacts. PATH is restored by guard drop.
-    drop(ninja_path);
     Ok(())
 }
 
 #[cfg(unix)]
-#[serial]
 #[rstest]
 fn run_build_with_emit_keeps_file() -> Result<()> {
-    let (_ninja_dir, ninja_path, _guard) = ninja_in_path()?;
+    let (_ninja_dir, _ninja_path, _guard) = ninja_in_env()?;
     let (temp, manifest_path) = create_test_manifest()?;
     let emit_path = temp.path().join("emitted.ninja");
     let cli = Cli {
@@ -158,17 +161,13 @@ fn run_build_with_emit_keeps_file() -> Result<()> {
         !temp.path().join("build.ninja").exists(),
         "build.ninja should not remain when emit path provided"
     );
-
-    // Drop the fake ninja artefacts. PATH is restored by guard drop.
-    drop(ninja_path);
     Ok(())
 }
 
 #[cfg(unix)]
-#[serial]
 #[rstest]
 fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
-    let (_ninja_dir, ninja_path, _guard) = ninja_with_exit_code(0)?;
+    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(0)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let nested_dir = temp.path().join("nested").join("dir");
     let emit_path = nested_dir.join("emitted.ninja");
@@ -189,9 +188,6 @@ fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
     run(&cli).context("expected run to succeed with nested emit path")?;
     ensure!(emit_path.exists(), "emit path should be created");
     ensure!(nested_dir.exists(), "nested directory should be created");
-
-    // Drop the fake ninja artefacts. PATH is restored by guard drop.
-    drop(ninja_path);
     Ok(())
 }
 
@@ -242,11 +238,13 @@ fn run_manifest_subcommand_accepts_relative_manifest_path() -> Result<()> {
 }
 
 #[test]
-#[serial]
 fn run_respects_env_override_for_ninja() -> Result<()> {
-    let (temp_dir, ninja_path) = fake_ninja(0u8)?;
+    let (_temp_dir_env, ninja_env_path) = fake_ninja(0u8)?;
+    let (temp_dir_path, _ninja_path_on_path) = fake_ninja(1u8)?;
     let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, &ninja_path);
+    let _path_guard =
+        prepend_dir_to_path(&env, temp_dir_path.path()).context("prepend failing ninja to PATH")?;
+    let _env_guard = override_ninja_env(&env, &ninja_env_path);
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
@@ -254,9 +252,34 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected run to use overridden NINJA_ENV")?;
-    drop(guard);
-    drop(ninja_path);
-    drop(temp_dir);
+    run(&cli).context("expected run to prefer NINJA_ENV over PATH entry")?;
+    Ok(())
+}
+
+#[rstest]
+fn run_succeeds_with_checking_ninja_env() -> Result<()> {
+    let (_ninja_dir, ninja_path, _temp, cli, _guard) = setup_ninja_env_test()?;
+
+    run(&cli).context("expected run to succeed using NINJA_ENV check binary")?;
+    ensure!(ninja_path.exists(), "fake ninja should remain present");
+    Ok(())
+}
+
+#[rstest]
+fn run_fails_with_failing_ninja_env() -> Result<()> {
+    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        ..Cli::default()
+    };
+
+    let err = run(&cli).expect_err("expected run to fail when NINJA_ENV ninja exits non-zero");
+    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    ensure!(
+        messages.iter().any(|m| m.contains("ninja exited")),
+        "error should report ninja exit status, got: {messages:?}"
+    );
     Ok(())
 }

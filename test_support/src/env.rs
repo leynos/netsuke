@@ -13,7 +13,11 @@ use std::{
     path::Path,
 };
 
-use crate::{env_guard::EnvGuard, env_lock::EnvLock, path_guard::PathGuard};
+use crate::{
+    env_guard::{EnvGuard, StdEnv},
+    env_lock::EnvLock,
+    path_guard::PathGuard,
+};
 
 /// Alias for the real process environment.
 pub type SystemEnv = DefaultEnv;
@@ -207,17 +211,26 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> Result<PathGuard> {
     Ok(PathGuard::new(original_os))
 }
 
-/// Guard that restores `NINJA_ENV` to its previous value on drop.
-#[derive(Debug)]
+/// Guard that restores `NINJA_ENV` to its previous value and holds `EnvLock` for
+/// its entire lifetime to prevent parallel mutation races.
+///
+/// Invariants (mirroring `PathGuard`):
+/// - `override_ninja_env` acquires `EnvLock` once and stores it in `_lock`.
+/// - `inner` is created with `lock_on_drop = false`, so it restores the value
+///   without attempting to re-lock.
+/// - Field order matters: `inner` drops before `_lock`, ensuring the restore
+///   runs while the lock is still held.
 pub struct NinjaEnvGuard {
     inner: EnvGuard,
+    _lock: EnvLock,
 }
 
 /// Override the `NINJA_ENV` variable with `path`, returning a guard that resets it.
 ///
 /// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates process-global
-/// state. `EnvLock` serialises the mutation and the guard restores the prior
-/// value, confining the unsafety to the scope of the guard.
+/// state. `EnvLock` serialises the mutation and the guard retains the lock for
+/// its entire lifetime, restoring the prior value on drop. Holding the lock
+/// prevents parallel tests from interleaving writes to `NINJA_ENV`.
 ///
 /// # Examples
 ///
@@ -236,12 +249,15 @@ pub struct NinjaEnvGuard {
 /// assert!(std::env::var(NINJA_ENV).is_err());
 /// ```
 pub fn override_ninja_env(env: &impl EnvMut, path: &Path) -> NinjaEnvGuard {
-    let _lock = EnvLock::acquire();
+    let lock = EnvLock::acquire();
     let original = env.raw(NINJA_ENV).ok().map(OsString::from);
-    // SAFETY: `EnvLock` serialises the mutation and the guard restores on drop.
+    // SAFETY: `EnvLock` is held for the guard's lifetime; `with_env_and_lock`
+    // restores the original value on drop without re-locking, avoiding parallel
+    // races while the guard is alive.
     unsafe { env.set_var(NINJA_ENV, path.as_os_str()) };
     NinjaEnvGuard {
-        inner: EnvGuard::new(NINJA_ENV, original),
+        inner: EnvGuard::with_env_and_lock(NINJA_ENV, original, StdEnv::default(), false),
+        _lock: lock,
     }
 }
 
