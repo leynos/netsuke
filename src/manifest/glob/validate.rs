@@ -1,5 +1,6 @@
 //! Brace and character-class validation for glob patterns.
-use super::{GlobErrorContext, GlobErrorType, GlobPattern, create_unmatched_brace_error};
+use super::errors::{GlobErrorContext, GlobErrorType, create_unmatched_brace_error};
+use super::GlobPattern;
 use minijinja::Error;
 
 /// Context for a character being processed by the validator.
@@ -101,14 +102,12 @@ impl BraceValidator {
         }
 
         match context.ch {
-            '}' if self.state.depth == 0 => Err(create_unmatched_brace_error(
-                &GlobErrorContext {
-                    pattern: pattern.raw.clone(),
-                    error_char: context.ch,
-                    position: context.position,
-                    error_type: GlobErrorType::UnmatchedBrace,
-                },
-            )),
+            '}' if self.state.depth == 0 => Err(create_unmatched_brace_error(&GlobErrorContext {
+                pattern: pattern.raw.clone(),
+                error_char: context.ch,
+                position: context.position,
+                error_type: GlobErrorType::UnmatchedBrace,
+            })),
             '{' => {
                 self.state.depth += 1;
                 self.state.last_open_pos = Some(context.position);

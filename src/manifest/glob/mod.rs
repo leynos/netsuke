@@ -6,8 +6,6 @@ mod normalize;
 mod validate;
 mod walk;
 
-pub(crate) use validate::{BraceValidationState, BraceValidator, CharContext};
-
 use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
