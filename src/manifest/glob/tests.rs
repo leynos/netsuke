@@ -21,6 +21,25 @@ fn build_validator() -> BraceValidator {
     BraceValidator::new()
 }
 
+fn build_char_context(ch: char, position: usize, in_class: bool, escaped: bool) -> CharContext {
+    CharContext {
+        ch,
+        position,
+        in_class,
+        escaped,
+    }
+}
+
+fn process_pattern_through_validator(
+    pattern: &GlobPattern,
+    validator: &mut BraceValidator,
+) -> Result<()> {
+    for (pos, ch) in pattern.raw.char_indices() {
+        validator.process_character(ch, pos, pattern)?;
+    }
+    Ok(())
+}
+
 #[test]
 fn char_context_retains_flags() {
     let ctx = CharContext {
@@ -65,12 +84,7 @@ fn brace_validator_disables_escape_on_windows() {
 #[test]
 fn handle_escape_sequence_sets_flag_on_unix() {
     let mut validator = build_validator();
-    let ctx = CharContext {
-        ch: '\\',
-        position: 0,
-        in_class: false,
-        escaped: false,
-    };
+    let ctx = build_char_context('\\', 0, false, false);
 
     let result = validator.handle_escape_sequence(&ctx);
 
@@ -82,12 +96,7 @@ fn handle_escape_sequence_sets_flag_on_unix() {
 #[test]
 fn handle_escape_sequence_ignored_on_windows() {
     let mut validator = build_validator();
-    let ctx = CharContext {
-        ch: '\\',
-        position: 0,
-        in_class: false,
-        escaped: false,
-    };
+    let ctx = build_char_context('\\', 0, false, false);
 
     let result = validator.handle_escape_sequence(&ctx);
 
@@ -140,11 +149,8 @@ fn character_class_state_transitions() {
 fn braces_inside_class_do_not_change_depth() {
     let pattern = pattern("[{a}]");
     let mut validator = build_validator();
-    for (pos, ch) in pattern.raw.char_indices() {
-        validator
-            .process_character(ch, pos, &pattern)
-            .expect("processing inside class should succeed");
-    }
+    process_pattern_through_validator(&pattern, &mut validator)
+        .expect("processing inside class should succeed");
 
     assert_eq!(validator.state.depth, 0);
 }
@@ -153,11 +159,8 @@ fn braces_inside_class_do_not_change_depth() {
 fn nested_open_braces_update_last_open_position() {
     let pattern = pattern("{{}}");
     let mut validator = build_validator();
-    for (pos, ch) in pattern.raw.char_indices() {
-        validator
-            .process_character(ch, pos, &pattern)
-            .expect("processing nested braces should succeed");
-    }
+    process_pattern_through_validator(&pattern, &mut validator)
+        .expect("processing nested braces should succeed");
 
     assert_eq!(validator.state.depth, 0);
     assert_eq!(validator.state.last_open_pos, Some(1));

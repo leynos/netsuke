@@ -1,6 +1,6 @@
 //! Brace and character-class validation for glob patterns.
-use super::errors::{GlobErrorContext, GlobErrorType, create_unmatched_brace_error};
 use super::GlobPattern;
+use super::errors::{GlobErrorContext, GlobErrorType, create_unmatched_brace_error};
 use minijinja::Error;
 
 /// Context for a character being processed by the validator.
