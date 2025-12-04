@@ -18,11 +18,11 @@ use test_support::{
 ///
 /// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
 #[fixture]
-fn ninja_in_env() -> Result<(tempfile::TempDir, NinjaEnvGuard)> {
+fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, guard))
+    Ok((ninja_dir, ninja_path, guard))
 }
 
 /// Fixture: point `NINJA_ENV` at a fake `ninja` with a configurable exit code.
@@ -31,26 +31,32 @@ fn ninja_in_env() -> Result<(tempfile::TempDir, NinjaEnvGuard)> {
 #[fixture]
 fn ninja_with_exit_code(
     #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, NinjaEnvGuard)> {
+) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, guard))
+    Ok((ninja_dir, ninja_path, guard))
 }
 
 /// Shared setup for tests that rely on `NINJA_ENV`.
 ///
 /// Returns the fake ninja directory, temp project directory, constructed CLI,
 /// and the guard keeping `NINJA_ENV` set for the test duration.
-fn setup_ninja_env_test() -> Result<(tempfile::TempDir, tempfile::TempDir, Cli, NinjaEnvGuard)> {
-    let (ninja_dir, guard) = ninja_in_env()?;
+fn setup_ninja_env_test() -> Result<(
+    tempfile::TempDir,
+    PathBuf,
+    tempfile::TempDir,
+    Cli,
+    NinjaEnvGuard,
+)> {
+    let (ninja_dir, ninja_path, guard) = ninja_in_env()?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
         ..Cli::default()
     };
-    Ok((ninja_dir, temp, cli, guard))
+    Ok((ninja_dir, ninja_path, temp, cli, guard))
 }
 
 /// Create a temporary project with a Netsukefile from `minimal.yml`.
@@ -110,7 +116,7 @@ fn run_ninja_not_found() -> Result<()> {
 
 #[rstest]
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
-    let (_ninja_dir, temp, cli, _guard) = setup_ninja_env_test()?;
+    let (_ninja_dir, _ninja_path, temp, cli, _guard) = setup_ninja_env_test()?;
 
     run(&cli).context("expected run to succeed without emit path")?;
 
@@ -125,7 +131,7 @@ fn run_executes_ninja_without_persisting_file() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn run_build_with_emit_keeps_file() -> Result<()> {
-    let (_ninja_dir, _guard) = ninja_in_env()?;
+    let (_ninja_dir, _ninja_path, _guard) = ninja_in_env()?;
     let (temp, manifest_path) = create_test_manifest()?;
     let emit_path = temp.path().join("emitted.ninja");
     let cli = Cli {
@@ -161,7 +167,7 @@ fn run_build_with_emit_keeps_file() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
-    let (_ninja_dir, _guard) = ninja_with_exit_code(0)?;
+    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(0)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let nested_dir = temp.path().join("nested").join("dir");
     let emit_path = nested_dir.join("emitted.ninja");
@@ -252,19 +258,16 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
 
 #[rstest]
 fn run_succeeds_with_checking_ninja_env() -> Result<()> {
-    let (ninja_dir, _temp, cli, _guard) = setup_ninja_env_test()?;
+    let (_ninja_dir, ninja_path, _temp, cli, _guard) = setup_ninja_env_test()?;
 
     run(&cli).context("expected run to succeed using NINJA_ENV check binary")?;
-    ensure!(
-        ninja_dir.path().join("ninja").exists(),
-        "fake ninja should remain present"
-    );
+    ensure!(ninja_path.exists(), "fake ninja should remain present");
     Ok(())
 }
 
 #[rstest]
 fn run_fails_with_failing_ninja_env() -> Result<()> {
-    let (_ninja_dir, _guard) = ninja_with_exit_code(7)?;
+    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path.clone(),

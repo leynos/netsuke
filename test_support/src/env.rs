@@ -213,6 +213,13 @@ pub fn prepend_dir_to_path(env: &impl EnvMut, dir: &Path) -> Result<PathGuard> {
 
 /// Guard that restores `NINJA_ENV` to its previous value and holds `EnvLock` for
 /// its entire lifetime to prevent parallel mutation races.
+///
+/// Invariants (mirroring `PathGuard`):
+/// - `override_ninja_env` acquires `EnvLock` once and stores it in `_lock`.
+/// - `inner` is created with `lock_on_drop = false`, so it restores the value
+///   without attempting to re-lock.
+/// - Field order matters: `inner` drops before `_lock`, ensuring the restore
+///   runs while the lock is still held.
 pub struct NinjaEnvGuard {
     inner: EnvGuard,
     _lock: EnvLock,

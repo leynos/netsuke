@@ -11,6 +11,8 @@ each other's environment.
 - `override_ninja_env` scopes changes via an `EnvGuard`, restoring the previous
   value even if the test fails.
 - Keeping `PATH` untouched avoids coupling to the developer's shell setup.
+- `override_ninja_env` also holds a process-wide lock for the guard's lifetime,
+  preventing parallel tests from interleaving `NINJA_ENV` mutations.
 
 ## Fixture pattern
 
