@@ -9,7 +9,7 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
         while let Some(c) = it.next() {
             if c == '\\' {
                 out.push(process_backslash(&mut it, native));
-            } else if c == '/' || c == '\\' {
+            } else if c == '/' {
                 out.push(native);
             } else {
                 out.push(c);

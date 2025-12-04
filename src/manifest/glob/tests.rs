@@ -42,12 +42,7 @@ fn process_pattern_through_validator(
 
 #[test]
 fn char_context_retains_flags() {
-    let ctx = CharContext {
-        ch: '{',
-        position: 3,
-        in_class: true,
-        escaped: true,
-    };
+    let ctx = build_char_context('{', 3, true, true);
 
     assert_eq!(ctx.ch, '{');
     assert_eq!(ctx.position, 3);
@@ -108,12 +103,7 @@ fn handle_escape_sequence_ignored_on_windows() {
 fn handle_escape_sequence_resets_after_escaped_char() {
     let mut validator = build_validator();
     validator.escaped = true;
-    let ctx = CharContext {
-        ch: '{',
-        position: 1,
-        in_class: false,
-        escaped: true,
-    };
+    let ctx = build_char_context('{', 1, false, true);
 
     let result = validator
         .handle_escape_sequence(&ctx)
@@ -126,21 +116,11 @@ fn handle_escape_sequence_resets_after_escaped_char() {
 #[test]
 fn character_class_state_transitions() {
     let mut validator = build_validator();
-    let open = CharContext {
-        ch: '[',
-        position: 0,
-        in_class: false,
-        escaped: false,
-    };
+    let open = build_char_context('[', 0, false, false);
     validator.handle_character_class(&open);
     assert!(validator.state.in_class);
 
-    let close = CharContext {
-        ch: ']',
-        position: 1,
-        in_class: true,
-        escaped: false,
-    };
+    let close = build_char_context(']', 1, true, false);
     validator.handle_character_class(&close);
     assert!(!validator.state.in_class);
 }
@@ -199,6 +179,18 @@ fn escaped_braces_do_not_affect_depth() -> Result<()> {
     let pattern = pattern("\\{foo\\}");
 
     validate_brace_matching(&pattern).context("escaped braces should be valid")
+}
+
+#[cfg(not(unix))]
+#[test]
+fn escaped_open_brace_is_treated_as_literal_on_windows() {
+    let pattern = pattern("\\{");
+
+    let err = validate_brace_matching(&pattern)
+        .expect_err("escaped brace should be treated as unmatched on Windows");
+
+    assert_eq!(err.kind(), ErrorKind::SyntaxError);
+    assert!(err.to_string().contains("position 1"));
 }
 
 #[rstest]

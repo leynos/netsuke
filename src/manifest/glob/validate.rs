@@ -63,6 +63,10 @@ impl BraceValidator {
         self.handle_braces(&context, pattern)
     }
 
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "escape handling depends on runtime state and provides no const benefit"
+    )]
     pub(super) fn handle_escape_sequence(
         &mut self,
         context: &CharContext,
@@ -72,7 +76,7 @@ impl BraceValidator {
             return Some(Ok(()));
         }
 
-        if context.ch == char::from(0x5c) && self.state.escape_active {
+        if context.ch == '\\' && self.state.escape_active {
             self.escaped = true;
             return Some(Ok(()));
         }
