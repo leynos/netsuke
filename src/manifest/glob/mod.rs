@@ -1,4 +1,4 @@
-//! Utilities for normalizing and validating manifest glob patterns.
+//! Utilities for normalising and validating manifest glob patterns.
 use minijinja::Error;
 
 mod errors;
@@ -15,9 +15,54 @@ use walk::{open_root_dir, process_glob_entry};
 use normalize::force_literal_escapes;
 
 #[derive(Debug, Clone)]
+/// A glob pattern and its normalised representation.
 pub struct GlobPattern {
-    pub raw: String,
-    pub normalized: String,
+    raw: String,
+    normalized: String,
+}
+
+impl GlobPattern {
+    /// Access the pattern as provided by the caller.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "const String::as_str() not available on all MSRV targets"
+    )]
+    pub fn raw(&self) -> &str {
+        self.raw.as_str()
+    }
+
+    /// Access the platform-normalised pattern suitable for globbing.
+    #[must_use]
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "const String::as_str() not available on all MSRV targets"
+    )]
+    pub fn normalized(&self) -> &str {
+        self.normalized.as_str()
+    }
+
+    /// Validate and normalise a glob pattern, preventing inconsistent state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when brace validation fails.
+    pub fn new(raw: &str) -> std::result::Result<Self, Error> {
+        validate_brace_matching(raw)?;
+
+        #[cfg(unix)]
+        let normalized = {
+            let normalized = normalize_separators(raw);
+            force_literal_escapes(&normalized)
+        };
+        #[cfg(not(unix))]
+        let normalized = normalize_separators(raw);
+
+        Ok(Self {
+            raw: raw.to_owned(),
+            normalized,
+        })
+    }
 }
 
 pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
@@ -38,30 +83,24 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    let mut pattern_state = GlobPattern {
-        raw: pattern.to_owned(),
-        normalized: String::new(),
-    };
+    let pattern_state = GlobPattern::new(pattern)?;
 
-    validate_brace_matching(&pattern_state)?;
-
-    #[cfg(unix)]
-    let mut normalized = normalize_separators(&pattern_state.raw);
-    #[cfg(unix)]
-    {
-        normalized = force_literal_escapes(&normalized);
-    }
-    #[cfg(not(unix))]
-    let normalized = normalize_separators(&pattern_state.raw);
-
-    pattern_state.normalized = normalized;
-
-    let root = open_root_dir(&pattern_state)?;
-
-    let entries = glob_with(&pattern_state.normalized, opts).map_err(|e| {
+    let root = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
-                pattern: pattern_state.raw.clone(),
+                pattern: pattern_state.raw().to_owned(),
+                error_char: char::from(0),
+                position: 0,
+                error_type: GlobErrorType::IoError,
+            },
+            Some(e.to_string()),
+        )
+    })?;
+
+    let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
+        create_glob_error(
+            &GlobErrorContext {
+                pattern: pattern_state.raw().to_owned(),
                 error_char: char::from(0),
                 position: 0,
                 error_type: GlobErrorType::InvalidPattern,

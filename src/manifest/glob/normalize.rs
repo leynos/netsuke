@@ -8,12 +8,16 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
         let mut it = pattern.chars().peekable();
         while let Some(c) = it.next() {
             if c == '\\' {
-                out.push(process_backslash(&mut it, native));
-            } else if c == '/' {
-                out.push(native);
-            } else {
-                out.push(c);
+                push_normalized_backslash(&mut it, &mut out, native);
+                continue;
             }
+
+            if c == '/' {
+                out.push(native);
+                continue;
+            }
+
+            out.push(c);
         }
         out
     }
@@ -24,35 +28,51 @@ pub(crate) fn normalize_separators(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-const fn should_preserve_backslash_for_bracket(next: char) -> bool {
-    matches!(next, '[' | ']' | '{' | '}')
-}
-
-#[cfg(unix)]
-fn should_preserve_backslash_for_wildcard(
+fn push_normalized_backslash(
     it: &mut std::iter::Peekable<std::str::Chars<'_>>,
-) -> bool {
-    match it.peek().copied() {
-        Some('*' | '?') => {
-            let mut lookahead = it.clone();
-            lookahead.next();
-            match lookahead.peek() {
-                None => true,
-                Some(&ch) => is_wildcard_continuation_char(ch),
-            }
-        }
-        _ => false,
+    out: &mut String,
+    native: char,
+) {
+    let Some(next) = it.peek().copied() else {
+        out.push('\\');
+        return;
+    };
+
+    if matches!(next, '[' | ']' | '{' | '}') {
+        out.push('\\');
+        return;
     }
+
+    if matches!(next, '*' | '?') {
+        let mut lookahead = it.clone();
+        lookahead.next();
+        let should_preserve_wildcard = match lookahead.peek() {
+            None => true,
+            Some(&ch) => is_wildcard_continuation_char(ch),
+        };
+        if should_preserve_wildcard {
+            out.push('\\');
+            return;
+        }
+    }
+
+    out.push(native);
 }
 
-#[cfg(unix)]
-fn process_backslash(it: &mut std::iter::Peekable<std::str::Chars<'_>>, native: char) -> char {
-    match it.peek().copied() {
-        Some(ch) if should_preserve_backslash_for_bracket(ch) => '\\',
-        Some(_) if should_preserve_backslash_for_wildcard(it) => '\\',
-        Some(_) => native,
-        None => '\\',
-    }
+#[cfg(not(unix))]
+#[expect(
+    dead_code,
+    reason = "stub keeps cfg alignment; unused on non-Unix targets"
+)]
+fn push_normalized_backslash(
+    _it: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    out: &mut String,
+    _native: char,
+) {
+    // On non-Unix targets the function is never invoked because the
+    // normalisation path uses the `replace` branch. Provide a stub to keep
+    // cfg alignment in sync for future callers.
+    out.push('\\');
 }
 
 #[cfg(unix)]
@@ -70,7 +90,7 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
                 in_class = false;
                 out.push(c);
             }
-            '\\' if !in_class => process_escape_sequence(&mut it, &mut out),
+            '\\' if !in_class => handle_escaped_char(&mut it, &mut out),
             _ => out.push(c),
         }
     }
@@ -78,33 +98,38 @@ pub(super) fn force_literal_escapes(pattern: &str) -> String {
 }
 
 #[cfg(unix)]
-pub(super) fn process_escape_sequence(
-    it: &mut std::iter::Peekable<std::str::Chars<'_>>,
-    out: &mut String,
-) {
-    if let Some(&next) = it.peek() {
-        let repl = get_escape_replacement(next);
-        if repl == "\\" {
-            out.push('\\');
-        } else {
-            it.next();
-            out.push_str(repl);
-        }
-    } else {
+fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &mut String) {
+    let Some(next) = it.peek().copied() else {
         out.push('\\');
-    }
-}
+        return;
+    };
 
-#[cfg(unix)]
-const fn get_escape_replacement(ch: char) -> &'static str {
-    match ch {
-        '*' => "[*]",
-        '?' => "[?]",
-        '[' => "[[]",
-        ']' => "[]]",
-        '{' => "[{]",
-        '}' => "[}]",
-        _ => "\\",
+    match next {
+        '*' => {
+            it.next();
+            out.push_str("[*]");
+        }
+        '?' => {
+            it.next();
+            out.push_str("[?]");
+        }
+        '[' => {
+            it.next();
+            out.push_str("[[]");
+        }
+        ']' => {
+            it.next();
+            out.push_str("[]]");
+        }
+        '{' => {
+            it.next();
+            out.push_str("[{]");
+        }
+        '}' => {
+            it.next();
+            out.push_str("[}]");
+        }
+        _ => out.push('\\'),
     }
 }
 
