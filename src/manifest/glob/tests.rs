@@ -102,22 +102,6 @@ fn validate_brace_matching_treats_escaped_braces_as_literals() -> Result<()> {
 #[cfg(not(unix))]
 #[test]
 fn validate_brace_matching_counts_escaped_braces() -> Result<()> {
-    match validate_brace_matching(r"\{foo") {
-        Ok(()) => Err(anyhow!("escaped brace should still count towards depth")),
-        Err(err) => {
-            ensure!(
-                err.kind() == ErrorKind::SyntaxError,
-                "unexpected error kind {kind:?}",
-                kind = err.kind()
-            );
-            Ok(())
-        }
-    }
-}
-
-#[cfg(not(unix))]
-#[test]
-fn validate_brace_matching_counts_escaped_braces() -> Result<()> {
     assert_syntax_error(r"\{foo", "escaped brace should still count towards depth")
 }
 
