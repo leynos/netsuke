@@ -94,9 +94,7 @@ impl MacroCache {
     pub(super) fn prepare(&self, env: &Environment) -> anyhow::Result<()> {
         if self.instance.get().is_none() {
             let instance = MacroInstance::new(env, &self.template_name, &self.macro_name)?;
-            if let Err(returned_instance) = self.instance.set(instance) {
-                drop(returned_instance);
-            }
+            self.instance.set(instance).ok();
         }
         Ok(())
     }
@@ -137,7 +135,7 @@ impl MacroInstance {
         // bytecode outlives the cached state stored in the macro instance.
         let state_static: State<'static, 'static> = unsafe { mem::transmute(state) };
         Ok(Self {
-            state: MacroStateGuard::new(state_static)?,
+            state: MacroStateGuard::new(state_static),
             value,
             owner_thread: std::thread::current().id(),
         })
@@ -163,14 +161,13 @@ struct MacroStateGuard {
 }
 
 impl MacroStateGuard {
-    fn new(state: State<'static, 'static>) -> anyhow::Result<Self> {
+    fn new(state: State<'static, 'static>) -> Self {
         let boxed = Box::new(state);
         let ptr = Box::into_raw(boxed);
-        // SAFETY: Box::into_raw never returns null for non-ZST types, but we
-        // handle the impossible case defensively.
-        let ptr_non_null = NonNull::new(ptr)
-            .ok_or_else(|| anyhow::anyhow!("Box::into_raw returned null pointer"))?;
-        Ok(Self { ptr: ptr_non_null })
+        // SAFETY: Box::into_raw never returns null for non-ZST types. State is
+        // non-zero-sized so the pointer is guaranteed valid.
+        let ptr_non_null = unsafe { NonNull::new_unchecked(ptr) };
+        Self { ptr: ptr_non_null }
     }
 
     #[expect(

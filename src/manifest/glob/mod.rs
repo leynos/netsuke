@@ -41,13 +41,12 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
     validate_brace_matching(pattern)?;
 
     #[cfg(unix)]
-    let mut normalized = normalize_separators(pattern);
+    let normalized = {
+        let normalized = normalize_separators(pattern);
+        force_literal_escapes(&normalized)
+    };
     #[cfg(not(unix))]
     let normalized = normalize_separators(pattern);
-    #[cfg(unix)]
-    {
-        normalized = force_literal_escapes(&normalized);
-    }
 
     let pattern_state = GlobPattern {
         raw: pattern.to_owned(),
