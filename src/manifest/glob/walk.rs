@@ -8,14 +8,14 @@ use minijinja::Error;
 ///
 /// Returns the filesystem root for absolute patterns and the current working
 /// directory for relative patterns.
-pub(super) fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
-    let candidate = pattern.normalized.as_str();
-    let path = Utf8Path::new(candidate);
+pub(super) fn open_root_dir(pattern: &GlobPattern) -> Result<Dir, Error> {
+    let path = Utf8Path::new(&pattern.normalized);
     if path.is_absolute() {
         Dir::open_ambient_dir("/", ambient_authority())
     } else {
         Dir::open_ambient_dir(".", ambient_authority())
     }
+    .map_err(|err| create_io_error(pattern, 0, err.to_string()))
 }
 
 fn create_io_error(pattern: &GlobPattern, position: usize, detail: String) -> Error {

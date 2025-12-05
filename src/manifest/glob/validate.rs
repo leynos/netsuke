@@ -1,59 +1,74 @@
 //! Brace and character-class validation for glob patterns.
-use super::{GlobErrorContext, GlobErrorType, create_unmatched_brace_error};
+use super::GlobPattern;
+use super::errors::{GlobErrorContext, GlobErrorType, create_unmatched_brace_error};
 use minijinja::Error;
 
-struct BraceValidator {
-    depth: i32,
-    in_class: bool,
-    last_open_pos: Option<usize>,
-    escaped: bool,
+/// Context for a character being processed by the validator.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct CharContext {
+    pub ch: char,
+    pub position: usize,
+}
+
+/// Tracks brace depth and escape semantics while parsing a pattern.
+#[derive(Debug, Clone)]
+pub(super) struct BraceValidationState {
+    pub depth: i32,
+    pub in_class: bool,
+    pub last_open_pos: Option<usize>,
+}
+
+/// Stateful brace validator that understands character classes and escapes.
+#[derive(Debug)]
+pub(super) struct BraceValidator {
+    pub(super) state: BraceValidationState,
+    pub(super) escaped: bool,
 }
 
 impl BraceValidator {
-    const fn new() -> Self {
+    pub(super) const ESCAPE_ACTIVE: bool = cfg!(unix);
+
+    pub(super) const fn new() -> Self {
         Self {
-            depth: 0,
-            in_class: false,
-            last_open_pos: None,
+            state: BraceValidationState {
+                depth: 0,
+                in_class: false,
+                last_open_pos: None,
+            },
             escaped: false,
         }
     }
 
-    fn process_character(
+    pub(super) fn process_character(
         &mut self,
         ch: char,
         pos: usize,
-        pattern: &str,
+        pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
-        if self.handle_escape_sequence(ch) {
+        let context = CharContext { ch, position: pos };
+
+        if self.handle_escape_sequence(context.ch) {
             return Ok(());
         }
 
-        self.handle_character_class(ch);
+        self.handle_character_class(context.ch);
 
-        self.handle_braces(ch, pos, pattern)
+        self.handle_braces(&context, pattern)
     }
 
     #[expect(
         clippy::missing_const_for_fn,
-        reason = "validator mutates runtime state; const adds no benefit"
+        reason = "escape handling depends on runtime state; const adds no value"
     )]
-    fn handle_escape_sequence(&mut self, ch: char) -> bool {
+    pub(super) fn handle_escape_sequence(&mut self, ch: char) -> bool {
         if self.escaped {
             self.escaped = false;
             return true;
         }
 
-        #[cfg(unix)]
-        {
-            if ch == '\\' {
-                self.escaped = true;
-                return true;
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = ch;
+        if ch == '\\' && Self::ESCAPE_ACTIVE {
+            self.escaped = true;
+            return true;
         }
 
         false
@@ -63,49 +78,51 @@ impl BraceValidator {
         clippy::missing_const_for_fn,
         reason = "validator mutates runtime state; const adds no benefit"
     )]
-    fn handle_character_class(&mut self, ch: char) {
+    pub(super) fn handle_character_class(&mut self, ch: char) {
         match ch {
-            '[' if !self.in_class => self.in_class = true,
-            ']' if self.in_class => self.in_class = false,
+            '[' if !self.state.in_class => self.state.in_class = true,
+            ']' if self.state.in_class => self.state.in_class = false,
             _ => {}
         }
     }
 
-    fn handle_braces(
+    pub(super) fn handle_braces(
         &mut self,
-        ch: char,
-        pos: usize,
-        pattern: &str,
+        context: &CharContext,
+        pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
-        if self.in_class {
+        if self.state.in_class {
             return Ok(());
         }
 
-        match ch {
-            '}' if self.depth == 0 => Err(create_unmatched_brace_error(&GlobErrorContext {
-                pattern: pattern.to_owned(),
-                error_char: ch,
-                position: pos,
+        match context.ch {
+            '}' if self.state.depth == 0 => Err(create_unmatched_brace_error(&GlobErrorContext {
+                pattern: pattern.raw.clone(),
+                error_char: context.ch,
+                position: context.position,
                 error_type: GlobErrorType::UnmatchedBrace,
             })),
             '{' => {
-                self.depth += 1;
-                self.last_open_pos = Some(pos);
+                self.state.depth += 1;
+                self.state.last_open_pos = Some(context.position);
                 Ok(())
             }
             '}' => {
-                self.depth -= 1;
+                self.state.depth -= 1;
                 Ok(())
             }
             _ => Ok(()),
         }
     }
 
-    fn validate_final_state(&self, pattern: &str) -> std::result::Result<(), Error> {
-        if self.depth != 0 {
-            let pos = self.last_open_pos.unwrap_or(0);
+    pub(super) fn validate_final_state(
+        &self,
+        pattern: &GlobPattern,
+    ) -> std::result::Result<(), Error> {
+        if self.state.depth != 0 {
+            let pos = self.state.last_open_pos.unwrap_or(0);
             Err(create_unmatched_brace_error(&GlobErrorContext {
-                pattern: pattern.to_owned(),
+                pattern: pattern.raw.clone(),
                 error_char: '{',
                 position: pos,
                 error_type: GlobErrorType::UnmatchedBrace,
@@ -116,10 +133,10 @@ impl BraceValidator {
     }
 }
 
-pub(super) fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
+pub(super) fn validate_brace_matching(pattern: &GlobPattern) -> std::result::Result<(), Error> {
     let mut validator = BraceValidator::new();
 
-    for (i, ch) in pattern.char_indices() {
+    for (i, ch) in pattern.raw.char_indices() {
         validator.process_character(ch, i, pattern)?;
     }
 

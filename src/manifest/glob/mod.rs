@@ -1,4 +1,4 @@
-//! Utilities for normalising and validating manifest glob patterns.
+//! Utilities for normalizing and validating manifest glob patterns.
 use minijinja::Error;
 
 mod errors;
@@ -6,7 +6,7 @@ mod normalize;
 mod validate;
 mod walk;
 
-use errors::{GlobErrorContext, GlobErrorType, create_glob_error, create_unmatched_brace_error};
+use errors::{GlobErrorContext, GlobErrorType, create_glob_error};
 use normalize::normalize_separators;
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
@@ -38,32 +38,25 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
         require_literal_leading_dot: false,
     };
 
-    validate_brace_matching(pattern)?;
+    let mut pattern_state = GlobPattern {
+        raw: pattern.to_owned(),
+        normalized: String::new(),
+    };
+
+    validate_brace_matching(&pattern_state)?;
 
     #[cfg(unix)]
-    let normalized = {
-        let normalized = normalize_separators(pattern);
-        force_literal_escapes(&normalized)
-    };
+    let mut normalized = normalize_separators(&pattern_state.raw);
+    #[cfg(unix)]
+    {
+        normalized = force_literal_escapes(&normalized);
+    }
     #[cfg(not(unix))]
-    let normalized = normalize_separators(pattern);
+    let normalized = normalize_separators(&pattern_state.raw);
 
-    let pattern_state = GlobPattern {
-        raw: pattern.to_owned(),
-        normalized,
-    };
+    pattern_state.normalized = normalized;
 
-    let root = open_root_dir(&pattern_state).map_err(|e| {
-        create_glob_error(
-            &GlobErrorContext {
-                pattern: pattern_state.raw.clone(),
-                error_char: char::from(0),
-                position: 0,
-                error_type: GlobErrorType::IoError,
-            },
-            Some(e.to_string()),
-        )
-    })?;
+    let root = open_root_dir(&pattern_state)?;
 
     let entries = glob_with(&pattern_state.normalized, opts).map_err(|e| {
         create_glob_error(
