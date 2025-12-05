@@ -8,8 +8,6 @@ use minijinja::Error;
 pub(super) struct CharContext {
     pub ch: char,
     pub position: usize,
-    pub in_class: bool,
-    pub escaped: bool,
 }
 
 /// Tracks brace depth and escape semantics while parsing a pattern.
@@ -18,7 +16,6 @@ pub(super) struct BraceValidationState {
     pub depth: i32,
     pub in_class: bool,
     pub last_open_pos: Option<usize>,
-    pub escape_active: bool,
 }
 
 /// Stateful brace validator that understands character classes and escapes.
@@ -29,13 +26,14 @@ pub(super) struct BraceValidator {
 }
 
 impl BraceValidator {
+    pub(super) const ESCAPE_ACTIVE: bool = cfg!(unix);
+
     pub(super) const fn new() -> Self {
         Self {
             state: BraceValidationState {
                 depth: 0,
                 in_class: false,
                 last_open_pos: None,
-                escape_active: cfg!(unix),
             },
             escaped: false,
         }
@@ -47,51 +45,43 @@ impl BraceValidator {
         pos: usize,
         pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
-        let context = CharContext {
-            ch,
-            position: pos,
-            in_class: self.state.in_class,
-            escaped: self.escaped,
-        };
+        let context = CharContext { ch, position: pos };
 
-        if let Some(result) = self.handle_escape_sequence(&context) {
-            return result;
+        if self.handle_escape_sequence(context.ch) {
+            return Ok(());
         }
 
-        self.handle_character_class(&context);
+        self.handle_character_class(context.ch);
 
         self.handle_braces(&context, pattern)
     }
 
     #[expect(
         clippy::missing_const_for_fn,
-        reason = "escape handling depends on runtime state and provides no const benefit"
+        reason = "escape handling depends on runtime state; const adds no value"
     )]
-    pub(super) fn handle_escape_sequence(
-        &mut self,
-        context: &CharContext,
-    ) -> Option<std::result::Result<(), Error>> {
-        if context.escaped {
+    pub(super) fn handle_escape_sequence(&mut self, ch: char) -> bool {
+        if self.escaped {
             self.escaped = false;
-            return Some(Ok(()));
+            return true;
         }
 
-        if context.ch == '\\' && self.state.escape_active {
+        if ch == '\\' && Self::ESCAPE_ACTIVE {
             self.escaped = true;
-            return Some(Ok(()));
+            return true;
         }
 
-        None
+        false
     }
 
     #[expect(
         clippy::missing_const_for_fn,
         reason = "validator mutates runtime state; const adds no benefit"
     )]
-    pub(super) fn handle_character_class(&mut self, context: &CharContext) {
-        match context.ch {
-            '[' if !context.in_class => self.state.in_class = true,
-            ']' if context.in_class => self.state.in_class = false,
+    pub(super) fn handle_character_class(&mut self, ch: char) {
+        match ch {
+            '[' if !self.state.in_class => self.state.in_class = true,
+            ']' if self.state.in_class => self.state.in_class = false,
             _ => {}
         }
     }
@@ -101,7 +91,7 @@ impl BraceValidator {
         context: &CharContext,
         pattern: &GlobPattern,
     ) -> std::result::Result<(), Error> {
-        if context.in_class {
+        if self.state.in_class {
             return Ok(());
         }
 

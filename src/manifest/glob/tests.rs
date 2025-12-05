@@ -15,7 +15,7 @@ use tempfile::tempdir;
 fn pattern(raw: &str) -> GlobPattern {
     GlobPattern {
         raw: raw.to_owned(),
-        normalized: None,
+        normalized: String::new(),
     }
 }
 
@@ -24,13 +24,8 @@ fn build_validator() -> BraceValidator {
     BraceValidator::new()
 }
 
-fn build_char_context(ch: char, position: usize, in_class: bool, escaped: bool) -> CharContext {
-    CharContext {
-        ch,
-        position,
-        in_class,
-        escaped,
-    }
+fn build_char_context(ch: char, position: usize) -> CharContext {
+    CharContext { ch, position }
 }
 
 fn process_pattern_through_validator(
@@ -45,12 +40,10 @@ fn process_pattern_through_validator(
 
 #[test]
 fn char_context_retains_flags() {
-    let ctx = build_char_context('{', 3, true, true);
+    let ctx = build_char_context('{', 3);
 
     assert_eq!(ctx.ch, '{');
     assert_eq!(ctx.position, 3);
-    assert!(ctx.in_class);
-    assert!(ctx.escaped);
 }
 
 #[test]
@@ -65,28 +58,26 @@ fn brace_state_defaults_are_zeroed() {
 #[cfg(unix)]
 #[test]
 fn brace_validator_enables_escape_on_unix() {
-    let validator = build_validator();
-
-    assert!(validator.state.escape_active);
+    let mut validator = build_validator();
+    assert!(validator.handle_escape_sequence('\\'));
 }
 
 #[cfg(not(unix))]
 #[test]
 fn brace_validator_disables_escape_on_windows() {
-    let validator = build_validator();
-
-    assert!(!validator.state.escape_active);
+    let mut validator = build_validator();
+    assert!(!validator.handle_escape_sequence('\\'));
 }
 
 #[cfg(unix)]
 #[test]
 fn handle_escape_sequence_sets_flag_on_unix() {
     let mut validator = build_validator();
-    let ctx = build_char_context('\\', 0, false, false);
+    let ctx = build_char_context('\\', 0);
 
-    let result = validator.handle_escape_sequence(&ctx);
+    let result = validator.handle_escape_sequence(ctx.ch);
 
-    assert!(result.is_some());
+    assert!(result);
     assert!(validator.escaped);
 }
 
@@ -94,11 +85,11 @@ fn handle_escape_sequence_sets_flag_on_unix() {
 #[test]
 fn handle_escape_sequence_ignored_on_windows() {
     let mut validator = build_validator();
-    let ctx = build_char_context('\\', 0, false, false);
+    let ctx = build_char_context('\\', 0);
 
-    let result = validator.handle_escape_sequence(&ctx);
+    let result = validator.handle_escape_sequence(ctx.ch);
 
-    assert!(result.is_none());
+    assert!(!result);
     assert!(!validator.escaped);
 }
 
@@ -106,25 +97,23 @@ fn handle_escape_sequence_ignored_on_windows() {
 fn handle_escape_sequence_resets_after_escaped_char() {
     let mut validator = build_validator();
     validator.escaped = true;
-    let ctx = build_char_context('{', 1, false, true);
+    let ctx = build_char_context('{', 1);
 
-    let result = validator
-        .handle_escape_sequence(&ctx)
-        .expect("expected escape handling result");
+    let result = validator.handle_escape_sequence(ctx.ch);
 
-    assert!(result.is_ok());
+    assert!(result);
     assert!(!validator.escaped);
 }
 
 #[test]
 fn character_class_state_transitions() {
     let mut validator = build_validator();
-    let open = build_char_context('[', 0, false, false);
-    validator.handle_character_class(&open);
+    let open = build_char_context('[', 0);
+    validator.handle_character_class(open.ch);
     assert!(validator.state.in_class);
 
-    let close = build_char_context(']', 1, true, false);
-    validator.handle_character_class(&close);
+    let close = build_char_context(']', 1);
+    validator.handle_character_class(close.ch);
     assert!(!validator.state.in_class);
 }
 
@@ -323,6 +312,104 @@ fn escaped_braces_inside_pattern_validate() -> Result<()> {
     let pattern = pattern("path/\\{escaped\\}/file");
 
     validate_brace_matching(&pattern).context("pattern with escaped braces should be valid")
+}
+
+#[test]
+fn pattern_normalized_field_contains_expected_value() -> Result<()> {
+    let mut pattern = pattern("test/pattern");
+    pattern.normalized = normalize_separators(&pattern.raw);
+
+    ensure!(
+        pattern.normalized == normalize_separators("test/pattern"),
+        "normalized value should match separator normalization"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn normalized_applies_escape_forcing_on_unix() -> Result<()> {
+    let mut pattern = pattern("test\\*pattern");
+    let normalized = normalize_separators(&pattern.raw);
+    pattern.normalized = force_literal_escapes(&normalized);
+
+    ensure!(
+        pattern.normalized.contains("[*]"),
+        "expected forced escape for wildcard"
+    );
+    Ok(())
+}
+
+#[cfg(not(unix))]
+#[test]
+fn normalized_converts_separators_on_windows() -> Result<()> {
+    let mut pattern = pattern("test/pattern");
+    pattern.normalized = normalize_separators(&pattern.raw);
+
+    ensure!(
+        pattern.normalized.contains(std::path::MAIN_SEPARATOR),
+        "expected native separator in normalized pattern"
+    );
+    Ok(())
+}
+
+#[test]
+fn open_root_dir_uses_filesystem_root_for_absolute_pattern() -> Result<()> {
+    let mut pattern = pattern("/absolute/path");
+    pattern.normalized = normalize_separators(&pattern.raw);
+
+    let dir =
+        open_root_dir(&pattern).context("open_root_dir should succeed for absolute pattern")?;
+
+    dir.metadata(".")
+        .context("should be able to stat root directory")?;
+    Ok(())
+}
+
+#[test]
+fn open_root_dir_uses_current_dir_for_relative_pattern() -> Result<()> {
+    let mut pattern = pattern("relative/path");
+    pattern.normalized = normalize_separators(&pattern.raw);
+
+    let dir =
+        open_root_dir(&pattern).context("open_root_dir should succeed for relative pattern")?;
+
+    dir.metadata(".")
+        .context("should be able to stat current directory")?;
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn open_root_dir_handles_normalized_unix_pattern() -> Result<()> {
+    let temp = tempdir()?;
+    let subdir = temp.path().join("subdir");
+    std::fs::create_dir(&subdir)?;
+
+    let pattern_str = format!("{}/subdir/*", temp.path().display());
+    let mut pattern = pattern(&pattern_str);
+    pattern.normalized = normalize_separators(&pattern.raw);
+    pattern.normalized = force_literal_escapes(&pattern.normalized);
+
+    open_root_dir(&pattern).context("open_root_dir should work with normalized Unix pattern")?;
+    Ok(())
+}
+
+#[test]
+fn glob_paths_normalizes_pattern_before_expansion() -> Result<()> {
+    let temp = tempdir()?;
+    let file = temp.path().join("test.txt");
+    std::fs::write(&file, "content")?;
+
+    let pattern = format!("{}/test.txt", temp.path().display());
+    let results = glob_paths(&pattern).context("glob_paths should normalize and expand pattern")?;
+
+    ensure!(results.len() == 1, "expected exactly one match");
+    let first = results
+        .first()
+        .context("expected at least one match from glob_paths")?;
+    ensure!(first.ends_with("test.txt"), "expected test.txt in results");
+    Ok(())
 }
 
 #[cfg(unix)]
