@@ -157,3 +157,65 @@ pub fn map_data_error(
         message,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::{Context, Result, ensure};
+    use miette::Diagnostic;
+    use serde_json::Value;
+
+    #[test]
+    fn map_data_error_formats_message_and_code() -> Result<()> {
+        let name = ManifestName::new("test.json");
+        let err = serde_json::from_str::<Value>("{\"key\":}")
+            .expect_err("expected serde_json parse error");
+        let diag = map_data_error(err, &name);
+        let message = diag.to_string();
+        ensure!(
+            message.starts_with("manifest structure error in test.json:"),
+            "unexpected message: {message}"
+        );
+        let code = diag
+            .code()
+            .map(|c| c.to_string())
+            .context("structure diagnostic should expose a code")?;
+        ensure!(
+            code == "netsuke::manifest::structure",
+            "unexpected diagnostic code {code}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn map_data_error_is_wrapped_by_manifest_error() -> Result<()> {
+        let name = ManifestName::new("example");
+        let err = serde_json::from_str::<Value>("not json")
+            .expect_err("expected serde_json parse failure");
+        let diag = map_data_error(err, &name);
+        let wrapped = ManifestError::Parse { source: diag };
+        ensure!(
+            wrapped.to_string() == "manifest parse error",
+            "unexpected outer error message: {wrapped}"
+        );
+        let parse_code = wrapped
+            .code()
+            .map(|c| c.to_string())
+            .context("parse diagnostic should expose a code")?;
+        ensure!(
+            parse_code == "netsuke::manifest::parse",
+            "unexpected parse diagnostic code {parse_code}"
+        );
+        let inner_code = match &wrapped {
+            ManifestError::Parse { source } => source
+                .code()
+                .map(|c| c.to_string())
+                .context("source diagnostic should have a code")?,
+        };
+        ensure!(
+            inner_code == "netsuke::manifest::structure",
+            "unexpected inner diagnostic code {inner_code}"
+        );
+        Ok(())
+    }
+}

@@ -8,20 +8,20 @@ use minijinja::Error;
 ///
 /// Returns the filesystem root for absolute patterns and the current working
 /// directory for relative patterns.
-pub(super) fn open_root_dir(pattern: &GlobPattern) -> Result<Dir, Error> {
-    let path = Utf8Path::new(&pattern.normalized);
+pub(super) fn open_root_dir(pattern: &GlobPattern) -> std::io::Result<Dir> {
+    let candidate = pattern.normalized();
+    let path = Utf8Path::new(candidate);
     if path.is_absolute() {
         Dir::open_ambient_dir("/", ambient_authority())
     } else {
         Dir::open_ambient_dir(".", ambient_authority())
     }
-    .map_err(|err| create_io_error(pattern, 0, err.to_string()))
 }
 
 fn create_io_error(pattern: &GlobPattern, position: usize, detail: String) -> Error {
     create_glob_error(
         &GlobErrorContext {
-            pattern: pattern.raw.clone(),
+            pattern: pattern.raw().to_owned(),
             error_char: '\0',
             position,
             error_type: GlobErrorType::IoError,
@@ -42,12 +42,12 @@ pub(super) fn process_glob_entry(
             let utf_path = Utf8PathBuf::try_from(path).map_err(|_| {
                 create_io_error(
                     pattern,
-                    pattern.raw.len(),
+                    pattern.raw().len(),
                     "glob matched a non-UTF-8 path".to_owned(),
                 )
             })?;
             let metadata = fetch_metadata(root, &utf_path)
-                .map_err(|err| create_io_error(pattern, pattern.raw.len(), err.to_string()))?;
+                .map_err(|err| create_io_error(pattern, pattern.raw().len(), err.to_string()))?;
             if !metadata.is_file() {
                 return Ok(None);
             }
