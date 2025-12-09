@@ -183,9 +183,7 @@ pub fn write_manifest(file: &mut impl Write) -> io::Result<()> {
             "netsuke_version: \"1.0.0\"\n",
             "targets:\n",
             "  - name: hello\n",
-            "    recipe:\n",
-            "      kind: command\n",
-            "      command: \"echo hi\"\n"
+            "    command: \"echo hi\"\n"
         ),
     )
 }

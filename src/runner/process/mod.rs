@@ -59,12 +59,11 @@ pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
 }
 
-fn configure_ninja_command(
-    cmd: &mut Command,
-    cli: &Cli,
-    build_file: &Path,
-    targets: &BuildTargets<'_>,
-) -> io::Result<()> {
+/// Configure the base Ninja command with working directory, job count, and build file.
+///
+/// Sets up stdout/stderr pipes for streaming. Callers append targets or tool flags
+/// after this function returns.
+fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::Result<()> {
     if let Some(dir) = &cli.directory {
         let canonical = canonicalize_utf8_path(dir.as_path())?;
         cmd.current_dir(canonical.as_std_path());
@@ -84,9 +83,30 @@ fn configure_ninja_command(
         })
     })?;
     cmd.arg("-f").arg(build_file_path.as_std_path());
-    cmd.args(targets.as_slice());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    Ok(())
+}
+
+fn configure_ninja_command(
+    cmd: &mut Command,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets<'_>,
+) -> io::Result<()> {
+    configure_ninja_base(cmd, cli, build_file)?;
+    cmd.args(targets.as_slice());
+    Ok(())
+}
+
+fn configure_ninja_tool_command(
+    cmd: &mut Command,
+    cli: &Cli,
+    build_file: &Path,
+    tool: &str,
+) -> io::Result<()> {
+    configure_ninja_base(cmd, cli, build_file)?;
+    cmd.arg("-t").arg(tool);
     Ok(())
 }
 
@@ -128,6 +148,25 @@ pub fn run_ninja(
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
     configure_ninja_command(&mut cmd, cli, build_file, targets)?;
+    log_command_execution(&cmd);
+    let child = cmd.spawn()?;
+    let status = spawn_and_stream_output(child)?;
+    check_exit_status(status)
+}
+
+/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
+///
+/// The function forwards the job count and working directory to Ninja,
+/// specifies the build file, and streams its standard output and error back to
+/// the user.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
+pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
+    let mut cmd = Command::new(program);
+    configure_ninja_tool_command(&mut cmd, cli, build_file, tool)?;
     log_command_execution(&cmd);
     let child = cmd.spawn()?;
     let status = spawn_and_stream_output(child)?;

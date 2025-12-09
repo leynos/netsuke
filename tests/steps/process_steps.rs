@@ -61,6 +61,14 @@ fn fake_ninja_check(world: &mut CliWorld) -> Result<()> {
     install_test_ninja(&env, world, dir, path)
 }
 
+/// Creates a fake ninja executable that expects the `-t clean` tool invocation.
+#[given("a fake ninja executable that expects the clean tool")]
+fn fake_ninja_expects_clean(world: &mut CliWorld) -> Result<()> {
+    let (dir, path) = check_ninja::fake_ninja_expect_tool("clean")?;
+    let env = env::mocked_path_env();
+    install_test_ninja(&env, world, dir, path)
+}
+
 /// Sets up a scenario where no ninja executable is available.
 ///
 /// This step creates a temporary directory and records the path to a
@@ -146,6 +154,51 @@ fn run(world: &mut CliWorld) -> Result<()> {
         Err(e) => {
             world.run_status = Some(false);
             world.run_error = Some(e.to_string());
+        }
+    }
+    Ok(())
+}
+
+/// Executes the clean subcommand and captures the result in the test world.
+///
+/// This step runs the full `runner::run` function with the Clean command,
+/// ensuring the manifest exists first and updating the world's `run_status`
+/// and `run_error` fields based on the execution outcome.
+#[when("the clean process is run")]
+fn run_clean(world: &mut CliWorld) -> Result<()> {
+    let dir = world
+        .temp
+        .as_ref()
+        .context("CLI temp directory has not been initialised")?;
+    {
+        let cli = world
+            .cli
+            .as_mut()
+            .context("CLI configuration has not been initialised")?;
+        let temp_path = Utf8Path::from_path(dir.path())
+            .ok_or_else(|| anyhow!("temporary directory path is not valid UTF-8"))?;
+        let manifest_path = Utf8Path::from_path(&cli.file)
+            .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))?;
+        let manifest = ensure_manifest_exists(temp_path, manifest_path)
+            .context("ensure manifest exists in temp workspace")?;
+        cli.file = manifest.into_std_path_buf();
+        // Clear directory since file is now an absolute path; otherwise
+        // resolve_manifest_path would incorrectly join them.
+        cli.directory = None;
+    }
+    let cli = world
+        .cli
+        .as_ref()
+        .context("CLI configuration has not been initialised")?;
+    match runner::run(cli) {
+        Ok(()) => {
+            world.run_status = Some(true);
+            world.run_error = None;
+        }
+        Err(e) => {
+            world.run_status = Some(false);
+            // Use alternate formatting to capture the full anyhow error chain.
+            world.run_error = Some(format!("{e:#}"));
         }
     }
     Ok(())
