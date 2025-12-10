@@ -88,25 +88,29 @@ fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::
     Ok(())
 }
 
-fn configure_ninja_build_command(
-    cmd: &mut Command,
-    cli: &Cli,
-    build_file: &Path,
-    targets: &BuildTargets<'_>,
-) -> io::Result<()> {
-    configure_ninja_base(cmd, cli, build_file)?;
-    cmd.args(targets.as_slice());
-    Ok(())
+/// Type of Ninja command to execute.
+enum NinjaCommandType<'a> {
+    /// Build specific targets.
+    Build(&'a BuildTargets<'a>),
+    /// Run a Ninja tool (e.g., "clean").
+    Tool(&'a str),
 }
 
-fn configure_ninja_tool_command(
+fn configure_ninja_command(
     cmd: &mut Command,
     cli: &Cli,
     build_file: &Path,
-    tool: &str,
+    command_type: &NinjaCommandType<'_>,
 ) -> io::Result<()> {
     configure_ninja_base(cmd, cli, build_file)?;
-    cmd.arg("-t").arg(tool);
+    match command_type {
+        NinjaCommandType::Build(targets) => {
+            cmd.args(targets.as_slice());
+        }
+        NinjaCommandType::Tool(tool) => {
+            cmd.arg("-t").arg(tool);
+        }
+    }
     Ok(())
 }
 
@@ -129,6 +133,14 @@ fn log_command_execution(cmd: &Command) {
     );
 }
 
+/// Log, spawn, stream output, and check exit status for a prepared command.
+fn run_command_and_stream(mut cmd: Command) -> io::Result<()> {
+    log_command_execution(&cmd);
+    let child = cmd.spawn()?;
+    let status = spawn_and_stream_output(child)?;
+    check_exit_status(status)
+}
+
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
 /// The function forwards the job count and working directory to Ninja,
@@ -147,11 +159,8 @@ pub fn run_ninja(
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
-    configure_ninja_build_command(&mut cmd, cli, build_file, targets)?;
-    log_command_execution(&cmd);
-    let child = cmd.spawn()?;
-    let status = spawn_and_stream_output(child)?;
-    check_exit_status(status)
+    configure_ninja_command(&mut cmd, cli, build_file, &NinjaCommandType::Build(targets))?;
+    run_command_and_stream(cmd)
 }
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
@@ -166,11 +175,8 @@ pub fn run_ninja(
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
     let mut cmd = Command::new(program);
-    configure_ninja_tool_command(&mut cmd, cli, build_file, tool)?;
-    log_command_execution(&cmd);
-    let child = cmd.spawn()?;
-    let status = spawn_and_stream_output(child)?;
-    check_exit_status(status)
+    configure_ninja_command(&mut cmd, cli, build_file, &NinjaCommandType::Tool(tool))?;
+    run_command_and_stream(cmd)
 }
 
 fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_name: &str) {
