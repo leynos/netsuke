@@ -75,28 +75,38 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// let (dir, ninja_path) = fake_ninja_expect_tool("clean")?;
 /// // ninja_path will succeed only when invoked with `-t clean`
 /// ```
+#[cfg(unix)]
 pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja_expect_tool: create temp dir")?;
     let path = dir.path().join("ninja");
     let mut file = File::create(&path)
         .with_context(|| format!("fake_ninja_expect_tool: create script {}", path.display()))?;
-    // Shell script that iterates through arguments looking for `-t <tool>`
+    // Shell script that validates:
+    // 1. `-t <tool>` is present with the expected tool name
+    // 2. `-f <file>` is present (build file argument)
     writeln!(
         file,
         concat!(
             "#!/bin/sh\n",
             "expected=\"{expected}\"\n",
-            "found=0\n",
+            "found_tool=0\n",
+            "found_file=0\n",
             "prev=\"\"\n",
             "for arg in \"$@\"; do\n",
             "  if [ \"$prev\" = \"-t\" ] && [ \"$arg\" = \"$expected\" ]; then\n",
-            "    found=1\n",
-            "    break\n",
+            "    found_tool=1\n",
+            "  fi\n",
+            "  if [ \"$prev\" = \"-f\" ]; then\n",
+            "    found_file=1\n",
             "  fi\n",
             "  prev=\"$arg\"\n",
             "done\n",
-            "if [ $found -eq 0 ]; then\n",
+            "if [ $found_tool -eq 0 ]; then\n",
             "  echo \"expected -t $expected but did not find it\" >&2\n",
+            "  exit 1\n",
+            "fi\n",
+            "if [ $found_file -eq 0 ]; then\n",
+            "  echo \"expected -f <build_file> but did not find it\" >&2\n",
             "  exit 1\n",
             "fi\n",
             "exit 0"

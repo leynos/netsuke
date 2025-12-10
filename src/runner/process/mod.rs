@@ -88,29 +88,25 @@ fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::
     Ok(())
 }
 
-/// Specifies whether Ninja should run a build or invoke a tool subcommand.
-enum NinjaCommandType<'a> {
-    /// Standard build invocation with optional targets.
-    Build(&'a BuildTargets<'a>),
-    /// Tool invocation via `ninja -t <tool>`.
-    Tool(&'a str),
-}
-
-fn configure_ninja_command(
+fn configure_ninja_build_command(
     cmd: &mut Command,
     cli: &Cli,
     build_file: &Path,
-    command_type: &NinjaCommandType<'_>,
+    targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     configure_ninja_base(cmd, cli, build_file)?;
-    match command_type {
-        NinjaCommandType::Build(targets) => {
-            cmd.args(targets.as_slice());
-        }
-        NinjaCommandType::Tool(tool) => {
-            cmd.arg("-t").arg(tool);
-        }
-    }
+    cmd.args(targets.as_slice());
+    Ok(())
+}
+
+fn configure_ninja_tool_command(
+    cmd: &mut Command,
+    cli: &Cli,
+    build_file: &Path,
+    tool: &str,
+) -> io::Result<()> {
+    configure_ninja_base(cmd, cli, build_file)?;
+    cmd.arg("-t").arg(tool);
     Ok(())
 }
 
@@ -151,7 +147,7 @@ pub fn run_ninja(
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(program);
-    configure_ninja_command(&mut cmd, cli, build_file, &NinjaCommandType::Build(targets))?;
+    configure_ninja_build_command(&mut cmd, cli, build_file, targets)?;
     log_command_execution(&cmd);
     let child = cmd.spawn()?;
     let status = spawn_and_stream_output(child)?;
@@ -170,7 +166,7 @@ pub fn run_ninja(
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
     let mut cmd = Command::new(program);
-    configure_ninja_command(&mut cmd, cli, build_file, &NinjaCommandType::Tool(tool))?;
+    configure_ninja_tool_command(&mut cmd, cli, build_file, tool)?;
     log_command_execution(&cmd);
     let child = cmd.spawn()?;
     let status = spawn_and_stream_output(child)?;

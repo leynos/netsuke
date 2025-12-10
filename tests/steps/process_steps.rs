@@ -62,6 +62,7 @@ fn fake_ninja_check(world: &mut CliWorld) -> Result<()> {
 }
 
 /// Creates a fake ninja executable that expects the `-t clean` tool invocation.
+#[cfg(unix)]
 #[given("a fake ninja executable that expects the clean tool")]
 fn fake_ninja_expects_clean(world: &mut CliWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_expect_tool("clean")?;
@@ -99,8 +100,9 @@ fn cli_uses_temp_dir(world: &mut CliWorld) -> Result<()> {
 
 /// Prepares the CLI for execution by ensuring the manifest exists and updating paths.
 ///
-/// When `clear_directory` is `true`, sets `cli.directory = None` after updating the file path.
-fn prepare_cli(world: &mut CliWorld, clear_directory: bool) -> Result<()> {
+/// Keeps `cli.directory` unchanged, suitable for direct ninja invocations that
+/// use the directory setting.
+fn prepare_cli_with_directory(world: &mut CliWorld) -> Result<()> {
     let dir = world
         .temp
         .as_ref()
@@ -116,11 +118,21 @@ fn prepare_cli(world: &mut CliWorld, clear_directory: bool) -> Result<()> {
     let manifest = ensure_manifest_exists(temp_path, manifest_path)
         .context("ensure manifest exists in temp workspace")?;
     cli.file = manifest.into_std_path_buf();
-    if clear_directory {
-        // Clear directory since file is now an absolute path; otherwise
-        // resolve_manifest_path would incorrectly join them.
-        cli.directory = None;
-    }
+    Ok(())
+}
+
+/// Prepares the CLI for execution with an absolute file path.
+///
+/// Sets `cli.directory = None` after updating the file path, since the file is
+/// now absolute. This prevents `resolve_manifest_path` from incorrectly joining
+/// the directory and file paths.
+fn prepare_cli_with_absolute_file(world: &mut CliWorld) -> Result<()> {
+    prepare_cli_with_directory(world)?;
+    let cli = world
+        .cli
+        .as_mut()
+        .context("CLI configuration has not been initialised")?;
+    cli.directory = None;
     Ok(())
 }
 
@@ -160,7 +172,7 @@ fn build_dir_exists(world: &mut CliWorld) -> Result<()> {
 )]
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) -> Result<()> {
-    prepare_cli(world, false)?;
+    prepare_cli_with_directory(world)?;
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)
     } else {
@@ -182,9 +194,10 @@ fn run(world: &mut CliWorld) -> Result<()> {
 /// This step runs the full `runner::run` function with the Clean command,
 /// ensuring the manifest exists first and updating the world's `run_status`
 /// and `run_error` fields based on the execution outcome.
+#[cfg(unix)]
 #[when("the clean process is run")]
 fn run_clean(world: &mut CliWorld) -> Result<()> {
-    prepare_cli(world, true)?;
+    prepare_cli_with_absolute_file(world)?;
     let cli = world
         .cli
         .as_ref()
