@@ -94,6 +94,27 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
     Ok(())
 }
 
+/// Helper: test that a command fails when ninja exits with non-zero status
+#[expect(clippy::expect_used, reason = "test helper uses expect_err for clarity")]
+fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
+    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        command,
+        ..Cli::default()
+    };
+
+    let err = run(&cli).expect_err("expected run to fail when ninja exits non-zero");
+    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    ensure!(
+        messages.iter().any(|m| m.contains("ninja exited")),
+        "error should report ninja exit status, got: {messages:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn run_ninja_not_found() -> Result<()> {
     let cli = Cli::default();
@@ -267,21 +288,7 @@ fn run_succeeds_with_checking_ninja_env() -> Result<()> {
 
 #[rstest]
 fn run_fails_with_failing_ninja_env() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        ..Cli::default()
-    };
-
-    let err = run(&cli).expect_err("expected run to fail when NINJA_ENV ninja exits non-zero");
-    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
-    ensure!(
-        messages.iter().any(|m| m.contains("ninja exited")),
-        "error should report ninja exit status, got: {messages:?}"
-    );
-    Ok(())
+    assert_ninja_failure_propagates(None)
 }
 
 // --- Clean subcommand tests ---
@@ -316,22 +323,7 @@ fn run_clean_subcommand_succeeds() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn run_clean_fails_with_failing_ninja() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Clean),
-        ..Cli::default()
-    };
-
-    let err = run(&cli).expect_err("expected clean to fail when ninja exits non-zero");
-    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
-    ensure!(
-        messages.iter().any(|m| m.contains("ninja exited")),
-        "error should report ninja exit status, got: {messages:?}"
-    );
-    Ok(())
+    assert_ninja_failure_propagates(Some(Commands::Clean))
 }
 
 #[cfg(unix)]

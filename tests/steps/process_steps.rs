@@ -97,6 +97,47 @@ fn cli_uses_temp_dir(world: &mut CliWorld) -> Result<()> {
     Ok(())
 }
 
+/// Prepares the CLI for execution by ensuring the manifest exists and updating paths.
+///
+/// When `clear_directory` is `true`, sets `cli.directory = None` after updating the file path.
+fn prepare_cli(world: &mut CliWorld, clear_directory: bool) -> Result<()> {
+    let dir = world
+        .temp
+        .as_ref()
+        .context("CLI temp directory has not been initialised")?;
+    let cli = world
+        .cli
+        .as_mut()
+        .context("CLI configuration has not been initialised")?;
+    let temp_path = Utf8Path::from_path(dir.path())
+        .ok_or_else(|| anyhow!("temporary directory path is not valid UTF-8"))?;
+    let manifest_path = Utf8Path::from_path(&cli.file)
+        .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))?;
+    let manifest = ensure_manifest_exists(temp_path, manifest_path)
+        .context("ensure manifest exists in temp workspace")?;
+    cli.file = manifest.into_std_path_buf();
+    if clear_directory {
+        // Clear directory since file is now an absolute path; otherwise
+        // resolve_manifest_path would incorrectly join them.
+        cli.directory = None;
+    }
+    Ok(())
+}
+
+/// Records the result of a command execution in the test world.
+fn record_result(world: &mut CliWorld, result: Result<(), String>) {
+    match result {
+        Ok(()) => {
+            world.run_status = Some(true);
+            world.run_error = None;
+        }
+        Err(e) => {
+            world.run_status = Some(false);
+            world.run_error = Some(e);
+        }
+    }
+}
+
 /// Creates a directory named `build.ninja` in the temporary working directory.
 #[given("a directory named build.ninja exists")]
 fn build_dir_exists(world: &mut CliWorld) -> Result<()> {
@@ -119,23 +160,7 @@ fn build_dir_exists(world: &mut CliWorld) -> Result<()> {
 )]
 #[when("the ninja process is run")]
 fn run(world: &mut CliWorld) -> Result<()> {
-    let dir = world
-        .temp
-        .as_ref()
-        .context("CLI temp directory has not been initialised")?;
-    {
-        let cli = world
-            .cli
-            .as_mut()
-            .context("CLI configuration has not been initialised")?;
-        let temp_path = Utf8Path::from_path(dir.path())
-            .ok_or_else(|| anyhow!("temporary directory path is not valid UTF-8"))?;
-        let manifest_path = Utf8Path::from_path(&cli.file)
-            .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))?;
-        let manifest = ensure_manifest_exists(temp_path, manifest_path)
-            .context("ensure manifest exists in temp workspace")?;
-        cli.file = manifest.into_std_path_buf();
-    }
+    prepare_cli(world, false)?;
     let program = if let Some(ninja) = &world.ninja {
         Path::new(ninja)
     } else {
@@ -146,16 +171,9 @@ fn run(world: &mut CliWorld) -> Result<()> {
         .cli
         .as_ref()
         .context("CLI configuration has not been initialised")?;
-    match runner::run_ninja(program, cli, Path::new("build.ninja"), &targets) {
-        Ok(()) => {
-            world.run_status = Some(true);
-            world.run_error = None;
-        }
-        Err(e) => {
-            world.run_status = Some(false);
-            world.run_error = Some(e.to_string());
-        }
-    }
+    let result = runner::run_ninja(program, cli, Path::new("build.ninja"), &targets)
+        .map_err(|e| e.to_string());
+    record_result(world, result);
     Ok(())
 }
 
@@ -166,41 +184,14 @@ fn run(world: &mut CliWorld) -> Result<()> {
 /// and `run_error` fields based on the execution outcome.
 #[when("the clean process is run")]
 fn run_clean(world: &mut CliWorld) -> Result<()> {
-    let dir = world
-        .temp
-        .as_ref()
-        .context("CLI temp directory has not been initialised")?;
-    {
-        let cli = world
-            .cli
-            .as_mut()
-            .context("CLI configuration has not been initialised")?;
-        let temp_path = Utf8Path::from_path(dir.path())
-            .ok_or_else(|| anyhow!("temporary directory path is not valid UTF-8"))?;
-        let manifest_path = Utf8Path::from_path(&cli.file)
-            .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))?;
-        let manifest = ensure_manifest_exists(temp_path, manifest_path)
-            .context("ensure manifest exists in temp workspace")?;
-        cli.file = manifest.into_std_path_buf();
-        // Clear directory since file is now an absolute path; otherwise
-        // resolve_manifest_path would incorrectly join them.
-        cli.directory = None;
-    }
+    prepare_cli(world, true)?;
     let cli = world
         .cli
         .as_ref()
         .context("CLI configuration has not been initialised")?;
-    match runner::run(cli) {
-        Ok(()) => {
-            world.run_status = Some(true);
-            world.run_error = None;
-        }
-        Err(e) => {
-            world.run_status = Some(false);
-            // Use alternate formatting to capture the full anyhow error chain.
-            world.run_error = Some(format!("{e:#}"));
-        }
-    }
+    // Use alternate formatting to capture the full anyhow error chain.
+    let result = runner::run(cli).map_err(|e| format!("{e:#}"));
+    record_result(world, result);
     Ok(())
 }
 
