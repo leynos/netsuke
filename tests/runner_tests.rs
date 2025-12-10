@@ -118,24 +118,34 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-fn run_ninja_not_found() -> Result<()> {
-    let cli = Cli::default();
-    let targets = BuildTargets::default();
-    let err = run_ninja(
-        Path::new("does-not-exist"),
-        &cli,
-        Path::new("build.ninja"),
-        &targets,
-    )
-    .err()
-    .context("expected run_ninja to fail when binary is missing")?;
+/// Helper: assert that a function fails with `NotFound` when the ninja binary is missing
+fn assert_binary_not_found<F>(f: F) -> Result<()>
+where
+    F: FnOnce() -> std::io::Result<()>,
+{
+    let err = f()
+        .err()
+        .context("expected function to fail when binary is missing")?;
     ensure!(
         err.kind() == std::io::ErrorKind::NotFound,
         "expected NotFound error, got {:?}",
         err.kind()
     );
     Ok(())
+}
+
+#[rstest]
+fn run_ninja_not_found() -> Result<()> {
+    assert_binary_not_found(|| {
+        let cli = Cli::default();
+        let targets = BuildTargets::default();
+        run_ninja(
+            Path::new("does-not-exist"),
+            &cli,
+            Path::new("build.ninja"),
+            &targets,
+        )
+    })
 }
 
 #[rstest]
@@ -332,21 +342,15 @@ fn run_clean_fails_with_failing_ninja() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn run_ninja_tool_not_found() -> Result<()> {
-    let cli = Cli::default();
-    let err = run_ninja_tool(
-        Path::new("does-not-exist"),
-        &cli,
-        Path::new("build.ninja"),
-        "clean",
-    )
-    .err()
-    .context("expected run_ninja_tool to fail when binary is missing")?;
-    ensure!(
-        err.kind() == std::io::ErrorKind::NotFound,
-        "expected NotFound error, got {:?}",
-        err.kind()
-    );
-    Ok(())
+    assert_binary_not_found(|| {
+        let cli = Cli::default();
+        run_ninja_tool(
+            Path::new("does-not-exist"),
+            &cli,
+            Path::new("build.ninja"),
+            "clean",
+        )
+    })
 }
 
 #[cfg(unix)]
