@@ -330,6 +330,11 @@ fn run_clean_subcommand_succeeds() -> Result<()> {
     };
 
     run(&cli).context("expected clean subcommand to succeed")?;
+
+    ensure!(
+        !temp.path().join("build.ninja").exists(),
+        "clean subcommand should not leave build.ninja in project directory"
+    );
     Ok(())
 }
 
@@ -339,7 +344,6 @@ fn run_clean_fails_with_failing_ninja() -> Result<()> {
     assert_ninja_failure_propagates(Some(Commands::Clean))
 }
 
-#[cfg(unix)]
 #[rstest]
 fn run_ninja_tool_not_found() -> Result<()> {
     assert_binary_not_found(|| {

@@ -278,3 +278,45 @@ pub fn fake_ninja_expect_tool_with_jobs(
 ) -> Result<(TempDir, PathBuf)> {
     anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Verify that the fake ninja script validates `-C <directory>` correctly.
+    #[cfg(unix)]
+    #[test]
+    fn fake_ninja_validates_directory_flag() -> Result<()> {
+        use anyhow::Context;
+        use std::process::Command;
+
+        let (dir, ninja_path) =
+            fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), None, Some("/path/to/build"))?;
+
+        // Should succeed when `-C /path/to/build` is provided
+        let status = Command::new(&ninja_path)
+            .args(["-f", "build.ninja", "-C", "/path/to/build", "-t", "clean"])
+            .current_dir(dir.path())
+            .status()
+            .context("execute fake ninja with -C flag")?;
+        assert!(status.success(), "expected success with correct -C value");
+
+        // Should fail when `-C` is provided with wrong value
+        let status = Command::new(&ninja_path)
+            .args(["-f", "build.ninja", "-C", "/wrong/path", "-t", "clean"])
+            .current_dir(dir.path())
+            .status()
+            .context("execute fake ninja with wrong -C value")?;
+        assert!(!status.success(), "expected failure with wrong -C value");
+
+        // Should fail when `-C` is missing entirely
+        let status = Command::new(&ninja_path)
+            .args(["-f", "build.ninja", "-t", "clean"])
+            .current_dir(dir.path())
+            .status()
+            .context("execute fake ninja without -C flag")?;
+        assert!(!status.success(), "expected failure without -C flag");
+
+        Ok(())
+    }
+}

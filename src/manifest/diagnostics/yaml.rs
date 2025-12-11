@@ -69,6 +69,14 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
+// Allow unused_assignments: miette/thiserror derive macros generate code that
+// triggers false positives in some Rust versions. Using `allow` instead of
+// `expect` since this warning is version-dependent.
+#[allow(
+    clippy::allow_attributes,
+    unused_assignments,
+    reason = "version-dependent false positive from miette/thiserror derive expansion"
+)]
 struct YamlDiagnostic {
     #[source_code]
     src: NamedSource<String>,
