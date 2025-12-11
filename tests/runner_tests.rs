@@ -6,7 +6,7 @@ use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
 use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
 use test_support::{
-    check_ninja,
+    check_ninja::{self, ToolName},
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env, prepend_dir_to_path},
     fake_ninja,
 };
@@ -311,7 +311,7 @@ fn run_fails_with_failing_ninja_env() -> Result<()> {
 /// Returns: (tempdir holding ninja, path to ninja, `NINJA_ENV` guard)
 #[fixture]
 fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
-    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool("clean")?;
+    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))

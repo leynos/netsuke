@@ -20,7 +20,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use test_support::{
-    check_ninja, ensure_manifest_exists,
+    check_ninja::{self, ToolName},
+    ensure_manifest_exists,
     env::{self, EnvMut},
     fake_ninja,
 };
@@ -65,7 +66,7 @@ fn fake_ninja_check(world: &mut CliWorld) -> Result<()> {
 #[cfg(unix)]
 #[given("a fake ninja executable that expects the clean tool")]
 fn fake_ninja_expects_clean(world: &mut CliWorld) -> Result<()> {
-    let (dir, path) = check_ninja::fake_ninja_expect_tool("clean")?;
+    let (dir, path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path)
 }
@@ -74,7 +75,8 @@ fn fake_ninja_expects_clean(world: &mut CliWorld) -> Result<()> {
 #[cfg(unix)]
 #[given(expr = "a fake ninja executable that expects clean with {int} jobs")]
 fn fake_ninja_expects_clean_with_jobs(world: &mut CliWorld, jobs: u32) -> Result<()> {
-    let (dir, path) = check_ninja::fake_ninja_expect_tool_with_jobs("clean", Some(jobs))?;
+    let (dir, path) =
+        check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), Some(jobs))?;
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path)
 }
