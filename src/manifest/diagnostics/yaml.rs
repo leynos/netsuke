@@ -77,20 +77,25 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
-#[allow(unfulfilled_lint_expectations)]
-#[expect(
-    unused_assignments,
-    reason = "false positive from miette/thiserror derive expansion"
-)]
 struct YamlDiagnostic {
     #[source_code]
+    #[allow(unfulfilled_lint_expectations)]
+    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     src: NamedSource<String>,
     #[label("parse error here")]
+    #[allow(unfulfilled_lint_expectations)]
+    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     span: Option<SourceSpan>,
     #[help]
+    #[allow(unfulfilled_lint_expectations)]
+    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     help: Option<String>,
     #[source]
+    #[allow(unfulfilled_lint_expectations)]
+    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     source: YamlError,
+    #[allow(unfulfilled_lint_expectations)]
+    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     message: String,
 }
 
