@@ -74,28 +74,22 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
     SourceSpan::new(start.into(), len.into())
 }
 
+// FIXME: remove unused_assignments suppression once miette/thiserror derive
+// false positive is fixed upstream. The lint fires in some Rust versions but
+// not others due to how the derive macros expand field assignments.
+#[allow(unused_assignments)]
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
 struct YamlDiagnostic {
     #[source_code]
-    #[allow(unfulfilled_lint_expectations)]
-    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     src: NamedSource<String>,
     #[label("parse error here")]
-    #[allow(unfulfilled_lint_expectations)]
-    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     span: Option<SourceSpan>,
     #[help]
-    #[allow(unfulfilled_lint_expectations)]
-    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     help: Option<String>,
     #[source]
-    #[allow(unfulfilled_lint_expectations)]
-    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     source: YamlError,
-    #[allow(unfulfilled_lint_expectations)]
-    #[expect(unused_assignments, reason = "miette/thiserror derive false positive")]
     message: String,
 }
 
