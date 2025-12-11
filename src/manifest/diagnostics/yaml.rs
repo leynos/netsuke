@@ -5,6 +5,17 @@
 //! mistakes such as tab indentation. The public entry point is
 //! [`map_yaml_error`], which accepts a manifest name and source buffer to
 //! generate actionable error messages for callers.
+
+// Module-level suppression for version-dependent lint false positives from
+// miette/thiserror derive macros. The unused_assignments lint fires in some
+// Rust versions but not others. Since `#[expect]` fails when the lint doesn't
+// fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
+// `#[allow]` here. FIXME: remove once upstream is fixed.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason
+)]
+
 use super::{ManifestName, ManifestSource};
 use crate::manifest::hints::YAML_HINTS;
 use miette::{Diagnostic, NamedSource, SourceSpan};
@@ -69,13 +80,10 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
-// Allow unused_assignments: miette/thiserror derive macros generate code that
-// triggers false positives in some Rust versions. Using `allow` instead of
-// `expect` since this warning is version-dependent.
-#[allow(
-    clippy::allow_attributes,
+#[allow(unfulfilled_lint_expectations)]
+#[expect(
     unused_assignments,
-    reason = "version-dependent false positive from miette/thiserror derive expansion"
+    reason = "false positive from miette/thiserror derive expansion"
 )]
 struct YamlDiagnostic {
     #[source_code]

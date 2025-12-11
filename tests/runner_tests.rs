@@ -94,11 +94,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
     Ok(())
 }
 
-/// Helper: test that a command fails when ninja exits with non-zero status
-#[expect(
-    clippy::expect_used,
-    reason = "test helper uses expect_err for clarity"
-)]
+/// Helper: test that a command fails when ninja exits with non-zero status.
 fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
     let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
@@ -109,7 +105,9 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
         ..Cli::default()
     };
 
-    let err = run(&cli).expect_err("expected run to fail when ninja exits non-zero");
+    let Err(err) = run(&cli) else {
+        bail!("expected run to fail when ninja exits non-zero");
+    };
     let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
     ensure!(
         messages.iter().any(|m| m.contains("ninja exited")),
