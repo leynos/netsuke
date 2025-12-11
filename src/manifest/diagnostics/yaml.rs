@@ -11,10 +11,7 @@
 // Rust versions but not others. Since `#[expect]` fails when the lint doesn't
 // fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
 // `#[allow]` here. FIXME: remove once upstream is fixed.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason
-)]
+#![allow(clippy::allow_attributes, clippy::allow_attributes_without_reason)]
 
 use super::{ManifestName, ManifestSource};
 use crate::manifest::hints::YAML_HINTS;
