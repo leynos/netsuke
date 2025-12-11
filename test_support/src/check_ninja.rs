@@ -61,7 +61,8 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// Create a fake Ninja that validates `-t <tool>` was invoked with the expected tool name.
 ///
 /// The script scans command-line arguments for `-t <tool>` and exits with status `0`
-/// if the expected tool is found, otherwise `1`.
+/// if the expected tool is found, otherwise `1`. It also validates that `-f <file>`
+/// is present.
 ///
 /// # Arguments
 ///
@@ -77,18 +78,75 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// ```
 #[cfg(unix)]
 pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)> {
+    fake_ninja_expect_tool_with_jobs(expected_tool, None)
+}
+
+/// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>`.
+///
+/// The script scans command-line arguments for `-t <tool>`, `-f <file>`, and
+/// optionally `-j <jobs>`. It exits with status `0` if all expected arguments
+/// are found, otherwise `1`.
+///
+/// # Arguments
+///
+/// * `expected_tool` - The tool name that should follow `-t` (e.g., `"clean"`)
+/// * `expected_jobs` - Optional job count that should follow `-j`
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use test_support::check_ninja::fake_ninja_expect_tool_with_jobs;
+///
+/// let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs("clean", Some(4))?;
+/// // ninja_path will succeed only when invoked with `-t clean -j 4`
+/// ```
+#[cfg(unix)]
+pub fn fake_ninja_expect_tool_with_jobs(
+    expected_tool: &str,
+    expected_jobs: Option<u32>,
+) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja_expect_tool: create temp dir")?;
     let path = dir.path().join("ninja");
     let mut file = File::create(&path)
         .with_context(|| format!("fake_ninja_expect_tool: create script {}", path.display()))?;
-    // Shell script that validates:
-    // 1. `-t <tool>` is present with the expected tool name
-    // 2. `-f <file>` is present (build file argument)
+
+    // Build the job validation snippet conditionally
+    let jobs_check = if let Some(jobs) = expected_jobs {
+        format!(
+            concat!("expected_jobs=\"{jobs}\"\n", "found_jobs=0\n",),
+            jobs = jobs
+        )
+    } else {
+        String::new()
+    };
+
+    let jobs_loop_check = if expected_jobs.is_some() {
+        concat!(
+            "  if [ \"$prev\" = \"-j\" ] && [ \"$arg\" = \"$expected_jobs\" ]; then\n",
+            "    found_jobs=1\n",
+            "  fi\n",
+        )
+    } else {
+        ""
+    };
+
+    let jobs_validation = if expected_jobs.is_some() {
+        concat!(
+            "if [ $found_jobs -eq 0 ]; then\n",
+            "  echo \"expected -j $expected_jobs but did not find it\" >&2\n",
+            "  exit 1\n",
+            "fi\n",
+        )
+    } else {
+        ""
+    };
+
     writeln!(
         file,
         concat!(
             "#!/bin/sh\n",
             "expected=\"{expected}\"\n",
+            "{jobs_check}",
             "found_tool=0\n",
             "found_file=0\n",
             "prev=\"\"\n",
@@ -99,6 +157,7 @@ pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)>
             "  if [ \"$prev\" = \"-f\" ]; then\n",
             "    found_file=1\n",
             "  fi\n",
+            "{jobs_loop_check}",
             "  prev=\"$arg\"\n",
             "done\n",
             "if [ $found_tool -eq 0 ]; then\n",
@@ -109,9 +168,13 @@ pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)>
             "  echo \"expected -f <build_file> but did not find it\" >&2\n",
             "  exit 1\n",
             "fi\n",
+            "{jobs_validation}",
             "exit 0"
         ),
-        expected = expected_tool
+        expected = expected_tool,
+        jobs_check = jobs_check,
+        jobs_loop_check = jobs_loop_check,
+        jobs_validation = jobs_validation,
     )
     .with_context(|| format!("fake_ninja_expect_tool: write script {}", path.display()))?;
     make_script_executable(&path, "fake_ninja_expect_tool")?;
@@ -122,4 +185,13 @@ pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)>
 #[cfg(not(unix))]
 pub fn fake_ninja_expect_tool(_expected_tool: &str) -> Result<(TempDir, PathBuf)> {
     anyhow::bail!("fake_ninja_expect_tool is only supported on Unix platforms")
+}
+
+/// Stub for non-Unix platforms that returns an error.
+#[cfg(not(unix))]
+pub fn fake_ninja_expect_tool_with_jobs(
+    _expected_tool: &str,
+    _expected_jobs: Option<u32>,
+) -> Result<(TempDir, PathBuf)> {
+    anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
 }

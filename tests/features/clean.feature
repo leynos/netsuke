@@ -22,7 +22,7 @@ Feature: Clean subcommand execution
     Then the command should succeed
 
   Scenario: Clean respects jobs flag
-    Given a fake ninja executable that expects the clean tool
+    Given a fake ninja executable that expects clean with 4 jobs
     And the CLI is parsed with "-j 4 clean"
     And the CLI uses the temporary directory
     When the clean process is run
