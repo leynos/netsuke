@@ -76,7 +76,7 @@ fn fake_ninja_expects_clean(world: &mut CliWorld) -> Result<()> {
 #[given(expr = "a fake ninja executable that expects clean with {int} jobs")]
 fn fake_ninja_expects_clean_with_jobs(world: &mut CliWorld, jobs: u32) -> Result<()> {
     let (dir, path) =
-        check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), Some(jobs))?;
+        check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), Some(jobs), None)?;
     let env = env::mocked_path_env();
     install_test_ninja(&env, world, dir, path)
 }

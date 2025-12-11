@@ -100,12 +100,16 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
 /// ```
 #[cfg(unix)]
 pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathBuf)> {
-    fake_ninja_expect_tool_with_jobs(expected_tool, None)
+    fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
 
 /// Builds the shell script content for validating ninja tool invocation.
 #[cfg(unix)]
-fn build_tool_validation_script(expected_tool: ToolName, expected_jobs: Option<u32>) -> String {
+fn build_tool_validation_script(
+    expected_tool: ToolName,
+    expected_jobs: Option<u32>,
+    expected_directory: Option<&str>,
+) -> String {
     let expected = expected_tool.as_str();
     let jobs_check = if let Some(jobs) = expected_jobs {
         format!(
@@ -116,10 +120,29 @@ fn build_tool_validation_script(expected_tool: ToolName, expected_jobs: Option<u
         String::new()
     };
 
+    let dir_check = if let Some(dir) = expected_directory {
+        format!(
+            concat!("expected_dir=\"{dir}\"\n", "found_dir=0\n"),
+            dir = dir
+        )
+    } else {
+        String::new()
+    };
+
     let jobs_loop_check = if expected_jobs.is_some() {
         concat!(
             "  if [ \"$prev\" = \"-j\" ] && [ \"$arg\" = \"$expected_jobs\" ]; then\n",
             "    found_jobs=1\n",
+            "  fi\n",
+        )
+    } else {
+        ""
+    };
+
+    let dir_loop_check = if expected_directory.is_some() {
+        concat!(
+            "  if [ \"$prev\" = \"-C\" ] && [ \"$arg\" = \"$expected_dir\" ]; then\n",
+            "    found_dir=1\n",
             "  fi\n",
         )
     } else {
@@ -137,11 +160,23 @@ fn build_tool_validation_script(expected_tool: ToolName, expected_jobs: Option<u
         ""
     };
 
+    let dir_validation = if expected_directory.is_some() {
+        concat!(
+            "if [ $found_dir -eq 0 ]; then\n",
+            "  echo \"expected -C $expected_dir but did not find it\" >&2\n",
+            "  exit 1\n",
+            "fi\n",
+        )
+    } else {
+        ""
+    };
+
     format!(
         concat!(
             "#!/bin/sh\n",
             "expected=\"{expected}\"\n",
             "{jobs_check}",
+            "{dir_check}",
             "found_tool=0\n",
             "found_file=0\n",
             "prev=\"\"\n",
@@ -153,6 +188,7 @@ fn build_tool_validation_script(expected_tool: ToolName, expected_jobs: Option<u
             "    found_file=1\n",
             "  fi\n",
             "{jobs_loop_check}",
+            "{dir_loop_check}",
             "  prev=\"$arg\"\n",
             "done\n",
             "if [ $found_tool -eq 0 ]; then\n",
@@ -164,38 +200,48 @@ fn build_tool_validation_script(expected_tool: ToolName, expected_jobs: Option<u
             "  exit 1\n",
             "fi\n",
             "{jobs_validation}",
+            "{dir_validation}",
             "exit 0\n"
         ),
         expected = expected,
         jobs_check = jobs_check,
+        dir_check = dir_check,
         jobs_loop_check = jobs_loop_check,
+        dir_loop_check = dir_loop_check,
         jobs_validation = jobs_validation,
+        dir_validation = dir_validation,
     )
 }
 
-/// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>`.
+/// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>` and `-C <dir>`.
 ///
 /// The script scans command-line arguments for `-t <tool>`, `-f <file>`, and
-/// optionally `-j <jobs>`. It exits with status `0` if all expected arguments
-/// are found, otherwise `1`.
+/// optionally `-j <jobs>` and `-C <directory>`. It exits with status `0` if all
+/// expected arguments are found, otherwise `1`.
 ///
 /// # Arguments
 ///
 /// * `expected_tool` - The tool name that should follow `-t` (e.g., `"clean"`)
 /// * `expected_jobs` - Optional job count that should follow `-j`
+/// * `expected_directory` - Optional working directory that should follow `-C`
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// use test_support::check_ninja::{fake_ninja_expect_tool_with_jobs, ToolName};
 ///
-/// let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), Some(4))?;
-/// // ninja_path will succeed only when invoked with `-t clean -j 4`
+/// let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs(
+///     ToolName::new("clean"),
+///     Some(4),
+///     Some("/path/to/build"),
+/// )?;
+/// // ninja_path will succeed only when invoked with `-t clean -j 4 -C /path/to/build`
 /// ```
 #[cfg(unix)]
 pub fn fake_ninja_expect_tool_with_jobs(
     expected_tool: ToolName,
     expected_jobs: Option<u32>,
+    expected_directory: Option<&str>,
 ) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja_expect_tool_with_jobs: create temp dir")?;
     let path = dir.path().join("ninja");
@@ -205,7 +251,8 @@ pub fn fake_ninja_expect_tool_with_jobs(
             path.display()
         )
     })?;
-    let script_content = build_tool_validation_script(expected_tool, expected_jobs);
+    let script_content =
+        build_tool_validation_script(expected_tool, expected_jobs, expected_directory);
     write!(file, "{}", script_content).with_context(|| {
         format!(
             "fake_ninja_expect_tool_with_jobs: write script {}",
@@ -227,6 +274,7 @@ pub fn fake_ninja_expect_tool(_expected_tool: ToolName) -> Result<(TempDir, Path
 pub fn fake_ninja_expect_tool_with_jobs(
     _expected_tool: ToolName,
     _expected_jobs: Option<u32>,
+    _expected_directory: Option<&str>,
 ) -> Result<(TempDir, PathBuf)> {
     anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
 }
