@@ -3,12 +3,12 @@
 use anyhow::{Context, Result};
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Make a script file executable on Unix platforms.
 #[cfg(unix)]
-fn make_script_executable(path: &PathBuf, context: &str) -> Result<()> {
+fn make_script_executable(path: &Path, context: &str) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let mut perms = fs::metadata(path)
         .with_context(|| format!("{context}: read metadata {}", path.display()))?
@@ -20,7 +20,7 @@ fn make_script_executable(path: &PathBuf, context: &str) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn make_script_executable(_path: &PathBuf, _context: &str) -> Result<()> {
+fn make_script_executable(_path: &Path, _context: &str) -> Result<()> {
     Ok(())
 }
 
