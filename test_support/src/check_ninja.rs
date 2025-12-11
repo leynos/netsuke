@@ -81,36 +81,9 @@ pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)>
     fake_ninja_expect_tool_with_jobs(expected_tool, None)
 }
 
-/// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>`.
-///
-/// The script scans command-line arguments for `-t <tool>`, `-f <file>`, and
-/// optionally `-j <jobs>`. It exits with status `0` if all expected arguments
-/// are found, otherwise `1`.
-///
-/// # Arguments
-///
-/// * `expected_tool` - The tool name that should follow `-t` (e.g., `"clean"`)
-/// * `expected_jobs` - Optional job count that should follow `-j`
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use test_support::check_ninja::fake_ninja_expect_tool_with_jobs;
-///
-/// let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs("clean", Some(4))?;
-/// // ninja_path will succeed only when invoked with `-t clean -j 4`
-/// ```
+/// Builds the shell script content for validating ninja tool invocation.
 #[cfg(unix)]
-pub fn fake_ninja_expect_tool_with_jobs(
-    expected_tool: &str,
-    expected_jobs: Option<u32>,
-) -> Result<(TempDir, PathBuf)> {
-    let dir = TempDir::new().context("fake_ninja_expect_tool: create temp dir")?;
-    let path = dir.path().join("ninja");
-    let mut file = File::create(&path)
-        .with_context(|| format!("fake_ninja_expect_tool: create script {}", path.display()))?;
-
-    // Build the job validation snippet conditionally
+fn build_tool_validation_script(expected_tool: &str, expected_jobs: Option<u32>) -> String {
     let jobs_check = if let Some(jobs) = expected_jobs {
         format!(
             concat!("expected_jobs=\"{jobs}\"\n", "found_jobs=0\n",),
@@ -141,8 +114,7 @@ pub fn fake_ninja_expect_tool_with_jobs(
         ""
     };
 
-    writeln!(
-        file,
+    format!(
         concat!(
             "#!/bin/sh\n",
             "expected=\"{expected}\"\n",
@@ -169,14 +141,46 @@ pub fn fake_ninja_expect_tool_with_jobs(
             "  exit 1\n",
             "fi\n",
             "{jobs_validation}",
-            "exit 0"
+            "exit 0\n"
         ),
         expected = expected_tool,
         jobs_check = jobs_check,
         jobs_loop_check = jobs_loop_check,
         jobs_validation = jobs_validation,
     )
-    .with_context(|| format!("fake_ninja_expect_tool: write script {}", path.display()))?;
+}
+
+/// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>`.
+///
+/// The script scans command-line arguments for `-t <tool>`, `-f <file>`, and
+/// optionally `-j <jobs>`. It exits with status `0` if all expected arguments
+/// are found, otherwise `1`.
+///
+/// # Arguments
+///
+/// * `expected_tool` - The tool name that should follow `-t` (e.g., `"clean"`)
+/// * `expected_jobs` - Optional job count that should follow `-j`
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use test_support::check_ninja::fake_ninja_expect_tool_with_jobs;
+///
+/// let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs("clean", Some(4))?;
+/// // ninja_path will succeed only when invoked with `-t clean -j 4`
+/// ```
+#[cfg(unix)]
+pub fn fake_ninja_expect_tool_with_jobs(
+    expected_tool: &str,
+    expected_jobs: Option<u32>,
+) -> Result<(TempDir, PathBuf)> {
+    let dir = TempDir::new().context("fake_ninja_expect_tool: create temp dir")?;
+    let path = dir.path().join("ninja");
+    let mut file = File::create(&path)
+        .with_context(|| format!("fake_ninja_expect_tool: create script {}", path.display()))?;
+    let script_content = build_tool_validation_script(expected_tool, expected_jobs);
+    write!(file, "{}", script_content)
+        .with_context(|| format!("fake_ninja_expect_tool: write script {}", path.display()))?;
     make_script_executable(&path, "fake_ninja_expect_tool")?;
     Ok((dir, path))
 }
