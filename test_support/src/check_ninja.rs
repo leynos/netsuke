@@ -117,3 +117,9 @@ pub fn fake_ninja_expect_tool(expected_tool: &str) -> Result<(TempDir, PathBuf)>
     make_script_executable(&path, "fake_ninja_expect_tool")?;
     Ok((dir, path))
 }
+
+/// Stub for non-Unix platforms that returns an error.
+#[cfg(not(unix))]
+pub fn fake_ninja_expect_tool(_expected_tool: &str) -> Result<(TempDir, PathBuf)> {
+    anyhow::bail!("fake_ninja_expect_tool is only supported on Unix platforms")
+}
