@@ -103,6 +103,101 @@ pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathB
     fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
 
+/// Builds the initialisation block for an optional flag validation.
+#[cfg(unix)]
+fn build_flag_init(var_name: &str, expected_value: &str) -> String {
+    format!("expected_{var_name}=\"{expected_value}\"\nfound_{var_name}=0\n")
+}
+
+/// Builds the loop check block for an optional flag validation.
+#[cfg(unix)]
+fn build_flag_loop_check(flag: &str, var_name: &str) -> String {
+    format!(
+        concat!(
+            "  if [ \"$prev\" = \"{flag}\" ] && [ \"$arg\" = \"$expected_{var}\" ]; then\n",
+            "    found_{var}=1\n",
+            "  fi\n",
+        ),
+        flag = flag,
+        var = var_name
+    )
+}
+
+/// Builds the final validation block for an optional flag.
+#[cfg(unix)]
+fn build_flag_validation(flag: &str, var_name: &str) -> String {
+    format!(
+        concat!(
+            "if [ $found_{var} -eq 0 ]; then\n",
+            "  echo \"expected {flag} $expected_{var} but did not find it\" >&2\n",
+            "  exit 1\n",
+            "fi\n",
+        ),
+        flag = flag,
+        var = var_name
+    )
+}
+
+/// Represents an optional flag validation configuration.
+#[cfg(unix)]
+struct FlagValidation {
+    init: String,
+    loop_check: String,
+    validation: String,
+}
+
+#[cfg(unix)]
+impl FlagValidation {
+    /// Creates a new flag validation for the given flag and expected value.
+    fn new(flag: &str, var_name: &str, expected_value: &str) -> Self {
+        Self {
+            init: build_flag_init(var_name, expected_value),
+            loop_check: build_flag_loop_check(flag, var_name),
+            validation: build_flag_validation(flag, var_name),
+        }
+    }
+
+    /// Creates an empty flag validation (no-op).
+    fn empty() -> Self {
+        Self {
+            init: String::new(),
+            loop_check: String::new(),
+            validation: String::new(),
+        }
+    }
+}
+
+/// Shell script template for validating ninja tool invocation.
+#[cfg(unix)]
+const TOOL_VALIDATION_TEMPLATE: &str = concat!(
+    "#!/bin/sh\n",
+    "expected=\"{expected}\"\n",
+    "{flag_inits}",
+    "found_tool=0\n",
+    "found_file=0\n",
+    "prev=\"\"\n",
+    "for arg in \"$@\"; do\n",
+    "  if [ \"$prev\" = \"-t\" ] && [ \"$arg\" = \"$expected\" ]; then\n",
+    "    found_tool=1\n",
+    "  fi\n",
+    "  if [ \"$prev\" = \"-f\" ]; then\n",
+    "    found_file=1\n",
+    "  fi\n",
+    "{flag_loop_checks}",
+    "  prev=\"$arg\"\n",
+    "done\n",
+    "if [ $found_tool -eq 0 ]; then\n",
+    "  echo \"expected -t $expected but did not find it\" >&2\n",
+    "  exit 1\n",
+    "fi\n",
+    "if [ $found_file -eq 0 ]; then\n",
+    "  echo \"expected -f <build_file> but did not find it\" >&2\n",
+    "  exit 1\n",
+    "fi\n",
+    "{flag_validations}",
+    "exit 0\n"
+);
+
 /// Builds the shell script content for validating ninja tool invocation.
 #[cfg(unix)]
 fn build_tool_validation_script(
@@ -110,107 +205,24 @@ fn build_tool_validation_script(
     expected_jobs: Option<u32>,
     expected_directory: Option<&str>,
 ) -> String {
-    let expected = expected_tool.as_str();
-    let jobs_check = if let Some(jobs) = expected_jobs {
-        format!(
-            concat!("expected_jobs=\"{jobs}\"\n", "found_jobs=0\n",),
-            jobs = jobs
-        )
-    } else {
-        String::new()
-    };
+    let jobs = expected_jobs
+        .map(|j| FlagValidation::new("-j", "jobs", &j.to_string()))
+        .unwrap_or_else(FlagValidation::empty);
+    let dir = expected_directory
+        .map(|d| FlagValidation::new("-C", "dir", d))
+        .unwrap_or_else(FlagValidation::empty);
 
-    let dir_check = if let Some(dir) = expected_directory {
-        format!(
-            concat!("expected_dir=\"{dir}\"\n", "found_dir=0\n"),
-            dir = dir
+    TOOL_VALIDATION_TEMPLATE
+        .replace("{expected}", expected_tool.as_str())
+        .replace("{flag_inits}", &format!("{}{}", jobs.init, dir.init))
+        .replace(
+            "{flag_loop_checks}",
+            &format!("{}{}", jobs.loop_check, dir.loop_check),
         )
-    } else {
-        String::new()
-    };
-
-    let jobs_loop_check = if expected_jobs.is_some() {
-        concat!(
-            "  if [ \"$prev\" = \"-j\" ] && [ \"$arg\" = \"$expected_jobs\" ]; then\n",
-            "    found_jobs=1\n",
-            "  fi\n",
+        .replace(
+            "{flag_validations}",
+            &format!("{}{}", jobs.validation, dir.validation),
         )
-    } else {
-        ""
-    };
-
-    let dir_loop_check = if expected_directory.is_some() {
-        concat!(
-            "  if [ \"$prev\" = \"-C\" ] && [ \"$arg\" = \"$expected_dir\" ]; then\n",
-            "    found_dir=1\n",
-            "  fi\n",
-        )
-    } else {
-        ""
-    };
-
-    let jobs_validation = if expected_jobs.is_some() {
-        concat!(
-            "if [ $found_jobs -eq 0 ]; then\n",
-            "  echo \"expected -j $expected_jobs but did not find it\" >&2\n",
-            "  exit 1\n",
-            "fi\n",
-        )
-    } else {
-        ""
-    };
-
-    let dir_validation = if expected_directory.is_some() {
-        concat!(
-            "if [ $found_dir -eq 0 ]; then\n",
-            "  echo \"expected -C $expected_dir but did not find it\" >&2\n",
-            "  exit 1\n",
-            "fi\n",
-        )
-    } else {
-        ""
-    };
-
-    format!(
-        concat!(
-            "#!/bin/sh\n",
-            "expected=\"{expected}\"\n",
-            "{jobs_check}",
-            "{dir_check}",
-            "found_tool=0\n",
-            "found_file=0\n",
-            "prev=\"\"\n",
-            "for arg in \"$@\"; do\n",
-            "  if [ \"$prev\" = \"-t\" ] && [ \"$arg\" = \"$expected\" ]; then\n",
-            "    found_tool=1\n",
-            "  fi\n",
-            "  if [ \"$prev\" = \"-f\" ]; then\n",
-            "    found_file=1\n",
-            "  fi\n",
-            "{jobs_loop_check}",
-            "{dir_loop_check}",
-            "  prev=\"$arg\"\n",
-            "done\n",
-            "if [ $found_tool -eq 0 ]; then\n",
-            "  echo \"expected -t $expected but did not find it\" >&2\n",
-            "  exit 1\n",
-            "fi\n",
-            "if [ $found_file -eq 0 ]; then\n",
-            "  echo \"expected -f <build_file> but did not find it\" >&2\n",
-            "  exit 1\n",
-            "fi\n",
-            "{jobs_validation}",
-            "{dir_validation}",
-            "exit 0\n"
-        ),
-        expected = expected,
-        jobs_check = jobs_check,
-        dir_check = dir_check,
-        jobs_loop_check = jobs_loop_check,
-        dir_loop_check = dir_loop_check,
-        jobs_validation = jobs_validation,
-        dir_validation = dir_validation,
-    )
 }
 
 /// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>` and `-C <dir>`.
