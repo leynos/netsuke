@@ -1997,13 +1997,12 @@ the targets listed in the `defaults` section of the manifest are built.
   directory. It will invoke the Ninja backend with the appropriate flags, such
   as `ninja -t clean`, to remove the outputs of the build rules.
 
-- `Netsuke graph`: This command is an introspection and debugging tool. It will
-  run the Netsuke pipeline up to Stage 4 (IR Generation) and then invoke Ninja
-  with the graph tool, `ninja -t graph`. This outputs the complete build
-  dependency graph in the DOT language. The result can be piped through
-  `dot -Tsvg` or displayed via `netsuke graph --html` using an embedded
-  Dagre.js viewer. Visualizing the graph is invaluable for understanding and
-  debugging complex projects.
+- `Netsuke graph`: This command is an introspection and debugging tool. It
+  runs the Netsuke pipeline through Ninja synthesis (Stage 6) to produce a
+  temporary `build.ninja`, then invokes Ninja with the graph tool,
+  `ninja -t graph`, which outputs the complete build dependency graph in the
+  DOT language. The result can be piped through Graphviz tools such as
+  `dot -Tsvg`. An optional `--html` renderer is planned for a later milestone.
 
 - `Netsuke manifest FILE`: This command performs the pipeline up to Ninja
   synthesis and writes the resulting Ninja file to `FILE` without invoking

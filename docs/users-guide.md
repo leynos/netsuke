@@ -497,9 +497,9 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
   rules/targets to be properly configured for cleaning in Ninja (often via
   `phony` targets).
 
-- `graph`: Generates the build dependency graph and outputs it in DOT format
-  (suitable for Graphviz). Future versions may support other formats like
-  `--html`.
+- `graph`: Generates the build dependency graph by running `ninja -t graph` on
+  the generated `build.ninja`, outputting DOT to stdout (suitable for
+  Graphviz). Future versions may support other formats like `--html`.
 
 ### Exit Codes
 

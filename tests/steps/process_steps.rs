@@ -81,6 +81,25 @@ fn fake_ninja_expects_clean_with_jobs(world: &mut CliWorld, jobs: u32) -> Result
     install_test_ninja(&env, world, dir, path)
 }
 
+/// Creates a fake ninja executable that expects the `-t graph` tool invocation.
+#[cfg(unix)]
+#[given("a fake ninja executable that expects the graph tool")]
+fn fake_ninja_expects_graph(world: &mut CliWorld) -> Result<()> {
+    let (dir, path) = check_ninja::fake_ninja_expect_tool(ToolName::new("graph"))?;
+    let env = env::mocked_path_env();
+    install_test_ninja(&env, world, dir, path)
+}
+
+/// Creates a fake ninja executable that expects `-t graph` and `-j <jobs>`.
+#[cfg(unix)]
+#[given(expr = "a fake ninja executable that expects graph with {int} jobs")]
+fn fake_ninja_expects_graph_with_jobs(world: &mut CliWorld, jobs: u32) -> Result<()> {
+    let (dir, path) =
+        check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("graph"), Some(jobs), None)?;
+    let env = env::mocked_path_env();
+    install_test_ninja(&env, world, dir, path)
+}
+
 /// Sets up a scenario where no ninja executable is available.
 ///
 /// This step creates a temporary directory and records the path to a
@@ -208,6 +227,25 @@ fn run(world: &mut CliWorld) -> Result<()> {
 #[cfg(unix)]
 #[when("the clean process is run")]
 fn run_clean(world: &mut CliWorld) -> Result<()> {
+    prepare_cli_with_absolute_file(world)?;
+    let cli = world
+        .cli
+        .as_ref()
+        .context("CLI configuration has not been initialised")?;
+    // Use alternate formatting to capture the full anyhow error chain.
+    let result = runner::run(cli).map_err(|e| format!("{e:#}"));
+    record_result(world, result);
+    Ok(())
+}
+
+/// Executes the graph subcommand and captures the result in the test world.
+///
+/// This step runs the full `runner::run` function with the Graph command,
+/// ensuring the manifest exists first and updating the world's `run_status`
+/// and `run_error` fields based on the execution outcome.
+#[cfg(unix)]
+#[when("the graph process is run")]
+fn run_graph(world: &mut CliWorld) -> Result<()> {
     prepare_cli_with_absolute_file(world)?;
     let cli = world
         .cli

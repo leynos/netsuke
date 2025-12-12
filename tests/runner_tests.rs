@@ -377,3 +377,66 @@ fn run_clean_fails_with_invalid_manifest() -> Result<()> {
     );
     Ok(())
 }
+
+// --- Graph subcommand tests ---
+
+/// Fixture: point `NINJA_ENV` at a fake `ninja` that expects `-t graph`.
+///
+/// Returns: (tempdir holding ninja, path to ninja, `NINJA_ENV` guard)
+#[fixture]
+fn ninja_expecting_graph() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("graph"))?;
+    let env = SystemEnv::new();
+    let guard = override_ninja_env(&env, ninja_path.as_path());
+    Ok((ninja_dir, ninja_path, guard))
+}
+
+#[cfg(unix)]
+#[rstest]
+fn run_graph_subcommand_succeeds() -> Result<()> {
+    let (_ninja_dir, _ninja_path, _guard) = ninja_expecting_graph()?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        command: Some(Commands::Graph),
+        ..Cli::default()
+    };
+
+    run(&cli).context("expected graph subcommand to succeed")?;
+
+    ensure!(
+        !temp.path().join("build.ninja").exists(),
+        "graph subcommand should not leave build.ninja in project directory"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn run_graph_fails_with_failing_ninja() -> Result<()> {
+    assert_ninja_failure_propagates(Some(Commands::Graph))
+}
+
+#[cfg(unix)]
+#[rstest]
+fn run_graph_fails_with_invalid_manifest() -> Result<()> {
+    let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
+        .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        command: Some(Commands::Graph),
+        ..Cli::default()
+    };
+
+    let Err(err) = run(&cli) else {
+        bail!("expected graph to fail for invalid manifest");
+    };
+    ensure!(
+        err.to_string().contains("loading manifest at"),
+        "error should mention manifest loading, got: {err}"
+    );
+    Ok(())
+}

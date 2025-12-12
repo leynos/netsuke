@@ -95,10 +95,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             Ok(())
         }
         Commands::Clean => handle_clean(cli),
-        Commands::Graph => {
-            info!(target: "netsuke::subcommand", subcommand = "graph", "Subcommand requested");
-            Ok(())
-        }
+        Commands::Graph => handle_graph(cli),
     }
 }
 
@@ -175,6 +172,32 @@ fn handle_clean(cli: &Cli) -> Result<()> {
     run_ninja_tool(program.as_path(), cli, build_path, "clean").with_context(|| {
         format!(
             "running {} -t clean with build file {}",
+            program.display(),
+            build_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+/// Display build dependency graph by invoking `ninja -t graph`.
+///
+/// Generates the Ninja manifest to a temporary file, then invokes Ninja's graph
+/// tool to emit a DOT representation to stdout.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or Ninja execution fails.
+fn handle_graph(cli: &Cli) -> Result<()> {
+    info!(target: "netsuke::subcommand", subcommand = "graph", "Subcommand requested");
+    let ninja = generate_ninja(cli)?;
+
+    let tmp = process::create_temp_ninja_file(&ninja)?;
+    let build_path = tmp.path();
+
+    let program = process::resolve_ninja_program();
+    run_ninja_tool(program.as_path(), cli, build_path, "graph").with_context(|| {
+        format!(
+            "running {} -t graph with build file {}",
             program.display(),
             build_path.display()
         )
