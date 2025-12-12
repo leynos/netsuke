@@ -132,6 +132,59 @@ where
     Ok(())
 }
 
+fn assert_subcommand_succeeds_without_persisting_file(
+    fixture: Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)>,
+    command: Commands,
+) -> Result<()> {
+    let name = match command {
+        Commands::Clean => "clean",
+        Commands::Graph => "graph",
+        other => bail!("unsupported subcommand for test helper: {other:?}"),
+    };
+    let (_ninja_dir, _ninja_path, _guard) = fixture?;
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        directory: Some(temp.path().to_path_buf()),
+        command: Some(command),
+        ..Cli::default()
+    };
+
+    run(&cli).with_context(|| format!("expected {name} subcommand to succeed"))?;
+
+    ensure!(
+        !temp.path().join("build.ninja").exists(),
+        "{name} subcommand should not leave build.ninja in project directory"
+    );
+    Ok(())
+}
+
+fn assert_subcommand_fails_with_invalid_manifest(command: Commands) -> Result<()> {
+    let name = match command {
+        Commands::Clean => "clean",
+        Commands::Graph => "graph",
+        other => bail!("unsupported subcommand for test helper: {other:?}"),
+    };
+    let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
+        .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
+    let cli = Cli {
+        file: manifest_path.clone(),
+        command: Some(command),
+        ..Cli::default()
+    };
+
+    let Err(err) = run(&cli) else {
+        bail!("expected {name} to fail for invalid manifest");
+    };
+    ensure!(
+        err.to_string().contains("loading manifest at"),
+        "error should mention manifest loading, got: {err}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn run_ninja_not_found() -> Result<()> {
     assert_binary_not_found(|| {
@@ -318,22 +371,7 @@ fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)
 #[cfg(unix)]
 #[rstest]
 fn run_clean_subcommand_succeeds() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_expecting_clean()?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Clean),
-        ..Cli::default()
-    };
-
-    run(&cli).context("expected clean subcommand to succeed")?;
-
-    ensure!(
-        !temp.path().join("build.ninja").exists(),
-        "clean subcommand should not leave build.ninja in project directory"
-    );
-    Ok(())
+    assert_subcommand_succeeds_without_persisting_file(ninja_expecting_clean(), Commands::Clean)
 }
 
 #[cfg(unix)]
@@ -358,24 +396,7 @@ fn run_ninja_tool_not_found() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn run_clean_fails_with_invalid_manifest() -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
-        .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        command: Some(Commands::Clean),
-        ..Cli::default()
-    };
-
-    let Err(err) = run(&cli) else {
-        bail!("expected clean to fail for invalid manifest");
-    };
-    ensure!(
-        err.to_string().contains("loading manifest at"),
-        "error should mention manifest loading, got: {err}"
-    );
-    Ok(())
+    assert_subcommand_fails_with_invalid_manifest(Commands::Clean)
 }
 
 // --- Graph subcommand tests ---
@@ -394,22 +415,7 @@ fn ninja_expecting_graph() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)
 #[cfg(unix)]
 #[rstest]
 fn run_graph_subcommand_succeeds() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_expecting_graph()?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Graph),
-        ..Cli::default()
-    };
-
-    run(&cli).context("expected graph subcommand to succeed")?;
-
-    ensure!(
-        !temp.path().join("build.ninja").exists(),
-        "graph subcommand should not leave build.ninja in project directory"
-    );
-    Ok(())
+    assert_subcommand_succeeds_without_persisting_file(ninja_expecting_graph(), Commands::Graph)
 }
 
 #[cfg(unix)]
@@ -421,22 +427,5 @@ fn run_graph_fails_with_failing_ninja() -> Result<()> {
 #[cfg(unix)]
 #[rstest]
 fn run_graph_fails_with_invalid_manifest() -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
-        .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        command: Some(Commands::Graph),
-        ..Cli::default()
-    };
-
-    let Err(err) = run(&cli) else {
-        bail!("expected graph to fail for invalid manifest");
-    };
-    ensure!(
-        err.to_string().contains("loading manifest at"),
-        "error should mention manifest loading, got: {err}"
-    );
-    Ok(())
+    assert_subcommand_fails_with_invalid_manifest(Commands::Graph)
 }

@@ -153,6 +153,34 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     Ok(())
 }
 
+/// Execute a Ninja tool (e.g., `ninja -t clean`) using a temporary build file.
+///
+/// Generates the Ninja manifest to a temporary file, then invokes Ninja with
+/// `-t <tool>` while preserving the CLI settings (working directory and job
+/// count).
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or Ninja execution fails.
+fn handle_ninja_tool(cli: &Cli, tool: &str) -> Result<()> {
+    info!(target: "netsuke::subcommand", subcommand = tool, "Subcommand requested");
+    let ninja = generate_ninja(cli)?;
+
+    let tmp = process::create_temp_ninja_file(&ninja)?;
+    let build_path = tmp.path();
+
+    let program = process::resolve_ninja_program();
+    run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
+        format!(
+            "running {} -t {} with build file {}",
+            program.display(),
+            tool,
+            build_path.display()
+        )
+    })?;
+    Ok(())
+}
+
 /// Remove build artefacts by invoking `ninja -t clean`.
 ///
 /// Generates the Ninja manifest to a temporary file, then invokes Ninja's clean
@@ -162,21 +190,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_clean(cli: &Cli) -> Result<()> {
-    info!(target: "netsuke::subcommand", subcommand = "clean", "Subcommand requested");
-    let ninja = generate_ninja(cli)?;
-
-    let tmp = process::create_temp_ninja_file(&ninja)?;
-    let build_path = tmp.path();
-
-    let program = process::resolve_ninja_program();
-    run_ninja_tool(program.as_path(), cli, build_path, "clean").with_context(|| {
-        format!(
-            "running {} -t clean with build file {}",
-            program.display(),
-            build_path.display()
-        )
-    })?;
-    Ok(())
+    handle_ninja_tool(cli, "clean")
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
@@ -188,21 +202,7 @@ fn handle_clean(cli: &Cli) -> Result<()> {
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_graph(cli: &Cli) -> Result<()> {
-    info!(target: "netsuke::subcommand", subcommand = "graph", "Subcommand requested");
-    let ninja = generate_ninja(cli)?;
-
-    let tmp = process::create_temp_ninja_file(&ninja)?;
-    let build_path = tmp.path();
-
-    let program = process::resolve_ninja_program();
-    run_ninja_tool(program.as_path(), cli, build_path, "graph").with_context(|| {
-        format!(
-            "running {} -t graph with build file {}",
-            program.display(),
-            build_path.display()
-        )
-    })?;
-    Ok(())
+    handle_ninja_tool(cli, "graph")
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.

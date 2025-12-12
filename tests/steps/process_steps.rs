@@ -219,14 +219,8 @@ fn run(world: &mut CliWorld) -> Result<()> {
     Ok(())
 }
 
-/// Executes the clean subcommand and captures the result in the test world.
-///
-/// This step runs the full `runner::run` function with the Clean command,
-/// ensuring the manifest exists first and updating the world's `run_status`
-/// and `run_error` fields based on the execution outcome.
 #[cfg(unix)]
-#[when("the clean process is run")]
-fn run_clean(world: &mut CliWorld) -> Result<()> {
+fn run_subcommand(world: &mut CliWorld) -> Result<()> {
     prepare_cli_with_absolute_file(world)?;
     let cli = world
         .cli
@@ -238,6 +232,17 @@ fn run_clean(world: &mut CliWorld) -> Result<()> {
     Ok(())
 }
 
+/// Executes the clean subcommand and captures the result in the test world.
+///
+/// This step runs the full `runner::run` function with the Clean command,
+/// ensuring the manifest exists first and updating the world's `run_status`
+/// and `run_error` fields based on the execution outcome.
+#[cfg(unix)]
+#[when("the clean process is run")]
+fn run_clean(world: &mut CliWorld) -> Result<()> {
+    run_subcommand(world)
+}
+
 /// Executes the graph subcommand and captures the result in the test world.
 ///
 /// This step runs the full `runner::run` function with the Graph command,
@@ -246,15 +251,7 @@ fn run_clean(world: &mut CliWorld) -> Result<()> {
 #[cfg(unix)]
 #[when("the graph process is run")]
 fn run_graph(world: &mut CliWorld) -> Result<()> {
-    prepare_cli_with_absolute_file(world)?;
-    let cli = world
-        .cli
-        .as_ref()
-        .context("CLI configuration has not been initialised")?;
-    // Use alternate formatting to capture the full anyhow error chain.
-    let result = runner::run(cli).map_err(|e| format!("{e:#}"));
-    record_result(world, result);
-    Ok(())
+    run_subcommand(world)
 }
 
 /// Asserts that the command succeeds.
