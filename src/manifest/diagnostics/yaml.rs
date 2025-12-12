@@ -11,7 +11,11 @@
 // Rust versions but not others. Since `#[expect]` fails when the lint doesn't
 // fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
 // `#[allow]` here. FIXME: remove once upstream is fixed.
-#![allow(clippy::allow_attributes, clippy::allow_attributes_without_reason)]
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    unused_assignments
+)]
 
 use super::{ManifestName, ManifestSource};
 use crate::manifest::hints::YAML_HINTS;
@@ -74,10 +78,6 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
     SourceSpan::new(start.into(), len.into())
 }
 
-// FIXME: remove unused_assignments suppression once miette/thiserror derive
-// false positive is fixed upstream. The lint fires in some Rust versions but
-// not others due to how the derive macros expand field assignments.
-#[allow(unused_assignments)]
 #[derive(Debug, Error, Diagnostic)]
 #[error("{message}")]
 #[diagnostic(code(netsuke::yaml::parse))]
