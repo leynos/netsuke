@@ -174,11 +174,11 @@ jobs:
       matrix:
         include:
           - target: x86_64-apple-darwin
-            runner: macos-13
+            runner: macos-15-intel
             artifact_suffix: macos-x86_64
             target_key: macos-x86_64
           - target: aarch64-apple-darwin
-            runner: macos-14
+            runner: macos-15
             artifact_suffix: macos-arm64
             target_key: macos-aarch64
     uses: ./.github/workflows/build-and-package.yml
