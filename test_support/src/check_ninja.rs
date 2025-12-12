@@ -28,6 +28,35 @@ impl From<&'static str> for ToolName {
     }
 }
 
+/// Represents a Ninja command-line flag and its associated shell variable name.
+#[cfg(unix)]
+#[derive(Debug, Clone, Copy)]
+struct ShellFlag {
+    flag: &'static str,
+    var_name: &'static str,
+}
+
+#[cfg(unix)]
+impl ShellFlag {
+    const JOBS: Self = Self {
+        flag: "-j",
+        var_name: "jobs",
+    };
+
+    const DIRECTORY: Self = Self {
+        flag: "-C",
+        var_name: "dir",
+    };
+
+    fn flag(&self) -> &str {
+        self.flag
+    }
+
+    fn var_name(&self) -> &str {
+        self.var_name
+    }
+}
+
 /// Make a script file executable on Unix platforms.
 #[cfg(unix)]
 fn make_script_executable(path: &Path, context: &str) -> Result<()> {
@@ -103,16 +132,15 @@ pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathB
     fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
 
-/// Builds the initialisation block for an optional flag validation.
+/// Builds all three shell script snippets for validating an optional flag.
+///
+/// Returns a tuple of (init, loop_check, validation) strings for the given flag.
 #[cfg(unix)]
-fn build_flag_init(var_name: &str, expected_value: &str) -> String {
-    format!("expected_{var_name}=\"{expected_value}\"\nfound_{var_name}=0\n")
-}
-
-/// Builds the loop check block for an optional flag validation.
-#[cfg(unix)]
-fn build_flag_loop_check(flag: &str, var_name: &str) -> String {
-    format!(
+fn build_flag_validation(shell_flag: ShellFlag, expected_value: &str) -> (String, String, String) {
+    let flag = shell_flag.flag();
+    let var_name = shell_flag.var_name();
+    let init = format!("expected_{var_name}=\"{expected_value}\"\nfound_{var_name}=0\n");
+    let loop_check = format!(
         concat!(
             "  if [ \"$prev\" = \"{flag}\" ] && [ \"$arg\" = \"$expected_{var}\" ]; then\n",
             "    found_{var}=1\n",
@@ -120,13 +148,8 @@ fn build_flag_loop_check(flag: &str, var_name: &str) -> String {
         ),
         flag = flag,
         var = var_name
-    )
-}
-
-/// Builds the final validation block for an optional flag.
-#[cfg(unix)]
-fn build_flag_validation(flag: &str, var_name: &str) -> String {
-    format!(
+    );
+    let validation = format!(
         concat!(
             "if [ $found_{var} -eq 0 ]; then\n",
             "  echo \"expected {flag} $expected_{var} but did not find it\" >&2\n",
@@ -135,36 +158,8 @@ fn build_flag_validation(flag: &str, var_name: &str) -> String {
         ),
         flag = flag,
         var = var_name
-    )
-}
-
-/// Represents an optional flag validation configuration.
-#[cfg(unix)]
-struct FlagValidation {
-    init: String,
-    loop_check: String,
-    validation: String,
-}
-
-#[cfg(unix)]
-impl FlagValidation {
-    /// Creates a new flag validation for the given flag and expected value.
-    fn new(flag: &str, var_name: &str, expected_value: &str) -> Self {
-        Self {
-            init: build_flag_init(var_name, expected_value),
-            loop_check: build_flag_loop_check(flag, var_name),
-            validation: build_flag_validation(flag, var_name),
-        }
-    }
-
-    /// Creates an empty flag validation (no-op).
-    fn empty() -> Self {
-        Self {
-            init: String::new(),
-            loop_check: String::new(),
-            validation: String::new(),
-        }
-    }
+    );
+    (init, loop_check, validation)
 }
 
 /// Shell script template for validating ninja tool invocation.
@@ -205,25 +200,19 @@ fn build_tool_validation_script(
     expected_jobs: Option<u32>,
     expected_directory: Option<&Path>,
 ) -> String {
-    let jobs = expected_jobs
-        .map(|j| FlagValidation::new("-j", "jobs", &j.to_string()))
-        .unwrap_or_else(FlagValidation::empty);
-    let dir = expected_directory
+    let (jobs_init, jobs_loop, jobs_valid) = expected_jobs
+        .map(|j| build_flag_validation(ShellFlag::JOBS, &j.to_string()))
+        .unwrap_or_default();
+    let (dir_init, dir_loop, dir_valid) = expected_directory
         .and_then(|p| p.to_str())
-        .map(|d| FlagValidation::new("-C", "dir", d))
-        .unwrap_or_else(FlagValidation::empty);
+        .map(|d| build_flag_validation(ShellFlag::DIRECTORY, d))
+        .unwrap_or_default();
 
     TOOL_VALIDATION_TEMPLATE
         .replace("{expected}", expected_tool.as_str())
-        .replace("{flag_inits}", &format!("{}{}", jobs.init, dir.init))
-        .replace(
-            "{flag_loop_checks}",
-            &format!("{}{}", jobs.loop_check, dir.loop_check),
-        )
-        .replace(
-            "{flag_validations}",
-            &format!("{}{}", jobs.validation, dir.validation),
-        )
+        .replace("{flag_inits}", &format!("{jobs_init}{dir_init}"))
+        .replace("{flag_loop_checks}", &format!("{jobs_loop}{dir_loop}"))
+        .replace("{flag_validations}", &format!("{jobs_valid}{dir_valid}"))
 }
 
 /// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>` and `-C <dir>`.
