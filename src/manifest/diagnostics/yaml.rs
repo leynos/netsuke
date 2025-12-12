@@ -5,6 +5,18 @@
 //! mistakes such as tab indentation. The public entry point is
 //! [`map_yaml_error`], which accepts a manifest name and source buffer to
 //! generate actionable error messages for callers.
+
+// Module-level suppression for version-dependent lint false positives from
+// miette/thiserror derive macros. The unused_assignments lint fires in some
+// Rust versions but not others. Since `#[expect]` fails when the lint doesn't
+// fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
+// `#[allow]` here. FIXME: remove once upstream is fixed.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    unused_assignments
+)]
+
 use super::{ManifestName, ManifestSource};
 use crate::manifest::hints::YAML_HINTS;
 use miette::{Diagnostic, NamedSource, SourceSpan};

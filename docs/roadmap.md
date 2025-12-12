@@ -179,7 +179,7 @@ library, and CLI ergonomics.
 
 - [ ] **CLI and Feature Completeness:**
 
-  - [ ] Implement the `clean` subcommand by invoking `ninja -t clean`.
+  - [x] Implement the `clean` subcommand by invoking `ninja -t clean`.
 
   - [ ] Implement the graph subcommand by invoking ninja -t graph to output
     a DOT representation of the dependency graph.

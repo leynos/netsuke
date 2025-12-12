@@ -21,7 +21,7 @@ pub use ninja_env::NINJA_ENV;
 mod process;
 #[cfg(doctest)]
 pub use process::doc;
-pub use process::run_ninja;
+pub use process::{run_ninja, run_ninja_tool};
 
 /// Wrapper around generated Ninja manifest text.
 #[derive(Debug, Clone)]
@@ -94,10 +94,7 @@ pub fn run(cli: &Cli) -> Result<()> {
             process::write_ninja_file(&file, &ninja)?;
             Ok(())
         }
-        Commands::Clean => {
-            info!(target: "netsuke::subcommand", subcommand = "clean", "Subcommand requested");
-            Ok(())
-        }
+        Commands::Clean => handle_clean(cli),
         Commands::Graph => {
             info!(target: "netsuke::subcommand", subcommand = "graph", "Subcommand requested");
             Ok(())
@@ -152,6 +149,32 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
             "running {} with build file {}",
+            program.display(),
+            build_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+/// Remove build artefacts by invoking `ninja -t clean`.
+///
+/// Generates the Ninja manifest to a temporary file, then invokes Ninja's clean
+/// tool to remove all outputs defined by the build graph.
+///
+/// # Errors
+///
+/// Returns an error if manifest generation or Ninja execution fails.
+fn handle_clean(cli: &Cli) -> Result<()> {
+    info!(target: "netsuke::subcommand", subcommand = "clean", "Subcommand requested");
+    let ninja = generate_ninja(cli)?;
+
+    let tmp = process::create_temp_ninja_file(&ninja)?;
+    let build_path = tmp.path();
+
+    let program = process::resolve_ninja_program();
+    run_ninja_tool(program.as_path(), cli, build_path, "clean").with_context(|| {
+        format!(
+            "running {} -t clean with build file {}",
             program.display(),
             build_path.display()
         )
