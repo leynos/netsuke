@@ -93,7 +93,7 @@ pub fn fake_ninja_check_build_file() -> Result<(TempDir, PathBuf)> {
         concat!(
             "#!/bin/sh\n",
             "if [ \"$1\" = \"-f\" ] && [ ! -f \"$2\" ]; then\n",
-            "  echo 'missing build file: $2' >&2\n",
+            "  echo \"missing build file: $2\" >&2\n",
             "  exit 1\n",
             "fi\n",
             "exit 0"
@@ -132,6 +132,16 @@ pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathB
     fake_ninja_expect_tool_with_jobs(expected_tool, None, None)
 }
 
+/// Convert a Rust string to a shell-safe single-quoted literal.
+///
+/// The returned string is wrapped in single quotes, with any internal single
+/// quotes escaped as `'\''` so no shell expansion can occur.
+#[cfg(unix)]
+fn shell_single_quote(value: &str) -> String {
+    let escaped = value.replace('\'', r"'\''");
+    format!("'{escaped}'")
+}
+
 /// Builds all three shell script snippets for validating an optional flag.
 ///
 /// Returns a tuple of (init, loop_check, validation) strings for the given flag.
@@ -139,7 +149,8 @@ pub fn fake_ninja_expect_tool(expected_tool: ToolName) -> Result<(TempDir, PathB
 fn build_flag_validation(shell_flag: ShellFlag, expected_value: &str) -> (String, String, String) {
     let flag = shell_flag.flag();
     let var_name = shell_flag.var_name();
-    let init = format!("expected_{var_name}=\"{expected_value}\"\nfound_{var_name}=0\n");
+    let expected_literal = shell_single_quote(expected_value);
+    let init = format!("expected_{var_name}={expected_literal}\nfound_{var_name}=0\n");
     let loop_check = format!(
         concat!(
             "  if [ \"$prev\" = \"{flag}\" ] && [ \"$arg\" = \"$expected_{var}\" ]; then\n",
@@ -166,7 +177,7 @@ fn build_flag_validation(shell_flag: ShellFlag, expected_value: &str) -> (String
 #[cfg(unix)]
 const TOOL_VALIDATION_TEMPLATE: &str = concat!(
     "#!/bin/sh\n",
-    "expected=\"{expected}\"\n",
+    "expected={expected}\n",
     "{flag_inits}",
     "found_tool=0\n",
     "found_file=0\n",
@@ -199,20 +210,30 @@ fn build_tool_validation_script(
     expected_tool: ToolName,
     expected_jobs: Option<u32>,
     expected_directory: Option<&Path>,
-) -> String {
+) -> Result<String> {
     let (jobs_init, jobs_loop, jobs_valid) = expected_jobs
         .map(|j| build_flag_validation(ShellFlag::JOBS, &j.to_string()))
         .unwrap_or_default();
-    let (dir_init, dir_loop, dir_valid) = expected_directory
-        .and_then(|p| p.to_str())
-        .map(|d| build_flag_validation(ShellFlag::DIRECTORY, d))
-        .unwrap_or_default();
+    let (dir_init, dir_loop, dir_valid) = match expected_directory {
+        None => (String::new(), String::new(), String::new()),
+        Some(dir) => {
+            let dir_str = dir.to_str().with_context(|| {
+                format!(
+                    "fake_ninja_expect_tool_with_jobs: expected_directory is not valid UTF-8: {}",
+                    dir.display()
+                )
+            })?;
+            build_flag_validation(ShellFlag::DIRECTORY, dir_str)
+        }
+    };
 
-    TOOL_VALIDATION_TEMPLATE
-        .replace("{expected}", expected_tool.as_str())
+    let expected_literal = shell_single_quote(expected_tool.as_str());
+
+    Ok(TOOL_VALIDATION_TEMPLATE
+        .replace("{expected}", &expected_literal)
         .replace("{flag_inits}", &format!("{jobs_init}{dir_init}"))
         .replace("{flag_loop_checks}", &format!("{jobs_loop}{dir_loop}"))
-        .replace("{flag_validations}", &format!("{jobs_valid}{dir_valid}"))
+        .replace("{flag_validations}", &format!("{jobs_valid}{dir_valid}")))
 }
 
 /// Create a fake Ninja that validates `-t <tool>` and optionally `-j <jobs>` and `-C <dir>`.
@@ -255,7 +276,7 @@ pub fn fake_ninja_expect_tool_with_jobs(
         )
     })?;
     let script_content =
-        build_tool_validation_script(expected_tool, expected_jobs, expected_directory);
+        build_tool_validation_script(expected_tool, expected_jobs, expected_directory)?;
     write!(file, "{}", script_content).with_context(|| {
         format!(
             "fake_ninja_expect_tool_with_jobs: write script {}",
