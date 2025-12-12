@@ -203,12 +203,13 @@ const TOOL_VALIDATION_TEMPLATE: &str = concat!(
 fn build_tool_validation_script(
     expected_tool: ToolName,
     expected_jobs: Option<u32>,
-    expected_directory: Option<&str>,
+    expected_directory: Option<&Path>,
 ) -> String {
     let jobs = expected_jobs
         .map(|j| FlagValidation::new("-j", "jobs", &j.to_string()))
         .unwrap_or_else(FlagValidation::empty);
     let dir = expected_directory
+        .and_then(|p| p.to_str())
         .map(|d| FlagValidation::new("-C", "dir", d))
         .unwrap_or_else(FlagValidation::empty);
 
@@ -240,12 +241,13 @@ fn build_tool_validation_script(
 /// # Example
 ///
 /// ```rust,ignore
+/// use std::path::Path;
 /// use test_support::check_ninja::{fake_ninja_expect_tool_with_jobs, ToolName};
 ///
 /// let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs(
 ///     ToolName::new("clean"),
 ///     Some(4),
-///     Some("/path/to/build"),
+///     Some(Path::new("/path/to/build")),
 /// )?;
 /// // ninja_path will succeed only when invoked with `-t clean -j 4 -C /path/to/build`
 /// ```
@@ -253,7 +255,7 @@ fn build_tool_validation_script(
 pub fn fake_ninja_expect_tool_with_jobs(
     expected_tool: ToolName,
     expected_jobs: Option<u32>,
-    expected_directory: Option<&str>,
+    expected_directory: Option<&Path>,
 ) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja_expect_tool_with_jobs: create temp dir")?;
     let path = dir.path().join("ninja");
@@ -286,7 +288,7 @@ pub fn fake_ninja_expect_tool(_expected_tool: ToolName) -> Result<(TempDir, Path
 pub fn fake_ninja_expect_tool_with_jobs(
     _expected_tool: ToolName,
     _expected_jobs: Option<u32>,
-    _expected_directory: Option<&str>,
+    _expected_directory: Option<&Path>,
 ) -> Result<(TempDir, PathBuf)> {
     anyhow::bail!("fake_ninja_expect_tool_with_jobs is only supported on Unix platforms")
 }
@@ -297,37 +299,31 @@ mod tests {
 
     /// Verify that the fake ninja script validates `-C <directory>` correctly.
     #[cfg(unix)]
-    #[test]
-    fn fake_ninja_validates_directory_flag() -> Result<()> {
+    #[rstest::rstest]
+    #[case(&["-f", "build.ninja", "-C", "/path/to/build", "-t", "clean"], true, "correct -C value")]
+    #[case(&["-f", "build.ninja", "-C", "/wrong/path", "-t", "clean"], false, "wrong -C value")]
+    #[case(&["-f", "build.ninja", "-t", "clean"], false, "missing -C flag")]
+    fn fake_ninja_validates_directory_flag(
+        #[case] args: &[&str],
+        #[case] should_succeed: bool,
+        #[case] description: &str,
+    ) -> Result<()> {
         use anyhow::Context;
         use std::process::Command;
 
-        let (dir, ninja_path) =
-            fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), None, Some("/path/to/build"))?;
+        let (dir, ninja_path) = fake_ninja_expect_tool_with_jobs(
+            ToolName::new("clean"),
+            None,
+            Some(Path::new("/path/to/build")),
+        )?;
 
-        // Should succeed when `-C /path/to/build` is provided
         let status = Command::new(&ninja_path)
-            .args(["-f", "build.ninja", "-C", "/path/to/build", "-t", "clean"])
+            .args(args)
             .current_dir(dir.path())
             .status()
-            .context("execute fake ninja with -C flag")?;
-        assert!(status.success(), "expected success with correct -C value");
+            .context("execute fake ninja")?;
 
-        // Should fail when `-C` is provided with wrong value
-        let status = Command::new(&ninja_path)
-            .args(["-f", "build.ninja", "-C", "/wrong/path", "-t", "clean"])
-            .current_dir(dir.path())
-            .status()
-            .context("execute fake ninja with wrong -C value")?;
-        assert!(!status.success(), "expected failure with wrong -C value");
-
-        // Should fail when `-C` is missing entirely
-        let status = Command::new(&ninja_path)
-            .args(["-f", "build.ninja", "-t", "clean"])
-            .current_dir(dir.path())
-            .status()
-            .context("execute fake ninja without -C flag")?;
-        assert!(!status.success(), "expected failure without -C flag");
+        assert_eq!(status.success(), should_succeed, "{description}");
 
         Ok(())
     }
