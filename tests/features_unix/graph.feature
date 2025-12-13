@@ -1,3 +1,4 @@
+@unix
 Feature: Graph subcommand execution
 
   Scenario: Graph invokes ninja with tool flag

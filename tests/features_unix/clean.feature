@@ -1,3 +1,4 @@
+@unix
 Feature: Clean subcommand execution
 
   Scenario: Clean invokes ninja with tool flag

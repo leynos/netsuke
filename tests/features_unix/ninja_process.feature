@@ -1,3 +1,4 @@
+@unix
 Feature: Ninja process execution
 
   Scenario: Ninja succeeds
