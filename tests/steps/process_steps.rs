@@ -40,6 +40,9 @@ fn install_test_ninja(
     let guard = env::prepend_dir_to_path(env, dir.path())?;
     world.path_guard = Some(guard);
     world.ninja = Some(ninja_path.to_string_lossy().into_owned());
+    world.ninja_env_guard.take();
+    let system_env = env::SystemEnv::new();
+    world.ninja_env_guard = Some(env::override_ninja_env(&system_env, &ninja_path));
     world.temp = Some(dir);
     Ok(())
 }
