@@ -11,6 +11,18 @@ use test_support::{
     fake_ninja,
 };
 
+mod common;
+use common::create_test_manifest;
+
+// Re-export `common::ninja_with_exit_code` as a local fixture so rstest can
+// discover it in this integration test crate.
+#[fixture]
+fn ninja_with_exit_code(
+    #[default(0u8)] exit_code: u8,
+) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+    common::ninja_with_exit_code(exit_code)
+}
+
 /// Fixture: point `NINJA_ENV` at a fake `ninja` that validates `-f` files.
 ///
 /// Using `NINJA_ENV` avoids mutating `PATH`, letting tests run in parallel
@@ -20,19 +32,6 @@ use test_support::{
 #[fixture]
 fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
-    let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
-}
-
-/// Fixture: point `NINJA_ENV` at a fake `ninja` with a configurable exit code.
-///
-/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
-#[fixture]
-fn ninja_with_exit_code(
-    #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
-    let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
@@ -57,15 +56,6 @@ fn setup_ninja_env_test() -> Result<(
         ..Cli::default()
     };
     Ok((ninja_dir, ninja_path, temp, cli, guard))
-}
-
-/// Create a temporary project with a Netsukefile from `minimal.yml`.
-fn create_test_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
-    let temp = tempfile::tempdir().context("create temp dir for test manifest")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/minimal.yml", &manifest_path)
-        .with_context(|| format!("copy minimal.yml to {}", manifest_path.display()))?;
-    Ok((temp, manifest_path))
 }
 
 #[test]
