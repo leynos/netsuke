@@ -122,14 +122,24 @@ where
     Ok(())
 }
 
-#[rstest]
-fn run_ninja_not_found() -> Result<()> {
+/// Helper: assert that a runner function fails with `NotFound` when ninja binary is missing.
+fn assert_runner_not_found<F>(runner_call: F) -> Result<()>
+where
+    F: FnOnce(&Cli) -> std::io::Result<()>,
+{
     assert_binary_not_found(|| {
         let cli = Cli::default();
+        runner_call(&cli)
+    })
+}
+
+#[rstest]
+fn run_ninja_not_found() -> Result<()> {
+    assert_runner_not_found(|cli| {
         let targets = BuildTargets::default();
         run_ninja(
             Path::new("does-not-exist"),
-            &cli,
+            cli,
             Path::new("build.ninja"),
             &targets,
         )
@@ -294,11 +304,10 @@ fn run_fails_with_failing_ninja_env() -> Result<()> {
 
 #[rstest]
 fn run_ninja_tool_not_found() -> Result<()> {
-    assert_binary_not_found(|| {
-        let cli = Cli::default();
+    assert_runner_not_found(|cli| {
         run_ninja_tool(
             Path::new("does-not-exist"),
-            &cli,
+            cli,
             Path::new("build.ninja"),
             "clean",
         )
