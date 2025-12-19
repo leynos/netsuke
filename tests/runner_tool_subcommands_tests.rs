@@ -16,8 +16,12 @@ use test_support::{
 mod common;
 use common::create_test_manifest;
 
-// Re-export `common::ninja_with_exit_code` as a local fixture so rstest can
-// discover it in this integration test crate.
+/// Fixture: provide a fake `ninja` binary with a configurable exit code.
+///
+/// This is a re-export of `common::ninja_with_exit_code` so `rstest` can
+/// discover it in this integration test crate.
+///
+/// Returns: (`tempfile::TempDir`, path to the ninja binary, `NinjaEnvGuard`)
 #[fixture]
 fn ninja_with_exit_code(
     #[default(0u8)] exit_code: u8,
@@ -29,6 +33,11 @@ fn ninja_with_exit_code(
 fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
     let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
+    let expected_tool = match &command {
+        Commands::Clean => "clean",
+        Commands::Graph => "graph",
+        other => bail!("unsupported command for this helper: {other:?}"),
+    };
     let cli = Cli {
         file: manifest_path.clone(),
         directory: Some(temp.path().to_path_buf()),
@@ -43,6 +52,18 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
     ensure!(
         messages.iter().any(|m| m.contains("ninja exited")),
         "error should report ninja exit status, got: {messages:?}"
+    );
+    ensure!(
+        messages
+            .iter()
+            .any(|m| m.contains(&format!("-t {expected_tool}"))),
+        "error should mention running ninja tool {expected_tool}, got: {messages:?}"
+    );
+    ensure!(
+        messages
+            .iter()
+            .any(|m| m.contains("with build file") && m.contains(".ninja")),
+        "error should include build file context, got: {messages:?}"
     );
     Ok(())
 }

@@ -14,8 +14,12 @@ use test_support::{
 mod common;
 use common::create_test_manifest;
 
-// Re-export `common::ninja_with_exit_code` as a local fixture so rstest can
-// discover it in this integration test crate.
+/// Fixture: provide a fake `ninja` binary with a configurable exit code.
+///
+/// This is a re-export of `common::ninja_with_exit_code` so `rstest` can
+/// discover it in this integration test crate.
+///
+/// Returns: (`tempfile::TempDir`, path to the ninja binary, `NinjaEnvGuard`)
 #[fixture]
 fn ninja_with_exit_code(
     #[default(0u8)] exit_code: u8,
