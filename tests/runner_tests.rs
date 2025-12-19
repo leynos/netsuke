@@ -6,10 +6,26 @@ use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
 use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
 use test_support::{
-    check_ninja::{self, ToolName},
+    check_ninja,
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env, prepend_dir_to_path},
     fake_ninja,
 };
+
+mod common;
+use common::create_test_manifest;
+
+/// Fixture: provide a fake `ninja` binary with a configurable exit code.
+///
+/// This is a re-export of `common::ninja_with_exit_code` so `rstest` can
+/// discover it in this integration test crate.
+///
+/// Returns: (`tempfile::TempDir`, path to the ninja binary, `NinjaEnvGuard`)
+#[fixture]
+fn ninja_with_exit_code(
+    #[default(0u8)] exit_code: u8,
+) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+    common::ninja_with_exit_code(exit_code)
+}
 
 /// Fixture: point `NINJA_ENV` at a fake `ninja` that validates `-f` files.
 ///
@@ -20,19 +36,6 @@ use test_support::{
 #[fixture]
 fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     let (ninja_dir, ninja_path) = check_ninja::fake_ninja_check_build_file()?;
-    let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
-}
-
-/// Fixture: point `NINJA_ENV` at a fake `ninja` with a configurable exit code.
-///
-/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
-#[fixture]
-fn ninja_with_exit_code(
-    #[default(0u8)] exit_code: u8,
-) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
-    let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
@@ -57,15 +60,6 @@ fn setup_ninja_env_test() -> Result<(
         ..Cli::default()
     };
     Ok((ninja_dir, ninja_path, temp, cli, guard))
-}
-
-/// Create a temporary project with a Netsukefile from `minimal.yml`.
-fn create_test_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
-    let temp = tempfile::tempdir().context("create temp dir for test manifest")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/minimal.yml", &manifest_path)
-        .with_context(|| format!("copy minimal.yml to {}", manifest_path.display()))?;
-    Ok((temp, manifest_path))
 }
 
 #[test]
@@ -132,14 +126,24 @@ where
     Ok(())
 }
 
-#[rstest]
-fn run_ninja_not_found() -> Result<()> {
+/// Helper: assert that a runner function fails with `NotFound` when ninja binary is missing.
+fn assert_runner_not_found<F>(runner_call: F) -> Result<()>
+where
+    F: FnOnce(&Cli) -> std::io::Result<()>,
+{
     assert_binary_not_found(|| {
         let cli = Cli::default();
+        runner_call(&cli)
+    })
+}
+
+#[rstest]
+fn run_ninja_not_found() -> Result<()> {
+    assert_runner_not_found(|cli| {
         let targets = BuildTargets::default();
         run_ninja(
             Path::new("does-not-exist"),
-            &cli,
+            cli,
             Path::new("build.ninja"),
             &targets,
         )
@@ -302,78 +306,14 @@ fn run_fails_with_failing_ninja_env() -> Result<()> {
     assert_ninja_failure_propagates(None)
 }
 
-// --- Clean subcommand tests ---
-
-/// Fixture: point `NINJA_ENV` at a fake `ninja` that expects `-t clean`.
-///
-/// Returns: (tempdir holding ninja, path to ninja, `NINJA_ENV` guard)
-#[fixture]
-fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
-    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
-    let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
-}
-
-#[cfg(unix)]
-#[rstest]
-fn run_clean_subcommand_succeeds() -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_expecting_clean()?;
-    let (temp, manifest_path) = create_test_manifest()?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        directory: Some(temp.path().to_path_buf()),
-        command: Some(Commands::Clean),
-        ..Cli::default()
-    };
-
-    run(&cli).context("expected clean subcommand to succeed")?;
-
-    ensure!(
-        !temp.path().join("build.ninja").exists(),
-        "clean subcommand should not leave build.ninja in project directory"
-    );
-    Ok(())
-}
-
-#[cfg(unix)]
-#[rstest]
-fn run_clean_fails_with_failing_ninja() -> Result<()> {
-    assert_ninja_failure_propagates(Some(Commands::Clean))
-}
-
 #[rstest]
 fn run_ninja_tool_not_found() -> Result<()> {
-    assert_binary_not_found(|| {
-        let cli = Cli::default();
+    assert_runner_not_found(|cli| {
         run_ninja_tool(
             Path::new("does-not-exist"),
-            &cli,
+            cli,
             Path::new("build.ninja"),
             "clean",
         )
     })
-}
-
-#[cfg(unix)]
-#[rstest]
-fn run_clean_fails_with_invalid_manifest() -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
-        .with_context(|| format!("copy invalid manifest to {}", manifest_path.display()))?;
-    let cli = Cli {
-        file: manifest_path.clone(),
-        command: Some(Commands::Clean),
-        ..Cli::default()
-    };
-
-    let Err(err) = run(&cli) else {
-        bail!("expected clean to fail for invalid manifest");
-    };
-    ensure!(
-        err.to_string().contains("loading manifest at"),
-        "error should mention manifest loading, got: {err}"
-    );
-    Ok(())
 }

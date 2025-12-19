@@ -65,6 +65,10 @@ guiding you.
 
 The `Netsukefile` is a YAML file describing your build process.
 
+Netsuke targets YAML 1.2 and forbids duplicate keys in manifests. If the same
+mapping key appears more than once (even if a YAML parser would normally accept
+it with “last key wins” behaviour), Netsuke treats this as an error.
+
 ### Top-Level Structure
 
 ```yaml
@@ -497,9 +501,9 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
   rules/targets to be properly configured for cleaning in Ninja (often via
   `phony` targets).
 
-- `graph`: Generates the build dependency graph and outputs it in DOT format
-  (suitable for Graphviz). Future versions may support other formats like
-  `--html`.
+- `graph`: Generates the build dependency graph by running `ninja -t graph` on
+  the generated `build.ninja`, outputting DOT to stdout (suitable for
+  Graphviz). Future versions may support other formats like `--html`.
 
 ### Exit Codes
 

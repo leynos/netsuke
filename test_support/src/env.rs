@@ -223,6 +223,12 @@ pub struct NinjaEnvGuard {
     _lock: EnvLock,
 }
 
+impl std::fmt::Debug for NinjaEnvGuard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NinjaEnvGuard").finish_non_exhaustive()
+    }
+}
+
 /// Override the `NINJA_ENV` variable with `path`, returning a guard that resets it.
 ///
 /// In Rust 2024 `std::env::set_var` is `unsafe` because it mutates process-global

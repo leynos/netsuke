@@ -181,8 +181,8 @@ library, and CLI ergonomics.
 
   - [x] Implement the `clean` subcommand by invoking `ninja -t clean`.
 
-  - [ ] Implement the graph subcommand by invoking ninja -t graph to output
-    a DOT representation of the dependency graph.
+  - [x] Implement the graph subcommand by invoking `ninja -t graph` to output a
+    DOT representation of the dependency graph.
 
   - [ ] Refine all CLI output for clarity, ensuring help messages are
     descriptive and command feedback is intuitive.

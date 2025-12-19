@@ -7,7 +7,11 @@ use netsuke::stdlib::{NetworkPolicy, StdlibState};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::{collections::HashMap, ffi::OsString, net::TcpListener};
-use test_support::{PathGuard, env::restore_many, http};
+use test_support::{
+    PathGuard,
+    env::{NinjaEnvGuard, restore_many},
+    http,
+};
 
 /// Shared state for Cucumber scenarios.
 #[derive(Debug, Default, World)]
@@ -37,6 +41,8 @@ pub struct CliWorld {
     pub temp: Option<tempfile::TempDir>,
     /// Guard that restores `PATH` after each scenario.
     pub path_guard: Option<PathGuard>,
+    /// Guard that overrides `NINJA_ENV` for deterministic Ninja resolution.
+    pub ninja_env_guard: Option<NinjaEnvGuard>,
     /// Root directory for stdlib scenarios.
     pub stdlib_root: Option<Utf8PathBuf>,
     /// Captured output from the last stdlib render.
@@ -181,6 +187,7 @@ fn block_device_exists() -> bool {
 impl Drop for CliWorld {
     fn drop(&mut self) {
         self.shutdown_http_server();
+        self.ninja_env_guard.take();
         self.restore_environment();
         self.stdlib_text = None;
     }
