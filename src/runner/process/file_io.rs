@@ -5,10 +5,17 @@ use crate::runner::NinjaContent;
 use anyhow::{Context, Result as AnyResult, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs as cap_fs};
+use std::io;
 use std::io::Write;
 use std::path::Path;
 use tempfile::{Builder, NamedTempFile};
 use tracing::info;
+
+/// Return `true` when `path` is the CLI sentinel indicating "write to stdout".
+#[must_use]
+pub fn is_stdout_path(path: &Path) -> bool {
+    path.as_os_str() == "-"
+}
 
 pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
     let mut tmp = Builder::new()
@@ -81,6 +88,17 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     Ok(())
 }
 
+pub fn write_ninja_stdout(content: &NinjaContent) -> AnyResult<()> {
+    let mut stdout = io::stdout().lock();
+    match stdout.write_all(content.as_str().as_bytes()) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => return Ok(()),
+        Err(err) => return Err(err).context("failed to write Ninja manifest to stdout"),
+    }
+    stdout.flush().context("failed to flush stdout")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,6 +106,7 @@ mod tests {
     use anyhow::{Context, Result, ensure};
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs as cap_fs};
+    use rstest::rstest;
     use std::io::{Read, Seek, SeekFrom};
 
     #[test]
@@ -137,6 +156,19 @@ mod tests {
             expected = content.as_str()
         );
         Ok(())
+    }
+
+    #[rstest]
+    #[case("-", true)]
+    #[case("out.ninja", false)]
+    #[case("./-", false)]
+    fn is_stdout_path_detects_dash(#[case] candidate: &str, #[case] expected: bool) {
+        let path = Path::new(candidate);
+        assert_eq!(
+            is_stdout_path(path),
+            expected,
+            "unexpected result for {candidate}"
+        );
     }
 
     #[test]

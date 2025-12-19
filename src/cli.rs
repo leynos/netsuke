@@ -160,6 +160,8 @@ pub enum Commands {
     /// Write the Ninja manifest to the specified file without invoking Ninja.
     Manifest {
         /// Output path for the generated Ninja file.
+        ///
+        /// Use `-` to write to stdout.
         #[arg(value_name = "FILE")]
         file: PathBuf,
     },

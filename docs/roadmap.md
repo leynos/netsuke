@@ -187,9 +187,9 @@ library, and CLI ergonomics.
   - [ ] Refine all CLI output for clarity, ensuring help messages are
     descriptive and command feedback is intuitive.
 
-  - [ ] Implement the `manifest` subcommand to persist the generated Ninja file
+  - [x] Implement the `manifest` subcommand to persist the generated Ninja file
     without executing it, including integration tests that cover writing to
-    disk and streaming to stdout.
+    disk and streaming to stdout. *(done)*
 
   - [ ] Extend the graph subcommand with an optional `--html` renderer that
     produces a browsable graph visualization while documenting a text-only

@@ -37,6 +37,10 @@ pub struct CliWorld {
     pub run_status: Option<bool>,
     /// Error message from the last failed process execution.
     pub run_error: Option<String>,
+    /// Captured stdout from the last `netsuke` CLI process invocation.
+    pub command_stdout: Option<String>,
+    /// Captured stderr from the last `netsuke` CLI process invocation.
+    pub command_stderr: Option<String>,
     /// Temporary directory handle for test isolation.
     pub temp: Option<tempfile::TempDir>,
     /// Guard that restores `PATH` after each scenario.

@@ -1962,7 +1962,11 @@ given). /// This is the default subcommand. Build(BuildArgs),
     /// Display the build dependency graph in DOT format for visualisation.
     Graph,
 
-    /// Write the Ninja manifest to `FILE` without invoking Ninja. Manifest {
+    /// Write the Ninja manifest to `FILE` without invoking Ninja.
+    ///
+    /// Use `-` to write the generated Ninja file to stdout instead of
+    /// persisting it to disk.
+    Manifest {
     /// Output path for the generated Ninja file.
         #[arg(value_name = "FILE")]
         file: PathBuf, }, }
@@ -2006,7 +2010,7 @@ the targets listed in the `defaults` section of the manifest are built.
 
 - `Netsuke manifest FILE`: This command performs the pipeline up to Ninja
   synthesis and writes the resulting Ninja file to `FILE` without invoking
-  Ninja.
+  Ninja. Supplying `-` for `FILE` streams the generated Ninja file to stdout.
 
 ### 8.4 Design Decisions
 
@@ -2017,10 +2021,11 @@ execution and dispatch live in `src/runner.rs`, keeping `main.rs` focused on
 parsing. Process management, Ninja invocation, argument redaction, and the
 temporary file helpers reside in `src/runner/process.rs`, allowing the runner
 entry point to delegate low-level concerns. The working directory flag mirrors
-Ninja's `-C` option but is resolved internally; Netsuke changes directory
-before spawning Ninja rather than forwarding the flag. Error scenarios are
-validated using clap's `ErrorKind` enumeration in unit tests and via Cucumber
-steps for behavioural coverage.
+Ninja's `-C` option but is resolved internally: Netsuke runs Ninja with a
+configured working directory and resolves relative output paths (for example
+`build --emit` and `manifest`) under the same directory so behaviour matches a
+real directory change. Error scenarios are validated using clap's `ErrorKind`
+enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
 The Ninja executable may be overridden via the `NINJA_ENV` environment
 variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces
