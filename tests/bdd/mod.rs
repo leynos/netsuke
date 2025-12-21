@@ -5,3 +5,4 @@
 
 pub mod fixtures;
 pub mod steps;
+pub mod types;
