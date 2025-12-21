@@ -16,4 +16,4 @@ Feature: File-system tests
     And the environment variable "CHAR_DEVICE_PATH" is set to "${WORKSPACE}/.missing/char"
     And the environment variable "DEVICE_PATH" is set to "${WORKSPACE}/.missing/device"
     When the manifest file "tests/data/jinja_is.yml" is parsed
-    Then the manifest has targets 0
+    Then the manifest has 0 targets

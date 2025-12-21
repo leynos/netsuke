@@ -1,15 +1,12 @@
-//! Helpers for preparing stdlib workspaces during Cucumber scenarios, wiring
+//! Helpers for preparing stdlib workspaces during BDD scenarios, wiring
 //! up temporary directories, fixtures, and environment overrides for tests.
-use crate::CliWorld;
+
+use crate::bdd::fixtures::{RefCellOptionExt, strip_quotes, with_world};
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use cucumber::given;
-use std::{
-    env,
-    ffi::{OsStr, OsString},
-    fs,
-};
+use rstest_bdd_macros::given;
+use std::{env, ffi::OsStr, fs};
 use test_support::{
     command_helper::{
         compile_failure_helper, compile_large_output_helper, compile_uppercase_helper,
@@ -17,97 +14,109 @@ use test_support::{
     env::set_var,
 };
 
-use super::types::{FileContent, PathEntries, RelativePath, ServerBody, TemplatePath};
+use super::types::TemplatePath;
 
 const LINES_FIXTURE: &str = concat!("one\n", "two\n", "three\n",);
 
-pub(crate) fn ensure_workspace(world: &mut CliWorld) -> Result<Utf8PathBuf> {
-    if let Some(root) = &world.stdlib_root {
-        return Ok(root.clone());
-    }
-    let temp = tempfile::tempdir().context("create stdlib workspace")?;
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("stdlib workspace path is not valid UTF-8: {path:?}"))?;
-    let handle = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open stdlib workspace directory")?;
-    handle
-        .write("file", b"data")
-        .context("write stdlib file fixture")?;
-    handle
-        .write("lines.txt", LINES_FIXTURE.as_bytes())
-        .context("write stdlib lines fixture")?;
-    #[cfg(unix)]
-    handle
-        .symlink("file", "link")
-        .context("create stdlib symlink fixture")?;
-    #[cfg(not(unix))]
-    handle
-        .write("link", b"data")
-        .context("write stdlib link fixture")?;
-    world.temp = Some(temp);
-    world.stdlib_root = Some(root.clone());
-    Ok(root)
+pub(crate) fn ensure_workspace() -> Result<Utf8PathBuf> {
+    with_world(|world| {
+        if let Some(root) = world.stdlib_root.get() {
+            return Ok(root);
+        }
+        let temp = tempfile::tempdir().context("create stdlib workspace")?;
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
+            .map_err(|path| anyhow!("stdlib workspace path is not valid UTF-8: {path:?}"))?;
+        let handle = Dir::open_ambient_dir(&root, ambient_authority())
+            .context("open stdlib workspace directory")?;
+        handle
+            .write("file", b"data")
+            .context("write stdlib file fixture")?;
+        handle
+            .write("lines.txt", LINES_FIXTURE.as_bytes())
+            .context("write stdlib lines fixture")?;
+        #[cfg(unix)]
+        handle
+            .symlink("file", "link")
+            .context("create stdlib symlink fixture")?;
+        #[cfg(not(unix))]
+        handle
+            .write("link", b"data")
+            .context("write stdlib link fixture")?;
+        world.temp_dir.set_value(temp);
+        world.stdlib_root.set(root.clone());
+        Ok(root)
+    })
 }
 
 #[given("a stdlib workspace")]
-pub(crate) fn stdlib_workspace(world: &mut CliWorld) -> Result<()> {
-    let root = ensure_workspace(world)?;
-    world.stdlib_root = Some(root);
+pub(crate) fn stdlib_workspace() -> Result<()> {
+    let root = ensure_workspace()?;
+    with_world(|world| {
+        world.stdlib_root.set(root);
+    });
     Ok(())
 }
 
 #[given("an uppercase stdlib command helper")]
-pub(crate) fn uppercase_stdlib_command_helper(world: &mut CliWorld) -> Result<()> {
-    let root = ensure_workspace(world)?;
+pub(crate) fn uppercase_stdlib_command_helper() -> Result<()> {
+    let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
     let helper = compile_uppercase_helper(&handle, &root, "cmd_upper")
         .context("compile uppercase helper")?;
-    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+    with_world(|world| {
+        world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
+    });
     Ok(())
 }
 
 #[given("a failing stdlib command helper")]
-pub(crate) fn failing_stdlib_command_helper(world: &mut CliWorld) -> Result<()> {
-    let root = ensure_workspace(world)?;
+pub(crate) fn failing_stdlib_command_helper() -> Result<()> {
+    let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
     let helper =
         compile_failure_helper(&handle, &root, "cmd_fail").context("compile failing helper")?;
-    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+    with_world(|world| {
+        world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
+    });
     Ok(())
 }
 
 #[given("a large-output stdlib command helper")]
-pub(crate) fn large_output_stdlib_command_helper(world: &mut CliWorld) -> Result<()> {
-    let root = ensure_workspace(world)?;
+pub(crate) fn large_output_stdlib_command_helper() -> Result<()> {
+    let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
     let helper = compile_large_output_helper(&handle, &root, "cmd_large")
         .context("compile large-output helper")?;
-    world.stdlib_command = Some(format!("\"{}\"", helper.as_str()));
+    with_world(|world| {
+        world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
+    });
     Ok(())
 }
 
-#[given(regex = r#"^an HTTP server returning "(.+)"$"#)]
-pub(crate) fn http_server_returning(world: &mut CliWorld, body: ServerBody) -> Result<()> {
-    let body = body.into_inner();
-    world
-        .start_http_server(body)
-        .context("start stdlib HTTP fixture")?;
-    Ok(())
+#[given("an HTTP server returning {body}")]
+pub(crate) fn http_server_returning(body: String) -> Result<()> {
+    let body = strip_quotes(&body).to_string();
+    with_world(|world| {
+        world.shutdown_http_server();
+        let (url, server) = test_support::http::spawn_http_server(body)
+            .context("spawn HTTP server for stdlib steps")?;
+        world.stdlib_url.set(url);
+        world.http_server.set_value(server);
+        Ok(())
+    })
 }
 
-#[given(regex = r#"^the stdlib file "(.+)" contains "(.+)"$"#)]
-pub(crate) fn write_stdlib_file(
-    world: &mut CliWorld,
-    path: RelativePath,
-    contents: FileContent,
-) -> Result<()> {
-    let root = ensure_workspace(world)?;
+#[given("the stdlib file {path} contains {contents}")]
+pub(crate) fn write_stdlib_file(path: String, contents: String) -> Result<()> {
+    let path = strip_quotes(&path);
+    let contents = strip_quotes(&contents);
+    let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let relative_path = TemplatePath::from(path.into_path_buf());
+    let relative_path = TemplatePath::from(path);
     if let Some(parent) = relative_path
         .as_path()
         .parent()
@@ -118,15 +127,16 @@ pub(crate) fn write_stdlib_file(
             .context("create stdlib fixture directories")?;
     }
     handle
-        .write(relative_path.as_path(), contents.into_bytes())
+        .write(relative_path.as_path(), contents.as_bytes())
         .context("write stdlib fixture file")?;
     Ok(())
 }
 
-#[given(regex = r#"^the stdlib executable "(.+)" exists$"#)]
-pub(crate) fn stdlib_executable_exists(world: &mut CliWorld, path: RelativePath) -> Result<()> {
-    let root = ensure_workspace(world)?;
-    let relative = path.into_path_buf();
+#[given("the stdlib executable {path} exists")]
+pub(crate) fn stdlib_executable_exists(path: String) -> Result<()> {
+    let path = strip_quotes(&path);
+    let root = ensure_workspace()?;
+    let relative = Utf8PathBuf::from(path);
     let target = resolve_executable_path(&root, &relative);
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent.as_std_path())
@@ -138,10 +148,10 @@ pub(crate) fn stdlib_executable_exists(world: &mut CliWorld, path: RelativePath)
     Ok(())
 }
 
-#[given(regex = r#"^the stdlib PATH entries are "(.*)"$"#)]
-pub(crate) fn stdlib_path_entries(world: &mut CliWorld, entries: PathEntries) -> Result<()> {
-    let root = ensure_workspace(world)?;
-    let raw_entries = entries.into_inner();
+#[given("the stdlib PATH entries are {entries}")]
+pub(crate) fn stdlib_path_entries(entries: String) -> Result<()> {
+    let raw_entries = strip_quotes(&entries);
+    let root = ensure_workspace()?;
     let trimmed = raw_entries.trim();
     let dirs: Vec<Utf8PathBuf> = if trimmed.is_empty() {
         Vec::new()
@@ -157,44 +167,51 @@ pub(crate) fn stdlib_path_entries(world: &mut CliWorld, entries: PathEntries) ->
             .with_context(|| format!("create PATH directory {dir}"))?;
     }
     let joined = if dirs.is_empty() {
-        OsString::new()
+        std::ffi::OsString::new()
     } else {
         env::join_paths(dirs.iter().map(|dir| dir.as_std_path()))
             .context("join stdlib PATH entries")?
     };
     let previous = set_var("PATH", joined.as_os_str());
-    world.env_vars.insert("PATH".into(), previous);
+    with_world(|world| {
+        world.track_env_var("PATH".into(), previous);
+    });
     #[cfg(windows)]
     {
         let previous = set_var("PATHEXT", OsStr::new(".cmd;.exe"));
-        world.env_vars.insert("PATHEXT".into(), previous);
+        with_world(|world| {
+            world.track_env_var("PATHEXT".into(), previous);
+        });
     }
     Ok(())
 }
 
 #[given("HOME points to the stdlib workspace root")]
-pub(crate) fn home_points_to_stdlib_root(world: &mut CliWorld) -> Result<()> {
-    let root = ensure_workspace(world)?;
+pub(crate) fn home_points_to_stdlib_root() -> Result<()> {
+    let root = ensure_workspace()?;
     let os_root = OsStr::new(root.as_str());
     let previous = set_var("HOME", os_root);
-    world.env_vars.entry("HOME".into()).or_insert(previous);
+    with_world(|world| {
+        world.track_env_var("HOME".into(), previous);
+    });
     #[cfg(windows)]
     {
         let previous = set_var("USERPROFILE", os_root);
-        world
-            .env_vars
-            .entry("USERPROFILE".into())
-            .or_insert(previous);
+        with_world(|world| {
+            world.track_env_var("USERPROFILE".into(), previous);
+        });
     }
-    world.stdlib_root = Some(root);
+    with_world(|world| {
+        world.stdlib_root.set(root);
+    });
     Ok(())
 }
 
-pub(crate) fn resolve_template_path(root: &Utf8Path, raw: RelativePath) -> TemplatePath {
-    if raw.as_str().starts_with('~') {
-        return TemplatePath::from(raw.into_path_buf());
+pub(crate) fn resolve_template_path(root: &Utf8Path, raw: &str) -> TemplatePath {
+    if raw.starts_with('~') {
+        return TemplatePath::from(raw);
     }
-    let candidate = raw.into_path_buf();
+    let candidate = Utf8PathBuf::from(raw);
     if candidate.is_absolute() {
         TemplatePath::from(candidate)
     } else {

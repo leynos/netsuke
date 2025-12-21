@@ -1,32 +1,8 @@
-//! Parsing helpers for stdlib Cucumber steps, covering timestamp and offset
-//! formats used in output assertions and server host extraction.
+//! Parsing helpers for stdlib steps, covering timestamp and offset
+//! formats used in output assertions.
+
 use anyhow::{Context, Result, anyhow, bail};
 use time::{OffsetDateTime, UtcOffset, format_description::well_known::Iso8601};
-
-pub(crate) fn server_host(url: &str) -> Option<&str> {
-    extract_host_from_url(url)
-}
-
-pub(crate) fn extract_host_from_url(url: &str) -> Option<&str> {
-    const HTTP_LEN: usize = 7;
-    const HTTPS_LEN: usize = 8;
-
-    if let Some(prefix) = url.get(..HTTP_LEN)
-        && prefix.eq_ignore_ascii_case("http://")
-    {
-        let (_, rest) = url.split_at(HTTP_LEN);
-        return rest.split('/').next();
-    }
-
-    if let Some(prefix) = url.get(..HTTPS_LEN)
-        && prefix.eq_ignore_ascii_case("https://")
-    {
-        let (_, rest) = url.split_at(HTTPS_LEN);
-        return rest.split('/').next();
-    }
-
-    None
-}
 
 pub(crate) fn parse_iso_timestamp(raw: &str) -> Result<OffsetDateTime> {
     OffsetDateTime::parse(raw, &Iso8601::DEFAULT)
