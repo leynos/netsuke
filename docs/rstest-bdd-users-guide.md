@@ -26,15 +26,16 @@ owner, the developer, and the tester.
 `rstest-bdd` targets Rust 1.75 or newer across every crate in the workspace.
 Each `Cargo.toml` declares `rust-version = "1.75"`, so `cargo` will refuse to
 compile the project on older stable compilers. The workspace now settles on the
-Rust 2021 edition to keep the declared MSRV and edition compatible. The
-repository still pins a nightly toolchain for development because the runtime
-uses auto traits and negative impls. Those nightly-only features remain behind
-the existing `rust-toolchain.toml` pin and do not alter the public MSRV. Step
-definitions and writers remain synchronous functions; the framework no longer
-depends on the `async-trait` crate to express async methods in traits. Projects
-that previously relied on `#[async_trait]` in helper traits should replace
-those methods with ordinary functions—`StepFn` continues to execute
-synchronously and exposes results via `StepExecution`.
+Rust 2021 edition to keep the declared Minimum Supported Rust Version (MSRV)
+and edition compatible. The repository still pins a nightly toolchain for
+development because the runtime uses auto traits and negative impls. Those
+nightly-only features remain behind the existing `rust-toolchain.toml` pin and
+do not alter the public MSRV. Step definitions and writers remain synchronous
+functions; the framework no longer depends on the `async-trait` crate to
+express async methods in traits. Projects that previously relied on
+`#[async_trait]` in helper traits should replace those methods with ordinary
+functions—`StepFn` continues to execute synchronously and exposes results via
+`StepExecution`.
 
 ## The three amigos
 
@@ -61,9 +62,10 @@ same type for readability.
 
 Scenarios follow the simple `Given‑When‑Then` pattern. Support for **Scenario
 Outline** is available, enabling a single scenario to run with multiple sets of
-data from an `Examples` table. A `Background` section may define steps that run
-before each scenario. Advanced constructs such as data tables and Docstrings
-provide structured or free‑form arguments to steps.
+data from an `Examples` table. A `Background` section defines steps that run
+before each `Scenario` in a feature file, enabling shared setup across
+scenarios. Advanced constructs such as data tables and Docstrings provide
+structured or free‑form arguments to steps.
 
 ### Example feature file
 
@@ -83,8 +85,8 @@ code.
 ### Internationalised scenarios
 
 `rstest-bdd` reads the optional `# language: <code>` directive that appears at
-the top of a feature file. When you specify a locale the parser uses that
-language's keyword catalogue, letting teams collaborate in their native
+the top of a feature file. When a locale is specified, the parser uses that
+language's keyword catalogue, enabling teams to collaborate in their native
 language. The `examples/japanese-ledger` crate demonstrates the end-to-end
 workflow for Japanese:
 
@@ -99,7 +101,7 @@ workflow for Japanese:
 
 Step definitions use the same Unicode phrases:
 
-```rust
+```rust,no_run
 use japanese_ledger::HouseholdLedger;
 use rstest_bdd_macros::{given, when, then};
 
@@ -110,8 +112,8 @@ fn starting_balance(ledger: &HouseholdLedger, start: i32) {
 ```
 
 Running `cargo test -p japanese-ledger` executes both Japanese scenarios. The
-full source lives under `examples/japanese-ledger/` if you want to copy the
-structure into your own project.
+full source lives under `examples/japanese-ledger/` for teams that want to copy
+the structure into their projects.
 
 ## Step definitions
 
@@ -150,6 +152,131 @@ key–value map of fixture names to type‑erased references. When a scenario ru
 the generated test inserts its arguments (the `rstest` fixtures) into the
 `StepContext` before invoking each registered step.
 
+### Mutable world fixtures
+
+Each scenario owns its fixtures, so value fixtures are stored with exclusive
+access. Step parameters declared as `&mut FixtureType` receive mutable
+references, making “world” structs ergonomic without sprinkling `Cell` or
+`RefCell` wrappers through the fields. Immutable references continue to work
+exactly as before; mutability is an opt‑in convenience.
+
+**When to use `&mut Fixture`**
+
+- Prefer `&mut` when the world has straightforward owned fields and the steps
+  mutate them directly.
+- Prefer `Slot<T>` (from `rstest_bdd::Slot`) when state is optional, when a
+  need to reset between steps, or when a step may override values conditionally
+  without holding a mutable borrow.
+- Combine both: keep the primary world mutable and store optional or
+  late‑bound values in slots to avoid borrow checker churn inside complex
+  scenarios.
+
+#### Simple mutable world
+
+```rust,no_run
+use rstest::fixture;
+use rstest_bdd_macros::{given, scenario, then, when};
+
+#[derive(Default)]
+struct CounterWorld {
+    count: usize,
+}
+
+#[fixture]
+fn world() -> CounterWorld {
+    CounterWorld::default()
+}
+
+#[given("the world starts at {value}")]
+fn seed(world: &mut CounterWorld, value: usize) {
+    world.count = value;
+}
+
+#[when("the world increments")]
+fn increment(world: &mut CounterWorld) {
+    world.count += 1;
+}
+
+#[then("the world equals {expected}")]
+fn check(world: &CounterWorld, expected: usize) {
+    assert_eq!(world.count, expected);
+}
+
+#[scenario(path = "tests/features/mutable_world.feature", name = "Steps mutate shared state")]
+fn mutable_world(world: CounterWorld) {
+    assert_eq!(world.count, 3);
+}
+```
+
+#### Slot‑based state (unchanged and still useful)
+
+```rust,no_run
+use rstest::fixture;
+use rstest_bdd::{ScenarioState as _, Slot};
+use rstest_bdd_macros::{given, scenario, then, when, ScenarioState};
+
+#[derive(Default, ScenarioState)]
+struct CartState {
+    total: Slot<i32>,
+}
+
+#[fixture]
+fn cart_state() -> CartState { CartState::default() }
+
+#[when("I record {value:i32}")]
+fn record(cart_state: &CartState, value: i32) { cart_state.total.set(value); }
+
+#[then("the recorded value is {expected:i32}")]
+fn check(cart_state: &CartState, expected: i32) {
+    assert_eq!(cart_state.total.get(), Some(expected));
+}
+
+#[scenario(path = "tests/features/scenario_state.feature", name = "Recording a single value")]
+fn keeps_value(cart_state: CartState) { let _ = cart_state; }
+```
+
+#### Mixed approach
+
+```rust,no_run
+#[derive(Default, ScenarioState)]
+struct ReportWorld {
+    total: usize,
+    last_input: Slot<String>,
+}
+
+#[when("the total increases by {value:usize}")]
+fn bump(world: &mut ReportWorld, value: usize) {
+    world.total += value;
+    world.last_input.set(format!("+{value}"));
+}
+
+#[then("the last input was recorded")]
+fn last_input(world: &ReportWorld) {
+    assert_eq!(world.last_input.get(), Some("+1".to_string()));
+}
+```
+
+#### Best practices
+
+- Keep world structs small and focused; extract helper methods when mutation
+  requires validation or cross‑field consistency.
+- Prefer immutable references in assertions to make read‑only intent obvious.
+- Reserve `Slot<T>` for optional or resettable state; avoid mixing it in when a
+  plain field would do.
+- Add comments where mutation order matters between steps.
+
+#### Troubleshooting
+
+- A rustc internal compiler error (ICE) affected some nightly compilers when
+  expanding macro‑driven scenarios with `&mut` fixtures. See
+  `crates/rstest-bdd/tests/mutable_world_macro.rs` for a guarded example and
+  `crates/rstest-bdd/tests/mutable_fixture.rs` for the context‑level regression
+  test used until the upstream fix lands. Tracking details live in
+  `docs/known-issues.md#rustc-ice-with-mutable-world-macro`.
+- For advanced cases—custom fixture injection or manual borrowing—use
+  `StepContext::insert_owned` and `StepContext::borrow_mut` directly; the
+  examples above cover most scenarios.
+
 ### Step return values
 
 `#[when]` steps may return a value. The scenario runner scans the available
@@ -164,7 +291,7 @@ Steps may also return `Result<T, E>`. An `Err` aborts the scenario, while an
 Returning `()` or `Ok(())` produces no stored value, so fixtures of `()` are
 not overwritten.
 
-```rust
+```rust,no_run
 use rstest::fixture;
 use rstest_bdd_macros::{given, when, then, scenario};
 
@@ -196,7 +323,7 @@ During expansion the macro inserts a compile-time check to ensure the field
 count matches the pattern, producing a trait-bound error if the struct does not
 implement `StepArgs`.
 
-```rust
+```rust,no_run
 use rstest::fixture;
 use rstest_bdd_macros::{given, scenario, then, when, StepArgs};
 
@@ -246,7 +373,7 @@ declare any placeholders.
 
 Example:
 
-```rust
+```rust,no_run
 use rstest::fixture;
 use rstest_bdd_macros::{given, when, then, scenario};
 
@@ -291,12 +418,12 @@ Define a state struct whose fields are `Slot<T>` and derive [`ScenarioState`].
 The derive macro clears every slot by implementing `ScenarioState::reset` and
 it automatically adds a [`Default`] implementation that leaves all slots empty.
 **Do not** also derive or implement `Default`: Rust will report a
-duplicate-implementation error because the macro already provides it. When you
-need custom initialization, plan to use the future
-`#[scenario_state(no_default)]` flag (or equivalent) to opt out of the
-generated `Default` and supply your own logic.
+duplicate-implementation error because the macro already provides it. For
+custom initialization, plan to use the future `#[scenario_state(no_default)]`
+flag (or equivalent) to opt out of the generated `Default` and supply bespoke
+logic.
 
-```rust
+```rust,no_run
 use rstest::fixture;
 use rstest_bdd::{ScenarioState, Slot};
 use rstest_bdd_macros::{given, scenario, then, when, ScenarioState};
@@ -358,7 +485,7 @@ Step macros may omit the pattern string or provide a string literal containing
 only whitespace. In either case, the macro derives a pattern from the function
 name by replacing underscores with spaces.
 
-```rust
+```rust,no_run
 use rstest_bdd_macros::given;
 
 #[given]
@@ -398,7 +525,7 @@ include the leading `@`. When the filter is combined with `index` or `name`,
 the macro emits a compile error if the selected scenario does not satisfy the
 expression.
 
-```rust
+```rust,no_run
 # use rstest_bdd_macros::scenario;
 #[scenario(path = "features/search.feature", tags = "@fast and not @wip")]
 fn smoke_test() {}
@@ -451,7 +578,18 @@ message. Pass an optional string to describe the reason, and use the standard
 into test failures unless the feature or scenario carries an `@allow_skipped`
 tag. (Example-level tags are not yet evaluated.)
 
-```rust
+The macro captures the current execution scope internally, so helper functions
+may freely call `skip!` as long as they eventually run within a step or hook.
+When code outside that context—for example, a unit test or module
+initialization routine—invokes the macro, it panics with the message
+`rstest_bdd::skip! may only be used inside a step or hook generated by rstest-bdd`.
+ Each scope tracks the thread that entered it; issuing a skip from another
+thread panics with
+`rstest_bdd::skip! may only run on the thread executing the step ...`. Keep
+skip requests on the thread that executes steps, so the runner can intercept
+the panic payload.
+
+```rust,no_run
 # use rstest_bdd as bdd;
 # use rstest_bdd_macros::{given, scenario};
 
@@ -484,6 +622,39 @@ Scenario: Behaviour pending external contract
   Given a dependent service is unavailable
 ```
 
+### Asserting skipped outcomes
+
+Tests that exercise skip-heavy flows no longer need to match on enums to verify
+that a step or scenario stopped executing. Use
+`rstest_bdd::assert_step_skipped!` to unwrap a `StepExecution::Skipped`
+outcome, optionally constraining its message, and
+`rstest_bdd::assert_scenario_skipped!` to inspect
+[`ScenarioStatus`](crate::reporting::ScenarioStatus) records. Both macros
+accept `message_absent = true` to assert that no message was provided and
+substring matching to confirm that a message contains the expected reason.
+
+```rust,no_run
+use rstest_bdd::{assert_scenario_skipped, assert_step_skipped, StepExecution};
+use rstest_bdd::reporting::{ScenarioRecord, ScenarioStatus, SkippedScenario};
+
+let outcome = StepExecution::skipped(Some("maintenance pending".into()));
+let message = assert_step_skipped!(outcome, message = "maintenance");
+assert_eq!(message, Some("maintenance pending".into()));
+
+let record = ScenarioRecord::new(
+    "features/unhappy.feature",
+    "pending work",
+    ScenarioStatus::Skipped(SkippedScenario::new(None, true, false)),
+);
+let details = assert_scenario_skipped!(
+    record.status(),
+    message_absent = true,
+    allow_skipped = true,
+    forced_failure = false,
+);
+assert!(details.allow_skipped());
+```
+
 ## Autodiscovering scenarios
 
 For large suites, it is tedious to bind each scenario manually. The
@@ -493,7 +664,7 @@ after the feature file and scenario title. Identifiers are sanitized
 (ASCII-only) and deduplicated by appending a numeric suffix when collisions
 occur.
 
-```rust
+```rust,no_run
 use rstest_bdd_macros::{given, then, when, scenarios};
 
 #[given("a precondition")] fn precondition() {}
@@ -522,7 +693,7 @@ behave like other `rstest` tests; they honour `#[tokio::test]` or
 `#[async_std::test]` attributes if applied to the original function. Each
 scenario runs its steps sequentially in the order defined in the feature file.
 By default, missing steps emit a compile‑time warning and are checked again at
-runtime so steps can live in other crates. Enabling the
+runtime, so steps can live in other crates. Enabling the
 `compile-time-validation` feature on `rstest-bdd-macros` registers steps and
 performs compile‑time validation, emitting warnings for any that are missing.
 The `strict-compile-time-validation` feature builds on this and turns those
@@ -530,18 +701,18 @@ warnings into `compile_error!`s when all step definitions are local. This
 prevents behaviour specifications from silently drifting from the code while
 still permitting cross‑crate step sharing.
 
-To enable validation pin a feature in your `dev-dependencies`:
+To enable validation, pin a feature in the project's `dev-dependencies`:
 
 ```toml
 [dev-dependencies]
-rstest-bdd-macros = { version = "0.1.0", features = ["compile-time-validation"] }
+rstest-bdd-macros = { version = "0.2.0", features = ["compile-time-validation"] }
 ```
 
 For strict checking use:
 
 ```toml
 [dev-dependencies]
-rstest-bdd-macros = { version = "0.1.0", features = ["strict-compile-time-validation"] }
+rstest-bdd-macros = { version = "0.2.0", features = ["strict-compile-time-validation"] }
 ```
 
 Steps are only validated when one of these features is enabled.
@@ -574,24 +745,31 @@ Best practices for writing effective scenarios include:
   literal braces with `{{` and `}}`. Use
   `\` to match a single backslash. A trailing `\` or any other backslash escape
   is treated literally, so `\d` matches the two-character sequence `\d`. Nested
-  braces inside placeholders are not supported. Placeholders follow
-  `{name[:type]}`; `name` must start with a letter or underscore and may
-  contain letters, digits, or underscores (`[A-Za-z_][A-Za-z0-9_]*`).
-  Whitespace within the type hint is ignored (for example, `{count: u32}` and
-  `{count:u32}` are both accepted), but whitespace is not allowed between the
-  name and the colon. Prefer the compact form `{count:u32}` in new code. When a
-  pattern contains no placeholders, the step text must match exactly. Unknown
-  type hints are treated as generic placeholders and capture any non-newline
-  text greedily.
+  braces inside placeholders are not supported. Braces are not allowed inside
+  type hints. Placeholders use `{name}` or `{name:type}`; the type hint must
+  not contain braces (for example, `{n:{u32}}` and `{n:Vec<{u32}>}` are
+  rejected). To describe braces in the surrounding step text (for example,
+  referring to `{u32}`), escape them as `{{` and `}}` rather than placing them
+  inside `{name:type}`. The lexer closes the placeholder at the first `}` after
+  the optional type hint; any characters between the `:type` and that first `}`
+  are ignored (for example, `{n:u32 extra}` parses as `name = n`,
+  `type = u32`). `name` must start with a letter or underscore and may contain
+  letters, digits, or underscores (`[A-Za-z_][A-Za-z0-9_]*`). Whitespace within
+  the type hint is ignored (for example, `{count: u32}` and `{count:u32}` are
+  both accepted), but whitespace is not allowed between the name and the colon.
+  Prefer the compact form `{count:u32}` in new code. When a pattern contains no
+  placeholders, the step text must match exactly. Unknown type hints are
+  treated as generic placeholders and capture any non-newline text using a
+  non-greedy match.
 
 ## Data tables and Docstrings
 
 Steps may supply structured or free-form data via a trailing argument. A data
 table is received by including a parameter annotated with `#[datatable]` or
-named `datatable`. The declared type must implement `TryFrom<Vec<Vec<String>>>`
-so the wrapper can convert the parsed cells. Existing code can continue to
-accept a raw `Vec<Vec<String>>`, while the `rstest_bdd::datatable` module
-offers strongly typed helpers.
+named `datatable`. The declared type must implement
+`TryFrom<Vec<Vec<String>>>`, so the wrapper can convert the parsed cells.
+Existing code can continue to accept a raw `Vec<Vec<String>>`, while the
+`rstest_bdd::datatable` module offers strongly typed helpers.
 
 `datatable::Rows<T>` wraps a vector of parsed rows and derives
 `Deref<Target = [T]>`, `From<Vec<T>>`, and `IntoIterator`, enabling direct
@@ -600,7 +778,7 @@ each row should be interpreted for a given type. When `T::REQUIRES_HEADER` is
 `true`, the first table row is treated as a header and exposed via the
 `HeaderSpec` helpers.
 
-```rust
+```rust,no_run
 use rstest_bdd::datatable::{
     self, DataTableError, DataTableRow, RowSpec, Rows,
 };
@@ -639,8 +817,25 @@ Projects that prefer to work with raw rows can declare the argument as
 `Vec<Vec<String>>` and handle parsing manually. Both forms can co-exist within
 the same project, allowing incremental adoption of typed tables.
 
+### Performance and caching
+
+Data tables are now converted once per distinct table literal and cached for
+reuse. The generated wrappers key the cache by the table content, so repeated
+executions of the same step with the same table reuse the stored
+`Vec<Vec<String>>` without re-parsing cell text. The cache is scoped to the
+step wrapper, preventing different steps or tables from sharing entries.
+
+For zero-allocation access on subsequent executions, prefer the
+`datatable::CachedTable` argument type. It borrows the cached rows via an
+`Arc`, avoiding fresh string allocations when the step runs multiple times.
+Existing `Vec<Vec<String>>` signatures remain supported; they clone the cached
+rows when binding the argument, which still avoids re-parsing but retains the
+ownership semantics of the older API. The cache lives for the lifetime of the
+test process, so large tables remain available to later scenarios without
+additional conversion overhead.
+
 A derive macro removes the boilerplate when mapping headers to fields. Annotate
-the struct with `#[derive(DataTableRow)]` and customise behaviour via field
+the struct with `#[derive(DataTableRow)]` and customize behaviour via field
 attributes:
 
 - `#[datatable(rename_all = "kebab-case")]` applies a casing rule to unnamed
@@ -655,7 +850,7 @@ attributes:
 - `#[datatable(parse_with = path::to_fn)]` calls a custom parser that returns a
   `Result<T, E>`.
 
-```rust
+```rust,no_run
 use rstest_bdd::datatable::{self, DataTableError, Rows};
 use rstest_bdd_macros::DataTableRow;
 
@@ -701,7 +896,7 @@ rows before exposing them to the step function:
 - `#[datatable(try_map = path::to_fn)]` performs fallible conversion, returning
   a `DataTableError` on failure.
 
-```rust
+```rust,no_run
 use rstest_bdd::datatable::{DataTableError, Rows};
 use rstest_bdd_macros::{DataTable, DataTableRow};
 
@@ -815,7 +1010,7 @@ Scenario: capture table and docstring
     """
 ```
 
-```rust
+```rust,no_run
 #[given("the following numbers:")]
 fn capture_table(datatable: Vec<Vec<String>>) {
     // ...
@@ -850,10 +1045,10 @@ document and README remain unimplemented in the current codebase:
 - **Restricted placeholder types.** Only placeholders that parse via
   `FromStr` are supported, and they must be well-formed and non-overlapping.
 
-Consult the project’s roadmap or repository for updates. When new features are
-added, patterns and examples may change. Meanwhile, adopting `rstest‑bdd` in
-its current form will be most effective when feature files remain simple and
-step definitions are explicit.
+Consult the project’s roadmap or repository for updates. The addition of new
+features may result in patterns or examples changing. Meanwhile, adopting
+`rstest‑bdd` in its current form will be most effective when teams keep feature
+files simple. Step definitions should remain explicit.
 
 ## Assertion macros
 
@@ -861,7 +1056,7 @@ When step functions return `Result` values it is common to assert on their
 outcome. The `rstest-bdd` crate exports two helper macros to streamline these
 checks:
 
-```rust
+```rust,no_run
 use rstest_bdd::{assert_step_err, assert_step_ok};
 
 let ok: Result<(), &str> = Ok(());
@@ -910,7 +1105,7 @@ Localization tooling can be added to `Cargo.toml` as follows:
 
 ```toml
 [dependencies]
-rstest-bdd = "0.1.0"
+rstest-bdd = "0.2.0"
 i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
 unic-langid = "0.9"
 ```
@@ -921,7 +1116,7 @@ Fluent infrastructure to load resources into their own
 [`FluentLanguageLoader`]. Libraries without a localization framework can rely
 on the built-in loader and request a different language at runtime:
 
-```rust
+```rust,no_run
 # fn scope_locale() -> Result<(), rstest_bdd::localization::LocalizationError> {
 use rstest_bdd::select_localizations;
 use unic_langid::langid;
@@ -984,16 +1179,17 @@ runtime reporting modules. `rstest_bdd::reporting::json` offers helper
 functions that serialize the collector snapshot into a predictable schema with
 lowercase status labels:
 
-```rust
+```rust,no_run
 let mut buffer = Vec::new();
 rstest_bdd::reporting::json::write_snapshot(&mut buffer)?;
 ```
 
 The companion `rstest_bdd::reporting::junit` module renders the same snapshot
 as JUnit XML. Each skipped scenario emits a `<skipped>` element with an
-optional `message` attribute so CI servers surface the reason:
+optional `message` attribute so continuous integration (CI) servers surface the
+reason:
 
-```rust
+```rust,no_run
 let mut xml = String::new();
 rstest_bdd::reporting::junit::write_snapshot(&mut xml)?;
 ```
