@@ -9,6 +9,142 @@ use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
 use cucumber::{given, then, when};
 use std::fs;
+use std::ops::Deref;
+use std::path::PathBuf;
+
+#[derive(Debug)]
+struct DirectoryName(String);
+
+impl From<String> for DirectoryName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl std::str::FromStr for DirectoryName {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(value.to_owned()))
+    }
+}
+
+impl Deref for DirectoryName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+#[derive(Debug)]
+struct FileName(String);
+
+impl From<String> for FileName {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl std::str::FromStr for FileName {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(value.to_owned()))
+    }
+}
+
+impl Deref for FileName {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+#[derive(Debug)]
+struct ManifestOutput(String);
+
+impl From<String> for ManifestOutput {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl std::str::FromStr for ManifestOutput {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(value.to_owned()))
+    }
+}
+
+impl Deref for ManifestOutput {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+#[derive(Debug)]
+struct OutputFragment(String);
+
+impl From<String> for OutputFragment {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl std::str::FromStr for OutputFragment {
+    type Err = std::convert::Infallible;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(Self(value.to_owned()))
+    }
+}
+
+impl Deref for OutputFragment {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+fn get_temp_path(world: &CliWorld) -> Result<PathBuf> {
+    let temp = world
+        .temp
+        .as_ref()
+        .context("temp dir has not been initialised")?;
+    Ok(temp.path().to_path_buf())
+}
+
+fn assert_output_contains(
+    output: Option<&String>,
+    output_name: &str,
+    fragment: &str,
+) -> Result<()> {
+    let output =
+        output.with_context(|| format!("no {output_name} captured from netsuke CLI process"))?;
+    ensure!(
+        output.contains(fragment),
+        "expected {output_name} to contain '{fragment}', got '{output}'"
+    );
+    Ok(())
+}
+
+fn assert_file_existence(world: &CliWorld, name: &str, should_exist: bool) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
+    let path = temp_path.join(name);
+    let expected = if should_exist { "exist" } else { "not exist" };
+    ensure!(
+        path.exists() == should_exist,
+        "expected file {} to {expected}",
+        path.display()
+    );
+    Ok(())
+}
 
 #[given("a minimal Netsuke workspace")]
 fn minimal_workspace(world: &mut CliWorld) -> Result<()> {
@@ -25,36 +161,25 @@ fn minimal_workspace(world: &mut CliWorld) -> Result<()> {
 }
 
 #[given(expr = "a directory named {string} exists")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String arguments"
-)]
-fn directory_named_exists(world: &mut CliWorld, name: String) -> Result<()> {
-    let temp = world
-        .temp
-        .as_ref()
-        .context("temp dir has not been initialised")?;
-    fs::create_dir_all(temp.path().join(&name))
-        .with_context(|| format!("create directory {}", temp.path().join(&name).display()))?;
+fn directory_named_exists(world: &mut CliWorld, name: DirectoryName) -> Result<()> {
+    let DirectoryName(name) = name;
+    let temp_path = get_temp_path(world)?;
+    let dir_path = temp_path.join(name.as_str());
+    fs::create_dir_all(&dir_path)
+        .with_context(|| format!("create directory {}", dir_path.display()))?;
     Ok(())
 }
 
 #[when(expr = "the netsuke manifest subcommand is run with {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String arguments"
-)]
-fn run_manifest_subcommand(world: &mut CliWorld, output: String) -> Result<()> {
-    let temp = world
-        .temp
-        .as_ref()
-        .context("temp dir has not been initialised")?;
+fn run_manifest_subcommand(world: &mut CliWorld, output: ManifestOutput) -> Result<()> {
+    let ManifestOutput(output) = output;
+    let temp_path = get_temp_path(world)?;
     let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
     let result = cmd
-        .current_dir(temp.path())
+        .current_dir(temp_path)
         .env("PATH", "")
         .arg("manifest")
-        .arg(&output)
+        .arg(output.as_str())
         .output()
         .context("run netsuke manifest subcommand")?;
 
@@ -70,71 +195,25 @@ fn run_manifest_subcommand(world: &mut CliWorld, output: String) -> Result<()> {
 }
 
 #[then(expr = "stdout should contain {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String arguments"
-)]
-fn stdout_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
-    let stdout = world
-        .command_stdout
-        .as_ref()
-        .context("no stdout captured from netsuke CLI process")?;
-    ensure!(
-        stdout.contains(&fragment),
-        "expected stdout to contain '{fragment}', got '{stdout}'"
-    );
-    Ok(())
+fn stdout_should_contain(world: &mut CliWorld, fragment: OutputFragment) -> Result<()> {
+    let OutputFragment(fragment) = fragment;
+    assert_output_contains(world.command_stdout.as_ref(), "stdout", fragment.as_str())
 }
 
 #[then(expr = "stderr should contain {string}")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String arguments"
-)]
-fn stderr_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
-    let stderr = world
-        .command_stderr
-        .as_ref()
-        .context("no stderr captured from netsuke CLI process")?;
-    ensure!(
-        stderr.contains(&fragment),
-        "expected stderr to contain '{fragment}', got '{stderr}'"
-    );
-    Ok(())
+fn stderr_should_contain(world: &mut CliWorld, fragment: OutputFragment) -> Result<()> {
+    let OutputFragment(fragment) = fragment;
+    assert_output_contains(world.command_stderr.as_ref(), "stderr", fragment.as_str())
 }
 
 #[then(expr = "the file {string} should exist")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String arguments"
-)]
-fn file_should_exist(world: &mut CliWorld, name: String) -> Result<()> {
-    let temp = world
-        .temp
-        .as_ref()
-        .context("temp dir has not been initialised")?;
-    ensure!(
-        temp.path().join(&name).exists(),
-        "expected file {} to exist",
-        temp.path().join(&name).display()
-    );
-    Ok(())
+fn file_should_exist(world: &mut CliWorld, name: FileName) -> Result<()> {
+    let FileName(name) = name;
+    assert_file_existence(world, name.as_str(), true)
 }
 
 #[then(expr = "the file {string} should not exist")]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Cucumber step requires owned String arguments"
-)]
-fn file_should_not_exist(world: &mut CliWorld, name: String) -> Result<()> {
-    let temp = world
-        .temp
-        .as_ref()
-        .context("temp dir has not been initialised")?;
-    ensure!(
-        !temp.path().join(&name).exists(),
-        "expected file {} to not exist",
-        temp.path().join(&name).display()
-    );
-    Ok(())
+fn file_should_not_exist(world: &mut CliWorld, name: FileName) -> Result<()> {
+    let FileName(name) = name;
+    assert_file_existence(world, name.as_str(), false)
 }
