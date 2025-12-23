@@ -50,7 +50,7 @@ fn manifest_subcommand_streams_to_stdout_when_dash() -> Result<()> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     ensure!(
-        stdout.contains("rule "),
+        stdout.contains("rule ") && stdout.contains("build "),
         "manifest - should print Ninja content, got: {stdout}"
     );
     ensure!(
@@ -86,6 +86,43 @@ fn manifest_subcommand_resolves_output_relative_to_directory() -> Result<()> {
     ensure!(
         !temp.path().join("out.ninja").exists(),
         "manifest output should not be written outside -C directory"
+    );
+    Ok(())
+}
+
+#[test]
+fn manifest_subcommand_streams_to_stdout_when_dash_with_directory() -> Result<()> {
+    let temp = tempdir().context("create temp dir for manifest stdout -C test")?;
+    let workdir = temp.path().join("work");
+    fs::create_dir_all(&workdir).context("create work directory")?;
+    let netsukefile = workdir.join("Netsukefile");
+    fs::copy("tests/data/minimal.yml", &netsukefile)
+        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
+
+    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
+    let output = cmd
+        .current_dir(temp.path())
+        .env("PATH", "")
+        .arg("-C")
+        .arg("work")
+        .arg("manifest")
+        .arg("-")
+        .output()
+        .context("run netsuke -C work manifest -")?;
+    ensure!(output.status.success(), "manifest - with -C should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    ensure!(
+        stdout.contains("rule ") && stdout.contains("build "),
+        "manifest - with -C should print Ninja content, got: {stdout}"
+    );
+    ensure!(
+        !temp.path().join("-").exists(),
+        "manifest - with -C should not create a file named '-' in the working directory"
+    );
+    ensure!(
+        !workdir.join("-").exists(),
+        "manifest - with -C should not create a file named '-' in the -C directory"
     );
     Ok(())
 }

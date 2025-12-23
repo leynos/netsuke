@@ -88,14 +88,31 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     Ok(())
 }
 
+fn is_broken_pipe(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::BrokenPipe
+}
+
+fn write_all_ignoring_broken_pipe(writer: &mut impl Write, buf: &[u8]) -> io::Result<()> {
+    match writer.write_all(buf) {
+        Ok(()) => Ok(()),
+        Err(err) if is_broken_pipe(&err) => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
+fn flush_ignoring_broken_pipe(writer: &mut impl Write) -> io::Result<()> {
+    match writer.flush() {
+        Ok(()) => Ok(()),
+        Err(err) if is_broken_pipe(&err) => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
 pub fn write_ninja_stdout(content: &NinjaContent) -> AnyResult<()> {
     let mut stdout = io::stdout().lock();
-    match stdout.write_all(content.as_str().as_bytes()) {
-        Ok(()) => {}
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => return Ok(()),
-        Err(err) => return Err(err).context("failed to write Ninja manifest to stdout"),
-    }
-    stdout.flush().context("failed to flush stdout")?;
+    write_all_ignoring_broken_pipe(&mut stdout, content.as_str().as_bytes())
+        .context("failed to write Ninja manifest to stdout")?;
+    flush_ignoring_broken_pipe(&mut stdout).context("failed to flush stdout")?;
     Ok(())
 }
 

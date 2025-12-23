@@ -145,6 +145,7 @@ mockall = "0.11"
 camino = "1.2.0"
 test_support = { path = "test_support" }
 strip-ansi-escapes = "0.2"
+derive_more = { version = "1", features = ["from", "deref"] }
 
 # Target-specific dev-deps
 [target.'cfg(unix)'.dev-dependencies]

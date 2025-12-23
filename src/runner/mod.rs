@@ -9,7 +9,7 @@ use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tempfile::NamedTempFile;
 use tracing::{debug, info};
 
@@ -95,7 +95,7 @@ pub fn run(cli: &Cli) -> Result<()> {
                 process::write_ninja_stdout(&ninja)?;
             } else {
                 let output_path = resolve_output_path(cli, file.as_path());
-                process::write_ninja_file(output_path.as_path(), &ninja)?;
+                process::write_ninja_file(output_path.as_ref(), &ninja)?;
             }
             Ok(())
         }
@@ -139,8 +139,8 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let _tmp_file_guard: Option<NamedTempFile>;
     if let Some(path) = &args.emit {
         let emit_path = resolve_output_path(cli, path.as_path());
-        process::write_ninja_file(emit_path.as_path(), &ninja)?;
-        build_path = Cow::Owned(emit_path);
+        process::write_ninja_file(emit_path.as_ref(), &ninja)?;
+        build_path = emit_path;
         _tmp_file_guard = None;
     } else {
         let tmp = process::create_temp_ninja_file(&ninja)?;
@@ -293,13 +293,13 @@ fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
 /// relative and a directory has been configured, the returned path is
 /// `directory/path`.
 #[must_use]
-fn resolve_output_path(cli: &Cli, path: &Path) -> PathBuf {
+fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
     if path.is_relative() {
         cli.directory
             .as_ref()
-            .map_or_else(|| path.to_path_buf(), |dir| dir.join(path))
+            .map_or_else(|| Cow::Borrowed(path), |dir| Cow::Owned(dir.join(path)))
     } else {
-        path.to_path_buf()
+        Cow::Borrowed(path)
     }
 }
 
@@ -307,6 +307,7 @@ fn resolve_output_path(cli: &Cli, path: &Path) -> PathBuf {
 mod tests {
     use super::*;
     use rstest::rstest;
+    use std::path::PathBuf;
 
     #[rstest]
     #[case(None, "out.ninja", "out.ninja")]
@@ -322,6 +323,6 @@ mod tests {
             ..Cli::default()
         };
         let resolved = resolve_output_path(&cli, Path::new(input));
-        assert_eq!(resolved, PathBuf::from(expected));
+        assert_eq!(resolved.as_ref(), Path::new(expected));
     }
 }

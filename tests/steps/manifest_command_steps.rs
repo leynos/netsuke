@@ -8,109 +8,30 @@ use crate::CliWorld;
 use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
 use cucumber::{given, then, when};
+use derive_more::{Deref, From};
 use std::fs;
-use std::ops::Deref;
 use std::path::PathBuf;
+use std::str::FromStr;
 
-#[derive(Debug)]
-struct DirectoryName(String);
+macro_rules! cucumber_string_wrapper {
+    ($name:ident) => {
+        #[derive(Debug, From, Deref)]
+        struct $name(String);
 
-impl From<String> for DirectoryName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
+        impl FromStr for $name {
+            type Err = std::convert::Infallible;
+
+            fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+                Ok(Self(value.to_owned()))
+            }
+        }
+    };
 }
 
-impl std::str::FromStr for DirectoryName {
-    type Err = std::convert::Infallible;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        Ok(Self(value.to_owned()))
-    }
-}
-
-impl Deref for DirectoryName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-#[derive(Debug)]
-struct FileName(String);
-
-impl From<String> for FileName {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl std::str::FromStr for FileName {
-    type Err = std::convert::Infallible;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        Ok(Self(value.to_owned()))
-    }
-}
-
-impl Deref for FileName {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-#[derive(Debug)]
-struct ManifestOutput(String);
-
-impl From<String> for ManifestOutput {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl std::str::FromStr for ManifestOutput {
-    type Err = std::convert::Infallible;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        Ok(Self(value.to_owned()))
-    }
-}
-
-impl Deref for ManifestOutput {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-#[derive(Debug)]
-struct OutputFragment(String);
-
-impl From<String> for OutputFragment {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl std::str::FromStr for OutputFragment {
-    type Err = std::convert::Infallible;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        Ok(Self(value.to_owned()))
-    }
-}
-
-impl Deref for OutputFragment {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
+cucumber_string_wrapper!(DirectoryName);
+cucumber_string_wrapper!(FileName);
+cucumber_string_wrapper!(ManifestOutput);
+cucumber_string_wrapper!(OutputFragment);
 
 fn get_temp_path(world: &CliWorld) -> Result<PathBuf> {
     let temp = world
