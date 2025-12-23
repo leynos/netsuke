@@ -13,6 +13,12 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         rust: [stable, '1.89.0']
+        # rstest-bdd currently requires nightly; monitor until v0.3.0 supports stable
+        include:
+          - os: ubuntu-latest
+            rust: nightly
+            experimental: true
+    continue-on-error: ${{ matrix.experimental || false }}
     permissions:
       contents: read
     env:
