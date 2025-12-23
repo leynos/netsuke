@@ -73,17 +73,106 @@ fn assert_parsed() -> Result<()> {
     })
 }
 
-fn assert_field_eq(
-    context_name: &str,
-    field_name: &str,
-    actual: &str,
-    expected: &str,
-) -> Result<()> {
+// ---------------------------------------------------------------------------
+// Domain-specific typed assertion functions
+// ---------------------------------------------------------------------------
+
+fn assert_target_name_eq(target_index: usize, actual: &str, expected: &TargetName) -> Result<()> {
     ensure!(
-        actual == expected,
-        "expected {context_name} {field_name} '{expected}', got '{actual}'"
+        actual == expected.as_str(),
+        "expected target {target_index} name '{}', got '{actual}'",
+        expected
     );
     Ok(())
+}
+
+fn assert_target_command_eq(
+    target_index: usize,
+    actual: &str,
+    expected: &CommandText,
+) -> Result<()> {
+    ensure!(
+        actual == expected.as_str(),
+        "expected target {target_index} command '{}', got '{actual}'",
+        expected
+    );
+    Ok(())
+}
+
+fn assert_target_script_eq(target_index: usize, actual: &str, expected: &ScriptText) -> Result<()> {
+    ensure!(
+        actual == expected.as_str(),
+        "expected target {target_index} script '{}', got '{actual}'",
+        expected
+    );
+    Ok(())
+}
+
+fn assert_target_rule_eq(target_index: usize, actual: &str, expected: &RuleName) -> Result<()> {
+    ensure!(
+        actual == expected.as_str(),
+        "expected target {target_index} rule '{}', got '{actual}'",
+        expected
+    );
+    Ok(())
+}
+
+fn assert_rule_name_eq(actual: &str, expected: &RuleName) -> Result<()> {
+    ensure!(
+        actual == expected.as_str(),
+        "expected first rule name '{}', got '{actual}'",
+        expected
+    );
+    Ok(())
+}
+
+fn assert_version_eq(actual: &str, expected: &VersionString) -> Result<()> {
+    ensure!(
+        actual == expected.as_str(),
+        "expected manifest version '{}', got '{actual}'",
+        expected
+    );
+    Ok(())
+}
+
+fn assert_macro_signature_eq(
+    macro_index: usize,
+    actual: &str,
+    expected: &MacroSignature,
+) -> Result<()> {
+    ensure!(
+        actual == expected.as_str(),
+        "expected macro {macro_index} signature '{}', got '{actual}'",
+        expected
+    );
+    Ok(())
+}
+
+fn assert_target_has_source(
+    target_index: usize,
+    sources: &StringOrList,
+    expected: &SourcePath,
+) -> Result<()> {
+    assert_list_contains(sources, expected.as_str())
+        .with_context(|| format!("target {target_index} missing source '{expected}'"))
+}
+
+fn assert_target_has_dep(
+    target_index: usize,
+    deps: &StringOrList,
+    expected: &DepName,
+) -> Result<()> {
+    assert_list_contains(deps, expected.as_str())
+        .with_context(|| format!("target {target_index} missing dep '{expected}'"))
+}
+
+fn assert_target_has_order_only_dep(
+    target_index: usize,
+    deps: &StringOrList,
+    expected: &DepName,
+) -> Result<()> {
+    assert_list_contains(deps, expected.as_str())
+        .with_context(|| format!("target {target_index} missing order-only dep '{expected}'"))
 }
 
 fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
@@ -112,6 +201,61 @@ fn expand_env(raw: &str) -> String {
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// Generic helper functions for target access
+// ---------------------------------------------------------------------------
+
+/// Access a target by 1-based index and apply a closure to it.
+fn with_target<T, F>(index: usize, f: F) -> Result<T>
+where
+    F: FnOnce(&netsuke::ast::Target) -> Result<T>,
+{
+    ensure!(index > 0, "target index is 1-based");
+    with_world(|world| {
+        let result = world.manifest.with_ref(|m| {
+            let target = m
+                .targets
+                .get(index - 1)
+                .with_context(|| format!("missing target {index}"))?;
+            f(target)
+        });
+        result.context("manifest has not been parsed")?
+    })
+}
+
+/// Validate a boolean flag on a target.
+fn assert_target_flag<F>(index: usize, flag_name: &str, expected: bool, getter: F) -> Result<()>
+where
+    F: FnOnce(&netsuke::ast::Target) -> bool,
+{
+    with_target(index, |target| {
+        let actual = getter(target);
+        ensure!(
+            actual == expected,
+            "target {index} {flag_name} should be {expected}"
+        );
+        Ok(())
+    })
+}
+
+/// Extract a count from the manifest using a closure.
+fn with_manifest_count<F>(f: F, item_name: &str, expected: usize) -> Result<()>
+where
+    F: FnOnce(&netsuke::ast::NetsukeManifest) -> usize,
+{
+    with_world(|world| {
+        let actual = world
+            .manifest
+            .with_ref(|m| f(m))
+            .context("manifest has not been parsed")?;
+        ensure!(
+            actual == expected,
+            "expected manifest to have {expected} {item_name}, got {actual}"
+        );
+        Ok(())
+    })
 }
 
 fn assert_list_contains(value: &StringOrList, expected: &str) -> Result<()> {
@@ -223,7 +367,7 @@ fn manifest_version(version: String) -> Result<()> {
             .manifest
             .with_ref(|m| m.netsuke_version.to_string())
             .context("manifest has not been parsed")?;
-        assert_field_eq("manifest", "version", actual.as_str(), version.as_str())
+        assert_version_eq(actual.as_str(), &version)
     })
 }
 
@@ -234,12 +378,7 @@ fn first_target_name(name: String) -> Result<()> {
         let result = world.manifest.with_ref(|m| {
             let target = m.targets.first().context("missing target 1")?;
             let actual = get_string_from_string_or_list(&target.name, "name")?;
-            ensure!(
-                actual == name.as_str(),
-                "expected target 1 name '{}', got '{actual}'",
-                name
-            );
-            Ok(())
+            assert_target_name_eq(1, &actual, &name)
         });
         result.context("manifest has not been parsed")?
     })
@@ -247,66 +386,22 @@ fn first_target_name(name: String) -> Result<()> {
 
 #[then("the target {index:usize} is phony")]
 fn target_is_phony(index: usize) -> Result<()> {
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            ensure!(target.phony, "target {index} should be phony");
-            Ok(())
-        });
-        result.context("manifest has not been parsed")?
-    })
+    assert_target_flag(index, "phony", true, |t| t.phony)
 }
 
 #[then("the target {index:usize} is always rebuilt")]
 fn target_is_always(index: usize) -> Result<()> {
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            ensure!(target.always, "target {index} should always build");
-            Ok(())
-        });
-        result.context("manifest has not been parsed")?
-    })
+    assert_target_flag(index, "always", true, |t| t.always)
 }
 
 #[then("the target {index:usize} is not phony")]
 fn target_not_phony(index: usize) -> Result<()> {
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            ensure!(!target.phony, "target {index} should not be phony");
-            Ok(())
-        });
-        result.context("manifest has not been parsed")?
-    })
+    assert_target_flag(index, "phony", false, |t| t.phony)
 }
 
 #[then("the target {index:usize} is not always rebuilt")]
 fn target_not_always(index: usize) -> Result<()> {
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            ensure!(!target.always, "target {index} should not always build");
-            Ok(())
-        });
-        result.context("manifest has not been parsed")?
-    })
+    assert_target_flag(index, "always", false, |t| t.always)
 }
 
 #[then("the first action is phony")]
@@ -361,7 +456,7 @@ fn first_rule_name(name: String) -> Result<()> {
                 .rules
                 .first()
                 .context("manifest does not contain any rules")?;
-            assert_field_eq("first rule", "name", rule.name.as_str(), name.as_str())
+            assert_rule_name_eq(rule.name.as_str(), &name)
         });
         result.context("manifest has not been parsed")?
     })
@@ -375,7 +470,7 @@ fn first_target_command(command: String) -> Result<()> {
             let target = m.targets.first().context("missing target 1")?;
             match &target.recipe {
                 Recipe::Command { command: actual } => {
-                    assert_field_eq("target 1", "command", actual, command.as_str())
+                    assert_target_command_eq(1, actual, &command)
                 }
                 other => bail!("Expected command recipe, got: {other:?}"),
             }
@@ -386,32 +481,12 @@ fn first_target_command(command: String) -> Result<()> {
 
 #[then("the manifest has {count:usize} targets")]
 fn manifest_has_targets(count: usize) -> Result<()> {
-    with_world(|world| {
-        let actual = world
-            .manifest
-            .with_ref(|m| m.targets.len())
-            .context("manifest has not been parsed")?;
-        ensure!(
-            actual == count,
-            "expected manifest to have {count} targets, got {actual}"
-        );
-        Ok(())
-    })
+    with_manifest_count(|m| m.targets.len(), "targets", count)
 }
 
 #[then("the manifest has {count:usize} macros")]
 fn manifest_has_macros(count: usize) -> Result<()> {
-    with_world(|world| {
-        let actual = world
-            .manifest
-            .with_ref(|m| m.macros.len())
-            .context("manifest has not been parsed")?;
-        ensure!(
-            actual == count,
-            "expected manifest to have {count} macros, got {actual}"
-        );
-        Ok(())
-    })
+    with_manifest_count(|m| m.macros.len(), "macros", count)
 }
 
 #[then("the macro {index:usize} signature is {signature}")]
@@ -424,12 +499,7 @@ fn macro_signature_is(index: usize, signature: String) -> Result<()> {
                 .macros
                 .get(index - 1)
                 .with_context(|| format!("missing macro {index}"))?;
-            assert_field_eq(
-                &format!("macro {index}"),
-                "signature",
-                macro_def.signature.as_str(),
-                signature.as_str(),
-            )
+            assert_macro_signature_eq(index, macro_def.signature.as_str(), &signature)
         });
         result.context("manifest has not been parsed")?
     })
@@ -471,173 +541,81 @@ fn manifest_has_targets_named(names: String) -> Result<()> {
 #[then("the target {index:usize} name is {name}")]
 fn target_name_n(index: usize, name: String) -> Result<()> {
     let name = TargetName::new(name);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            let actual = get_string_from_string_or_list(&target.name, "name")?;
-            ensure!(
-                actual == name.as_str(),
-                "expected target {index} name '{}', got '{actual}'",
-                name
-            );
-            Ok(())
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| {
+        let actual = get_string_from_string_or_list(&target.name, "name")?;
+        assert_target_name_eq(index, &actual, &name)
     })
 }
 
 #[then("the target {index:usize} command is {command}")]
 fn target_command_n(index: usize, command: String) -> Result<()> {
     let command = CommandText::new(command);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            match &target.recipe {
-                Recipe::Command { command: actual } => assert_field_eq(
-                    &format!("target {index}"),
-                    "command",
-                    actual,
-                    command.as_str(),
-                ),
-                other => bail!("Expected command recipe, got: {other:?}"),
-            }
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| match &target.recipe {
+        Recipe::Command { command: actual } => assert_target_command_eq(index, actual, &command),
+        other => bail!("Expected command recipe, got: {other:?}"),
     })
 }
 
 #[then("the target {index:usize} index is {expected:usize}")]
 fn target_index_n(index: usize, expected: usize) -> Result<()> {
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            let index_value = target
-                .vars
-                .get(INDEX_KEY)
-                .with_context(|| format!("target {index} missing '{INDEX_KEY}' variable"))?
-                .as_u64()
-                .with_context(|| format!("target {index} index is not an integer"))?;
-            let actual = usize::try_from(index_value)
-                .with_context(|| format!("target {index} index does not fit into usize"))?;
-            ensure!(
-                actual == expected,
-                "unexpected index for target {index}: expected {expected}, got {actual}"
-            );
-            Ok(())
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| {
+        let index_value = target
+            .vars
+            .get(INDEX_KEY)
+            .with_context(|| format!("target {index} missing '{INDEX_KEY}' variable"))?
+            .as_u64()
+            .with_context(|| format!("target {index} index is not an integer"))?;
+        let actual = usize::try_from(index_value)
+            .with_context(|| format!("target {index} index does not fit into usize"))?;
+        ensure!(
+            actual == expected,
+            "unexpected index for target {index}: expected {expected}, got {actual}"
+        );
+        Ok(())
     })
 }
 
 #[then("the target {index:usize} has source {source}")]
 fn target_has_source(index: usize, source: String) -> Result<()> {
     let source = SourcePath::new(source);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            assert_list_contains(&target.sources, source.as_str())
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| {
+        assert_target_has_source(index, &target.sources, &source)
     })
 }
 
 #[then("the target {index:usize} has dep {dep}")]
 fn target_has_dep(index: usize, dep: String) -> Result<()> {
     let dep = DepName::new(dep);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            assert_list_contains(&target.deps, dep.as_str())
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| {
+        assert_target_has_dep(index, &target.deps, &dep)
     })
 }
 
 #[then("the target {index:usize} has order-only dep {dep}")]
 fn target_has_order_only_dep(index: usize, dep: String) -> Result<()> {
     let dep = DepName::new(dep);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            assert_list_contains(&target.order_only_deps, dep.as_str())
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| {
+        assert_target_has_order_only_dep(index, &target.order_only_deps, &dep)
     })
 }
 
 #[then("the target {index:usize} script is {script}")]
 fn target_script_is(index: usize, script: String) -> Result<()> {
     let script = ScriptText::new(script);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            match &target.recipe {
-                Recipe::Script { script: actual } => {
-                    ensure!(
-                        actual == script.as_str(),
-                        "expected target {index} script '{}', got '{actual}'",
-                        script
-                    );
-                    Ok(())
-                }
-                other => bail!("Expected script recipe, got: {other:?}"),
-            }
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| match &target.recipe {
+        Recipe::Script { script: actual } => assert_target_script_eq(index, actual, &script),
+        other => bail!("Expected script recipe, got: {other:?}"),
     })
 }
 
 #[then("the target {index:usize} rule is {rule}")]
 fn target_rule_is(index: usize, rule: String) -> Result<()> {
     let rule = RuleName::new(rule);
-    ensure!(index > 0, "target index is 1-based");
-    with_world(|world| {
-        let result = world.manifest.with_ref(|m| {
-            let target = m
-                .targets
-                .get(index - 1)
-                .with_context(|| format!("missing target {index}"))?;
-            match &target.recipe {
-                Recipe::Rule { rule: actual } => {
-                    let actual_str = get_string_from_string_or_list(actual, "rule")?;
-                    ensure!(
-                        actual_str == rule.as_str(),
-                        "expected target {index} rule '{}', got '{actual_str}'",
-                        rule
-                    );
-                    Ok(())
-                }
-                other => bail!("Expected rule recipe, got: {other:?}"),
-            }
-        });
-        result.context("manifest has not been parsed")?
+    with_target(index, |target| match &target.recipe {
+        Recipe::Rule { rule: actual } => {
+            let actual_str = get_string_from_string_or_list(actual, "rule")?;
+            assert_target_rule_eq(index, &actual_str, &rule)
+        }
+        other => bail!("Expected rule recipe, got: {other:?}"),
     })
 }

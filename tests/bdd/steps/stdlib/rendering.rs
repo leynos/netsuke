@@ -52,6 +52,27 @@ impl ContextKey {
     }
 }
 
+/// Newtype wrapper for context value strings.
+///
+/// Distinguishes context variable values from other string parameters,
+/// ensuring type safety when constructing template rendering contexts.
+pub(crate) struct ContextValue(String);
+
+impl ContextValue {
+    pub(crate) fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+    pub(crate) fn into_string(self) -> String {
+        self.0
+    }
+}
+
+impl From<String> for ContextValue {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
 /// Configuration values extracted from the test world for stdlib rendering.
 struct RenderConfig {
     policy: Option<NetworkPolicy>,
@@ -121,12 +142,12 @@ pub(crate) fn render_template_with_context(template: &TemplateContent, ctx: Valu
 fn render_with_single_context(
     template: &TemplateContent,
     key: &ContextKey,
-    value: String,
+    value: ContextValue,
 ) -> Result<()> {
     use std::collections::BTreeMap;
 
     let ctx = Value::from_serialize(
-        [(key.as_str(), value)]
+        [(key.as_str(), value.into_string())]
             .into_iter()
             .collect::<BTreeMap<&str, String>>(),
     );
@@ -162,7 +183,7 @@ pub(crate) fn render_stdlib_template_with_url(template: String) -> Result<()> {
             .get()
             .context("expected stdlib HTTP server to be initialised")
     })?;
-    render_with_single_context(&template, &ContextKey::new("url"), url)
+    render_with_single_context(&template, &ContextKey::new("url"), ContextValue::new(url))
 }
 
 #[when("I render the stdlib template {template} using the stdlib command helper")]
@@ -174,7 +195,7 @@ pub(crate) fn render_stdlib_template_with_command(template: String) -> Result<()
             .get()
             .context("expected stdlib command helper to be compiled")
     })?;
-    render_with_single_context(&template, &ContextKey::new("cmd"), cmd)
+    render_with_single_context(&template, &ContextKey::new("cmd"), ContextValue::new(cmd))
 }
 
 #[when("I render the stdlib template {template} using the stdlib text")]
@@ -186,5 +207,5 @@ pub(crate) fn render_stdlib_template_with_text(template: String) -> Result<()> {
             .get()
             .context("expected stdlib template text to be configured")
     })?;
-    render_with_single_context(&template, &ContextKey::new("text"), text)
+    render_with_single_context(&template, &ContextKey::new("text"), ContextValue::new(text))
 }
