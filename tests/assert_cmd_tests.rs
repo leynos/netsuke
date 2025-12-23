@@ -6,9 +6,18 @@
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
+use std::ffi::OsString;
 use std::fs;
 use tempfile::tempdir;
 use test_support::fake_ninja;
+
+fn path_with_fake_ninja(ninja_dir: &tempfile::TempDir) -> Result<OsString> {
+    let original = std::env::var_os("PATH").unwrap_or_default();
+    std::env::join_paths(
+        std::iter::once(ninja_dir.path().to_path_buf()).chain(std::env::split_paths(&original)),
+    )
+    .context("construct PATH with fake ninja")
+}
 
 #[test]
 fn manifest_subcommand_writes_file() -> Result<()> {
@@ -135,11 +144,7 @@ fn build_with_emit_writes_file() -> Result<()> {
     fs::copy("tests/data/minimal.yml", &netsukefile)
         .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
     let output = temp.path().join("emitted.ninja");
-    let original = std::env::var_os("PATH").unwrap_or_default();
-    let path = std::env::join_paths(
-        std::iter::once(ninja_dir.path().to_path_buf()).chain(std::env::split_paths(&original)),
-    )
-    .context("construct PATH with fake ninja")?;
+    let path = path_with_fake_ninja(&ninja_dir)?;
     let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
     cmd.current_dir(temp.path())
         .env("PATH", path)
@@ -165,11 +170,7 @@ fn build_with_emit_resolves_output_relative_to_directory() -> Result<()> {
     fs::copy("tests/data/minimal.yml", &netsukefile)
         .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
 
-    let original = std::env::var_os("PATH").unwrap_or_default();
-    let path = std::env::join_paths(
-        std::iter::once(ninja_dir.path().to_path_buf()).chain(std::env::split_paths(&original)),
-    )
-    .context("construct PATH with fake ninja")?;
+    let path = path_with_fake_ninja(&ninja_dir)?;
 
     let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
     cmd.current_dir(temp.path())

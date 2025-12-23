@@ -67,6 +67,27 @@ fn assert_file_existence(world: &CliWorld, name: &str, should_exist: bool) -> Re
     Ok(())
 }
 
+fn run_netsuke_and_record(world: &mut CliWorld, args: &[&str]) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
+    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
+    let result = cmd
+        .current_dir(temp_path)
+        .env("PATH", "")
+        .args(args)
+        .output()
+        .context("run netsuke command")?;
+
+    world.command_stdout = Some(String::from_utf8_lossy(&result.stdout).into_owned());
+    world.command_stderr = Some(String::from_utf8_lossy(&result.stderr).into_owned());
+    world.run_status = Some(result.status.success());
+    world.run_error = if result.status.success() {
+        None
+    } else {
+        world.command_stderr.clone()
+    };
+    Ok(())
+}
+
 #[given("a minimal Netsuke workspace")]
 fn minimal_workspace(world: &mut CliWorld) -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for manifest workspace")?;
@@ -94,25 +115,7 @@ fn directory_named_exists(world: &mut CliWorld, name: DirectoryName) -> Result<(
 #[when(expr = "the netsuke manifest subcommand is run with {string}")]
 fn run_manifest_subcommand(world: &mut CliWorld, output: ManifestOutput) -> Result<()> {
     let ManifestOutput(output) = output;
-    let temp_path = get_temp_path(world)?;
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
-    let result = cmd
-        .current_dir(temp_path)
-        .env("PATH", "")
-        .arg("manifest")
-        .arg(output.as_str())
-        .output()
-        .context("run netsuke manifest subcommand")?;
-
-    world.command_stdout = Some(String::from_utf8_lossy(&result.stdout).into_owned());
-    world.command_stderr = Some(String::from_utf8_lossy(&result.stderr).into_owned());
-    world.run_status = Some(result.status.success());
-    world.run_error = if result.status.success() {
-        None
-    } else {
-        world.command_stderr.clone()
-    };
-    Ok(())
+    run_netsuke_and_record(world, &["manifest", output.as_str()])
 }
 
 #[then(expr = "stdout should contain {string}")]
