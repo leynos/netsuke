@@ -77,13 +77,31 @@ fn assert_parsed() -> Result<()> {
 // Domain-specific typed assertion functions
 // ---------------------------------------------------------------------------
 
-fn assert_target_name_eq(target_index: usize, actual: &str, expected: &TargetName) -> Result<()> {
+/// Generic string equality assertion with contextual error messages.
+#[expect(clippy::too_many_arguments, reason = "parameters are semantically distinct")]
+fn assert_string_eq<T>(
+    context: &str,
+    index: Option<usize>,
+    field: &str,
+    actual: &str,
+    expected: &T,
+) -> Result<()>
+where
+    T: AsRef<str> + std::fmt::Display,
+{
+    let location = match index {
+        Some(idx) => format!("{context} {idx}"),
+        None => context.to_string(),
+    };
     ensure!(
-        actual == expected.as_str(),
-        "expected target {target_index} name '{}', got '{actual}'",
-        expected
+        actual == expected.as_ref(),
+        "expected {location} {field} '{expected}', got '{actual}'"
     );
     Ok(())
+}
+
+fn assert_target_name_eq(target_index: usize, actual: &str, expected: &TargetName) -> Result<()> {
+    assert_string_eq("target", Some(target_index), "name", actual, expected)
 }
 
 fn assert_target_command_eq(
@@ -91,48 +109,23 @@ fn assert_target_command_eq(
     actual: &str,
     expected: &CommandText,
 ) -> Result<()> {
-    ensure!(
-        actual == expected.as_str(),
-        "expected target {target_index} command '{}', got '{actual}'",
-        expected
-    );
-    Ok(())
+    assert_string_eq("target", Some(target_index), "command", actual, expected)
 }
 
 fn assert_target_script_eq(target_index: usize, actual: &str, expected: &ScriptText) -> Result<()> {
-    ensure!(
-        actual == expected.as_str(),
-        "expected target {target_index} script '{}', got '{actual}'",
-        expected
-    );
-    Ok(())
+    assert_string_eq("target", Some(target_index), "script", actual, expected)
 }
 
 fn assert_target_rule_eq(target_index: usize, actual: &str, expected: &RuleName) -> Result<()> {
-    ensure!(
-        actual == expected.as_str(),
-        "expected target {target_index} rule '{}', got '{actual}'",
-        expected
-    );
-    Ok(())
+    assert_string_eq("target", Some(target_index), "rule", actual, expected)
 }
 
 fn assert_rule_name_eq(actual: &str, expected: &RuleName) -> Result<()> {
-    ensure!(
-        actual == expected.as_str(),
-        "expected first rule name '{}', got '{actual}'",
-        expected
-    );
-    Ok(())
+    assert_string_eq("first rule", None, "name", actual, expected)
 }
 
 fn assert_version_eq(actual: &str, expected: &VersionString) -> Result<()> {
-    ensure!(
-        actual == expected.as_str(),
-        "expected manifest version '{}', got '{actual}'",
-        expected
-    );
-    Ok(())
+    assert_string_eq("manifest", None, "version", actual, expected)
 }
 
 fn assert_macro_signature_eq(
@@ -140,12 +133,7 @@ fn assert_macro_signature_eq(
     actual: &str,
     expected: &MacroSignature,
 ) -> Result<()> {
-    ensure!(
-        actual == expected.as_str(),
-        "expected macro {macro_index} signature '{}', got '{actual}'",
-        expected
-    );
-    Ok(())
+    assert_string_eq("macro", Some(macro_index), "signature", actual, expected)
 }
 
 fn assert_target_has_source(
@@ -225,34 +213,53 @@ where
     })
 }
 
-/// Validate a boolean flag on a target.
-fn assert_target_flag<F>(index: usize, flag_name: &str, expected: bool, getter: F) -> Result<()>
-where
-    F: FnOnce(&netsuke::ast::Target) -> bool,
-{
+/// Validate the phony flag on a target.
+fn assert_target_phony(index: usize, expected: bool) -> Result<()> {
     with_target(index, |target| {
-        let actual = getter(target);
         ensure!(
-            actual == expected,
-            "target {index} {flag_name} should be {expected}"
+            target.phony == expected,
+            "target {index} phony should be {expected}"
         );
         Ok(())
     })
 }
 
-/// Extract a count from the manifest using a closure.
-fn with_manifest_count<F>(f: F, item_name: &str, expected: usize) -> Result<()>
-where
-    F: FnOnce(&netsuke::ast::NetsukeManifest) -> usize,
-{
+/// Validate the always flag on a target.
+fn assert_target_always(index: usize, expected: bool) -> Result<()> {
+    with_target(index, |target| {
+        ensure!(
+            target.always == expected,
+            "target {index} always should be {expected}"
+        );
+        Ok(())
+    })
+}
+
+/// Validate the number of targets in the manifest.
+fn assert_target_count(expected: usize) -> Result<()> {
     with_world(|world| {
         let actual = world
             .manifest
-            .with_ref(|m| f(m))
+            .with_ref(|m| m.targets.len())
             .context("manifest has not been parsed")?;
         ensure!(
             actual == expected,
-            "expected manifest to have {expected} {item_name}, got {actual}"
+            "expected manifest to have {expected} targets, got {actual}"
+        );
+        Ok(())
+    })
+}
+
+/// Validate the number of macros in the manifest.
+fn assert_macro_count(expected: usize) -> Result<()> {
+    with_world(|world| {
+        let actual = world
+            .manifest
+            .with_ref(|m| m.macros.len())
+            .context("manifest has not been parsed")?;
+        ensure!(
+            actual == expected,
+            "expected manifest to have {expected} macros, got {actual}"
         );
         Ok(())
     })
@@ -386,22 +393,22 @@ fn first_target_name(name: String) -> Result<()> {
 
 #[then("the target {index:usize} is phony")]
 fn target_is_phony(index: usize) -> Result<()> {
-    assert_target_flag(index, "phony", true, |t| t.phony)
+    assert_target_phony(index, true)
 }
 
 #[then("the target {index:usize} is always rebuilt")]
 fn target_is_always(index: usize) -> Result<()> {
-    assert_target_flag(index, "always", true, |t| t.always)
+    assert_target_always(index, true)
 }
 
 #[then("the target {index:usize} is not phony")]
 fn target_not_phony(index: usize) -> Result<()> {
-    assert_target_flag(index, "phony", false, |t| t.phony)
+    assert_target_phony(index, false)
 }
 
 #[then("the target {index:usize} is not always rebuilt")]
 fn target_not_always(index: usize) -> Result<()> {
-    assert_target_flag(index, "always", false, |t| t.always)
+    assert_target_always(index, false)
 }
 
 #[then("the first action is phony")]
@@ -481,12 +488,12 @@ fn first_target_command(command: String) -> Result<()> {
 
 #[then("the manifest has {count:usize} targets")]
 fn manifest_has_targets(count: usize) -> Result<()> {
-    with_manifest_count(|m| m.targets.len(), "targets", count)
+    assert_target_count(count)
 }
 
 #[then("the manifest has {count:usize} macros")]
 fn manifest_has_macros(count: usize) -> Result<()> {
-    with_manifest_count(|m| m.macros.len(), "macros", count)
+    assert_macro_count(count)
 }
 
 #[then("the macro {index:usize} signature is {signature}")]
