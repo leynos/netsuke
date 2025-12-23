@@ -78,7 +78,10 @@ fn assert_parsed() -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Generic string equality assertion with contextual error messages.
-#[expect(clippy::too_many_arguments, reason = "parameters are semantically distinct")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "parameters are semantically distinct"
+)]
 fn assert_string_eq<T>(
     context: &str,
     index: Option<usize>,
