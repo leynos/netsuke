@@ -371,7 +371,7 @@ dependencies = [
  "console",
  "cucumber-codegen",
  "cucumber-expressions",
- "derive_more 0.99.20",
+ "derive_more",
  "drain_filter_polyfill",
  "either",
  "futures",
@@ -411,7 +411,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d794fed319eea24246fb5f57632f7ae38d61195817b7eb659455aa5bdd7c1810"
 dependencies = [
- "derive_more 0.99.20",
+ "derive_more",
  "either",
  "nom",
  "nom_locate",
@@ -434,26 +434,6 @@ name = "derive_more"
 version = "0.99.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6edb4b64a43d977b8e99788fe3a04d483834fba1215a7e02caa415b626497f7f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.104",
-]
-
-[[package]]
-name = "derive_more"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a9b99b9cbbe49445b21764dc0625032a89b145a2642e67603e1c936f5458d05"
-dependencies = [
- "derive_more-impl",
-]
-
-[[package]]
-name = "derive_more-impl"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb7330aeadfbe296029522e6c40f315320aba36fc43a5b3632f3795348f3bd22"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1291,7 +1271,6 @@ dependencies = [
  "clap",
  "clap_mangen",
  "cucumber",
- "derive_more 1.0.0",
  "digest",
  "glob",
  "indexmap",
@@ -2185,6 +2164,7 @@ name = "test_support"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "camino",
  "cap-std",
  "mockable",

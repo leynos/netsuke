@@ -6,32 +6,21 @@
 
 use crate::CliWorld;
 use anyhow::{Context, Result, ensure};
-use assert_cmd::Command;
 use cucumber::{given, then, when};
-use derive_more::{Deref, From};
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
+use test_support::netsuke::run_netsuke_in;
 
-macro_rules! cucumber_string_wrapper {
-    ($name:ident) => {
-        #[derive(Debug, From, Deref)]
-        struct $name(String);
-
-        impl FromStr for $name {
-            type Err = std::convert::Infallible;
-
-            fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-                Ok(Self(value.to_owned()))
-            }
-        }
+fn record_run(world: &mut CliWorld, stdout: String, stderr: String, success: bool) {
+    world.command_stdout = Some(stdout);
+    world.command_stderr = Some(stderr);
+    world.run_status = Some(success);
+    world.run_error = if success {
+        None
+    } else {
+        world.command_stderr.clone()
     };
 }
-
-cucumber_string_wrapper!(DirectoryName);
-cucumber_string_wrapper!(FileName);
-cucumber_string_wrapper!(ManifestOutput);
-cucumber_string_wrapper!(OutputFragment);
 
 fn get_temp_path(world: &CliWorld) -> Result<PathBuf> {
     let temp = world
@@ -67,27 +56,6 @@ fn assert_file_existence(world: &CliWorld, name: &str, should_exist: bool) -> Re
     Ok(())
 }
 
-fn run_netsuke_and_record(world: &mut CliWorld, args: &[&str]) -> Result<()> {
-    let temp_path = get_temp_path(world)?;
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
-    let result = cmd
-        .current_dir(temp_path)
-        .env("PATH", "")
-        .args(args)
-        .output()
-        .context("run netsuke command")?;
-
-    world.command_stdout = Some(String::from_utf8_lossy(&result.stdout).into_owned());
-    world.command_stderr = Some(String::from_utf8_lossy(&result.stderr).into_owned());
-    world.run_status = Some(result.status.success());
-    world.run_error = if result.status.success() {
-        None
-    } else {
-        world.command_stderr.clone()
-    };
-    Ok(())
-}
-
 #[given("a minimal Netsuke workspace")]
 fn minimal_workspace(world: &mut CliWorld) -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for manifest workspace")?;
@@ -103,41 +71,45 @@ fn minimal_workspace(world: &mut CliWorld) -> Result<()> {
 }
 
 #[given(expr = "a directory named {string} exists")]
-fn directory_named_exists(world: &mut CliWorld, name: DirectoryName) -> Result<()> {
-    let DirectoryName(name) = name;
+fn directory_named_exists(world: &mut CliWorld, name: String) -> Result<()> {
+    let name = name.into_boxed_str();
     let temp_path = get_temp_path(world)?;
-    let dir_path = temp_path.join(name.as_str());
+    let dir_path = temp_path.join(name.as_ref());
     fs::create_dir_all(&dir_path)
         .with_context(|| format!("create directory {}", dir_path.display()))?;
     Ok(())
 }
 
 #[when(expr = "the netsuke manifest subcommand is run with {string}")]
-fn run_manifest_subcommand(world: &mut CliWorld, output: ManifestOutput) -> Result<()> {
-    let ManifestOutput(output) = output;
-    run_netsuke_and_record(world, &["manifest", output.as_str()])
+fn run_manifest_subcommand(world: &mut CliWorld, output: String) -> Result<()> {
+    let output = output.into_boxed_str();
+    let temp_path = get_temp_path(world)?;
+    let args = ["manifest", output.as_ref()];
+    let run = run_netsuke_in(temp_path.as_path(), &args)?;
+    record_run(world, run.stdout, run.stderr, run.success);
+    Ok(())
 }
 
 #[then(expr = "stdout should contain {string}")]
-fn stdout_should_contain(world: &mut CliWorld, fragment: OutputFragment) -> Result<()> {
-    let OutputFragment(fragment) = fragment;
-    assert_output_contains(world.command_stdout.as_ref(), "stdout", fragment.as_str())
+fn stdout_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
+    let fragment = fragment.into_boxed_str();
+    assert_output_contains(world.command_stdout.as_ref(), "stdout", fragment.as_ref())
 }
 
 #[then(expr = "stderr should contain {string}")]
-fn stderr_should_contain(world: &mut CliWorld, fragment: OutputFragment) -> Result<()> {
-    let OutputFragment(fragment) = fragment;
-    assert_output_contains(world.command_stderr.as_ref(), "stderr", fragment.as_str())
+fn stderr_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
+    let fragment = fragment.into_boxed_str();
+    assert_output_contains(world.command_stderr.as_ref(), "stderr", fragment.as_ref())
 }
 
 #[then(expr = "the file {string} should exist")]
-fn file_should_exist(world: &mut CliWorld, name: FileName) -> Result<()> {
-    let FileName(name) = name;
-    assert_file_existence(world, name.as_str(), true)
+fn file_should_exist(world: &mut CliWorld, name: String) -> Result<()> {
+    let name = name.into_boxed_str();
+    assert_file_existence(world, name.as_ref(), true)
 }
 
 #[then(expr = "the file {string} should not exist")]
-fn file_should_not_exist(world: &mut CliWorld, name: FileName) -> Result<()> {
-    let FileName(name) = name;
-    assert_file_existence(world, name.as_str(), false)
+fn file_should_not_exist(world: &mut CliWorld, name: String) -> Result<()> {
+    let name = name.into_boxed_str();
+    assert_file_existence(world, name.as_ref(), false)
 }

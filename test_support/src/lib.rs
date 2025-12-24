@@ -22,6 +22,7 @@ pub mod exec;
 pub mod hash;
 pub mod http;
 pub mod manifest;
+pub mod netsuke;
 pub mod ninja;
 pub mod path_guard;
 pub mod stdlib_assert;
