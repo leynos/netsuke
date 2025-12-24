@@ -11,9 +11,15 @@ use std::fs;
 use std::path::PathBuf;
 use test_support::netsuke::run_netsuke_in;
 
-fn record_run(world: &mut CliWorld, stdout: String, stderr: String, success: bool) {
-    world.command_stdout = Some(stdout);
-    world.command_stderr = Some(stderr);
+/// Captured output from a command execution.
+struct CommandOutput {
+    stdout: String,
+    stderr: String,
+}
+
+fn record_run(world: &mut CliWorld, output: CommandOutput, success: bool) {
+    world.command_stdout = Some(output.stdout);
+    world.command_stderr = Some(output.stderr);
     world.run_status = Some(success);
     world.run_error = if success {
         None
@@ -30,11 +36,7 @@ fn get_temp_path(world: &CliWorld) -> Result<PathBuf> {
     Ok(temp.path().to_path_buf())
 }
 
-fn assert_output_contains(
-    output: Option<&String>,
-    output_name: &str,
-    fragment: &str,
-) -> Result<()> {
+fn assert_output_contains(output: Option<&str>, output_name: &str, fragment: &str) -> Result<()> {
     let output =
         output.with_context(|| format!("no {output_name} captured from netsuke CLI process"))?;
     ensure!(
@@ -71,45 +73,70 @@ fn minimal_workspace(world: &mut CliWorld) -> Result<()> {
 }
 
 #[given(expr = "a directory named {string} exists")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String arguments"
+)]
 fn directory_named_exists(world: &mut CliWorld, name: String) -> Result<()> {
-    let name = name.into_boxed_str();
     let temp_path = get_temp_path(world)?;
-    let dir_path = temp_path.join(name.as_ref());
+    let dir_path = temp_path.join(&name);
     fs::create_dir_all(&dir_path)
         .with_context(|| format!("create directory {}", dir_path.display()))?;
     Ok(())
 }
 
 #[when(expr = "the netsuke manifest subcommand is run with {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String arguments"
+)]
 fn run_manifest_subcommand(world: &mut CliWorld, output: String) -> Result<()> {
-    let output = output.into_boxed_str();
     let temp_path = get_temp_path(world)?;
-    let args = ["manifest", output.as_ref()];
+    let args = ["manifest", &output];
     let run = run_netsuke_in(temp_path.as_path(), &args)?;
-    record_run(world, run.stdout, run.stderr, run.success);
+    record_run(
+        world,
+        CommandOutput {
+            stdout: run.stdout,
+            stderr: run.stderr,
+        },
+        run.success,
+    );
     Ok(())
 }
 
 #[then(expr = "stdout should contain {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String arguments"
+)]
 fn stdout_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
-    let fragment = fragment.into_boxed_str();
-    assert_output_contains(world.command_stdout.as_ref(), "stdout", fragment.as_ref())
+    assert_output_contains(world.command_stdout.as_deref(), "stdout", &fragment)
 }
 
 #[then(expr = "stderr should contain {string}")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String arguments"
+)]
 fn stderr_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
-    let fragment = fragment.into_boxed_str();
-    assert_output_contains(world.command_stderr.as_ref(), "stderr", fragment.as_ref())
+    assert_output_contains(world.command_stderr.as_deref(), "stderr", &fragment)
 }
 
 #[then(expr = "the file {string} should exist")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String arguments"
+)]
 fn file_should_exist(world: &mut CliWorld, name: String) -> Result<()> {
-    let name = name.into_boxed_str();
-    assert_file_existence(world, name.as_ref(), true)
+    assert_file_existence(world, &name, true)
 }
 
 #[then(expr = "the file {string} should not exist")]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Cucumber step requires owned String arguments"
+)]
 fn file_should_not_exist(world: &mut CliWorld, name: String) -> Result<()> {
-    let name = name.into_boxed_str();
-    assert_file_existence(world, name.as_ref(), false)
+    assert_file_existence(world, &name, false)
 }
