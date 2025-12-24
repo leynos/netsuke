@@ -1,7 +1,7 @@
 //! Step definitions for CLI parsing scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, with_world};
-use crate::bdd::types::{CliArgs, ErrorFragment, PathString, TargetName, UrlString};
+use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Parser;
 use netsuke::cli::{BuildArgs, Cli, Commands};
@@ -79,6 +79,85 @@ fn get_command() -> Result<Commands> {
 // ---------------------------------------------------------------------------
 // Typed verification helpers
 // ---------------------------------------------------------------------------
+
+/// Expected CLI command variants for verification.
+enum ExpectedCommand {
+    Build,
+    Clean,
+    Graph,
+    Manifest,
+}
+
+impl ExpectedCommand {
+    /// Check if the actual command matches the expected variant.
+    #[expect(
+        clippy::missing_const_for_fn,
+        reason = "matches! macro is not const-compatible"
+    )]
+    fn matches(&self, actual: &Commands) -> bool {
+        matches!(
+            (self, actual),
+            (Self::Build, Commands::Build(_))
+                | (Self::Clean, Commands::Clean)
+                | (Self::Graph, Commands::Graph)
+                | (Self::Manifest, Commands::Manifest { .. })
+        )
+    }
+
+    /// Return the command name for error messages.
+    const fn name(&self) -> &'static str {
+        match self {
+            Self::Build => "build",
+            Self::Clean => "clean",
+            Self::Graph => "graph",
+            Self::Manifest => "manifest",
+        }
+    }
+}
+
+fn verify_command(expected: ExpectedCommand) -> Result<()> {
+    let command = get_command()?;
+    ensure!(
+        expected.matches(&command),
+        "command should be {}",
+        expected.name()
+    );
+    Ok(())
+}
+
+fn verify_job_count(expected: JobCount) -> Result<()> {
+    with_world(|world| {
+        let result = world.cli.with_ref(|cli| {
+            if cli.jobs == Some(expected.value()) {
+                Ok(())
+            } else {
+                Err(anyhow!(
+                    "expected job count {}, got {:?}",
+                    expected.value(),
+                    cli.jobs
+                ))
+            }
+        });
+        result.context("CLI has not been parsed")?
+    })
+}
+
+fn verify_parsing_succeeded() -> Result<()> {
+    with_world(|world| {
+        ensure!(world.cli.is_some(), "CLI should be present after parsing");
+        Ok(())
+    })
+}
+
+fn verify_error_returned() -> Result<()> {
+    with_world(|world| {
+        ensure!(
+            world.cli_error.is_filled(),
+            "Expected an error, but none was returned"
+        );
+        Ok(())
+    })
+}
 
 fn verify_manifest_path(path: &PathString) -> Result<()> {
     with_world(|world| {
@@ -226,46 +305,27 @@ fn parse_cli_invalid_when(args: String) -> Result<()> {
 
 #[then("parsing succeeds")]
 fn parsing_succeeds() -> Result<()> {
-    with_world(|world| {
-        ensure!(world.cli.is_some(), "CLI should be present after parsing");
-        Ok(())
-    })
+    verify_parsing_succeeded()
 }
 
 #[then("the command is build")]
 fn command_is_build() -> Result<()> {
-    let _ = extract_build()?;
-    Ok(())
+    verify_command(ExpectedCommand::Build)
 }
 
 #[then("the command is clean")]
 fn command_is_clean() -> Result<()> {
-    let command = get_command()?;
-    ensure!(
-        matches!(command, Commands::Clean),
-        "command should be clean"
-    );
-    Ok(())
+    verify_command(ExpectedCommand::Clean)
 }
 
 #[then("the command is graph")]
 fn command_is_graph() -> Result<()> {
-    let command = get_command()?;
-    ensure!(
-        matches!(command, Commands::Graph),
-        "command should be graph"
-    );
-    Ok(())
+    verify_command(ExpectedCommand::Graph)
 }
 
 #[then("the command is manifest")]
 fn command_is_manifest() -> Result<()> {
-    let command = get_command()?;
-    ensure!(
-        matches!(command, Commands::Manifest { .. }),
-        "command should be manifest"
-    );
-    Ok(())
+    verify_command(ExpectedCommand::Manifest)
 }
 
 #[then("the manifest path is {path}")]
@@ -285,16 +345,7 @@ fn working_directory(directory: String) -> Result<()> {
 
 #[then("the job count is {count:usize}")]
 fn job_count(count: usize) -> Result<()> {
-    with_world(|world| {
-        let result = world.cli.with_ref(|cli| {
-            if cli.jobs == Some(count) {
-                Ok(())
-            } else {
-                Err(anyhow!("expected job count {}, got {:?}", count, cli.jobs))
-            }
-        });
-        result.context("CLI has not been parsed")?
-    })
+    verify_job_count(JobCount::new(count))
 }
 
 #[then("the emit path is {path}")]
@@ -319,13 +370,7 @@ fn manifest_command_path(path: String) -> Result<()> {
 
 #[then("an error should be returned")]
 fn error_should_be_returned() -> Result<()> {
-    with_world(|world| {
-        ensure!(
-            world.cli_error.is_filled(),
-            "Expected an error, but none was returned"
-        );
-        Ok(())
-    })
+    verify_error_returned()
 }
 
 #[then("the error message should contain {fragment}")]

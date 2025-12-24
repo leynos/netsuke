@@ -77,34 +77,61 @@ fn assert_parsed() -> Result<()> {
 // Domain-specific typed assertion functions
 // ---------------------------------------------------------------------------
 
-/// Generic string equality assertion with contextual error messages.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "parameters are semantically distinct"
-)]
-fn assert_string_eq<T>(
-    context: &str,
+/// Location information for field assertions.
+struct FieldLocation {
+    context: &'static str,
     index: Option<usize>,
-    field: &str,
-    actual: &str,
-    expected: &T,
-) -> Result<()>
+    field: &'static str,
+}
+
+impl FieldLocation {
+    /// Create a location without an index.
+    const fn new(context: &'static str, field: &'static str) -> Self {
+        Self {
+            context,
+            index: None,
+            field,
+        }
+    }
+
+    /// Create a location with an index.
+    const fn with_index(context: &'static str, index: usize, field: &'static str) -> Self {
+        Self {
+            context,
+            index: Some(index),
+            field,
+        }
+    }
+
+    /// Format the location prefix for error messages.
+    fn format_prefix(&self) -> String {
+        match self.index {
+            Some(idx) => format!("{} {idx}", self.context),
+            None => self.context.to_string(),
+        }
+    }
+}
+
+/// Generic string equality assertion with contextual error messages.
+fn assert_string_eq<T>(location: FieldLocation, actual: &str, expected: &T) -> Result<()>
 where
     T: AsRef<str> + std::fmt::Display,
 {
-    let location = match index {
-        Some(idx) => format!("{context} {idx}"),
-        None => context.to_string(),
-    };
+    let prefix = location.format_prefix();
     ensure!(
         actual == expected.as_ref(),
-        "expected {location} {field} '{expected}', got '{actual}'"
+        "expected {prefix} {} '{expected}', got '{actual}'",
+        location.field
     );
     Ok(())
 }
 
 fn assert_target_name_eq(target_index: usize, actual: &str, expected: &TargetName) -> Result<()> {
-    assert_string_eq("target", Some(target_index), "name", actual, expected)
+    assert_string_eq(
+        FieldLocation::with_index("target", target_index, "name"),
+        actual,
+        expected,
+    )
 }
 
 fn assert_target_command_eq(
@@ -112,23 +139,35 @@ fn assert_target_command_eq(
     actual: &str,
     expected: &CommandText,
 ) -> Result<()> {
-    assert_string_eq("target", Some(target_index), "command", actual, expected)
+    assert_string_eq(
+        FieldLocation::with_index("target", target_index, "command"),
+        actual,
+        expected,
+    )
 }
 
 fn assert_target_script_eq(target_index: usize, actual: &str, expected: &ScriptText) -> Result<()> {
-    assert_string_eq("target", Some(target_index), "script", actual, expected)
+    assert_string_eq(
+        FieldLocation::with_index("target", target_index, "script"),
+        actual,
+        expected,
+    )
 }
 
 fn assert_target_rule_eq(target_index: usize, actual: &str, expected: &RuleName) -> Result<()> {
-    assert_string_eq("target", Some(target_index), "rule", actual, expected)
+    assert_string_eq(
+        FieldLocation::with_index("target", target_index, "rule"),
+        actual,
+        expected,
+    )
 }
 
 fn assert_rule_name_eq(actual: &str, expected: &RuleName) -> Result<()> {
-    assert_string_eq("first rule", None, "name", actual, expected)
+    assert_string_eq(FieldLocation::new("first rule", "name"), actual, expected)
 }
 
 fn assert_version_eq(actual: &str, expected: &VersionString) -> Result<()> {
-    assert_string_eq("manifest", None, "version", actual, expected)
+    assert_string_eq(FieldLocation::new("manifest", "version"), actual, expected)
 }
 
 fn assert_macro_signature_eq(
@@ -136,7 +175,11 @@ fn assert_macro_signature_eq(
     actual: &str,
     expected: &MacroSignature,
 ) -> Result<()> {
-    assert_string_eq("macro", Some(macro_index), "signature", actual, expected)
+    assert_string_eq(
+        FieldLocation::with_index("macro", macro_index, "signature"),
+        actual,
+        expected,
+    )
 }
 
 fn assert_target_has_source(

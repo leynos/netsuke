@@ -197,3 +197,29 @@ impl NamesList {
         self.iter().map(str::to_string).collect()
     }
 }
+
+// ---------------------------------------------------------------------------
+// CLI domain types (non-string)
+// ---------------------------------------------------------------------------
+
+/// Job count for parallel execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct JobCount(usize);
+
+impl JobCount {
+    /// Create a new job count.
+    pub const fn new(count: usize) -> Self {
+        Self(count)
+    }
+
+    /// Return the job count value.
+    pub const fn value(self) -> usize {
+        self.0
+    }
+}
+
+impl From<usize> for JobCount {
+    fn from(count: usize) -> Self {
+        Self(count)
+    }
+}

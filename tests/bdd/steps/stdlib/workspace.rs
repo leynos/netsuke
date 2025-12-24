@@ -57,43 +57,35 @@ pub(crate) fn stdlib_workspace() -> Result<()> {
     Ok(())
 }
 
-#[given("an uppercase stdlib command helper")]
-pub(crate) fn uppercase_stdlib_command_helper() -> Result<()> {
+/// Compile a command helper and register it in the world state.
+fn compile_and_register_helper<F>(helper_name: &str, compile_fn: F) -> Result<()>
+where
+    F: FnOnce(&Dir, &Utf8PathBuf, &str) -> Result<Utf8PathBuf>,
+{
     let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let helper = compile_uppercase_helper(&handle, &root, "cmd_upper")
-        .context("compile uppercase helper")?;
+    let helper = compile_fn(&handle, &root, helper_name)
+        .with_context(|| format!("compile {helper_name} helper"))?;
     with_world(|world| {
         world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
     });
     Ok(())
+}
+
+#[given("an uppercase stdlib command helper")]
+pub(crate) fn uppercase_stdlib_command_helper() -> Result<()> {
+    compile_and_register_helper("cmd_upper", compile_uppercase_helper)
 }
 
 #[given("a failing stdlib command helper")]
 pub(crate) fn failing_stdlib_command_helper() -> Result<()> {
-    let root = ensure_workspace()?;
-    let handle = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open stdlib workspace directory")?;
-    let helper =
-        compile_failure_helper(&handle, &root, "cmd_fail").context("compile failing helper")?;
-    with_world(|world| {
-        world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
-    });
-    Ok(())
+    compile_and_register_helper("cmd_fail", compile_failure_helper)
 }
 
 #[given("a large-output stdlib command helper")]
 pub(crate) fn large_output_stdlib_command_helper() -> Result<()> {
-    let root = ensure_workspace()?;
-    let handle = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open stdlib workspace directory")?;
-    let helper = compile_large_output_helper(&handle, &root, "cmd_large")
-        .context("compile large-output helper")?;
-    with_world(|world| {
-        world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
-    });
-    Ok(())
+    compile_and_register_helper("cmd_large", compile_large_output_helper)
 }
 
 #[given("an HTTP server returning {body}")]

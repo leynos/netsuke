@@ -23,6 +23,24 @@ fn assert_generation_attempted() -> Result<()> {
     })
 }
 
+/// Assert that a BuildGraph collection has the expected count.
+fn assert_graph_collection_count<F>(expected: usize, accessor: F, field_name: &str) -> Result<()>
+where
+    F: FnOnce(&BuildGraph) -> usize,
+{
+    with_world(|world| {
+        let actual = world
+            .build_graph
+            .with_ref(accessor)
+            .context("build graph should be available")?;
+        ensure!(
+            actual == expected,
+            "expected {expected} {field_name}, found {actual}"
+        );
+        Ok(())
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
@@ -111,47 +129,17 @@ fn remove_action() -> Result<()> {
 
 #[then("the graph has {count:usize} actions")]
 fn graph_actions(count: usize) -> Result<()> {
-    with_world(|world| {
-        let actions_len = world
-            .build_graph
-            .with_ref(|g| g.actions.len())
-            .context("build graph should be available")?;
-        ensure!(
-            actions_len == count,
-            "expected {count} actions, found {actions_len}"
-        );
-        Ok(())
-    })
+    assert_graph_collection_count(count, |g| g.actions.len(), "actions")
 }
 
 #[then("the graph has {count:usize} targets")]
 fn graph_targets(count: usize) -> Result<()> {
-    with_world(|world| {
-        let targets_len = world
-            .build_graph
-            .with_ref(|g| g.targets.len())
-            .context("build graph should be available")?;
-        ensure!(
-            targets_len == count,
-            "expected {count} targets, found {targets_len}"
-        );
-        Ok(())
-    })
+    assert_graph_collection_count(count, |g| g.targets.len(), "targets")
 }
 
 #[then("the graph has {count:usize} default targets")]
 fn graph_defaults(count: usize) -> Result<()> {
-    with_world(|world| {
-        let defaults_len = world
-            .build_graph
-            .with_ref(|g| g.default_targets.len())
-            .context("build graph should be available")?;
-        ensure!(
-            defaults_len == count,
-            "expected {count} default targets, found {defaults_len}"
-        );
-        Ok(())
-    })
+    assert_graph_collection_count(count, |g| g.default_targets.len(), "default targets")
 }
 
 #[then("IR generation fails")]
