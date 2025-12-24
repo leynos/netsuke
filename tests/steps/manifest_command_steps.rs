@@ -7,6 +7,7 @@
 use crate::CliWorld;
 use anyhow::{Context, Result, ensure};
 use cucumber::{given, then, when};
+use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use test_support::netsuke::run_netsuke_in;
@@ -15,6 +16,22 @@ use test_support::netsuke::run_netsuke_in;
 struct CommandOutput {
     stdout: String,
     stderr: String,
+}
+
+/// Type of output stream for assertions.
+#[derive(Copy, Clone)]
+enum OutputType {
+    Stdout,
+    Stderr,
+}
+
+impl fmt::Display for OutputType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Stdout => write!(f, "stdout"),
+            Self::Stderr => write!(f, "stderr"),
+        }
+    }
 }
 
 fn record_run(world: &mut CliWorld, output: CommandOutput, success: bool) {
@@ -36,12 +53,16 @@ fn get_temp_path(world: &CliWorld) -> Result<PathBuf> {
     Ok(temp.path().to_path_buf())
 }
 
-fn assert_output_contains(output: Option<&str>, output_name: &str, fragment: &str) -> Result<()> {
+fn assert_output_contains(
+    output: Option<&str>,
+    output_type: OutputType,
+    fragment: &str,
+) -> Result<()> {
     let output =
-        output.with_context(|| format!("no {output_name} captured from netsuke CLI process"))?;
+        output.with_context(|| format!("no {output_type} captured from netsuke CLI process"))?;
     ensure!(
         output.contains(fragment),
-        "expected {output_name} to contain '{fragment}', got '{output}'"
+        "expected {output_type} to contain '{fragment}', got '{output}'"
     );
     Ok(())
 }
@@ -111,7 +132,11 @@ fn run_manifest_subcommand(world: &mut CliWorld, output: String) -> Result<()> {
     reason = "Cucumber step requires owned String arguments"
 )]
 fn stdout_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
-    assert_output_contains(world.command_stdout.as_deref(), "stdout", &fragment)
+    assert_output_contains(
+        world.command_stdout.as_deref(),
+        OutputType::Stdout,
+        &fragment,
+    )
 }
 
 #[then(expr = "stderr should contain {string}")]
@@ -120,7 +145,11 @@ fn stdout_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
     reason = "Cucumber step requires owned String arguments"
 )]
 fn stderr_should_contain(world: &mut CliWorld, fragment: String) -> Result<()> {
-    assert_output_contains(world.command_stderr.as_deref(), "stderr", &fragment)
+    assert_output_contains(
+        world.command_stderr.as_deref(),
+        OutputType::Stderr,
+        &fragment,
+    )
 }
 
 #[then(expr = "the file {string} should exist")]
