@@ -6,12 +6,15 @@
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
+use rstest::rstest;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
 use test_support::fake_ninja;
 
+/// Builds a `PATH` value that prioritises the provided directory (containing a
+/// fake `ninja` implementation) ahead of the existing `PATH`.
 fn path_with_fake_ninja(ninja_dir: &tempfile::TempDir) -> Result<OsString> {
     let original = std::env::var_os("PATH").unwrap_or_default();
     std::env::join_paths(
@@ -20,6 +23,7 @@ fn path_with_fake_ninja(ninja_dir: &tempfile::TempDir) -> Result<OsString> {
     .context("construct PATH with fake ninja")
 }
 
+/// Creates a temporary directory containing a minimal `Netsukefile`.
 fn setup_simple_workspace(context: &str) -> Result<TempDir> {
     let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
     let netsukefile = temp.path().join("Netsukefile");
@@ -28,6 +32,8 @@ fn setup_simple_workspace(context: &str) -> Result<TempDir> {
     Ok(temp)
 }
 
+/// Creates a temporary directory containing a `work/` subdirectory, with the
+/// minimal `Netsukefile` written inside that subdirectory.
 fn setup_workspace_with_subdir(context: &str) -> Result<(TempDir, PathBuf)> {
     let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
     let workdir = temp.path().join("work");
@@ -38,36 +44,82 @@ fn setup_workspace_with_subdir(context: &str) -> Result<(TempDir, PathBuf)> {
     Ok((temp, workdir))
 }
 
-fn create_netsuke_command(current_dir: &Path, path_override: OsString) -> Result<Command> {
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
+/// Creates a `netsuke` command configured to run from `current_dir`, with the
+/// provided `PATH` override.
+fn create_netsuke_command(current_dir: &Path, path_override: OsString) -> Command {
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
     cmd.current_dir(current_dir).env("PATH", path_override);
-    Ok(cmd)
+    cmd
 }
 
-#[test]
-fn manifest_subcommand_writes_file() -> Result<()> {
-    let temp = setup_simple_workspace("manifest test")?;
-    let output = temp.path().join("standalone.ninja");
-    let mut cmd = create_netsuke_command(temp.path(), OsString::from(""))?;
-    cmd.arg("manifest").arg(&output).assert().success();
-    ensure!(
-        output.exists(),
-        "manifest command should create output file"
-    );
+#[derive(Copy, Clone, Debug)]
+enum WritesFileCase {
+    Manifest,
+    BuildEmit,
+}
+
+impl WritesFileCase {
+    const fn context(self) -> &'static str {
+        match self {
+            Self::Manifest => "manifest test",
+            Self::BuildEmit => "build test",
+        }
+    }
+
+    const fn args(self) -> &'static [&'static str] {
+        match self {
+            Self::Manifest => &["manifest"],
+            Self::BuildEmit => &["build", "--emit"],
+        }
+    }
+
+    const fn output_file(self) -> &'static str {
+        match self {
+            Self::Manifest => "standalone.ninja",
+            Self::BuildEmit => "emitted.ninja",
+        }
+    }
+
+    const fn needs_ninja(self) -> bool {
+        matches!(self, Self::BuildEmit)
+    }
+
+    const fn expectation(self) -> &'static str {
+        match self {
+            Self::Manifest => "manifest command should create output file",
+            Self::BuildEmit => "build --emit should create emitted manifest",
+        }
+    }
+}
+
+#[rstest]
+#[case(WritesFileCase::Manifest)]
+#[case(WritesFileCase::BuildEmit)]
+fn subcommand_writes_file(#[case] case: WritesFileCase) -> Result<()> {
+    let temp = setup_simple_workspace(case.context())?;
+    let output = temp.path().join(case.output_file());
+
+    let (ninja_dir_guard, path) = if case.needs_ninja() {
+        let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
+        let path = path_with_fake_ninja(&ninja_dir)?;
+        (Some(ninja_dir), path)
+    } else {
+        (None, OsString::from(""))
+    };
+
+    let _ninja_dir_guard = ninja_dir_guard;
+    let mut cmd = create_netsuke_command(temp.path(), path);
+    cmd.args(case.args()).arg(&output).assert().success();
+
+    ensure!(output.exists(), "{}", case.expectation());
     Ok(())
 }
 
 #[test]
 fn manifest_subcommand_streams_to_stdout_when_dash() -> Result<()> {
-    let temp = tempdir().context("create temp dir for manifest stdout test")?;
-    let netsukefile = temp.path().join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &netsukefile)
-        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
-
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
+    let temp = setup_simple_workspace("manifest stdout test")?;
+    let mut cmd = create_netsuke_command(temp.path(), OsString::from(""));
     let output = cmd
-        .current_dir(temp.path())
-        .env("PATH", "")
         .arg("manifest")
         .arg("-")
         .output()
@@ -86,42 +138,94 @@ fn manifest_subcommand_streams_to_stdout_when_dash() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn manifest_subcommand_resolves_output_relative_to_directory() -> Result<()> {
-    let (temp, workdir) = setup_workspace_with_subdir("manifest -C test")?;
+#[derive(Copy, Clone, Debug)]
+enum RelativeOutputCase {
+    Manifest,
+    BuildEmit,
+}
 
-    let mut cmd = create_netsuke_command(temp.path(), OsString::from(""))?;
-    cmd.arg("-C")
-        .arg("work")
-        .arg("manifest")
-        .arg("out.ninja")
+impl RelativeOutputCase {
+    const fn context(self) -> &'static str {
+        match self {
+            Self::Manifest => "manifest -C test",
+            Self::BuildEmit => "build -C test",
+        }
+    }
+
+    const fn args(self) -> &'static [&'static str] {
+        match self {
+            Self::Manifest => &["-C", "work", "manifest"],
+            Self::BuildEmit => &["-C", "work", "build", "--emit"],
+        }
+    }
+
+    const fn output_file(self) -> &'static str {
+        match self {
+            Self::Manifest => "out.ninja",
+            Self::BuildEmit => "emitted.ninja",
+        }
+    }
+
+    const fn needs_ninja(self) -> bool {
+        matches!(self, Self::BuildEmit)
+    }
+
+    const fn should_exist_expectation(self) -> &'static str {
+        match self {
+            Self::Manifest => "manifest output should be written relative to -C directory",
+            Self::BuildEmit => "build --emit should write output relative to -C directory",
+        }
+    }
+
+    const fn should_not_exist_expectation(self) -> &'static str {
+        match self {
+            Self::Manifest => "manifest output should not be written outside -C directory",
+            Self::BuildEmit => "build --emit should not write output outside -C directory",
+        }
+    }
+}
+
+#[rstest]
+#[case(RelativeOutputCase::Manifest)]
+#[case(RelativeOutputCase::BuildEmit)]
+fn subcommand_resolves_output_relative_to_directory(
+    #[case] case: RelativeOutputCase,
+) -> Result<()> {
+    let (temp, workdir) = setup_workspace_with_subdir(case.context())?;
+
+    let (ninja_dir_guard, path) = if case.needs_ninja() {
+        let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
+        let path = path_with_fake_ninja(&ninja_dir)?;
+        (Some(ninja_dir), path)
+    } else {
+        (None, OsString::from(""))
+    };
+
+    let _ninja_dir_guard = ninja_dir_guard;
+    let mut cmd = create_netsuke_command(temp.path(), path);
+    cmd.args(case.args())
+        .arg(case.output_file())
         .assert()
         .success();
 
     ensure!(
-        workdir.join("out.ninja").exists(),
-        "manifest output should be written relative to -C directory"
+        workdir.join(case.output_file()).exists(),
+        "{}",
+        case.should_exist_expectation()
     );
     ensure!(
-        !temp.path().join("out.ninja").exists(),
-        "manifest output should not be written outside -C directory"
+        !temp.path().join(case.output_file()).exists(),
+        "{}",
+        case.should_not_exist_expectation()
     );
     Ok(())
 }
 
 #[test]
 fn manifest_subcommand_streams_to_stdout_when_dash_with_directory() -> Result<()> {
-    let temp = tempdir().context("create temp dir for manifest stdout -C test")?;
-    let workdir = temp.path().join("work");
-    fs::create_dir_all(&workdir).context("create work directory")?;
-    let netsukefile = workdir.join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &netsukefile)
-        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
-
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
+    let (temp, workdir) = setup_workspace_with_subdir("manifest stdout -C test")?;
+    let mut cmd = create_netsuke_command(temp.path(), OsString::from(""));
     let output = cmd
-        .current_dir(temp.path())
-        .env("PATH", "")
         .arg("-C")
         .arg("work")
         .arg("manifest")
@@ -142,51 +246,6 @@ fn manifest_subcommand_streams_to_stdout_when_dash_with_directory() -> Result<()
     ensure!(
         !workdir.join("-").exists(),
         "manifest - with -C should not create a file named '-' in the -C directory"
-    );
-    Ok(())
-}
-
-#[test]
-fn build_with_emit_writes_file() -> Result<()> {
-    let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
-    let temp = setup_simple_workspace("build test")?;
-    let output = temp.path().join("emitted.ninja");
-    let path = path_with_fake_ninja(&ninja_dir)?;
-    let mut cmd = create_netsuke_command(temp.path(), path)?;
-    cmd.arg("build")
-        .arg("--emit")
-        .arg(&output)
-        .assert()
-        .success();
-    ensure!(
-        output.exists(),
-        "build --emit should create emitted manifest"
-    );
-    Ok(())
-}
-
-#[test]
-fn build_with_emit_resolves_output_relative_to_directory() -> Result<()> {
-    let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
-    let (temp, workdir) = setup_workspace_with_subdir("build -C test")?;
-
-    let path = path_with_fake_ninja(&ninja_dir)?;
-    let mut cmd = create_netsuke_command(temp.path(), path)?;
-    cmd.arg("-C")
-        .arg("work")
-        .arg("build")
-        .arg("--emit")
-        .arg("emitted.ninja")
-        .assert()
-        .success();
-
-    ensure!(
-        workdir.join("emitted.ninja").exists(),
-        "build --emit should write output relative to -C directory"
-    );
-    ensure!(
-        !temp.path().join("emitted.ninja").exists(),
-        "build --emit should not write output outside -C directory"
     );
     Ok(())
 }

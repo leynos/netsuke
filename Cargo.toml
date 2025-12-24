@@ -138,7 +138,7 @@ rstest = "0.18.0"
 cucumber = "0.21.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
-assert_cmd = "2.0.17"
+assert_cmd = "2.0"
 mockable = { version = "0.3", features = ["mock"] }
 serial_test = "3"
 mockall = "0.11"
