@@ -21,6 +21,24 @@ const INDEX_KEY: &str = "index";
 // Helper functions
 // ---------------------------------------------------------------------------
 
+/// Enhance an error with manifest parse error context if available.
+///
+/// When manifest parsing fails, the error is stored in `manifest_error` but
+/// not propagated. This helper retrieves any stored error and includes it
+/// in the error context, making diagnosis easier.
+fn with_manifest_error_context<T>(result: Result<T>) -> Result<T> {
+    if result.is_ok() {
+        return result;
+    }
+    with_world(|world| {
+        if let Some(parse_err) = world.manifest_error.get() {
+            result.with_context(|| format!("manifest parse error: {parse_err}"))
+        } else {
+            result
+        }
+    })
+}
+
 fn get_string_from_string_or_list(value: &StringOrList, field_name: &str) -> Result<String> {
     match value {
         StringOrList::String(s) => Ok(s.clone()),
@@ -255,7 +273,7 @@ where
                 .with_context(|| format!("missing target {index}"))?;
             f(target)
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 
@@ -287,7 +305,8 @@ fn assert_target_count(expected: usize) -> Result<()> {
         let actual = world
             .manifest
             .with_ref(|m| m.targets.len())
-            .context("manifest has not been parsed")?;
+            .context("manifest has not been parsed");
+        let actual = with_manifest_error_context(actual)?;
         ensure!(
             actual == expected,
             "expected manifest to have {expected} targets, got {actual}"
@@ -302,7 +321,8 @@ fn assert_macro_count(expected: usize) -> Result<()> {
         let actual = world
             .manifest
             .with_ref(|m| m.macros.len())
-            .context("manifest has not been parsed")?;
+            .context("manifest has not been parsed");
+        let actual = with_manifest_error_context(actual)?;
         ensure!(
             actual == expected,
             "expected manifest to have {expected} macros, got {actual}"
@@ -419,7 +439,8 @@ fn manifest_version(version: String) -> Result<()> {
         let actual = world
             .manifest
             .with_ref(|m| m.netsuke_version.to_string())
-            .context("manifest has not been parsed")?;
+            .context("manifest has not been parsed");
+        let actual = with_manifest_error_context(actual)?;
         assert_version_eq(actual.as_str(), &version)
     })
 }
@@ -433,7 +454,7 @@ fn first_target_name(name: String) -> Result<()> {
             let actual = get_string_from_string_or_list(&target.name, "name")?;
             assert_target_name_eq(1, &actual, &name)
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 
@@ -468,7 +489,7 @@ fn first_action_phony() -> Result<()> {
             ensure!(first.phony, "expected first action to be marked phony");
             Ok(())
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 
@@ -511,7 +532,7 @@ fn first_rule_name(name: String) -> Result<()> {
                 .context("manifest does not contain any rules")?;
             assert_rule_name_eq(rule.name.as_str(), &name)
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 
@@ -528,7 +549,7 @@ fn first_target_command(command: String) -> Result<()> {
                 other => bail!("Expected command recipe, got: {other:?}"),
             }
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 
@@ -554,7 +575,7 @@ fn macro_signature_is(index: usize, signature: String) -> Result<()> {
                 .with_context(|| format!("missing macro {index}"))?;
             assert_macro_signature_eq(index, macro_def.signature.as_str(), &signature)
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 
@@ -587,7 +608,7 @@ fn manifest_has_targets_named(names: String) -> Result<()> {
             );
             Ok(())
         });
-        result.context("manifest has not been parsed")?
+        with_manifest_error_context(result.context("manifest has not been parsed"))?
     })
 }
 

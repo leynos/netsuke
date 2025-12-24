@@ -27,7 +27,7 @@ pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> 
     Ok(())
 }
 
-fn expand_target(map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValue>> {
+fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, env)?;
         let mut items = Vec::new();
@@ -42,7 +42,43 @@ fn expand_target(map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValu
         }
         Ok(items)
     } else {
+        // For targets without foreach, still evaluate and remove the `when` clause.
+        // Use empty context since there's no iteration variable.
+        if !when_allows_static(&mut map, env)? {
+            return Ok(vec![]);
+        }
         Ok(vec![ManifestValue::Object(map)])
+    }
+}
+
+/// Evaluate a `when` clause for a non-foreach target.
+///
+/// Unlike `when_allows`, this version does not inject `item` or `index` into
+/// the evaluation context since there is no iteration happening.
+///
+/// The `when` clause can be either:
+/// - A Jinja expression (e.g., `item > 1`) - used with `foreach`
+/// - A Jinja template (e.g., `{{ path is dir }}`) - used standalone
+///
+/// For standalone targets, we use `render_str` to evaluate the template and
+/// check if the rendered result is truthy.
+fn when_allows_static(map: &mut ManifestMap, env: &Environment) -> Result<bool> {
+    if let Some(when_val) = map.remove("when") {
+        let expr = as_str(&when_val, "when")?;
+        // First try as template (for {{ }} syntax), then as expression
+        let result = if expr.contains("{{") {
+            let rendered = env
+                .render_str(expr, context! {})
+                .with_context(|| format!("when template evaluation error for '{expr}'"))?;
+            // Treat "true" as truthy, anything else (including "false", "") as falsy
+            matches!(rendered.trim().to_lowercase().as_str(), "true" | "1")
+        } else {
+            let result = eval_expression(env, "when", expr, context! {})?;
+            result.is_true()
+        };
+        Ok(result)
+    } else {
+        Ok(true)
     }
 }
 

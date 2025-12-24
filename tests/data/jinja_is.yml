@@ -2,29 +2,22 @@ netsuke_version: "0.1.0"
 targets:
   - name: is-dir
     when: "{{ env('DIR_PATH') is dir }}"
-    recipe:
-      command: echo dir
+    command: echo dir
   - name: is-file
     when: "{{ env('FILE_PATH') is file }}"
-    recipe:
-      command: echo file
+    command: echo file
   - name: is-symlink
     when: "{{ env('SYMLINK_PATH') is symlink }}"
-    recipe:
-      command: echo symlink
+    command: echo symlink
   - name: is-pipe
     when: "{{ env('PIPE_PATH') is pipe }}"
-    recipe:
-      command: echo pipe
+    command: echo pipe
   - name: is-block-device
     when: "{{ env('BLOCK_DEVICE_PATH') is block_device }}"
-    recipe:
-      command: echo block
+    command: echo block
   - name: is-char-device
     when: "{{ env('CHAR_DEVICE_PATH') is char_device }}"
-    recipe:
-      command: echo char
+    command: echo char
   - name: is-device
     when: "{{ env('DEVICE_PATH') is device }}"
-    recipe:
-      command: echo device
+    command: echo device
