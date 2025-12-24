@@ -8,7 +8,8 @@ use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
 use std::ffi::OsString;
 use std::fs;
-use tempfile::tempdir;
+use std::path::{Path, PathBuf};
+use tempfile::{TempDir, tempdir};
 use test_support::fake_ninja;
 
 fn path_with_fake_ninja(ninja_dir: &tempfile::TempDir) -> Result<OsString> {
@@ -19,20 +20,36 @@ fn path_with_fake_ninja(ninja_dir: &tempfile::TempDir) -> Result<OsString> {
     .context("construct PATH with fake ninja")
 }
 
-#[test]
-fn manifest_subcommand_writes_file() -> Result<()> {
-    let temp = tempdir().context("create temp dir for manifest test")?;
+fn setup_simple_workspace(context: &str) -> Result<TempDir> {
+    let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
     let netsukefile = temp.path().join("Netsukefile");
     fs::copy("tests/data/minimal.yml", &netsukefile)
-        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
-    let output = temp.path().join("standalone.ninja");
+        .with_context(|| format!("copy manifest to {} for {context}", netsukefile.display()))?;
+    Ok(temp)
+}
+
+fn setup_workspace_with_subdir(context: &str) -> Result<(TempDir, PathBuf)> {
+    let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
+    let workdir = temp.path().join("work");
+    fs::create_dir_all(&workdir).with_context(|| format!("create work directory for {context}"))?;
+    let netsukefile = workdir.join("Netsukefile");
+    fs::copy("tests/data/minimal.yml", &netsukefile)
+        .with_context(|| format!("copy manifest to {} for {context}", netsukefile.display()))?;
+    Ok((temp, workdir))
+}
+
+fn create_netsuke_command(current_dir: &Path, path_override: OsString) -> Result<Command> {
     let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
-    cmd.current_dir(temp.path())
-        .env("PATH", "")
-        .arg("manifest")
-        .arg(&output)
-        .assert()
-        .success();
+    cmd.current_dir(current_dir).env("PATH", path_override);
+    Ok(cmd)
+}
+
+#[test]
+fn manifest_subcommand_writes_file() -> Result<()> {
+    let temp = setup_simple_workspace("manifest test")?;
+    let output = temp.path().join("standalone.ninja");
+    let mut cmd = create_netsuke_command(temp.path(), OsString::from(""))?;
+    cmd.arg("manifest").arg(&output).assert().success();
     ensure!(
         output.exists(),
         "manifest command should create output file"
@@ -71,17 +88,10 @@ fn manifest_subcommand_streams_to_stdout_when_dash() -> Result<()> {
 
 #[test]
 fn manifest_subcommand_resolves_output_relative_to_directory() -> Result<()> {
-    let temp = tempdir().context("create temp dir for manifest -C test")?;
-    let workdir = temp.path().join("work");
-    fs::create_dir_all(&workdir).context("create work directory")?;
-    let netsukefile = workdir.join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &netsukefile)
-        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
+    let (temp, workdir) = setup_workspace_with_subdir("manifest -C test")?;
 
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
-    cmd.current_dir(temp.path())
-        .env("PATH", "")
-        .arg("-C")
+    let mut cmd = create_netsuke_command(temp.path(), OsString::from(""))?;
+    cmd.arg("-C")
         .arg("work")
         .arg("manifest")
         .arg("out.ninja")
@@ -139,16 +149,11 @@ fn manifest_subcommand_streams_to_stdout_when_dash_with_directory() -> Result<()
 #[test]
 fn build_with_emit_writes_file() -> Result<()> {
     let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
-    let temp = tempdir().context("create temp dir for build test")?;
-    let netsukefile = temp.path().join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &netsukefile)
-        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
+    let temp = setup_simple_workspace("build test")?;
     let output = temp.path().join("emitted.ninja");
     let path = path_with_fake_ninja(&ninja_dir)?;
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
-    cmd.current_dir(temp.path())
-        .env("PATH", path)
-        .arg("build")
+    let mut cmd = create_netsuke_command(temp.path(), path)?;
+    cmd.arg("build")
         .arg("--emit")
         .arg(&output)
         .assert()
@@ -163,19 +168,11 @@ fn build_with_emit_writes_file() -> Result<()> {
 #[test]
 fn build_with_emit_resolves_output_relative_to_directory() -> Result<()> {
     let (ninja_dir, _ninja_path) = fake_ninja(0u8)?;
-    let temp = tempdir().context("create temp dir for build -C test")?;
-    let workdir = temp.path().join("work");
-    fs::create_dir_all(&workdir).context("create work directory")?;
-    let netsukefile = workdir.join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &netsukefile)
-        .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
+    let (temp, workdir) = setup_workspace_with_subdir("build -C test")?;
 
     let path = path_with_fake_ninja(&ninja_dir)?;
-
-    let mut cmd = Command::cargo_bin("netsuke").context("locate netsuke binary")?;
-    cmd.current_dir(temp.path())
-        .env("PATH", path)
-        .arg("-C")
+    let mut cmd = create_netsuke_command(temp.path(), path)?;
+    cmd.arg("-C")
         .arg("work")
         .arg("build")
         .arg("--emit")
