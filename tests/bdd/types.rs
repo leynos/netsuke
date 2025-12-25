@@ -199,6 +199,30 @@ impl NamesList {
 }
 
 // ---------------------------------------------------------------------------
+// Manifest command domain types
+// ---------------------------------------------------------------------------
+
+define_newtype!(
+    /// Output fragment for assertions.
+    OutputFragment
+);
+
+define_newtype!(
+    /// Manifest command output path.
+    ManifestOutputPath
+);
+
+define_newtype!(
+    /// Directory name.
+    DirectoryName
+);
+
+define_newtype!(
+    /// File name.
+    FileName
+);
+
+// ---------------------------------------------------------------------------
 // CLI domain types (non-string)
 // ---------------------------------------------------------------------------
 

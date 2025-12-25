@@ -14,27 +14,11 @@ use std::path::PathBuf;
 
 /// Apply CLI parsing, storing result or error in world state.
 fn apply_cli(args: &CliArgs) {
-    with_world(|world| {
-        let tokens: Vec<String> = std::iter::once("netsuke".to_owned())
-            .chain(args.as_str().split_whitespace().map(str::to_string))
-            .collect();
-        match Cli::try_parse_from(tokens) {
-            Ok(mut cli) => {
-                if cli.command.is_none() {
-                    cli.command = Some(Commands::Build(BuildArgs {
-                        emit: None,
-                        targets: Vec::new(),
-                    }));
-                }
-                world.cli.set_value(cli);
-                world.cli_error.clear();
-            }
-            Err(e) => {
-                world.cli.clear_value();
-                world.cli_error.set(e.to_string());
-            }
-        }
-    });
+    let tokens = build_token_list(args);
+    match Cli::try_parse_from(tokens) {
+        Ok(cli) => handle_parse_success(cli),
+        Err(e) => handle_parse_error(e),
+    }
 }
 
 /// Get the CLI's network policy using `with_ref`.
@@ -74,6 +58,58 @@ fn get_command() -> Result<Commands> {
             .context("CLI has not been parsed")?
             .context("CLI command missing")
     })
+}
+
+// ---------------------------------------------------------------------------
+// CLI parsing helpers
+// ---------------------------------------------------------------------------
+
+/// Prefix marker for invalid argument steps.
+///
+/// The feature file uses "invalid arguments X" to indicate that the CLI
+/// should reject the arguments X. This struct provides a typed way to
+/// detect and strip this prefix from raw argument strings.
+struct ArgsPrefix;
+
+impl ArgsPrefix {
+    /// The prefix string used in feature files for invalid argument scenarios.
+    const INVALID: &'static str = "invalid arguments ";
+
+    /// Strip the "invalid arguments " prefix if present, returning the actual args.
+    fn strip_invalid(args: &CliArgs) -> CliArgs {
+        let raw = args.as_str();
+        let actual = raw.strip_prefix(Self::INVALID).unwrap_or(raw);
+        CliArgs::new(actual.to_string())
+    }
+}
+
+/// Build the token list from CLI arguments for parsing.
+fn build_token_list(args: &CliArgs) -> Vec<String> {
+    std::iter::once("netsuke".to_owned())
+        .chain(args.as_str().split_whitespace().map(str::to_string))
+        .collect()
+}
+
+/// Handle successful CLI parsing by storing the result.
+fn handle_parse_success(mut cli: Cli) {
+    if cli.command.is_none() {
+        cli.command = Some(Commands::Build(BuildArgs {
+            emit: None,
+            targets: Vec::new(),
+        }));
+    }
+    with_world(|world| {
+        world.cli.set_value(cli);
+        world.cli_error.clear();
+    });
+}
+
+/// Handle CLI parsing error by storing the error message.
+fn handle_parse_error(err: clap::Error) {
+    with_world(|world| {
+        world.cli.clear_value();
+        world.cli_error.set(err.to_string());
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -275,26 +311,19 @@ fn verify_error_contains(fragment: &ErrorFragment) -> Result<()> {
 // Given/When steps
 // ---------------------------------------------------------------------------
 
-/// Prefix for invalid argument steps in the feature file.
-const INVALID_ARGS_PREFIX: &str = "invalid arguments ";
-
-/// Parse CLI args, handling both regular and invalid argument scenarios.
-/// If the args string starts with "invalid arguments ", strip that prefix
-/// and treat the remaining args as CLI input.
-fn parse_cli_with_args(args: &str) {
-    let actual_args = args.strip_prefix(INVALID_ARGS_PREFIX).unwrap_or(args);
-    apply_cli(&CliArgs::new(actual_args.to_string()));
-}
-
 #[given("the CLI is parsed with {args}")]
 fn parse_cli_given(args: String) -> Result<()> {
-    parse_cli_with_args(&args);
+    let cli_args = CliArgs::new(args);
+    let stripped = ArgsPrefix::strip_invalid(&cli_args);
+    apply_cli(&stripped);
     Ok(())
 }
 
 #[when("the CLI is parsed with {args}")]
 fn parse_cli_when(args: String) -> Result<()> {
-    parse_cli_with_args(&args);
+    let cli_args = CliArgs::new(args);
+    let stripped = ArgsPrefix::strip_invalid(&cli_args);
+    apply_cli(&stripped);
     Ok(())
 }
 
