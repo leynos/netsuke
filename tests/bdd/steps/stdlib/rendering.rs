@@ -159,7 +159,7 @@ fn render_template(template: &TemplateContent, path: &TemplatePath) -> Result<()
     render_template_with_context(template, ctx)
 }
 
-#[when("I render {template} with stdlib path {path}")]
+#[when("I render template {template} at stdlib path {path}")]
 pub(crate) fn render_stdlib_template(template: String, path: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
     let path = strip_quotes(&path);
@@ -174,7 +174,7 @@ pub(crate) fn render_stdlib_template_without_path(template: String) -> Result<()
     render_template_with_context(&template, context! {})
 }
 
-#[when("I render {template} with stdlib url")]
+#[when("I render template {template} with stdlib url")]
 pub(crate) fn render_stdlib_template_with_url(template: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
     let url = with_world(|world| {
