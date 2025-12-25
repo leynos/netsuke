@@ -52,6 +52,7 @@ fn create_netsuke_command(current_dir: &Path, path_override: OsString) -> Comman
     cmd
 }
 
+/// Test variants for subcommands that write a manifest file.
 #[derive(Copy, Clone, Debug)]
 enum WritesFileCase {
     Manifest,
@@ -59,6 +60,7 @@ enum WritesFileCase {
 }
 
 impl WritesFileCase {
+    /// Describes the workspace setup in error contexts.
     const fn context(self) -> &'static str {
         match self {
             Self::Manifest => "manifest test",
@@ -66,6 +68,7 @@ impl WritesFileCase {
         }
     }
 
+    /// CLI arguments (excluding the output path) for the case.
     const fn args(self) -> &'static [&'static str] {
         match self {
             Self::Manifest => &["manifest"],
@@ -73,6 +76,7 @@ impl WritesFileCase {
         }
     }
 
+    /// Output filename to pass to the CLI.
     const fn output_file(self) -> &'static str {
         match self {
             Self::Manifest => "standalone.ninja",
@@ -80,10 +84,12 @@ impl WritesFileCase {
         }
     }
 
+    /// Whether the case requires a `ninja` executable to be present on `PATH`.
     const fn needs_ninja(self) -> bool {
         matches!(self, Self::BuildEmit)
     }
 
+    /// Expected assertion message when the output file is missing.
     const fn expectation(self) -> &'static str {
         match self {
             Self::Manifest => "manifest command should create output file",
@@ -138,6 +144,7 @@ fn manifest_subcommand_streams_to_stdout_when_dash() -> Result<()> {
     Ok(())
 }
 
+/// Test variants for output path resolution with `-C`.
 #[derive(Copy, Clone, Debug)]
 enum RelativeOutputCase {
     Manifest,
@@ -145,6 +152,7 @@ enum RelativeOutputCase {
 }
 
 impl RelativeOutputCase {
+    /// Describes the workspace setup in error contexts.
     const fn context(self) -> &'static str {
         match self {
             Self::Manifest => "manifest -C test",
@@ -152,6 +160,7 @@ impl RelativeOutputCase {
         }
     }
 
+    /// CLI arguments (excluding the output path) for the case.
     const fn args(self) -> &'static [&'static str] {
         match self {
             Self::Manifest => &["-C", "work", "manifest"],
@@ -159,6 +168,7 @@ impl RelativeOutputCase {
         }
     }
 
+    /// Output filename to pass to the CLI.
     const fn output_file(self) -> &'static str {
         match self {
             Self::Manifest => "out.ninja",
@@ -166,10 +176,12 @@ impl RelativeOutputCase {
         }
     }
 
+    /// Whether the case requires a `ninja` executable to be present on `PATH`.
     const fn needs_ninja(self) -> bool {
         matches!(self, Self::BuildEmit)
     }
 
+    /// Expected assertion message when the output file isn't written in `-C`.
     const fn should_exist_expectation(self) -> &'static str {
         match self {
             Self::Manifest => "manifest output should be written relative to -C directory",
@@ -177,6 +189,7 @@ impl RelativeOutputCase {
         }
     }
 
+    /// Expected assertion message when the output file is written outside `-C`.
     const fn should_not_exist_expectation(self) -> &'static str {
         match self {
             Self::Manifest => "manifest output should not be written outside -C directory",

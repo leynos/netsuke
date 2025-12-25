@@ -8,6 +8,10 @@ use anyhow::{Context, Result, ensure};
 use std::path::Path;
 use std::path::PathBuf;
 
+/// Locate the built `netsuke` executable for integration-style tests.
+///
+/// Prefer `CARGO_BIN_EXE_netsuke` when available, otherwise fall back to a
+/// `target/(debug|release)`-derived path based on the current test binary.
 fn netsuke_executable() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("CARGO_BIN_EXE_netsuke") {
         return Ok(path.into());
