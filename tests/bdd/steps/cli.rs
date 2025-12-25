@@ -275,27 +275,26 @@ fn verify_error_contains(fragment: &ErrorFragment) -> Result<()> {
 // Given/When steps
 // ---------------------------------------------------------------------------
 
+/// Prefix for invalid argument steps in the feature file.
+const INVALID_ARGS_PREFIX: &str = "invalid arguments ";
+
+/// Parse CLI args, handling both regular and invalid argument scenarios.
+/// If the args string starts with "invalid arguments ", strip that prefix
+/// and treat the remaining args as CLI input.
+fn parse_cli_with_args(args: &str) {
+    let actual_args = args.strip_prefix(INVALID_ARGS_PREFIX).unwrap_or(args);
+    apply_cli(&CliArgs::new(actual_args.to_string()));
+}
+
 #[given("the CLI is parsed with {args}")]
 fn parse_cli_given(args: String) -> Result<()> {
-    apply_cli(&CliArgs::new(args));
+    parse_cli_with_args(&args);
     Ok(())
 }
 
 #[when("the CLI is parsed with {args}")]
 fn parse_cli_when(args: String) -> Result<()> {
-    apply_cli(&CliArgs::new(args));
-    Ok(())
-}
-
-#[given("the CLI is parsed with invalid arguments {args}")]
-fn parse_cli_invalid_given(args: String) -> Result<()> {
-    apply_cli(&CliArgs::new(args));
-    Ok(())
-}
-
-#[when("the CLI is parsed with invalid arguments {args}")]
-fn parse_cli_invalid_when(args: String) -> Result<()> {
-    apply_cli(&CliArgs::new(args));
+    parse_cli_with_args(&args);
     Ok(())
 }
 

@@ -32,9 +32,7 @@ impl fmt::Display for OutputType {
 fn get_temp_path() -> Result<PathBuf> {
     with_world(|world| {
         let temp = world.temp_dir.borrow();
-        let dir = temp
-            .as_ref()
-            .context("temp dir has not been initialised")?;
+        let dir = temp.as_ref().context("temp dir has not been initialised")?;
         Ok(dir.path().to_path_buf())
     })
 }
@@ -112,11 +110,8 @@ fn run_manifest_subcommand(output: String) -> Result<()> {
         world.run_status.set(run.success);
         if run.success {
             world.run_error.clear();
-        } else {
-            world
-                .command_stderr
-                .get()
-                .map(|stderr| world.run_error.set(stderr));
+        } else if let Some(stderr) = world.command_stderr.get() {
+            world.run_error.set(stderr);
         }
     });
     Ok(())
