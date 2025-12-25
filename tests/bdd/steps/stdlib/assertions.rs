@@ -53,6 +53,22 @@ fn stdlib_output_path() -> Result<camino::Utf8PathBuf> {
     stdlib_output().map(|s| camino::Utf8PathBuf::from(s))
 }
 
+/// Check that the stdlib template purity state matches the expected value.
+fn assert_purity_state(expected_impure: bool) -> Result<()> {
+    with_world(|world| {
+        let is_impure = world
+            .stdlib_state
+            .with_ref(|s| s.is_impure())
+            .context("stdlib state should be initialised")?;
+        let state_name = if expected_impure { "impure" } else { "pure" };
+        ensure!(
+            is_impure == expected_impure,
+            "expected template to be {state_name}"
+        );
+        Ok(())
+    })
+}
+
 #[then("the stdlib error contains {expected}")]
 pub(crate) fn assert_stdlib_error(expected: String) -> Result<()> {
     let expected = strip_quotes(&expected);
@@ -68,26 +84,12 @@ pub(crate) fn assert_stdlib_error(expected: String) -> Result<()> {
 
 #[then("the stdlib template is impure")]
 pub(crate) fn assert_stdlib_impure() -> Result<()> {
-    with_world(|world| {
-        let is_impure = world
-            .stdlib_state
-            .with_ref(|s| s.is_impure())
-            .context("stdlib state should be initialised")?;
-        ensure!(is_impure, "expected template to be impure");
-        Ok(())
-    })
+    assert_purity_state(true)
 }
 
 #[then("the stdlib template is pure")]
 pub(crate) fn assert_stdlib_pure() -> Result<()> {
-    with_world(|world| {
-        let is_impure = world
-            .stdlib_state
-            .with_ref(|s| s.is_impure())
-            .context("stdlib state should be initialised")?;
-        ensure!(!is_impure, "expected template to remain pure");
-        Ok(())
-    })
+    assert_purity_state(false)
 }
 
 #[then("the stdlib workspace contains the fetch cache for stdlib url")]

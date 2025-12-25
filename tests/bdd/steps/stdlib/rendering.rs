@@ -159,6 +159,51 @@ fn render_template(template: &TemplateContent, path: &TemplatePath) -> Result<()
     render_template_with_context(template, ctx)
 }
 
+/// Source of context values for template rendering.
+///
+/// Each variant corresponds to a world field that provides a context value
+/// for template rendering, along with its associated context key.
+enum ContextSource {
+    Url,
+    Command,
+    Text,
+}
+
+impl ContextSource {
+    /// Return the context key for this source.
+    const fn key(&self) -> &'static str {
+        match self {
+            Self::Url => "url",
+            Self::Command => "cmd",
+            Self::Text => "text",
+        }
+    }
+
+    /// Retrieve the value from the world for this context source.
+    fn get_value(&self) -> Result<String> {
+        with_world(|world| match self {
+            Self::Url => world
+                .stdlib_url
+                .get()
+                .context("expected stdlib HTTP server to be initialised"),
+            Self::Command => world
+                .stdlib_command
+                .get()
+                .context("expected stdlib command helper to be compiled"),
+            Self::Text => world
+                .stdlib_text
+                .get()
+                .context("expected stdlib template text to be configured"),
+        })
+    }
+}
+
+/// Render a template using a context value from the specified source.
+fn render_with_context_source(template: &TemplateContent, source: ContextSource) -> Result<()> {
+    let value = source.get_value()?;
+    render_with_single_context(template, &ContextKey::new(source.key()), ContextValue::new(value))
+}
+
 #[when("I render template {template} at stdlib path {path}")]
 pub(crate) fn render_stdlib_template(template: String, path: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
@@ -176,35 +221,17 @@ pub(crate) fn render_stdlib_template_without_path(template: String) -> Result<()
 #[when("I render template {template} with stdlib url")]
 pub(crate) fn render_stdlib_template_with_url(template: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
-    let url = with_world(|world| {
-        world
-            .stdlib_url
-            .get()
-            .context("expected stdlib HTTP server to be initialised")
-    })?;
-    render_with_single_context(&template, &ContextKey::new("url"), ContextValue::new(url))
+    render_with_context_source(&template, ContextSource::Url)
 }
 
 #[when("I render the stdlib template {template} using the stdlib command helper")]
 pub(crate) fn render_stdlib_template_with_command(template: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
-    let cmd = with_world(|world| {
-        world
-            .stdlib_command
-            .get()
-            .context("expected stdlib command helper to be compiled")
-    })?;
-    render_with_single_context(&template, &ContextKey::new("cmd"), ContextValue::new(cmd))
+    render_with_context_source(&template, ContextSource::Command)
 }
 
 #[when("I render the stdlib template {template} using the stdlib text")]
 pub(crate) fn render_stdlib_template_with_text(template: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
-    let text = with_world(|world| {
-        world
-            .stdlib_text
-            .get()
-            .context("expected stdlib template text to be configured")
-    })?;
-    render_with_single_context(&template, &ContextKey::new("text"), ContextValue::new(text))
+    render_with_context_source(&template, ContextSource::Text)
 }
