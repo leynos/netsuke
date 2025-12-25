@@ -1618,9 +1618,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fcefde6aee6db6d70c149d48e17111e9e088a1ff71da92234e986a23fb4c134"
+checksum = "0ba31adad257da60b8ff09eab6892baf0717d4b7941fed413afb87b8b57cb1dd"
 dependencies = [
  "ctor",
  "derive_more",
@@ -1642,9 +1642,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd-macros"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225ddea765e1f1b6491aef744475f5feaea2b4070c29fea0482155b643c09ee0"
+checksum = "55e76759696088b1a8040ec244bb8ea7fb5681a3cc1f66786c630278579a1569"
 dependencies = [
  "camino",
  "cap-std",
@@ -1665,9 +1665,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd-patterns"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7da2291923de0d5f83564b4e6c193c67722129180983f0b3f424dc7e0580c0c0"
+checksum = "9b6c9f3f3de341bdc0b9a51a6cfe2f947a59b696141e68cc9c4bc03d066a78c6"
 dependencies = [
  "regex",
  "thiserror 1.0.69",

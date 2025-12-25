@@ -135,8 +135,8 @@ unescaped_backticks                 = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
-rstest-bdd = "0.2.0"
-rstest-bdd-macros = { version = "0.2.0", features = ["strict-compile-time-validation"] }
+rstest-bdd = "0.3.0"
+rstest-bdd-macros = { version = "0.3.0", features = ["strict-compile-time-validation"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.0"
