@@ -1,7 +1,8 @@
 //! Helpers for preparing stdlib workspaces during BDD scenarios, wiring
 //! up temporary directories, fixtures, and environment overrides for tests.
 
-use crate::bdd::fixtures::{RefCellOptionExt, strip_quotes, with_world};
+use crate::bdd::fixtures::{RefCellOptionExt, with_world};
+use crate::bdd::types::{FileContents, HelperName, HttpResponseBody, PathEntries};
 use anyhow::{Context, Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -57,43 +58,32 @@ pub(crate) fn stdlib_workspace() -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
 /// Compile a command helper and register it in the world state.
-fn compile_and_register_helper<F>(helper_name: &str, compile_fn: F) -> Result<()>
+fn compile_and_register_helper<F>(helper_name: HelperName, compile_fn: F) -> Result<()>
 where
     F: FnOnce(&Dir, &Utf8PathBuf, &str) -> Result<Utf8PathBuf>,
 {
     let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let helper = compile_fn(&handle, &root, helper_name)
-        .with_context(|| format!("compile {helper_name} helper"))?;
+    let name = helper_name.as_str();
+    let helper = compile_fn(&handle, &root, name)
+        .with_context(|| format!("compile {name} helper"))?;
     with_world(|world| {
         world.stdlib_command.set(format!("\"{}\"", helper.as_str()));
     });
     Ok(())
 }
 
-#[given("an uppercase stdlib command helper")]
-pub(crate) fn uppercase_stdlib_command_helper() -> Result<()> {
-    compile_and_register_helper("cmd_upper", compile_uppercase_helper)
-}
-
-#[given("a failing stdlib command helper")]
-pub(crate) fn failing_stdlib_command_helper() -> Result<()> {
-    compile_and_register_helper("cmd_fail", compile_failure_helper)
-}
-
-#[given("a large-output stdlib command helper")]
-pub(crate) fn large_output_stdlib_command_helper() -> Result<()> {
-    compile_and_register_helper("cmd_large", compile_large_output_helper)
-}
-
-#[given("an HTTP server returning {body}")]
-pub(crate) fn http_server_returning(body: String) -> Result<()> {
-    let body = strip_quotes(&body).to_string();
+/// Start an HTTP server returning the given body content.
+fn start_http_server(body: HttpResponseBody) -> Result<()> {
     with_world(|world| {
         world.shutdown_http_server();
-        let (url, server) = test_support::http::spawn_http_server(body)
+        let (url, server) = test_support::http::spawn_http_server(body.into_string())
             .context("spawn HTTP server for stdlib steps")?;
         world.stdlib_url.set(url);
         world.http_server.set_value(server);
@@ -101,34 +91,26 @@ pub(crate) fn http_server_returning(body: String) -> Result<()> {
     })
 }
 
-#[given("the stdlib file {path} contains {contents}")]
-pub(crate) fn write_stdlib_file(path: String, contents: String) -> Result<()> {
-    let path = strip_quotes(&path);
-    let contents = strip_quotes(&contents);
+/// Write file contents to a path within the stdlib workspace.
+fn write_file_to_workspace(path: TemplatePath, contents: FileContents) -> Result<()> {
     let root = ensure_workspace()?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
-    let relative_path = TemplatePath::from(path);
-    if let Some(parent) = relative_path
-        .as_path()
-        .parent()
-        .filter(|p| !p.as_str().is_empty())
-    {
+    if let Some(parent) = path.as_path().parent().filter(|p| !p.as_str().is_empty()) {
         handle
             .create_dir_all(parent)
             .context("create stdlib fixture directories")?;
     }
     handle
-        .write(relative_path.as_path(), contents.as_bytes())
+        .write(path.as_path(), contents.as_bytes())
         .context("write stdlib fixture file")?;
     Ok(())
 }
 
-#[given("the stdlib executable {path} exists")]
-pub(crate) fn stdlib_executable_exists(path: String) -> Result<()> {
-    let path = strip_quotes(&path);
+/// Create an executable script at the given path within the stdlib workspace.
+fn create_executable(path: TemplatePath) -> Result<()> {
     let root = ensure_workspace()?;
-    let relative = Utf8PathBuf::from(path);
+    let relative = Utf8PathBuf::from(path.as_str());
     let target = resolve_executable_path(&root, &relative);
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent.as_std_path())
@@ -140,11 +122,10 @@ pub(crate) fn stdlib_executable_exists(path: String) -> Result<()> {
     Ok(())
 }
 
-#[given("the stdlib PATH entries are {entries}")]
-pub(crate) fn stdlib_path_entries(entries: String) -> Result<()> {
-    let raw_entries = strip_quotes(&entries);
+/// Configure the PATH environment variable with the given entries.
+fn configure_path_environment(entries: PathEntries) -> Result<()> {
     let root = ensure_workspace()?;
-    let trimmed = raw_entries.trim();
+    let trimmed = entries.as_str().trim();
     let dirs: Vec<Utf8PathBuf> = if trimmed.is_empty() {
         Vec::new()
     } else {
@@ -178,6 +159,41 @@ pub(crate) fn stdlib_path_entries(entries: String) -> Result<()> {
     Ok(())
 }
 
+#[given("an uppercase stdlib command helper")]
+pub(crate) fn uppercase_stdlib_command_helper() -> Result<()> {
+    compile_and_register_helper(HelperName::from("cmd_upper"), compile_uppercase_helper)
+}
+
+#[given("a failing stdlib command helper")]
+pub(crate) fn failing_stdlib_command_helper() -> Result<()> {
+    compile_and_register_helper(HelperName::from("cmd_fail"), compile_failure_helper)
+}
+
+#[given("a large-output stdlib command helper")]
+pub(crate) fn large_output_stdlib_command_helper() -> Result<()> {
+    compile_and_register_helper(HelperName::from("cmd_large"), compile_large_output_helper)
+}
+
+#[given("an HTTP server returning {body}")]
+pub(crate) fn http_server_returning(body: String) -> Result<()> {
+    start_http_server(HttpResponseBody::new(body))
+}
+
+#[given("the stdlib file {path} contains {contents}")]
+pub(crate) fn write_stdlib_file(path: String, contents: String) -> Result<()> {
+    write_file_to_workspace(TemplatePath::new(path), FileContents::new(contents))
+}
+
+#[given("the stdlib executable {path} exists")]
+pub(crate) fn stdlib_executable_exists(path: String) -> Result<()> {
+    create_executable(TemplatePath::new(path))
+}
+
+#[given("the stdlib PATH entries are {entries}")]
+pub(crate) fn stdlib_path_entries(entries: String) -> Result<()> {
+    configure_path_environment(PathEntries::new(entries))
+}
+
 #[given("HOME points to the stdlib workspace root")]
 pub(crate) fn home_points_to_stdlib_root() -> Result<()> {
     let root = ensure_workspace()?;
@@ -199,13 +215,13 @@ pub(crate) fn home_points_to_stdlib_root() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn resolve_template_path(root: &Utf8Path, raw: &str) -> TemplatePath {
-    if raw.starts_with('~') {
-        return TemplatePath::from(raw);
+pub(crate) fn resolve_template_path(root: &Utf8Path, raw: TemplatePath) -> TemplatePath {
+    if raw.as_str().starts_with('~') {
+        return raw;
     }
-    let candidate = Utf8PathBuf::from(raw);
+    let candidate = raw.as_path();
     if candidate.is_absolute() {
-        TemplatePath::from(candidate)
+        raw
     } else {
         TemplatePath::from(root.join(candidate))
     }

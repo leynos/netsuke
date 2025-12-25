@@ -223,6 +223,52 @@ define_newtype!(
 );
 
 // ---------------------------------------------------------------------------
+// Stdlib workspace domain types
+// ---------------------------------------------------------------------------
+
+define_newtype!(
+    /// HTTP response body content.
+    HttpResponseBody
+);
+
+define_newtype!(
+    /// File contents for stdlib fixtures.
+    FileContents
+);
+
+impl FileContents {
+    /// Return the contents as a byte slice.
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+define_newtype!(
+    /// PATH environment variable entries (colon-separated).
+    PathEntries
+);
+
+/// Command helper name (does not strip quotes).
+///
+/// Unlike other newtypes, this is constructed from static strings and
+/// does not perform quote stripping.
+#[derive(Debug, Clone)]
+pub struct HelperName(&'static str);
+
+impl HelperName {
+    /// Return the helper name as a string slice.
+    pub const fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+impl From<&'static str> for HelperName {
+    fn from(s: &'static str) -> Self {
+        Self(s)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CLI domain types (non-string)
 // ---------------------------------------------------------------------------
 

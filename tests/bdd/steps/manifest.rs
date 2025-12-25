@@ -144,61 +144,42 @@ where
     Ok(())
 }
 
-fn assert_target_name_eq(target_index: usize, actual: &str, expected: &TargetName) -> Result<()> {
-    assert_string_eq(
-        FieldLocation::with_index("target", target_index, "name"),
-        actual,
-        expected,
-    )
+/// Generates typed assertion wrapper functions around `assert_string_eq`.
+///
+/// This macro reduces boilerplate for assertion functions that compare actual
+/// string values against expected typed values. Two variants are supported:
+///
+/// - `indexed`: For assertions that include an index (e.g., target N, macro N).
+///   Generates: `fn $name(index: usize, actual: &str, expected: &$type) -> Result<()>`
+///
+/// - `simple`: For assertions without an index (e.g., first rule, manifest).
+///   Generates: `fn $name(actual: &str, expected: &$type) -> Result<()>`
+///
+/// Both variants delegate to `assert_string_eq` with appropriate `FieldLocation`.
+macro_rules! define_assertion {
+    (indexed: $name:ident, $context:literal, $field:literal, $type:ty) => {
+        fn $name(index: usize, actual: &str, expected: &$type) -> Result<()> {
+            assert_string_eq(
+                FieldLocation::with_index($context, index, $field),
+                actual,
+                expected,
+            )
+        }
+    };
+    (simple: $name:ident, $context:literal, $field:literal, $type:ty) => {
+        fn $name(actual: &str, expected: &$type) -> Result<()> {
+            assert_string_eq(FieldLocation::new($context, $field), actual, expected)
+        }
+    };
 }
 
-fn assert_target_command_eq(
-    target_index: usize,
-    actual: &str,
-    expected: &CommandText,
-) -> Result<()> {
-    assert_string_eq(
-        FieldLocation::with_index("target", target_index, "command"),
-        actual,
-        expected,
-    )
-}
-
-fn assert_target_script_eq(target_index: usize, actual: &str, expected: &ScriptText) -> Result<()> {
-    assert_string_eq(
-        FieldLocation::with_index("target", target_index, "script"),
-        actual,
-        expected,
-    )
-}
-
-fn assert_target_rule_eq(target_index: usize, actual: &str, expected: &RuleName) -> Result<()> {
-    assert_string_eq(
-        FieldLocation::with_index("target", target_index, "rule"),
-        actual,
-        expected,
-    )
-}
-
-fn assert_rule_name_eq(actual: &str, expected: &RuleName) -> Result<()> {
-    assert_string_eq(FieldLocation::new("first rule", "name"), actual, expected)
-}
-
-fn assert_version_eq(actual: &str, expected: &VersionString) -> Result<()> {
-    assert_string_eq(FieldLocation::new("manifest", "version"), actual, expected)
-}
-
-fn assert_macro_signature_eq(
-    macro_index: usize,
-    actual: &str,
-    expected: &MacroSignature,
-) -> Result<()> {
-    assert_string_eq(
-        FieldLocation::with_index("macro", macro_index, "signature"),
-        actual,
-        expected,
-    )
-}
+define_assertion!(indexed: assert_target_name_eq, "target", "name", TargetName);
+define_assertion!(indexed: assert_target_command_eq, "target", "command", CommandText);
+define_assertion!(indexed: assert_target_script_eq, "target", "script", ScriptText);
+define_assertion!(indexed: assert_target_rule_eq, "target", "rule", RuleName);
+define_assertion!(indexed: assert_macro_signature_eq, "macro", "signature", MacroSignature);
+define_assertion!(simple: assert_rule_name_eq, "first rule", "name", RuleName);
+define_assertion!(simple: assert_version_eq, "manifest", "version", VersionString);
 
 fn assert_target_has_source(
     target_index: usize,

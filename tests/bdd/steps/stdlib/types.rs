@@ -9,6 +9,18 @@ use camino::{Utf8Path, Utf8PathBuf};
 pub(crate) struct TemplatePath(pub(crate) Utf8PathBuf);
 
 impl TemplatePath {
+    /// Create a new template path, stripping surrounding quotes.
+    pub(crate) fn new(path: impl Into<String>) -> Self {
+        use crate::bdd::fixtures::strip_quotes;
+        let raw = path.into();
+        Self(Utf8PathBuf::from(strip_quotes(&raw)))
+    }
+
+    /// Return the path as a string slice.
+    pub(crate) fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
     /// Borrow the path as an [`Utf8Path`] slice.
     pub(crate) fn as_path(&self) -> &Utf8Path {
         &self.0

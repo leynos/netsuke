@@ -162,9 +162,8 @@ fn render_template(template: &TemplateContent, path: &TemplatePath) -> Result<()
 #[when("I render template {template} at stdlib path {path}")]
 pub(crate) fn render_stdlib_template(template: String, path: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
-    let path = strip_quotes(&path);
     let root = ensure_workspace()?;
-    let target = resolve_template_path(root.as_path(), path);
+    let target = resolve_template_path(root.as_path(), TemplatePath::new(path));
     render_template(&template, &target)
 }
 
