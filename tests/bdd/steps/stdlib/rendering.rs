@@ -168,7 +168,7 @@ pub(crate) fn render_stdlib_template(template: String, path: String) -> Result<(
     render_template(&template, &target)
 }
 
-#[when("I render the stdlib template {template}")]
+#[when("I render the stdlib template {template} without context")]
 pub(crate) fn render_stdlib_template_without_path(template: String) -> Result<()> {
     let template = TemplateContent::new(strip_quotes(&template));
     render_template_with_context(&template, context! {})

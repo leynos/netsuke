@@ -76,27 +76,27 @@ Feature: Template stdlib filters
     Given the stdlib executable "bin/primary/tool" exists
     And the stdlib executable "bin/secondary/tool" exists
     And the stdlib PATH entries are "bin/primary:bin/secondary"
-    When I render the stdlib template "{{ 'tool' | which }}"
+    When I render the stdlib template "{{ 'tool' | which }}" without context
     Then the stdlib output is the workspace executable "bin/primary/tool"
 
   Scenario: which filter lists every PATH match
     Given the stdlib executable "bin/path_a/tool" exists
     And the stdlib executable "bin/path_b/tool" exists
     And the stdlib PATH entries are "bin/path_a:bin/path_b"
-    When I render the stdlib template "{{ ('tool' | which(all=true))[0] }}"
+    When I render the stdlib template "{{ ('tool' | which(all=true))[0] }}" without context
     Then the stdlib output is the workspace executable "bin/path_a/tool"
-    When I render the stdlib template "{{ ('tool' | which(all=true))[1] }}"
+    When I render the stdlib template "{{ ('tool' | which(all=true))[1] }}" without context
     Then the stdlib output is the workspace executable "bin/path_b/tool"
 
   Scenario: which function honours cwd_mode
     Given the stdlib executable "local/tool" exists
     And the stdlib PATH entries are ""
-    When I render the stdlib template "{{ which('tool', cwd_mode='always') }}"
+    When I render the stdlib template "{{ which('tool', cwd_mode='always') }}" without context
     Then the stdlib output is the workspace executable "local/tool"
 
   Scenario: which filter reports missing executables
     Given the stdlib PATH entries are ""
-    When I render the stdlib template "{{ 'absent' | which }}"
+    When I render the stdlib template "{{ 'absent' | which }}" without context
     Then the stdlib error contains "netsuke::jinja::which::not_found"
 
   Scenario: shell filter transforms text and marks templates impure
@@ -145,7 +145,7 @@ Feature: Template stdlib filters
     And the stdlib template is impure
 
   Scenario: grep filter extracts matching lines
-    When I render the stdlib template "{{ 'alpha\nbeta\n' | grep('beta') | trim }}"
+    When I render the stdlib template "{{ 'alpha\nbeta\n' | grep('beta') | trim }}" without context
     Then the stdlib output equals "beta"
     And the stdlib template is impure
 
@@ -173,7 +173,7 @@ Feature: Template stdlib filters
 
   Scenario: fetch reports network errors
     Given the stdlib network policy allows scheme "http"
-    When I render the stdlib template "{{ fetch('http://127.0.0.1:9') }}"
+    When I render the stdlib template "{{ fetch('http://127.0.0.1:9') }}" without context
     Then the stdlib error contains "fetch failed"
     And the stdlib template is impure
 
