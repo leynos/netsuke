@@ -491,11 +491,13 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
   specified `TARGETS` (or the `defaults` if none are given).
 
   - `--emit <FILE>`: Write the generated `build.ninja` file to `<FILE>` and
-    keep it, instead of using a temporary file.
+    keep it, instead of using a temporary file. When `-C/--directory` is set,
+    relative `--emit` paths are resolved under `<DIR>`.
 
 - `manifest <FILE>`: Generates the `build.ninja` file and writes it to
-  `<FILE>` without executing Ninja. Useful for debugging or integration with
-  other tools.
+  `<FILE>` without executing Ninja. Use `-` to stream the generated Ninja file
+  to stdout (for example `netsuke manifest - | sed ...`). When `-C/--directory`
+  is set, relative manifest output paths are resolved under `<DIR>`.
 
 - `clean`: Removes build artefacts by running `ninja -t clean`. Requires
   rules/targets to be properly configured for cleaning in Ninja (often via

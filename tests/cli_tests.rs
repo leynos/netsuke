@@ -80,6 +80,13 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 #[case(CliCase {
+    argv: vec!["netsuke", "manifest", "-"],
+    expected_cmd: Commands::Manifest {
+        file: PathBuf::from("-"),
+    },
+    ..CliCase::default()
+})]
+#[case(CliCase {
     argv: vec![
         "netsuke",
         "--fetch-allow-scheme",

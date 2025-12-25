@@ -91,7 +91,12 @@ pub fn run(cli: &Cli) -> Result<()> {
         Commands::Build(args) => handle_build(cli, &args),
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli)?;
-            process::write_ninja_file(&file, &ninja)?;
+            if process::is_stdout_path(file.as_path()) {
+                process::write_ninja_stdout(&ninja)?;
+            } else {
+                let output_path = resolve_output_path(cli, file.as_path());
+                process::write_ninja_file(output_path.as_ref(), &ninja)?;
+            }
             Ok(())
         }
         Commands::Clean => handle_clean(cli),
@@ -133,8 +138,9 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
     let build_path: Cow<Path>;
     let _tmp_file_guard: Option<NamedTempFile>;
     if let Some(path) = &args.emit {
-        process::write_ninja_file(path, &ninja)?;
-        build_path = Cow::Borrowed(path.as_path());
+        let emit_path = resolve_output_path(cli, path.as_path());
+        process::write_ninja_file(emit_path.as_ref(), &ninja)?;
+        build_path = emit_path;
         _tmp_file_guard = None;
     } else {
         let tmp = process::create_temp_ninja_file(&ninja)?;
@@ -277,5 +283,46 @@ fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
         Ok(base.join(&file))
     } else {
         Ok(file)
+    }
+}
+
+/// Resolve an output path relative to the CLI working directory.
+///
+/// The Netsuke `-C/--directory` option behaves like a working directory change
+/// for any filesystem paths supplied on the command line. When `path` is
+/// relative and a directory has been configured, the returned path is
+/// `directory/path`.
+#[must_use]
+fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
+    if path.is_relative() {
+        cli.directory
+            .as_ref()
+            .map_or_else(|| Cow::Borrowed(path), |dir| Cow::Owned(dir.join(path)))
+    } else {
+        Cow::Borrowed(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+    use std::path::PathBuf;
+
+    #[rstest]
+    #[case(None, "out.ninja", "out.ninja")]
+    #[case(Some("work"), "out.ninja", "work/out.ninja")]
+    #[case(Some("work"), "/tmp/out.ninja", "/tmp/out.ninja")]
+    fn resolve_output_path_respects_directory(
+        #[case] directory: Option<&str>,
+        #[case] input: &str,
+        #[case] expected: &str,
+    ) {
+        let cli = Cli {
+            directory: directory.map(PathBuf::from),
+            ..Cli::default()
+        };
+        let resolved = resolve_output_path(&cli, Path::new(input));
+        assert_eq!(resolved.as_ref(), Path::new(expected));
     }
 }

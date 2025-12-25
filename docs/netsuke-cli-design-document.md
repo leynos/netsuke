@@ -937,14 +937,14 @@ like introspection commands and diagnostic modes come into play.
   users to advanced usage.
 
 - `netsuke manifest`: The user can output the Ninja file via
-  `netsuke manifest output.ninja`. The CLI confirms by writing the file and
-  printing a message like “Ninja file generated at output.ninja (not
-  executed)”. If verbose, it might also print some stats (how many rules, how
-  many targets). This command is for advanced debugging – the user sees exactly
-  what build commands Netsuke generated. It’s an advanced tool for trust but
-  also helps if they need to manually inspect or run ninja themselves. By
-  offering it as a first-class command, the CLI demonstrates that Netsuke
-  caters to power users.
+  `netsuke manifest output.ninja` or stream it to stdout with
+  `netsuke manifest -`. The CLI confirms by writing the file and printing a
+  message like “Ninja file generated at output.ninja (not executed)”. If
+  verbose, it might also print some stats (how many rules, how many targets).
+  This command is for advanced debugging – the user sees exactly what build
+  commands Netsuke generated. It’s an advanced tool for trust but also helps if
+  they need to manually inspect or run ninja themselves. By offering it as a
+  first-class command, the CLI demonstrates that Netsuke caters to power users.
 
 - **Encountering and Understanding Errors:** At some point, the user will write
   something wrong in a Netsukefile or encounter a build failure. This is a

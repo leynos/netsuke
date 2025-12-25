@@ -7,6 +7,7 @@ mod common;
 #[cfg(unix)]
 mod fs_steps;
 mod ir_steps;
+mod manifest_command_steps;
 mod manifest_steps;
 mod ninja_steps;
 mod process_steps;

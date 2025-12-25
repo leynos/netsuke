@@ -36,6 +36,12 @@ Feature: CLI parsing
     And the command is manifest
     And the manifest command path is "out.ninja"
 
+  Scenario: Manifest subcommand can stream to stdout
+    When the CLI is parsed with "manifest -"
+    Then parsing succeeds
+    And the command is manifest
+    And the manifest command path is "-"
+
   Scenario: Manifest subcommand requires a path
     When the CLI is parsed with invalid arguments "manifest"
     Then an error should be returned
@@ -80,4 +86,3 @@ Feature: CLI parsing
     When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"
     Then parsing succeeds
     And the CLI network policy rejects "https://example.com" with "host 'example.com' is blocked"
-
