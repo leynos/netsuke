@@ -131,7 +131,7 @@ pub(crate) fn assert_stdlib_output_is_root() -> Result<()> {
     Ok(())
 }
 
-#[then("the stdlib output is the workspace path {path}")]
+#[then("the stdlib output matches the workspace path {path}")]
 pub(crate) fn assert_stdlib_output_is_workspace_path(path: String) -> Result<()> {
     let path = strip_quotes(&path);
     let (root, output) = stdlib_root_and_output()?;

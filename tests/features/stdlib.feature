@@ -17,12 +17,12 @@ Feature: Template stdlib filters
 
   Scenario: with_suffix rewrites extensions
     When I render "{{ path | with_suffix('.log') }}" with stdlib path "file.tar.gz"
-    Then the stdlib output is the workspace path "file.tar.log"
+    Then the stdlib output matches the workspace path "file.tar.log"
 
   Scenario: expanduser expands the home directory
     Given HOME points to the stdlib workspace root
     When I render "{{ path | expanduser }}" with stdlib path "~/workspace"
-    Then the stdlib output is the workspace path "workspace"
+    Then the stdlib output matches the workspace path "workspace"
 
   Scenario: contents reads a file
     When I render "{{ path | contents }}" with stdlib path "file"
