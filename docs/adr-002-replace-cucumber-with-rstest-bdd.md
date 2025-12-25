@@ -493,6 +493,124 @@ fn cli_scenario(world: TestWorld) {
 - Loses the type safety of direct fixture injection.
 - Cannot easily support parallel scenario execution within a thread.
 
+#### Observed failure: state leakage under sequential test execution
+
+During migration, a concrete failure mode was observed that demonstrates the
+fragility of the thread-local workaround. The test
+`stdlib_grep_filter_streams_large_output_to_a_temporary_file` passes when run
+in isolation but fails when executed sequentially with other tests using
+`cargo test --test-threads=1`.
+
+**Symptom**: The template variable `text` is undefined during rendering,
+causing the error:
+
+```
+invalid operation: input value is undefined (in <string>:1)
+```
+
+**Scenario under test** (`tests/features/stdlib.feature`):
+
+```gherkin
+Scenario: grep filter streams large output to a temporary file
+  Given the stdlib command output limit is 512 bytes
+  And the stdlib command stream limit is 200000 bytes
+  And the stdlib template text contains 32768 lines of "match"
+  When I render the stdlib template "{{ text | grep('match', none, {'mode': 'tempfile'}) }}" using the stdlib text
+  Then the stdlib output file has at least 190000 bytes
+```
+
+**Root cause analysis**: The workaround implementation uses thread names to
+detect scenario boundaries and reset state:
+
+```rust
+// tests/bdd/fixtures/mod.rs
+
+thread_local! {
+    static WORLD: RefCell<Option<TestWorld>> = const { RefCell::new(None) };
+    static CURRENT_SCENARIO: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+fn current_scenario_name() -> Option<String> {
+    std::thread::current().name().map(String::from)
+}
+
+fn should_reset_world() -> bool {
+    let current = current_scenario_name();
+    CURRENT_SCENARIO.with(|stored| {
+        let stored_name = stored.borrow();
+        match (&*stored_name, &current) {
+            (None, _) => true,                                // No scenario recorded yet
+            (Some(prev), Some(curr)) if prev != curr => true, // Different scenario
+            _ => false,
+        }
+    })
+}
+
+pub fn with_world<R>(f: impl FnOnce(&TestWorld) -> R) -> R {
+    let should_reset = should_reset_world();
+    if should_reset {
+        WORLD.with(|w| {
+            let _ = w.borrow_mut().take(); // Drop old world
+            *w.borrow_mut() = Some(TestWorld::default());
+        });
+        update_scenario_name();
+    }
+    // ...
+}
+```
+
+When tests run with `--test-threads=1`, all scenarios execute on the same
+thread but with different thread names (e.g.,
+`features_scenarios::stdlib_grep_filter_extracts_matching_lines` followed by
+`features_scenarios::stdlib_grep_filter_streams_large_output_to_a_temporary_file`).
+
+The failure occurs because:
+
+1. **Step execution order**: The `Given` step sets `world.stdlib_text` via
+   `Slot::set()`, and the `When` step retrieves it via `Slot::get()`.
+
+2. **Scenario boundary detection**: The `should_reset_world()` function
+   correctly detects the new scenario name and resets the world to
+   `TestWorld::default()`.
+
+3. **State loss**: However, under certain test orderings, the `Slot<String>`
+   for `stdlib_text` either:
+   - Is not properly initialized after the reset, or
+   - Has its value cleared by residual `Drop` logic from the previous world
+     instance executing interleaved with the new scenario's step setup.
+
+4. **Race condition**: The `Slot<T>` type (from `rstest-bdd`) uses interior
+   mutability. When the old `TestWorld` is dropped (line: `let _ =
+   w.borrow_mut().take()`), its `Drop` implementation runs, which includes
+   `self.stdlib_text.clear()`. If step functions from the new scenario have
+   already begun populating slots before this drop completes, state corruption
+   occurs.
+
+**Evidence**: The test passes reliably with parallel execution (default) and
+in isolation, but fails deterministically with `--test-threads=1` when preceded
+by `stdlib_grep_filter_extracts_matching_lines`. This indicates the failure is
+order-dependent and related to cleanup/initialization timing.
+
+**Relevant code paths**:
+
+- `tests/bdd/fixtures/mod.rs:55-65` — `should_reset_world()` scenario detection
+- `tests/bdd/fixtures/mod.rs:89-112` — `with_world()` reset and access logic
+- `tests/bdd/fixtures/mod.rs:252-259` — `TestWorld::drop()` cleanup
+- `tests/bdd/steps/stdlib/config.rs:27-38` — step setting `stdlib_text`
+- `tests/bdd/steps/stdlib/rendering.rs:201-211` — step reading `stdlib_text`
+
+**Why this matters for rstest-bdd**: This failure demonstrates that
+thread-local state management is fundamentally unsuitable for BDD scenarios
+where:
+
+1. Multiple scenarios run sequentially on the same thread
+2. State must be reliably isolated between scenarios
+3. Cleanup logic in `Drop` implementations can race with new scenario setup
+
+The cucumber-rs `World` model avoids this by passing the world as an explicit
+parameter to each step, ensuring the lifetime is tied to the scenario function
+scope rather than thread-local storage with manual reset detection.
+
 **Recommendation for rstest-bdd**: This is the highest-impact improvement for
 cucumber migration ergonomics. Consider one of these approaches:
 
