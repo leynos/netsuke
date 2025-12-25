@@ -15,17 +15,17 @@ Feature: Template time helpers
   Scenario: Timedelta composes multiple components
     Given a stdlib workspace
     When I render the stdlib template "{{ timedelta(days=1, hours=2, minutes=30, seconds=5, milliseconds=750, microseconds=250).iso8601 }}"
-    Then the stdlib output is "P1DT2H30M5.75025S"
+    Then the stdlib output equals "P1DT2H30M5.75025S"
 
   Scenario: Timedelta captures nanosecond precision
     Given a stdlib workspace
     When I render the stdlib template "{{ timedelta(nanoseconds=1).iso8601 }}"
-    Then the stdlib output is "PT0.000000001S"
+    Then the stdlib output equals "PT0.000000001S"
 
   Scenario: Timedelta supports negative values
     Given a stdlib workspace
     When I render the stdlib template "{{ timedelta(hours=-1).iso8601 }}"
-    Then the stdlib output is "-PT1H"
+    Then the stdlib output equals "-PT1H"
 
   Scenario: Timedelta overflow surfaces an error
     Given a stdlib workspace

@@ -14,7 +14,7 @@ use url::Url;
 use super::parsing::{parse_expected_offset, parse_iso_timestamp};
 use super::workspace::resolve_executable_path;
 
-#[then("the stdlib output is {expected}")]
+#[then("the stdlib output equals {expected}")]
 pub(crate) fn assert_stdlib_output(expected: String) -> Result<()> {
     let expected = strip_quotes(&expected);
     with_world(|world| {
