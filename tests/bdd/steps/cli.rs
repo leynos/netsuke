@@ -1,6 +1,6 @@
 //! Step definitions for CLI parsing scenarios.
 
-use crate::bdd::fixtures::{RefCellOptionExt, with_world};
+use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Parser;
@@ -13,75 +13,50 @@ use std::path::PathBuf;
 // ---------------------------------------------------------------------------
 
 /// Apply CLI parsing, storing result or error in world state.
-fn apply_cli(args: &CliArgs) {
+fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let tokens = build_token_list(args);
     match Cli::try_parse_from(tokens) {
-        Ok(cli) => handle_parse_success(cli),
-        Err(e) => handle_parse_error(e),
+        Ok(cli) => handle_parse_success(world, cli),
+        Err(e) => handle_parse_error(world, e),
     }
 }
 
 /// Get the CLI's network policy using `with_ref`.
-fn cli_network_policy() -> Result<netsuke::stdlib::NetworkPolicy> {
-    with_world(|world| {
-        world
-            .cli
-            .with_ref(|cli| cli.network_policy())
-            .context("CLI has not been parsed")?
-            .context("construct CLI network policy")
-    })
+fn cli_network_policy(world: &TestWorld) -> Result<netsuke::stdlib::NetworkPolicy> {
+    world
+        .cli
+        .with_ref(|cli| cli.network_policy())
+        .context("CLI has not been parsed")?
+        .context("construct CLI network policy")
 }
 
 /// Extract build command args (targets and emit path) using with_ref.
-fn extract_build() -> Result<(Vec<String>, Option<PathBuf>)> {
-    with_world(|world| {
-        world
-            .cli
-            .with_ref(|cli| {
-                let command = cli.command.as_ref()?;
-                match command {
-                    Commands::Build(args) => Some((args.targets.clone(), args.emit.clone())),
-                    _ => None,
-                }
-            })
-            .flatten()
-            .context("expected build command")
-    })
+fn extract_build(world: &TestWorld) -> Result<(Vec<String>, Option<PathBuf>)> {
+    world
+        .cli
+        .with_ref(|cli| {
+            let command = cli.command.as_ref()?;
+            match command {
+                Commands::Build(args) => Some((args.targets.clone(), args.emit.clone())),
+                _ => None,
+            }
+        })
+        .flatten()
+        .context("expected build command")
 }
 
 /// Get the parsed CLI command using with_ref.
-fn get_command() -> Result<Commands> {
-    with_world(|world| {
-        world
-            .cli
-            .with_ref(|cli| cli.command.clone())
-            .context("CLI has not been parsed")?
-            .context("CLI command missing")
-    })
+fn get_command(world: &TestWorld) -> Result<Commands> {
+    world
+        .cli
+        .with_ref(|cli| cli.command.clone())
+        .context("CLI has not been parsed")?
+        .context("CLI command missing")
 }
 
 // ---------------------------------------------------------------------------
 // CLI parsing helpers
 // ---------------------------------------------------------------------------
-
-/// Prefix marker for invalid argument steps.
-///
-/// The feature file uses "invalid arguments X" to indicate that the CLI
-/// should reject the arguments X. This struct provides a typed way to
-/// detect and strip this prefix from raw argument strings.
-struct ArgsPrefix;
-
-impl ArgsPrefix {
-    /// The prefix string used in feature files for invalid argument scenarios.
-    const INVALID: &'static str = "invalid arguments ";
-
-    /// Strip the "invalid arguments " prefix if present, returning the actual args.
-    fn strip_invalid(args: &CliArgs) -> CliArgs {
-        let raw = args.as_str();
-        let actual = raw.strip_prefix(Self::INVALID).unwrap_or(raw);
-        CliArgs::new(actual.to_string())
-    }
-}
 
 /// Build the token list from CLI arguments for parsing.
 fn build_token_list(args: &CliArgs) -> Vec<String> {
@@ -91,25 +66,21 @@ fn build_token_list(args: &CliArgs) -> Vec<String> {
 }
 
 /// Handle successful CLI parsing by storing the result.
-fn handle_parse_success(mut cli: Cli) {
+fn handle_parse_success(world: &TestWorld, mut cli: Cli) {
     if cli.command.is_none() {
         cli.command = Some(Commands::Build(BuildArgs {
             emit: None,
             targets: Vec::new(),
         }));
     }
-    with_world(|world| {
-        world.cli.set_value(cli);
-        world.cli_error.clear();
-    });
+    world.cli.set_value(cli);
+    world.cli_error.clear();
 }
 
 /// Handle CLI parsing error by storing the error message.
-fn handle_parse_error(err: clap::Error) {
-    with_world(|world| {
-        world.cli.clear_value();
-        world.cli_error.set(err.to_string());
-    });
+fn handle_parse_error(world: &TestWorld, err: clap::Error) {
+    world.cli.clear_value();
+    world.cli_error.set(err.to_string());
 }
 
 // ---------------------------------------------------------------------------
@@ -151,8 +122,8 @@ impl ExpectedCommand {
     }
 }
 
-fn verify_command(expected: ExpectedCommand) -> Result<()> {
-    let command = get_command()?;
+fn verify_command(world: &TestWorld, expected: ExpectedCommand) -> Result<()> {
+    let command = get_command(world)?;
     ensure!(
         expected.matches(&command),
         "command should be {}",
@@ -161,59 +132,51 @@ fn verify_command(expected: ExpectedCommand) -> Result<()> {
     Ok(())
 }
 
-fn verify_job_count(expected: JobCount) -> Result<()> {
-    with_world(|world| {
-        let result = world.cli.with_ref(|cli| {
-            if cli.jobs == Some(expected.value()) {
-                Ok(())
-            } else {
-                Err(anyhow!(
-                    "expected job count {}, got {:?}",
-                    expected.value(),
-                    cli.jobs
-                ))
-            }
-        });
-        result.context("CLI has not been parsed")?
-    })
+fn verify_job_count(world: &TestWorld, expected: JobCount) -> Result<()> {
+    let result = world.cli.with_ref(|cli| {
+        if cli.jobs == Some(expected.value()) {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "expected job count {}, got {:?}",
+                expected.value(),
+                cli.jobs
+            ))
+        }
+    });
+    result.context("CLI has not been parsed")?
 }
 
-fn verify_parsing_succeeded() -> Result<()> {
-    with_world(|world| {
-        ensure!(world.cli.is_some(), "CLI should be present after parsing");
-        Ok(())
-    })
+fn verify_parsing_succeeded(world: &TestWorld) -> Result<()> {
+    ensure!(world.cli.is_some(), "CLI should be present after parsing");
+    Ok(())
 }
 
-fn verify_error_returned() -> Result<()> {
-    with_world(|world| {
-        ensure!(
-            world.cli_error.is_filled(),
-            "Expected an error, but none was returned"
-        );
-        Ok(())
-    })
+fn verify_error_returned(world: &TestWorld) -> Result<()> {
+    ensure!(
+        world.cli_error.is_filled(),
+        "Expected an error, but none was returned"
+    );
+    Ok(())
 }
 
-fn verify_manifest_path(path: &PathString) -> Result<()> {
-    with_world(|world| {
-        let result = world.cli.with_ref(|cli| {
-            if cli.file.as_path() == path.as_path() {
-                Ok(())
-            } else {
-                Err(anyhow!(
-                    "expected manifest path {}, got {}",
-                    path,
-                    cli.file.display()
-                ))
-            }
-        });
-        result.context("CLI has not been parsed")?
-    })
+fn verify_manifest_path(world: &TestWorld, path: &PathString) -> Result<()> {
+    let result = world.cli.with_ref(|cli| {
+        if cli.file.as_path() == path.as_path() {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "expected manifest path {}, got {}",
+                path,
+                cli.file.display()
+            ))
+        }
+    });
+    result.context("CLI has not been parsed")?
 }
 
-fn verify_first_target(target: &TargetName) -> Result<()> {
-    let (targets, _) = extract_build()?;
+fn verify_first_target(world: &TestWorld, target: &TargetName) -> Result<()> {
+    let (targets, _) = extract_build(world)?;
     ensure!(
         targets.first().map(String::as_str) == Some(target.as_str()),
         "expected first target {}, got {:?}",
@@ -223,25 +186,23 @@ fn verify_first_target(target: &TargetName) -> Result<()> {
     Ok(())
 }
 
-fn verify_working_directory(directory: &PathString) -> Result<()> {
-    with_world(|world| {
-        let result = world.cli.with_ref(|cli| {
-            if cli.directory.as_deref() == Some(directory.as_path()) {
-                Ok(())
-            } else {
-                Err(anyhow!(
-                    "expected working directory {}, got {:?}",
-                    directory,
-                    cli.directory
-                ))
-            }
-        });
-        result.context("CLI has not been parsed")?
-    })
+fn verify_working_directory(world: &TestWorld, directory: &PathString) -> Result<()> {
+    let result = world.cli.with_ref(|cli| {
+        if cli.directory.as_deref() == Some(directory.as_path()) {
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "expected working directory {}, got {:?}",
+                directory,
+                cli.directory
+            ))
+        }
+    });
+    result.context("CLI has not been parsed")?
 }
 
-fn verify_emit_path(path: &PathString) -> Result<()> {
-    let (_, emit) = extract_build()?;
+fn verify_emit_path(world: &TestWorld, path: &PathString) -> Result<()> {
+    let (_, emit) = extract_build(world)?;
     ensure!(
         emit.as_deref() == Some(path.as_path()),
         "expected emit path {}, got {:?}",
@@ -251,8 +212,8 @@ fn verify_emit_path(path: &PathString) -> Result<()> {
     Ok(())
 }
 
-fn verify_cli_policy_allows(url: &UrlString) -> Result<()> {
-    let policy = cli_network_policy()?;
+fn verify_cli_policy_allows(world: &TestWorld, url: &UrlString) -> Result<()> {
+    let policy = cli_network_policy(world)?;
     let parsed = url.parse().context("parse URL for CLI policy check")?;
     ensure!(
         policy.evaluate(&parsed).is_ok(),
@@ -262,8 +223,12 @@ fn verify_cli_policy_allows(url: &UrlString) -> Result<()> {
     Ok(())
 }
 
-fn verify_cli_policy_rejects(url: &UrlString, message: &ErrorFragment) -> Result<()> {
-    let policy = cli_network_policy()?;
+fn verify_cli_policy_rejects(
+    world: &TestWorld,
+    url: &UrlString,
+    message: &ErrorFragment,
+) -> Result<()> {
+    let policy = cli_network_policy(world)?;
     let parsed = url.parse().context("parse URL for CLI policy check")?;
     let Err(err) = policy.evaluate(&parsed) else {
         bail!("expected CLI policy to reject {}", url);
@@ -276,8 +241,8 @@ fn verify_cli_policy_rejects(url: &UrlString, message: &ErrorFragment) -> Result
     Ok(())
 }
 
-fn verify_manifest_command_path(path: &PathString) -> Result<()> {
-    let command = get_command()?;
+fn verify_manifest_command_path(world: &TestWorld, path: &PathString) -> Result<()> {
+    let command = get_command(world)?;
     match command {
         Commands::Manifest { file } => {
             ensure!(
@@ -292,38 +257,41 @@ fn verify_manifest_command_path(path: &PathString) -> Result<()> {
     }
 }
 
-fn verify_error_contains(fragment: &ErrorFragment) -> Result<()> {
-    with_world(|world| {
-        let error = world
-            .cli_error
-            .get()
-            .context("no error was returned by CLI parsing")?;
-        ensure!(
-            error.contains(fragment.as_str()),
-            "Error message '{error}' does not contain expected '{}'",
-            fragment
-        );
-        Ok(())
-    })
+fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<()> {
+    let error = world
+        .cli_error
+        .get()
+        .context("no error was returned by CLI parsing")?;
+    ensure!(
+        error.contains(fragment.as_str()),
+        "Error message '{error}' does not contain expected '{}'",
+        fragment
+    );
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // Given/When steps
 // ---------------------------------------------------------------------------
 
-#[given("the CLI is parsed with {args}")]
-fn parse_cli_given(args: String) -> Result<()> {
+#[given("the CLI is parsed with {args:string}")]
+fn parse_cli_given(world: &TestWorld, args: &str) -> Result<()> {
     let cli_args = CliArgs::new(args);
-    let stripped = ArgsPrefix::strip_invalid(&cli_args);
-    apply_cli(&stripped);
+    apply_cli(world, &cli_args);
     Ok(())
 }
 
-#[when("the CLI is parsed with {args}")]
-fn parse_cli_when(args: String) -> Result<()> {
+#[when("the CLI is parsed with {args:string}")]
+fn parse_cli_when(world: &TestWorld, args: &str) -> Result<()> {
     let cli_args = CliArgs::new(args);
-    let stripped = ArgsPrefix::strip_invalid(&cli_args);
-    apply_cli(&stripped);
+    apply_cli(world, &cli_args);
+    Ok(())
+}
+
+#[when("the CLI is parsed with invalid arguments {args:string}")]
+fn parse_cli_with_invalid_args(world: &TestWorld, args: &str) -> Result<()> {
+    let cli_args = CliArgs::new(args);
+    apply_cli(world, &cli_args);
     Ok(())
 }
 
@@ -332,76 +300,76 @@ fn parse_cli_when(args: String) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 #[then("parsing succeeds")]
-fn parsing_succeeds() -> Result<()> {
-    verify_parsing_succeeded()
+fn parsing_succeeds(world: &TestWorld) -> Result<()> {
+    verify_parsing_succeeded(world)
 }
 
 #[then("the command is build")]
-fn command_is_build() -> Result<()> {
-    verify_command(ExpectedCommand::Build)
+fn command_is_build(world: &TestWorld) -> Result<()> {
+    verify_command(world, ExpectedCommand::Build)
 }
 
 #[then("the command is clean")]
-fn command_is_clean() -> Result<()> {
-    verify_command(ExpectedCommand::Clean)
+fn command_is_clean(world: &TestWorld) -> Result<()> {
+    verify_command(world, ExpectedCommand::Clean)
 }
 
 #[then("the command is graph")]
-fn command_is_graph() -> Result<()> {
-    verify_command(ExpectedCommand::Graph)
+fn command_is_graph(world: &TestWorld) -> Result<()> {
+    verify_command(world, ExpectedCommand::Graph)
 }
 
 #[then("the command is manifest")]
-fn command_is_manifest() -> Result<()> {
-    verify_command(ExpectedCommand::Manifest)
+fn command_is_manifest(world: &TestWorld) -> Result<()> {
+    verify_command(world, ExpectedCommand::Manifest)
 }
 
-#[then("the manifest path is {path}")]
-fn manifest_path(path: String) -> Result<()> {
-    verify_manifest_path(&PathString::new(path))
+#[then("the manifest path is {path:string}")]
+fn manifest_path(world: &TestWorld, path: &str) -> Result<()> {
+    verify_manifest_path(world, &PathString::new(path))
 }
 
-#[then("the first target is {target}")]
-fn first_target(target: String) -> Result<()> {
-    verify_first_target(&TargetName::new(target))
+#[then("the first target is {target:string}")]
+fn first_target(world: &TestWorld, target: &str) -> Result<()> {
+    verify_first_target(world, &TargetName::new(target))
 }
 
-#[then("the working directory is {directory}")]
-fn working_directory(directory: String) -> Result<()> {
-    verify_working_directory(&PathString::new(directory))
+#[then("the working directory is {directory:string}")]
+fn working_directory(world: &TestWorld, directory: &str) -> Result<()> {
+    verify_working_directory(world, &PathString::new(directory))
 }
 
 #[then("the job count is {count:usize}")]
-fn job_count(count: usize) -> Result<()> {
-    verify_job_count(JobCount::new(count))
+fn job_count(world: &TestWorld, count: usize) -> Result<()> {
+    verify_job_count(world, JobCount::new(count))
 }
 
-#[then("the emit path is {path}")]
-fn emit_path(path: String) -> Result<()> {
-    verify_emit_path(&PathString::new(path))
+#[then("the emit path is {path:string}")]
+fn emit_path(world: &TestWorld, path: &str) -> Result<()> {
+    verify_emit_path(world, &PathString::new(path))
 }
 
-#[then("the CLI network policy allows {url}")]
-fn cli_policy_allows(url: String) -> Result<()> {
-    verify_cli_policy_allows(&UrlString::new(url))
+#[then("the CLI network policy allows {url:string}")]
+fn cli_policy_allows(world: &TestWorld, url: &str) -> Result<()> {
+    verify_cli_policy_allows(world, &UrlString::new(url))
 }
 
-#[then("the CLI network policy rejects {url} with {message}")]
-fn cli_policy_rejects(url: String, message: String) -> Result<()> {
-    verify_cli_policy_rejects(&UrlString::new(url), &ErrorFragment::new(message))
+#[then("the CLI network policy rejects {url:string} with {message:string}")]
+fn cli_policy_rejects(world: &TestWorld, url: &str, message: &str) -> Result<()> {
+    verify_cli_policy_rejects(world, &UrlString::new(url), &ErrorFragment::new(message))
 }
 
-#[then("the manifest command path is {path}")]
-fn manifest_command_path(path: String) -> Result<()> {
-    verify_manifest_command_path(&PathString::new(path))
+#[then("the manifest command path is {path:string}")]
+fn manifest_command_path(world: &TestWorld, path: &str) -> Result<()> {
+    verify_manifest_command_path(world, &PathString::new(path))
 }
 
 #[then("an error should be returned")]
-fn error_should_be_returned() -> Result<()> {
-    verify_error_returned()
+fn error_should_be_returned(world: &TestWorld) -> Result<()> {
+    verify_error_returned(world)
 }
 
-#[then("the error message should contain {fragment}")]
-fn error_message_should_contain(fragment: String) -> Result<()> {
-    verify_error_contains(&ErrorFragment::new(fragment))
+#[then("the error message should contain {fragment:string}")]
+fn error_message_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
+    verify_error_contains(world, &ErrorFragment::new(fragment))
 }

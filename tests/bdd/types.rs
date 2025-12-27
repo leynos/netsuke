@@ -8,7 +8,6 @@
     reason = "newtypes provide complete API; not all methods are used yet"
 )]
 
-use crate::bdd::fixtures::strip_quotes;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -16,7 +15,6 @@ use std::path::{Path, PathBuf};
 ///
 /// Each generated type:
 /// - Wraps a `String`
-/// - Strips quotes during construction via `From<String>`
 /// - Provides `as_str()` and `into_string()` accessors
 /// - Implements `Display` and `Debug`
 macro_rules! define_newtype {
@@ -26,10 +24,9 @@ macro_rules! define_newtype {
         pub struct $name(String);
 
         impl $name {
-            /// Create a new instance, stripping surrounding quotes.
+            /// Create a new instance.
             pub fn new(s: impl Into<String>) -> Self {
-                let raw = s.into();
-                Self(strip_quotes(&raw).to_string())
+                Self(s.into())
             }
 
             /// Return the inner string as a slice.

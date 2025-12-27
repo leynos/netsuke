@@ -3,9 +3,8 @@
 //! The `TestWorld` struct holds all state for BDD scenarios. Non-Clone types
 //! use `RefCell<Option<T>>` directly, while Clone types use `Slot<T>`.
 //!
-//! Since the `scenarios!` macro doesn't support fixture injection, we use
-//! thread-local storage to provide the world to steps. Each scenario gets
-//! a fresh world initialized at the start.
+//! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
+//! as parameters, eliminating the need for thread-local storage.
 
 // The `#[fixture]` macro generates types that cannot have doc comments attached
 #![allow(
@@ -24,115 +23,6 @@ use std::ffi::OsString;
 use test_support::PathGuard;
 use test_support::env::{NinjaEnvGuard, restore_many};
 use test_support::http::HttpServer;
-
-// Thread-local storage for the current scenario's world
-thread_local! {
-    static WORLD: RefCell<Option<TestWorld>> = const { RefCell::new(None) };
-    // Track which scenario owns the current world (by test name)
-    static CURRENT_SCENARIO: RefCell<Option<String>> = const { RefCell::new(None) };
-}
-
-/// Initialize a fresh world for the current scenario.
-///
-/// This should be called at the start of each scenario to ensure
-/// steps have a clean world to work with.
-pub fn init_world() {
-    WORLD.with(|w| {
-        // Drop any existing world to run cleanup
-        let _ = w.borrow_mut().take();
-        *w.borrow_mut() = Some(TestWorld::default());
-    });
-}
-
-/// Get the current test/scenario name from the thread.
-fn current_scenario_name() -> Option<String> {
-    std::thread::current().name().map(String::from)
-}
-
-/// Check if we need to reset the world for a new scenario.
-///
-/// Returns true if the scenario has changed since last access.
-fn should_reset_world() -> bool {
-    let current = current_scenario_name();
-    CURRENT_SCENARIO.with(|stored| {
-        let stored_name = stored.borrow();
-        match (&*stored_name, &current) {
-            (None, _) => true,                                // No scenario recorded yet
-            (Some(prev), Some(curr)) if prev != curr => true, // Different scenario
-            _ => false,
-        }
-    })
-}
-
-/// Update the stored scenario name.
-fn update_scenario_name() {
-    let current = current_scenario_name();
-    CURRENT_SCENARIO.with(|stored| {
-        *stored.borrow_mut() = current;
-    });
-}
-
-/// Access the current scenario's world, initializing if needed.
-///
-/// The world is lazily initialized on first access within a test.
-/// When a new scenario is detected (via thread name change), the
-/// world is automatically reset to ensure test isolation.
-///
-/// # Panics
-///
-/// Panics if the world cannot be initialized, which should never happen
-/// under normal operation since the world is always created before access.
-#[expect(
-    clippy::expect_used,
-    reason = "World is always initialized before access"
-)]
-pub fn with_world<R>(f: impl FnOnce(&TestWorld) -> R) -> R {
-    let should_reset = should_reset_world();
-
-    // Check if we've entered a new scenario
-    if should_reset {
-        // Reset the world for the new scenario
-        WORLD.with(|w| {
-            let _ = w.borrow_mut().take(); // Drop old world, running cleanup
-            *w.borrow_mut() = Some(TestWorld::default());
-        });
-        update_scenario_name();
-    }
-
-    WORLD.with(|w| {
-        // Lazily initialize the world if not yet created
-        if w.borrow().is_none() {
-            *w.borrow_mut() = Some(TestWorld::default());
-            update_scenario_name();
-        }
-        let guard = w.borrow();
-        let world = guard.as_ref().expect("world should be initialized");
-        f(world)
-    })
-}
-
-/// Clean up the current scenario's world.
-///
-/// This should be called at the end of each scenario to ensure
-/// proper cleanup of resources.
-pub fn cleanup_world() {
-    WORLD.with(|w| {
-        let _ = w.borrow_mut().take();
-    });
-}
-
-/// Reset the world for a new scenario.
-///
-/// This is called by the before hook at the start of each scenario
-/// to ensure a fresh world state.
-pub fn reset_world() {
-    WORLD.with(|w| {
-        // Drop any existing world to run cleanup (e.g., Drop implementations)
-        let _ = w.borrow_mut().take();
-        // Create a fresh world
-        *w.borrow_mut() = Some(TestWorld::default());
-    });
-}
 
 /// Combined test world for all BDD scenarios.
 ///
@@ -288,17 +178,6 @@ pub trait RefCellOptionExt<T> {
     fn with_mut<R>(&self, f: impl FnOnce(&mut T) -> R) -> Option<R>;
     /// Take the value out of the `RefCell`, leaving `None` in its place.
     fn take_value(&self) -> Option<T>;
-}
-
-/// Strip surrounding double quotes from a string parameter.
-///
-/// rstest-bdd captures quoted strings including the quotes (unlike cucumber),
-/// so we need to strip them when processing step parameters.
-#[must_use]
-pub fn strip_quotes(s: &str) -> &str {
-    s.strip_prefix('"')
-        .and_then(|stripped| stripped.strip_suffix('"'))
-        .unwrap_or(s)
 }
 
 impl<T> RefCellOptionExt<T> for RefCell<Option<T>> {

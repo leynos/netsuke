@@ -1,6 +1,6 @@
 //! Render-related stdlib step helpers used by BDD scenarios.
 
-use crate::bdd::fixtures::{RefCellOptionExt, strip_quotes, with_world};
+use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
@@ -73,6 +73,10 @@ impl From<String> for ContextValue {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
 /// Configuration values extracted from the test world for stdlib rendering.
 struct RenderConfig {
     policy: Option<NetworkPolicy>,
@@ -81,24 +85,28 @@ struct RenderConfig {
     command_stream_max_bytes: Option<u64>,
 }
 
-fn extract_render_config() -> RenderConfig {
-    with_world(|world| RenderConfig {
+fn extract_render_config(world: &TestWorld) -> RenderConfig {
+    RenderConfig {
         policy: world.stdlib_policy.with_ref(|p| p.clone()),
         fetch_max_bytes: world.stdlib_fetch_max_bytes.get(),
         command_max_output_bytes: world.stdlib_command_max_output_bytes.get(),
         command_stream_max_bytes: world.stdlib_command_stream_max_bytes.get(),
-    })
+    }
 }
 
-pub(crate) fn render_template_with_context(template: &TemplateContent, ctx: Value) -> Result<()> {
-    let root = ensure_workspace()?;
+pub(crate) fn render_template_with_context(
+    world: &TestWorld,
+    template: &TemplateContent,
+    ctx: Value,
+) -> Result<()> {
+    let root = ensure_workspace(world)?;
     let mut env = Environment::new();
     let workspace = Dir::open_ambient_dir(&root, ambient_authority())
         .context("open stdlib workspace directory")?;
     let mut config = StdlibConfig::new(workspace)?.with_workspace_root_path(root.clone())?;
 
     // Extract config from world before applying
-    let render_cfg = extract_render_config();
+    let render_cfg = extract_render_config(world);
 
     if let Some(policy) = render_cfg.policy {
         config = config.with_network_policy(policy);
@@ -123,23 +131,22 @@ pub(crate) fn render_template_with_context(template: &TemplateContent, ctx: Valu
     state.reset_impure();
 
     let render = env.render_str(template.as_str(), ctx);
-    with_world(|world| {
-        world.stdlib_state.set_value(state);
-        match render {
-            Ok(output) => {
-                world.stdlib_output.set(output);
-                world.stdlib_error.clear();
-            }
-            Err(err) => {
-                world.stdlib_output.clear();
-                world.stdlib_error.set(err.to_string());
-            }
+    world.stdlib_state.set_value(state);
+    match render {
+        Ok(output) => {
+            world.stdlib_output.set(output);
+            world.stdlib_error.clear();
         }
-    });
+        Err(err) => {
+            world.stdlib_output.clear();
+            world.stdlib_error.set(err.to_string());
+        }
+    }
     Ok(())
 }
 
 fn render_with_single_context(
+    world: &TestWorld,
     template: &TemplateContent,
     key: &ContextKey,
     value: ContextValue,
@@ -151,12 +158,16 @@ fn render_with_single_context(
             .into_iter()
             .collect::<BTreeMap<&str, String>>(),
     );
-    render_template_with_context(template, ctx)
+    render_template_with_context(world, template, ctx)
 }
 
-fn render_template(template: &TemplateContent, path: &TemplatePath) -> Result<()> {
+fn render_template(
+    world: &TestWorld,
+    template: &TemplateContent,
+    path: &TemplatePath,
+) -> Result<()> {
     let ctx = context!(path => path.as_path().as_str());
-    render_template_with_context(template, ctx)
+    render_template_with_context(world, template, ctx)
 }
 
 /// Source of context values for template rendering.
@@ -180,8 +191,8 @@ impl ContextSource {
     }
 
     /// Retrieve the value from the world for this context source.
-    fn get_value(&self) -> Result<String> {
-        with_world(|world| match self {
+    fn get_value(&self, world: &TestWorld) -> Result<String> {
+        match self {
             Self::Url => world
                 .stdlib_url
                 .get()
@@ -194,44 +205,57 @@ impl ContextSource {
                 .stdlib_text
                 .get()
                 .context("expected stdlib template text to be configured"),
-        })
+        }
     }
 }
 
 /// Render a template using a context value from the specified source.
-fn render_with_context_source(template: &TemplateContent, source: ContextSource) -> Result<()> {
-    let value = source.get_value()?;
-    render_with_single_context(template, &ContextKey::new(source.key()), ContextValue::new(value))
+fn render_with_context_source(
+    world: &TestWorld,
+    template: &TemplateContent,
+    source: ContextSource,
+) -> Result<()> {
+    let value = source.get_value(world)?;
+    render_with_single_context(
+        world,
+        template,
+        &ContextKey::new(source.key()),
+        ContextValue::new(value),
+    )
 }
 
-#[when("I render template {template} at stdlib path {path}")]
-pub(crate) fn render_stdlib_template(template: String, path: String) -> Result<()> {
-    let template = TemplateContent::new(strip_quotes(&template));
-    let root = ensure_workspace()?;
+// ---------------------------------------------------------------------------
+// When steps
+// ---------------------------------------------------------------------------
+
+#[when("I render template {template:string} at stdlib path {path:string}")]
+pub(crate) fn render_stdlib_template(world: &TestWorld, template: &str, path: &str) -> Result<()> {
+    let template = TemplateContent::new(template);
+    let root = ensure_workspace(world)?;
     let target = resolve_template_path(root.as_path(), TemplatePath::new(path));
-    render_template(&template, &target)
+    render_template(world, &template, &target)
 }
 
-#[when("I render the stdlib template {template} without context")]
-pub(crate) fn render_stdlib_template_without_path(template: String) -> Result<()> {
-    let template = TemplateContent::new(strip_quotes(&template));
-    render_template_with_context(&template, context! {})
+#[when("I render the stdlib template {template:string} without context")]
+pub(crate) fn render_stdlib_template_without_path(world: &TestWorld, template: &str) -> Result<()> {
+    let template = TemplateContent::new(template);
+    render_template_with_context(world, &template, context! {})
 }
 
-#[when("I render template {template} with stdlib url")]
-pub(crate) fn render_stdlib_template_with_url(template: String) -> Result<()> {
-    let template = TemplateContent::new(strip_quotes(&template));
-    render_with_context_source(&template, ContextSource::Url)
+#[when("I render template {template:string} with stdlib url")]
+pub(crate) fn render_stdlib_template_with_url(world: &TestWorld, template: &str) -> Result<()> {
+    let template = TemplateContent::new(template);
+    render_with_context_source(world, &template, ContextSource::Url)
 }
 
-#[when("I render the stdlib template {template} using the stdlib command helper")]
-pub(crate) fn render_stdlib_template_with_command(template: String) -> Result<()> {
-    let template = TemplateContent::new(strip_quotes(&template));
-    render_with_context_source(&template, ContextSource::Command)
+#[when("I render the stdlib template {template:string} using the stdlib command helper")]
+pub(crate) fn render_stdlib_template_with_command(world: &TestWorld, template: &str) -> Result<()> {
+    let template = TemplateContent::new(template);
+    render_with_context_source(world, &template, ContextSource::Command)
 }
 
-#[when("I render the stdlib template {template} using the stdlib text")]
-pub(crate) fn render_stdlib_template_with_text(template: String) -> Result<()> {
-    let template = TemplateContent::new(strip_quotes(&template));
-    render_with_context_source(&template, ContextSource::Text)
+#[when("I render the stdlib template {template:string} using the stdlib text")]
+pub(crate) fn render_stdlib_template_with_text(world: &TestWorld, template: &str) -> Result<()> {
+    let template = TemplateContent::new(template);
+    render_with_context_source(world, &template, ContextSource::Text)
 }

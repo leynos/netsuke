@@ -1,6 +1,6 @@
 //! Steps for preparing file-system fixtures used in Jinja tests (Unix only).
 
-use crate::bdd::fixtures::with_world;
+use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::FileTypeExt as CapFileTypeExt, fs_utf8::Dir};
@@ -98,7 +98,11 @@ fn create_device_with_fallback(config: DeviceConfig<'_>) -> Result<Utf8PathBuf> 
     Ok(fallback)
 }
 
-fn setup_environment_variables(root: &Utf8PathBuf, device_paths: &(Utf8PathBuf, Utf8PathBuf)) {
+fn setup_environment_variables(
+    world: &TestWorld,
+    root: &Utf8PathBuf,
+    device_paths: &(Utf8PathBuf, Utf8PathBuf),
+) {
     let (block_path, char_path) = device_paths;
     let entries = [
         ("DIR_PATH", root.join("dir")),
@@ -109,14 +113,12 @@ fn setup_environment_variables(root: &Utf8PathBuf, device_paths: &(Utf8PathBuf, 
         ("CHAR_DEVICE_PATH", char_path.clone()),
         ("DEVICE_PATH", char_path.clone()),
     ];
-    with_world(|world| {
-        for (key, path) in entries {
-            let previous = set_var(key, path.as_std_path().as_os_str());
-            world.track_env_var(key.to_owned(), previous);
-        }
-        let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
-        world.track_env_var("WORKSPACE".into(), previous);
-    });
+    for (key, path) in entries {
+        let previous = set_var(key, path.as_std_path().as_os_str());
+        world.track_env_var(key.to_owned(), previous);
+    }
+    let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
+    world.track_env_var("WORKSPACE".into(), previous);
 }
 
 fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {
@@ -139,14 +141,12 @@ fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 #[given("a file-type test workspace")]
-fn file_type_workspace() -> Result<()> {
+fn file_type_workspace(world: &TestWorld) -> Result<()> {
     let (temp, root, handle) = setup_workspace()?;
     create_basic_fixtures(&handle)?;
     let device_paths = create_device_fixtures()?;
-    setup_environment_variables(&root, &device_paths);
+    setup_environment_variables(world, &root, &device_paths);
     verify_missing_fixtures(&handle, &root)?;
-    with_world(|world| {
-        *world.temp_dir.borrow_mut() = Some(temp);
-    });
+    *world.temp_dir.borrow_mut() = Some(temp);
     Ok(())
 }

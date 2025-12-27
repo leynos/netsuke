@@ -1,6 +1,6 @@
 //! Step definitions for `netsuke manifest` behavioural tests.
 
-use crate::bdd::fixtures::with_world;
+use crate::bdd::fixtures::TestWorld;
 use crate::bdd::types::{DirectoryName, FileName, ManifestOutputPath, OutputFragment};
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
@@ -30,12 +30,10 @@ impl fmt::Display for OutputType {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-fn get_temp_path() -> Result<PathBuf> {
-    with_world(|world| {
-        let temp = world.temp_dir.borrow();
-        let dir = temp.as_ref().context("temp dir has not been initialised")?;
-        Ok(dir.path().to_path_buf())
-    })
+fn get_temp_path(world: &TestWorld) -> Result<PathBuf> {
+    let temp = world.temp_dir.borrow();
+    let dir = temp.as_ref().context("temp dir has not been initialised")?;
+    Ok(dir.path().to_path_buf())
 }
 
 fn assert_output_contains(
@@ -62,8 +60,8 @@ fn check_file_exists(path: &Path) -> bool {
     path.exists()
 }
 
-fn assert_file_existence(name: &FileName, should_exist: bool) -> Result<()> {
-    let temp_path = get_temp_path()?;
+fn assert_file_existence(world: &TestWorld, name: &FileName, should_exist: bool) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
     let path = resolve_file_path(&temp_path, name);
     let expected = if should_exist { "exist" } else { "not exist" };
     ensure!(
@@ -98,17 +96,15 @@ fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result
     })
 }
 
-fn store_run_result(result: RunResult) {
-    with_world(|world| {
-        world.command_stdout.set(result.stdout);
-        world.command_stderr.set(result.stderr);
-        world.run_status.set(result.success);
-        if result.success {
-            world.run_error.clear();
-        } else if let Some(stderr) = world.command_stderr.get() {
-            world.run_error.set(stderr);
-        }
-    });
+fn store_run_result(world: &TestWorld, result: RunResult) {
+    world.command_stdout.set(result.stdout);
+    world.command_stderr.set(result.stderr);
+    world.run_status.set(result.success);
+    if result.success {
+        world.run_error.clear();
+    } else if let Some(stderr) = world.command_stderr.get() {
+        world.run_error.set(stderr);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -116,25 +112,23 @@ fn store_run_result(result: RunResult) {
 // ---------------------------------------------------------------------------
 
 #[given("a minimal Netsuke workspace")]
-fn minimal_workspace() -> Result<()> {
+fn minimal_workspace(world: &TestWorld) -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for manifest workspace")?;
     let netsukefile = temp.path().join("Netsukefile");
     fs::copy("tests/data/minimal.yml", &netsukefile)
         .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
-    with_world(|world| {
-        *world.temp_dir.borrow_mut() = Some(temp);
-        world.run_status.clear();
-        world.run_error.clear();
-        world.command_stdout.clear();
-        world.command_stderr.clear();
-    });
+    *world.temp_dir.borrow_mut() = Some(temp);
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
     Ok(())
 }
 
-#[given("a directory named {name} exists")]
-fn directory_named_exists(name: String) -> Result<()> {
+#[given("a directory named {name:string} exists")]
+fn directory_named_exists(world: &TestWorld, name: &str) -> Result<()> {
     let name = DirectoryName::new(name);
-    let temp_path = get_temp_path()?;
+    let temp_path = get_temp_path(world)?;
     create_directory_in_workspace(&temp_path, &name)
 }
 
@@ -142,12 +136,12 @@ fn directory_named_exists(name: String) -> Result<()> {
 // When steps
 // ---------------------------------------------------------------------------
 
-#[when("the netsuke manifest subcommand is run with {output}")]
-fn run_manifest_subcommand(output: String) -> Result<()> {
+#[when("the netsuke manifest subcommand is run with {output:string}")]
+fn run_manifest_subcommand(world: &TestWorld, output: &str) -> Result<()> {
     let output = ManifestOutputPath::new(output);
-    let temp_path = get_temp_path()?;
+    let temp_path = get_temp_path(world)?;
     let result = run_manifest_command(&temp_path, &output)?;
-    store_run_result(result);
+    store_run_result(world, result);
     Ok(())
 }
 
@@ -155,26 +149,26 @@ fn run_manifest_subcommand(output: String) -> Result<()> {
 // Then steps
 // ---------------------------------------------------------------------------
 
-#[then("stdout should contain {fragment}")]
-fn stdout_should_contain(fragment: String) -> Result<()> {
+#[then("stdout should contain {fragment:string}")]
+fn stdout_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
     let fragment = OutputFragment::new(fragment);
-    with_world(|world| assert_output_contains(&world.command_stdout, OutputType::Stdout, &fragment))
+    assert_output_contains(&world.command_stdout, OutputType::Stdout, &fragment)
 }
 
-#[then("stderr should contain {fragment}")]
-fn stderr_should_contain(fragment: String) -> Result<()> {
+#[then("stderr should contain {fragment:string}")]
+fn stderr_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
     let fragment = OutputFragment::new(fragment);
-    with_world(|world| assert_output_contains(&world.command_stderr, OutputType::Stderr, &fragment))
+    assert_output_contains(&world.command_stderr, OutputType::Stderr, &fragment)
 }
 
-#[then("the file {name} should exist")]
-fn file_should_exist(name: String) -> Result<()> {
+#[then("the file {name:string} should exist")]
+fn file_should_exist(world: &TestWorld, name: &str) -> Result<()> {
     let name = FileName::new(name);
-    assert_file_existence(&name, true)
+    assert_file_existence(world, &name, true)
 }
 
-#[then("the file {name} should not exist")]
-fn file_should_not_exist(name: String) -> Result<()> {
+#[then("the file {name:string} should not exist")]
+fn file_should_not_exist(world: &TestWorld, name: &str) -> Result<()> {
     let name = FileName::new(name);
-    assert_file_existence(&name, false)
+    assert_file_existence(world, &name, false)
 }
