@@ -266,6 +266,55 @@ impl From<&'static str> for HelperName {
 }
 
 // ---------------------------------------------------------------------------
+// Ninja domain types
+// ---------------------------------------------------------------------------
+
+define_newtype!(
+    /// Fragment expected to appear in ninja output (e.g., "build: phony").
+    NinjaFragment
+);
+
+define_newtype!(
+    /// Comma-separated list of expected tokens from shlex parsing.
+    TokenList
+);
+
+impl TokenList {
+    /// Parse the token list into a Vec of strings, replacing escaped newlines.
+    pub fn to_vec(&self) -> Vec<String> {
+        self.0
+            .split(',')
+            .map(|w| w.trim().replace("\\n", "\n"))
+            .collect()
+    }
+}
+
+/// Content name for error messages in ninja-related assertions.
+#[derive(Debug, Clone, Copy)]
+pub enum ContentName {
+    /// Ninja file content.
+    NinjaContent,
+    /// Ninja generation error.
+    NinjaError,
+}
+
+impl ContentName {
+    /// Return the content name as a static string slice.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NinjaContent => "ninja content",
+            Self::NinjaError => "ninja error",
+        }
+    }
+}
+
+impl fmt::Display for ContentName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CLI domain types (non-string)
 // ---------------------------------------------------------------------------
 

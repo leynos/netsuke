@@ -126,6 +126,9 @@ pub(crate) fn render_template_with_context(
             .with_command_max_stream_bytes(limit)
             .context("configure stdlib command stream limit")?;
     }
+    if let Some(path) = world.stdlib_path_override.borrow().as_ref() {
+        config = config.with_path_override(path.clone());
+    }
 
     let state = stdlib::register_with_config(&mut env, config)?;
     state.reset_impure();

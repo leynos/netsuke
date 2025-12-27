@@ -85,6 +85,8 @@ pub struct TestWorld {
     pub stdlib_command: Slot<String>,
     /// Custom network policy applied during stdlib rendering scenarios (non-Clone).
     pub stdlib_policy: RefCell<Option<NetworkPolicy>>,
+    /// Override for the PATH environment variable used by the `which` resolver.
+    pub stdlib_path_override: RefCell<Option<OsString>>,
     /// Maximum fetch response size configured for the active scenario.
     pub stdlib_fetch_max_bytes: Slot<u64>,
     /// Maximum captured command output size configured for the scenario.

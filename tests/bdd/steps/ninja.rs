@@ -1,24 +1,86 @@
 //! Step definitions for Ninja file generation scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::types::{ContentName, NinjaFragment, TokenList};
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::ninja_gen;
 use rstest_bdd_macros::{then, when};
 
 // ---------------------------------------------------------------------------
-// Helper functions
+// Typed helper functions
 // ---------------------------------------------------------------------------
 
-/// Assert that optional content contains an expected fragment.
-fn assert_contains(
-    content: Option<String>,
-    expected_fragment: &str,
-    content_name: &str,
-) -> Result<()> {
-    let text = content.context(format!("{content_name} should be available"))?;
+/// Get the ninja content from the world, returning a Result.
+fn get_ninja_content(world: &TestWorld) -> Result<String> {
+    world
+        .ninja_content
+        .get()
+        .context("ninja content should be available")
+}
+
+/// Extract command line at the given 1-based index from ninja content.
+fn extract_command_line(ninja: &str, index: usize) -> Result<String> {
+    ensure!(index > 0, "command index must be >= 1");
+    let commands: Vec<&str> = ninja
+        .lines()
+        .filter(|l| l.trim_start().starts_with("command ="))
+        .collect();
+    let idx = index - 1;
+    let line = commands
+        .get(idx)
+        .with_context(|| format!("command index {index} out of range"))?;
+    Ok(line
+        .trim_start()
+        .trim_start_matches("command = ")
+        .to_owned())
+}
+
+/// Parse command line into tokens using shlex.
+fn parse_command_tokens(command: &str) -> Result<Vec<String>> {
+    shlex::split(command).ok_or_else(|| anyhow!("failed to split command '{command}'"))
+}
+
+/// Compare parsed tokens against expected token list.
+fn compare_tokens(actual: &[String], expected: &TokenList) -> Result<()> {
+    let expected_vec = expected.to_vec();
     ensure!(
-        text.contains(expected_fragment),
-        "{content_name} should contain '{expected_fragment}'"
+        actual == expected_vec,
+        "expected tokens {:?}, got {:?}",
+        expected_vec,
+        actual
+    );
+    Ok(())
+}
+
+/// Assert that optional content contains an expected fragment.
+fn assert_content_contains(
+    content: Option<String>,
+    fragment: &NinjaFragment,
+    name: ContentName,
+) -> Result<()> {
+    let text = content.context(format!("{} should be available", name.as_str()))?;
+    ensure!(
+        text.contains(fragment.as_str()),
+        "{} should contain '{}'",
+        name.as_str(),
+        fragment.as_str()
+    );
+    Ok(())
+}
+
+/// Assert that error message mentions the removed action id.
+fn assert_error_mentions_action_id(world: &TestWorld) -> Result<()> {
+    let err = world
+        .ninja_error
+        .get()
+        .context("ninja error should be available")?;
+    let id = world
+        .removed_action_id
+        .get()
+        .context("removed action id should be available")?;
+    ensure!(
+        err.contains(&id),
+        "ninja error '{err}' does not mention removed action id '{id}'"
     );
     Ok(())
 }
@@ -51,38 +113,19 @@ fn generate_ninja(world: &TestWorld) -> Result<()> {
 
 #[then("the ninja file contains {fragment:string}")]
 fn ninja_contains(world: &TestWorld, fragment: &str) -> Result<()> {
-    assert_contains(world.ninja_content.get(), fragment, "ninja content")
+    assert_content_contains(
+        world.ninja_content.get(),
+        &NinjaFragment::new(fragment),
+        ContentName::NinjaContent,
+    )
 }
 
 #[then("shlex splitting command {index:usize} yields {tokens:string}")]
 fn ninja_command_tokens(world: &TestWorld, index: usize, tokens: &str) -> Result<()> {
-    ensure!(index > 0, "command index must be >= 1");
-    let ninja = world
-        .ninja_content
-        .get()
-        .context("ninja content should be available")?;
-    let commands: Vec<&str> = ninja
-        .lines()
-        .filter(|l| l.trim_start().starts_with("command ="))
-        .collect();
-    let idx = index - 1;
-    let line = commands
-        .get(idx)
-        .with_context(|| format!("command index {index} out of range"))?;
-    let command = line.trim_start().trim_start_matches("command = ");
-    let words =
-        shlex::split(command).ok_or_else(|| anyhow!("failed to split command '{command}'"))?;
-    let expected: Vec<String> = tokens
-        .split(',')
-        .map(|w| w.trim().replace("\\n", "\n"))
-        .collect();
-    ensure!(
-        words == expected,
-        "expected tokens {:?}, got {:?}",
-        expected,
-        words
-    );
-    Ok(())
+    let ninja = get_ninja_content(world)?;
+    let command = extract_command_line(&ninja, index)?;
+    let actual = parse_command_tokens(&command)?;
+    compare_tokens(&actual, &TokenList::new(tokens))
 }
 
 #[then("shlex splitting the command yields {tokens:string}")]
@@ -92,22 +135,14 @@ fn ninja_first_command_tokens(world: &TestWorld, tokens: &str) -> Result<()> {
 
 #[then("ninja generation fails with {fragment:string}")]
 fn ninja_generation_fails(world: &TestWorld, fragment: &str) -> Result<()> {
-    assert_contains(world.ninja_error.get(), fragment, "ninja error")
+    assert_content_contains(
+        world.ninja_error.get(),
+        &NinjaFragment::new(fragment),
+        ContentName::NinjaError,
+    )
 }
 
 #[then("ninja generation fails mentioning the removed action id")]
 fn ninja_generation_fails_with_removed_action_id(world: &TestWorld) -> Result<()> {
-    let err = world
-        .ninja_error
-        .get()
-        .context("ninja error should be available")?;
-    let id = world
-        .removed_action_id
-        .get()
-        .context("removed action id should be available")?;
-    ensure!(
-        err.contains(&id),
-        "ninja error '{err}' does not mention removed action id '{id}'"
-    );
-    Ok(())
+    assert_error_mentions_action_id(world)
 }

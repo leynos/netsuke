@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use indexmap::IndexSet;
-use std::{env, num::NonZeroUsize, sync::Arc};
+use std::{env, ffi::OsString, num::NonZeroUsize, sync::Arc};
 
 /// Default relative path for the fetch cache within the workspace.
 pub const DEFAULT_FETCH_CACHE_DIR: &str = ".netsuke/fetch";
@@ -32,6 +32,7 @@ pub struct StdlibConfig {
     command_max_stream_bytes: u64,
     which_cache_capacity: NonZeroUsize,
     workspace_skip_dirs: Vec<String>,
+    path_override: Option<OsString>,
 }
 
 impl StdlibConfig {
@@ -63,6 +64,7 @@ impl StdlibConfig {
                 .iter()
                 .map(|dir| (*dir).to_owned())
                 .collect(),
+            path_override: None,
         })
     }
 
@@ -193,6 +195,22 @@ impl StdlibConfig {
         }
         self.workspace_skip_dirs = validated.into_iter().collect();
         Ok(self)
+    }
+
+    /// Override the `PATH` environment variable for `which` lookups.
+    ///
+    /// When set, the stdlib will use the provided path string instead of
+    /// reading `PATH` from the process environment. This allows test isolation
+    /// without mutating global state.
+    #[must_use]
+    pub fn with_path_override(mut self, path: impl Into<OsString>) -> Self {
+        self.path_override = Some(path.into());
+        self
+    }
+
+    /// Return the configured PATH override, if any.
+    pub(crate) const fn path_override(&self) -> Option<&OsString> {
+        self.path_override.as_ref()
     }
 
     /// The configured fetch cache directory relative to the workspace root.

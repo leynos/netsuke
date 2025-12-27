@@ -1,8 +1,6 @@
 //! Snapshot of PATH, PATHEXT, and current directory for the `which` resolver.
 
-#[cfg(windows)]
-use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(windows)]
@@ -22,13 +20,18 @@ pub(super) struct EnvSnapshot {
 }
 
 impl EnvSnapshot {
-    pub(super) fn capture(cwd_override: Option<&Utf8Path>) -> Result<Self, Error> {
+    pub(super) fn capture(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+    ) -> Result<Self, Error> {
         let cwd = if let Some(override_cwd) = cwd_override {
             override_cwd.to_path_buf()
         } else {
             current_dir_utf8()?
         };
-        let raw_path = std::env::var_os("PATH");
+        let raw_path = path_override
+            .map(OsString::from)
+            .or_else(|| std::env::var_os("PATH"));
         let entries = parse_path_entries(raw_path.clone(), &cwd)?;
         #[cfg(windows)]
         let raw_pathext = std::env::var_os("PATHEXT");

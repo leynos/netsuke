@@ -115,7 +115,12 @@ fn create_executable(world: &TestWorld, path: TemplatePath) -> Result<()> {
     Ok(())
 }
 
-/// Configure the PATH environment variable with the given entries.
+/// Configure the PATH override for the stdlib `which` resolver.
+///
+/// Instead of mutating the global `PATH` environment variable, we store the
+/// configured path in `TestWorld.stdlib_path_override` and apply it via
+/// `StdlibConfig::with_path_override` during rendering. This avoids race
+/// conditions when tests run in parallel.
 fn configure_path_environment(world: &TestWorld, entries: PathEntries) -> Result<()> {
     let root = ensure_workspace(world)?;
     let trimmed = entries.as_str().trim();
@@ -138,13 +143,8 @@ fn configure_path_environment(world: &TestWorld, entries: PathEntries) -> Result
         env::join_paths(dirs.iter().map(|dir| dir.as_std_path()))
             .context("join stdlib PATH entries")?
     };
-    let previous = set_var("PATH", joined.as_os_str());
-    world.track_env_var("PATH".into(), previous);
-    #[cfg(windows)]
-    {
-        let previous = set_var("PATHEXT", OsStr::new(".cmd;.exe"));
-        world.track_env_var("PATHEXT".into(), previous);
-    }
+    // Store path override in world instead of mutating global env
+    *world.stdlib_path_override.borrow_mut() = Some(joined);
     Ok(())
 }
 

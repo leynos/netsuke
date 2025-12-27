@@ -4,9 +4,8 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
-use std::{ffi::OsStr, fs};
+use std::fs;
 use tempfile::TempDir;
-use test_support::env::{VarGuard, with_isolated_path};
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -62,9 +61,9 @@ fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspa
     let non_exec = workspace.root().join("tool2");
     fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
 
-    let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .expect("capture env for workspace search");
     let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
     ensure!(
         results == vec![exec],
@@ -80,9 +79,9 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
     fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
     let second = write_exec(subdir.as_path(), "tool")?;
 
-    let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .expect("capture env for workspace search");
     let mut results = search_workspace(&snapshot, "tool", true, &WorkspaceSkipList::default())?;
     results.sort();
     let mut expected = vec![first, second];
@@ -100,9 +99,9 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
     fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
     write_exec(heavy.as_path(), "tool")?;
 
-    let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .expect("capture env for workspace search");
     let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
     ensure!(results.is_empty(), "expected target/ to be skipped");
     Ok(())
@@ -121,9 +120,9 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
     fs::set_permissions(blocked.as_std_path(), perms).context("chmod blocked")?;
 
     let exec = write_exec(workspace.root(), "tool")?;
-    let _guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).expect("capture env for workspace search");
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .expect("capture env for workspace search");
     let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
     ensure!(
         results == vec![exec],
@@ -138,22 +137,20 @@ fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Resul
     use std::os::unix::ffi::OsStrExt;
 
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
-    with_isolated_path(invalid_path, || -> Result<()> {
-        let err = EnvSnapshot::capture(Some(workspace.root()))
-            .expect_err("invalid PATH should fail EnvSnapshot::capture");
-        let msg = err.to_string();
+    let err = EnvSnapshot::capture(Some(workspace.root()), Some(invalid_path))
+        .expect_err("invalid PATH should fail EnvSnapshot::capture");
+    let msg = err.to_string();
 
-        ensure!(
-            msg.contains("netsuke::jinja::which::args"),
-            "expected PATH parsing error, got: {msg}"
-        );
-        ensure!(
-            msg.contains("PATH entry #1"),
-            "expected PATH entry index in message, got: {msg}"
-        );
+    ensure!(
+        msg.contains("netsuke::jinja::which::args"),
+        "expected PATH parsing error, got: {msg}"
+    );
+    ensure!(
+        msg.contains("PATH entry #1"),
+        "expected PATH entry index in message, got: {msg}"
+    );
 
-        Ok(())
-    })
+    Ok(())
 }
 
 #[rstest]
@@ -169,9 +166,8 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
         std::path::Path::new("tools"),
     ])
     .context("join PATH entries")?;
-    let _guard = VarGuard::set("PATH", path_value.as_os_str());
 
-    let snapshot = EnvSnapshot::capture(Some(workspace.root()))
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .context("capture env with relative PATH entries")?;
     let resolved_dirs = snapshot.resolved_dirs(CwdMode::Never);
 
@@ -190,11 +186,12 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
 #[cfg(windows)]
 #[rstest]
 fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
-    let _path_guard = VarGuard::set("PATH", std::ffi::OsStr::new(workspace.root().as_str()));
+    use test_support::env::VarGuard;
     let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new(""));
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
 
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).context("capture env for empty PATHEXT")?;
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .context("capture env for empty PATHEXT")?;
     let pathexts = snapshot.pathext();
 
     assert!(
@@ -214,10 +211,11 @@ fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
 fn pathext_without_leading_dots_is_normalised_and_deduplicated(
     workspace: TempWorkspace,
 ) -> Result<()> {
-    let _path_guard = VarGuard::set("PATH", std::ffi::OsStr::new(workspace.root().as_str()));
+    use test_support::env::VarGuard;
     let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat"));
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
 
-    let snapshot = EnvSnapshot::capture(Some(workspace.root()))?;
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))?;
     let mut pathexts = snapshot.pathext().to_vec();
     pathexts.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
 
@@ -251,9 +249,9 @@ fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) 
     perms.set_mode(0o644);
     fs::set_permissions(script.as_std_path(), perms).context("chmod script")?;
 
-    let _path_guard = VarGuard::set("PATH", OsStr::new(workspace.root().as_str()));
-    let snapshot =
-        EnvSnapshot::capture(Some(workspace.root())).context("capture env for direct path")?;
+    let path_value = std::ffi::OsString::from(workspace.root().as_str());
+    let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
+        .context("capture env for direct path")?;
 
     let err = resolve_direct(script.as_str(), &snapshot, &WhichOptions::default())
         .expect_err("non-executable direct path should fail");
