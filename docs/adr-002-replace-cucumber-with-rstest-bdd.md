@@ -199,7 +199,7 @@ the cucumber equivalents once the new tests pass.
   regressions. *Mitigation:* Port features in small slices, keep cucumber
   running until each slice is validated, and rely on helpers shared between the
   old and new harnesses to avoid behavioural drift.
-- *Risk:* The new fixture structs may not cover all the cleanup logic handled
+- *Risk:* The new fixture structs may not cover all the clean-up logic handled
   implicitly by `CliWorld::drop`. *Mitigation:* Model teardown as RAII helpers
   (`ScopeGuard`-style fixtures) and add explicit tests that assert destructors
   restore environment variables, stop HTTP servers, and delete temp files.
@@ -595,7 +595,7 @@ order-dependent and related to clean-up/initialization timing.
 
 - `tests/bdd/fixtures/mod.rs:55-65` — `should_reset_world()` scenario detection
 - `tests/bdd/fixtures/mod.rs:89-112` — `with_world()` reset and access logic
-- `tests/bdd/fixtures/mod.rs:252-259` — `TestWorld::drop()` cleanup
+- `tests/bdd/fixtures/mod.rs:252-259` — `TestWorld::drop()` clean-up
 - `tests/bdd/steps/stdlib/config.rs:27-38` — step setting `stdlib_text`
 - `tests/bdd/steps/stdlib/rendering.rs:201-211` — step reading `stdlib_text`
 

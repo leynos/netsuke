@@ -21,7 +21,10 @@ fn main_logs_errors_to_stderr() -> Result<()> {
         .output()
         .context("run netsuke graph")?;
 
-    ensure!(!output.status.success(), "command should fail without manifest");
+    ensure!(
+        !output.status.success(),
+        "command should fail without manifest"
+    );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(

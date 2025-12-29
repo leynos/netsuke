@@ -34,7 +34,7 @@ fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<Manifest
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            if !when_allows(&mut clone, env, &item, index)? {
+            if !when_allows(&mut clone, env, Some((&item, index)))? {
                 continue;
             }
             inject_iteration_vars(&mut clone, &item, index)?;
@@ -44,9 +44,7 @@ fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<Manifest
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        if let Some(when_val) = map.remove("when")
-            && !eval_when(env, as_str(&when_val, "when")?, context! {})?
-        {
+        if !when_allows(&mut map, env, None)? {
             return Ok(vec![]);
         }
         Ok(vec![ManifestValue::Object(map)])
@@ -89,22 +87,24 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
     }
 }
 
-/// Evaluate a `when` clause for a foreach iteration.
+/// Evaluate a `when` clause if present, returning whether the target should be included.
 ///
-/// Injects `item` and `index` into the evaluation context for use in the
-/// when expression.
+/// Accepts an optional iteration context (`item`, `index`) for foreach targets;
+/// static targets pass `None`.
 fn when_allows(
     map: &mut ManifestMap,
     env: &Environment,
-    item: &Value,
-    index: usize,
+    iteration: Option<(&Value, usize)>,
 ) -> Result<bool> {
-    if let Some(when_val) = map.remove("when") {
-        let expr = as_str(&when_val, "when")?;
-        eval_when(env, expr, context! { item, index })
-    } else {
-        Ok(true)
-    }
+    let Some(when_val) = map.remove("when") else {
+        return Ok(true);
+    };
+    let expr = as_str(&when_val, "when")?;
+    let ctx = match iteration {
+        Some((item, index)) => context! { item, index },
+        None => context! {},
+    };
+    eval_when(env, expr, ctx)
 }
 
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
