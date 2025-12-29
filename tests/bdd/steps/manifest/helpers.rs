@@ -164,30 +164,34 @@ pub(super) fn assert_target_always(world: &TestWorld, index: usize, expected: bo
     })
 }
 
-/// Validate the number of targets in the manifest.
-pub(super) fn assert_target_count(world: &TestWorld, expected: usize) -> Result<()> {
+/// Generic manifest collection count assertion.
+fn assert_manifest_count<F>(
+    world: &TestWorld,
+    expected: usize,
+    field_name: &'static str,
+    f: F,
+) -> Result<()>
+where
+    F: FnOnce(&netsuke::ast::NetsukeManifest) -> usize,
+{
     let count = world
         .manifest
-        .with_ref(|m| m.targets.len())
+        .with_ref(|m| f(m))
         .context("manifest has not been parsed");
     let actual = with_manifest_error_context(world, count)?;
     ensure!(
         actual == expected,
-        "expected manifest to have {expected} targets, got {actual}"
+        "expected manifest to have {expected} {field_name}, got {actual}"
     );
     Ok(())
 }
 
+/// Validate the number of targets in the manifest.
+pub(super) fn assert_target_count(world: &TestWorld, expected: usize) -> Result<()> {
+    assert_manifest_count(world, expected, "targets", |m| m.targets.len())
+}
+
 /// Validate the number of macros in the manifest.
 pub(super) fn assert_macro_count(world: &TestWorld, expected: usize) -> Result<()> {
-    let count = world
-        .manifest
-        .with_ref(|m| m.macros.len())
-        .context("manifest has not been parsed");
-    let actual = with_manifest_error_context(world, count)?;
-    ensure!(
-        actual == expected,
-        "expected manifest to have {expected} macros, got {actual}"
-    );
-    Ok(())
+    assert_manifest_count(world, expected, "macros", |m| m.macros.len())
 }

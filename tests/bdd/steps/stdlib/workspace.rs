@@ -23,6 +23,15 @@ const LINES_FIXTURE: &str = concat!("one\n", "two\n", "three\n",);
 // Helper functions
 // ---------------------------------------------------------------------------
 
+/// Ensure a stdlib workspace exists, creating one if necessary.
+///
+/// Returns the workspace root path. If a workspace already exists (cached in
+/// `world.stdlib_root`), returns that path immediately. Otherwise, creates a
+/// new temporary directory with standard test fixtures (`file`, `lines.txt`,
+/// and a symlink on Unix or fallback file on Windows).
+///
+/// The workspace is cached in the `TestWorld` state, so subsequent calls
+/// within the same test scenario return the same directory.
 pub(crate) fn ensure_workspace(world: &TestWorld) -> Result<Utf8PathBuf> {
     if let Some(root) = world.stdlib_root.get() {
         return Ok(root);
@@ -154,6 +163,13 @@ fn configure_path_environment(world: &TestWorld, entries: &PathEntries) -> Resul
     Ok(())
 }
 
+/// Resolve a template path relative to the workspace root.
+///
+/// Handles three cases:
+/// - Tilde-prefixed paths (`~/.config/...`) are returned unchanged for home
+///   directory expansion during rendering.
+/// - Absolute paths are returned unchanged.
+/// - Relative paths are joined to the workspace root.
 pub(crate) fn resolve_template_path(root: &Utf8Path, raw: TemplatePath) -> TemplatePath {
     if raw.as_str().starts_with('~') {
         return raw;
@@ -166,6 +182,10 @@ pub(crate) fn resolve_template_path(root: &Utf8Path, raw: TemplatePath) -> Templ
     }
 }
 
+/// Resolve an executable path, applying platform-specific extension handling.
+///
+/// Joins the relative path to the workspace root. On Windows, if the path has
+/// no extension, appends `.cmd` to create a valid batch script name.
 pub(super) fn resolve_executable_path(root: &Utf8Path, relative: &Utf8Path) -> Utf8PathBuf {
     #[cfg(windows)]
     let mut path = root.join(relative);
@@ -216,8 +236,7 @@ fn mark_executable(path: &Utf8Path) -> Result<()> {
 
 #[given("a stdlib workspace")]
 pub(crate) fn stdlib_workspace(world: &TestWorld) -> Result<()> {
-    let root = ensure_workspace(world)?;
-    world.stdlib_root.set(root);
+    ensure_workspace(world)?;
     Ok(())
 }
 
@@ -279,6 +298,5 @@ pub(crate) fn home_points_to_stdlib_root(world: &TestWorld) -> Result<()> {
         let previous = set_var("USERPROFILE", os_root);
         world.track_env_var("USERPROFILE".into(), previous);
     }
-    world.stdlib_root.set(root);
     Ok(())
 }
