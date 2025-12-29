@@ -135,8 +135,8 @@ unescaped_backticks                 = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
-rstest-bdd = { git = "https://github.com/leynos/rstest-bdd.git", branch = "terragon/add-fixtures-to-scenarios" }
-rstest-bdd-macros = { git = "https://github.com/leynos/rstest-bdd.git", branch = "terragon/add-fixtures-to-scenarios", features = ["strict-compile-time-validation"] }
+rstest-bdd = "0.3.2"
+rstest-bdd-macros = { version = "0.3.2", features = ["strict-compile-time-validation"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.0"
