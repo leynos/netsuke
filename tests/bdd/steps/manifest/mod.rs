@@ -2,8 +2,10 @@
 //!
 //! This module is split into:
 //! - `mod.rs` - Shared helpers and parsing/validation steps
+//! - `helpers.rs` - Typed assertion utilities and target accessor functions
 //! - `targets.rs` - Target-specific assertion steps
 
+mod helpers;
 mod targets;
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};

@@ -3,9 +3,12 @@
 //! These wrappers distinguish between different string parameter types,
 //! improving type safety and self-documentation in step definitions.
 
+// The newtype macro generates `as_str` and `into_string` methods for API
+// completeness. Not all types use all methods, but suppressing at the method
+// level isn't feasible with macros since `expect` requires the lint to fire.
 #![expect(
-    dead_code,
-    reason = "newtypes provide complete API; not all methods are used yet"
+    clippy::allow_attributes,
+    reason = "macro-generated methods may or may not be used per type"
 )]
 
 use std::fmt;
@@ -30,11 +33,13 @@ macro_rules! define_newtype {
             }
 
             /// Return the inner string as a slice.
+            #[allow(dead_code, reason = "newtype provides complete API")]
             pub fn as_str(&self) -> &str {
                 &self.0
             }
 
             /// Consume the wrapper and return the inner string.
+            #[allow(dead_code, reason = "newtype provides complete API")]
             pub fn into_string(self) -> String {
                 self.0
             }
@@ -91,6 +96,12 @@ impl PathString {
     }
 }
 
+impl AsRef<Path> for PathString {
+    fn as_ref(&self) -> &Path {
+        self.as_path()
+    }
+}
+
 define_newtype!(
     /// URL string for network policy checks.
     UrlString
@@ -125,6 +136,18 @@ impl ManifestPath {
     /// Return the path as a `Path` reference.
     pub fn as_path(&self) -> &Path {
         Path::new(&self.0)
+    }
+
+    /// Convert to an owned `PathBuf`.
+    #[allow(dead_code, reason = "path wrapper provides complete API")]
+    pub fn to_path_buf(&self) -> PathBuf {
+        PathBuf::from(&self.0)
+    }
+}
+
+impl AsRef<Path> for ManifestPath {
+    fn as_ref(&self) -> &Path {
+        self.as_path()
     }
 }
 

@@ -121,6 +121,12 @@ fn create_executable(world: &TestWorld, path: &TemplatePath) -> Result<()> {
 /// configured path in `TestWorld.stdlib_path_override` and apply it via
 /// `StdlibConfig::with_path_override` during rendering. This avoids race
 /// conditions when tests run in parallel.
+///
+/// # Input format
+///
+/// Feature files use `:` as the path separator regardless of platform. This is
+/// a test convention for simplicity; `std::env::join_paths` handles converting
+/// to the platform-appropriate format (`;` on Windows, `:` elsewhere).
 fn configure_path_environment(world: &TestWorld, entries: &PathEntries) -> Result<()> {
     let root = ensure_workspace(world)?;
     let trimmed = entries.as_str().trim();

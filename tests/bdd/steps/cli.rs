@@ -1,9 +1,13 @@
 //! Step definitions for CLI parsing scenarios.
+//!
+//! Provides BDD step functions for parsing command-line arguments via `clap`,
+//! verifying parsed commands, and checking CLI network policy behaviour.
+//! Steps store results in [`TestWorld`] for downstream assertions.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
-use anyhow::{Context, Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use rstest_bdd_macros::{given, then, when};
@@ -252,7 +256,7 @@ fn verify_manifest_command_path(world: &TestWorld, path: &PathString) -> Result<
             );
             Ok(())
         }
-        other => Err(anyhow!("expected manifest command, got {other:?}")),
+        other => bail!("expected manifest command, got {other:?}"),
     }
 }
 

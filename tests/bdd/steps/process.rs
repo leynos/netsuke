@@ -28,9 +28,11 @@ fn install_test_ninja(
 ) -> Result<()> {
     let guard = env::prepend_dir_to_path(env, dir.path())?;
     *world.path_guard.borrow_mut() = Some(guard);
-    world
-        .ninja_content
-        .set(ninja_path.to_string_lossy().into_owned());
+    let ninja_str = ninja_path
+        .to_str()
+        .ok_or_else(|| anyhow!("ninja path is not valid UTF-8"))?
+        .to_owned();
+    world.ninja_content.set(ninja_str);
     world.ninja_env_guard.borrow_mut().take();
     let system_env = env::SystemEnv::new();
     *world.ninja_env_guard.borrow_mut() = Some(env::override_ninja_env(&system_env, ninja_path));
