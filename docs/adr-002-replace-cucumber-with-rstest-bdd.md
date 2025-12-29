@@ -580,15 +580,15 @@ The failure occurs because:
      instance executing interleaved with the new scenario's step setup.
 
 4. **Race condition**: The `Slot<T>` type (from `rstest-bdd`) uses interior
-   mutability. When the old `TestWorld` is dropped (line: `let _ =
-   w.borrow_mut().take()`), its `Drop` implementation runs, which includes
-   `self.stdlib_text.clear()`. If step functions from the new scenario have
-   already begun populating slots before this drop completes, state corruption
-   occurs.
+   mutability. When the old `TestWorld` is dropped (line:
+   `let _ = w.borrow_mut().take()`), its `Drop` implementation runs, which
+   includes `self.stdlib_text.clear()`. If step functions from the new scenario
+   have already begun populating slots before this drop completes, state
+   corruption occurs.
 
-**Evidence**: The test passes reliably with parallel execution (default) and
-in isolation, but fails deterministically with `--test-threads=1` when preceded
-by `stdlib_grep_filter_extracts_matching_lines`. This indicates the failure is
+**Evidence**: The test passes reliably with parallel execution (default) and in
+isolation, but fails deterministically with `--test-threads=1` when preceded by
+`stdlib_grep_filter_extracts_matching_lines`. This indicates the failure is
 order-dependent and related to cleanup/initialization timing.
 
 **Relevant code paths**:
