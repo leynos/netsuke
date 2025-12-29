@@ -87,8 +87,26 @@ Feature: CLI parsing
     Then parsing succeeds
     And the CLI network policy rejects "https://example.com" with "host 'example.com' is blocked"
 
-  Scenario: CLI parses quoted argument with space
+  Scenario: CLI parses single-quoted argument with space
     When the CLI is parsed with "--file 'my manifest.yml' manifest out.ninja"
     Then parsing succeeds
     And the command is manifest
     And the manifest path is "my manifest.yml"
+
+  Scenario: CLI parses double-quoted argument with space
+    When the CLI is parsed with '--file "my manifest.yml" manifest out.ninja'
+    Then parsing succeeds
+    And the command is manifest
+    And the manifest path is "my manifest.yml"
+
+  Scenario: CLI parses argument with escaped space
+    When the CLI is parsed with "--file my\ manifest.yml manifest out.ninja"
+    Then parsing succeeds
+    And the command is manifest
+    And the manifest path is "my manifest.yml"
+
+  Scenario: CLI parses multiple single-quoted arguments
+    When the CLI is parsed with "--directory 'work dir' --file 'other.yml' build"
+    Then parsing succeeds
+    And the command is build
+    And the working directory is "work dir"

@@ -3,7 +3,7 @@
 //! These tests exercise the production logging path by invoking the compiled
 //! binary and asserting log messages appear on stderr rather than stdout.
 
-use anyhow::{Context, Result, ensure};
+use predicates::prelude::*;
 use tempfile::tempdir;
 
 /// Verifies that runner errors are logged to stderr.
@@ -12,31 +12,13 @@ use tempfile::tempdir;
 /// `graph` subcommand, which fails quickly. The error log should appear on
 /// stderr, not stdout.
 #[test]
-fn main_logs_errors_to_stderr() -> Result<()> {
-    let temp = tempdir().context("create temp dir")?;
+fn main_logs_errors_to_stderr() {
+    let temp = tempdir().expect("create temp dir");
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
-    let output = cmd
-        .current_dir(temp.path())
+    cmd.current_dir(temp.path())
         .arg("graph")
-        .output()
-        .context("run netsuke graph")?;
-
-    ensure!(
-        !output.status.success(),
-        "command should fail without manifest"
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    ensure!(
-        stderr.contains("runner failed"),
-        "stderr should contain 'runner failed', got: {stderr}"
-    );
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    ensure!(
-        !stdout.contains("runner failed"),
-        "stdout should not contain 'runner failed', got: {stdout}"
-    );
-
-    Ok(())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("runner failed"))
+        .stdout(predicate::str::contains("runner failed").not());
 }
