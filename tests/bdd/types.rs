@@ -288,6 +288,16 @@ define_newtype!(
     PathEntries
 );
 
+define_newtype!(
+    /// URL scheme for network policy configuration (e.g., "https").
+    Scheme
+);
+
+define_newtype!(
+    /// Host name for network policy configuration.
+    HostName
+);
+
 /// Command helper name (does not strip quotes).
 ///
 /// Unlike other newtypes, this is constructed from static strings and
