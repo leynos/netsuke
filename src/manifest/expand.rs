@@ -274,4 +274,64 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn expand_excludes_static_target_when_false() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: ManifestValue = serde_saphyr::from_str(
+            "targets:
+  - name: excluded
+    when: 'false'
+  - name: included",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = targets(&doc)?;
+        anyhow::ensure!(targets.len() == 1, "expected one target after filtering");
+        let name = targets
+            .first()
+            .and_then(|t| t.get("name"))
+            .and_then(|v| v.as_str())
+            .context("name field")?;
+        anyhow::ensure!(name == "included", "wrong target remained: {name}");
+        Ok(())
+    }
+
+    #[test]
+    fn expand_includes_static_target_when_true() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: ManifestValue = serde_saphyr::from_str(
+            "targets:
+  - name: kept
+    when: 'true'",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = targets(&doc)?;
+        anyhow::ensure!(targets.len() == 1, "expected one target");
+        Ok(())
+    }
+
+    #[test]
+    fn expand_evaluates_static_target_template_when() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: ManifestValue = serde_saphyr::from_str(
+            "targets:
+  - name: template_false
+    when: '{{ 1 == 2 }}'
+  - name: template_true
+    when: '{{ 2 == 2 }}'",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = targets(&doc)?;
+        anyhow::ensure!(
+            targets.len() == 1,
+            "expected one target after template filtering"
+        );
+        let name = targets
+            .first()
+            .and_then(|t| t.get("name"))
+            .and_then(|v| v.as_str())
+            .context("name field")?;
+        anyhow::ensure!(name == "template_true", "wrong target remained: {name}");
+        Ok(())
+    }
 }

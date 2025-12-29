@@ -589,7 +589,7 @@ The failure occurs because:
 **Evidence**: The test passes reliably with parallel execution (default) and in
 isolation, but fails deterministically with `--test-threads=1` when preceded by
 `stdlib_grep_filter_extracts_matching_lines`. This indicates the failure is
-order-dependent and related to cleanup/initialization timing.
+order-dependent and related to clean-up/initialization timing.
 
 **Relevant code paths**:
 

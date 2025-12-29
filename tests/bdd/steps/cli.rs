@@ -134,18 +134,17 @@ fn verify_command(world: &TestWorld, expected: ExpectedCommand) -> Result<()> {
 }
 
 fn verify_job_count(world: &TestWorld, expected: JobCount) -> Result<()> {
-    let result = world.cli.with_ref(|cli| {
-        if cli.jobs == Some(expected.value()) {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "expected job count {}, got {:?}",
-                expected.value(),
-                cli.jobs
-            ))
-        }
-    });
-    result.context("CLI has not been parsed")?
+    let actual = world
+        .cli
+        .with_ref(|cli| cli.jobs)
+        .context("CLI has not been parsed")?;
+    ensure!(
+        actual == Some(expected.value()),
+        "expected job count {}, got {:?}",
+        expected.value(),
+        actual
+    );
+    Ok(())
 }
 
 fn verify_parsing_succeeded(world: &TestWorld) -> Result<()> {
@@ -162,18 +161,17 @@ fn verify_error_returned(world: &TestWorld) -> Result<()> {
 }
 
 fn verify_manifest_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let result = world.cli.with_ref(|cli| {
-        if cli.file.as_path() == path.as_path() {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "expected manifest path {}, got {}",
-                path,
-                cli.file.display()
-            ))
-        }
-    });
-    result.context("CLI has not been parsed")?
+    let actual = world
+        .cli
+        .with_ref(|cli| cli.file.clone())
+        .context("CLI has not been parsed")?;
+    ensure!(
+        actual.as_path() == path.as_path(),
+        "expected manifest path {}, got {}",
+        path,
+        actual.display()
+    );
+    Ok(())
 }
 
 fn verify_first_target(world: &TestWorld, target: &TargetName) -> Result<()> {
@@ -188,18 +186,17 @@ fn verify_first_target(world: &TestWorld, target: &TargetName) -> Result<()> {
 }
 
 fn verify_working_directory(world: &TestWorld, directory: &PathString) -> Result<()> {
-    let result = world.cli.with_ref(|cli| {
-        if cli.directory.as_deref() == Some(directory.as_path()) {
-            Ok(())
-        } else {
-            Err(anyhow!(
-                "expected working directory {}, got {:?}",
-                directory,
-                cli.directory
-            ))
-        }
-    });
-    result.context("CLI has not been parsed")?
+    let actual = world
+        .cli
+        .with_ref(|cli| cli.directory.clone())
+        .context("CLI has not been parsed")?;
+    ensure!(
+        actual.as_deref() == Some(directory.as_path()),
+        "expected working directory {}, got {:?}",
+        directory,
+        actual
+    );
+    Ok(())
 }
 
 fn verify_emit_path(world: &TestWorld, path: &PathString) -> Result<()> {
