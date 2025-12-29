@@ -1,7 +1,7 @@
 //! Render-related stdlib step helpers used by BDD scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
-use crate::bdd::types::{ContextKey, ContextValue};
+use crate::bdd::types::{ContextKey, ContextValue, TemplateContent};
 use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
@@ -10,33 +10,6 @@ use rstest_bdd_macros::when;
 
 use super::types::TemplatePath;
 use super::workspace::{ensure_workspace, resolve_template_path};
-
-/// Newtype wrapper for template content strings.
-///
-/// Distinguishes template source from other string parameters in rendering
-/// functions, improving type safety and API clarity.
-pub(crate) struct TemplateContent(String);
-
-impl TemplateContent {
-    pub(crate) fn new(content: impl Into<String>) -> Self {
-        Self(content.into())
-    }
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<String> for TemplateContent {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
-}
-
-impl AsRef<str> for TemplateContent {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Helper functions

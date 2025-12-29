@@ -224,6 +224,14 @@ define_newtype!(
 // ---------------------------------------------------------------------------
 
 define_newtype!(
+    /// Template content string for rendering.
+    ///
+    /// Distinguishes template source from other string parameters in rendering
+    /// functions, improving type safety and API clarity.
+    TemplateContent
+);
+
+define_newtype!(
     /// Template context variable key.
     ContextKey
 );

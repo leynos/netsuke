@@ -40,6 +40,7 @@ fn install_test_ninja(
 
 /// Prepares the CLI for execution by ensuring the manifest exists and updating paths.
 fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
+    // Extract temp directory path
     let temp_path = {
         let temp_dir = world.temp_dir.borrow();
         let dir = temp_dir
@@ -50,17 +51,27 @@ fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
             .to_owned()
     };
 
+    // Extract current manifest path from CLI
+    let cli_manifest_path = world
+        .cli
+        .with_ref(|cli| {
+            Utf8Path::from_path(&cli.file)
+                .map(camino::Utf8PathBuf::from)
+                .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))
+        })
+        .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))??;
+
+    // Resolve manifest in temp workspace
+    let resolved_manifest = ensure_manifest_exists(&temp_path, &cli_manifest_path)
+        .context("ensure manifest exists in temp workspace")?;
+
+    // Update CLI with resolved path
     world
         .cli
-        .with_mut(|cli| {
-            let manifest_path = Utf8Path::from_path(&cli.file)
-                .ok_or_else(|| anyhow!("CLI manifest path is not valid UTF-8"))?;
-            let manifest = ensure_manifest_exists(&temp_path, manifest_path)
-                .context("ensure manifest exists in temp workspace")?;
-            cli.file = manifest.into_std_path_buf();
-            Ok::<(), anyhow::Error>(())
-        })
-        .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
+        .with_mut(|cli| cli.file = resolved_manifest.into_std_path_buf())
+        .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?;
+
+    Ok(())
 }
 
 /// Prepares the CLI for execution with an absolute file path.

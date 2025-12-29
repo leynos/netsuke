@@ -14,8 +14,8 @@ use tempfile::tempdir;
 #[test]
 fn main_logs_errors_to_stderr() {
     let temp = tempdir().expect("create temp dir");
-    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
-    cmd.current_dir(temp.path())
+    assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
         .arg("graph")
         .assert()
         .failure()

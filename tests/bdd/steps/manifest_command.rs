@@ -82,14 +82,17 @@ fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result
 }
 
 fn store_run_result(world: &TestWorld, result: RunResult) {
+    // Store raw command outputs first
     world.command_stdout.set(result.stdout);
+    world.command_stderr.set(result.stderr.clone());
+
+    // Then record success/failure status with error message
     world.run_status.set(result.success);
     if result.success {
         world.run_error.clear();
     } else {
-        world.run_error.set(result.stderr.clone());
+        world.run_error.set(result.stderr);
     }
-    world.command_stderr.set(result.stderr);
 }
 
 // ---------------------------------------------------------------------------

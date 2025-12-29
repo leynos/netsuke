@@ -11,7 +11,7 @@
 //! functions, file-wide suppressions are used here as a practical exception
 //! to the project's "no blanket suppressions" guideline.
 //!
-//! FIXME(rstest-bdd): Once <https://github.com/nickkuk/rstest-bdd/issues/TBD>
+//! FIXME(rstest-bdd): Once <https://github.com/leynos/rstest-bdd/issues/381>
 //! is resolved, these suppressions may be removable.
 //!
 //! Suppressed lints and rationale:
