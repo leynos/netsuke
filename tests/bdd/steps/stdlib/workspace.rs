@@ -54,7 +54,7 @@ pub(crate) fn ensure_workspace(world: &TestWorld) -> Result<Utf8PathBuf> {
 /// Compile a command helper and register it in the world state.
 fn compile_and_register_helper<F>(
     world: &TestWorld,
-    helper_name: HelperName,
+    helper_name: &HelperName,
     compile_fn: F,
 ) -> Result<()>
 where
@@ -83,8 +83,8 @@ fn start_http_server(world: &TestWorld, body: HttpResponseBody) -> Result<()> {
 /// Write file contents to a path within the stdlib workspace.
 fn write_file_to_workspace(
     world: &TestWorld,
-    path: TemplatePath,
-    contents: FileContents,
+    path: &TemplatePath,
+    contents: &FileContents,
 ) -> Result<()> {
     let root = ensure_workspace(world)?;
     let handle = Dir::open_ambient_dir(&root, ambient_authority())
@@ -101,7 +101,7 @@ fn write_file_to_workspace(
 }
 
 /// Create an executable script at the given path within the stdlib workspace.
-fn create_executable(world: &TestWorld, path: TemplatePath) -> Result<()> {
+fn create_executable(world: &TestWorld, path: &TemplatePath) -> Result<()> {
     let root = ensure_workspace(world)?;
     let relative = Utf8PathBuf::from(path.as_str());
     let target = resolve_executable_path(&root, &relative);
@@ -121,7 +121,7 @@ fn create_executable(world: &TestWorld, path: TemplatePath) -> Result<()> {
 /// configured path in `TestWorld.stdlib_path_override` and apply it via
 /// `StdlibConfig::with_path_override` during rendering. This avoids race
 /// conditions when tests run in parallel.
-fn configure_path_environment(world: &TestWorld, entries: PathEntries) -> Result<()> {
+fn configure_path_environment(world: &TestWorld, entries: &PathEntries) -> Result<()> {
     let root = ensure_workspace(world)?;
     let trimmed = entries.as_str().trim();
     let dirs: Vec<Utf8PathBuf> = if trimmed.is_empty() {
@@ -219,21 +219,21 @@ pub(crate) fn stdlib_workspace(world: &TestWorld) -> Result<()> {
 pub(crate) fn uppercase_stdlib_command_helper(world: &TestWorld) -> Result<()> {
     compile_and_register_helper(
         world,
-        HelperName::from("cmd_upper"),
+        &HelperName::from("cmd_upper"),
         compile_uppercase_helper,
     )
 }
 
 #[given("a failing stdlib command helper")]
 pub(crate) fn failing_stdlib_command_helper(world: &TestWorld) -> Result<()> {
-    compile_and_register_helper(world, HelperName::from("cmd_fail"), compile_failure_helper)
+    compile_and_register_helper(world, &HelperName::from("cmd_fail"), compile_failure_helper)
 }
 
 #[given("a large-output stdlib command helper")]
 pub(crate) fn large_output_stdlib_command_helper(world: &TestWorld) -> Result<()> {
     compile_and_register_helper(
         world,
-        HelperName::from("cmd_large"),
+        &HelperName::from("cmd_large"),
         compile_large_output_helper,
     )
 }
@@ -245,17 +245,21 @@ pub(crate) fn http_server_returning(world: &TestWorld, body: &str) -> Result<()>
 
 #[given("the stdlib file {path:string} contains {contents:string}")]
 pub(crate) fn write_stdlib_file(world: &TestWorld, path: &str, contents: &str) -> Result<()> {
-    write_file_to_workspace(world, TemplatePath::new(path), FileContents::new(contents))
+    write_file_to_workspace(
+        world,
+        &TemplatePath::new(path),
+        &FileContents::new(contents),
+    )
 }
 
 #[given("the stdlib executable {path:string} exists")]
 pub(crate) fn stdlib_executable_exists(world: &TestWorld, path: &str) -> Result<()> {
-    create_executable(world, TemplatePath::new(path))
+    create_executable(world, &TemplatePath::new(path))
 }
 
 #[given("the stdlib PATH entries are {entries:string}")]
 pub(crate) fn stdlib_path_entries(world: &TestWorld, entries: &str) -> Result<()> {
-    configure_path_environment(world, PathEntries::new(entries))
+    configure_path_environment(world, &PathEntries::new(entries))
 }
 
 #[given("HOME points to the stdlib workspace root")]

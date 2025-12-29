@@ -1,4 +1,4 @@
-//! Step definitions for BuildGraph (IR) scenarios.
+//! Step definitions for `BuildGraph` (IR) scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;
@@ -22,7 +22,7 @@ fn assert_generation_attempted(world: &TestWorld) -> Result<()> {
     }
 }
 
-/// Assert that a BuildGraph collection has the expected count.
+/// Assert that a `BuildGraph` collection has the expected count.
 fn assert_graph_collection_count<F>(
     world: &TestWorld,
     expected: usize,
@@ -47,6 +47,10 @@ where
 // Given/When steps
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("a new BuildGraph is created")]
 #[when("a new BuildGraph is created")]
 fn create_graph(world: &TestWorld) -> Result<()> {
@@ -54,10 +58,15 @@ fn create_graph(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("the manifest file {path:string} is compiled to IR")]
 #[when("the manifest file {path:string} is compiled to IR")]
 fn compile_manifest(world: &TestWorld, path: &str) -> Result<()> {
-    compile_manifest_impl(world, path)
+    compile_manifest_impl(world, path);
+    Ok(())
 }
 
 #[when("its contents are checked")]
@@ -127,11 +136,10 @@ fn ir_generation_fails(world: &TestWorld) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Compile a manifest file to IR, storing result or error in state.
-fn compile_manifest_impl(world: &TestWorld, path: &str) -> Result<()> {
+fn compile_manifest_impl(world: &TestWorld, path: &str) {
     let outcome = netsuke::manifest::from_path(path)
         .and_then(|m| BuildGraph::from_manifest(&m).context("building IR from manifest"))
         .with_context(|| format!("IR generation failed for {path}"))
         .map_err(|e| e.to_string());
     store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
-    Ok(())
 }

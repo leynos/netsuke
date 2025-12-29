@@ -126,6 +126,10 @@ fn expand_env(raw: &str) -> String {
 // Given steps
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("the environment variable {key:string} is set to {value:string}")]
 fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
     let key = EnvVarKey::new(key);
@@ -140,6 +144,10 @@ fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("the environment variable {key:string} is unset")]
 fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
     let key = EnvVarKey::new(key);
@@ -152,6 +160,10 @@ fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("the manifest file {path:string} is parsed")]
 #[when("the manifest file {path:string} is parsed")]
 fn parse_manifest(world: &TestWorld, path: &str) -> Result<()> {
@@ -185,14 +197,18 @@ fn when_manifest_aspects_checked(world: &TestWorld) -> Result<()> {
 // Then steps - manifest-level assertions
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the manifest version is {version:string}")]
 fn manifest_version(world: &TestWorld, version: &str) -> Result<()> {
     let version = VersionString::new(version);
-    let actual = world
+    let version_result = world
         .manifest
         .with_ref(|m| m.netsuke_version.to_string())
         .context("manifest has not been parsed");
-    let actual = with_manifest_error_context(world, actual)?;
+    let actual = with_manifest_error_context(world, version_result)?;
     ensure!(
         actual == version.as_str(),
         "expected manifest version '{version}', got '{actual}'"
@@ -209,6 +225,10 @@ fn manifest_parse_error(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the error message contains {text:string}")]
 fn manifest_error_contains(world: &TestWorld, text: &str) -> Result<()> {
     let text = ErrorPattern::new(text);
@@ -224,6 +244,10 @@ fn manifest_error_contains(world: &TestWorld, text: &str) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the first rule name is {name:string}")]
 fn first_rule_name(world: &TestWorld, name: &str) -> Result<()> {
     let name = RuleName::new(name);

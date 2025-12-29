@@ -30,16 +30,16 @@ pub(crate) fn allow_scheme(world: &TestWorld, scheme: &str) -> Result<()> {
 
 #[given("the stdlib network policy allows host {host:string}")]
 pub(crate) fn allow_host(world: &TestWorld, host: &str) -> Result<()> {
-    let policy = take_policy(world).allow_hosts([host.to_string()])?;
+    let policy = take_policy(world).allow_hosts([host.to_owned()])?;
     store_policy(world, policy);
     Ok(())
 }
 
-#[given("the stdlib network policy blocks all hosts by default")]
 #[expect(
     clippy::unnecessary_wraps,
-    reason = "Step handlers use Result for ? ergonomics and uniform signatures"
+    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
 )]
+#[given("the stdlib network policy blocks all hosts by default")]
 pub(crate) fn default_deny(world: &TestWorld) -> Result<()> {
     let policy = take_policy(world).deny_all_hosts();
     store_policy(world, policy);

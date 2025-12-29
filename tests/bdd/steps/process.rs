@@ -24,7 +24,7 @@ fn install_test_ninja(
     world: &TestWorld,
     env: &impl EnvMut,
     dir: TempDir,
-    ninja_path: PathBuf,
+    ninja_path: &Path,
 ) -> Result<()> {
     let guard = env::prepend_dir_to_path(env, dir.path())?;
     *world.path_guard.borrow_mut() = Some(guard);
@@ -33,7 +33,7 @@ fn install_test_ninja(
         .set(ninja_path.to_string_lossy().into_owned());
     world.ninja_env_guard.borrow_mut().take();
     let system_env = env::SystemEnv::new();
-    *world.ninja_env_guard.borrow_mut() = Some(env::override_ninja_env(&system_env, &ninja_path));
+    *world.ninja_env_guard.borrow_mut() = Some(env::override_ninja_env(&system_env, ninja_path));
     *world.temp_dir.borrow_mut() = Some(dir);
     Ok(())
 }
@@ -110,14 +110,14 @@ fn install_fake_ninja_step(world: &TestWorld, code: i32) -> Result<()> {
         u8::try_from(code).map_err(|_| anyhow!("exit code must be between 0 and 255"))?;
     let (dir, path) = fake_ninja(exit_code)?;
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[given("a fake ninja executable that checks for the build file")]
 fn fake_ninja_check(world: &TestWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_check_build_file()?;
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[cfg(unix)]
@@ -125,7 +125,7 @@ fn fake_ninja_check(world: &TestWorld) -> Result<()> {
 fn fake_ninja_expects_clean(world: &TestWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_expect_tool(ToolName::new("clean"))?;
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[cfg(unix)]
@@ -134,7 +134,7 @@ fn fake_ninja_expects_clean_with_jobs(world: &TestWorld, jobs: u32) -> Result<()
     let (dir, path) =
         check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("clean"), Some(jobs), None)?;
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[cfg(unix)]
@@ -142,7 +142,7 @@ fn fake_ninja_expects_clean_with_jobs(world: &TestWorld, jobs: u32) -> Result<()
 fn fake_ninja_expects_graph(world: &TestWorld) -> Result<()> {
     let (dir, path) = check_ninja::fake_ninja_expect_tool(ToolName::new("graph"))?;
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[cfg(unix)]
@@ -151,7 +151,7 @@ fn fake_ninja_expects_graph_with_jobs(world: &TestWorld, jobs: u32) -> Result<()
     let (dir, path) =
         check_ninja::fake_ninja_expect_tool_with_jobs(ToolName::new("graph"), Some(jobs), None)?;
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[given("no ninja executable is available")]
@@ -159,7 +159,7 @@ fn no_ninja(world: &TestWorld) -> Result<()> {
     let dir = TempDir::new().context("create temp dir for missing ninja scenario")?;
     let path = dir.path().join("ninja");
     let env = env::mocked_path_env();
-    install_test_ninja(world, &env, dir, path)
+    install_test_ninja(world, &env, dir, &path)
 }
 
 #[given("the CLI uses the temporary directory")]
@@ -194,6 +194,10 @@ fn build_dir_exists(world: &TestWorld) -> Result<()> {
 // When steps
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::option_if_let_else,
+    reason = "if-let-else is clearer for this path resolution; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[when("the ninja process is run")]
 fn run(world: &TestWorld) -> Result<()> {
     prepare_cli_with_directory(world)?;
@@ -220,7 +224,7 @@ fn run_subcommand(world: &TestWorld) -> Result<()> {
     prepare_cli_with_absolute_file(world)?;
     let result = world
         .cli
-        .with_ref(|cli| runner::run(cli))
+        .with_ref(runner::run)
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
         .map_err(|e| format!("{e:#}"));
     record_result(world, result);

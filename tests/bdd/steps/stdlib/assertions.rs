@@ -50,7 +50,7 @@ fn stdlib_output_path(world: &TestWorld) -> Result<camino::Utf8PathBuf> {
 fn assert_purity_state(world: &TestWorld, expected_impure: bool) -> Result<()> {
     let is_impure = world
         .stdlib_state
-        .with_ref(|s| s.is_impure())
+        .with_ref(netsuke::stdlib::StdlibState::is_impure)
         .context("stdlib state should be initialised")?;
     let state_name = if expected_impure { "impure" } else { "pure" };
     ensure!(

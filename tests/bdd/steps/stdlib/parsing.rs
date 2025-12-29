@@ -35,13 +35,13 @@ fn parse_optional_component(part: Option<&str>, component_name: &str, raw: &str)
 }
 
 pub(crate) fn parse_expected_offset(raw: &str) -> Result<UtcOffset> {
-    let raw = raw.trim();
+    let trimmed = raw.trim();
 
-    if raw.eq_ignore_ascii_case("z") {
+    if trimmed.eq_ignore_ascii_case("z") {
         return Ok(UtcOffset::UTC);
     }
 
-    let (sign, rest) = parse_sign(raw)?;
+    let (sign, rest) = parse_sign(trimmed)?;
 
     let mut parts = rest.split(':');
     let hours_part = parts

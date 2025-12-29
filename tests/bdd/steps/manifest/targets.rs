@@ -20,6 +20,7 @@ const INDEX_KEY: &str = "index";
 // ---------------------------------------------------------------------------
 
 /// Location information for field assertions.
+#[derive(Copy, Clone)]
 struct FieldLocation {
     context: &'static str,
     index: Option<usize>,
@@ -37,11 +38,11 @@ impl FieldLocation {
     }
 
     /// Format the location prefix for error messages.
-    fn format_prefix(&self) -> String {
-        match self.index {
-            Some(idx) => format!("{} {idx}", self.context),
-            None => self.context.to_string(),
-        }
+    fn format_prefix(self) -> String {
+        self.index.map_or_else(
+            || self.context.to_owned(),
+            |idx| format!("{} {idx}", self.context),
+        )
     }
 }
 
@@ -164,11 +165,11 @@ fn assert_target_always(world: &TestWorld, index: usize, expected: bool) -> Resu
 
 /// Validate the number of targets in the manifest.
 fn assert_target_count(world: &TestWorld, expected: usize) -> Result<()> {
-    let actual = world
+    let count = world
         .manifest
         .with_ref(|m| m.targets.len())
         .context("manifest has not been parsed");
-    let actual = with_manifest_error_context(world, actual)?;
+    let actual = with_manifest_error_context(world, count)?;
     ensure!(
         actual == expected,
         "expected manifest to have {expected} targets, got {actual}"
@@ -178,11 +179,11 @@ fn assert_target_count(world: &TestWorld, expected: usize) -> Result<()> {
 
 /// Validate the number of macros in the manifest.
 fn assert_macro_count(world: &TestWorld, expected: usize) -> Result<()> {
-    let actual = world
+    let count = world
         .manifest
         .with_ref(|m| m.macros.len())
         .context("manifest has not been parsed");
-    let actual = with_manifest_error_context(world, actual)?;
+    let actual = with_manifest_error_context(world, count)?;
     ensure!(
         actual == expected,
         "expected manifest to have {expected} macros, got {actual}"
@@ -194,6 +195,10 @@ fn assert_macro_count(world: &TestWorld, expected: usize) -> Result<()> {
 // Then steps - target assertions
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the first target name is {name:string}")]
 fn first_target_name(world: &TestWorld, name: &str) -> Result<()> {
     let name = TargetName::new(name);
@@ -225,6 +230,10 @@ fn target_not_always(world: &TestWorld, index: usize) -> Result<()> {
     assert_target_always(world, index, false)
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the first target command is {command:string}")]
 fn first_target_command(world: &TestWorld, command: &str) -> Result<()> {
     let command = CommandText::new(command);
@@ -248,6 +257,10 @@ fn manifest_has_macros(world: &TestWorld, count: usize) -> Result<()> {
     assert_macro_count(world, count)
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the macro {index:usize} signature is {signature:string}")]
 fn macro_signature_is(world: &TestWorld, index: usize, signature: &str) -> Result<()> {
     let signature = MacroSignature::new(signature);
@@ -262,6 +275,10 @@ fn macro_signature_is(world: &TestWorld, index: usize, signature: &str) -> Resul
     with_manifest_error_context(world, result.context("manifest has not been parsed"))?
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[when("the manifest has targets named {names:string}")]
 #[then("the manifest has targets named {names:string}")]
 fn manifest_has_targets_named(world: &TestWorld, names: &str) -> Result<()> {
@@ -293,6 +310,10 @@ fn manifest_has_targets_named(world: &TestWorld, names: &str) -> Result<()> {
     with_manifest_error_context(world, result.context("manifest has not been parsed"))?
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} name is {name:string}")]
 fn target_name_n(world: &TestWorld, index: usize, name: &str) -> Result<()> {
     let name = TargetName::new(name);
@@ -302,6 +323,10 @@ fn target_name_n(world: &TestWorld, index: usize, name: &str) -> Result<()> {
     })
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} command is {command:string}")]
 fn target_command_n(world: &TestWorld, index: usize, command: &str) -> Result<()> {
     let command = CommandText::new(command);
@@ -330,6 +355,10 @@ fn target_index_n(world: &TestWorld, index: usize, expected: usize) -> Result<()
     })
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} has source {source:string}")]
 fn target_has_source(world: &TestWorld, index: usize, source: &str) -> Result<()> {
     let source = SourcePath::new(source);
@@ -338,6 +367,10 @@ fn target_has_source(world: &TestWorld, index: usize, source: &str) -> Result<()
     })
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} has dep {dep:string}")]
 fn target_has_dep(world: &TestWorld, index: usize, dep: &str) -> Result<()> {
     let dep = DepName::new(dep);
@@ -346,6 +379,10 @@ fn target_has_dep(world: &TestWorld, index: usize, dep: &str) -> Result<()> {
     })
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} has order-only dep {dep:string}")]
 fn target_has_order_only_dep(world: &TestWorld, index: usize, dep: &str) -> Result<()> {
     let dep = DepName::new(dep);
@@ -354,6 +391,10 @@ fn target_has_order_only_dep(world: &TestWorld, index: usize, dep: &str) -> Resu
     })
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} script is {script:string}")]
 fn target_script_is(world: &TestWorld, index: usize, script: &str) -> Result<()> {
     let script = ScriptText::new(script);
@@ -363,6 +404,10 @@ fn target_script_is(world: &TestWorld, index: usize, script: &str) -> Result<()>
     })
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the target {index:usize} rule is {rule:string}")]
 fn target_rule_is(world: &TestWorld, index: usize, rule: &str) -> Result<()> {
     let rule = RuleName::new(rule);

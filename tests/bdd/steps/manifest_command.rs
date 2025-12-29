@@ -113,6 +113,10 @@ fn minimal_workspace(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("a directory named {name:string} exists")]
 fn directory_named_exists(world: &TestWorld, name: &str) -> Result<()> {
     let name = DirectoryName::new(name);
@@ -124,6 +128,10 @@ fn directory_named_exists(world: &TestWorld, name: &str) -> Result<()> {
 // When steps
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[when("the netsuke manifest subcommand is run with {output:string}")]
 fn run_manifest_subcommand(world: &TestWorld, output: &str) -> Result<()> {
     let output = ManifestOutputPath::new(output);
@@ -137,24 +145,40 @@ fn run_manifest_subcommand(world: &TestWorld, output: &str) -> Result<()> {
 // Then steps
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("stdout should contain {fragment:string}")]
 fn stdout_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
     let fragment = OutputFragment::new(fragment);
     assert_output_contains(&world.command_stdout, OutputType::Stdout, &fragment)
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("stderr should contain {fragment:string}")]
 fn stderr_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
     let fragment = OutputFragment::new(fragment);
     assert_output_contains(&world.command_stderr, OutputType::Stderr, &fragment)
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the file {name:string} should exist")]
 fn file_should_exist(world: &TestWorld, name: &str) -> Result<()> {
     let name = FileName::new(name);
     assert_file_existence(world, &name, true)
 }
 
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[then("the file {name:string} should not exist")]
 fn file_should_not_exist(world: &TestWorld, name: &str) -> Result<()> {
     let name = FileName::new(name);

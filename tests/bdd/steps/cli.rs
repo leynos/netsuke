@@ -22,16 +22,16 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 
-/// Get the CLI's network policy using `with_ref`.
+/// Get the CLI's network policy.
 fn cli_network_policy(world: &TestWorld) -> Result<netsuke::stdlib::NetworkPolicy> {
     world
         .cli
-        .with_ref(|cli| cli.network_policy())
+        .with_ref(Cli::network_policy)
         .context("CLI has not been parsed")?
         .context("construct CLI network policy")
 }
 
-/// Extract build command args (targets and emit path) using with_ref.
+/// Extract build command args (targets and emit path).
 fn extract_build(world: &TestWorld) -> Result<(Vec<String>, Option<PathBuf>)> {
     world
         .cli
@@ -46,7 +46,7 @@ fn extract_build(world: &TestWorld) -> Result<(Vec<String>, Option<PathBuf>)> {
         .context("expected build command")
 }
 
-/// Get the parsed CLI command using with_ref.
+/// Get the parsed CLI command.
 fn get_command(world: &TestWorld) -> Result<Commands> {
     world
         .cli
@@ -89,6 +89,7 @@ fn normalize_cli(mut cli: Cli) -> Cli {
 // ---------------------------------------------------------------------------
 
 /// Expected CLI command variants for verification.
+#[derive(Copy, Clone)]
 enum ExpectedCommand {
     Build,
     Clean,
@@ -102,7 +103,7 @@ impl ExpectedCommand {
         clippy::missing_const_for_fn,
         reason = "Commands contains heap-allocated types preventing const evaluation"
     )]
-    fn matches(&self, actual: &Commands) -> bool {
+    fn matches(self, actual: &Commands) -> bool {
         matches!(
             (self, actual),
             (Self::Build, Commands::Build(_))
@@ -113,7 +114,7 @@ impl ExpectedCommand {
     }
 
     /// Return the command name for error messages.
-    const fn name(&self) -> &'static str {
+    const fn name(self) -> &'static str {
         match self {
             Self::Build => "build",
             Self::Clean => "clean",
@@ -272,6 +273,10 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 // Given/When steps
 // ---------------------------------------------------------------------------
 
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
 #[given("the CLI is parsed with {args:string}")]
 #[when("the CLI is parsed with {args:string}")]
 #[when("the CLI is parsed with invalid arguments {args:string}")]

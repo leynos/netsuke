@@ -85,9 +85,7 @@ fn assert_error_mentions_action_id(world: &TestWorld) -> Result<()> {
 
 #[when("the ninja file is generated")]
 fn generate_ninja(world: &TestWorld) -> Result<()> {
-    let result = world
-        .build_graph
-        .with_ref(|graph| ninja_gen::generate(graph));
+    let result = world.build_graph.with_ref(ninja_gen::generate);
     match result.context("build graph should be available")? {
         Ok(n) => {
             world.ninja_content.set(n);
@@ -124,7 +122,7 @@ fn ninja_command_tokens(world: &TestWorld, index: usize, tokens: &str) -> Result
 
 /// Verify tokenization of the first user-defined command in the Ninja output.
 ///
-/// Uses index 2 because indices 0-1 are Ninja preamble (ninja_required_version
+/// Uses index 2 because indices 0-1 are Ninja preamble (`ninja_required_version`
 /// and builddir declarations). Index 2 is typically the first build rule command.
 #[then("shlex splitting the command yields {tokens:string}")]
 fn ninja_first_command_tokens(world: &TestWorld, tokens: &str) -> Result<()> {
