@@ -86,3 +86,9 @@ Feature: CLI parsing
     When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"
     Then parsing succeeds
     And the CLI network policy rejects "https://example.com" with "host 'example.com' is blocked"
+
+  Scenario: CLI parses quoted argument with space
+    When the CLI is parsed with "--file 'my manifest.yml' manifest out.ninja"
+    Then parsing succeeds
+    And the command is manifest
+    And the manifest path is "my manifest.yml"

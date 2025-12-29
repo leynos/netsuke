@@ -44,7 +44,9 @@ fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<Manifest
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        if !when_allows_static(&mut map, env)? {
+        if let Some(when_val) = map.remove("when")
+            && !eval_when(env, as_str(&when_val, "when")?, context! {})?
+        {
             return Ok(vec![]);
         }
         Ok(vec![ManifestValue::Object(map)])
@@ -100,18 +102,6 @@ fn when_allows(
     if let Some(when_val) = map.remove("when") {
         let expr = as_str(&when_val, "when")?;
         eval_when(env, expr, context! { item, index })
-    } else {
-        Ok(true)
-    }
-}
-
-/// Evaluate a `when` clause for a non-foreach target.
-///
-/// Uses an empty context since there is no iteration variable available.
-fn when_allows_static(map: &mut ManifestMap, env: &Environment) -> Result<bool> {
-    if let Some(when_val) = map.remove("when") {
-        let expr = as_str(&when_val, "when")?;
-        eval_when(env, expr, context! {})
     } else {
         Ok(true)
     }
@@ -297,7 +287,7 @@ mod tests {
     }
 
     #[test]
-    fn expand_includes_static_target_when_true() -> Result<()> {
+    fn expand_includes_static_target_when_true_and_strips_when() -> Result<()> {
         let env = Environment::new();
         let mut doc: ManifestValue = serde_saphyr::from_str(
             "targets:
@@ -307,6 +297,46 @@ mod tests {
         expand_foreach(&mut doc, &env)?;
         let targets = targets(&doc)?;
         anyhow::ensure!(targets.len() == 1, "expected one target");
+        let target = targets.first().context("target")?;
+        let map = target.as_object().context("target object")?;
+        anyhow::ensure!(
+            !map.contains_key("when"),
+            "when field should be removed after evaluation"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn expand_static_target_when_truthy_template_strips_when() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: ManifestValue = serde_saphyr::from_str(
+            "targets:
+  - name: x
+    when: '{{ 1 }}'",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = targets(&doc)?;
+        anyhow::ensure!(targets.len() == 1, "expected one target");
+        let target = targets.first().context("target")?;
+        let map = target.as_object().context("target object")?;
+        anyhow::ensure!(
+            !map.contains_key("when"),
+            "when field should be removed after template evaluation"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn expand_static_target_when_falsy_template_drops_target() -> Result<()> {
+        let env = Environment::new();
+        let mut doc: ManifestValue = serde_saphyr::from_str(
+            "targets:
+  - name: x
+    when: '{{ 0 }}'",
+        )?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = targets(&doc)?;
+        anyhow::ensure!(targets.is_empty(), "target should be dropped");
         Ok(())
     }
 
