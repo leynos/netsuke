@@ -79,7 +79,7 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/rust-build-release@9b84b9fda7ac050cc5565bfa065740bf73b50c30
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ inputs['bin-name'] }}
@@ -87,7 +87,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/linux-packages@9b84b9fda7ac050cc5565bfa065740bf73b50c30
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -118,7 +118,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/windows-package@9b84b9fda7ac050cc5565bfa065740bf73b50c30
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -130,13 +130,13 @@ jobs:
           output-basename: ${{ inputs['bin-name'] }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          upload-artifact: ${{ inputs['should-upload-workflow-artifacts'] }}
+          upload-artefact: ${{ inputs['should-upload-workflow-artifacts'] }}
           wix-extension-version: ${{ inputs['wix-extension-version'] }}
 
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/macos-package@9b84b9fda7ac050cc5565bfa065740bf73b50c30
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}

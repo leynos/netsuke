@@ -80,7 +80,7 @@ jobs:
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+          leynos/shared-actions/.github/actions/ensure-cargo-version@9b84b9fda7ac050cc5565bfa065740bf73b50c30
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version

@@ -2104,20 +2104,19 @@ erDiagram
 ```
 
 The staged artefacts feed a WiX v4 authoring template stored in
-`installer/Package.wxs`; the workflow invokes the shared
-`windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b` composite to convert
-the repository licence into RTF, embed the binary, and output a signed MSI
-installer alongside the staged directory. The packaging step gates the action's
-internal artefact uploader behind the `should_publish` flag exported by the
-metadata job so that dry runs do not leak MSI artefacts. The composite pins the
-`WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
-`WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
-WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
-for a CLI tool. Windows does not modify the PATH, so users must add the
-installation directory manually if they want global command resolution. The
-Unix manual page remains in the staged artefacts for parity with the other
-platforms but is not bundled into the installer to avoid shipping an
-inaccessible help format.
+`installer/Package.wxs`; the workflow invokes the shared `windows-package`
+composite to convert the repository licence into RTF, embed the binary, and
+output a signed MSI installer alongside the staged directory. The packaging
+step gates the action's internal artefact uploader behind the `should_publish`
+flag exported by the metadata job so that dry runs do not leak MSI artefacts.
+The composite pins the `WixToolset.UI.wixext` extension to v6 to match the WiX
+v6 CLI and avoid the `WIX6101` incompatibility seen with the legacy v4 bundle.
+The installer uses WiX v4 syntax, installs per-machine, and presents the
+minimal UI appropriate for a CLI tool. Windows does not modify the PATH, so
+users must add the installation directory manually if they want global command
+resolution. The Unix manual page remains in the staged artefacts for parity
+with the other platforms but is not bundled into the installer to avoid
+shipping an inaccessible help format.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML
