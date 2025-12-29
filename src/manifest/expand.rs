@@ -27,14 +27,14 @@ pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> 
     Ok(())
 }
 
-fn expand_target(map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValue>> {
+fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, env)?;
         let mut items = Vec::new();
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            if !when_allows(&mut clone, env, &item, index)? {
+            if !when_allows(&mut clone, env, Some((&item, index)))? {
                 continue;
             }
             inject_iteration_vars(&mut clone, &item, index)?;
@@ -42,6 +42,11 @@ fn expand_target(map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValu
         }
         Ok(items)
     } else {
+        // For targets without foreach, still evaluate and remove the `when` clause.
+        // Use empty context since there's no iteration variable.
+        if !when_allows(&mut map, env, None)? {
+            return Ok(vec![]);
+        }
         Ok(vec![ManifestValue::Object(map)])
     }
 }
@@ -58,19 +63,58 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
     Ok(iter.collect())
 }
 
+/// Evaluate a `when` clause and return whether the target should be included.
+///
+/// The `when` clause can be either:
+/// - A Jinja expression (e.g., `item > 1`) - evaluated via `compile_expression`
+/// - A Jinja template (e.g., `{{ path is dir }}`) - evaluated via `render_str`
+///
+/// Detection strategy: attempt expression compilation first; if parsing fails,
+/// fall back to template rendering. This avoids brittle heuristics like
+/// checking for `{{` which could appear in string literals.
+///
+/// Empty expressions are rejected as invalid.
+fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
+    anyhow::ensure!(!expr.is_empty(), "empty when expression");
+
+    // Try expression compilation first - this handles plain expressions
+    // like "item > 1" or "true" without needing template delimiters.
+    if let Ok(compiled) = env.compile_expression(expr) {
+        let result = compiled
+            .eval(ctx)
+            .with_context(|| format!("when expression evaluation error for '{expr}'"))?;
+        return Ok(result.is_true());
+    }
+
+    // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
+    let rendered = env
+        .render_str(expr, ctx)
+        .with_context(|| format!("when template evaluation error for '{expr}'"))?;
+    // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
+    Ok(matches!(
+        rendered.trim().to_lowercase().as_str(),
+        "true" | "1"
+    ))
+}
+
+/// Evaluate a `when` clause if present, returning whether the target should be included.
+///
+/// Accepts an optional iteration context (`item`, `index`) for foreach targets;
+/// static targets pass `None`.
 fn when_allows(
     map: &mut ManifestMap,
     env: &Environment,
-    item: &Value,
-    index: usize,
+    iteration: Option<(&Value, usize)>,
 ) -> Result<bool> {
-    if let Some(when_val) = map.remove("when") {
-        let expr = as_str(&when_val, "when")?;
-        let result = eval_expression(env, "when", expr, context! { item, index })?;
-        Ok(result.is_true())
-    } else {
-        Ok(true)
-    }
+    let Some(when_val) = map.remove("when") else {
+        return Ok(true);
+    };
+    let expr = as_str(&when_val, "when")?;
+    let ctx = match iteration {
+        Some((item, index)) => context! { item, index },
+        None => context! {},
+    };
+    eval_when(env, expr, ctx)
 }
 
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
@@ -118,6 +162,7 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
 mod tests {
     use super::*;
     use minijinja::Environment;
+    use rstest::rstest;
 
     fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
         doc.get("targets")
@@ -228,6 +273,59 @@ mod tests {
                 keys
             );
         }
+        Ok(())
+    }
+
+    #[rstest]
+    #[case("false", 0, "expression false drops target")]
+    #[case("0", 0, "expression 0 drops target")]
+    #[case("true", 1, "expression true keeps target")]
+    #[case("1 == 1", 1, "expression equality keeps target")]
+    #[case("{{ 0 }}", 0, "template 0 drops target")]
+    #[case("{{ 1 }}", 1, "template 1 keeps target")]
+    #[case("{{ \"true\" }}", 1, "template lowercase true keeps target")]
+    #[case("{{ \"True\" }}", 1, "template mixed case True keeps target")]
+    #[case("{{ \"TRUE\" }}", 1, "template uppercase TRUE keeps target")]
+    #[case("{{ 2 }}", 0, "template 2 drops target (only 1 is truthy)")]
+    #[case("{{ \"yes\" }}", 0, "template yes drops target (only true/1 truthy)")]
+    fn expand_static_target_when_evaluation(
+        #[case] when_expr: &str,
+        #[case] expected_count: usize,
+        #[case] description: &str,
+    ) -> Result<()> {
+        let env = Environment::new();
+        let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
+        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+        expand_foreach(&mut doc, &env)?;
+        let targets = targets(&doc)?;
+        anyhow::ensure!(
+            targets.len() == expected_count,
+            "{description}: expected {expected_count} target(s), got {}",
+            targets.len()
+        );
+        if expected_count == 1 {
+            let target = targets.first().context("target")?;
+            let map = target.as_object().context("target object")?;
+            anyhow::ensure!(
+                !map.contains_key("when"),
+                "{description}: when field should be removed after evaluation"
+            );
+        }
+        Ok(())
+    }
+
+    #[rstest]
+    #[case("{{ unclosed", "malformed template")]
+    #[case("", "empty when expression")]
+    fn expand_static_target_when_invalid_errors(
+        #[case] when_expr: &str,
+        #[case] description: &str,
+    ) -> Result<()> {
+        let env = Environment::new();
+        let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
+        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+        let result = expand_foreach(&mut doc, &env);
+        anyhow::ensure!(result.is_err(), "{description} should return Err");
         Ok(())
     }
 }

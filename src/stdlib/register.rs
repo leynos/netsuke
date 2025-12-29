@@ -94,7 +94,9 @@ pub fn register_with_config(
     let which_cwd = config
         .workspace_root_path()
         .map(|path| Arc::new(path.to_path_buf()));
-    let which_config = WhichConfig::new(which_cwd, which_skip_dirs, which_cache_capacity);
+    let which_path = config.path_override().cloned();
+    let which_config =
+        WhichConfig::new(which_cwd, which_path, which_skip_dirs, which_cache_capacity);
     which::register(env, which_config);
     let impure = state.impure_flag();
     let (network_config, command_config) = config.into_components();

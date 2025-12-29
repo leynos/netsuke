@@ -13,11 +13,19 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         rust: [stable, '1.89.0']
+        # Nightly is experimental; stable and MSRV are the supported toolchains
+        include:
+          - os: ubuntu-latest
+            rust: nightly
+            experimental: true
+    continue-on-error: ${{ matrix.experimental || false }}
     permissions:
       contents: read
     env:
       CARGO_TERM_COLOR: always
       BUILD_PROFILE: debug
+      # Override rust-toolchain.toml to actually use the matrix toolchain
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Setup Rust

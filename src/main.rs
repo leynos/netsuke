@@ -4,6 +4,7 @@
 
 use clap::Parser;
 use netsuke::{cli::Cli, runner};
+use std::io;
 use std::process::ExitCode;
 use tracing::Level;
 use tracing_subscriber::fmt;
@@ -15,7 +16,10 @@ fn main() -> ExitCode {
     } else {
         Level::ERROR
     };
-    fmt().with_max_level(max_level).init();
+    fmt()
+        .with_max_level(max_level)
+        .with_writer(io::stderr)
+        .init();
     match runner::run(&cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {

@@ -1,13 +1,17 @@
-//! Steps for preparing file-system fixtures used in Jinja tests.
+//! Steps for preparing file-system fixtures used in Jinja tests (Unix only).
 
-use crate::CliWorld;
+use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::FileTypeExt as CapFileTypeExt, fs_utf8::Dir};
-use cucumber::given;
+use rstest_bdd_macros::given;
 use rustix::fs::{Dev, FileType as RxFileType, Mode, mknodat};
 use std::os::unix::fs::FileTypeExt;
 use test_support::env::set_var;
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
 
 fn setup_workspace() -> Result<(tempfile::TempDir, Utf8PathBuf, Dir)> {
     let temp = tempfile::tempdir().context("create tempdir for file-type workspace")?;
@@ -26,7 +30,6 @@ fn create_basic_fixtures(handle: &Dir) -> Result<()> {
     handle
         .symlink("file", "link")
         .context("create symlink fixture")?;
-    // FIFO creation is unprivileged and should succeed.
     mknodat(
         handle,
         "pipe",
@@ -96,7 +99,7 @@ fn create_device_with_fallback(config: DeviceConfig<'_>) -> Result<Utf8PathBuf> 
 }
 
 fn setup_environment_variables(
-    world: &mut CliWorld,
+    world: &TestWorld,
     root: &Utf8PathBuf,
     device_paths: &(Utf8PathBuf, Utf8PathBuf),
 ) {
@@ -112,10 +115,10 @@ fn setup_environment_variables(
     ];
     for (key, path) in entries {
         let previous = set_var(key, path.as_std_path().as_os_str());
-        world.env_vars.entry(key.to_owned()).or_insert(previous);
+        world.track_env_var(key.to_owned(), previous);
     }
     let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
-    world.env_vars.entry("WORKSPACE".into()).or_insert(previous);
+    world.track_env_var("WORKSPACE".into(), previous);
 }
 
 fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {
@@ -133,13 +136,17 @@ fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Given steps
+// ---------------------------------------------------------------------------
+
 #[given("a file-type test workspace")]
-fn file_type_workspace(world: &mut CliWorld) -> Result<()> {
+fn file_type_workspace(world: &TestWorld) -> Result<()> {
     let (temp, root, handle) = setup_workspace()?;
     create_basic_fixtures(&handle)?;
     let device_paths = create_device_fixtures()?;
     setup_environment_variables(world, &root, &device_paths);
     verify_missing_fixtures(&handle, &root)?;
-    world.temp = Some(temp);
+    *world.temp_dir.borrow_mut() = Some(temp);
     Ok(())
 }

@@ -150,13 +150,8 @@ impl WhichTestFixture {
         let mut tool_paths = Vec::new();
         for dir_name in dir_names {
             let dir = root.join(dir_name.as_str());
-<<<<<<< HEAD
-            std::fs::create_dir_all(dir.as_std_path()).with_context(|| {
-                format!("create directory {}", dir)
-            })?;
-=======
-            std::fs::create_dir_all(dir.as_std_path())?;
->>>>>>> aadfa2e (feat(which): add workspace fallback and improve direct path resolution)
+            std::fs::create_dir_all(dir.as_std_path())
+                .with_context(|| format!("create directory {}", dir))?;
             let tool_path = write_tool(&dir, tool_name)?;
             dirs.push(dir);
             tool_paths.push(tool_path);

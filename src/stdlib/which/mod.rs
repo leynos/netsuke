@@ -5,7 +5,7 @@
 //! canonical paths, bypassing the resolver cache, and opt-in search of the
 //! current working directory.
 
-use std::{num::NonZeroUsize, sync::Arc};
+use std::{ffi::OsString, num::NonZeroUsize, sync::Arc};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{
@@ -28,6 +28,7 @@ use error::args_error;
 #[derive(Clone, Debug)]
 pub(crate) struct WhichConfig {
     pub(crate) cwd_override: Option<Arc<Utf8PathBuf>>,
+    pub(crate) path_override: Option<OsString>,
     pub(crate) workspace_skips: WorkspaceSkipList,
     pub(crate) cache_capacity: NonZeroUsize,
 }
@@ -35,11 +36,13 @@ pub(crate) struct WhichConfig {
 impl WhichConfig {
     pub(crate) const fn new(
         cwd_override: Option<Arc<Utf8PathBuf>>,
+        path_override: Option<OsString>,
         workspace_skips: WorkspaceSkipList,
         cache_capacity: NonZeroUsize,
     ) -> Self {
         Self {
             cwd_override,
+            path_override,
             workspace_skips,
             cache_capacity,
         }
@@ -49,6 +52,7 @@ impl WhichConfig {
 pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
     let resolver = Arc::new(WhichResolver::new(
         config.cwd_override,
+        config.path_override,
         config.workspace_skips,
         config.cache_capacity,
     ));

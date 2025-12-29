@@ -135,10 +135,12 @@ unescaped_backticks                 = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
-cucumber = "0.21.1"
+rstest-bdd = "0.3.2"
+rstest-bdd-macros = { version = "0.3.2", features = ["strict-compile-time-validation"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.0"
+predicates = "3"
 mockable = { version = "0.3", features = ["mock"] }
 serial_test = "3"
 mockall = "0.11"
@@ -150,7 +152,3 @@ strip-ansi-escapes = "0.2"
 [target.'cfg(unix)'.dev-dependencies]
 # Used only to construct FIFOs and device nodes in tests.
 rustix = { version = "1.0.8", features = ["fs"] }
-
-[[test]]
-name = "cucumber"
-harness = false
