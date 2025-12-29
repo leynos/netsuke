@@ -224,6 +224,16 @@ define_newtype!(
 // ---------------------------------------------------------------------------
 
 define_newtype!(
+    /// Template context variable key.
+    ContextKey
+);
+
+define_newtype!(
+    /// Template context variable value.
+    ContextValue
+);
+
+define_newtype!(
     /// HTTP response body content.
     HttpResponseBody
 );

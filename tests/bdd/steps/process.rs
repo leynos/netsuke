@@ -60,8 +60,7 @@ fn prepare_cli_with_directory(world: &TestWorld) -> Result<()> {
             cli.file = manifest.into_std_path_buf();
             Ok::<(), anyhow::Error>(())
         })
-        .context("CLI configuration has not been initialised")??;
-    Ok(())
+        .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
 }
 
 /// Prepares the CLI for execution with an absolute file path.

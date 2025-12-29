@@ -69,22 +69,32 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
 /// - A Jinja expression (e.g., `item > 1`) - evaluated via `compile_expression`
 /// - A Jinja template (e.g., `{{ path is dir }}`) - evaluated via `render_str`
 ///
-/// Template syntax (containing `{{`) is rendered and checked for truthy output
-/// ("true" or "1"). Expression syntax is compiled and evaluated directly.
+/// Detection strategy: attempt expression compilation first; if parsing fails,
+/// fall back to template rendering. This avoids brittle heuristics like
+/// checking for `{{` which could appear in string literals.
+///
+/// Empty expressions are rejected as invalid.
 fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
-    if expr.contains("{{") {
-        let rendered = env
-            .render_str(expr, ctx)
-            .with_context(|| format!("when template evaluation error for '{expr}'"))?;
-        // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
-        Ok(matches!(
-            rendered.trim().to_lowercase().as_str(),
-            "true" | "1"
-        ))
-    } else {
-        let result = eval_expression(env, "when", expr, ctx)?;
-        Ok(result.is_true())
+    anyhow::ensure!(!expr.is_empty(), "empty when expression");
+
+    // Try expression compilation first - this handles plain expressions
+    // like "item > 1" or "true" without needing template delimiters.
+    if let Ok(compiled) = env.compile_expression(expr) {
+        let result = compiled
+            .eval(ctx)
+            .with_context(|| format!("when expression evaluation error for '{expr}'"))?;
+        return Ok(result.is_true());
     }
+
+    // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
+    let rendered = env
+        .render_str(expr, ctx)
+        .with_context(|| format!("when template evaluation error for '{expr}'"))?;
+    // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
+    Ok(matches!(
+        rendered.trim().to_lowercase().as_str(),
+        "true" | "1"
+    ))
 }
 
 /// Evaluate a `when` clause if present, returning whether the target should be included.

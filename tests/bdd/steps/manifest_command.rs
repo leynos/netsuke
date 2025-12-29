@@ -45,20 +45,12 @@ fn assert_output_contains(
     assert_slot_contains(output, fragment.as_str(), &output_type.to_string())
 }
 
-fn resolve_file_path(temp_path: &Path, name: &FileName) -> PathBuf {
-    temp_path.join(name.as_str())
-}
-
-fn check_file_exists(path: &Path) -> bool {
-    path.exists()
-}
-
 fn assert_file_existence(world: &TestWorld, name: &FileName, should_exist: bool) -> Result<()> {
     let temp_path = get_temp_path(world)?;
-    let path = resolve_file_path(&temp_path, name);
+    let path = temp_path.join(name.as_str());
     let expected = if should_exist { "exist" } else { "not exist" };
     ensure!(
-        check_file_exists(&path) == should_exist,
+        path.exists() == should_exist,
         "expected file {} to {expected}",
         path.display()
     );
@@ -91,13 +83,13 @@ fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result
 
 fn store_run_result(world: &TestWorld, result: RunResult) {
     world.command_stdout.set(result.stdout);
-    world.command_stderr.set(result.stderr);
     world.run_status.set(result.success);
     if result.success {
         world.run_error.clear();
-    } else if let Some(stderr) = world.command_stderr.get() {
-        world.run_error.set(stderr);
+    } else {
+        world.run_error.set(result.stderr.clone());
     }
+    world.command_stderr.set(result.stderr);
 }
 
 // ---------------------------------------------------------------------------

@@ -151,6 +151,11 @@ impl Drop for TestWorld {
 }
 
 /// Extract the host component from a URL.
+///
+/// This function handles only plain HTTP URLs with IPv4 hosts (e.g.,
+/// `http://127.0.0.1:8080/path`). It does not support HTTPS, IPv6 addresses
+/// in brackets, or other edge cases. This is intentional: the test HTTP
+/// server always binds to `127.0.0.1`, so broader URL parsing is unnecessary.
 fn server_host(url: &str) -> Option<&str> {
     url.strip_prefix("http://")
         .and_then(|s| s.split('/').next())

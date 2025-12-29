@@ -1,6 +1,7 @@
 //! Render-related stdlib step helpers used by BDD scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::types::{ContextKey, ContextValue};
 use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
@@ -34,42 +35,6 @@ impl From<String> for TemplateContent {
 impl AsRef<str> for TemplateContent {
     fn as_ref(&self) -> &str {
         &self.0
-    }
-}
-
-/// Newtype wrapper for context key strings.
-///
-/// Distinguishes context variable names from other string parameters,
-/// preventing accidental misuse of keys and values.
-pub(crate) struct ContextKey(String);
-
-impl ContextKey {
-    pub(crate) fn new(key: impl Into<String>) -> Self {
-        Self(key.into())
-    }
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Newtype wrapper for context value strings.
-///
-/// Distinguishes context variable values from other string parameters,
-/// ensuring type safety when constructing template rendering contexts.
-pub(crate) struct ContextValue(String);
-
-impl ContextValue {
-    pub(crate) fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-    pub(crate) fn into_string(self) -> String {
-        self.0
-    }
-}
-
-impl From<String> for ContextValue {
-    fn from(s: String) -> Self {
-        Self(s)
     }
 }
 

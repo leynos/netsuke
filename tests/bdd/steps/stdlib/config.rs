@@ -20,7 +20,7 @@ pub(crate) fn configure_command_stream_limit(world: &TestWorld, limit: u64) {
 
 #[given("the stdlib template text contains {lines:usize} lines of {line:string}")]
 pub(crate) fn configure_stdlib_text(world: &TestWorld, lines: usize, line: &str) {
-    let mut text = String::with_capacity(line.len().saturating_mul(lines + 1));
+    let mut text = String::with_capacity(line.len().saturating_add(1).saturating_mul(lines));
     for _ in 0..lines {
         text.push_str(line);
         text.push('\n');

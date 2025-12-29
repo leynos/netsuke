@@ -2,45 +2,59 @@
 //!
 //! Each module contains step definitions for a specific domain. Steps are
 //! registered via `#[given]`, `#[when]`, and `#[then]` attribute macros.
+//!
+//! ## File-wide lint suppressions
+//!
+//! The `rstest-bdd` macros generate wrapper code for each step function that
+//! triggers multiple Clippy lints. Since the generated code cannot be
+//! annotated directly and these patterns appear across dozens of step
+//! functions, file-wide suppressions are used here as a practical exception
+//! to the project's "no blanket suppressions" guideline.
+//!
+//! FIXME(rstest-bdd): Once <https://github.com/nickkuk/rstest-bdd/issues/TBD>
+//! is resolved, these suppressions may be removable.
+//!
+//! Suppressed lints and rationale:
+//! - `shadow_reuse`: Step functions strip quotes via intentional shadowing
+//! - `unnecessary_wraps`: Macros require `Result` returns for all steps
+//! - `str_to_string`: Quote stripping converts `&str` parameters
+//! - `redundant_closure_for_method_calls`: Closures improve step readability
+//! - `needless_pass_by_value`: Step signatures prioritise ergonomics
+//! - `option_if_let_else`: if-let-else is clearer for step logic
+//! - `doc_markdown`: Informal docs don't need backticks on identifiers
+//! - `redundant_closure`: Closures aid comprehension in step context
 
-// Step functions use shadow_reuse to strip quotes from captured parameters,
-// which is idiomatic for this pattern. The rstest-bdd macros also generate
-// code with these patterns.
 #![expect(
     clippy::shadow_reuse,
-    reason = "Step functions strip quotes using intentional shadowing"
+    reason = "rstest-bdd macros generate step wrappers that shadow parameters"
 )]
-// The rstest-bdd macros generate functions that may have unnecessary wraps
 #![expect(
     clippy::unnecessary_wraps,
     reason = "rstest-bdd macros require Result returns for step functions"
 )]
-// The step functions use to_string on &str for convenience
 #![expect(
     clippy::str_to_string,
-    reason = "Step functions convert stripped quotes"
+    reason = "rstest-bdd step functions convert quote-stripped parameters"
 )]
-// Step functions may use closures for clarity even when methods exist
 #![expect(
     clippy::redundant_closure_for_method_calls,
-    reason = "Step closures are clearer than method references"
+    reason = "rstest-bdd step closures prioritise readability over brevity"
 )]
-// Some step functions take owned values for ergonomics
 #![expect(
     clippy::needless_pass_by_value,
-    reason = "Step function signatures optimized for readability"
+    reason = "rstest-bdd step signatures prioritise ergonomics"
 )]
-// Step logic may be clearer with if-let-else than map_or_else
 #![expect(
     clippy::option_if_let_else,
-    reason = "if-let-else is clearer for step logic"
+    reason = "rstest-bdd step logic uses if-let-else for clarity"
 )]
-// Step comments may reference identifiers without backticks
-#![expect(clippy::doc_markdown, reason = "Step docs are informal")]
-// Step closures may be clearer than function references
+#![expect(
+    clippy::doc_markdown,
+    reason = "rstest-bdd step docs are informal and omit backticks"
+)]
 #![expect(
     clippy::redundant_closure,
-    reason = "Closures are clearer in step context"
+    reason = "rstest-bdd step closures improve comprehension"
 )]
 
 mod cli;
