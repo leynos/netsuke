@@ -504,7 +504,7 @@ in isolation but fails when executed sequentially with other tests using
 **Symptom**: The template variable `text` is undefined during rendering,
 causing the error:
 
-```
+```text
 invalid operation: input value is undefined (in <string>:1)
 ```
 

@@ -60,10 +60,17 @@ fn get_command(world: &TestWorld) -> Result<Commands> {
 // ---------------------------------------------------------------------------
 
 /// Build the token list from CLI arguments for parsing.
+///
+/// Uses shell-like splitting via `shlex` to handle quoted arguments correctly,
+/// matching the behaviour of `std::env::args_os()` more closely. Falls back to
+/// whitespace splitting if shlex fails (e.g., unbalanced quotes).
 fn build_token_list(args: &CliArgs) -> Vec<String> {
-    std::iter::once("netsuke".to_owned())
-        .chain(args.as_str().split_whitespace().map(str::to_string))
-        .collect()
+    let mut tokens = vec!["netsuke".to_owned()];
+    match shlex::split(args.as_str()) {
+        Some(mut split_args) => tokens.append(&mut split_args),
+        None => tokens.extend(args.as_str().split_whitespace().map(str::to_owned)),
+    }
+    tokens
 }
 
 /// Normalise a parsed CLI by setting default command if missing.

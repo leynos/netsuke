@@ -122,6 +122,10 @@ fn ninja_command_tokens(world: &TestWorld, index: usize, tokens: &str) -> Result
     compare_tokens(&actual, &TokenList::new(tokens))
 }
 
+/// Verify tokenization of the first user-defined command in the Ninja output.
+///
+/// Uses index 2 because indices 0-1 are Ninja preamble (ninja_required_version
+/// and builddir declarations). Index 2 is typically the first build rule command.
 #[then("shlex splitting the command yields {tokens:string}")]
 fn ninja_first_command_tokens(world: &TestWorld, tokens: &str) -> Result<()> {
     ninja_command_tokens(world, 2, tokens)

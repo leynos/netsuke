@@ -7,7 +7,7 @@
 //! as parameters, eliminating the need for thread-local storage.
 
 // The `#[fixture]` macro generates types that cannot have doc comments attached
-#![allow(
+#![expect(
     missing_docs,
     reason = "Generated fixture types cannot have doc comments attached"
 )]

@@ -51,37 +51,6 @@ fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<Manifest
     }
 }
 
-/// Evaluate a `when` clause for a non-foreach target.
-///
-/// Unlike `when_allows`, this version does not inject `item` or `index` into
-/// the evaluation context since there is no iteration happening.
-///
-/// The `when` clause can be either:
-/// - A Jinja expression (e.g., `item > 1`) - used with `foreach`
-/// - A Jinja template (e.g., `{{ path is dir }}`) - used standalone
-///
-/// For standalone targets, we use `render_str` to evaluate the template and
-/// check if the rendered result is truthy.
-fn when_allows_static(map: &mut ManifestMap, env: &Environment) -> Result<bool> {
-    if let Some(when_val) = map.remove("when") {
-        let expr = as_str(&when_val, "when")?;
-        // First try as template (for {{ }} syntax), then as expression
-        let result = if expr.contains("{{") {
-            let rendered = env
-                .render_str(expr, context! {})
-                .with_context(|| format!("when template evaluation error for '{expr}'"))?;
-            // Treat "true" as truthy, anything else (including "false", "") as falsy
-            matches!(rendered.trim().to_lowercase().as_str(), "true" | "1")
-        } else {
-            let result = eval_expression(env, "when", expr, context! {})?;
-            result.is_true()
-        };
-        Ok(result)
-    } else {
-        Ok(true)
-    }
-}
-
 fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {
     if let Some(seq) = expr_val.as_array() {
         return Ok(seq.iter().cloned().map(Value::from_serialize).collect());
@@ -94,6 +63,34 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
     Ok(iter.collect())
 }
 
+/// Evaluate a `when` clause and return whether the target should be included.
+///
+/// The `when` clause can be either:
+/// - A Jinja expression (e.g., `item > 1`) - evaluated via `compile_expression`
+/// - A Jinja template (e.g., `{{ path is dir }}`) - evaluated via `render_str`
+///
+/// Template syntax (containing `{{`) is rendered and checked for truthy output
+/// ("true" or "1"). Expression syntax is compiled and evaluated directly.
+fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
+    if expr.contains("{{") {
+        let rendered = env
+            .render_str(expr, ctx)
+            .with_context(|| format!("when template evaluation error for '{expr}'"))?;
+        // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
+        Ok(matches!(
+            rendered.trim().to_lowercase().as_str(),
+            "true" | "1"
+        ))
+    } else {
+        let result = eval_expression(env, "when", expr, ctx)?;
+        Ok(result.is_true())
+    }
+}
+
+/// Evaluate a `when` clause for a foreach iteration.
+///
+/// Injects `item` and `index` into the evaluation context for use in the
+/// when expression.
 fn when_allows(
     map: &mut ManifestMap,
     env: &Environment,
@@ -102,8 +99,19 @@ fn when_allows(
 ) -> Result<bool> {
     if let Some(when_val) = map.remove("when") {
         let expr = as_str(&when_val, "when")?;
-        let result = eval_expression(env, "when", expr, context! { item, index })?;
-        Ok(result.is_true())
+        eval_when(env, expr, context! { item, index })
+    } else {
+        Ok(true)
+    }
+}
+
+/// Evaluate a `when` clause for a non-foreach target.
+///
+/// Uses an empty context since there is no iteration variable available.
+fn when_allows_static(map: &mut ManifestMap, env: &Environment) -> Result<bool> {
+    if let Some(when_val) = map.remove("when") {
+        let expr = as_str(&when_val, "when")?;
+        eval_when(env, expr, context! {})
     } else {
         Ok(true)
     }

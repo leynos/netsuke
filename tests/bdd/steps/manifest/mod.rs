@@ -100,6 +100,15 @@ where
     std::env::var(&name).unwrap_or_else(|_| ["${", &name, "}"].concat())
 }
 
+/// Expand `${VAR}` patterns in the input string using environment variables.
+///
+/// Supported syntax:
+/// - `${VAR}` - replaced by the value of environment variable `VAR`
+///
+/// Unsupported syntax (passed through unchanged):
+/// - `$VAR` - bare dollar sign variables
+/// - `${VAR:-default}` - default value syntax
+/// - `${VAR:+alternate}` - alternate value syntax
 fn expand_env(raw: &str) -> String {
     let mut out = String::new();
     let mut chars = raw.chars().peekable();
