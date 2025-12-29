@@ -1,0 +1,23 @@
+netsuke_version: "0.1.0"
+targets:
+  - name: is-dir
+    when: "{{ env('MISSING_DIR_PATH') is dir }}"
+    command: echo dir
+  - name: is-file
+    when: "{{ env('MISSING_FILE_PATH') is file }}"
+    command: echo file
+  - name: is-symlink
+    when: "{{ env('MISSING_SYMLINK_PATH') is symlink }}"
+    command: echo symlink
+  - name: is-pipe
+    when: "{{ env('MISSING_PIPE_PATH') is pipe }}"
+    command: echo pipe
+  - name: is-block-device
+    when: "{{ env('MISSING_BLOCK_DEVICE_PATH') is block_device }}"
+    command: echo block
+  - name: is-char-device
+    when: "{{ env('MISSING_CHAR_DEVICE_PATH') is char_device }}"
+    command: echo char
+  - name: is-device
+    when: "{{ env('MISSING_DEVICE_PATH') is device }}"
+    command: echo device
