@@ -3,6 +3,16 @@
 //! These wrappers distinguish between different string parameter types,
 //! improving type safety and self-documentation in step definitions.
 
+// The `define_newtype` macro generates `as_str` and `into_string` methods for
+// API completeness. Some types use all methods while others don't. Using
+// `#[expect(dead_code)]` is not feasible because it requires the lint to fire,
+// which varies per type instantiation. The `#[allow(dead_code)]` within the
+// macro requires this module-level exception to `clippy::allow_attributes`.
+#![expect(
+    clippy::allow_attributes,
+    reason = "macro-generated dead_code suppression varies per type instantiation"
+)]
+
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -25,13 +35,13 @@ macro_rules! define_newtype {
             }
 
             /// Return the inner string as a slice.
-            #[expect(dead_code, reason = "newtype provides complete API; usage varies per type instantiation")]
+            #[allow(dead_code, reason = "newtype provides complete API; usage varies per type")]
             pub fn as_str(&self) -> &str {
                 &self.0
             }
 
             /// Consume the wrapper and return the inner string.
-            #[expect(dead_code, reason = "newtype provides complete API; usage varies per type instantiation")]
+            #[allow(dead_code, reason = "newtype provides complete API; usage varies per type")]
             pub fn into_string(self) -> String {
                 self.0
             }
@@ -131,7 +141,7 @@ impl ManifestPath {
     }
 
     /// Convert to an owned `PathBuf`.
-    #[expect(dead_code, reason = "path wrapper provides complete API; usage varies")]
+    #[allow(dead_code, reason = "path wrapper provides complete API; usage varies")]
     pub fn to_path_buf(&self) -> PathBuf {
         PathBuf::from(&self.0)
     }
