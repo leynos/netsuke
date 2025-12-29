@@ -2049,27 +2049,27 @@ value is invalid.
 ### 8.6 Release Automation
 
 Release engineering is delegated to GitHub Actions workflows built on the
-`leynos/shared-actions` toolchain. All shared composites are pinned to
-`dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b` so release automation remains
-reproducible. The tagging workflow first verifies that the Git ref matches
-`Cargo.toml` and records the crate's binary name once so all subsequent jobs
-operate on consistent metadata. Linux builds invoke the `rust-build-release`
-composite action to cross-compile for `x86_64` and `aarch64`, generate the
-staged binary + man page directory, and then call the shared `linux-packages`
-composite a second time with explicit metadata so the resulting `.deb` and
-`.rpm` archives both declare a runtime dependency on `ninja-build`. Windows
-builds reuse the same action for compilation and now invoke the generic staging
-composite defined in `.github/actions/stage`. The composite shells out to a
-Cyclopts-driven script that reads `.github/release-staging.toml`, merges the
-`[common]` configuration with the target-specific overrides, and copies the
-configured artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. It
-installs `uv` with `astral-sh/setup-uv`, double-checks the tool is present, and
-only then launches the Python entry point so workflows stay declarative. The
-helper writes SHA-256 sums for every staged file and exports a JSON map of the
-artefact outputs, allowing the workflow to hydrate downstream steps without
-hard-coded path logic. Figure 8.1 summarises the configuration entities,
-including optional keys reserved for templated directories and explicit
-artefact destinations that the helper can adopt without breaking compatibility.
+`leynos/shared-actions` toolchain. All shared composites are pinned to explicit
+SHAs so release automation remains reproducible. The tagging workflow first
+verifies that the Git ref matches `Cargo.toml` and records the crate's binary
+name once so all subsequent jobs operate on consistent metadata. Linux builds
+invoke the `rust-build-release` composite action to cross-compile for `x86_64`
+and `aarch64`, generate the staged binary + man page directory, and then call
+the shared `linux-packages` composite a second time with explicit metadata so
+the resulting `.deb` and `.rpm` archives both declare a runtime dependency on
+`ninja-build`. Windows builds reuse the same action for compilation and now
+invoke the generic staging `stage-release-artefacts` composite from
+`leynos/shared-actions`. The composite shells out to a Cyclopts-driven script
+that reads `.github/release-staging.toml`, merges the `[common]` configuration
+with the target-specific overrides, and copies the configured artefacts into a
+fresh `dist/{bin}_{platform}_{arch}` directory. It installs `uv` with
+`astral-sh/setup-uv`, double-checks the tool is present, and only then launches
+the Python entry point so workflows stay declarative. The helper writes SHA-256
+sums for every staged file and exports a JSON map of the artefact outputs,
+allowing the workflow to hydrate downstream steps without hard-coded path
+logic. Figure 8.1 summarises the configuration entities, including optional
+keys reserved for templated directories and explicit artefact destinations that
+the helper can adopt without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 

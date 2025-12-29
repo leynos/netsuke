@@ -108,21 +108,12 @@ jobs:
       - name: Stage artefacts
         if: inputs.platform != 'linux'
         id: stage
-        uses: ./.github/actions/stage
+        uses: >-
+          leynos/shared-actions/.github/actions/stage-release-artefacts@9b84b9fda7ac050cc5565bfa065740bf73b50c30
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
-
-      - name: Normalise Windows paths
-        if: inputs.platform == 'windows'
-        id: normalize_windows_paths
-        shell: bash
-        env:
-          BINARY_PATH: ${{ steps.stage.outputs.binary_path }}
-          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
-        run: |
-          set -euo pipefail
-          python .github/workflows/scripts/normalise_windows_paths.py
+          normalize-windows-paths: ${{ inputs.platform == 'windows' }}
 
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
@@ -132,8 +123,8 @@ jobs:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
           install-dir-name: ${{ inputs['bin-name'] }}
-          application-path: ${{ steps.normalize_windows_paths.outputs.binary_path }}
-          license-rtf-path: ${{ steps.normalize_windows_paths.outputs.license_path }}
+          application-path: ${{ steps.stage.outputs['binary-path'] }}
+          license-rtf-path: ${{ steps.stage.outputs['license-path'] }}
           architecture: ${{ inputs['msi-arch'] }}
           version: ${{ inputs.version }}
           output-basename: ${{ inputs['bin-name'] }}
@@ -149,8 +140,8 @@ jobs:
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
-          binary: ${{ steps.stage.outputs.binary_path }}
-          manpage: ${{ steps.stage.outputs.man_path }}
+          binary: ${{ steps.stage.outputs['binary-path'] }}
+          manpage: ${{ steps.stage.outputs['man-path'] }}
           license-file: LICENSE
           version: ${{ inputs.version }}
 
@@ -182,7 +173,7 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage.outputs.artifact_dir }}
+            ${{ steps.stage.outputs['artifact-dir'] }}
             ${{ steps.package_windows.outputs['msi-path'] }}
 
       - name: Upload macOS artefacts
@@ -192,5 +183,5 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage.outputs.artifact_dir }}
+            ${{ steps.stage.outputs['artifact-dir'] }}
             dist/${{ inputs['bin-name'] }}-${{ inputs.version }}-${{ inputs['artifact-suffix'] }}.pkg
