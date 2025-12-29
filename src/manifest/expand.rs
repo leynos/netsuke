@@ -152,6 +152,7 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
 mod tests {
     use super::*;
     use minijinja::Environment;
+    use rstest::rstest;
 
     fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
         doc.get("targets")
@@ -265,103 +266,56 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn expand_excludes_static_target_when_false() -> Result<()> {
+    #[rstest]
+    #[case("false", 0, "expression false drops target")]
+    #[case("0", 0, "expression 0 drops target")]
+    #[case("true", 1, "expression true keeps target")]
+    #[case("1 == 1", 1, "expression equality keeps target")]
+    #[case("{{ 0 }}", 0, "template 0 drops target")]
+    #[case("{{ 1 }}", 1, "template 1 keeps target")]
+    #[case("{{ \"true\" }}", 1, "template lowercase true keeps target")]
+    #[case("{{ \"True\" }}", 1, "template mixed case True keeps target")]
+    #[case("{{ \"TRUE\" }}", 1, "template uppercase TRUE keeps target")]
+    #[case("{{ 2 }}", 0, "template 2 drops target (only 1 is truthy)")]
+    #[case("{{ \"yes\" }}", 0, "template yes drops target (only true/1 truthy)")]
+    fn expand_static_target_when_evaluation(
+        #[case] when_expr: &str,
+        #[case] expected_count: usize,
+        #[case] description: &str,
+    ) -> Result<()> {
         let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: excluded
-    when: 'false'
-  - name: included",
-        )?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.len() == 1, "expected one target after filtering");
-        let name = targets
-            .first()
-            .and_then(|t| t.get("name"))
-            .and_then(|v| v.as_str())
-            .context("name field")?;
-        anyhow::ensure!(name == "included", "wrong target remained: {name}");
-        Ok(())
-    }
-
-    #[test]
-    fn expand_includes_static_target_when_true_and_strips_when() -> Result<()> {
-        let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: kept
-    when: 'true'",
-        )?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.len() == 1, "expected one target");
-        let target = targets.first().context("target")?;
-        let map = target.as_object().context("target object")?;
-        anyhow::ensure!(
-            !map.contains_key("when"),
-            "when field should be removed after evaluation"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn expand_static_target_when_truthy_template_strips_when() -> Result<()> {
-        let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: x
-    when: '{{ 1 }}'",
-        )?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.len() == 1, "expected one target");
-        let target = targets.first().context("target")?;
-        let map = target.as_object().context("target object")?;
-        anyhow::ensure!(
-            !map.contains_key("when"),
-            "when field should be removed after template evaluation"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn expand_static_target_when_falsy_template_drops_target() -> Result<()> {
-        let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: x
-    when: '{{ 0 }}'",
-        )?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.is_empty(), "target should be dropped");
-        Ok(())
-    }
-
-    #[test]
-    fn expand_evaluates_static_target_template_when() -> Result<()> {
-        let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: template_false
-    when: '{{ 1 == 2 }}'
-  - name: template_true
-    when: '{{ 2 == 2 }}'",
-        )?;
+        let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
+        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
         expand_foreach(&mut doc, &env)?;
         let targets = targets(&doc)?;
         anyhow::ensure!(
-            targets.len() == 1,
-            "expected one target after template filtering"
+            targets.len() == expected_count,
+            "{description}: expected {expected_count} target(s), got {}",
+            targets.len()
         );
-        let name = targets
-            .first()
-            .and_then(|t| t.get("name"))
-            .and_then(|v| v.as_str())
-            .context("name field")?;
-        anyhow::ensure!(name == "template_true", "wrong target remained: {name}");
+        if expected_count == 1 {
+            let target = targets.first().context("target")?;
+            let map = target.as_object().context("target object")?;
+            anyhow::ensure!(
+                !map.contains_key("when"),
+                "{description}: when field should be removed after evaluation"
+            );
+        }
+        Ok(())
+    }
+
+    #[rstest]
+    #[case("{{ unclosed", "malformed template")]
+    #[case("", "empty when expression")]
+    fn expand_static_target_when_invalid_errors(
+        #[case] when_expr: &str,
+        #[case] description: &str,
+    ) -> Result<()> {
+        let env = Environment::new();
+        let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
+        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+        let result = expand_foreach(&mut doc, &env);
+        anyhow::ensure!(result.is_err(), "{description} should return Err");
         Ok(())
     }
 }
