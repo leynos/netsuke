@@ -231,7 +231,7 @@ fn parse_cli(world: &mut CliWorld, args: String) {
 }
 ```
 
-**rstest-bdd behaviour**: Placeholders capture the *literal* text including any
+**rstest-bdd behaviour**: Placeholders capture the *literal* text, including any
 quotes present in the step text.
 
 ```rust

@@ -100,7 +100,7 @@ impl ExpectedCommand {
     /// Check if the actual command matches the expected variant.
     #[expect(
         clippy::missing_const_for_fn,
-        reason = "matches! macro is not const-compatible"
+        reason = "Commands contains heap-allocated types preventing const evaluation"
     )]
     fn matches(&self, actual: &Commands) -> bool {
         matches!(
