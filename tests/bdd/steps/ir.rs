@@ -1,6 +1,7 @@
 //! Step definitions for BuildGraph (IR) scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::parse_store::store_parse_outcome;
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::ir::BuildGraph;
 use rstest_bdd_macros::{given, then, when};
@@ -43,41 +44,25 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Given steps
+// Given/When steps
 // ---------------------------------------------------------------------------
 
 #[given("a new BuildGraph is created")]
+#[when("a new BuildGraph is created")]
 fn create_graph(world: &TestWorld) -> Result<()> {
     world.build_graph.set_value(BuildGraph::default());
     Ok(())
 }
 
 #[given("the manifest file {path:string} is compiled to IR")]
-fn compile_manifest_given(world: &TestWorld, path: &str) -> Result<()> {
+#[when("the manifest file {path:string} is compiled to IR")]
+fn compile_manifest(world: &TestWorld, path: &str) -> Result<()> {
     compile_manifest_impl(world, path)
 }
 
-// ---------------------------------------------------------------------------
-// When steps
-// ---------------------------------------------------------------------------
-
-#[when("a new BuildGraph is created")]
-fn when_create_graph(world: &TestWorld) -> Result<()> {
-    world.build_graph.set_value(BuildGraph::default());
-    Ok(())
-}
-
 #[when("its contents are checked")]
-fn graph_checked(world: &TestWorld) -> Result<()> {
-    ensure!(
-        world.build_graph.is_some(),
-        "build graph should be available"
-    );
-    Ok(())
-}
-
 #[when("the graph contents are checked")]
-fn graph_contents_checked(world: &TestWorld) -> Result<()> {
+fn graph_checked(world: &TestWorld) -> Result<()> {
     ensure!(
         world.build_graph.is_some(),
         "build graph should be available"
@@ -88,11 +73,6 @@ fn graph_contents_checked(world: &TestWorld) -> Result<()> {
 #[when("the generation result is checked")]
 fn generation_result_checked(world: &TestWorld) -> Result<()> {
     assert_generation_attempted(world)
-}
-
-#[when("the manifest file {path:string} is compiled to IR")]
-fn compile_manifest_when(world: &TestWorld, path: &str) -> Result<()> {
-    compile_manifest_impl(world, path)
 }
 
 #[when("an action is removed from the graph")]
@@ -148,18 +128,10 @@ fn ir_generation_fails(world: &TestWorld) -> Result<()> {
 
 /// Compile a manifest file to IR, storing result or error in state.
 fn compile_manifest_impl(world: &TestWorld, path: &str) -> Result<()> {
-    match netsuke::manifest::from_path(path)
+    let outcome = netsuke::manifest::from_path(path)
         .and_then(|m| BuildGraph::from_manifest(&m).context("building IR from manifest"))
         .with_context(|| format!("IR generation failed for {path}"))
-    {
-        Ok(graph) => {
-            world.build_graph.set_value(graph);
-            world.generation_error.clear();
-        }
-        Err(e) => {
-            world.build_graph.clear_value();
-            world.generation_error.set(e.to_string());
-        }
-    }
+        .map_err(|e| e.to_string());
+    store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
     Ok(())
 }

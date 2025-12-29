@@ -4,5 +4,6 @@
 //! attribute macros from rstest-bdd.
 
 pub mod fixtures;
+pub mod helpers;
 pub mod steps;
 pub mod types;

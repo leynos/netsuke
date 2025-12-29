@@ -1,6 +1,7 @@
 //! Step definitions for Ninja file generation scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::assertions::assert_optional_contains;
 use crate::bdd::types::{ContentName, NinjaFragment, TokenList};
 use anyhow::{Context, Result, anyhow, ensure};
 use netsuke::ninja_gen;
@@ -58,14 +59,7 @@ fn assert_content_contains(
     fragment: &NinjaFragment,
     name: ContentName,
 ) -> Result<()> {
-    let text = content.context(format!("{} should be available", name.as_str()))?;
-    ensure!(
-        text.contains(fragment.as_str()),
-        "{} should contain '{}'",
-        name.as_str(),
-        fragment.as_str()
-    );
-    Ok(())
+    assert_optional_contains(content, fragment.as_str(), name.as_str())
 }
 
 /// Assert that error message mentions the removed action id.

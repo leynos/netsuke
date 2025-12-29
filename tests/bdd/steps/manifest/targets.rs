@@ -1,89 +1,19 @@
-//! Step definitions for manifest parsing scenarios.
+//! Target-specific step definitions for manifest parsing scenarios.
+//!
+//! Contains step definitions for asserting on target properties like name,
+//! command, script, rule, sources, deps, and flags.
 
+use super::{get_string_from_string_or_list, with_manifest_error_context};
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{
-    CommandText, DepName, EnvVarKey, EnvVarValue, ErrorPattern, MacroSignature, ManifestPath,
-    NamesList, RuleName, ScriptText, SourcePath, TargetName, VersionString,
+    CommandText, DepName, MacroSignature, NamesList, RuleName, ScriptText, SourcePath, TargetName,
 };
 use anyhow::{Context, Result, bail, ensure};
-use netsuke::{
-    ast::{Recipe, StringOrList},
-    manifest,
-};
-use rstest_bdd_macros::{given, then, when};
-use std::{collections::BTreeSet, convert::TryFrom, ffi::OsStr};
-use test_support::display_error_chain;
-use test_support::env::{remove_var, set_var};
+use netsuke::ast::{Recipe, StringOrList};
+use rstest_bdd_macros::{then, when};
+use std::{collections::BTreeSet, convert::TryFrom};
 
 const INDEX_KEY: &str = "index";
-
-// ---------------------------------------------------------------------------
-// Helper functions
-// ---------------------------------------------------------------------------
-
-/// Enhance an error with manifest parse error context if available.
-///
-/// When manifest parsing fails, the error is stored in `manifest_error` but
-/// not propagated. This helper retrieves any stored error and includes it
-/// in the error context, making diagnosis easier.
-fn with_manifest_error_context<T>(world: &TestWorld, result: Result<T>) -> Result<T> {
-    if result.is_ok() {
-        return result;
-    }
-    if let Some(parse_err) = world.manifest_error.get() {
-        result.with_context(|| format!("manifest parse error: {parse_err}"))
-    } else {
-        result
-    }
-}
-
-fn get_string_from_string_or_list(value: &StringOrList, field_name: &str) -> Result<String> {
-    match value {
-        StringOrList::String(s) => Ok(s.clone()),
-        StringOrList::List(list) => {
-            ensure!(
-                list.len() == 1,
-                "Expected String or single-item List for {field_name}, got list of length {}",
-                list.len()
-            );
-            list.first()
-                .cloned()
-                .with_context(|| format!("{field_name} list unexpectedly empty"))
-        }
-        StringOrList::Empty => {
-            bail!("Expected String or single-item List for {field_name}, got empty value")
-        }
-    }
-}
-
-fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
-    match manifest::from_path(path.as_str()) {
-        Ok(manifest) => {
-            world.manifest.set_value(manifest);
-            world.manifest_error.clear();
-        }
-        Err(e) => {
-            world.manifest.clear_value();
-            world.manifest_error.set(display_error_chain(e.as_ref()));
-        }
-    }
-}
-
-fn assert_manifest(world: &TestWorld) -> Result<()> {
-    ensure!(
-        world.manifest.is_some(),
-        "manifest should have been parsed successfully"
-    );
-    Ok(())
-}
-
-fn assert_parsed(world: &TestWorld) -> Result<()> {
-    ensure!(
-        world.manifest.is_some() || world.manifest_error.is_filled(),
-        "manifest should have been parsed"
-    );
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------
 // Domain-specific typed assertion functions
@@ -97,15 +27,6 @@ struct FieldLocation {
 }
 
 impl FieldLocation {
-    /// Create a location without an index.
-    const fn new(context: &'static str, field: &'static str) -> Self {
-        Self {
-            context,
-            index: None,
-            field,
-        }
-    }
-
     /// Create a location with an index.
     const fn with_index(context: &'static str, index: usize, field: &'static str) -> Self {
         Self {
@@ -141,15 +62,7 @@ where
 /// Generates typed assertion wrapper functions around `assert_string_eq`.
 ///
 /// This macro reduces boilerplate for assertion functions that compare actual
-/// string values against expected typed values. Two variants are supported:
-///
-/// - `indexed`: For assertions that include an index (e.g., target N, macro N).
-///   Generates: `fn $name(index: usize, actual: &str, expected: &$type) -> Result<()>`
-///
-/// - `simple`: For assertions without an index (e.g., first rule, manifest).
-///   Generates: `fn $name(actual: &str, expected: &$type) -> Result<()>`
-///
-/// Both variants delegate to `assert_string_eq` with appropriate `FieldLocation`.
+/// string values against expected typed values.
 macro_rules! define_assertion {
     (indexed: $name:ident, $context:literal, $field:literal, $type:ty) => {
         fn $name(index: usize, actual: &str, expected: &$type) -> Result<()> {
@@ -160,11 +73,6 @@ macro_rules! define_assertion {
             )
         }
     };
-    (simple: $name:ident, $context:literal, $field:literal, $type:ty) => {
-        fn $name(actual: &str, expected: &$type) -> Result<()> {
-            assert_string_eq(FieldLocation::new($context, $field), actual, expected)
-        }
-    };
 }
 
 define_assertion!(indexed: assert_target_name_eq, "target", "name", TargetName);
@@ -172,8 +80,6 @@ define_assertion!(indexed: assert_target_command_eq, "target", "command", Comman
 define_assertion!(indexed: assert_target_script_eq, "target", "script", ScriptText);
 define_assertion!(indexed: assert_target_rule_eq, "target", "rule", RuleName);
 define_assertion!(indexed: assert_macro_signature_eq, "macro", "signature", MacroSignature);
-define_assertion!(simple: assert_rule_name_eq, "first rule", "name", RuleName);
-define_assertion!(simple: assert_version_eq, "manifest", "version", VersionString);
 
 fn assert_target_has_source(
     target_index: usize,
@@ -202,32 +108,16 @@ fn assert_target_has_order_only_dep(
         .with_context(|| format!("target {target_index} missing order-only dep '{expected}'"))
 }
 
-fn parse_env_token<I>(chars: &mut std::iter::Peekable<I>) -> String
-where
-    I: Iterator<Item = char>,
-{
-    chars.next();
-    let mut name = String::new();
-    for ch in chars.by_ref() {
-        if ch == '}' {
-            break;
-        }
-        name.push(ch);
+fn assert_list_contains(value: &StringOrList, expected: &str) -> Result<()> {
+    match value {
+        StringOrList::List(list) => ensure!(
+            list.iter().any(|entry| entry == expected),
+            "missing {expected}"
+        ),
+        StringOrList::String(s) => ensure!(s == expected, "expected '{expected}', got '{s}'"),
+        StringOrList::Empty => bail!("value is empty"),
     }
-    std::env::var(&name).unwrap_or_else(|_| ["${", &name, "}"].concat())
-}
-
-fn expand_env(raw: &str) -> String {
-    let mut out = String::new();
-    let mut chars = raw.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '$' && chars.peek() == Some(&'{') {
-            out.push_str(&parse_env_token(&mut chars));
-        } else {
-            out.push(c);
-        }
-    }
-    out
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -300,113 +190,9 @@ fn assert_macro_count(world: &TestWorld, expected: usize) -> Result<()> {
     Ok(())
 }
 
-fn assert_list_contains(value: &StringOrList, expected: &str) -> Result<()> {
-    match value {
-        StringOrList::List(list) => ensure!(
-            list.iter().any(|entry| entry == expected),
-            "missing {expected}"
-        ),
-        StringOrList::String(s) => ensure!(s == expected, "expected '{expected}', got '{s}'"),
-        StringOrList::Empty => bail!("value is empty"),
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
-// Given steps
+// Then steps - target assertions
 // ---------------------------------------------------------------------------
-
-#[given("the environment variable {key:string} is set to {value:string}")]
-fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
-    let key = EnvVarKey::new(key);
-    let value = EnvVarValue::new(value);
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
-    let expanded = expand_env(value.as_str());
-    let previous = set_var(key.as_str(), OsStr::new(&expanded));
-    world.track_env_var(key.into_string(), previous);
-    Ok(())
-}
-
-#[given("the environment variable {key:string} is unset")]
-fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
-    let key = EnvVarKey::new(key);
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
-    let previous = remove_var(key.as_str());
-    world.track_env_var(key.into_string(), previous);
-    Ok(())
-}
-
-#[given("the manifest file {path:string} is parsed")]
-fn given_parse_manifest(world: &TestWorld, path: &str) -> Result<()> {
-    let path = ManifestPath::new(path);
-    ensure!(
-        !path.as_str().trim().is_empty(),
-        "manifest path must not be an empty string"
-    );
-    parse_manifest_inner(world, &path);
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// When steps
-// ---------------------------------------------------------------------------
-
-#[when("the manifest file {path:string} is parsed")]
-fn when_parse_manifest(world: &TestWorld, path: &str) -> Result<()> {
-    let path = ManifestPath::new(path);
-    ensure!(
-        !path.as_str().trim().is_empty(),
-        "manifest path must not be an empty string"
-    );
-    parse_manifest_inner(world, &path);
-    Ok(())
-}
-
-#[when("the parsing result is checked")]
-fn when_parsing_result_checked(world: &TestWorld) -> Result<()> {
-    assert_parsed(world)
-}
-
-#[when("the manifest is checked")]
-fn when_manifest_checked(world: &TestWorld) -> Result<()> {
-    assert_manifest(world)
-}
-
-#[when("the version is checked")]
-fn when_version_checked(world: &TestWorld) -> Result<()> {
-    assert_manifest(world)
-}
-
-#[when("the flags are checked")]
-fn when_flags_checked(world: &TestWorld) -> Result<()> {
-    assert_manifest(world)
-}
-
-#[when("the rules are checked")]
-fn when_rules_checked(world: &TestWorld) -> Result<()> {
-    assert_manifest(world)
-}
-
-// ---------------------------------------------------------------------------
-// Then steps
-// ---------------------------------------------------------------------------
-
-#[then("the manifest version is {version:string}")]
-fn manifest_version(world: &TestWorld, version: &str) -> Result<()> {
-    let version = VersionString::new(version);
-    let actual = world
-        .manifest
-        .with_ref(|m| m.netsuke_version.to_string())
-        .context("manifest has not been parsed");
-    let actual = with_manifest_error_context(world, actual)?;
-    assert_version_eq(actual.as_str(), &version)
-}
 
 #[then("the first target name is {name:string}")]
 fn first_target_name(world: &TestWorld, name: &str) -> Result<()> {
@@ -437,56 +223,6 @@ fn target_not_phony(world: &TestWorld, index: usize) -> Result<()> {
 #[then("the target {index:usize} is not always rebuilt")]
 fn target_not_always(world: &TestWorld, index: usize) -> Result<()> {
     assert_target_always(world, index, false)
-}
-
-#[then("the first action is phony")]
-fn first_action_phony(world: &TestWorld) -> Result<()> {
-    let result = world.manifest.with_ref(|m| {
-        let first = m
-            .actions
-            .first()
-            .context("manifest does not contain any actions")?;
-        ensure!(first.phony, "expected first action to be marked phony");
-        Ok(())
-    });
-    with_manifest_error_context(world, result.context("manifest has not been parsed"))?
-}
-
-#[then("parsing the manifest fails")]
-fn manifest_parse_error(world: &TestWorld) -> Result<()> {
-    ensure!(
-        world.manifest_error.is_filled(),
-        "expected manifest parsing to record an error"
-    );
-    Ok(())
-}
-
-#[then("the error message contains {text:string}")]
-fn manifest_error_contains(world: &TestWorld, text: &str) -> Result<()> {
-    let text = ErrorPattern::new(text);
-    let msg = world
-        .manifest_error
-        .get()
-        .context("expected manifest parsing to produce an error")?;
-    ensure!(
-        msg.contains(text.as_str()),
-        "expected parse error to contain '{}', but was '{msg}'",
-        text
-    );
-    Ok(())
-}
-
-#[then("the first rule name is {name:string}")]
-fn first_rule_name(world: &TestWorld, name: &str) -> Result<()> {
-    let name = RuleName::new(name);
-    let result = world.manifest.with_ref(|m| {
-        let rule = m
-            .rules
-            .first()
-            .context("manifest does not contain any rules")?;
-        assert_rule_name_eq(rule.name.as_str(), &name)
-    });
-    with_manifest_error_context(world, result.context("manifest has not been parsed"))?
 }
 
 #[then("the first target command is {command:string}")]

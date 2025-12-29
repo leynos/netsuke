@@ -1,6 +1,7 @@
 //! Step definitions for CLI parsing scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::Parser;
@@ -15,10 +16,10 @@ use std::path::PathBuf;
 /// Apply CLI parsing, storing result or error in world state.
 fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let tokens = build_token_list(args);
-    match Cli::try_parse_from(tokens) {
-        Ok(cli) => handle_parse_success(world, cli),
-        Err(e) => handle_parse_error(world, e),
-    }
+    let outcome = Cli::try_parse_from(tokens)
+        .map(normalize_cli)
+        .map_err(|e| e.to_string());
+    store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 
 /// Get the CLI's network policy using `with_ref`.
@@ -65,22 +66,15 @@ fn build_token_list(args: &CliArgs) -> Vec<String> {
         .collect()
 }
 
-/// Handle successful CLI parsing by storing the result.
-fn handle_parse_success(world: &TestWorld, mut cli: Cli) {
+/// Normalise a parsed CLI by setting default command if missing.
+fn normalize_cli(mut cli: Cli) -> Cli {
     if cli.command.is_none() {
         cli.command = Some(Commands::Build(BuildArgs {
             emit: None,
             targets: Vec::new(),
         }));
     }
-    world.cli.set_value(cli);
-    world.cli_error.clear();
-}
-
-/// Handle CLI parsing error by storing the error message.
-fn handle_parse_error(world: &TestWorld, err: clap::Error) {
-    world.cli.clear_value();
-    world.cli_error.set(err.to_string());
+    cli
 }
 
 // ---------------------------------------------------------------------------
@@ -275,21 +269,9 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 // ---------------------------------------------------------------------------
 
 #[given("the CLI is parsed with {args:string}")]
-fn parse_cli_given(world: &TestWorld, args: &str) -> Result<()> {
-    let cli_args = CliArgs::new(args);
-    apply_cli(world, &cli_args);
-    Ok(())
-}
-
 #[when("the CLI is parsed with {args:string}")]
-fn parse_cli_when(world: &TestWorld, args: &str) -> Result<()> {
-    let cli_args = CliArgs::new(args);
-    apply_cli(world, &cli_args);
-    Ok(())
-}
-
 #[when("the CLI is parsed with invalid arguments {args:string}")]
-fn parse_cli_with_invalid_args(world: &TestWorld, args: &str) -> Result<()> {
+fn parse_cli(world: &TestWorld, args: &str) -> Result<()> {
     let cli_args = CliArgs::new(args);
     apply_cli(world, &cli_args);
     Ok(())

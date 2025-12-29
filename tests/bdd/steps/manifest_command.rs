@@ -1,6 +1,7 @@
 //! Step definitions for `netsuke manifest` behavioural tests.
 
 use crate::bdd::fixtures::TestWorld;
+use crate::bdd::helpers::assertions::assert_slot_contains;
 use crate::bdd::types::{DirectoryName, FileName, ManifestOutputPath, OutputFragment};
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
@@ -41,15 +42,7 @@ fn assert_output_contains(
     output_type: OutputType,
     fragment: &OutputFragment,
 ) -> Result<()> {
-    let content = output
-        .get()
-        .with_context(|| format!("no {output_type} captured from netsuke CLI process"))?;
-    ensure!(
-        content.contains(fragment.as_str()),
-        "expected {output_type} to contain '{}', got '{content}'",
-        fragment.as_str()
-    );
-    Ok(())
+    assert_slot_contains(output, fragment.as_str(), &output_type.to_string())
 }
 
 fn resolve_file_path(temp_path: &Path, name: &FileName) -> PathBuf {
