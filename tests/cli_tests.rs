@@ -13,7 +13,7 @@ use netsuke::stdlib::NetworkPolicyViolation;
 use ortho_config::{CliValueExtractor, MergeComposer, sanitize_value};
 use rstest::rstest;
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use url::Url;
 
 struct CliCase {
@@ -341,7 +341,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists() -> Result<()> {
     }));
     let merged = Cli::merge_from_layers(composer.layers())?;
     ensure!(
-        merged.file == PathBuf::from("Configfile"),
+        merged.file.as_path() == Path::new("Configfile"),
         "file layer should override defaults",
     );
     ensure!(merged.jobs == Some(4), "CLI layer should override jobs",);
