@@ -7,28 +7,38 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
 
-fn validate_label(label: &str, original: &str) -> Result<(), HostPatternError> {
-    if label.is_empty() {
-        return Err(HostPatternError::EmptyLabel {
-            pattern: original.to_owned(),
-        });
+struct ValidationContext<'a> {
+    original: &'a str,
+}
+
+impl<'a> ValidationContext<'a> {
+    const fn new(original: &'a str) -> Self {
+        Self { original }
     }
-    if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return Err(HostPatternError::InvalidCharacters {
-            pattern: original.to_owned(),
-        });
+
+    fn validate_label(&self, label: &str) -> Result<(), HostPatternError> {
+        if label.is_empty() {
+            return Err(HostPatternError::EmptyLabel {
+                pattern: self.original.to_owned(),
+            });
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(HostPatternError::InvalidCharacters {
+                pattern: self.original.to_owned(),
+            });
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(HostPatternError::InvalidLabelEdge {
+                pattern: self.original.to_owned(),
+            });
+        }
+        if label.len() > 63 {
+            return Err(HostPatternError::LabelTooLong {
+                pattern: self.original.to_owned(),
+            });
+        }
+        Ok(())
     }
-    if label.starts_with('-') || label.ends_with('-') {
-        return Err(HostPatternError::InvalidLabelEdge {
-            pattern: original.to_owned(),
-        });
-    }
-    if label.len() > 63 {
-        return Err(HostPatternError::LabelTooLong {
-            pattern: original.to_owned(),
-        });
-    }
-    Ok(())
 }
 
 /// Errors emitted when parsing host allowlist/blocklist patterns.
@@ -116,8 +126,9 @@ pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), Ho
 
     let normalised = host_body.to_ascii_lowercase();
     let mut total_len = 0usize;
+    let ctx = ValidationContext::new(trimmed);
     for (index, label) in normalised.split('.').enumerate() {
-        validate_label(label, trimmed)?;
+        ctx.validate_label(label)?;
         total_len += label.len() + usize::from(index > 0);
     }
     if total_len > 255 {

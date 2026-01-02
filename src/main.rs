@@ -3,7 +3,6 @@
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
 use netsuke::{cli, cli_localization, runner};
-use ortho_config::is_display_request;
 use std::ffi::OsString;
 use std::io;
 use std::process::ExitCode;
@@ -19,12 +18,7 @@ fn main() -> ExitCode {
 
     let (parsed_cli, matches) = match cli::parse_with_localizer_from(args, localizer.as_ref()) {
         Ok(parsed) => parsed,
-        Err(err) => {
-            if is_display_request(&err) {
-                err.exit();
-            }
-            err.exit();
-        }
+        Err(err) => err.exit(),
     };
 
     let merged_cli = match cli::merge_with_config(&parsed_cli, &matches) {

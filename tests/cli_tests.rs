@@ -6,15 +6,51 @@
 use anyhow::{Context, Result, bail, ensure};
 use clap::error::ErrorKind;
 use clap::{CommandFactory, FromArgMatches, Parser};
-use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::cli::{BuildArgs, Cli, Commands, locale_hint_from_args};
 use netsuke::cli_localization;
 use netsuke::host_pattern::HostPattern;
 use netsuke::stdlib::NetworkPolicyViolation;
 use ortho_config::{CliValueExtractor, MergeComposer, sanitize_value};
 use rstest::rstest;
 use serde_json::json;
+use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::path::{Path, PathBuf};
+use tempfile::tempdir;
 use url::Url;
+
+struct EnvGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvGuard {
+    fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+        let previous = std::env::var_os(key);
+        // SAFETY: Tests run in a single process and the guard restores values.
+        unsafe { std::env::set_var(key, value.as_ref()) };
+        Self { key, previous }
+    }
+
+    fn unset(key: &'static str) -> Self {
+        let previous = std::env::var_os(key);
+        // SAFETY: Tests run in a single process and the guard restores values.
+        unsafe { std::env::remove_var(key) };
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            // SAFETY: Restores the previous environment value for the test.
+            unsafe { std::env::set_var(self.key, previous) };
+        } else {
+            // SAFETY: Restores the previous environment state for the test.
+            unsafe { std::env::remove_var(self.key) };
+        }
+    }
+}
 
 struct CliCase {
     argv: Vec<&'static str>,
@@ -284,6 +320,65 @@ fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) 
     Ok(())
 }
 
+fn os_args(args: &[&str]) -> Vec<OsString> {
+    args.iter().map(|arg| OsString::from(*arg)).collect()
+}
+
+#[rstest]
+fn locale_hint_from_args_accepts_space_form() -> Result<()> {
+    let args = os_args(&["netsuke", "--locale", "es-ES"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.as_deref() == Some("es-ES"),
+        "expected Some(\"es-ES\"), got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn locale_hint_from_args_accepts_equals_form() -> Result<()> {
+    let args = os_args(&["netsuke", "--locale=es-ES"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.as_deref() == Some("es-ES"),
+        "expected Some(\"es-ES\"), got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn locale_hint_from_args_trailing_locale_flag_yields_none() -> Result<()> {
+    let args = os_args(&["netsuke", "--locale"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.is_none(),
+        "expected None for trailing --locale without value, got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn locale_hint_from_args_ignores_args_after_double_dash() -> Result<()> {
+    let args = os_args(&["netsuke", "--verbose", "--", "--locale", "es-ES"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.is_none(),
+        "expected None when --locale appears after \"--\", got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn locale_hint_from_args_uses_last_locale_flag() -> Result<()> {
+    let args = os_args(&["netsuke", "--locale", "es-ES", "--locale", "en-US"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.as_deref() == Some("en-US"),
+        "expected last --locale to win (\"en-US\"), got: {hint:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn cli_extract_user_provided_omits_defaults() -> Result<()> {
     let mut matches = Cli::command()
@@ -354,6 +449,39 @@ fn cli_merge_layers_respects_precedence_and_appends_lists() -> Result<()> {
         "file layer should populate locale when CLI does not override",
     );
     ensure!(merged.verbose, "CLI layer should set verbose");
+    Ok(())
+}
+
+#[rstest]
+fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Result<()> {
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    let config = r#"
+jobs = 2
+fetch_allow_scheme = ["https"]
+"#;
+    fs::write(&config_path, config).context("write netsuke.toml")?;
+
+    let _config_guard = EnvGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let _jobs_guard = EnvGuard::set("NETSUKE_JOBS", "4");
+    let _scheme_guard = EnvGuard::unset("NETSUKE_FETCH_ALLOW_SCHEME");
+
+    let localizer = cli_localization::build_localizer(None);
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], localizer.as_ref())
+        .context("parse CLI args for merge")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge CLI and configuration layers")?
+        .with_default_command();
+
+    ensure!(
+        merged.jobs == Some(4),
+        "environment variables should override config when CLI has no value",
+    );
+    ensure!(
+        merged.fetch_allow_scheme == vec!["https".to_owned()],
+        "config values should apply when CLI overrides are empty",
+    );
+
     Ok(())
 }
 

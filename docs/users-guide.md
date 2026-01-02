@@ -540,8 +540,8 @@ Windows application data directories, `$HOME/.config/netsuke`,
 `$HOME/.netsuke.toml`, and finally the project root.
 
 Environment variables use the `NETSUKE_` prefix (for example,
-`NETSUKE_JOBS=8`). Use `__` to separate nested keys if you need to match
-structured configuration.
+`NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
+configuration.
 
 Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localised CLI copy and
 error messages. Spanish (`es-ES`) is included as a reference translation;

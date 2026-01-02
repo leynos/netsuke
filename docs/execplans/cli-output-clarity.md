@@ -27,8 +27,8 @@ outputs and configuration precedence.
   plumbing.
 - [x] Refine user-facing CLI output and update docs.
 - [x] Add unit tests and rstest-bdd behavioural tests for happy/unhappy paths.
-- [x] (2026-01-02 00:00Z) Run formatting, lint, and test gates; update roadmap
-  entry to done.
+- [x] (2026-01-02 00:00Z) Run formatting, lint, and test gates; mark the
+  roadmap entry as done.
 
 ## Surprises & Discoveries
 
@@ -69,18 +69,19 @@ Key runtime entry points and CLI definitions live in these files:
   `tests/runner_tests.rs`, plus behavioural steps in `tests/bdd/steps/cli.rs`
   and `tests/bdd/steps/process.rs`.
 
-OrthoConfig is currently not wired in. The user guide for it is
+OrthoConfig is wired in. The user guide for it is
 `docs/ortho-config-users-guide.md`, which explains configuration layering,
 localised help via Fluent, and error localisation helpers. Design expectations
 for CLI behaviour are in `docs/netsuke-design.md` and the roadmap entry in
 `docs/roadmap.md` (Phase 3 → “CLI and Feature Completeness”).
 
-Testing guidance for fixtures, DI, and BDD lives in:
+Testing guidance for fixtures, dependency injection (DI), and behaviour-driven
+development (BDD) lives in:
 
 - `docs/rust-testing-with-rstest-fixtures.md`
 - `docs/reliable-testing-in-rust-via-dependency-injection.md`
 - `docs/behavioural-testing-in-rust-with-cucumber.md` (applies to Gherkin
-  structure, even though we use `rstest-bdd`)
+  structure, even though `rstest-bdd` is used instead)
 - `docs/rust-doctest-dry-guide.md` (for any new public API docs)
 
 ## Plan of Work
@@ -116,7 +117,7 @@ Testing guidance for fixtures, DI, and BDD lives in:
    action-oriented. Review `tracing::info!` messages for build/manifest/graph
    flows and update wording to align with the user guide. Ensure stderr/stdout
    separation remains correct and messages are consistent across subcommands.
-   If necessary, introduce a small output helper module to centralise user
+   If necessary, introduce a small output helper module to centralize user
    message formatting.
 
 5. Add tests. Extend unit tests in `tests/cli_tests.rs` with `rstest` fixtures

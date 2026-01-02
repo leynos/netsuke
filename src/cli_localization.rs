@@ -33,7 +33,7 @@ impl Localizer for LayeredLocalizer {
     }
 }
 
-fn parse_locale(locale: &str) -> Option<LanguageIdentifier> {
+fn parse_locale_identifier(locale: &str) -> Option<LanguageIdentifier> {
     LanguageIdentifier::from_str(locale).ok()
 }
 
@@ -67,7 +67,7 @@ pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     let Some(preferred) = preferred_locale else {
         return fallback;
     };
-    let Some(locale) = parse_locale(preferred) else {
+    let Some(locale) = parse_locale_identifier(preferred) else {
         return fallback;
     };
 
