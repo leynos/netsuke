@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use thiserror::Error;
 use url::Url;
 
-use crate::host_pattern::{HostPattern, HostPatternError};
+use crate::host_pattern::{HostCandidate, HostPattern, HostPatternError};
 
 /// Declarative allow- and deny-list policy for outbound network requests.
 ///
@@ -298,18 +298,18 @@ impl NetworkPolicy {
         if self
             .blocked_hosts
             .iter()
-            .any(|pattern| pattern.matches(host))
+            .any(|pattern| pattern.matches(HostCandidate(host)))
         {
             return Err(NetworkPolicyViolation::HostBlocked {
                 host: host.to_owned(),
             });
         }
 
-        if self
-            .allowed_hosts
-            .as_ref()
-            .is_some_and(|allowlist| !allowlist.iter().any(|pattern| pattern.matches(host)))
-        {
+        if self.allowed_hosts.as_ref().is_some_and(|allowlist| {
+            !allowlist
+                .iter()
+                .any(|pattern| pattern.matches(HostCandidate(host)))
+        }) {
             return Err(NetworkPolicyViolation::HostNotAllowlisted {
                 host: host.to_owned(),
             });

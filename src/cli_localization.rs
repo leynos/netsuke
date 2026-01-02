@@ -1,7 +1,7 @@
 //! Locale-aware helpers for CLI messaging.
 //!
 //! Provides Fluent-backed localizers with an English fallback and
-//! consumer-provided Spanish translations to validate localisation support.
+//! consumer-provided Spanish translations to validate localization support.
 
 use ortho_config::LanguageIdentifier;
 use ortho_config::{FluentLocalizer, FluentLocalizerBuilder, Localizer, NoOpLocalizer};
@@ -38,10 +38,13 @@ fn parse_locale_identifier(locale: &str) -> Option<LanguageIdentifier> {
 }
 
 fn build_en_localizer() -> Box<dyn Localizer> {
-    FluentLocalizer::with_en_us_defaults([NETSUKE_EN_US]).map_or_else(
-        |_| Box::new(NoOpLocalizer::new()) as Box<dyn Localizer>,
-        |localizer| Box::new(localizer) as Box<dyn Localizer>,
-    )
+    match FluentLocalizer::with_en_us_defaults([NETSUKE_EN_US]) {
+        Ok(localizer) => Box::new(localizer) as Box<dyn Localizer>,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to load default localization resources");
+            Box::new(NoOpLocalizer::new()) as Box<dyn Localizer>
+        }
+    }
 }
 
 fn build_consumer_localizer(

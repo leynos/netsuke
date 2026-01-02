@@ -485,7 +485,7 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
 
 - `-v, --verbose`: Enable verbose logging output.
 
-- `--locale <LOCALE>`: Localise CLI help and error messages (for example
+- `--locale <LOCALE>`: Localize CLI help and error messages (for example
   `en-US` or `es-ES`).
 
 ### Network Policy Options
@@ -527,7 +527,7 @@ policy is configured by these global options:
   the generated `build.ninja`, outputting DOT to stdout (suitable for
   Graphviz). Future versions may support other formats like `--html`.
 
-### Configuration and Localisation
+### Configuration and Localization
 
 Netsuke layers configuration in this order, with later entries overriding
 earlier ones: defaults, configuration files, environment variables, and
@@ -543,7 +543,7 @@ Environment variables use the `NETSUKE_` prefix (for example,
 `NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
 configuration.
 
-Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localised CLI copy and
+Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localized CLI copy and
 error messages. Spanish (`es-ES`) is included as a reference translation;
 unsupported locales fall back to English.
 

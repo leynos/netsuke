@@ -142,6 +142,8 @@ pub struct Cli {
     pub fetch_default_deny: bool,
 
     /// Optional subcommand to execute; defaults to `build` when omitted.
+    ///
+    /// `OrthoConfig` merging ignores this field; CLI parsing supplies it.
     #[serde(skip)]
     #[command(subcommand)]
     #[ortho_config(skip_cli)]
@@ -304,14 +306,14 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
     hint
 }
 
-/// Parse CLI arguments with localised clap output.
+/// Parse CLI arguments with localized clap output.
 ///
 /// Returns both the parsed CLI struct and the `ArgMatches` required for
 /// configuration merging.
 ///
 /// # Errors
 ///
-/// Returns a `clap::Error` with localisation applied when parsing fails.
+/// Returns a `clap::Error` with localization applied when parsing fails.
 pub fn parse_with_localizer_from<I, T>(
     iter: I,
     localizer: &dyn Localizer,
@@ -331,10 +333,12 @@ where
     Ok((cli, matches))
 }
 
+/// Return the prefixed environment provider for CLI configuration.
 fn env_provider() -> Env {
     Env::prefixed(ENV_PREFIX)
 }
 
+/// Build configuration discovery rooted in the optional working directory.
 fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
     let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
     if let Some(dir) = directory {
@@ -343,6 +347,7 @@ fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
     builder.build()
 }
 
+/// Return `true` when no CLI overrides were supplied.
 fn is_empty_value(value: &serde_json::Value) -> bool {
     matches!(value, serde_json::Value::Object(map) if map.is_empty())
 }

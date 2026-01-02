@@ -3,9 +3,6 @@
 //! This library provides the command line interface definitions and
 //! helper functions for parsing `Netsukefile` manifests.
 
-#[cfg(not(feature = "serde_json"))]
-compile_error!("The `serde_json` feature is required to build Netsuke.");
-
 pub mod ast;
 pub mod cli;
 pub mod cli_localization;

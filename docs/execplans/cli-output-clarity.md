@@ -1,4 +1,4 @@
-# Refine CLI Output With OrthoConfig Localised Help
+# Refine CLI Output With OrthoConfig Localized Help
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -11,7 +11,7 @@ No `PLANS.md` exists in the repository root at the time of writing.
 Users should see clear, descriptive CLI help and intuitive command feedback
 when running Netsuke. Configuration should be layered ergonomically via
 `ortho_config` so defaults, config files, environment variables, and CLI flags
-behave consistently. Localised help strings should be used for CLI usage and
+behave consistently. Localized help strings should be used for CLI usage and
 error output. Success is observable by running `netsuke --help`, subcommand
 help, and core commands (build, clean, graph, manifest) and seeing clear
 messages, plus passing the new unit and behavioural tests that assert these
@@ -23,7 +23,7 @@ outputs and configuration precedence.
   context.
 - [ ] Inventory current CLI output and help messages (help text, errors,
   subcommand feedback) and record gaps.
-- [x] Implement OrthoConfig-backed CLI configuration and localised help
+- [x] Implement OrthoConfig-backed CLI configuration and localized help
   plumbing.
 - [x] Refine user-facing CLI output and update docs.
 - [x] Add unit tests and rstest-bdd behavioural tests for happy/unhappy paths.
@@ -42,15 +42,15 @@ outputs and configuration precedence.
   absent. Rationale: Preserves deterministic precedence and avoids masking
   file/env values with clap defaults. Date/Author: 2026-01-02 (Codex)
 
-- Decision: Provide Fluent-backed localisation with English defaults and a
+- Decision: Provide Fluent-backed localization with English defaults and a
   Spanish catalogue layered as a consumer resource. Rationale: Validates
-  localised help/error support while keeping fallback behaviour intact.
+  localized help/error support while keeping fallback behaviour intact.
   Date/Author: 2026-01-02 (Codex)
 
 ## Outcomes & Retrospective
 
 - Outcome: Complete.
-  Notes: OrthoConfig configuration layering, localisation resources (including
+  Notes: OrthoConfig configuration layering, localization resources (including
   Spanish), updated CLI output, and tests are in place; `make check-fmt`,
   `make lint`, and `make test` now pass.
 
@@ -71,7 +71,7 @@ Key runtime entry points and CLI definitions live in these files:
 
 OrthoConfig is wired in. The user guide for it is
 `docs/ortho-config-users-guide.md`, which explains configuration layering,
-localised help via Fluent, and error localisation helpers. Design expectations
+localized help via Fluent, and error localization helpers. Design expectations
 for CLI behaviour are in `docs/netsuke-design.md` and the roadmap entry in
 `docs/roadmap.md` (Phase 3 → “CLI and Feature Completeness”).
 
@@ -106,11 +106,11 @@ development (BDD) lives in:
    not incorrectly override config layers (use `cli_default_as_absent` where
    needed).
 
-3. Localise CLI help and clap errors. Create Fluent resources (for example
+3. Localize CLI help and clap errors. Create Fluent resources (for example
    `locales/en-US/messages.ftl` and a CLI-specific bundle) and wire a
    `FluentLocalizer` into CLI parsing. Use `command().localize(&localizer)`
    before parsing and `localize_clap_error_with_command` on errors. Ensure the
-   fallback path preserves stock clap output when localisation fails.
+   fallback path preserves stock clap output when localization fails.
 
 4. Refine CLI output messages. Update docstrings and help text in
    `src/cli.rs` (or the new config module) to be plain language and
@@ -125,7 +125,7 @@ development (BDD) lives in:
 
    - OrthoConfig precedence (defaults < file < env < CLI), using
      `MergeComposer` or `compose_layers` to avoid touching process state.
-   - Localised help contains expected copy, and clap errors are localised when
+   - Localized help contains expected copy, and clap errors are localized when
      possible.
    - Unhappy paths (invalid schemes, invalid jobs count, missing required
      values) return the correct error kinds and messages.
@@ -137,7 +137,7 @@ development (BDD) lives in:
    unhappy path for help output and configuration layering.
 
 6. Documentation updates. Update `docs/users-guide.md` to explain the new
-   configuration layering, localised help, and any changes to CLI output.
+   configuration layering, localized help, and any changes to CLI output.
    Record design decisions in `docs/netsuke-design.md`. Mark the “Refine all
    CLI output…” item as done in `docs/roadmap.md` once tests pass.
 
@@ -155,7 +155,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
     cargo run -- graph --help 2>&1 | tee /tmp/netsuke-graph-help.log
     cargo run -- manifest --help 2>&1 | tee /tmp/netsuke-manifest-help.log
 
-2. Implement OrthoConfig integration and localisation. Update or add the
+2. Implement OrthoConfig integration and localization. Update or add the
    relevant files and ensure new Fluent resources exist.
 
 3. Update tests and docs.
@@ -176,10 +176,10 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 
 ## Validation and Acceptance
 
-- Running `netsuke --help` (via `cargo run -- --help`) prints localised,
+- Running `netsuke --help` (via `cargo run -- --help`) prints localized,
   plain-language descriptions for every flag and subcommand.
 - Subcommand help (`build`, `clean`, `graph`, `manifest`) is descriptive and
-  matches the user guide. Error output for invalid CLI inputs is localised when
+  matches the user guide. Error output for invalid CLI inputs is localized when
   a translation exists.
 - Configuration precedence is verified by unit tests: defaults < config file
   < environment variables < CLI overrides.
@@ -191,9 +191,9 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 
 ## Idempotence and Recovery
 
-- OrthoConfig and localisation changes are safe to re-run; regenerate
+- OrthoConfig and localization changes are safe to re-run; regenerate
   configuration layers and help output as often as needed.
-- If localisation setup fails, fall back to default clap strings and record
+- If localization setup fails, fall back to default clap strings and record
   the failure in `Surprises & Discoveries` with the error output.
 - If tests fail mid-run, fix the underlying issue and re-run the same command
   with the same log path, overwriting the log file to keep evidence current.
@@ -202,9 +202,9 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 
 Keep the following short transcripts for evidence:
 
-- `netsuke --help` output with localised strings (from
+- `netsuke --help` output with localized strings (from
   `/tmp/netsuke-help.log`).
-- A failing CLI invocation showing localised error output (record the command
+- A failing CLI invocation showing localized error output (record the command
   and a short excerpt of stderr).
 - Test summaries from `/tmp/netsuke-test.log` showing the new unit and BDD
   tests passing.
@@ -222,7 +222,7 @@ Keep the following short transcripts for evidence:
 - Use `FluentLocalizer` from `ortho_config` and wire it into clap command
   creation. Provide Fluent keys for usage, about, flag help, and
   `clap-error-<kind>` messages.
-- Ensure CLI parsing in `src/main.rs` uses the localiser and merges config
+- Ensure CLI parsing in `src/main.rs` uses the localizer and merges config
   layers before calling `runner::run`.
 - If a helper module is introduced (for example `src/cli_output.rs`), keep it
   small, with a single responsibility for formatting user-visible messages.
@@ -230,4 +230,4 @@ Keep the following short transcripts for evidence:
 ## Revision note (required when editing an ExecPlan)
 
 - 2026-01-02: Initial ExecPlan created to cover OrthoConfig integration,
-  localised help, CLI output clarity, and test/documentation updates.
+  localized help, CLI output clarity, and test/documentation updates.

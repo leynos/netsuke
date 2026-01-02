@@ -17,6 +17,7 @@ description = "A YAML-powered Ninja/Jinja hybrid build system."
 [features]
 default = ["serde_json"]
 legacy-digests = ["sha1", "md5"]
+# Required: OrthoConfig derive and core manifest types depend on serde_json.
 serde_json = ["ortho_config/serde_json"]
 
 [dependencies]

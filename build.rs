@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
-    const _: fn(&HostPattern, &str) -> bool = HostPattern::matches;
+    const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
 
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli.rs");
