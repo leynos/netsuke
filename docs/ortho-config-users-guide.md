@@ -48,17 +48,19 @@ values from multiple sources. The core features are:
 The workspace bundles an executable Hello World example under
 `examples/hello_world`. It layers defaults, environment variables, and CLI
 flags via the derive macro; see its [README](../examples/hello_world/README.md)
-for a step-by-step walkthrough and the Cucumber scenarios that validate
-behaviour end-to-end.
+for a step-by-step walkthrough and the `rstest-bdd` (Behaviour-Driven
+Development) scenarios that validate behaviour end-to-end.
 
 Run `make test` to execute the example’s coverage. The unit suite uses `rstest`
 fixtures to exercise parsing, validation, and command planning across
-parameterised edge-cases (conflicting delivery modes, blank salutations, and
-custom punctuation). Behavioural coverage comes from the `cucumber-rs` runner
-in `tests/cucumber.rs`, which spawns the compiled binary inside a temporary
-working directory, layers `.hello_world.toml` defaults via `cap-std`, and sets
-`HELLO_WORLD_*` environment variables per scenario to demonstrate precedence:
-configuration files < environment variables < CLI arguments.
+parameterized edge-cases (conflicting delivery modes, blank salutations, and
+custom punctuation). Behavioural coverage comes from the `rstest-bdd`
+integration test under `tests/rstest_bdd`, which spawns the compiled binary
+inside a temporary working directory, layers `.hello_world.toml` defaults via
+`cap-std`, and sets `HELLO_WORLD_*` environment variables per scenario to
+demonstrate precedence: configuration files < environment variables < CLI
+arguments. Scenarios tagged `@requires.yaml` are gated by compile-time tag
+filters, so non-`yaml` builds skip them automatically.
 
 `ConfigDiscovery` exposes the same search order used by the example so
 applications can replace bespoke path juggling with a single call. By default
@@ -138,13 +140,140 @@ fixtures for default payloads, then enumerate cases for file, environment, and
 CLI layers. This validates every precedence permutation without copy-pasting
 setup.
 
+Every derived configuration also exposes `compose_layers()` and
+`compose_layers_from_iter(..)`. These helpers discover configuration files,
+serialize environment variables, and capture CLI input as a `LayerComposition`,
+keeping discovery separate from merging. The returned composition includes both
+the ordered layers and any collected errors, letting callers push additional
+layers or aggregate errors before invoking `merge_from_layers`.
+
+### Post-merge hooks
+
+Some configuration structs require custom adjustments after the standard merge
+pipeline completes. The `PostMergeHook` trait provides an opt-in hook that the
+library invokes automatically when the `#[ortho_config(post_merge_hook)]`
+attribute is present.
+
+```rust
+use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_", post_merge_hook)]
+struct GreetArgs {
+    #[ortho_config(default = String::from("!"))]
+    punctuation: String,
+    preamble: Option<String>,
+}
+
+impl PostMergeHook for GreetArgs {
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        // Normalize whitespace-only preambles to None
+        if self.preamble.as_ref().is_some_and(|p| p.trim().is_empty()) {
+            self.preamble = None;
+        }
+        Ok(())
+    }
+}
+```
+
+The `PostMergeContext` provides metadata about the merge process:
+
+- `prefix()` – the environment variable prefix used during loading
+- `loaded_files()` – paths of configuration files that contributed to the merge
+- `has_cli_input()` – whether CLI arguments were present in the merge
+
+Use post-merge hooks sparingly. Most configuration needs are satisfied by the
+standard merge pipeline combined with field-level attributes like
+`cli_default_as_absent` and `merge_strategy`. Hooks are best suited for:
+
+- Normalizing values after all layers have been applied
+- Performing validation that depends on multiple fields being merged
+- Conditional transformations based on which sources contributed
+
+The Hello World example demonstrates this pattern with `GreetCommand`, which
+uses a post-merge hook to clean up whitespace-only preambles.
+
+### Localizing CLI copy
+
+`ortho_config` exposes a `Localizer` trait, so applications can swap the text
+`clap` displays without abandoning sensible defaults. Each implementation is
+`Send + Sync` and returns owned `String` instances, making it cheap to cache
+resolved messages or fall back to the stock help text. The helper type
+`LocalizationArgs<'a> = HashMap<&'a str, FluentValue<'a>>` mirrors Fluent’s
+placeholder model, keeping argument-aware lookups ergonomic.
+
+The crate now ships a Fluent-backed implementation. `FluentLocalizer` embeds an
+English catalogue at `locales/en-US/messages.ftl`, layers any consumer bundles
+over those defaults, logs formatting errors with `tracing`, and falls back to
+the next bundle when a lookup fails:
+
+```rust
+use ortho_config::{langid, FluentLocalizer, LocalizationArgs, Localizer};
+
+static APP_EN: &str = include_str!("../locales/en-US/app.ftl");
+
+let localizer = FluentLocalizer::builder(langid!("en-US"))
+    .with_consumer_resources([APP_EN])
+    .try_build()
+    .expect("embedded locales load successfully");
+
+let mut args: LocalizationArgs<'_> = LocalizationArgs::default();
+args.insert("binary", "demo".into());
+assert_eq!(
+localizer
+    .lookup("cli.usage", Some(&args))
+    .expect("usage copy exists"),
+    "Usage: demo [OPTIONS] <COMMAND>"
+);
+```
+
+Applications can inject a custom logger with `with_error_reporter` when they
+need to capture Fluent formatting errors alongside command parsing failures.
+
+The Hello World example ships `hello_world::localizer::DemoLocalizer`, which
+builds a `FluentLocalizer` from `examples/hello_world/locales/en-US` and drives
+`CommandLine::command().localize(&localizer)` and
+`CommandLine::try_parse_localized_env`. If the localization setup ever fails,
+the example falls back to `NoOpLocalizer`, preserving the stock `clap` strings
+until translations are fixed.
+
+Errors surfaced by `clap` can be localized as well. Use
+`localize_clap_error_with_command` to map each `ErrorKind` to a Fluent
+identifier of the form `clap-error-<kebab-case>`, forwarding argument context
+such as the missing flag or the offending value. Supplying the command enables
+the helper to populate missing context (for example, the available subcommands
+when `clap` emits `DisplayHelpOnMissingArgumentOrSubcommand`). When no
+translation exists, the helper returns the original `clap` error unchanged:
+
+```rust
+use clap::CommandFactory;
+use ortho_config::{localize_clap_error_with_command, Localizer};
+
+# #[derive(clap::Parser)]
+# struct Cli {}
+fn parse(localizer: &dyn Localizer) -> Result<Cli, clap::Error> {
+    let mut command = Cli::command().localize(localizer);
+    let mut matches = command
+        .try_get_matches()
+        .map_err(|err| {
+            localize_clap_error_with_command(err, localizer, Some(&command))
+        })?;
+
+    Cli::from_arg_matches_mut(&mut matches).map_err(|err| {
+        let err = err.with_cmd(&command);
+        localize_clap_error_with_command(err, localizer, Some(&command))
+    })
+}
+```
+
 ## Installation and dependencies
 
 Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
 
 ```toml
 [dependencies]
-ortho_config = "0.6.0"            # replace with the latest version
+ortho_config = "0.7.0"            # replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }    # required for CLI support
 ```
@@ -155,7 +284,7 @@ corresponding cargo features:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.6.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.7.0", features = ["json5", "yaml"] }
 # Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
 ```
 
@@ -255,6 +384,7 @@ Field attributes modify how a field is sourced or merged:
 | `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                             |
 | `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                |
 | `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
+| `cli_default_as_absent`     | Treats clap's `default_value_t` as absent during subcommand merging. File and environment values take precedence over clap defaults, while explicit CLI overrides still win.  |
 
 Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
@@ -646,14 +776,68 @@ Subcommands `pr` and `issue` load their defaults from the `cmds` namespace and
 environment variables. If the `reference` field is missing in the defaults, the
 tool continues using the CLI value instead of exiting with an error.
 
+### Merging a selected subcommand enum
+
+When the root CLI parses into a `Commands` enum, it is possible to derive
+`ortho_config_macros::SelectedSubcommandMerge` and import the
+`SelectedSubcommandMerge` trait from `ortho_config` to merge the selected
+variant in one call, instead of matching only to call `load_and_merge()` per
+branch.
+
+Variants that rely on `cli_default_as_absent` (because they use
+`default_value_t`) should be annotated with `#[ortho_subcommand(with_matches)]`
+so the merge can consult `ArgMatches` and treat clap defaults as absent.
+
+To load the global configuration and merge the selected subcommand in one
+expression, use `load_globals_and_merge_selected_subcommand` and supply a
+global loader as a closure.
+
+```rust
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use ortho_config::{SelectedSubcommandMerge, load_globals_and_merge_selected_subcommand};
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand, ortho_config_macros::SelectedSubcommandMerge)]
+enum Commands {
+    #[ortho_subcommand(with_matches)]
+    Greet(GreetArgs),
+    Run(RunArgs),
+}
+
+// Placeholder types for the example; real subcommands define fields and derive
+// `OrthoConfig`.
+struct GreetArgs;
+struct RunArgs;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+let mut cmd = Cli::command();
+let matches = cmd.get_matches();
+let cli = Cli::from_arg_matches(&matches)?;
+let (_globals, _merged) = load_globals_and_merge_selected_subcommand(
+    &matches,
+    cli.command,
+    || Ok::<_, std::io::Error>(()),
+)?;
+Ok(())
+}
+```
+
 ### Hello world walkthrough
 
 <https://github.com/leynos/ortho-config/tree/main/examples/hello_world>
 
 The `hello_world` example crate demonstrates these patterns in a compact
-setting. Global options such as `--recipient` or `--salutation` are parsed via
-`load_global_config`, which layers configuration files and environment
-variables beneath any CLI overrides. The `greet` subcommand adds optional
+setting. Global options such as `--recipient` or `--salutation` are resolved by
+`load_global_config`, which now reuses
+`HelloWorldCli::compose_layers_from_iter` to collect defaults, discovered files
+and environment variables before applying CLI overrides. When callers pass
+`-s/--salutation`, the helper clears earlier vector contributions, so CLI input
+replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
 combines switches and optional arguments (`--wave`, `--gift`,
@@ -661,7 +845,7 @@ combines switches and optional arguments (`--wave`, `--gift`,
 (`--preamble "Until next time"`, `--punctuation ?`) to describe how the
 farewell should unfold. Each subcommand struct derives `OrthoConfig` so
 defaults from `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
-`load_and_merge()` is called.
+`load_and_merge_selected()` is invoked on the derived `Commands` enum.
 
 Behavioural tests in `examples/hello_world/tests` exercise scenarios such as
 `hello_world greet --preamble "Good morning"` and running
@@ -678,6 +862,52 @@ by adjusting the recipient and salutation. The paired `scripts/demo.sh` and
 running `cargo run -p hello_world`, illustrating how file defaults, environment
 variables, and CLI arguments override one another without mutating the working
 tree.
+
+### Treating clap defaults as absent
+
+Non‑`Option` fields annotated with `#[arg(default_value_t = ...)]` normally
+override configuration files and environment variables because `clap` always
+populates them. The `cli_default_as_absent` attribute changes this behaviour:
+when the user does not explicitly provide a value on the command line, the
+field is excluded from the CLI layer so that file and environment values take
+precedence.
+
+Add the attribute alongside the matching `default` attribute:
+
+```rust
+#[derive(Parser, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "APP_")]
+struct GreetArgs {
+    #[arg(long, default_value_t = String::from("!"))]
+    #[ortho_config(default = String::from("!"), cli_default_as_absent)]
+    punctuation: String,
+}
+```
+
+**Precedence with the attribute (lowest to highest):**
+
+1. Struct default (`#[ortho_config(default = ...)]`)
+2. Configuration file
+3. Environment variable
+4. Explicit CLI override (e.g. `--punctuation "?"`)
+
+Without `cli_default_as_absent`, the clap default would always beat the file
+and environment layers. With the attribute, calling `greet` without
+`--punctuation` allows a `[cmds.greet] punctuation = "?"` file entry or
+`APP_CMDS_GREET_PUNCTUATION=?` environment variable to win.
+
+When using this attribute, pass the `ArgMatches` so the crate can inspect
+`value_source()`:
+
+```rust
+let matches = GreetArgs::command().get_matches();
+let cli = GreetArgs::from_arg_matches(&matches)?;
+let merged = cli.load_and_merge_with_matches(&matches)?;
+```
+
+Clap's `value_source()` uses argument IDs (the field identifier unless
+`#[arg(id = "...")]` overrides it). This behaviour requires the `serde_json`
+feature (enabled by default).
 
 ### Dispatching with `clap‑dispatch`
 
@@ -708,6 +938,37 @@ Missing required values:
   sample_value (use --sample-value, SAMPLE_VALUE, or file entry)
 ```
 
+### Preserving `clap` display exits
+
+When a user passes `--help` or `--version`, `clap` surfaces specialised
+`ErrorKind::DisplayHelp` / `DisplayVersion` errors so applications can print
+usage text and exit successfully. Deriving `OrthoConfig` often goes hand in
+hand with `Cli::try_parse()` so applications can map errors into their own
+types. Before performing that conversion, call
+`ortho_config::is_display_request` to detect these cases and delegate to
+`err.exit()`:
+
+```rust
+use clap::Parser;
+use ortho_config::{is_display_request, OrthoConfig};
+
+fn parse_cli() -> Result<MyCli, CliError> {
+    match MyCli::try_parse() {
+        Ok(cli) => Ok(cli),
+        Err(mut err) => {
+            if is_display_request(&err) {
+                err.exit();
+            }
+            Err(CliError::ArgumentParsing(err.into()))
+        }
+    }
+}
+```
+
+The `examples/hello_world` crate applies this pattern in `main.rs`. Behavioural
+tests assert that both `--help` and `--version` exit with code 0 so regressions
+are caught automatically.
+
 ### Aggregating multiple errors
 
 To return multiple errors in one go, use `OrthoError::aggregate`. It accepts
@@ -732,6 +993,25 @@ let err = OrthoError::aggregate(vec![
 ]);
 ```
 
+### Gathering vs Merge errors
+
+`OrthoConfig` distinguishes between two phases of configuration loading:
+
+- **Gathering** (`OrthoError::Gathering`): Errors that occur while reading
+  configuration sources (files, environment variables). These indicate problems
+  with the source data itself, such as malformed TOML or invalid JSON.
+
+- **Merge** (`OrthoError::Merge`): Errors that occur while combining layers and
+  deserializing the final configuration. These indicate incompatibilities
+  between the merged data and the target struct, such as type mismatches or
+  invalid field values.
+
+When deserializing the final merged configuration fails (for example, because a
+field has an invalid type after all layers are combined), the error is reported
+as `Merge`. This distinction helps diagnose whether an issue lies with a
+specific source file (Gathering) or with the combined result of all layers
+(Merge).
+
 ### Mapping errors ergonomically
 
 To reduce boiler‑plate when converting between error types, the crate exposes
@@ -741,6 +1021,9 @@ small extension traits:
   `OrthoResult<T>` when `E: Into<OrthoError>` (e.g., `serde_json::Error`).
 - `OrthoMergeExt::into_ortho_merge()` converts `Result<T, figment::Error>`
   into `OrthoResult<T>` as `OrthoError::Merge`.
+- `OrthoJsonMergeExt::into_ortho_merge_json()` converts
+  `Result<T, serde_json::Error>` into `OrthoResult<T>` as `OrthoError::Merge`,
+  preserving location information from the JSON parser.
 - `IntoFigmentError::into_figment()` converts `Arc<OrthoError>` (or
   `&Arc<OrthoError>`) into `figment::Error` for interop in tests or adapters,
   cloning the inner error to preserve structured details where possible.
