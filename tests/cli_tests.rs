@@ -4,12 +4,15 @@
 //! using `rstest` for parameterised coverage of success and error scenarios.
 
 use anyhow::{Context, Result, bail, ensure};
-use clap::Parser;
 use clap::error::ErrorKind;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::cli_localization;
 use netsuke::host_pattern::HostPattern;
 use netsuke::stdlib::NetworkPolicyViolation;
+use ortho_config::{CliValueExtractor, MergeComposer, sanitize_value};
 use rstest::rstest;
+use serde_json::json;
 use std::path::PathBuf;
 use url::Url;
 
@@ -19,6 +22,7 @@ struct CliCase {
     directory: Option<PathBuf>,
     jobs: Option<usize>,
     verbose: bool,
+    locale: Option<&'static str>,
     allow_scheme: Vec<String>,
     allow_host: Vec<&'static str>,
     block_host: Vec<&'static str>,
@@ -34,6 +38,7 @@ impl Default for CliCase {
             directory: None,
             jobs: None,
             verbose: false,
+            locale: None,
             allow_scheme: Vec::new(),
             allow_host: Vec::new(),
             block_host: Vec::new(),
@@ -62,6 +67,11 @@ impl Default for CliCase {
 #[case(CliCase {
     argv: vec!["netsuke", "--verbose"],
     verbose: true,
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--locale", "es-ES"],
+    locale: Some("es-ES"),
     ..CliCase::default()
 })]
 #[case(CliCase {
@@ -116,6 +126,10 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
     ensure!(
         cli.verbose == case.verbose,
         "verbose flag should match input",
+    );
+    ensure!(
+        cli.locale.as_deref() == case.locale,
+        "locale should match input",
     );
     ensure!(
         cli.fetch_allow_scheme == case.allow_scheme,
@@ -256,6 +270,7 @@ fn cli_network_policy_rejects_invalid_scheme() {
 #[case(vec!["netsuke", "-j", "notanumber"], ErrorKind::ValueValidation)]
 #[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
 #[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]
+#[case(vec!["netsuke", "--locale", "nope"], ErrorKind::ValueValidation)]
 fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) -> Result<()> {
     let err = Cli::try_parse_from(argv)
         .err()
@@ -265,6 +280,95 @@ fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) 
         "expected error kind {:?}, got {:?}",
         expected_error,
         err.kind()
+    );
+    Ok(())
+}
+
+#[rstest]
+fn cli_extract_user_provided_omits_defaults() -> Result<()> {
+    let mut matches = Cli::command()
+        .try_get_matches_from(["netsuke"])
+        .context("parse matches for default CLI")?;
+    let cli = Cli::from_arg_matches_mut(&mut matches).context("build CLI from matches")?;
+    let value = cli
+        .extract_user_provided(&matches)
+        .context("extract CLI overrides")?;
+    let object = value
+        .as_object()
+        .context("expected extracted CLI value to be an object")?;
+    ensure!(
+        !object.contains_key("file"),
+        "default file should not be treated as a CLI override",
+    );
+    ensure!(
+        !object.contains_key("verbose"),
+        "default verbose flag should not be treated as a CLI override",
+    );
+    ensure!(
+        !object.contains_key("fetch_default_deny"),
+        "default deny flag should not be treated as a CLI override",
+    );
+    Ok(())
+}
+
+#[rstest]
+fn cli_merge_layers_respects_precedence_and_appends_lists() -> Result<()> {
+    let mut composer = MergeComposer::new();
+    let mut defaults = sanitize_value(&Cli::default())?;
+    let defaults_object = defaults
+        .as_object_mut()
+        .context("defaults should be an object")?;
+    defaults_object.insert("jobs".to_owned(), json!(1));
+    defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
+    composer.push_defaults(defaults);
+    composer.push_file(
+        json!({
+            "file": "Configfile",
+            "jobs": 2,
+            "fetch_allow_scheme": ["http"],
+            "locale": "en-US"
+        }),
+        None,
+    );
+    composer.push_environment(json!({
+        "jobs": 3,
+        "fetch_allow_scheme": ["ftp"]
+    }));
+    composer.push_cli(json!({
+        "jobs": 4,
+        "fetch_allow_scheme": ["git"],
+        "verbose": true
+    }));
+    let merged = Cli::merge_from_layers(composer.layers())?;
+    ensure!(
+        merged.file == PathBuf::from("Configfile"),
+        "file layer should override defaults",
+    );
+    ensure!(merged.jobs == Some(4), "CLI layer should override jobs",);
+    ensure!(
+        merged.fetch_allow_scheme == vec!["https", "http", "ftp", "git"],
+        "list values should append in layer order",
+    );
+    ensure!(
+        merged.locale.as_deref() == Some("en-US"),
+        "file layer should populate locale when CLI does not override",
+    );
+    ensure!(merged.verbose, "CLI layer should set verbose");
+    Ok(())
+}
+
+#[rstest]
+fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
+    let localizer = cli_localization::build_localizer(Some("es-ES"));
+    let err = netsuke::cli::parse_with_localizer_from(
+        ["netsuke", "--locale", "es-ES", "unknown"],
+        localizer.as_ref(),
+    )
+    .err()
+    .context("parser should reject invalid subcommand")?;
+    ensure!(
+        err.to_string().contains("Subcomando desconocido"),
+        "expected Spanish localisation, got: {err}",
     );
     Ok(())
 }

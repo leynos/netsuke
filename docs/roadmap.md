@@ -184,7 +184,7 @@ library, and CLI ergonomics.
   - [x] Implement the graph subcommand by invoking `ninja -t graph` to output a
     DOT representation of the dependency graph.
 
-  - [ ] Refine all CLI output for clarity, ensuring help messages are
+  - [x] Refine all CLI output for clarity, ensuring help messages are
     descriptive and command feedback is intuitive.
 
   - [x] Implement the `manifest` subcommand to persist the generated Ninja file

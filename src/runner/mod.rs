@@ -119,6 +119,7 @@ pub fn run(cli: &Cli) -> Result<()> {
 ///     directory: None,
 ///     jobs: None,
 ///     verbose: false,
+///     locale: None,
 ///     fetch_allow_scheme: Vec::new(),
 ///     fetch_allow_host: Vec::new(),
 ///     fetch_block_host: Vec::new(),
@@ -169,7 +170,11 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
 fn handle_ninja_tool(cli: &Cli, tool: &str) -> Result<()> {
-    info!(target: "netsuke::subcommand", subcommand = tool, "Subcommand requested");
+    info!(
+        target: "netsuke::subcommand",
+        subcommand = tool,
+        "Preparing Ninja tool invocation"
+    );
     let ninja = generate_ninja(cli)?;
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
@@ -226,6 +231,7 @@ fn handle_graph(cli: &Cli) -> Result<()> {
 ///     directory: None,
 ///     jobs: None,
 ///     verbose: false,
+///     locale: None,
 ///     fetch_allow_scheme: Vec::new(),
 ///     fetch_allow_host: Vec::new(),
 ///     fetch_block_host: Vec::new(),
@@ -265,6 +271,7 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 ///     directory: None,
 ///     jobs: None,
 ///     verbose: false,
+///     locale: None,
 ///     fetch_allow_scheme: Vec::new(),
 ///     fetch_allow_host: Vec::new(),
 ///     fetch_block_host: Vec::new(),

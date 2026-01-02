@@ -1049,8 +1049,8 @@ Structural view of the which module and configuration wiring:
 ```mermaid
 classDiagram
     class StdlibConfig {
-        +workspace_root_path() -> Option<&Utf8Path>
-        +workspace_skip_dirs() -> &[String]
+        +workspace_root_path() -> OptionalPath
+        +workspace_skip_dirs() -> StringList
         +which_cache_capacity() -> NonZeroUsize
     }
 
@@ -1059,23 +1059,21 @@ classDiagram
     }
 
     class WhichModule {
-        +register(env: &mut Environment, config: WhichConfig)
+        +register(env: Environment, config: WhichConfig)
     }
 
     class WhichResolver {
-        -cache: Arc<Mutex<LruCache<CacheKey, CacheEntry>>>
-        -cwd_override: Option<Arc<Utf8PathBuf>>
+        -cache: LruCache
+        -cwd_override: OptionalPath
         -workspace_skips: WorkspaceSkipList
-        +new(cwd_override: Option<Arc<Utf8PathBuf>>,
-             skips: WorkspaceSkipList,
-             cache_capacity: NonZeroUsize) -> Result<WhichResolver, Error>
-        +resolve(command: &str, options: &WhichOptions) -> Result<Vec<Utf8PathBuf>, Error>
+        +new(cwd_override: OptionalPath, skips: WorkspaceSkipList, cache_capacity: NonZeroUsize) -> Result
+        +resolve(command: String, options: WhichOptions) -> Result
     }
 
     class EnvSnapshot {
         +cwd: Utf8PathBuf
-        +raw_path: Option<OsString>
-        +capture(cwd_override: Option<&Utf8Path>) -> Result<EnvSnapshot, Error>
+        +raw_path: OptionalString
+        +capture(cwd_override: OptionalPath) -> Result
     }
 
     class WhichOptions {
@@ -1086,14 +1084,12 @@ classDiagram
     }
 
     class WhichConfig {
-        +new(cwd_override: Option<Arc<Utf8PathBuf>>,
-             skips: WorkspaceSkipList,
-             cache_capacity: NonZeroUsize) -> WhichConfig
+        +new(cwd_override: OptionalPath, skips: WorkspaceSkipList, cache_capacity: NonZeroUsize) -> WhichConfig
     }
 
     class WorkspaceSkipList {
         +default() -> WorkspaceSkipList
-        +from_names(names: IntoIterator<Item = impl AsRef<str>>) -> WorkspaceSkipList
+        +from_names(names: StringList) -> WorkspaceSkipList
     }
 
     class CwdMode {
@@ -2014,18 +2010,25 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The CLI is implemented using clap's derive API in `src/cli.rs`. Clap's
-`default_value_t` attribute marks `Build` as the default subcommand, so
-invoking `netsuke` with no explicit command still triggers a build. CLI
-execution and dispatch live in `src/runner.rs`, keeping `main.rs` focused on
-parsing. Process management, Ninja invocation, argument redaction, and the
-temporary file helpers reside in `src/runner/process.rs`, allowing the runner
-entry point to delegate low-level concerns. The working directory flag mirrors
-Ninja's `-C` option but is resolved internally: Netsuke runs Ninja with a
-configured working directory and resolves relative output paths (for example
-`build --emit` and `manifest`) under the same directory so behaviour matches a
-real directory change. Error scenarios are validated using clap's `ErrorKind`
-enumeration in unit tests and via Cucumber steps for behavioural coverage.
+The CLI is implemented using clap's derive API in `src/cli.rs`. Netsuke applies
+`Cli::with_default_command` after parsing so invoking `netsuke` with no
+explicit command still triggers a build. Configuration is layered with
+OrthoConfig (defaults, configuration files, environment variables, then CLI
+overrides) while treating clap defaults as absent so file or environment values
+are not masked. Configuration discovery honours `NETSUKE_CONFIG_PATH` and the
+standard OrthoConfig search order; environment variables use the `NETSUKE_`
+prefix with `__` as a nesting separator. CLI help and clap errors are localised
+via Fluent resources; `--locale` or `NETSUKE_LOCALE` selects the locale, and
+English plus Spanish catalogues ship in `locales/`. CLI execution and dispatch
+live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
+management, Ninja invocation, argument redaction, and the temporary file
+helpers reside in `src/runner/process.rs`, allowing the runner entry point to
+delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
+option but is resolved internally: Netsuke runs Ninja with a configured working
+directory and resolves relative output paths (for example `build --emit` and
+`manifest`) under the same directory so behaviour matches a real directory
+change. Error scenarios are validated using clap's `ErrorKind` enumeration in
+unit tests and via Cucumber steps for behavioural coverage.
 
 The Ninja executable may be overridden via the `NINJA_ENV` environment
 variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces

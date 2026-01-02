@@ -23,11 +23,12 @@ outputs and configuration precedence.
   context.
 - [ ] Inventory current CLI output and help messages (help text, errors,
   subcommand feedback) and record gaps.
-- [ ] Implement OrthoConfig-backed CLI configuration and localised help
+- [x] Implement OrthoConfig-backed CLI configuration and localised help
   plumbing.
-- [ ] Refine user-facing CLI output and update docs.
-- [ ] Add unit tests and rstest-bdd behavioural tests for happy/unhappy paths.
-- [ ] Run formatting, lint, and test gates; update roadmap entry to done.
+- [x] Refine user-facing CLI output and update docs.
+- [x] Add unit tests and rstest-bdd behavioural tests for happy/unhappy paths.
+- [x] (2026-01-02 00:00Z) Run formatting, lint, and test gates; update roadmap
+  entry to done.
 
 ## Surprises & Discoveries
 
@@ -36,14 +37,22 @@ outputs and configuration precedence.
 
 ## Decision Log
 
-- Decision: (pending)
-  Rationale: (pending)
-  Date/Author: (pending)
+- Decision: Use OrthoConfig merge composition to layer defaults, config files,
+  environment variables, and CLI overrides while treating clap defaults as
+  absent. Rationale: Preserves deterministic precedence and avoids masking
+  file/env values with clap defaults. Date/Author: 2026-01-02 (Codex)
+
+- Decision: Provide Fluent-backed localisation with English defaults and a
+  Spanish catalogue layered as a consumer resource. Rationale: Validates
+  localised help/error support while keeping fallback behaviour intact.
+  Date/Author: 2026-01-02 (Codex)
 
 ## Outcomes & Retrospective
 
-- Outcome: Not started.
-  Notes: Initial plan captured; implementation pending.
+- Outcome: Complete.
+  Notes: OrthoConfig configuration layering, localisation resources (including
+  Spanish), updated CLI output, and tests are in place; `make check-fmt`,
+  `make lint`, and `make test` now pass.
 
 ## Context and Orientation
 
@@ -57,8 +66,8 @@ Key runtime entry points and CLI definitions live in these files:
   and user-visible status logs.
 - `src/cli_policy.rs` derives network policy from CLI settings.
 - Tests cover CLI parsing and runner behaviour in `tests/cli_tests.rs` and
-  `tests/runner_tests.rs`, plus behavioural steps in
-  `tests/bdd/steps/cli.rs` and `tests/bdd/steps/process.rs`.
+  `tests/runner_tests.rs`, plus behavioural steps in `tests/bdd/steps/cli.rs`
+  and `tests/bdd/steps/process.rs`.
 
 OrthoConfig is currently not wired in. The user guide for it is
 `docs/ortho-config-users-guide.md`, which explains configuration layering,
@@ -80,20 +89,21 @@ Testing guidance for fixtures, DI, and BDD lives in:
    root command and each subcommand, plus error messages from invalid flags and
    missing values. Review `tracing` info logs emitted by
    `src/runner/process/mod.rs` and `src/runner/mod.rs` to identify copy that
-   needs to be clarified. Document gaps in `Surprises & Discoveries` and
-   update `Decision Log` if scope changes.
+   needs to be clarified. Document gaps in `Surprises & Discoveries` and update
+   `Decision Log` if scope changes.
 
 2. Introduce an OrthoConfig-backed configuration layer for CLI data. Add a
    new module (for example `src/cli_config.rs`) that defines `CliConfig` and
-   subcommand argument structs using `#[derive(OrthoConfig, Deserialize,
-   Serialize, Parser)]` (or the equivalent pattern in the guide). Configure a
-   prefix such as `NETSUKE` and ensure fields map to orthographic CLI flags,
-   env vars, and config file keys. Use OrthoConfig helpers (`ConfigDiscovery`,
-   `compose_layers`, `merge_from_layers`, or `SubcmdConfigMerge`) so
-   configuration files and environment variables are layered beneath explicit
-   CLI overrides. Add explicit handling for missing required values and make
-   sure clap defaults do not incorrectly override config layers (use
-   `cli_default_as_absent` where needed).
+   subcommand argument structs using
+   `#[derive(OrthoConfig, Deserialize, Serialize, Parser)]` (or the equivalent
+   pattern in the guide). Configure a prefix such as `NETSUKE` and ensure
+   fields map to orthographic CLI flags, env vars, and config file keys. Use
+   OrthoConfig helpers (`ConfigDiscovery`, `compose_layers`,
+   `merge_from_layers`, or `SubcmdConfigMerge`) so configuration files and
+   environment variables are layered beneath explicit CLI overrides. Add
+   explicit handling for missing required values and make sure clap defaults do
+   not incorrectly override config layers (use `cli_default_as_absent` where
+   needed).
 
 3. Localise CLI help and clap errors. Create Fluent resources (for example
    `locales/en-US/messages.ftl` and a CLI-specific bundle) and wire a
@@ -168,8 +178,8 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 - Running `netsuke --help` (via `cargo run -- --help`) prints localised,
   plain-language descriptions for every flag and subcommand.
 - Subcommand help (`build`, `clean`, `graph`, `manifest`) is descriptive and
-  matches the user guide. Error output for invalid CLI inputs is localised
-  when a translation exists.
+  matches the user guide. Error output for invalid CLI inputs is localised when
+  a translation exists.
 - Configuration precedence is verified by unit tests: defaults < config file
   < environment variables < CLI overrides.
 - Behavioural tests exercise at least one happy path and one unhappy path that
@@ -206,8 +216,8 @@ Keep the following short transcripts for evidence:
 - Define `CliConfig` in `src/cli_config.rs` (or equivalent) with fields that
   map to existing CLI flags: `file`, `directory`, `jobs`, `verbose`,
   `fetch_allow_scheme`, `fetch_allow_host`, `fetch_block_host`,
-  `fetch_default_deny`, plus subcommand args. Ensure `#[ortho_config(prefix =
-  "NETSUKE")]` is used for orthographic naming.
+  `fetch_default_deny`, plus subcommand args. Ensure
+  `#[ortho_config(prefix = "NETSUKE")]` is used for orthographic naming.
 - Use `FluentLocalizer` from `ortho_config` and wire it into clap command
   creation. Provide Fluent keys for usage, about, flag help, and
   `clap-error-<kind>` messages.

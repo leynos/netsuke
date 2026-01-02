@@ -31,7 +31,7 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
         handle.flush().context("flush temp ninja file")?;
         handle.sync_all().context("sync temp ninja file")?;
     }
-    info!("Generated temporary Ninja file at {}", tmp.path().display());
+    info!("Wrote temporary Ninja file to {}", tmp.path().display());
     Ok(tmp)
 }
 
@@ -84,7 +84,7 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
         Utf8Path::from_path(path).ok_or_else(|| anyhow!("non-UTF-8 path is not supported"))?;
     let (dir, relative) = derive_dir_and_relative(utf8_path)?;
     write_ninja_file_utf8(&dir, &relative, content)?;
-    info!("Generated Ninja file at {utf8_path}");
+    info!("Wrote Ninja file to {utf8_path}");
     Ok(())
 }
 

@@ -3,6 +3,8 @@
 //! The module centralises normalisation and matching logic so CLI parsing and
 //! runtime policy evaluation agree on allowable host syntax.
 
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use thiserror::Error;
 
 fn validate_label(label: &str, original: &str) -> Result<(), HostPatternError> {
@@ -177,6 +179,38 @@ impl TryFrom<String> for HostPattern {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::parse(&value)
+    }
+}
+
+impl FromStr for HostPattern {
+    type Err = HostPatternError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl Serialize for HostPattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let text = if self.wildcard {
+            format!("*.{}", self.pattern)
+        } else {
+            self.pattern.clone()
+        };
+        serializer.serialize_str(&text)
+    }
+}
+
+impl<'de> Deserialize<'de> for HostPattern {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let text = String::deserialize(deserializer)?;
+        Self::parse(&text).map_err(serde::de::Error::custom)
     }
 }
 

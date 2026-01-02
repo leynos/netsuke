@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.89.0"
 include = [
     "src/**",
+    "locales/**",
     "Cargo.toml",
     "README.md",
     "LICENSE",
@@ -14,8 +15,9 @@ license = "ISC"
 description = "A YAML-powered Ninja/Jinja hybrid build system."
 
 [features]
-default = []
+default = ["serde_json"]
 legacy-digests = ["sha1", "md5"]
+serde_json = ["ortho_config/serde_json"]
 
 [dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
@@ -50,10 +52,14 @@ time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "ser
 ureq = { version = "2.10.5" }
 wait-timeout = "0.2"
 url = "^2.5.0"
+ortho_config = "0.7.0"
 
 [build-dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 clap_mangen = "0.2.29"
+ortho_config = "0.7.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "1"
 time = { version = "0.3.44", features = ["formatting"] }
 
