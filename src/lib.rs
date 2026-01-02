@@ -5,6 +5,7 @@
 
 pub mod ast;
 pub mod cli;
+mod cli_l10n;
 pub mod cli_localization;
 mod cli_policy;
 pub(crate) mod diagnostics;

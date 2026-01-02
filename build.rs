@@ -15,6 +15,9 @@ const FALLBACK_DATE: &str = "1970-01-01";
 #[path = "src/cli.rs"]
 mod cli;
 
+#[path = "src/cli_l10n.rs"]
+mod cli_l10n;
+
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
