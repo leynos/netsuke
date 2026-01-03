@@ -1,4 +1,7 @@
 //! Configuration merge tests.
+//!
+//! These tests validate OrthoConfig layer precedence (defaults, file, env,
+//! CLI), list-value appending, and user-provided override extraction.
 
 use anyhow::{Context, Result, ensure};
 use clap::{CommandFactory, FromArgMatches};

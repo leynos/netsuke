@@ -265,6 +265,8 @@ fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
 }
 
 /// Return `true` when no CLI overrides were supplied.
+///
+/// The merge pipeline treats an empty JSON object as "no overrides".
 fn is_empty_value(value: &serde_json::Value) -> bool {
     matches!(value, serde_json::Value::Object(map) if map.is_empty())
 }

@@ -72,8 +72,9 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Exercise the host pattern symbols so the shared module remains linked
-    // when the build script is compiled without tests.
+    // Exercise CLI localisation, config merge, and host pattern symbols so the
+    // shared modules remain linked when the build script is compiled without
+    // tests.
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
