@@ -1,13 +1,12 @@
 //! Configuration merge tests.
 //!
 //! These tests validate OrthoConfig layer precedence (defaults, file, env,
-//! CLI), list-value appending, and user-provided override extraction.
+//! CLI) and list-value appending.
 
 use anyhow::{Context, Result, ensure};
-use clap::{CommandFactory, FromArgMatches};
 use netsuke::cli::Cli;
 use netsuke::cli_localization;
-use ortho_config::{CliValueExtractor, MergeComposer, sanitize_value};
+use ortho_config::{MergeComposer, sanitize_value};
 use rstest::rstest;
 use serde_json::json;
 use std::ffi::OsStr;
@@ -15,33 +14,6 @@ use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
-
-#[rstest]
-fn cli_extract_user_provided_omits_defaults() -> Result<()> {
-    let mut matches = Cli::command()
-        .try_get_matches_from(["netsuke"])
-        .context("parse matches for default CLI")?;
-    let cli = Cli::from_arg_matches_mut(&mut matches).context("build CLI from matches")?;
-    let value = cli
-        .extract_user_provided(&matches)
-        .context("extract CLI overrides")?;
-    let object = value
-        .as_object()
-        .context("expected extracted CLI value to be an object")?;
-    ensure!(
-        !object.contains_key("file"),
-        "default file should not be treated as a CLI override",
-    );
-    ensure!(
-        !object.contains_key("verbose"),
-        "default verbose flag should not be treated as a CLI override",
-    );
-    ensure!(
-        !object.contains_key("fetch_default_deny"),
-        "default deny flag should not be treated as a CLI override",
-    );
-    Ok(())
-}
 
 #[rstest]
 fn cli_merge_layers_respects_precedence_and_appends_lists() -> Result<()> {
@@ -95,8 +67,11 @@ fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Resu
     let temp_dir = tempdir().context("create temporary config directory")?;
     let config_path = temp_dir.path().join("netsuke.toml");
     let config = r#"
+file = "Configfile"
 jobs = 2
 fetch_allow_scheme = ["https"]
+verbose = true
+fetch_default_deny = true
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
@@ -111,6 +86,18 @@ fetch_allow_scheme = ["https"]
         .context("merge CLI and configuration layers")?
         .with_default_command();
 
+    ensure!(
+        merged.file.as_path() == Path::new("Configfile"),
+        "config file should override the default manifest path",
+    );
+    ensure!(
+        merged.verbose,
+        "config file should override the default verbose flag",
+    );
+    ensure!(
+        merged.fetch_default_deny,
+        "config file should override the default deny flag",
+    );
     ensure!(
         merged.jobs == Some(4),
         "environment variables should override config when CLI has no value",

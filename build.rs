@@ -72,7 +72,7 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Exercise CLI localisation, config merge, and host pattern symbols so the
+    // Exercise CLI localization, config merge, and host pattern symbols so the
     // shared modules remain linked when the build script is compiled without
     // tests.
     const _: usize = std::mem::size_of::<HostPattern>();

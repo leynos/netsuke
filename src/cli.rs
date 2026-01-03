@@ -3,6 +3,7 @@
 //! This module defines the [`Cli`] structure and its subcommands.
 //! It mirrors the design described in `docs/netsuke-design.md`.
 
+use clap::parser::ValueSource;
 use clap::{ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ortho_config::LanguageIdentifier;
 use ortho_config::declarative::LayerComposition;
@@ -10,13 +11,14 @@ use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::localize_clap_error_with_command;
 use ortho_config::uncased::Uncased;
 use ortho_config::{
-    CliValueExtractor, ConfigDiscovery, Localizer, MergeComposer, OrthoConfig, OrthoMergeExt,
-    OrthoResult, sanitize_value,
+    ConfigDiscovery, Localizer, MergeComposer, OrthoConfig, OrthoMergeExt, OrthoResult,
+    sanitize_value,
 };
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 
 pub use crate::cli_l10n::locale_hint_from_args;
 use crate::cli_l10n::localize_command;
@@ -64,7 +66,7 @@ fn parse_locale(s: &str) -> Result<String, String> {
     }
     LanguageIdentifier::from_str(trimmed)
         .map(|_| trimmed.to_owned())
-        .map_err(|_| format!("invalid locale '{s}'"))
+        .map_err(|_| format!("invalid locale '{trimmed}'"))
 }
 
 /// Parse a host pattern supplied via CLI flags.
@@ -83,7 +85,7 @@ fn parse_host_pattern(s: &str) -> Result<HostPattern, String> {
 pub struct Cli {
     /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
-    #[ortho_config(default = default_manifest_path(), cli_default_as_absent)]
+    #[ortho_config(default = default_manifest_path())]
     pub file: PathBuf,
 
     /// Run as if started in this directory.
@@ -100,7 +102,7 @@ pub struct Cli {
 
     /// Enable verbose diagnostic logging.
     #[arg(short, long)]
-    #[ortho_config(default = false, cli_default_as_absent)]
+    #[ortho_config(default = false)]
     pub verbose: bool,
 
     /// Locale tag for CLI copy (for example: en-US, es-ES).
@@ -140,7 +142,7 @@ pub struct Cli {
 
     /// Deny all hosts by default; only allow the declared allowlist.
     #[arg(long = "fetch-default-deny")]
-    #[ortho_config(default = false, cli_default_as_absent)]
+    #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
 
     /// Optional subcommand to execute; defaults to `build` when omitted.
@@ -219,6 +221,7 @@ pub enum Commands {
     },
 }
 
+/// Return the default manifest filename when none is provided.
 fn default_manifest_path() -> PathBuf {
     PathBuf::from("Netsukefile")
 }
@@ -271,6 +274,37 @@ fn is_empty_value(value: &serde_json::Value) -> bool {
     matches!(value, serde_json::Value::Object(map) if map.is_empty())
 }
 
+fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<serde_json::Value> {
+    let value = sanitize_value(cli)?;
+    let mut map = match value {
+        serde_json::Value::Object(map) => map,
+        other => {
+            return Err(Arc::new(ortho_config::OrthoError::Validation {
+                key: String::from("cli"),
+                message: format!(
+                    "expected parsed CLI values to serialize to an object, got {other:?}",
+                ),
+            }));
+        }
+    };
+
+    map.remove("command");
+    for field in [
+        "file",
+        "verbose",
+        "fetch_default_deny",
+        "fetch_allow_scheme",
+        "fetch_allow_host",
+        "fetch_block_host",
+    ] {
+        if matches.value_source(field) != Some(ValueSource::CommandLine) {
+            map.remove(field);
+        }
+    }
+
+    Ok(serde_json::Value::Object(map))
+}
+
 /// Merge configuration layers over the parsed CLI values.
 ///
 /// # Errors
@@ -308,7 +342,7 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
         Err(err) => errors.push(err),
     }
 
-    match cli.extract_user_provided(matches) {
+    match cli_overrides_from_matches(cli, matches) {
         Ok(value) if !is_empty_value(&value) => composer.push_cli(value),
         Ok(_) => {}
         Err(err) => errors.push(err),

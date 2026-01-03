@@ -64,6 +64,8 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
 }
 
 /// Inspect raw arguments and extract the `--locale` value when present.
+///
+/// When multiple `--locale` flags are provided, the last one is used.
 #[must_use]
 pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
     let mut hint = None;
