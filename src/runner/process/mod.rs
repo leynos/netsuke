@@ -123,7 +123,7 @@ fn log_command_execution(cmd: &Command) {
     let redacted_args = redact_sensitive_args(&args);
     let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
     info!(
-        "Running command: {} {}",
+        "Executing command: {} {}",
         program_display,
         arg_strings.join(" ")
     );

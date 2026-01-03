@@ -1,9 +1,11 @@
 //! Build script: generate the CLI manual page into target/generated-man/<target>/<profile> for
 //! release packaging.
-use clap::CommandFactory;
+use clap::{ArgMatches, CommandFactory};
 use clap_mangen::Man;
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     path::{Path, PathBuf},
 };
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
@@ -13,10 +15,16 @@ const FALLBACK_DATE: &str = "1970-01-01";
 #[path = "src/cli.rs"]
 mod cli;
 
+#[path = "src/cli_l10n.rs"]
+mod cli_l10n;
+
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
 use host_pattern::{HostPattern, HostPatternError};
+
+type LocalizedParseFn =
+    fn(Vec<OsString>, &dyn ortho_config::Localizer) -> Result<(cli::Cli, ArgMatches), clap::Error>;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -64,11 +72,16 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Exercise the host pattern symbols so the shared module remains linked
-    // when the build script is compiled without tests.
+    // Exercise CLI localization, config merge, and host pattern symbols so the
+    // shared modules remain linked when the build script is compiled without
+    // tests.
     const _: usize = std::mem::size_of::<HostPattern>();
-    let _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
-    let _: fn(&HostPattern, &str) -> bool = HostPattern::matches;
+    const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
+    const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
+        cli::merge_with_config;
+    const _: LocalizedParseFn = cli::parse_with_localizer_from;
+    const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
+    const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
 
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli.rs");

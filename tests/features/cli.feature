@@ -50,7 +50,12 @@ Feature: CLI parsing
   Scenario: Unknown command fails
     When the CLI is parsed with invalid arguments "unknown"
     Then an error should be returned
-    And the error message should contain "unknown"
+    And the error message should contain "Unknown subcommand"
+
+  Scenario: Unknown command is localised in Spanish
+    When the CLI is parsed with invalid arguments "--locale es-ES unknown"
+    Then an error should be returned
+    And the error message should contain "Subcomando desconocido"
 
   Scenario: Missing file argument value
     When the CLI is parsed with invalid arguments "--file"

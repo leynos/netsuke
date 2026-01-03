@@ -19,6 +19,7 @@ impl Cli {
     ///
     /// let cli = Cli {
     ///     fetch_allow_scheme: vec!["http".into()],
+    ///     locale: None,
     ///     ..Cli::default()
     /// };
     /// let policy = cli.network_policy().expect("policy");
@@ -33,6 +34,7 @@ impl Cli {
     /// let cli = Cli {
     ///     fetch_allow_scheme: vec![String::from("http?")],
     ///     fetch_allow_host: vec![HostPattern::parse("example.com").expect("parse host")],
+    ///     locale: None,
     ///     ..Cli::default()
     /// };
     /// let err = cli

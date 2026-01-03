@@ -8,9 +8,10 @@ use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, bail, ensure};
-use clap::Parser;
-use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::cli::{Cli, Commands};
+use netsuke::cli_localization;
 use rstest_bdd_macros::{given, then, when};
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 // ---------------------------------------------------------------------------
@@ -20,8 +21,11 @@ use std::path::PathBuf;
 /// Apply CLI parsing, storing result or error in world state.
 fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let tokens = build_token_list(args);
-    let outcome = Cli::try_parse_from(tokens)
-        .map(normalize_cli)
+    let os_tokens: Vec<OsString> = tokens.iter().map(OsString::from).collect();
+    let locale_hint = netsuke::cli::locale_hint_from_args(&os_tokens);
+    let localizer = cli_localization::build_localizer(locale_hint.as_deref());
+    let outcome = netsuke::cli::parse_with_localizer_from(os_tokens, localizer.as_ref())
+        .map(|(cli, _matches)| normalize_cli(cli))
         .map_err(|e| e.to_string());
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
@@ -78,14 +82,8 @@ fn build_token_list(args: &CliArgs) -> Vec<String> {
 }
 
 /// Normalise a parsed CLI by setting default command if missing.
-fn normalize_cli(mut cli: Cli) -> Cli {
-    if cli.command.is_none() {
-        cli.command = Some(Commands::Build(BuildArgs {
-            emit: None,
-            targets: Vec::new(),
-        }));
-    }
-    cli
+fn normalize_cli(cli: Cli) -> Cli {
+    cli.with_default_command()
 }
 
 // ---------------------------------------------------------------------------

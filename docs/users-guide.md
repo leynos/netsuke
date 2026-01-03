@@ -485,6 +485,26 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
 
 - `-v, --verbose`: Enable verbose logging output.
 
+- `--locale <LOCALE>`: Localize CLI help and error messages (for example
+  `en-US` or `es-ES`).
+
+### Network Policy Options
+
+Netsuke's `fetch` helper is guarded by a configurable network policy. The
+policy is configured by these global options:
+
+- `--fetch-allow-scheme <SCHEME>`: Allow additional URL schemes beyond the
+  defaults.
+
+- `--fetch-allow-host <HOST>`: Allow the provided hostnames when default deny
+  is enabled (wildcards such as `*.example.com` are supported).
+
+- `--fetch-block-host <HOST>`: Always block the provided hostnames (wildcards
+  supported), even if they are allowlisted.
+
+- `--fetch-default-deny`: Deny all hosts by default and only permit the
+  allowlist.
+
 ### Commands
 
 - `build` (default): Compiles the manifest and runs Ninja to build the
@@ -506,6 +526,26 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
 - `graph`: Generates the build dependency graph by running `ninja -t graph` on
   the generated `build.ninja`, outputting DOT to stdout (suitable for
   Graphviz). Future versions may support other formats like `--html`.
+
+### Configuration and Localization
+
+Netsuke layers configuration in this order, with later entries overriding
+earlier ones: defaults, configuration files, environment variables, and
+command-line flags.
+
+Configuration files are discovered using OrthoConfig. Netsuke honours
+`NETSUKE_CONFIG_PATH` first, then searches `$XDG_CONFIG_HOME/netsuke`, each
+entry in `$XDG_CONFIG_DIRS` (falling back to `/etc/xdg` on Unix-like targets),
+Windows application data directories, `$HOME/.config/netsuke`,
+`$HOME/.netsuke.toml`, and finally the project root.
+
+Environment variables use the `NETSUKE_` prefix (for example,
+`NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
+configuration.
+
+Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localized CLI copy and
+error messages. Spanish (`es-ES`) is included as a reference translation;
+unsupported locales fall back to English.
 
 ### Exit Codes
 
