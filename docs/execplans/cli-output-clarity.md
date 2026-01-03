@@ -108,8 +108,9 @@ development (BDD) lives in:
 
 3. Localize CLI help and clap errors. Create Fluent resources (for example
    `locales/en-US/messages.ftl` and a CLI-specific bundle) and wire a
-   `FluentLocalizer` into CLI parsing. Use `command().localize(&localizer)`
-   before parsing and `localize_clap_error_with_command` on errors. Ensure the
+   `FluentLocalizer` into CLI parsing. Follow the existing `locales/` layout
+   for project translations. Use `command().localize(&localizer)` before
+   parsing and `localize_clap_error_with_command` on errors. Ensure the
    fallback path preserves stock clap output when localization fails.
 
 4. Refine CLI output messages. Update docstrings and help text in
@@ -211,9 +212,9 @@ Keep the following short transcripts for evidence:
 
 ## Interfaces and Dependencies
 
-- Add `ortho_config` as a dependency using a caret version (for example,
-  `ortho_config = "0.7.0"`), enabling `yaml`/`json5` features only if required
-  and documenting the decision in `docs/netsuke-design.md`.
+- Add `ortho_config` as a dependency at the version specified in
+  `Cargo.toml`, enabling `yaml`/`json5` features only if required and
+  documenting the decision in `docs/netsuke-design.md`.
 - Define `CliConfig` in `src/cli_config.rs` (or equivalent) with fields that
   map to existing CLI flags: `file`, `directory`, `jobs`, `verbose`,
   `fetch_allow_scheme`, `fetch_allow_host`, `fetch_block_host`,
