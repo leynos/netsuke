@@ -97,12 +97,19 @@ jobs:
             version='6'
           fi
           echo "value=$version" >>"$GITHUB_OUTPUT"
+      - id: manifest_path
+        name: Resolve Cargo manifest path
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest_path="${CARGO_TOML_PATH:-Cargo.toml}"
+          echo "value=$manifest_path" >>"$GITHUB_OUTPUT"
       - id: bin_name
-        name: Export Cargo metadata
+        name: Export Cargo bin name
         uses: >-
           leynos/shared-actions/.github/actions/export-cargo-metadata@df81280dcc1d6e66134114dbc924313328b15f05
         with:
-          manifest-path: ${{ env.CARGO_TOML_PATH || 'Cargo.toml' }}
+          manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
           export-to-env: 'false'
 

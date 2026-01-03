@@ -2060,16 +2060,17 @@ the resulting `.deb` and `.rpm` archives both declare a runtime dependency on
 `ninja-build`. Windows builds reuse the same action for compilation and now
 invoke the generic staging `stage-release-artefacts` composite from
 `leynos/shared-actions`. The composite shells out to a Cyclopts-driven script
-that reads `.github/release-staging.toml`, merges the `[common]` configuration
-with the target-specific overrides, and copies the configured artefacts into a
-fresh `dist/{bin}_{platform}_{arch}` directory. It installs `uv` with
-`astral-sh/setup-uv`, double-checks the tool is present, and only then launches
-the Python entry point so workflows stay declarative. The helper writes SHA-256
-sums for every staged file and exports a JSON map of the artefact outputs,
-allowing the workflow to hydrate downstream steps without hard-coded path
-logic. Figure 8.1 summarises the configuration entities, including optional
-keys reserved for templated directories and explicit artefact destinations that
-the helper can adopt without breaking compatibility.
+that reads the `.github/release-staging.toml` configuration (Tom's Obvious,
+Minimal Language (TOML)), merges the `[common]` configuration with the
+target-specific overrides, and copies the configured artefacts into a fresh
+`dist/{bin}_{platform}_{arch}` directory. It installs Astral's Python package
+manager (uv) with `astral-sh/setup-uv`, double-checks the tool is present, and
+only then launches the Python entry point so workflows stay declarative. The
+helper writes SHA-256 sums for every staged file and exports a JSON map of the
+artefact outputs, allowing the workflow to hydrate downstream steps without
+hard-coded path logic. Figure 8.1 summarises the configuration entities,
+including optional keys reserved for templated directories and explicit
+artefact destinations that the helper can adopt without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 
@@ -2103,20 +2104,21 @@ erDiagram
   TARGETS ||--o{ ArtefactConfig : "has artefacts"
 ```
 
-The staged artefacts feed a WiX v4 authoring template stored in
-`installer/Package.wxs`; the workflow invokes the shared `windows-package`
-composite to convert the repository licence into RTF, embed the binary, and
-output a signed MSI installer alongside the staged directory. The packaging
-step gates the action's internal artefact uploader behind the `should_publish`
-flag exported by the metadata job so that dry runs do not leak MSI artefacts.
-The composite pins the `WixToolset.UI.wixext` extension to v6 to match the WiX
-v6 CLI and avoid the `WIX6101` incompatibility seen with the legacy v4 bundle.
-The installer uses WiX v4 syntax, installs per-machine, and presents the
-minimal UI appropriate for a CLI tool. Windows does not modify the PATH, so
-users must add the installation directory manually if they want global command
-resolution. The Unix manual page remains in the staged artefacts for parity
-with the other platforms but is not bundled into the installer to avoid
-shipping an inaccessible help format.
+The staged artefacts feed a Windows Installer XML (WiX) v4 authoring template
+stored in `installer/Package.wxs`; the workflow invokes the shared
+`windows-package` composite to convert the repository licence into Rich Text
+Format (RTF), embed the binary, and output a signed Microsoft Installer (MSI)
+installer alongside the staged directory. The packaging step gates the action's
+internal artefact uploader behind the `should_publish` flag exported by the
+metadata job so that dry runs do not leak MSI artefacts. The composite pins the
+`WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
+`WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
+WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
+for a CLI tool. Windows does not modify the PATH, so users must add the
+installation directory manually if they want global command resolution. The
+Unix manual page remains in the staged artefacts for parity with the other
+platforms but is not bundled into the installer to avoid shipping an
+inaccessible help format.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML
