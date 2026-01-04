@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-# Aggregate the quality gates enforced during review feedback.
-uvx ruff format --check
-uvx ruff check
-uvx --with cyclopts ty check --extra-search-path .github/actions/stage/scripts/ .github/actions/stage/scripts/*.py
-python -m pytest tests_python/test_stage_common.py tests_python/test_stage_cli.py tests_python/test_stage_action.py

@@ -14,7 +14,7 @@ use test_support::{
 };
 
 mod common;
-use common::create_test_manifest;
+use common::{create_test_manifest, workflow_contents};
 
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
 ///
@@ -66,6 +66,11 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         "error should include build file context, got: {messages:?}"
     );
     Ok(())
+}
+
+#[test]
+fn unit_workflow_contents_reads_release_workflow() {
+    let _contents = workflow_contents("release.yml").expect("release workflow should be readable");
 }
 
 fn assert_subcommand_succeeds_without_persisting_file(

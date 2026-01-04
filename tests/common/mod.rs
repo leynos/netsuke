@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result};
 use rstest::fixture;
+use std::fs;
 use std::path::PathBuf;
 use test_support::{
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
@@ -32,4 +33,12 @@ pub fn ninja_with_exit_code(
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
+}
+
+/// Load a workflow file from `.github/workflows`.
+pub fn workflow_contents(name: &str) -> Result<String> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let path = root.join(".github").join("workflows").join(name);
+    fs::read_to_string(&path)
+        .with_context(|| format!("read workflow contents from {}", path.display()))
 }

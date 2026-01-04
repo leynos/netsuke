@@ -79,7 +79,7 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/rust-build-release@df81280dcc1d6e66134114dbc924313328b15f05
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ inputs['bin-name'] }}
@@ -87,7 +87,7 @@ jobs:
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/linux-packages@df81280dcc1d6e66134114dbc924313328b15f05
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -108,49 +108,53 @@ jobs:
       - name: Stage artefacts
         if: inputs.platform != 'linux'
         id: stage
-        uses: ./.github/actions/stage
+        uses: >-
+          leynos/shared-actions/.github/actions/stage-release-artefacts@df81280dcc1d6e66134114dbc924313328b15f05
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
+          normalize-windows-paths: ${{ inputs.platform == 'windows' }}
 
-      - name: Normalise Windows paths
-        if: inputs.platform == 'windows'
-        id: normalize_windows_paths
+      - name: Capture staged paths
+        if: inputs.platform != 'linux'
+        id: stage_paths
         shell: bash
-        env:
-          BINARY_PATH: ${{ steps.stage.outputs.binary_path }}
-          LICENSE_PATH: ${{ steps.stage.outputs.license_path }}
         run: |
           set -euo pipefail
-          python .github/workflows/scripts/normalise_windows_paths.py
+          {
+            echo "binary_path=${{ steps.stage.outputs['binary-path'] }}"
+            echo "man_path=${{ steps.stage.outputs['man-path'] }}"
+            echo "license_path=${{ steps.stage.outputs['license-path'] }}"
+            echo "artifact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/windows-package@df81280dcc1d6e66134114dbc924313328b15f05
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
           install-dir-name: ${{ inputs['bin-name'] }}
-          application-path: ${{ steps.normalize_windows_paths.outputs.binary_path }}
-          license-rtf-path: ${{ steps.normalize_windows_paths.outputs.license_path }}
+          application-path: ${{ steps.stage_paths.outputs.binary_path }}
+          license-rtf-path: ${{ steps.stage_paths.outputs.license_path }}
           architecture: ${{ inputs['msi-arch'] }}
           version: ${{ inputs.version }}
           output-basename: ${{ inputs['bin-name'] }}
           output-directory: dist
           license-plaintext-path: LICENSE
-          upload-artifact: ${{ inputs['should-upload-workflow-artifacts'] }}
+          upload-artefact: ${{ inputs['should-upload-workflow-artifacts'] }}
           wix-extension-version: ${{ inputs['wix-extension-version'] }}
 
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@dd56f18c39f1e158eb04cd5b4fc9194aadb6b52b
+        uses: leynos/shared-actions/.github/actions/macos-package@df81280dcc1d6e66134114dbc924313328b15f05
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
-          binary: ${{ steps.stage.outputs.binary_path }}
-          manpage: ${{ steps.stage.outputs.man_path }}
+          binary: ${{ steps.stage_paths.outputs.binary_path }}
+          manpage: ${{ steps.stage_paths.outputs.man_path }}
           license-file: LICENSE
           version: ${{ inputs.version }}
 
@@ -182,7 +186,7 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage.outputs.artifact_dir }}
+            ${{ steps.stage_paths.outputs.artifact_dir }}
             ${{ steps.package_windows.outputs['msi-path'] }}
 
       - name: Upload macOS artefacts
@@ -192,5 +196,5 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage.outputs.artifact_dir }}
+            ${{ steps.stage_paths.outputs.artifact_dir }}
             dist/${{ inputs['bin-name'] }}-${{ inputs.version }}-${{ inputs['artifact-suffix'] }}.pkg
