@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.89.0"
 include = [
     "src/**",
+    "locales/**",
     "Cargo.toml",
     "README.md",
     "LICENSE",
@@ -50,10 +51,14 @@ time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "ser
 ureq = { version = "2.10.5" }
 wait-timeout = "0.2"
 url = "^2.5.0"
+ortho_config = { version = "0.7.0", features = ["serde_json"] }
 
 [build-dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
 clap_mangen = "0.2.29"
+ortho_config = { version = "0.7.0", features = ["serde_json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "1"
 time = { version = "0.3.44", features = ["formatting"] }
 

@@ -3,30 +3,61 @@
 //! The module centralises normalisation and matching logic so CLI parsing and
 //! runtime policy evaluation agree on allowable host syntax.
 
+use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use thiserror::Error;
 
-fn validate_label(label: &str, original: &str) -> Result<(), HostPatternError> {
-    if label.is_empty() {
-        return Err(HostPatternError::EmptyLabel {
-            pattern: original.to_owned(),
-        });
+#[derive(Copy, Clone)]
+struct HostPatternInput<'a>(&'a str);
+
+impl<'a> HostPatternInput<'a> {
+    const fn as_str(self) -> &'a str {
+        self.0
     }
-    if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return Err(HostPatternError::InvalidCharacters {
-            pattern: original.to_owned(),
-        });
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct HostCandidate<'a>(pub(crate) &'a str);
+
+impl<'a> HostCandidate<'a> {
+    const fn as_str(self) -> &'a str {
+        self.0
     }
-    if label.starts_with('-') || label.ends_with('-') {
-        return Err(HostPatternError::InvalidLabelEdge {
-            pattern: original.to_owned(),
-        });
+}
+
+struct ValidationContext<'a> {
+    original: HostPatternInput<'a>,
+}
+
+impl<'a> ValidationContext<'a> {
+    const fn new(original: HostPatternInput<'a>) -> Self {
+        Self { original }
     }
-    if label.len() > 63 {
-        return Err(HostPatternError::LabelTooLong {
-            pattern: original.to_owned(),
-        });
+
+    fn validate_label(&self, label: &str) -> Result<(), HostPatternError> {
+        let original = self.original.as_str();
+        if label.is_empty() {
+            return Err(HostPatternError::EmptyLabel {
+                pattern: original.to_owned(),
+            });
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err(HostPatternError::InvalidCharacters {
+                pattern: original.to_owned(),
+            });
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err(HostPatternError::InvalidLabelEdge {
+                pattern: original.to_owned(),
+            });
+        }
+        if label.len() > 63 {
+            return Err(HostPatternError::LabelTooLong {
+                pattern: original.to_owned(),
+            });
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Errors emitted when parsing host allowlist/blocklist patterns.
@@ -85,8 +116,8 @@ pub enum HostPatternError {
     },
 }
 
-pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), HostPatternError> {
-    let trimmed = pattern.trim();
+fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
+    let trimmed = input.as_str().trim();
     if trimmed.is_empty() {
         return Err(HostPatternError::Empty);
     }
@@ -114,8 +145,9 @@ pub(crate) fn normalise_host_pattern(pattern: &str) -> Result<(String, bool), Ho
 
     let normalised = host_body.to_ascii_lowercase();
     let mut total_len = 0usize;
+    let ctx = ValidationContext::new(HostPatternInput(trimmed));
     for (index, label) in normalised.split('.').enumerate() {
-        validate_label(label, trimmed)?;
+        ctx.validate_label(label)?;
         total_len += label.len() + usize::from(index > 0);
     }
     if total_len > 255 {
@@ -142,15 +174,15 @@ impl HostPattern {
     /// Returns an error when the pattern is empty, includes invalid
     /// characters, or uses a wildcard without a suffix.
     pub fn parse(pattern: &str) -> Result<Self, HostPatternError> {
-        let (normalised, wildcard) = normalise_host_pattern(pattern)?;
+        let (normalised, wildcard) = normalise_host_pattern(HostPatternInput(pattern))?;
         Ok(Self {
             pattern: normalised,
             wildcard,
         })
     }
 
-    pub(crate) fn matches(&self, candidate: &str) -> bool {
-        let host = candidate.to_ascii_lowercase();
+    pub(crate) fn matches(&self, candidate: HostCandidate<'_>) -> bool {
+        let host = candidate.as_str().to_ascii_lowercase();
         if self.wildcard {
             // Wildcard patterns match only subdomains, not the apex domain.
             // Example: "*.example.com" matches "sub.example.com" but not
@@ -177,6 +209,38 @@ impl TryFrom<String> for HostPattern {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::parse(&value)
+    }
+}
+
+impl FromStr for HostPattern {
+    type Err = HostPatternError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
+}
+
+impl Serialize for HostPattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if self.wildcard {
+            let text = format!("*.{}", self.pattern);
+            serializer.serialize_str(&text)
+        } else {
+            serializer.serialize_str(&self.pattern)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for HostPattern {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let text = String::deserialize(deserializer)?;
+        Self::parse(&text).map_err(serde::de::Error::custom)
     }
 }
 
@@ -216,7 +280,7 @@ mod tests {
     ) -> Result<()> {
         let parsed = HostPattern::parse(pattern)?;
         ensure!(
-            parsed.matches(host) == expected,
+            parsed.matches(HostCandidate(host)) == expected,
             "expected match={expected} for {host} against {pattern}",
         );
         Ok(())
