@@ -1,0 +1,31 @@
+//! Shared fixtures for integration tests that exercise the runner.
+
+use anyhow::{Context, Result};
+use rstest::fixture;
+use std::path::PathBuf;
+use test_support::{
+    env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
+    fake_ninja,
+};
+
+/// Create a temporary project with a Netsukefile from `minimal.yml`.
+pub fn create_test_manifest() -> Result<(tempfile::TempDir, PathBuf)> {
+    let temp = tempfile::tempdir().context("create temp dir for test manifest")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::copy("tests/data/minimal.yml", &manifest_path)
+        .with_context(|| format!("copy minimal.yml to {}", manifest_path.display()))?;
+    Ok((temp, manifest_path))
+}
+
+/// Fixture: point `NINJA_ENV` at a fake `ninja` with a configurable exit code.
+///
+/// Returns: (tempdir holding ninja, `NINJA_ENV` guard)
+#[fixture]
+pub fn ninja_with_exit_code(
+    #[default(0u8)] exit_code: u8,
+) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
+    let (ninja_dir, ninja_path) = fake_ninja(exit_code)?;
+    let env = SystemEnv::new();
+    let guard = override_ninja_env(&env, ninja_path.as_path());
+    Ok((ninja_dir, ninja_path, guard))
+}
