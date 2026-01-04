@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{create_test_manifest, ninja_with_exit_code, workflow_contents};
+use common::workflow_contents;
 
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {
@@ -61,10 +61,4 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
         contents.contains("should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}"),
         "release workflow should capture workflow artefact upload output"
     );
-}
-
-#[test]
-fn unit_common_helpers_build_fixtures() {
-    let _fixture = create_test_manifest().expect("test manifest fixture should build");
-    let _ninja = ninja_with_exit_code(0).expect("fake ninja fixture should build");
 }

@@ -11,8 +11,8 @@ use test_support::{
     fake_ninja,
 };
 
-mod common;
-use common::{create_test_manifest, workflow_contents};
+mod fixtures;
+use fixtures::create_test_manifest;
 
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
 ///
@@ -24,7 +24,7 @@ use common::{create_test_manifest, workflow_contents};
 fn ninja_with_exit_code(
     #[default(0u8)] exit_code: u8,
 ) -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
-    common::ninja_with_exit_code(exit_code)
+    fixtures::ninja_with_exit_code(exit_code)
 }
 
 /// Fixture: point `NINJA_ENV` at a fake `ninja` that validates `-f` files.
@@ -60,11 +60,6 @@ fn setup_ninja_env_test() -> Result<(
         ..Cli::default()
     };
     Ok((ninja_dir, ninja_path, temp, cli, guard))
-}
-
-#[test]
-fn unit_workflow_contents_reads_release_workflow() {
-    let _contents = workflow_contents("release.yml").expect("release workflow should be readable");
 }
 
 #[test]
