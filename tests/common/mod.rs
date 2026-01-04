@@ -6,6 +6,7 @@
 
 use anyhow::{Context, Result};
 use rstest::fixture;
+use std::fs;
 use std::path::PathBuf;
 use test_support::{
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
@@ -32,4 +33,37 @@ pub fn ninja_with_exit_code(
     let env = SystemEnv::new();
     let guard = override_ninja_env(&env, ninja_path.as_path());
     Ok((ninja_dir, ninja_path, guard))
+}
+
+/// Load a workflow file from `.github/workflows`.
+pub fn workflow_contents(name: &str) -> String {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let path = root.join(".github").join("workflows").join(name);
+    fs::read_to_string(&path)
+        .unwrap_or_else(|err| panic!("workflow {} should be readable: {err}", path.display()))
+}
+
+#[cfg(test)]
+mod common_smoke_tests {
+    use super::{create_test_manifest, workflow_contents};
+
+    #[test]
+    fn create_test_manifest_builds_fixture() {
+        let _fixture = create_test_manifest().expect("test manifest fixture should build");
+    }
+
+    #[test]
+    fn workflow_contents_reads_release_workflow() {
+        let _contents = workflow_contents("release.yml");
+    }
+}
+
+#[cfg(test)]
+mod workflow_contents_tests {
+    use super::workflow_contents;
+
+    #[test]
+    fn workflow_contents_reads_release_workflow() {
+        let _contents = workflow_contents("release.yml");
+    }
 }

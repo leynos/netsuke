@@ -1,18 +1,8 @@
 //! Validate release workflow wiring for shared actions.
 
-use std::fs;
-use std::path::PathBuf;
+mod common;
 
-fn workflow_contents(name: &str) -> String {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = root.join(".github").join("workflows").join(name);
-    fs::read_to_string(&path).unwrap_or_else(|err| {
-        panic!(
-            "release workflow {} should be readable: {err}",
-            path.display()
-        )
-    })
-}
+use common::workflow_contents;
 
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {

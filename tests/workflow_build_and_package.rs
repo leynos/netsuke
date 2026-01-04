@@ -1,18 +1,8 @@
 //! Validate build-and-package workflow wiring for shared actions.
 
-use std::fs;
-use std::path::PathBuf;
+mod common;
 
-fn workflow_contents(name: &str) -> String {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let path = root.join(".github").join("workflows").join(name);
-    fs::read_to_string(&path).unwrap_or_else(|err| {
-        panic!(
-            "build-and-package workflow {} should be readable: {err}",
-            path.display()
-        )
-    })
-}
+use common::workflow_contents;
 
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
@@ -27,27 +17,27 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
         "workflow should normalize Windows paths when staging on Windows"
     );
     assert!(
-        contents.contains("application-path: ${{ steps.stage.outputs['binary-path'] }}"),
-        "windows-package should consume staged binary-path output"
+        contents.contains("application-path: ${{ steps.stage_paths.outputs.binary_path }}"),
+        "windows-package should consume staged binary_path output"
     );
     assert!(
-        contents.contains("license-rtf-path: ${{ steps.stage.outputs['license-path'] }}"),
-        "windows-package should consume staged license-path output"
+        contents.contains("license-rtf-path: ${{ steps.stage_paths.outputs.license_path }}"),
+        "windows-package should consume staged license_path output"
     );
     assert!(
         contents.contains("upload-artefact: ${{ inputs['should-upload-workflow-artifacts'] }}"),
         "windows-package should use the upload-artefact input spelling"
     );
     assert!(
-        contents.contains("binary: ${{ steps.stage.outputs['binary-path'] }}"),
-        "macos-package should consume staged binary-path output"
+        contents.contains("binary: ${{ steps.stage_paths.outputs.binary_path }}"),
+        "macos-package should consume staged binary_path output"
     );
     assert!(
-        contents.contains("manpage: ${{ steps.stage.outputs['man-path'] }}"),
-        "macos-package should consume staged man-path output"
+        contents.contains("manpage: ${{ steps.stage_paths.outputs.man_path }}"),
+        "macos-package should consume staged man_path output"
     );
     assert!(
-        contents.contains("${{ steps.stage.outputs['artifact-dir'] }}"),
-        "workflow should use the staged artifact-dir output for uploads"
+        contents.contains("${{ steps.stage_paths.outputs.artifact_dir }}"),
+        "workflow should use the staged artifact_dir output for uploads"
     );
 }

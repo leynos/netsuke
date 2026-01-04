@@ -115,6 +115,19 @@ jobs:
           target: ${{ inputs['stage-target'] }}
           normalize-windows-paths: ${{ inputs.platform == 'windows' }}
 
+      - name: Capture staged paths
+        if: inputs.platform != 'linux'
+        id: stage_paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "binary_path=${{ steps.stage.outputs['binary-path'] }}"
+            echo "man_path=${{ steps.stage.outputs['man-path'] }}"
+            echo "license_path=${{ steps.stage.outputs['license-path'] }}"
+            echo "artifact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
+          } >>"$GITHUB_OUTPUT"
+
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
@@ -123,8 +136,8 @@ jobs:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
           install-dir-name: ${{ inputs['bin-name'] }}
-          application-path: ${{ steps.stage.outputs['binary-path'] }}
-          license-rtf-path: ${{ steps.stage.outputs['license-path'] }}
+          application-path: ${{ steps.stage_paths.outputs.binary_path }}
+          license-rtf-path: ${{ steps.stage_paths.outputs.license_path }}
           architecture: ${{ inputs['msi-arch'] }}
           version: ${{ inputs.version }}
           output-basename: ${{ inputs['bin-name'] }}
@@ -140,8 +153,8 @@ jobs:
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
-          binary: ${{ steps.stage.outputs['binary-path'] }}
-          manpage: ${{ steps.stage.outputs['man-path'] }}
+          binary: ${{ steps.stage_paths.outputs.binary_path }}
+          manpage: ${{ steps.stage_paths.outputs.man_path }}
           license-file: LICENSE
           version: ${{ inputs.version }}
 
@@ -173,7 +186,7 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage.outputs['artifact-dir'] }}
+            ${{ steps.stage_paths.outputs.artifact_dir }}
             ${{ steps.package_windows.outputs['msi-path'] }}
 
       - name: Upload macOS artefacts
@@ -183,5 +196,5 @@ jobs:
         with:
           name: ${{ inputs['artifact-name'] }}
           path: |
-            ${{ steps.stage.outputs['artifact-dir'] }}
+            ${{ steps.stage_paths.outputs.artifact_dir }}
             dist/${{ inputs['bin-name'] }}-${{ inputs.version }}-${{ inputs['artifact-suffix'] }}.pkg
