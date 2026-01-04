@@ -2,11 +2,11 @@
 
 mod common;
 
-use common::workflow_contents;
+use common::{create_test_manifest, ninja_with_exit_code, workflow_contents};
 
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {
-    let contents = workflow_contents("release.yml");
+    let contents = workflow_contents("release.yml").expect("release workflow should be readable");
 
     assert!(
         contents.contains("determine-release-modes@"),
@@ -28,7 +28,7 @@ fn behavioural_release_workflow_uses_shared_actions() {
 
 #[test]
 fn behavioural_release_workflow_exports_bin_name() {
-    let contents = workflow_contents("release.yml");
+    let contents = workflow_contents("release.yml").expect("release workflow should be readable");
 
     assert!(
         contents.contains("fields: bin-name"),
@@ -42,7 +42,7 @@ fn behavioural_release_workflow_exports_bin_name() {
 
 #[test]
 fn behavioural_release_workflow_wires_release_modes_outputs() {
-    let contents = workflow_contents("release.yml");
+    let contents = workflow_contents("release.yml").expect("release workflow should be readable");
 
     assert!(
         contents
@@ -61,4 +61,10 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
         contents.contains("should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}"),
         "release workflow should capture workflow artefact upload output"
     );
+}
+
+#[test]
+fn unit_common_helpers_build_fixtures() {
+    let _fixture = create_test_manifest().expect("test manifest fixture should build");
+    let _ninja = ninja_with_exit_code(0).expect("fake ninja fixture should build");
 }

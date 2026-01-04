@@ -2,11 +2,12 @@
 
 mod common;
 
-use common::workflow_contents;
+use common::{create_test_manifest, ninja_with_exit_code, workflow_contents};
 
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
-    let contents = workflow_contents("build-and-package.yml");
+    let contents = workflow_contents("build-and-package.yml")
+        .expect("build-and-package workflow should be readable");
 
     assert!(
         contents.contains("stage-release-artefacts@"),
@@ -40,4 +41,10 @@ fn behavioural_build_and_package_wiring_matches_shared_actions() {
         contents.contains("${{ steps.stage_paths.outputs.artifact_dir }}"),
         "workflow should use the staged artifact_dir output for uploads"
     );
+}
+
+#[test]
+fn unit_common_helpers_build_fixtures() {
+    let _fixture = create_test_manifest().expect("test manifest fixture should build");
+    let _ninja = ninja_with_exit_code(0).expect("fake ninja fixture should build");
 }

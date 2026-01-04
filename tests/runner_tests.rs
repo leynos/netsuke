@@ -12,7 +12,7 @@ use test_support::{
 };
 
 mod common;
-use common::create_test_manifest;
+use common::{create_test_manifest, workflow_contents};
 
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
 ///
@@ -60,6 +60,11 @@ fn setup_ninja_env_test() -> Result<(
         ..Cli::default()
     };
     Ok((ninja_dir, ninja_path, temp, cli, guard))
+}
+
+#[test]
+fn unit_workflow_contents_reads_release_workflow() {
+    let _contents = workflow_contents("release.yml").expect("release workflow should be readable");
 }
 
 #[test]
