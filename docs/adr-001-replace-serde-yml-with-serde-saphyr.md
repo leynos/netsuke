@@ -13,10 +13,7 @@ even preferred.
 The `serde-yml` crate has recently been **deprecated/archived** and raised
 concerns around maintenance and safety. It was a fork of `serde_yaml` using the
 C libyaml parser via unsafe code, and introduced unsound behaviour (segfaults
-were
-demonstrated)([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L176-L184)
-)(
-[1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L194-L203)).
+were demonstrated)([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L176-L184))([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L194-L203)).
  This situation prompts the need to choose a more robust and actively
 maintained YAML+Serde library. There are no constraints requiring extremely
 small binaries or WebAssembly support, so the selection can focus on the best
@@ -30,11 +27,8 @@ built on the pure-Rust **Saphyr** YAML 1.2 parser. This choice is made because
 it offers:
 
 - **Safety:** A pure Rust implementation with **no `unsafe` libyaml
-  dependencies**(
-  [2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums)
-  )(
-  [2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)),
-   eliminating C library risks.
+  dependencies**([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums))([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)),
+  eliminating C library risks.
 
 - **Spec Compliance:** Full YAML 1.2 support (including proper handling of
   anchors and merge
@@ -44,9 +38,7 @@ it offers:
 - **Robustness:** Built-in handling for resource limits and duplicate keys
   (configurable budgets and policies) to prevent pathological YAML from causing
   crashes or memory
-  exhaustion([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=don%E2%80%99t%20apply,to%20prevent%20resource%20exhaustion%20attacks)
-  )(
-  [4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=you%20can%20also%20re,choosing%20between%20LastWins%20and%20FirstWins)).
+  exhaustion([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=don%E2%80%99t%20apply,to%20prevent%20resource%20exhaustion%20attacks))([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=you%20can%20also%20re,choosing%20between%20LastWins%20and%20FirstWins)).
 
 - **Performance:** A modern zero-copy parsing approach that is significantly
   faster than alternatives in
@@ -80,9 +72,7 @@ Several YAML+Serde libraries were evaluated against the project requirements:
   critiqued `serde_yml` for being essentially *AI-“maintained”* with “complete
   nonsense” additions and even an unsound YAML emitter that can cause a
   segmentation
-  fault([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L176-L184)
-  )(
-  [1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L194-L203)).
+  fault([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L176-L184))([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L194-L203)).
    This raises serious trust and safety issues. While `serde_yml` did
   temporarily fill the gap after `serde_yaml`’s deprecation, its quality and
   maintenance are in doubt, so the dependency should be retired.
@@ -117,21 +107,15 @@ Several YAML+Serde libraries were evaluated against the project requirements:
   This library introduced support for YAML merge keys and more correct enum
   tagging, and importantly added a **pre-parse “budget” check** using the
   Saphyr parser to defend against resource-exhaustion
-  attacks([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=don%E2%80%99t%20apply,to%20prevent%20resource%20exhaustion%20attacks)
-  )(
-  [4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=Budget%2C%20available%20as%20part%20of,DeserializerOptions)).
+  attacks([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=don%E2%80%99t%20apply,to%20prevent%20resource%20exhaustion%20attacks))([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=Budget%2C%20available%20as%20part%20of,DeserializerOptions)).
    It allows configuring limits (document size, nesting depth, etc.) and by
   default **disallows duplicate keys** in mappings (with an option to allow
   them in either First-Wins or Last-Wins mode for legacy
-  cases)([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=merge%20keys%20and%20anchors%20,library%20enforces%20configurable%20budget%20constraints)
-  )(
-  [4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=you%20can%20also%20re,choosing%20between%20LastWins%20and%20FirstWins)).
+  cases)([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=merge%20keys%20and%20anchors%20,library%20enforces%20configurable%20budget%20constraints))([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=you%20can%20also%20re,choosing%20between%20LastWins%20and%20FirstWins)).
    These are valuable improvements for robustness. However, `serde_yaml_bw`
   still ultimately uses libyaml to do the actual parsing (the Saphyr pass is
   just a
-  safeguard)([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)
-  )(
-  [5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=Crate%20Time%20%28ms%29%20Notes%20serde,check%20upfront%20before%20calling%20libyaml)).
+  safeguard)([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw))([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=Crate%20Time%20%28ms%29%20Notes%20serde,check%20upfront%20before%20calling%20libyaml)).
    This two-phase approach made it **slower** on large inputs (due to parsing
   twice) – in a 25 MiB YAML benchmark, serde_yaml_bw was the slowest (~703ms)
   because of the extra checking
@@ -151,9 +135,7 @@ Several YAML+Serde libraries were evaluated against the project requirements:
 - **No Unsafe or C Dependencies:** By relying on Saphyr (written in Rust), it
   avoids linking to libyaml entirely. This removes the `unsafe-libyaml`
   dependency and its potential
-  vulnerabilities([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums)
-  )(
-  [2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)).
+  vulnerabilities([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums))([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)).
    Extended fuzz testing found that libyaml could even **stall on malicious
   inputs**, whereas Saphyr handles pathological cases more
   robustly([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)).
@@ -180,9 +162,7 @@ Several YAML+Serde libraries were evaluated against the project requirements:
   against resource-exhaustion attacks. Before fully deserializing, it can run a
   fast parsing pass (without building a tree) that simply counts events and
   ensures limits are not
-  exceeded([7](https://lib.rs/crates/serde-saphyr#:~:text=serde,any%20resource%20limit%20is%20exceeded)
-  )(
-  [4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=Budget%2C%20available%20as%20part%20of,DeserializerOptions)).
+  exceeded([7](https://lib.rs/crates/serde-saphyr#:~:text=serde,any%20resource%20limit%20is%20exceeded))([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=Budget%2C%20available%20as%20part%20of,DeserializerOptions)).
    The default settings are conservative and can be tuned. For instance, if an
   input YAML has extremely deep nesting or huge text values, this can be caught
   early. This is an extra safety net that neither the original serde_yaml nor
@@ -344,9 +324,7 @@ forward-looking path with minimal downsides.
   is not likely to hit those limits, the defaults can remain. If parsing
   extremely large manifests reveals performance overhead, disable the budget
   check in `DeserializerOptions` for a small
-  speed-up([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=actually%20building%20a%20full%20data,overhead%2C%20though%20this%20typically%20becomes)
-  )(
-  [4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=The%20default%20budget%20values%20are,to%20disable%20the%20budget%20entirely)).
+  speed-up([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=actually%20building%20a%20full%20data,overhead%2C%20though%20this%20typically%20becomes))([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=The%20default%20budget%20values%20are,to%20disable%20the%20budget%20entirely)).
    However, given the negligible overhead on typical files, it is probably best
   to leave it on as a safe default. Expose a way to configure it if Netsuke
   ever parses user-supplied YAML of arbitrary size (for example, an environment
@@ -382,9 +360,7 @@ forward-looking path with minimal downsides.
 - **Maturity of `serde-saphyr`:** The library is still new (version 0.x). There
   may be undiscovered bugs or edge cases. Mitigation: The author has put it
   through the official YAML test suite and fuzzed it
-  extensively([3](https://github.com/saphyr-rs/saphyr#:~:text=Specification%20Compliance)
-  )(
-  [5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)),
+  extensively([3](https://github.com/saphyr-rs/saphyr#:~:text=Specification%20Compliance))([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)),
    which gives confidence. The team should also run its own tests. Since
   Netsuke’s YAML usage is relatively straightforward (known schema), the risk
   is manageable. Keep an eye on patch releases from `serde-saphyr` for bug
@@ -437,9 +413,7 @@ YAML foundation moving forward.
   libyaml).* – Crates.io serde_yaml_ng, GitHub: acatton/serde-yaml-ng. (Project
   README contains context on forking, and notes from July 2025 about issues
   with
-  serde_yml([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L170-L180)
-  )(
-  [1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L224-L232)).)
+  serde_yml([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L170-L180))([1](https://github.com/acatton/serde-yaml-ng/blob/3628102977f3ec9e02b95ef32fcec30b3df91390/README.md#L224-L232)).)
 
 - **`serde_norway` crate:** *Another maintained fork of serde_yaml.* –
   Crates.io serde_norway, Docs.rs serde_norway documentation. (Aims to be a
@@ -454,20 +428,14 @@ YAML foundation moving forward.
 - **`serde_yaml_bw` crate:** *Fork with budget checks and YAML improvements.* –
   Crates.io serde_yaml_bw, GitHub: bourumir-wyngs/serde-yaml-bw. (Contains
   design notes on safety measures like Budget and duplicate key
-  handling([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=don%E2%80%99t%20apply,to%20prevent%20resource%20exhaustion%20attacks)
-  )(
-  [4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=you%20can%20also%20re,choosing%20between%20LastWins%20and%20FirstWins)).)
+  handling([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=don%E2%80%99t%20apply,to%20prevent%20resource%20exhaustion%20attacks))([4](https://github.com/bourumir-wyngs/serde-yaml-bw#:~:text=you%20can%20also%20re,choosing%20between%20LastWins%20and%20FirstWins)).)
 
 - **Discussion – Reddit r/rust thread about the loss of serde-yaml** – Thread
   (2025) discussing the deprecation of serde_yaml and community
-  alternatives([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums)
-  )(
-  [2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)).
+  alternatives([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=For%20the%20,key%20support%20and%20nested%20enums))([2](https://www.reddit.com/r/rust/comments/1bo5dle/we_lost_serdeyaml_whats_the_next_one/#:~:text=Those%20who%20dislike%20unsafe%20statements,it%20is%20also%20notably%20faster)).
 
 - **Announcement – New Serde YAML (serde-saphyr):** – Rust Internals Forum post
   by the serde-saphyr
-  author([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=I%20am%20pleased%20to%20share,has%20been%20much%20discussed%20here)
-  )(
-  [5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)),
+  author([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=I%20am%20pleased%20to%20share,has%20been%20much%20discussed%20here))([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=The%20library%20relies%20on%20saphyr,bw)),
    explaining the approach and benchmarking
   results([5](https://users.rust-lang.org/t/new-serde-deserialization-framework-for-yaml-data-that-parses-yaml-into-rust-structures-without-building-syntax-tree/134306#:~:text=Parsing%20generated%20YAML%2C%20file%20size,00%20MiB%2C%20release%20build)).
