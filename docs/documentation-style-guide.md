@@ -226,6 +226,9 @@ Every ADR must include the following sections in order:
   the problem or question that prompted the decision. Include enough background
   for readers unfamiliar with the history.
 
+Incorporate Conditional sections (below) as appropriate to the decision's
+complexity.
+
 ### Conditional sections
 
 Include these sections as appropriate to the decision's complexity:
@@ -263,6 +266,11 @@ Include these sections as appropriate to the decision's complexity:
 - Reference external sources using inline links or footnotes.
 
 ### ADR template
+
+The following template demonstrates the essential structure of an ADR. For
+complex decisions, expand the template by adding elements from the Formatting
+guidance above (e.g. comparison tables with captions, screen reader
+descriptions, or additional Conditional sections).
 
 ```markdown
 # Architectural decision record (ADR) NNN: <title>

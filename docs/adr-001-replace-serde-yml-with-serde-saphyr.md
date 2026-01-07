@@ -43,8 +43,7 @@ it offers:
 - **Maintenance & Design:** An actively maintained project (2025) with a clean,
   type-driven API (parsing directly into Rust types without intermediate YAML
   `Value` nodes)[^9]. This design suits Netsuke's strongly-typed manifests and
-  is supported by a maintainer focused on correctness and long-term
-  support[^4].
+  is supported by a maintainer focused on correctness and long-term support[^4].
 
 In summary, `serde-saphyr` best meets the selection criteria and will replace
 `serde-yml` as the YAML deserialization library in Netsuke.
@@ -271,9 +270,9 @@ downsides.
   fine for Netsuke's debugging needs. If custom pretty-print logic exists,
   continue using it, or rely on `to_string` and perhaps run it through a
   formatter if needed. Note that `serde_saphyr`'s serializer even supports
-  serialising shared references (e.g., `Rc`/`Arc`) as YAML anchors[^23], but
+  serializing shared references (e.g., `Rc`/`Arc`) as YAML anchors[^23], but
   that is an advanced feature that Netsuke is unlikely to need. Simple
-  serialisation of the data structures to a YAML string is sufficient.
+  serialization of the data structures to a YAML string is sufficient.
 
 - **Documentation:** Update Netsuke's documentation (README or user guide) to
   note that Netsuke now supports **YAML 1.2** fully. If there are any changes
@@ -341,7 +340,7 @@ downsides.
   uses `smallvec 2.0.0-alpha`[^25]. Using an alpha dependency in the project
   could be a concern, but in practice this is a well-understood crate and the
   choice was likely made for performance. The risk of serious issues here is
-  low, and `smallvec 2.0` is expected to stabilise in due time. The project can
+  low, and `smallvec 2.0` is expected to stabilize in due time. The project can
   live with this or pin the dependency if needed. Overall compile times and
   binary size impact from the new crates should be minimal (no huge C library
   to build, pure Rust, and the codebase is not extremely large).
