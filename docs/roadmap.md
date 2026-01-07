@@ -13,7 +13,7 @@ compilation pipeline from parsing to execution.
 ### 1.1. CLI and manifest parsing
 
 - [x] 1.1.1. Implement initial clap CLI structure for build command and global
-  options. See [netsuke-design.md](netsuke-design.md).
+  options. See [netsuke-design.md §8.2](netsuke-design.md).
   - [x] Define --file, --directory, and --jobs options.
 - [x] 1.1.2. Define core Abstract Syntax Tree data structures in `src/ast.rs`.
   - [x] Implement NetsukeManifest, Rule, Target, StringOrList, and Recipe
@@ -30,21 +30,25 @@ compilation pipeline from parsing to execution.
 
 ### 1.2. Intermediate Representation and validation
 
-- [x] 1.2.1. Define IR data structures in `src/ir.rs`.
+- [x] 1.2.1. Define IR data structures in `src/ir.rs`. See
+  [netsuke-design.md §5.2](netsuke-design.md).
   - [x] Implement BuildGraph, Action, and BuildEdge structs.
   - [x] Keep IR backend-agnostic per design.
-- [x] 1.2.2. Implement ir::from_manifest transformation logic.
+- [x] 1.2.2. Implement ir::from_manifest transformation logic. See
+  [netsuke-design.md §5.3](netsuke-design.md).
   - [x] Convert AST to BuildGraph IR.
 - [x] 1.2.3. Consolidate and deduplicate rules into ir::Action structs based on
   property hash during transformation.
 - [x] 1.2.4. Implement validation for rule, command, and script references.
   - [x] Ensure references are valid and mutually exclusive.
-- [x] 1.2.5. Implement cycle detection algorithm using depth-first search.
+- [x] 1.2.5. Implement cycle detection algorithm using depth-first search. See
+  [netsuke-design.md §5.3](netsuke-design.md).
   - [x] Fail compilation on circular dependency detection.
 
 ### 1.3. Code generation and execution
 
-- [x] 1.3.1. Implement Ninja file synthesizer in `src/ninja_gen.rs`.
+- [x] 1.3.1. Implement Ninja file synthesizer in `src/ninja_gen.rs`. See
+  [netsuke-design.md §5.4](netsuke-design.md).
   - [x] Traverse BuildGraph IR.
 - [x] 1.3.2. Generate Ninja rule and build statements.
   - [x] Write rule statements from ir::Action structs.
@@ -63,7 +67,8 @@ configurations with variables, control flow, and custom functions.
 
 ### 2.1. Jinja integration
 
-- [x] 2.1.1. Integrate the `minijinja` crate into the build pipeline.
+- [x] 2.1.1. Integrate the `minijinja` crate into the build pipeline. See
+  [netsuke-design.md §4.1](netsuke-design.md).
 - [x] 2.1.2. Implement data-first parsing pipeline.
   - [x] Stage 2: Parse manifest into `serde_json::Value` (Initial YAML Parsing).
   - [x] Stage 3: Expand `foreach` and `when` entries with Jinja environment
@@ -71,7 +76,7 @@ configurations with variables, control flow, and custom functions.
   - [x] Stage 4: Deserialize expanded tree into typed AST and render remaining
     string fields (Deserialization & Final Rendering).
 - [x] 2.1.3. Create minijinja::Environment and populate with global vars from
-  manifest.
+  manifest. See [netsuke-design.md §4.2](netsuke-design.md).
 
 ### 2.2. Dynamic features and custom functions
 
@@ -79,16 +84,18 @@ configurations with variables, control flow, and custom functions.
   - [x] Ensure manifests are valid YAML before any templating occurs.
 - [x] 2.2.2. Restrict Jinja expressions to string values only.
   - [x] Forbid structural tags such as `{% if %}` and `{% for %}`.
-- [x] 2.2.3. Implement `foreach` and `when` keys for target generation.
+- [x] 2.2.3. Implement `foreach` and `when` keys for target generation. See
+  [netsuke-design.md §2.5](netsuke-design.md).
   - [x] Expose `item` and optional `index` variables.
   - [x] Layer per-iteration locals over `target.vars` and manifest globals for
     subsequent rendering phases.
 - [x] 2.2.4. Implement `env(var_name)` custom Jinja function for reading system
-  environment variables.
+  environment variables. See [netsuke-design.md §4.4](netsuke-design.md).
 - [x] 2.2.5. Implement `glob(pattern)` custom function for file path globbing.
+  See [netsuke-design.md §4.4](netsuke-design.md).
   - [x] Sort results lexicographically.
 - [x] 2.2.6. Support user-defined Jinja macros declared in top-level macros
-  list.
+  list. See [netsuke-design.md §4.3](netsuke-design.md).
   - [x] Register macros with environment before rendering.
 
 **Success criterion:** Netsuke can successfully build a manifest that uses
@@ -114,10 +121,12 @@ library, and CLI ergonomics.
 ### 3.1. Security and shell escaping
 
 - [x] 3.1.1. Integrate the `shell-quote` crate.
-- [x] 3.1.2. Mandate shell-quote use for variable substitutions.
+- [x] 3.1.2. Mandate shell-quote use for variable substitutions. See
+  [netsuke-design.md §6.2](netsuke-design.md).
   - [x] Prevent command injection during IR generation.
   - [x] Validate final command string with shlex.
-- [x] 3.1.3. Emit POSIX-sh-compatible quoting.
+- [x] 3.1.3. Emit POSIX-sh-compatible quoting. See
+  [netsuke-design.md §6.3](netsuke-design.md).
   - [x] Use portable single-quote style rather than Bash-only forms.
   - [x] Document and enforce bash execution if Bash-specific quoting is
     required.
@@ -126,44 +135,54 @@ library, and CLI ergonomics.
 
 ### 3.2. Actionable error reporting
 
-- [x] 3.2.1. Adopt `anyhow` and `thiserror` error handling strategy.
+- [x] 3.2.1. Adopt `anyhow` and `thiserror` error handling strategy. See
+  [netsuke-design.md §7.2](netsuke-design.md).
 - [x] 3.2.2. Define structured error types using thiserror in library modules.
+  See [netsuke-design.md §7.2](netsuke-design.md).
   - [x] Implement IrGenError::RuleNotFound, IrGenError::CircularDependency, and
     similar types.
 - [x] 3.2.3. Use anyhow in application logic for human-readable context.
   - [x] Apply `.with_context()` for error propagation.
 - [x] 3.2.4. Use `miette` to render diagnostics with source spans and helpful
-  messages.
+  messages. See [netsuke-design.md §7.2](netsuke-design.md).
 - [x] 3.2.5. Refactor all error-producing code to provide clear, contextual, and
-  actionable error messages. See [netsuke-design.md](netsuke-design.md).
+  actionable error messages. See [netsuke-design.md §7](netsuke-design.md).
 
 ### 3.3. Template standard library
 
-- [x] 3.3.1. Implement basic file-system tests.
+- [x] 3.3.1. Implement basic file-system tests. See
+  [netsuke-design.md §4.7](netsuke-design.md).
   - [x] Implement `dir`, `file`, `symlink`, `pipe`, `block_device`,
     `char_device`, and legacy `device` tests.
-- [x] 3.3.2. Implement path and file filters.
+- [x] 3.3.2. Implement path and file filters. See
+  [netsuke-design.md §4.7](netsuke-design.md).
   - [x] Implement basename, dirname, with_suffix, realpath, contents, hash, and
     similar filters.
-- [x] 3.3.3. Implement generic collection filters.
+- [x] 3.3.3. Implement generic collection filters. See
+  [netsuke-design.md §4.7](netsuke-design.md).
   - [x] Implement `uniq`, `flatten`, and `group_by`.
-- [x] 3.3.4. Implement network and command functions/filters.
+- [x] 3.3.4. Implement network and command functions/filters. See
+  [netsuke-design.md §4.7](netsuke-design.md).
   - [x] Implement fetch, shell, and grep.
   - [x] Ensure shell marks templates as impure to disable caching.
-- [x] 3.3.5. Implement time helpers.
+- [x] 3.3.5. Implement time helpers. See
+  [netsuke-design.md §4.7](netsuke-design.md).
   - [x] Implement `now` and `timedelta`.
 
 ### 3.4. CLI and feature completeness
 
-- [x] 3.4.1. Implement `clean` subcommand.
+- [x] 3.4.1. Implement `clean` subcommand. See
+  [netsuke-design.md §8.3](netsuke-design.md).
   - [x] Invoke `ninja -t clean`.
-- [x] 3.4.2. Implement `graph` subcommand.
+- [x] 3.4.2. Implement `graph` subcommand. See
+  [netsuke-design.md §8.3](netsuke-design.md).
   - [x] Invoke `ninja -t graph` to output DOT representation of dependency
     graph.
 - [x] 3.4.3. Refine all CLI output for clarity.
   - [x] Ensure help messages are descriptive.
   - [x] Ensure command feedback is intuitive.
-- [x] 3.4.4. Implement `manifest` subcommand.
+- [x] 3.4.4. Implement `manifest` subcommand. See
+  [netsuke-design.md §8.3](netsuke-design.md).
   - [x] Persist generated Ninja file without executing.
   - [x] Include integration tests for writing to disk and streaming to stdout.
 - [ ] 3.4.5. Extend graph subcommand with optional `--html` renderer.
@@ -175,7 +194,7 @@ library, and CLI ergonomics.
 ### 3.5. Executable discovery filter
 
 - [x] 3.5.1. Implement cross-platform `which` MiniJinja filter and function
-  alias. See [netsuke-design.md](netsuke-design.md).
+  alias. See [netsuke-design.md §4.7](netsuke-design.md).
   - [x] Expose `all`, `canonical`, `fresh`, and `cwd_mode` keyword arguments.
 - [x] 3.5.2. Integrate finder with Stage 3/4 render cache.
   - [x] Include `PATH`, optional `PATHEXT`, current directory, and option flags
