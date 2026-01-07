@@ -194,7 +194,7 @@ library, and CLI ergonomics.
   - [x] Add MiniJinja fixtures asserting deterministic renders across repeated
     invocations.
 
-### 3.6. Welcoming onboarding and defaults
+### 3.6. Onboarding and defaults
 
 - [ ] 3.6.1. Ensure default subcommand builds manifest defaults.
   - [ ] Emit guided error and hint for missing-manifest scenarios. See CLI
