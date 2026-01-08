@@ -42,11 +42,14 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             // Check if the error is a RunnerError with diagnostic info.
-            if let Some(runner_err) = err.downcast_ref::<runner::RunnerError>() {
-                let report = Report::new_boxed(Box::new(runner_err.clone()));
-                drop(writeln!(io::stderr(), "{report:?}"));
-            } else {
-                tracing::error!(error = %err, "runner failed");
+            match err.downcast::<runner::RunnerError>() {
+                Ok(runner_err) => {
+                    let report = Report::new(runner_err);
+                    drop(writeln!(io::stderr(), "{report:?}"));
+                }
+                Err(other_err) => {
+                    tracing::error!(error = %other_err, "runner failed");
+                }
             }
             ExitCode::FAILURE
         }

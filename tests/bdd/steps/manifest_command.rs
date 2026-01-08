@@ -95,6 +95,21 @@ fn store_run_result(world: &TestWorld, result: RunResult) {
     }
 }
 
+/// Run netsuke with the given arguments and store the result.
+fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
+    let run = run_netsuke_in(&temp_path, args)?;
+    store_run_result(
+        world,
+        RunResult {
+            stdout: run.stdout,
+            stderr: run.stderr,
+            success: run.success,
+        },
+    );
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
@@ -229,18 +244,7 @@ fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
 /// Run netsuke without any arguments.
 #[when("netsuke is run without arguments")]
 fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
-    let temp_path = get_temp_path(world)?;
-    let args: [&str; 0] = [];
-    let run = run_netsuke_in(&temp_path, &args)?;
-    store_run_result(
-        world,
-        RunResult {
-            stdout: run.stdout,
-            stderr: run.stderr,
-            success: run.success,
-        },
-    );
-    Ok(())
+    run_netsuke_and_store(world, &[])
 }
 
 /// Run netsuke with specified arguments.
@@ -250,16 +254,6 @@ fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
 )]
 #[when("netsuke is run with arguments {args:string}")]
 fn run_netsuke_with_args(world: &TestWorld, args: &str) -> Result<()> {
-    let temp_path = get_temp_path(world)?;
     let args: Vec<&str> = args.split_whitespace().collect();
-    let run = run_netsuke_in(&temp_path, &args)?;
-    store_run_result(
-        world,
-        RunResult {
-            stdout: run.stdout,
-            stderr: run.stderr,
-            success: run.success,
-        },
-    );
-    Ok(())
+    run_netsuke_and_store(world, &args)
 }
