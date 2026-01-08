@@ -16,7 +16,7 @@ use thiserror::Error;
 use tracing::{debug, info};
 
 /// Errors raised during command execution.
-#[derive(Debug, Clone, Error, Diagnostic)]
+#[derive(Debug, Error, Diagnostic)]
 pub enum RunnerError {
     /// The manifest file does not exist at the expected path.
     #[error("No `{manifest_name}` found in {directory}")]
