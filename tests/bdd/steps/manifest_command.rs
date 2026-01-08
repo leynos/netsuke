@@ -184,3 +184,82 @@ fn file_should_not_exist(world: &TestWorld, name: &str) -> Result<()> {
     let name = FileName::new(name);
     assert_file_existence(world, &name, false)
 }
+
+// ---------------------------------------------------------------------------
+// Missing manifest scenario steps
+// ---------------------------------------------------------------------------
+
+/// Create an empty workspace (no Netsukefile).
+#[given("an empty workspace")]
+fn empty_workspace(world: &TestWorld) -> Result<()> {
+    let temp = tempfile::tempdir().context("create temp dir for empty workspace")?;
+    *world.temp_dir.borrow_mut() = Some(temp);
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
+    Ok(())
+}
+
+/// Create an empty workspace at a specific path.
+///
+/// This step sets up a fixed-path workspace for scenarios that test the `-C`
+/// flag by creating the directory at the specified path and storing a tempdir
+/// in the world so subsequent steps can access it.
+#[given("an empty workspace at path {path:string}")]
+fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
+    // Ensure the directory exists and is empty.
+    let dir = Path::new(path);
+    if dir.exists() {
+        fs::remove_dir_all(dir).with_context(|| format!("remove existing {}", dir.display()))?;
+    }
+    fs::create_dir_all(dir).with_context(|| format!("create directory {}", dir.display()))?;
+    // Use a normal temp dir as the working directory for the netsuke command.
+    // The -C flag in the arguments will override where netsuke looks for files.
+    let temp = tempfile::tempdir().context("create temp dir for command execution")?;
+    *world.temp_dir.borrow_mut() = Some(temp);
+    // Clear world state for consistency.
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
+    Ok(())
+}
+
+/// Run netsuke without any arguments.
+#[when("netsuke is run without arguments")]
+fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
+    let args: [&str; 0] = [];
+    let run = run_netsuke_in(&temp_path, &args)?;
+    store_run_result(
+        world,
+        RunResult {
+            stdout: run.stdout,
+            stderr: run.stderr,
+            success: run.success,
+        },
+    );
+    Ok(())
+}
+
+/// Run netsuke with specified arguments.
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
+#[when("netsuke is run with arguments {args:string}")]
+fn run_netsuke_with_args(world: &TestWorld, args: &str) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
+    let args: Vec<&str> = args.split_whitespace().collect();
+    let run = run_netsuke_in(&temp_path, &args)?;
+    store_run_result(
+        world,
+        RunResult {
+            stdout: run.stdout,
+            stderr: run.stderr,
+            success: run.success,
+        },
+    );
+    Ok(())
+}

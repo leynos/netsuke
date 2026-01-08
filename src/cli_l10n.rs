@@ -34,9 +34,36 @@ pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) 
         command = command.long_about(message);
     }
 
+    command = localize_arguments(command, localizer, None);
     localize_subcommands(&mut command, localizer);
 
     command
+}
+
+/// Localise help text for all arguments in a command.
+///
+/// When `subcommand_name` is `None`, keys are looked up as `cli.flag.{arg_id}.help`.
+/// When a subcommand name is provided, keys are `cli.subcommand.{name}.flag.{arg_id}.help`.
+fn localize_arguments(
+    command: Command,
+    localizer: &dyn Localizer,
+    subcommand_name: Option<&str>,
+) -> Command {
+    command.mut_args(|arg| {
+        let arg_id = arg.get_id().as_str();
+        let key = subcommand_name.map_or_else(
+            || format!("cli.flag.{arg_id}.help"),
+            |name| format!("cli.subcommand.{name}.flag.{arg_id}.help"),
+        );
+        if let Some(help) = arg.get_help().map(ToString::to_string) {
+            let message = localizer.message(&key, None, &help);
+            arg.help(message)
+        } else if let Some(message) = localizer.lookup(&key, None) {
+            arg.help(message)
+        } else {
+            arg
+        }
+    })
 }
 
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
@@ -58,6 +85,9 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
         } else if let Some(message) = localizer.lookup(&long_key, None) {
             updated = updated.long_about(message);
         }
+
+        // Localise subcommand argument help text.
+        updated = localize_arguments(updated, localizer, Some(&name));
 
         *subcommand = updated;
     }
