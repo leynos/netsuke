@@ -14,11 +14,12 @@ use tempfile::tempdir;
 #[test]
 fn main_logs_errors_to_stderr() {
     let temp = tempdir().expect("create temp dir");
+    // ManifestNotFound errors are rendered via miette with diagnostic output.
     assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
         .arg("graph")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("runner failed"))
-        .stdout(predicate::str::contains("runner failed").not());
+        .stderr(predicate::str::contains("No `Netsukefile` found"))
+        .stdout(predicate::str::contains("Netsukefile").not());
 }

@@ -8,10 +8,31 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
+use miette::Diagnostic;
 use std::borrow::Cow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
+use thiserror::Error;
 use tracing::{debug, info};
+
+/// Errors raised during command execution.
+#[derive(Debug, Clone, Error, Diagnostic)]
+pub enum RunnerError {
+    /// The manifest file does not exist at the expected path.
+    #[error("No `{manifest_name}` found in {directory}")]
+    #[diagnostic(
+        code(netsuke::runner::manifest_not_found),
+        help("Run `netsuke --help` to see how to specify or create a manifest.")
+    )]
+    ManifestNotFound {
+        /// Name of the expected manifest file (e.g., "Netsukefile").
+        manifest_name: String,
+        /// Directory description (e.g., "the current directory").
+        directory: String,
+        /// The path that was attempted.
+        path: PathBuf,
+    },
+}
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
@@ -243,6 +264,31 @@ fn handle_graph(cli: &Cli) -> Result<()> {
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli)?;
+
+    // Check for missing manifest and provide a helpful error with hint.
+    if !manifest_path.as_std_path().exists() {
+        let manifest_name = manifest_path
+            .file_name()
+            .unwrap_or("Netsukefile")
+            .to_owned();
+        let directory = if cli.directory.is_some() {
+            format!(
+                "directory `{}`",
+                manifest_path
+                    .parent()
+                    .map_or_else(|| manifest_path.as_str(), camino::Utf8Path::as_str)
+            )
+        } else {
+            "the current directory".to_owned()
+        };
+        return Err(RunnerError::ManifestNotFound {
+            manifest_name,
+            directory,
+            path: manifest_path.into_std_path_buf(),
+        }
+        .into());
+    }
+
     let policy = cli
         .network_policy()
         .context("derive network policy from CLI flags")?;

@@ -59,7 +59,21 @@ netsuke build target_name another_target # Builds specific targets
 ```
 
 If no `Netsukefile` is found, Netsuke will provide a helpful error message
-guiding you.
+guiding you:
+
+```text
+Error: No `Netsukefile` found in the current directory.
+
+Hint: Run `netsuke --help` to see how to specify or create a manifest.
+```
+
+You can specify a different manifest path using the `-f` or `--file` option:
+
+```sh
+netsuke -f path/to/your/manifest.yml
+```
+
+For a step-by-step introduction, see the [Quick Start guide](quickstart.md).
 
 ## 3\. The Netsukefile Manifest
 

@@ -215,16 +215,16 @@ library, and CLI ergonomics.
 
 ### 3.6. Onboarding and defaults
 
-- [ ] 3.6.1. Ensure default subcommand builds manifest defaults.
-  - [ ] Emit guided error and hint for missing-manifest scenarios. See CLI
+- [x] 3.6.1. Ensure default subcommand builds manifest defaults.
+  - [x] Emit guided error and hint for missing-manifest scenarios. See CLI
     design.
-  - [ ] Guard with integration tests.
-- [ ] 3.6.2. Curate OrthoConfig-generated Clap help output.
-  - [ ] Ensure every subcommand and flag has plain-language, localizable
+  - [x] Guard with integration tests.
+- [x] 3.6.2. Curate OrthoConfig-generated Clap help output.
+  - [x] Ensure every subcommand and flag has plain-language, localizable
     description. See style guide.
-- [ ] 3.6.3. Publish "Hello World" quick-start walkthrough.
-  - [ ] Demonstrate running Netsuke end-to-end.
-  - [ ] Exercise via documentation test or example build fixture.
+- [x] 3.6.3. Publish "Hello World" quick-start walkthrough.
+  - [x] Demonstrate running Netsuke end-to-end.
+  - [x] Exercise via documentation test or example build fixture.
 
 ### 3.7. Localization with Fluent
 

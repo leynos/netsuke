@@ -243,14 +243,17 @@ where
     T: Into<OsString> + Clone,
 {
     let mut command = localize_command(Cli::command(), localizer);
-    let mut matches = command
+    let matches = command
         .try_get_matches_from_mut(iter)
         .map_err(|err| localize_clap_error_with_command(err, localizer, Some(&command)))?;
-    let cli = Cli::from_arg_matches_mut(&mut matches).map_err(|clap_err| {
+    // Clone matches before from_arg_matches_mut consumes the values.
+    let matches_for_merge = matches.clone();
+    let mut matches_for_parse = matches;
+    let cli = Cli::from_arg_matches_mut(&mut matches_for_parse).map_err(|clap_err| {
         let with_cmd = clap_err.with_cmd(&command);
         localize_clap_error_with_command(with_cmd, localizer, Some(&command))
     })?;
-    Ok((cli, matches))
+    Ok((cli, matches_for_merge))
 }
 
 /// Return the prefixed environment provider for CLI configuration.
