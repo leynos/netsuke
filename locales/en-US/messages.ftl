@@ -10,10 +10,10 @@ cli.flag.directory.help = Run as if started in this directory.
 cli.flag.jobs.help = Set the number of parallel build jobs.
 cli.flag.verbose.help = Enable verbose diagnostic logging.
 cli.flag.locale.help = Locale tag for CLI copy (for example: en-US, es-ES).
-cli.flag.fetch-allow-scheme.help = Additional URL schemes allowed for the fetch helper.
-cli.flag.fetch-allow-host.help = Hostnames that are permitted when default deny is enabled.
-cli.flag.fetch-block-host.help = Hostnames that are always blocked, even when allowed elsewhere.
-cli.flag.fetch-default-deny.help = Deny all hosts by default; only allow the declared allowlist.
+cli.flag.fetch_allow_scheme.help = Additional URL schemes allowed for the fetch helper.
+cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny is enabled.
+cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
+cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).

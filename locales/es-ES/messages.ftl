@@ -10,10 +10,10 @@ cli.flag.directory.help = Ejecutar como si se iniciara en este directorio.
 cli.flag.jobs.help = Número de trabajos de compilación en paralelo.
 cli.flag.verbose.help = Habilitar registro de diagnóstico detallado.
 cli.flag.locale.help = Etiqueta de idioma para la CLI (por ejemplo: en-US, es-ES).
-cli.flag.fetch-allow-scheme.help = Esquemas de URL adicionales permitidos para el ayudante fetch.
-cli.flag.fetch-allow-host.help = Nombres de host permitidos cuando la denegación predeterminada está habilitada.
-cli.flag.fetch-block-host.help = Nombres de host siempre bloqueados, incluso cuando están permitidos.
-cli.flag.fetch-default-deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
+cli.flag.fetch_allow_scheme.help = Esquemas de URL adicionales permitidos para el ayudante fetch.
+cli.flag.fetch_allow_host.help = Nombres de host permitidos cuando la denegación predeterminada está habilitada.
+cli.flag.fetch_block_host.help = Nombres de host siempre bloqueados, incluso cuando están permitidos.
+cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
