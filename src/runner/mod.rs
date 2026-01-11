@@ -4,6 +4,17 @@
 //! handles command execution. It now delegates build requests to the Ninja
 //! subprocess, streaming its output back to the user.
 
+// Module-level suppression for version-dependent lint false positives from
+// miette/thiserror derive macros. The unused_assignments lint fires in some
+// Rust versions but not others. Since `#[expect]` fails when the lint doesn't
+// fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
+// `#[allow]` here. FIXME: remove once upstream is fixed.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    unused_assignments
+)]
+
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
