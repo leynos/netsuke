@@ -156,7 +156,7 @@ The input files have been transformed to uppercase.
   - `website.yml` — Static site generation from Markdown
   - `photo_edit.yml` — Photo processing with glob patterns
 - Run `netsuke --help` to see all available options
-- Try `netsuke graph` to visualise your build dependency graph
+- Try `netsuke graph` to visualize your build dependency graph
 
 ## Troubleshooting
 
