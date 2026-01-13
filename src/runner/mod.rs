@@ -4,47 +4,18 @@
 //! handles command execution. It now delegates build requests to the Ninja
 //! subprocess, streaming its output back to the user.
 
-// Module-level suppression for version-dependent lint false positives from
-// miette/thiserror derive macros. The unused_assignments lint fires in some
-// Rust versions but not others. Since `#[expect]` fails when the lint doesn't
-// fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
-// `#[allow]` here.
-// FIXME(rust-lang/rust#130021): remove once upstream is fixed.
-#![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    unused_assignments
-)]
+mod error;
+
+pub use error::RunnerError;
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
-use miette::Diagnostic;
 use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tempfile::NamedTempFile;
-use thiserror::Error;
 use tracing::{debug, info};
-
-/// Errors raised during command execution.
-#[derive(Debug, Error, Diagnostic)]
-pub enum RunnerError {
-    /// The manifest file does not exist at the expected path.
-    #[error("No `{manifest_name}` found in {directory}")]
-    #[diagnostic(
-        code(netsuke::runner::manifest_not_found),
-        help("Run `netsuke --help` to see how to specify or create a manifest.")
-    )]
-    ManifestNotFound {
-        /// Name of the expected manifest file (e.g., "Netsukefile").
-        manifest_name: String,
-        /// Directory description (e.g., "the current directory").
-        directory: String,
-        /// The path that was attempted.
-        path: PathBuf,
-    },
-}
 
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
