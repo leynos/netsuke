@@ -251,11 +251,10 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     // Check for missing manifest and provide a helpful error with hint.
     if !manifest_path.as_std_path().exists() {
         // `resolve_manifest_path()` validates that `file_name()` is Some.
-        #[expect(
-            clippy::expect_used,
-            reason = "resolve_manifest_path guarantees file_name is present"
-        )]
-        let manifest_name = manifest_path.file_name().expect("validated").to_owned();
+        let manifest_name = manifest_path
+            .file_name()
+            .ok_or_else(|| anyhow!("manifest path '{}' has no file name", manifest_path))?
+            .to_owned();
         let directory = if cli.directory.is_some() {
             format!(
                 "directory `{}`",
