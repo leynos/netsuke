@@ -1,4 +1,4 @@
-# Onboarding and Defaults (Roadmap 3.6)
+# Onboarding and defaults (roadmap 3.6)
 
 This ExecPlan is a living document. The sections `Progress`,
 `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must
@@ -10,7 +10,7 @@ This plan covers all three items in roadmap section 3.6:
 - 3.6.2 Curate OrthoConfig-generated Clap help output
 - 3.6.3 Publish "Hello World" quick-start walkthrough
 
-## Purpose / Big Picture
+## Purpose / big picture
 
 Users running `netsuke` for the first time should have a smooth onboarding
 experience. When a manifest file is missing, the CLI should emit a clear,
@@ -49,7 +49,7 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 - [x] Update `docs/users-guide.md` with new error behaviour and quickstart link.
 - [x] Run formatting, lint, and test gates; mark roadmap entries as done.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - Observation: The `thiserror` derive macro's `#[error(...)]` attribute captures
   struct fields for formatting, but Clippy's `unused_assignments` lint does not
@@ -67,7 +67,7 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
   Evidence: Implementation matched expectations for error handling, help
   localization, and quickstart documentation.
 
-## Decision Log
+## Decision log
 
 - Decision: Detect missing manifest at runner level (`generate_ninja()`) rather
   than in the manifest loader. Rationale: The runner has CLI context (directory
@@ -99,7 +99,7 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
   document while providing a focused, step-by-step onboarding path for new
   users. Date/Author: 2026-01-08 (Terry)
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 - Outcome: All three roadmap items (3.6.1, 3.6.2, 3.6.3) implemented and PR ready
   for review.
@@ -130,7 +130,7 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
   - Track rust-lang/rust#130021 and remove lint suppression when fixed.
   - Consider Fluent integration for `miette` diagnostics in roadmap item 3.7.
 
-## Context and Orientation
+## Context and orientation
 
 Key runtime entry points and relevant files:
 
@@ -159,9 +159,9 @@ section, lines 29-82). Testing guidance is in
 `docs/rust-testing-with-rstest-fixtures.md`. Documentation style is in
 `docs/documentation-style-guide.md` (British English, Oxford comma).
 
-## Plan of Work
+## Plan of work
 
-### 3.6.1 Missing Manifest Error Handling
+### 3.6.1 Missing manifest error handling
 
 1. **Define error type.** Add a `ManifestNotFound` variant to the runner's error
    handling in `src/runner/mod.rs`. Use `thiserror::Error` for the error trait
@@ -188,7 +188,7 @@ section, lines 29-82). Testing guidance is in
 4. **Add unit tests.** Add `rstest` unit tests to verify that `generate_ninja()`
    returns the correct error type when the manifest file is missing.
 
-### 3.6.2 Curate Help Output
+### 3.6.2 Curate help output
 
 1. **Audit current help text.** Capture `netsuke --help` and each subcommand
    help to identify gaps in flag descriptions.
@@ -202,8 +202,8 @@ section, lines 29-82). Testing guidance is in
    `locales/en-US/messages.ftl`:
    - Root flags: `file`, `directory`, `jobs`, `verbose`, `locale`,
      `fetch-allow-scheme`, `fetch-allow-host`, `fetch-block-host`,
-     `fetch-default-deny`
-   - Build subcommand: `emit`, `targets`
+     and `fetch-default-deny`
+   - Build subcommand: `emit` and `targets`
    - Manifest subcommand: output file argument
 
 4. **Add Spanish translations.** Add corresponding keys to
@@ -212,7 +212,7 @@ section, lines 29-82). Testing guidance is in
 5. **Add BDD test.** Verify help output contains expected localized strings for
    both English and Spanish locales.
 
-### 3.6.3 Hello World Quickstart
+### 3.6.3 Hello world quickstart
 
 1. **Create quickstart document.** Write `docs/quickstart.md` with:
    - Prerequisites (Netsuke, Ninja)
@@ -244,7 +244,7 @@ section, lines 29-82). Testing guidance is in
    and `make test`. Once all pass, mark roadmap items 3.6.1, 3.6.2, and 3.6.3
    as done in `docs/roadmap.md`.
 
-## Concrete Steps
+## Concrete steps
 
 All commands are run from the repository root (`/root/repo`). Use `tee` with
 `set -o pipefail` to preserve exit codes, as required by `AGENTS.md`.
@@ -299,7 +299,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
    cd /root/repo
    ```
 
-## Validation and Acceptance
+## Validation and acceptance
 
 - Running `netsuke` in an empty directory prints:
   `Error: No \`Netsukefile\` found in the current directory.` followed by a hint
@@ -316,7 +316,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 - `docs/users-guide.md` links to quickstart and documents error behaviour.
 - `docs/roadmap.md` items 3.6.1, 3.6.2, 3.6.3 are marked as done.
 
-## Idempotence and Recovery
+## Idempotence and recovery
 
 - The existence check and error emission are safe to re-run; they do not modify
   state.
@@ -326,7 +326,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 - If localization keys conflict with existing entries, rename them with a unique
   prefix.
 
-## Artifacts and Notes
+## Artifacts and notes
 
 Keep the following transcripts for evidence:
 
@@ -335,7 +335,7 @@ Keep the following transcripts for evidence:
 - `/tmp/netsuke-help.log` — help output with localized flag descriptions.
 - `/tmp/netsuke-test.log` — test run showing new BDD and unit tests passing.
 
-## Interfaces and Dependencies
+## Interfaces and dependencies
 
 - **Error type location**: `src/runner/mod.rs` — add `RunnerError` enum (or
   extend existing error handling) with `ManifestNotFound` variant.
@@ -356,7 +356,7 @@ Keep the following transcripts for evidence:
 - **Documentation**: `docs/users-guide.md` section 2.
 - **Roadmap**: `docs/roadmap.md` items 3.6.1, 3.6.2, 3.6.3.
 
-## Critical Files to Modify
+## Critical files to modify
 
 | File | Change |
 |------|--------|
@@ -373,7 +373,7 @@ Keep the following transcripts for evidence:
 | `docs/users-guide.md` | Link to quickstart; document error behaviour |
 | `docs/roadmap.md` | Mark 3.6.1, 3.6.2, 3.6.3 as done |
 
-## Revision Note (required when editing an ExecPlan)
+## Revision note (required when editing an ExecPlan)
 
 - 2026-01-08: Initial ExecPlan created for roadmap section 3.6 covering missing
   manifest error handling (3.6.1), curated help output (3.6.2), and Hello World
