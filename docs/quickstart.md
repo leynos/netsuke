@@ -1,11 +1,11 @@
-# Quick Start: Your First Netsuke Build
+# Quick Start: A First Netsuke Build
 
-This guide walks you through creating and running your first Netsuke build in
-under five minutes.
+This guide walks through creating and running a first Netsuke build in under
+five minutes.
 
 ## Prerequisites
 
-Before you begin, ensure you have:
+Before beginning, ensure the following are available:
 
 - **Netsuke** installed (build from source with `cargo build --release` or
   install via `cargo install netsuke`)
@@ -14,14 +14,14 @@ Before you begin, ensure you have:
 
 ## Step 1: Create a Project Directory
 
-Open a terminal and create a new directory for your project:
+Open a terminal and create a new directory for the project:
 
 ```sh
 mkdir hello-netsuke
 cd hello-netsuke
 ```
 
-## Step 2: Create Your First Manifest
+## Step 2: Create the First Manifest
 
 Create a file named `Netsukefile` with the following content:
 
@@ -38,18 +38,18 @@ defaults:
 
 This manifest defines:
 
-- A target called `hello.txt` that creates a file with a greeting
-- A default target so running `netsuke` without arguments builds `hello.txt`
+- A target called `hello.txt` that creates a file with a greeting.
+- A default target, so running `netsuke` without arguments builds `hello.txt`.
 
 ## Step 3: Run Netsuke
 
-Run Netsuke to build your project:
+Run Netsuke to build the project:
 
 ```sh
 netsuke
 ```
 
-You should see output similar to:
+The output should be similar to:
 
 ```text
 [1/1] echo 'Hello from Netsuke!' > hello.txt
@@ -67,11 +67,11 @@ Output:
 Hello from Netsuke!
 ```
 
-Congratulations! You've just run your first Netsuke build.
+This completes a first Netsuke build.
 
 ## Step 4: Add Variables and Templates
 
-Netsuke supports Jinja templating for dynamic manifests. Update your
+Netsuke supports Jinja templating for dynamic manifests. Update the
 `Netsukefile`:
 
 ```yaml
@@ -117,7 +117,7 @@ echo "Content A" > input_a.txt
 echo "Content B" > input_b.txt
 ```
 
-Update your `Netsukefile` to process all `.txt` files:
+Update the `Netsukefile` to process all `.txt` files:
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -162,8 +162,8 @@ The input files have been transformed to uppercase.
 
 ### "No `Netsukefile` found in the current directory"
 
-Ensure you're in the correct directory and that a file named `Netsukefile`
-exists. You can also specify a different manifest path with `-f`:
+Ensure the current directory is correct and that a file named `Netsukefile`
+exists. A different manifest path can be specified with `-f`:
 
 ```sh
 netsuke -f path/to/your/manifest.yml
@@ -171,7 +171,7 @@ netsuke -f path/to/your/manifest.yml
 
 ### "ninja: command not found"
 
-Install Ninja using your system's package manager:
+Install Ninja using the system's package manager:
 
 - **Ubuntu/Debian:** `sudo apt install ninja-build`
 - **macOS (Homebrew):** `brew install ninja`
