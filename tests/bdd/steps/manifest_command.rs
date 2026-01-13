@@ -222,18 +222,22 @@ fn empty_workspace(world: &TestWorld) -> Result<()> {
 /// flag by creating the directory at the specified path and storing a tempdir
 /// in the world so subsequent steps can access it.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the path is absolute or outside the expected test locations to
-/// prevent accidental deletion of sensitive directories.
+/// Returns an error if the path is outside expected test locations (must be a
+/// subdirectory of `/tmp` or the system temp directory, not the root itself)
+/// to prevent accidental deletion of sensitive directories.
 #[given("an empty workspace at path {path:string}")]
 fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
     let dir = Path::new(path);
-    // Safeguard: only allow paths under /tmp or system temp directory.
-    let is_safe = dir.starts_with("/tmp") || dir.starts_with(std::env::temp_dir());
+    let temp_dir = std::env::temp_dir();
+    // Safeguard: only allow paths that are proper subdirectories of /tmp or
+    // the system temp directory (not the root temp directory itself).
+    let is_safe_tmp = dir.starts_with("/tmp") && dir != Path::new("/tmp");
+    let is_safe_temp = dir.starts_with(&temp_dir) && dir != temp_dir;
     ensure!(
-        is_safe,
-        "test workspace path must be under /tmp or system temp directory: {}",
+        is_safe_tmp || is_safe_temp,
+        "test workspace path must be a subdirectory of /tmp or system temp directory, not the root itself: {}",
         dir.display()
     );
     // Ensure the directory exists and is empty.
@@ -260,6 +264,13 @@ fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
 }
 
 /// Run netsuke with specified arguments.
+///
+/// # Limitations
+///
+/// Arguments are split on whitespace using `split_whitespace()`, which does not
+/// handle quoted arguments containing spaces. For example, `-f "my file.yml"`
+/// would be incorrectly split into `["-f", "\"my", "file.yml\""]`. Current test
+/// scenarios use only simple arguments without embedded spaces.
 #[expect(
     clippy::shadow_reuse,
     reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
