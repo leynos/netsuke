@@ -8,7 +8,8 @@
 // miette/thiserror derive macros. The unused_assignments lint fires in some
 // Rust versions but not others. Since `#[expect]` fails when the lint doesn't
 // fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
-// `#[allow]` here. FIXME: remove once upstream is fixed.
+// `#[allow]` here.
+// FIXME(rust-lang/rust#130021): remove once upstream is fixed.
 #![allow(
     clippy::allow_attributes,
     clippy::allow_attributes_without_reason,
@@ -278,10 +279,12 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 
     // Check for missing manifest and provide a helpful error with hint.
     if !manifest_path.as_std_path().exists() {
-        let manifest_name = manifest_path
-            .file_name()
-            .unwrap_or("Netsukefile")
-            .to_owned();
+        // `resolve_manifest_path()` validates that `file_name()` is Some.
+        #[expect(
+            clippy::expect_used,
+            reason = "resolve_manifest_path guarantees file_name is present"
+        )]
+        let manifest_name = manifest_path.file_name().expect("validated").to_owned();
         let directory = if cli.directory.is_some() {
             format!(
                 "directory `{}`",
@@ -341,13 +344,20 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
     let file = Utf8PathBuf::from_path_buf(cli.file.clone())
         .map_err(|path| anyhow!("manifest path '{path:?}' must be valid UTF-8"))?;
-    if let Some(dir) = &cli.directory {
+    let resolved = if let Some(dir) = &cli.directory {
         let base = Utf8PathBuf::from_path_buf(dir.clone())
             .map_err(|path| anyhow!("manifest directory '{path:?}' must be valid UTF-8"))?;
-        Ok(base.join(&file))
+        base.join(&file)
     } else {
-        Ok(file)
+        file
+    };
+    if resolved.file_name().is_none() {
+        return Err(anyhow!(
+            "manifest path '{}' must include a file name",
+            resolved
+        ));
     }
+    Ok(resolved)
 }
 
 /// Resolve an output path relative to the CLI working directory.
