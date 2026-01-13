@@ -267,9 +267,9 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
   mentioning `--help`.
 - Running `netsuke --file custom.yml` where `custom.yml` does not exist prints a
   similar error with the custom filename.
-- Running `netsuke --help` shows localized descriptions for all flags.
-- Running `netsuke build --help` shows localized subcommand flag help.
-- Running `netsuke --locale es-ES --help` shows Spanish translations.
+- The `netsuke --help` output shows localized descriptions for all flags.
+- Subcommand help (`netsuke build --help`) displays localized flag text.
+- Spanish translations appear when invoking `netsuke --locale es-ES --help`.
 - `docs/quickstart.md` exists with step-by-step tutorial.
 - `examples/hello-world/` contains working example that builds successfully.
 - BDD scenarios pass for missing manifest and quickstart example.
@@ -325,12 +325,12 @@ Keep the following transcripts for evidence:
 | `src/cli_l10n.rs` | Add `localize_arguments()` to localize flag help strings |
 | `locales/en-US/messages.ftl` | Add error keys + all flag help descriptions |
 | `locales/es-ES/messages.ftl` | Add Spanish translations |
-| `tests/features/missing_manifest.feature` | **New** - BDD scenarios for missing manifest |
-| `tests/features/quickstart.feature` | **New** - BDD scenario exercising hello-world example |
-| `docs/quickstart.md` | **New** - step-by-step tutorial |
-| `examples/hello-world/Netsukefile` | **New** - minimal working example |
-| `examples/hello-world/input.txt` | **New** - sample input |
-| `examples/hello-world/README.md` | **New** - example documentation |
+| `tests/features/missing_manifest.feature` | **New** — BDD scenarios for missing manifest |
+| `tests/features/quickstart.feature` | **New** — BDD scenario exercising hello-world example |
+| `docs/quickstart.md` | **New** — step-by-step tutorial |
+| `examples/hello-world/Netsukefile` | **New** — minimal working example |
+| `examples/hello-world/input.txt` | **New** — sample input |
+| `examples/hello-world/README.md` | **New** — example documentation |
 | `docs/users-guide.md` | Link to quickstart; document error behaviour |
 | `docs/roadmap.md` | Mark 3.6.1, 3.6.2, 3.6.3 as done |
 
