@@ -221,10 +221,22 @@ fn empty_workspace(world: &TestWorld) -> Result<()> {
 /// This step sets up a fixed-path workspace for scenarios that test the `-C`
 /// flag by creating the directory at the specified path and storing a tempdir
 /// in the world so subsequent steps can access it.
+///
+/// # Panics
+///
+/// Panics if the path is absolute or outside the expected test locations to
+/// prevent accidental deletion of sensitive directories.
 #[given("an empty workspace at path {path:string}")]
 fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
-    // Ensure the directory exists and is empty.
     let dir = Path::new(path);
+    // Safeguard: only allow paths under /tmp or system temp directory.
+    let is_safe = dir.starts_with("/tmp") || dir.starts_with(std::env::temp_dir());
+    ensure!(
+        is_safe,
+        "test workspace path must be under /tmp or system temp directory: {}",
+        dir.display()
+    );
+    // Ensure the directory exists and is empty.
     if dir.exists() {
         fs::remove_dir_all(dir).with_context(|| format!("remove existing {}", dir.display()))?;
     }
@@ -256,4 +268,20 @@ fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
 fn run_netsuke_with_args(world: &TestWorld, args: &str) -> Result<()> {
     let args: Vec<&str> = args.split_whitespace().collect();
     run_netsuke_and_store(world, &args)
+}
+
+/// Run netsuke with `-C` pointing to the workspace directory.
+///
+/// This step runs netsuke with the `-C` flag set to the temp directory path,
+/// allowing tests to verify the directory flag behaviour without hardcoded paths.
+#[when("netsuke is run with directory flag pointing to the workspace")]
+fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
+    let temp_dir = world
+        .temp_dir
+        .borrow()
+        .as_ref()
+        .map(|t| t.path().to_path_buf())
+        .context("temp_dir must be set by a Given step")?;
+    let dir_arg = temp_dir.to_string_lossy().to_string();
+    run_netsuke_and_store(world, &["-C", &dir_arg])
 }

@@ -14,7 +14,7 @@ Feature: Missing manifest error handling
     And stderr should contain "No `nonexistent.yml` found"
 
   Scenario: Running netsuke in specified directory without manifest
-    Given an empty workspace at path "/tmp/netsuke-test-empty"
-    When netsuke is run with arguments "-C /tmp/netsuke-test-empty"
+    Given an empty workspace
+    When netsuke is run with directory flag pointing to the workspace
     Then the command should fail
     And stderr should contain "No `Netsukefile` found"
