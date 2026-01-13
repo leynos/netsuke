@@ -51,8 +51,21 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 
 ## Surprises & Discoveries
 
-- Observation: None yet.
-  Evidence: N/A.
+- Observation: The `thiserror` derive macro's `#[error(...)]` attribute captures
+  struct fields for formatting, but Clippy's `unused_assignments` lint does not
+  recognize this usage, triggering false-positive warnings for fields only used
+  in error messages.
+  Evidence: `src/runner/mod.rs` required `#![allow(unused_assignments)]` with an
+  explanatory comment referencing upstream issue `rust-lang/rust#130021`.
+
+- Observation: Fluent localization keys must use snake_case to match clap's
+  `Arg::id()` output, not kebab-case as initially assumed from the flag names.
+  Evidence: `localize_arguments()` generates keys like `cli.flag.fetch_allow_scheme.help`
+  from `--fetch-allow-scheme`, requiring snake_case keys in `.ftl` files.
+
+- Observation: No other surprises encountered during implementation.
+  Evidence: Implementation matched expectations for error handling, help
+  localization, and quickstart documentation.
 
 ## Decision Log
 
