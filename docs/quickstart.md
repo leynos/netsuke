@@ -1,7 +1,7 @@
-# Quick Start: A First Netsuke Build
+# Quick start: a Netsuke build
 
-This guide walks through creating and running a first Netsuke build in under
-five minutes.
+This guide walks through creating and running a Netsuke build in under five
+minutes.
 
 ## Prerequisites
 
@@ -12,7 +12,7 @@ Before beginning, ensure the following are available:
 - **Ninja** build tool in your PATH (install via your package manager, e.g.,
   `apt install ninja-build` or `brew install ninja`)
 
-## Step 1: Create a Project Directory
+## Step 1: Create a project directory
 
 Open a terminal and create a new directory for the project:
 
@@ -21,7 +21,7 @@ mkdir hello-netsuke
 cd hello-netsuke
 ```
 
-## Step 2: Create the First Manifest
+## Step 2: Create the first manifest
 
 Create a file named `Netsukefile` with the following content:
 
@@ -41,7 +41,7 @@ This manifest defines:
 - A target called `hello.txt` that creates a file with a greeting.
 - A default target, so running `netsuke` without arguments builds `hello.txt`.
 
-## Step 3: Run Netsuke
+## Step 3: Run netsuke
 
 Run Netsuke to build the project:
 
@@ -69,7 +69,7 @@ Hello from Netsuke!
 
 This completes a first Netsuke build.
 
-## Step 4: Add Variables and Templates
+## Step 4: Add variables and templates
 
 Netsuke supports Jinja templating for dynamic manifests. Update the
 `Netsukefile`:
@@ -107,7 +107,7 @@ Output:
 Hello, World!
 ```
 
-## Step 5: Use Globbing and Foreach
+## Step 5: Use globbing and foreach
 
 For more complex builds, Netsuke can process multiple files. Create some input
 files:
@@ -148,7 +148,7 @@ cat output_input_b.out
 
 The input files have been transformed to uppercase.
 
-## Next Steps
+## Next steps
 
 - Read the full [User Guide](users-guide.md) for comprehensive documentation
 - Explore the `examples/` directory for real-world manifest examples:
