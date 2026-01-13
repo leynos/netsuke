@@ -38,16 +38,16 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 
 ## Progress
 
-- [ ] Draft ExecPlan and capture repository context.
-- [ ] Implement `ManifestNotFound` error variant with `miette::Diagnostic`.
-- [ ] Add file existence check in `generate_ninja()` before manifest loading.
-- [ ] Extend `cli_l10n.rs` to localize flag help strings.
-- [ ] Add localization keys to Fluent files (`en-US`, `es-ES`).
-- [ ] Create `docs/quickstart.md` tutorial.
-- [ ] Create `examples/hello-world/` fixture with working manifest.
-- [ ] Add BDD scenarios for missing manifest and quickstart example.
-- [ ] Update `docs/users-guide.md` with new error behaviour and quickstart link.
-- [ ] Run formatting, lint, and test gates; mark roadmap entries as done.
+- [x] Draft ExecPlan and capture repository context.
+- [x] Implement `ManifestNotFound` error variant with `miette::Diagnostic`.
+- [x] Add file existence check in `generate_ninja()` before manifest loading.
+- [x] Extend `cli_l10n.rs` to localize flag help strings.
+- [x] Add localization keys to Fluent files (`en-US`, `es-ES`).
+- [x] Create `docs/quickstart.md` tutorial.
+- [x] Create `examples/hello-world/` fixture with working manifest.
+- [x] Add BDD scenarios for missing manifest and quickstart example.
+- [x] Update `docs/users-guide.md` with new error behaviour and quickstart link.
+- [x] Run formatting, lint, and test gates; mark roadmap entries as done.
 
 ## Surprises & Discoveries
 
@@ -101,8 +101,34 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 
 ## Outcomes & Retrospective
 
-- Outcome: Pending.
-  Notes: N/A.
+- Outcome: All three roadmap items (3.6.1, 3.6.2, 3.6.3) implemented and PR ready
+  for review.
+  - Default subcommand now validates manifest existence before loading, producing
+    a clear error with actionable hint when the manifest is missing.
+  - CLI help text fully localized via `localize_arguments()` helper; Spanish
+    translations provided alongside English.
+  - Quickstart tutorial (`docs/quickstart.md`) and working example
+    (`examples/hello-world/`) created for new user onboarding.
+  - BDD scenarios added for missing manifest detection and quickstart example
+    validation.
+  - All quality gates pass (`make check-fmt`, `make lint`, `make test`).
+
+- Design decisions:
+  - Manifest existence check placed in `generate_ninja()` at the runner level to
+    access CLI context for directory descriptions in error messages.
+  - Used `miette::Diagnostic` with static English messages; full Fluent
+    integration for runtime errors deferred to roadmap item 3.7.
+  - Hello-world example uses text processing (not C compilation) for portability.
+
+- Known limitations:
+  - Module-level `#![allow(unused_assignments)]` required to suppress
+    false-positive lint caused by thiserror derive macro (tracked upstream at
+    rust-lang/rust#130021).
+  - Fluent keys must use snake_case to match clap's `Arg::id()` output.
+
+- Follow-up tasks:
+  - Track rust-lang/rust#130021 and remove lint suppression when fixed.
+  - Consider Fluent integration for `miette` diagnostics in roadmap item 3.7.
 
 ## Context and Orientation
 
@@ -164,15 +190,15 @@ section, lines 29-82). Testing guidance is in
 
 ### 3.6.2 Curate Help Output
 
-5. **Audit current help text.** Capture `netsuke --help` and each subcommand
+1. **Audit current help text.** Capture `netsuke --help` and each subcommand
    help to identify gaps in flag descriptions.
 
-6. **Extend `localize_command()`.** Add a `localize_arguments()` helper in
+2. **Extend `localize_command()`.** Add a `localize_arguments()` helper in
    `src/cli_l10n.rs` to iterate over command arguments and replace help strings
    using pattern `cli.flag.{arg_id}.help` for root flags and
    `cli.subcommand.{cmd}.flag.{arg_id}.help` for subcommand flags.
 
-7. **Add Fluent messages.** Add localization keys for all flags to
+3. **Add Fluent messages.** Add localization keys for all flags to
    `locales/en-US/messages.ftl`:
    - Root flags: `file`, `directory`, `jobs`, `verbose`, `locale`,
      `fetch-allow-scheme`, `fetch-allow-host`, `fetch-block-host`,
@@ -180,43 +206,43 @@ section, lines 29-82). Testing guidance is in
    - Build subcommand: `emit`, `targets`
    - Manifest subcommand: output file argument
 
-8. **Add Spanish translations.** Add corresponding keys to
+4. **Add Spanish translations.** Add corresponding keys to
    `locales/es-ES/messages.ftl`.
 
-9. **Add BDD test.** Verify help output contains expected localized strings for
+5. **Add BDD test.** Verify help output contains expected localized strings for
    both English and Spanish locales.
 
 ### 3.6.3 Hello World Quickstart
 
-10. **Create quickstart document.** Write `docs/quickstart.md` with:
-    - Prerequisites (Netsuke, Ninja)
-    - Step 1: Create project directory
-    - Step 2: Create minimal Netsukefile (echo command)
-    - Step 3: Run netsuke and see output
-    - Step 4: Add real build target (text processing)
-    - Step 5: Demonstrate vars, glob, foreach
-    - Next steps: link to user guide and examples
+1. **Create quickstart document.** Write `docs/quickstart.md` with:
+   - Prerequisites (Netsuke, Ninja)
+   - Step 1: Create project directory
+   - Step 2: Create minimal Netsukefile (echo command)
+   - Step 3: Run netsuke and see output
+   - Step 4: Add real build target (text processing)
+   - Step 5: Demonstrate vars, glob, foreach
+   - Next steps: link to user guide and examples
 
-11. **Create example fixture.** Create `examples/hello-world/` with:
-    - `Netsukefile` — working manifest using text processing
-    - `input.txt` — sample input file
-    - `README.md` — example documentation
+2. **Create example fixture.** Create `examples/hello-world/` with:
+   - `Netsukefile` — working manifest using text processing
+   - `input.txt` — sample input file
+   - `README.md` — example documentation
 
-12. **Add BDD scenario.** Create `tests/features/quickstart.feature` to exercise
-    the example:
-    - Copy workspace from `examples/hello-world/`
-    - Run `netsuke`
-    - Verify command succeeds
-    - Verify expected output file exists
+3. **Add BDD scenario.** Create `tests/features/quickstart.feature` to exercise
+   the example:
+   - Copy workspace from `examples/hello-world/`
+   - Run `netsuke`
+   - Verify command succeeds
+   - Verify expected output file exists
 
-13. **Update documentation.** Update `docs/users-guide.md` section 2 ("Getting
-    Started") to:
-    - Link to quickstart tutorial
-    - Document the new missing manifest error message
+4. **Update documentation.** Update `docs/users-guide.md` section 2 ("Getting
+   Started") to:
+   - Link to quickstart tutorial
+   - Document the new missing manifest error message
 
-14. **Run quality gates and mark roadmap.** Run `make check-fmt`, `make lint`,
-    and `make test`. Once all pass, mark roadmap items 3.6.1, 3.6.2, and 3.6.3
-    as done in `docs/roadmap.md`.
+5. **Run quality gates and mark roadmap.** Run `make check-fmt`, `make lint`,
+   and `make test`. Once all pass, mark roadmap items 3.6.1, 3.6.2, and 3.6.3
+   as done in `docs/roadmap.md`.
 
 ## Concrete Steps
 
