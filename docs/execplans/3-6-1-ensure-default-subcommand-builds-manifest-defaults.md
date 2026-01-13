@@ -28,7 +28,7 @@ build fixture. Success is observable by:
    Hint: Run `netsuke --help` to see how to specify or create a manifest.
    ```
 
-2. Running `netsuke --help` and seeing localised descriptions for all flags.
+2. Running `netsuke --help` and seeing localized descriptions for all flags.
 
 3. Following `docs/quickstart.md` and successfully building the hello-world
    example.
@@ -41,8 +41,8 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 - [ ] Draft ExecPlan and capture repository context.
 - [ ] Implement `ManifestNotFound` error variant with `miette::Diagnostic`.
 - [ ] Add file existence check in `generate_ninja()` before manifest loading.
-- [ ] Extend `cli_l10n.rs` to localise flag help strings.
-- [ ] Add localisation keys to Fluent files (`en-US`, `es-ES`).
+- [ ] Extend `cli_l10n.rs` to localize flag help strings.
+- [ ] Add localization keys to Fluent files (`en-US`, `es-ES`).
 - [ ] Create `docs/quickstart.md` tutorial.
 - [ ] Create `examples/hello-world/` fixture with working manifest.
 - [ ] Add BDD scenarios for missing manifest and quickstart example.
@@ -72,9 +72,9 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
   missing" (user-friendly error with hint) vs "file unreadable" (permission
   error, which should surface differently). Date/Author: 2026-01-08 (Terry)
 
-- Decision: Extend `cli_l10n.rs` to localise flag help strings using a
+- Decision: Extend `cli_l10n.rs` to localize flag help strings using a
   `localize_arguments()` helper. Rationale: Follows the existing pattern for
-  subcommand about text localisation and keeps all clap localisation logic in
+  subcommand about text localization and keeps all clap localization logic in
   one module. Date/Author: 2026-01-08 (Terry)
 
 - Decision: Use text processing (not C compilation) for the hello-world example.
@@ -99,14 +99,14 @@ Key runtime entry points and relevant files:
   to `runner::run()`.
 - `src/cli.rs` defines the clap CLI with `#[derive(Parser, OrthoConfig)]` and
   default command behaviour via `.with_default_command()`.
-- `src/cli_l10n.rs` contains clap localisation logic; currently localises
+- `src/cli_l10n.rs` contains clap localization logic; currently localizes
   subcommand about/long_about but not flag help strings.
 - `src/runner/mod.rs` implements subcommand execution; `generate_ninja()`
   (lines 244-258) resolves the manifest path and loads the manifest.
 - `src/manifest/mod.rs` contains `from_path_with_policy()` (lines 179-189) which
   reads and parses the manifest file.
 - `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl` contain
-  localised CLI messages.
+  localized CLI messages.
 - `tests/features/` contains BDD feature files; `tests/bdd/steps/` contains step
   definitions using `rstest-bdd` v0.3.2.
 - `test_support/src/netsuke.rs` provides `run_netsuke_in()` for CLI integration
@@ -159,7 +159,7 @@ section, lines 29-82). Testing guidance is in
    using pattern `cli.flag.{arg_id}.help` for root flags and
    `cli.subcommand.{cmd}.flag.{arg_id}.help` for subcommand flags.
 
-7. **Add Fluent messages.** Add localisation keys for all flags to
+7. **Add Fluent messages.** Add localization keys for all flags to
    `locales/en-US/messages.ftl`:
    - Root flags: `file`, `directory`, `jobs`, `verbose`, `locale`,
      `fetch-allow-scheme`, `fetch-allow-host`, `fetch-block-host`,
@@ -170,7 +170,7 @@ section, lines 29-82). Testing guidance is in
 8. **Add Spanish translations.** Add corresponding keys to
    `locales/es-ES/messages.ftl`.
 
-9. **Add BDD test.** Verify help output contains expected localised strings for
+9. **Add BDD test.** Verify help output contains expected localized strings for
    both English and Spanish locales.
 
 ### 3.6.3 Hello World Quickstart
@@ -228,7 +228,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
    cargo run -- manifest --help 2>&1 | tee /tmp/netsuke-manifest-help.log
    ```
 
-3. Implement error type, existence check, and flag localisation.
+3. Implement error type, existence check, and flag localization.
 
 4. Add Fluent messages and BDD scenarios.
 
@@ -267,8 +267,8 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
   mentioning `--help`.
 - Running `netsuke --file custom.yml` where `custom.yml` does not exist prints a
   similar error with the custom filename.
-- Running `netsuke --help` shows localised descriptions for all flags.
-- Running `netsuke build --help` shows localised subcommand flag help.
+- Running `netsuke --help` shows localized descriptions for all flags.
+- Running `netsuke build --help` shows localized subcommand flag help.
 - Running `netsuke --locale es-ES --help` shows Spanish translations.
 - `docs/quickstart.md` exists with step-by-step tutorial.
 - `examples/hello-world/` contains working example that builds successfully.
@@ -281,10 +281,10 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 
 - The existence check and error emission are safe to re-run; they do not modify
   state.
-- Flag localisation changes are additive and safe to re-run.
+- Flag localization changes are additive and safe to re-run.
 - If tests fail mid-run, fix the underlying issue and re-run the same command,
   overwriting the log file to keep evidence current.
-- If localisation keys conflict with existing entries, rename them with a unique
+- If localization keys conflict with existing entries, rename them with a unique
   prefix.
 
 ## Artifacts and Notes
@@ -293,7 +293,7 @@ Keep the following transcripts for evidence:
 
 - `/tmp/netsuke-missing-before.log` — current (generic) error output.
 - `/tmp/netsuke-missing-after.log` — improved error output with hint.
-- `/tmp/netsuke-help.log` — help output with localised flag descriptions.
+- `/tmp/netsuke-help.log` — help output with localized flag descriptions.
 - `/tmp/netsuke-test.log` — test run showing new BDD and unit tests passing.
 
 ## Interfaces and Dependencies
@@ -302,8 +302,8 @@ Keep the following transcripts for evidence:
   extend existing error handling) with `ManifestNotFound` variant.
 - **Detection location**: `src/runner/mod.rs` function `generate_ninja()` — add
   `Path::exists()` check before `manifest::from_path_with_policy()` call.
-- **Flag localisation**: `src/cli_l10n.rs` — add `localize_arguments()` helper.
-- **Localisation**: `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`
+- **Flag localization**: `src/cli_l10n.rs` — add `localize_arguments()` helper.
+- **Localization**: `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`
   — add `error-manifest-not-found`, `error-manifest-not-found-hint`, and
   `cli.flag.{arg_id}.help` keys.
 - **BDD tests**: `tests/features/missing_manifest.feature` (new file) and
@@ -322,7 +322,7 @@ Keep the following transcripts for evidence:
 | File | Change |
 |------|--------|
 | `src/runner/mod.rs` | Add `ManifestNotFound` error; existence check in `generate_ninja()` |
-| `src/cli_l10n.rs` | Add `localize_arguments()` to localise flag help strings |
+| `src/cli_l10n.rs` | Add `localize_arguments()` to localize flag help strings |
 | `locales/en-US/messages.ftl` | Add error keys + all flag help descriptions |
 | `locales/es-ES/messages.ftl` | Add Spanish translations |
 | `tests/features/missing_manifest.feature` | **New** - BDD scenarios for missing manifest |
