@@ -83,7 +83,6 @@ jobs:
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ inputs['bin-name'] }}
-          version: ${{ inputs.version }}
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
