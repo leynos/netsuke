@@ -67,7 +67,7 @@ Output:
 Hello from Netsuke!
 ```
 
-This completes a first Netsuke build.
+This completes the first Netsuke build.
 
 ## Step 4: Add variables and templates
 
