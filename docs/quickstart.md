@@ -166,7 +166,7 @@ Ensure the current directory is correct and that a file named `Netsukefile`
 exists. A different manifest path can be specified with `-f`:
 
 ```sh
-netsuke -f path/to/your/manifest.yml
+netsuke -f path/to/manifest.yml
 ```
 
 ### "ninja: command not found"
