@@ -41,7 +41,7 @@ This manifest defines:
 - A target called `hello.txt` that creates a file with a greeting.
 - A default target, so running `netsuke` without arguments builds `hello.txt`.
 
-## Step 3: Run netsuke
+## Step 3: Run Netsuke
 
 To build the project, run Netsuke:
 
@@ -156,7 +156,7 @@ The input files have been transformed to uppercase.
   - `website.yml` — Static site generation from Markdown
   - `photo_edit.yml` — Photo processing with glob patterns
 - Run `netsuke --help` to see all available options
-- Try `netsuke graph` to visualize your build dependency graph
+- Try `netsuke graph` to visualize the build dependency graph
 
 ## Troubleshooting
 
