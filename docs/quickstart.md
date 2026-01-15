@@ -14,7 +14,7 @@ Before beginning, ensure the following are available:
 
 ## Step 1: Create a project directory
 
-Open a terminal and create a new directory for the project:
+In a terminal, create a new directory for the project:
 
 ```sh
 mkdir hello-netsuke
@@ -23,7 +23,7 @@ cd hello-netsuke
 
 ## Step 2: Create the first manifest
 
-Create a file named `Netsukefile` with the following content:
+A file named `Netsukefile` should be created with the following content:
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -43,7 +43,7 @@ This manifest defines:
 
 ## Step 3: Run netsuke
 
-Run Netsuke to build the project:
+To build the project, run Netsuke:
 
 ```sh
 netsuke
@@ -55,7 +55,7 @@ The output should be similar to:
 [1/1] echo 'Hello from Netsuke!' > hello.txt
 ```
 
-Check the result:
+The result can be verified:
 
 ```sh
 cat hello.txt
@@ -71,8 +71,8 @@ This completes a first Netsuke build.
 
 ## Step 4: Add variables and templates
 
-Netsuke supports Jinja templating for dynamic manifests. Update the
-`Netsukefile`:
+Netsuke supports Jinja templating for dynamic manifests. The `Netsukefile`
+can be updated as follows:
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -89,13 +89,13 @@ defaults:
   - greeting.txt
 ```
 
-Run `netsuke` again:
+Running `netsuke` again:
 
 ```sh
 netsuke
 ```
 
-Check the output:
+The output can be checked:
 
 ```sh
 cat greeting.txt
@@ -109,15 +109,15 @@ Hello, World!
 
 ## Step 5: Use globbing and foreach
 
-For more complex builds, Netsuke can process multiple files. Create some input
-files:
+For more complex builds, Netsuke can process multiple files. Some input files
+can be created:
 
 ```sh
 echo "Content A" > input_a.txt
 echo "Content B" > input_b.txt
 ```
 
-Update the `Netsukefile` to process all `.txt` files:
+The `Netsukefile` can be updated to process all `.txt` files:
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -133,13 +133,13 @@ defaults:
   - output_input_b.out
 ```
 
-Run `netsuke`:
+Running `netsuke`:
 
 ```sh
 netsuke
 ```
 
-Check the outputs:
+The outputs can be checked:
 
 ```sh
 cat output_input_a.out
