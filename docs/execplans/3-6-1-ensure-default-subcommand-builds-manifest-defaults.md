@@ -103,8 +103,8 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 
 - Outcome: All three roadmap items (3.6.1, 3.6.2, 3.6.3) implemented and PR ready
   for review.
-  - Default subcommand now validates manifest existence before loading, producing
-    a clear error with actionable hint when the manifest is missing.
+  - The default subcommand now validates manifest existence before loading,
+    producing a clear error with actionable hint when the manifest is missing.
   - CLI help text fully localized via `localize_arguments()` helper; Spanish
     translations provided alongside English.
   - Quickstart tutorial (`docs/quickstart.md`) and working example
