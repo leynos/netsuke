@@ -76,11 +76,11 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@df81280dcc1d6e66134114dbc924313328b15f05
+          leynos/shared-actions/.github/actions/determine-release-modes@aebb3f5b831102e2a10ef909c83d7d50ea86c332
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@df81280dcc1d6e66134114dbc924313328b15f05
+          leynos/shared-actions/.github/actions/ensure-cargo-version@aebb3f5b831102e2a10ef909c83d7d50ea86c332
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -107,7 +107,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@df81280dcc1d6e66134114dbc924313328b15f05
+          leynos/shared-actions/.github/actions/export-cargo-metadata@aebb3f5b831102e2a10ef909c83d7d50ea86c332
         with:
           manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
@@ -221,7 +221,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@df81280dcc1d6e66134114dbc924313328b15f05
+          leynos/shared-actions/.github/actions/upload-release-assets@aebb3f5b831102e2a10ef909c83d7d50ea86c332
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

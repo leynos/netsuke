@@ -21,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@df81280dcc1d6e66134114dbc924313328b15f05
+        uses: leynos/shared-actions/.github/actions/setup-rust@aebb3f5b831102e2a10ef909c83d7d50ea86c332
         with:
           toolchain: ${{ matrix.rust }}
       - name: Show rustc version
