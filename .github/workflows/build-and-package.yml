@@ -79,14 +79,14 @@ jobs:
           python-version: ${{ inputs['python-version'] }}
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@bd92b1e6f7c9aad2c671197f64faae0fae820325
+        uses: leynos/shared-actions/.github/actions/rust-build-release@7f4cc57326d14b55f7eea300e0454653636fb6a1
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ inputs['bin-name'] }}
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@bd92b1e6f7c9aad2c671197f64faae0fae820325
+        uses: leynos/shared-actions/.github/actions/linux-packages@7f4cc57326d14b55f7eea300e0454653636fb6a1
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -108,7 +108,7 @@ jobs:
         if: inputs.platform != 'linux'
         id: stage
         uses: >-
-          leynos/shared-actions/.github/actions/stage-release-artefacts@bd92b1e6f7c9aad2c671197f64faae0fae820325
+          leynos/shared-actions/.github/actions/stage-release-artefacts@7f4cc57326d14b55f7eea300e0454653636fb6a1
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
@@ -130,7 +130,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@bd92b1e6f7c9aad2c671197f64faae0fae820325
+        uses: leynos/shared-actions/.github/actions/windows-package@7f4cc57326d14b55f7eea300e0454653636fb6a1
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -148,7 +148,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@bd92b1e6f7c9aad2c671197f64faae0fae820325
+        uses: leynos/shared-actions/.github/actions/macos-package@7f4cc57326d14b55f7eea300e0454653636fb6a1
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
