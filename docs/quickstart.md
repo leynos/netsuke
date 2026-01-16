@@ -9,8 +9,8 @@ Before beginning, ensure the following are available:
 
 - **Netsuke** installed (build from source with `cargo build --release` or
   install via `cargo install netsuke`)
-- **Ninja** build tool in your PATH (install via your package manager, e.g.,
-  `apt install ninja-build` or `brew install ninja`)
+- **Ninja** build tool in the system PATH (install via the package manager,
+  e.g., `apt install ninja-build` or `brew install ninja`)
 
 ## Step 1: Create a project directory
 
