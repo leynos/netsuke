@@ -58,8 +58,7 @@ netsuke build target_name another_target # Builds specific targets
 
 ```
 
-If no `Netsukefile` is found, Netsuke will provide a helpful error message
-guiding you:
+If no `Netsukefile` is found, Netsuke will provide a helpful error message:
 
 ```text
 Error: No `Netsukefile` found in the current directory.
@@ -67,17 +66,17 @@ Error: No `Netsukefile` found in the current directory.
 Hint: Run `netsuke --help` to see how to specify or create a manifest.
 ```
 
-You can specify a different manifest path using the `-f` or `--file` option:
+A different manifest path can be specified using the `-f` or `--file` option:
 
 ```sh
-netsuke -f path/to/your/manifest.yml
+netsuke -f path/to/manifest.yml
 ```
 
 For a step-by-step introduction, see the [Quick Start guide](quickstart.md).
 
 ## 3\. The Netsukefile Manifest
 
-The `Netsukefile` is a YAML file describing your build process.
+The `Netsukefile` is a YAML file describing the build process.
 
 Netsuke targets YAML 1.2 and forbids duplicate keys in manifests. If the same
 mapping key appears more than once (even if a YAML parser would normally accept

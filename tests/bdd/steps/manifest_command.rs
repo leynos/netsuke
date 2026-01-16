@@ -216,6 +216,23 @@ fn empty_workspace(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Normalize a path by resolving `.` and `..` components without requiring the
+/// path to exist (unlike `std::fs::canonicalize`).
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::CurDir => {}
+            c => normalized.push(c),
+        }
+    }
+    normalized
+}
+
 /// Create an empty workspace at a specific path.
 ///
 /// This step sets up a fixed-path workspace for scenarios that test the `-C`
@@ -230,21 +247,26 @@ fn empty_workspace(world: &TestWorld) -> Result<()> {
 #[given("an empty workspace at path {path:string}")]
 fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
     let dir = Path::new(path);
+    // Normalize the path to resolve any `.` or `..` components before checking
+    // safety. This prevents traversal attacks like `/tmp/../etc/passwd`.
+    let normalized = normalize_path(dir);
     let temp_dir = std::env::temp_dir();
     // Safeguard: only allow paths that are proper subdirectories of /tmp or
     // the system temp directory (not the root temp directory itself).
-    let is_safe_tmp = dir.starts_with("/tmp") && dir != Path::new("/tmp");
-    let is_safe_temp = dir.starts_with(&temp_dir) && dir != temp_dir;
+    let is_safe_tmp = normalized.starts_with("/tmp") && normalized != Path::new("/tmp");
+    let is_safe_temp = normalized.starts_with(&temp_dir) && normalized != temp_dir;
     ensure!(
         is_safe_tmp || is_safe_temp,
         "test workspace path must be a subdirectory of /tmp or system temp directory, not the root itself: {}",
-        dir.display()
+        normalized.display()
     );
     // Ensure the directory exists and is empty.
-    if dir.exists() {
-        fs::remove_dir_all(dir).with_context(|| format!("remove existing {}", dir.display()))?;
+    if normalized.exists() {
+        fs::remove_dir_all(&normalized)
+            .with_context(|| format!("remove existing {}", normalized.display()))?;
     }
-    fs::create_dir_all(dir).with_context(|| format!("create directory {}", dir.display()))?;
+    fs::create_dir_all(&normalized)
+        .with_context(|| format!("create directory {}", normalized.display()))?;
     // Use a normal temp dir as the working directory for the netsuke command.
     // The -C flag in the arguments will override where netsuke looks for files.
     let temp = tempfile::tempdir().context("create temp dir for command execution")?;

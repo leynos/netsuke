@@ -71,8 +71,8 @@ This completes the first Netsuke build.
 
 ## Step 4: Add variables and templates
 
-Netsuke supports Jinja templating for dynamic manifests. The `Netsukefile`
-can be updated as follows:
+Netsuke supports Jinja templating for dynamic manifests. The `Netsukefile` can
+be updated as follows:
 
 ```yaml
 netsuke_version: "1.0.0"
@@ -110,7 +110,7 @@ Hello, World!
 ## Step 5: Use globbing and foreach
 
 For more complex builds, Netsuke can process multiple files. Some input files
-can be created:
+can be created as follows:
 
 ```sh
 echo "Content A" > input_a.txt

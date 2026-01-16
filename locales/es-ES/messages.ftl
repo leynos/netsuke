@@ -38,7 +38,7 @@ clap-error-missing-subcommand = Falta el subcomando. Opciones disponibles: { $va
 clap-error-unknown-argument = Argumento desconocido: { $argument }
 clap-error-invalid-value = Valor no válido para { $argument }: { $value }
 clap-error-invalid-subcommand = Subcomando desconocido: { $subcommand }
-# Note: value-validation uses distinct wording from invalid-value to differentiate
-# custom validator failures (ErrorKind::ValueValidation) from type mismatches
-# (ErrorKind::InvalidValue).
+# Nota: value-validation usa una redacción distinta de invalid-value para
+# diferenciar errores de validadores personalizados (ErrorKind::ValueValidation)
+# de errores de tipo (ErrorKind::InvalidValue).
 clap-error-value-validation = Validación fallida para { $argument }: { $value }
