@@ -5,6 +5,8 @@ use std::fmt;
 #[cfg(not(windows))]
 use shell_quote::{QuoteRefExt, Sh};
 
+use crate::localization::{self, keys};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum QuoteError {
     ContainsLineBreak,
@@ -13,9 +15,9 @@ pub(super) enum QuoteError {
 impl fmt::Display for QuoteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ContainsLineBreak => f.write_str(
-                "arguments containing carriage returns or line feeds cannot be safely quoted",
-            ),
+            Self::ContainsLineBreak => {
+                f.write_str(&localization::message(keys::COMMAND_QUOTE_LINE_BREAK).to_string())
+            }
         }
     }
 }

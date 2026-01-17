@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
+use netsuke::localization::{self, keys};
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
@@ -109,8 +110,11 @@ fn assert_subcommand_fails_with_invalid_manifest(
         bail!("expected {name} to fail for invalid manifest");
     };
     let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let expected = localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+        .with_arg("path", manifest_path.display().to_string())
+        .to_string();
     ensure!(
-        messages.iter().any(|m| m.contains("loading manifest at")),
+        messages.iter().any(|m| m.contains(&expected)),
         "error should mention manifest loading, got: {messages:?}"
     );
     Ok(())

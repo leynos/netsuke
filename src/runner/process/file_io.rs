@@ -1,6 +1,7 @@
 //! File creation helpers for the Ninja runner.
 //! Handles temporary build files and writes to capability-based directories.
 
+use crate::localization::{self, keys};
 use crate::runner::NinjaContent;
 use anyhow::{Context, Result as AnyResult, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -22,14 +23,18 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
         .prefix("netsuke.")
         .suffix(".ninja")
         .tempfile()
-        .context("create temp file")?;
+        .context(localization::message(keys::RUNNER_IO_CREATE_TEMP_FILE))?;
     {
         let handle = tmp.as_file_mut();
         handle
             .write_all(content.as_str().as_bytes())
-            .context("write temp ninja file")?;
-        handle.flush().context("flush temp ninja file")?;
-        handle.sync_all().context("sync temp ninja file")?;
+            .context(localization::message(keys::RUNNER_IO_WRITE_TEMP_NINJA))?;
+        handle
+            .flush()
+            .context(localization::message(keys::RUNNER_IO_FLUSH_TEMP_NINJA))?;
+        handle
+            .sync_all()
+            .context(localization::message(keys::RUNNER_IO_SYNC_TEMP_NINJA))?;
     }
     info!("Wrote temporary Ninja file to {}", tmp.path().display());
     Ok(tmp)
@@ -41,25 +46,31 @@ pub fn write_ninja_file_utf8(
     content: &NinjaContent,
 ) -> AnyResult<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {
-        dir.create_dir_all(parent.as_str())
-            .with_context(|| format!("failed to create parent directory {parent}"))?;
+        dir.create_dir_all(parent.as_str()).with_context(|| {
+            localization::message(keys::RUNNER_IO_CREATE_PARENT_DIR)
+                .with_arg("path", parent.as_str())
+        })?;
     }
-    let mut file = dir
-        .create(path.as_str())
-        .with_context(|| format!("failed to create Ninja file at {path}"))?;
+    let mut file = dir.create(path.as_str()).with_context(|| {
+        localization::message(keys::RUNNER_IO_CREATE_NINJA_FILE).with_arg("path", path.as_str())
+    })?;
     file.write_all(content.as_str().as_bytes())
-        .with_context(|| format!("failed to write Ninja file to {path}"))?;
-    file.flush()
-        .with_context(|| format!("failed to flush Ninja file at {path}"))?;
-    file.sync_all()
-        .with_context(|| format!("failed to sync Ninja file at {path}"))?;
+        .with_context(|| {
+            localization::message(keys::RUNNER_IO_WRITE_NINJA_FILE).with_arg("path", path.as_str())
+        })?;
+    file.flush().with_context(|| {
+        localization::message(keys::RUNNER_IO_FLUSH_NINJA_FILE).with_arg("path", path.as_str())
+    })?;
+    file.sync_all().with_context(|| {
+        localization::message(keys::RUNNER_IO_SYNC_NINJA_FILE).with_arg("path", path.as_str())
+    })?;
     Ok(())
 }
 
 fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathBuf)> {
     if path.is_relative() {
         let dir = cap_fs::Dir::open_ambient_dir(".", ambient_authority())
-            .context("open ambient directory")?;
+            .context(localization::message(keys::RUNNER_IO_OPEN_AMBIENT_DIR))?;
         return Ok((dir, path.to_owned()));
     }
 
@@ -71,17 +82,28 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
                 .ok()
                 .map(|dir| (candidate.to_owned(), dir))
         })
-        .ok_or_else(|| anyhow!("no existing ancestor for {path}"))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "{}",
+                localization::message(keys::RUNNER_IO_NO_EXISTING_ANCESTOR)
+                    .with_arg("path", path.as_str())
+            )
+        })?;
     let relative = path
         .strip_prefix(&base)
-        .context("derive relative Ninja path")?
+        .context(localization::message(keys::RUNNER_IO_DERIVE_RELATIVE_PATH))?
         .to_owned();
     Ok((dir, relative))
 }
 
 pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
-    let utf8_path =
-        Utf8Path::from_path(path).ok_or_else(|| anyhow!("non-UTF-8 path is not supported"))?;
+    let utf8_path = Utf8Path::from_path(path).ok_or_else(|| {
+        anyhow!(
+            "{}",
+            localization::message(keys::RUNNER_IO_NON_UTF8_PATH)
+                .with_arg("path", path.display().to_string())
+        )
+    })?;
     let (dir, relative) = derive_dir_and_relative(utf8_path)?;
     write_ninja_file_utf8(&dir, &relative, content)?;
     info!("Wrote Ninja file to {utf8_path}");
@@ -111,8 +133,9 @@ fn flush_ignoring_broken_pipe(writer: &mut impl Write) -> io::Result<()> {
 pub fn write_ninja_stdout(content: &NinjaContent) -> AnyResult<()> {
     let mut stdout = io::stdout().lock();
     write_all_ignoring_broken_pipe(&mut stdout, content.as_str().as_bytes())
-        .context("failed to write Ninja manifest to stdout")?;
-    flush_ignoring_broken_pipe(&mut stdout).context("failed to flush stdout")?;
+        .context(localization::message(keys::RUNNER_IO_WRITE_STDOUT))?;
+    flush_ignoring_broken_pipe(&mut stdout)
+        .context(localization::message(keys::RUNNER_IO_FLUSH_STDOUT))?;
     Ok(())
 }
 

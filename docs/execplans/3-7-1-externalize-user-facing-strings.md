@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DONE
 
 PLANS.md is not present in the repository.
 
@@ -36,8 +36,8 @@ referenced Fluent key is missing.
 - No `unsafe` code; use `Result`-based error handling, not panics.
 - All new tests use `rstest` and `rstest-bdd` (`rstest-bdd` v0.3.2).
 - Documentation updates must follow `docs/documentation-style-guide.md`
-  (British English, 80-column wrapping, no fenced code blocks inside this
-  plan file).
+  (British English, 80-column wrapping, no fenced code blocks inside this plan
+  file).
 
 ## Tolerances (Exception triggers)
 
@@ -54,38 +54,38 @@ Escalate immediately if a tolerance is hit.
 ## Risks
 
 - Risk: Scope creep from the large surface area of error strings.
-  Severity: high. Likelihood: medium.
-  Mitigation: define a clear “user-facing” inventory in Stage A and stick to
-  it; defer internal-only logs to later roadmap items.
+  Severity: high. Likelihood: medium. Mitigation: define a clear “user-facing”
+  inventory in Stage A and stick to it; defer internal-only logs to later
+  roadmap items.
 
 - Risk: Localization of `miette` diagnostics may require structural changes
-  to error types.
-  Severity: medium. Likelihood: medium.
-  Mitigation: use a small adapter layer that formats diagnostics from Fluent
-  without changing public APIs unless strictly necessary.
+  to error types. Severity: medium. Likelihood: medium. Mitigation: use a small
+  adapter layer that formats diagnostics from Fluent without changing public
+  APIs unless strictly necessary.
 
 - Risk: Spanish translations drift from English semantics.
-  Severity: medium. Likelihood: low.
-  Mitigation: keep translations short, avoid idioms, and add tests that assert
-  key Spanish phrases.
+  Severity: medium. Likelihood: low. Mitigation: keep translations short, avoid
+  idioms, and add tests that assert key Spanish phrases.
 
 - Risk: BDD step ambiguity (inventory-order differences in `rstest-bdd`).
-  Severity: medium. Likelihood: low.
-  Mitigation: avoid overlapping step patterns and follow the guidance in the
-  qdrant notes for `rstest-bdd` step wording.
+  Severity: medium. Likelihood: low. Mitigation: avoid overlapping step
+  patterns and follow the guidance in the qdrant notes for `rstest-bdd` step
+  wording.
 
 ## Progress
 
 - [x] (2026-01-17 00:00Z) Draft ExecPlan and capture initial context.
-- [ ] Inventory user-facing strings and define Fluent key taxonomy.
-- [ ] Add compile-time Fluent key audit.
-- [ ] Externalize user-facing strings and add Spanish translations.
-- [ ] Add unit and behavioural tests.
-- [ ] Update documentation and roadmap; run quality gates.
+- [x] (2026-01-17) Inventory user-facing strings and define Fluent key taxonomy.
+- [x] (2026-01-17) Add compile-time Fluent key audit.
+- [x] (2026-01-17) Externalize user-facing strings and add Spanish translations.
+- [x] (2026-01-17) Add unit and behavioural tests.
+- [x] (2026-01-17) Update documentation and roadmap; run quality gates.
 
 ## Surprises & Discoveries
 
-- None yet.
+- Proc-macro ingestion of `tests/features/*.feature` does not always trigger a
+  rebuild locally; touching `tests/bdd_tests.rs` forces the scenarios to
+  regenerate when feature text changes.
 
 ## Decision Log
 
@@ -95,12 +95,21 @@ Escalate immediately if a tolerance is hit.
   Date/Author: 2026-01-17 (Terry)
 
 - Decision: Add a compile-time audit in `build.rs` to validate Fluent keys.
-  Rationale: ensures missing keys fail CI before runtime.
-  Date/Author: 2026-01-17 (Terry)
+  Rationale: ensures missing keys fail CI before runtime. Date/Author:
+  2026-01-17 (Terry)
+
+- Decision: Centralize Fluent key names in `src/localization/keys.rs` and treat
+  them as the source of truth for the audit and message rendering. Rationale:
+  keeps key usage consistent and makes audits deterministic. Date/Author:
+  2026-01-17 (Terry)
 
 ## Outcomes & Retrospective
 
-- Pending.
+- Fluent keys now cover CLI copy, diagnostics, and stdlib errors with Spanish
+  as the reference translation and English fallback.
+- The compile-time Fluent key audit prevents missing-key regressions in CI.
+- Unit + BDD coverage updated for localisation-aware messages; quality gates
+  (`make check-fmt`, `make lint`, `make test`) pass.
 
 ## Context and orientation
 
@@ -116,8 +125,7 @@ Relevant files and modules:
   `src/runner/error.rs`, `src/manifest/diagnostics/*`, `src/ir/graph.rs`,
   `src/ninja_gen.rs`, and `src/stdlib/**/error.rs`.
 - Design expectations for localisation are in
-  `docs/netsuke-cli-design-document.md` and
-  `docs/ortho-config-users-guide.md`.
+  `docs/netsuke-cli-design-document.md` and `docs/ortho-config-users-guide.md`.
 - Testing conventions and fixtures are documented in
   `docs/rust-testing-with-rstest-fixtures.md` and
   `docs/rstest-bdd-users-guide.md`.

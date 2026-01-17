@@ -10,6 +10,7 @@ use minijinja::{
 };
 use tempfile::{Builder, NamedTempFile};
 
+use crate::localization::{self, keys};
 use crate::stdlib::DEFAULT_COMMAND_TEMP_DIR;
 
 use super::error::CommandFailure;
@@ -56,7 +57,7 @@ impl CommandConfig {
         let Some(root_path) = &self.workspace_root_path else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "workspace root path must be configured for command tempfiles",
+                localization::message(keys::COMMAND_TEMPFILE_ROOT_REQUIRED).to_string(),
             ));
         };
 
@@ -72,7 +73,10 @@ impl CommandConfig {
             .map_err(|err| {
                 io::Error::new(
                     err.kind(),
-                    format!("failed to create command tempfile for '{label}': {err}"),
+                    localization::message(keys::COMMAND_TEMPFILE_CREATE_FAILED)
+                        .with_arg("label", label)
+                        .with_arg("details", err.to_string())
+                        .to_string(),
                 )
             })
     }
@@ -102,12 +106,11 @@ pub(super) enum OutputMode {
 }
 
 impl OutputMode {
-    /// Returns the label used in diagnostics. For example,
-    /// `OutputMode::Capture.describe()` yields `"capture"`.
-    pub(super) const fn describe(self) -> &'static str {
+    /// Returns the localisation key used in diagnostics.
+    pub(super) const fn label_key(self) -> &'static str {
         match self {
-            Self::Capture => "capture",
-            Self::Tempfile => "streaming",
+            Self::Capture => keys::COMMAND_OUTPUT_MODE_CAPTURE,
+            Self::Tempfile => keys::COMMAND_OUTPUT_MODE_STREAMING,
         }
     }
 }
@@ -121,12 +124,11 @@ pub(super) enum OutputStream {
 }
 
 impl OutputStream {
-    /// Returns the stream name used in human-readable errors (for example,
-    /// `OutputStream::Stdout.describe()` returns `"stdout"`).
-    pub(super) const fn describe(self) -> &'static str {
+    /// Returns the localisation key used in human-readable errors.
+    pub(super) const fn label_key(self) -> &'static str {
         match self {
-            Self::Stdout => "stdout",
-            Self::Stderr => "stderr",
+            Self::Stdout => keys::COMMAND_OUTPUT_STREAM_STDOUT,
+            Self::Stderr => keys::COMMAND_OUTPUT_STREAM_STDERR,
         }
     }
 
@@ -261,7 +263,7 @@ impl CommandOptions {
                 let Some(text) = raw.as_str() else {
                     return Err(Error::new(
                         ErrorKind::InvalidOperation,
-                        "command options string must be valid UTF-8",
+                        localization::message(keys::COMMAND_OPTIONS_INVALID_UTF8).to_string(),
                     ));
                 };
                 Self::from_mode_str(text)
@@ -274,14 +276,14 @@ impl CommandOptions {
                 let Some(mode) = mode_value.as_str() else {
                     return Err(Error::new(
                         ErrorKind::InvalidOperation,
-                        "command option 'mode' must be a string",
+                        localization::message(keys::COMMAND_OPTION_MODE_NOT_STRING).to_string(),
                     ));
                 };
                 Self::from_mode_str(mode)
             }
             _ => Err(Error::new(
                 ErrorKind::InvalidOperation,
-                "command options must be a string or mapping",
+                localization::message(keys::COMMAND_OPTIONS_INVALID_TYPE).to_string(),
             )),
         }
     }
@@ -296,7 +298,9 @@ impl CommandOptions {
             }),
             other => Err(Error::new(
                 ErrorKind::InvalidOperation,
-                format!("unsupported command output mode '{other}'"),
+                localization::message(keys::COMMAND_OUTPUT_MODE_UNSUPPORTED)
+                    .with_arg("mode", other)
+                    .to_string(),
             )),
         }
     }

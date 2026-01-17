@@ -83,7 +83,7 @@ fn stdlib_config_for_manifest_rejects_non_utf_workspace_root() -> AnyResult<()> 
     let err = stdlib_config_for_manifest(&manifest_path, NetworkPolicy::default())
         .expect_err("config should fail when workspace root contains non-UTF-8 components");
     ensure!(
-        err.to_string().contains("contains non-UTF-8 components"),
+        err.to_string().contains("path is not valid UTF-8"),
         "error should mention non-UTF-8 components but was {err}"
     );
     Ok(())

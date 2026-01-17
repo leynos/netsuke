@@ -3,6 +3,7 @@
 //! The module centralises normalisation and matching logic so CLI parsing and
 //! runtime policy evaluation agree on allowable host syntax.
 
+use crate::localization::{self, LocalizedMessage, keys};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use thiserror::Error;
@@ -39,21 +40,29 @@ impl<'a> ValidationContext<'a> {
         if label.is_empty() {
             return Err(HostPatternError::EmptyLabel {
                 pattern: original.to_owned(),
+                message: localization::message(keys::HOST_PATTERN_EMPTY_LABEL)
+                    .with_arg("pattern", original),
             });
         }
         if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
             return Err(HostPatternError::InvalidCharacters {
                 pattern: original.to_owned(),
+                message: localization::message(keys::HOST_PATTERN_INVALID_CHARS)
+                    .with_arg("pattern", original),
             });
         }
         if label.starts_with('-') || label.ends_with('-') {
             return Err(HostPatternError::InvalidLabelEdge {
                 pattern: original.to_owned(),
+                message: localization::message(keys::HOST_PATTERN_INVALID_LABEL_EDGE)
+                    .with_arg("pattern", original),
             });
         }
         if label.len() > 63 {
             return Err(HostPatternError::LabelTooLong {
                 pattern: original.to_owned(),
+                message: localization::message(keys::HOST_PATTERN_LABEL_TOO_LONG)
+                    .with_arg("pattern", original),
             });
         }
         Ok(())
@@ -64,71 +73,96 @@ impl<'a> ValidationContext<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum HostPatternError {
     /// Input was empty or whitespace.
-    #[error("host pattern must not be empty")]
-    Empty,
+    #[error("{message}")]
+    Empty {
+        /// Localised error message.
+        message: LocalizedMessage,
+    },
     /// The pattern erroneously included a URL scheme.
-    #[error("host pattern '{pattern}' must not include a scheme")]
+    #[error("{message}")]
     ContainsScheme {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// The pattern contained path delimiters.
-    #[error("host pattern '{pattern}' must not contain '/'")]
+    #[error("{message}")]
     ContainsSlash {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Wildcard patterns must include a suffix after `*.`.
-    #[error("wildcard host pattern '{pattern}' must include a suffix")]
+    #[error("{message}")]
     MissingSuffix {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Patterns may not contain empty labels between dots.
-    #[error("host pattern '{pattern}' must not contain empty labels")]
+    #[error("{message}")]
     EmptyLabel {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Patterns must only contain alphanumeric characters or `-`.
-    #[error("host pattern '{pattern}' contains invalid characters")]
+    #[error("{message}")]
     InvalidCharacters {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Labels must not begin or end with a hyphen.
-    #[error("host pattern '{pattern}' must not start or end labels with '-'")]
+    #[error("{message}")]
     InvalidLabelEdge {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Individual labels may not exceed 63 characters.
-    #[error("host pattern '{pattern}' must not contain labels longer than 63 characters")]
+    #[error("{message}")]
     LabelTooLong {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// The full host (including dots) may not exceed 255 characters.
-    #[error("host pattern '{pattern}' must not exceed 255 characters in total")]
+    #[error("{message}")]
     HostTooLong {
         /// Original host pattern string.
         pattern: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 }
 
 fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool), HostPatternError> {
     let trimmed = input.as_str().trim();
     if trimmed.is_empty() {
-        return Err(HostPatternError::Empty);
+        return Err(HostPatternError::Empty {
+            message: localization::message(keys::HOST_PATTERN_EMPTY),
+        });
     }
     if trimmed.contains("://") {
         return Err(HostPatternError::ContainsScheme {
             pattern: trimmed.to_owned(),
+            message: localization::message(keys::HOST_PATTERN_CONTAINS_SCHEME)
+                .with_arg("pattern", trimmed),
         });
     }
     if trimmed.contains('/') {
         return Err(HostPatternError::ContainsSlash {
             pattern: trimmed.to_owned(),
+            message: localization::message(keys::HOST_PATTERN_CONTAINS_SLASH)
+                .with_arg("pattern", trimmed),
         });
     }
 
@@ -136,6 +170,8 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
         if suffix.is_empty() {
             return Err(HostPatternError::MissingSuffix {
                 pattern: trimmed.to_owned(),
+                message: localization::message(keys::HOST_PATTERN_MISSING_SUFFIX)
+                    .with_arg("pattern", trimmed),
             });
         }
         (true, suffix)
@@ -153,6 +189,8 @@ fn normalise_host_pattern(input: HostPatternInput<'_>) -> Result<(String, bool),
     if total_len > 255 {
         return Err(HostPatternError::HostTooLong {
             pattern: trimmed.to_owned(),
+            message: localization::message(keys::HOST_PATTERN_TOO_LONG)
+                .with_arg("pattern", trimmed),
         });
     }
 
@@ -295,7 +333,7 @@ mod tests {
         let err = HostPattern::parse(pattern).expect_err("invalid pattern should fail");
         let message = err.to_string();
         assert!(
-            message.contains("host pattern"),
+            message.contains("Host pattern"),
             "error message should mention host pattern validation: {message}"
         );
     }

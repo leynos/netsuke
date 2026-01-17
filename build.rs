@@ -3,6 +3,7 @@
 use clap::{ArgMatches, CommandFactory};
 use clap_mangen::Man;
 use std::{
+    collections::BTreeSet,
     env,
     ffi::OsString,
     fs,
@@ -15,11 +16,17 @@ const FALLBACK_DATE: &str = "1970-01-01";
 #[path = "src/cli.rs"]
 mod cli;
 
+#[path = "src/cli_localization.rs"]
+mod cli_localization;
+
 #[path = "src/cli_l10n.rs"]
 mod cli_l10n;
 
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
+
+#[path = "src/localization/mod.rs"]
+mod localization;
 
 use host_pattern::{HostPattern, HostPatternError};
 
@@ -71,6 +78,76 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
     Ok(destination)
 }
 
+fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box<dyn std::error::Error>> {
+    let source = fs::read_to_string(path)?;
+    let mut keys = BTreeSet::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        let Some((_, rest)) = trimmed.split_once("=> \"") else {
+            continue;
+        };
+        let Some((key, _)) = rest.split_once('"') else {
+            continue;
+        };
+        keys.insert(key.to_owned());
+    }
+    if keys.is_empty() {
+        return Err(format!("no localization keys found in {}", path.display()).into());
+    }
+    Ok(keys)
+}
+
+fn extract_ftl_keys(path: &Path) -> Result<BTreeSet<String>, Box<dyn std::error::Error>> {
+    let source = fs::read_to_string(path)?;
+    let mut keys = BTreeSet::new();
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('.') {
+            continue;
+        }
+        let Some((id_raw, _)) = trimmed.split_once('=') else {
+            continue;
+        };
+        let id = id_raw.trim();
+        if id.is_empty() || id.starts_with('-') {
+            continue;
+        }
+        keys.insert(id.to_owned());
+    }
+    if keys.is_empty() {
+        return Err(format!("no Fluent keys found in {}", path.display()).into());
+    }
+    Ok(keys)
+}
+
+fn audit_localization_keys() -> Result<(), Box<dyn std::error::Error>> {
+    let keys_path = Path::new("src/localization/keys.rs");
+    let en_path = Path::new("locales/en-US/messages.ftl");
+    let es_path = Path::new("locales/es-ES/messages.ftl");
+
+    let declared = extract_key_constants(keys_path)?;
+    let en_us_keys = extract_ftl_keys(en_path)?;
+    let es_es_keys = extract_ftl_keys(es_path)?;
+
+    let missing_en_us: Vec<_> = declared.difference(&en_us_keys).cloned().collect();
+    let missing_es_es: Vec<_> = declared.difference(&es_es_keys).cloned().collect();
+
+    if missing_en_us.is_empty() && missing_es_es.is_empty() {
+        return Ok(());
+    }
+
+    let mut message = String::from("localization key audit failed:");
+    if !missing_en_us.is_empty() {
+        message.push_str("\n- missing in en-US: ");
+        message.push_str(&missing_en_us.join(", "));
+    }
+    if !missing_es_es.is_empty() {
+        message.push_str("\n- missing in es-ES: ");
+        message.push_str(&missing_es_es.join(", "));
+    }
+    Err(message.into())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Exercise CLI localization, config merge, and host pattern symbols so the
     // shared modules remain linked when the build script is compiled without
@@ -93,6 +170,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
+    println!("cargo:rerun-if-changed=src/localization/keys.rs");
+    println!("cargo:rerun-if-changed=locales/en-US/messages.ftl");
+    println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
+
+    audit_localization_keys()?;
 
     // Packagers expect man pages under target/generated-man/<target>/<profile>.
     let out_dir = out_dir_for_target_profile();

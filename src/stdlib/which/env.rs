@@ -7,6 +7,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
 
+use crate::localization::{self, keys};
+
 use super::{error::args_error, options::CwdMode};
 
 #[derive(Clone, Debug)]
@@ -89,9 +91,10 @@ fn parse_path_entries(raw: Option<OsString>, cwd: &Utf8Path) -> Result<Vec<PathE
             continue;
         }
         let utf8 = Utf8PathBuf::from_path_buf(component).map_err(|_| {
-            args_error(format!(
-                "PATH entry #{index} contains non-UTF-8 characters; Netsuke requires UTF-8 paths",
-            ))
+            args_error(
+                localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
+                    .with_arg("index", index),
+            )
         })?;
         let resolved = if utf8.is_absolute() {
             utf8
@@ -136,13 +139,15 @@ pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, Error> {
     let cwd = std::env::current_dir().map_err(|err| {
         Error::new(
             ErrorKind::InvalidOperation,
-            format!("failed to resolve current directory: {err}"),
+            localization::message(keys::STDLIB_WHICH_CWD_RESOLVE_FAILED)
+                .with_arg("details", err.to_string())
+                .to_string(),
         )
     })?;
     Utf8PathBuf::from_path_buf(cwd).map_err(|_| {
         Error::new(
             ErrorKind::InvalidOperation,
-            "current directory contains non-UTF-8 components",
+            localization::message(keys::STDLIB_WHICH_CWD_NON_UTF8).to_string(),
         )
     })
 }

@@ -17,6 +17,8 @@ use time::{
     macros::format_description,
 };
 
+use crate::localization::{self, keys};
+
 const SECONDS_PER_MINUTE: i64 = 60;
 const SECONDS_PER_HOUR: i64 = 60 * SECONDS_PER_MINUTE;
 const SECONDS_PER_DAY: i64 = 24 * SECONDS_PER_HOUR;
@@ -64,7 +66,9 @@ fn parse_offset(raw: &str) -> Result<UtcOffset, Error> {
 fn invalid_offset(raw: &str) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
-        format!("now offset '{raw}' is invalid: expected '+HH:MM[:SS]' or 'Z'"),
+        localization::message(keys::STDLIB_TIME_OFFSET_INVALID)
+            .with_arg("offset", raw)
+            .to_string(),
     )
 }
 
@@ -74,7 +78,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: SECONDS_PER_WEEK,
             constructor: Duration::seconds,
-            label: "weeks",
+            label_key: keys::STDLIB_TIME_LABEL_WEEKS,
         },
     ),
     (
@@ -82,7 +86,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: SECONDS_PER_DAY,
             constructor: Duration::seconds,
-            label: "days",
+            label_key: keys::STDLIB_TIME_LABEL_DAYS,
         },
     ),
     (
@@ -90,7 +94,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: SECONDS_PER_HOUR,
             constructor: Duration::seconds,
-            label: "hours",
+            label_key: keys::STDLIB_TIME_LABEL_HOURS,
         },
     ),
     (
@@ -98,7 +102,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: SECONDS_PER_MINUTE,
             constructor: Duration::seconds,
-            label: "minutes",
+            label_key: keys::STDLIB_TIME_LABEL_MINUTES,
         },
     ),
     (
@@ -106,7 +110,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: 1,
             constructor: Duration::seconds,
-            label: "seconds",
+            label_key: keys::STDLIB_TIME_LABEL_SECONDS,
         },
     ),
     (
@@ -114,7 +118,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: NANOS_PER_MILLISECOND,
             constructor: Duration::nanoseconds,
-            label: "milliseconds",
+            label_key: keys::STDLIB_TIME_LABEL_MILLISECONDS,
         },
     ),
     (
@@ -122,7 +126,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: NANOS_PER_MICROSECOND,
             constructor: Duration::nanoseconds,
-            label: "microseconds",
+            label_key: keys::STDLIB_TIME_LABEL_MICROSECONDS,
         },
     ),
     (
@@ -130,7 +134,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
         ComponentSpec {
             multiplier: 1,
             constructor: Duration::nanoseconds,
-            label: "nanoseconds",
+            label_key: keys::STDLIB_TIME_LABEL_NANOSECONDS,
         },
     ),
 ];
@@ -139,7 +143,7 @@ const COMPONENT_SPECS: &[(&str, ComponentSpec)] = &[
 struct ComponentSpec {
     multiplier: i64,
     constructor: fn(i64) -> Duration,
-    label: &'static str,
+    label_key: &'static str,
 }
 
 fn add_component(
@@ -150,19 +154,22 @@ fn add_component(
     if let Some(value) = amount {
         let scaled = value
             .checked_mul(spec.multiplier)
-            .ok_or_else(|| overflow_error(spec.label))?;
+            .ok_or_else(|| overflow_error(spec.label_key))?;
         let component = (spec.constructor)(scaled);
         total = total
             .checked_add(component)
-            .ok_or_else(|| overflow_error(spec.label))?;
+            .ok_or_else(|| overflow_error(spec.label_key))?;
     }
     Ok(total)
 }
 
-fn overflow_error(label: &str) -> Error {
+fn overflow_error(label_key: &'static str) -> Error {
+    let component = localization::message(label_key).to_string();
     Error::new(
         ErrorKind::InvalidOperation,
-        format!("timedelta overflow when adding {label}"),
+        localization::message(keys::STDLIB_TIME_OVERFLOW)
+            .with_arg("component", component)
+            .to_string(),
     )
 }
 

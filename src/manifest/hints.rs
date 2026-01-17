@@ -1,22 +1,20 @@
+//! YAML error hint mappings for manifest diagnostics.
+
+use crate::localization::keys;
+
 pub(crate) const YAML_HINTS: [(&str, &str); 5] = [
     (
         "did not find expected '-'",
-        "Start list items with '-' and ensure proper indentation.",
+        keys::MANIFEST_YAML_HINT_LIST_ITEM,
     ),
-    (
-        "expected ':'",
-        "Ensure each key is followed by ':' separating key and value.",
-    ),
+    ("expected ':'", keys::MANIFEST_YAML_HINT_EXPECTED_COLON),
     (
         "mapping values are not allowed",
-        "Check for a stray ':' or add quotes around values where needed.",
+        keys::MANIFEST_YAML_HINT_MAPPING_VALUES,
     ),
     (
         "found character that cannot start any token",
-        "Remove stray characters and ensure indentation uses spaces (no tabs).",
+        keys::MANIFEST_YAML_HINT_INVALID_TOKEN,
     ),
-    (
-        "unknown escape character",
-        "Use valid YAML escape sequences or quote the string.",
-    ),
+    ("unknown escape character", keys::MANIFEST_YAML_HINT_ESCAPE),
 ];

@@ -25,7 +25,10 @@ fn allow_scheme_rejects_invalid_input(#[case] scheme: &str) {
     assert!(
         matches!(
             err,
-            NetworkPolicyConfigError::InvalidScheme { scheme: ref rejected }
+            NetworkPolicyConfigError::InvalidScheme {
+                scheme: ref rejected,
+                ..
+            }
                 if rejected == scheme
         ),
         "expected InvalidScheme for '{scheme}', got {err:?}"
@@ -61,9 +64,11 @@ fn allow_hosts_activates_allowlist() -> Result<()> {
         .evaluate(&denied)
         .expect_err("non-allowlisted host should be rejected");
     ensure!(
-        err == NetworkPolicyViolation::HostNotAllowlisted {
-            host: String::from("unauthorised.test"),
-        },
+        matches!(
+            err,
+            NetworkPolicyViolation::HostNotAllowlisted { ref host, .. }
+                if host.as_str() == "unauthorised.test"
+        ),
         "expected host unauthorised.test but was {err:?}",
     );
     Ok(())
@@ -80,7 +85,7 @@ fn evaluate_rejects_missing_host() {
         "data URLs must not expose a host: {url:?}"
     );
     let err = policy.evaluate(&url).expect_err("missing host should fail");
-    assert_eq!(err, NetworkPolicyViolation::MissingHost);
+    assert!(matches!(err, NetworkPolicyViolation::MissingHost { .. }));
 }
 
 #[rstest]
@@ -90,11 +95,13 @@ fn evaluate_rejects_disallowed_scheme() {
     let err = policy
         .evaluate(&url)
         .expect_err("http scheme should be denied by default");
-    assert_eq!(
-        err,
-        NetworkPolicyViolation::SchemeNotAllowed {
-            scheme: String::from("http"),
-        }
+    assert!(
+        matches!(
+            err,
+            NetworkPolicyViolation::SchemeNotAllowed { ref scheme, .. }
+                if scheme.as_str() == "http"
+        ),
+        "expected scheme http but was {err:?}",
     );
 }
 
@@ -112,9 +119,11 @@ fn evaluate_respects_allowlist() -> Result<()> {
         .evaluate(&denied)
         .expect_err("non-allowlisted host should be blocked");
     ensure!(
-        err == NetworkPolicyViolation::HostNotAllowlisted {
-            host: String::from("unauthorised.test"),
-        },
+        matches!(
+            err,
+            NetworkPolicyViolation::HostNotAllowlisted { ref host, .. }
+                if host.as_str() == "unauthorised.test"
+        ),
         "expected host to be unauthorised.test but was {err:?}",
     );
     Ok(())
@@ -156,9 +165,11 @@ fn evaluate_blocklist_precedence(#[case] case: BlocklistPrecedenceCase<'_>) -> R
     let url = Url::parse(test_url)?;
     let err = policy.evaluate(&url).expect_err(failure_message);
     ensure!(
-        err == NetworkPolicyViolation::HostBlocked {
-            host: String::from(expected_blocked_host),
-        },
+        matches!(
+            err,
+            NetworkPolicyViolation::HostBlocked { ref host, .. }
+                if host.as_str() == expected_blocked_host
+        ),
         "expected blocklist to reject {expected_blocked_host} but was {err:?}",
     );
     Ok(())

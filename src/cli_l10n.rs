@@ -7,6 +7,8 @@ use clap::Command;
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
 
+use crate::localization::keys;
+
 fn usage_body(usage: &str) -> &str {
     usage.strip_prefix("Usage: ").unwrap_or(usage)
 }
@@ -17,20 +19,20 @@ pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) 
     let mut args = LocalizationArgs::default();
     args.insert("binary", command.get_name().to_owned().into());
     args.insert("usage", fallback_usage.clone().into());
-    let usage = localizer.message("cli.usage", Some(&args), &fallback_usage);
+    let usage = localizer.message(keys::CLI_USAGE, Some(&args), &fallback_usage);
     command = command.override_usage(usage);
 
     if let Some(about) = command.get_about().map(ToString::to_string) {
-        let localized_text = localizer.message("cli.about", None, &about);
+        let localized_text = localizer.message(keys::CLI_ABOUT, None, &about);
         command = command.about(localized_text);
-    } else if let Some(message) = localizer.lookup("cli.about", None) {
+    } else if let Some(message) = localizer.lookup(keys::CLI_ABOUT, None) {
         command = command.about(message);
     }
 
     if let Some(long_about) = command.get_long_about().map(ToString::to_string) {
-        let localized_text = localizer.message("cli.long_about", None, &long_about);
+        let localized_text = localizer.message(keys::CLI_LONG_ABOUT, None, &long_about);
         command = command.long_about(localized_text);
-    } else if let Some(message) = localizer.lookup("cli.long_about", None) {
+    } else if let Some(message) = localizer.lookup(keys::CLI_LONG_ABOUT, None) {
         command = command.long_about(message);
     }
 
@@ -51,18 +53,17 @@ fn localize_arguments(
 ) -> Command {
     command.mut_args(|arg| {
         let arg_id = arg.get_id().as_str();
-        let key = subcommand_name.map_or_else(
-            || format!("cli.flag.{arg_id}.help"),
-            |name| format!("cli.subcommand.{name}.flag.{arg_id}.help"),
-        );
+        let Some(key) = flag_help_key(arg_id, subcommand_name) else {
+            return arg;
+        };
         if let Some(help) = arg.get_help().map(ToString::to_string) {
-            let message = localizer.message(&key, None, &help);
-            arg.help(message)
-        } else if let Some(message) = localizer.lookup(&key, None) {
-            arg.help(message)
-        } else {
-            arg
+            let message = localizer.message(key, None, &help);
+            return arg.help(message);
         }
+        if let Some(message) = localizer.lookup(key, None) {
+            return arg.help(message);
+        }
+        arg
     })
 }
 
@@ -70,26 +71,75 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     for subcommand in command.get_subcommands_mut() {
         let name = subcommand.get_name().to_owned();
         let mut updated = std::mem::take(subcommand);
-        let about_key = format!("cli.subcommand.{name}.about");
-        if let Some(about) = updated.get_about().map(ToString::to_string) {
-            let message = localizer.message(&about_key, None, &about);
-            updated = updated.about(message);
-        } else if let Some(message) = localizer.lookup(&about_key, None) {
-            updated = updated.about(message);
+        if let Some(about_key) = subcommand_about_key(&name) {
+            if let Some(about) = updated.get_about().map(ToString::to_string) {
+                let message = localizer.message(about_key, None, &about);
+                updated = updated.about(message);
+            } else if let Some(message) = localizer.lookup(about_key, None) {
+                updated = updated.about(message);
+            }
         }
 
-        let long_key = format!("cli.subcommand.{name}.long_about");
-        if let Some(long_about) = updated.get_long_about().map(ToString::to_string) {
-            let message = localizer.message(&long_key, None, &long_about);
-            updated = updated.long_about(message);
-        } else if let Some(message) = localizer.lookup(&long_key, None) {
-            updated = updated.long_about(message);
+        if let Some(long_key) = subcommand_long_about_key(&name) {
+            if let Some(long_about) = updated.get_long_about().map(ToString::to_string) {
+                let message = localizer.message(long_key, None, &long_about);
+                updated = updated.long_about(message);
+            } else if let Some(message) = localizer.lookup(long_key, None) {
+                updated = updated.long_about(message);
+            }
         }
 
         // Localise subcommand argument help text.
         updated = localize_arguments(updated, localizer, Some(&name));
 
         *subcommand = updated;
+    }
+}
+
+fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static str> {
+    match subcommand_name {
+        None => match arg_id {
+            "file" => Some(keys::CLI_FLAG_FILE_HELP),
+            "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),
+            "jobs" => Some(keys::CLI_FLAG_JOBS_HELP),
+            "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
+            "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),
+            "fetch_allow_scheme" => Some(keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP),
+            "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
+            "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
+            "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
+            _ => None,
+        },
+        Some("build") => match arg_id {
+            "emit" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_EMIT_HELP),
+            "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
+            _ => None,
+        },
+        Some("manifest") => match arg_id {
+            "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn subcommand_about_key(name: &str) -> Option<&'static str> {
+    match name {
+        "build" => Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT),
+        "clean" => Some(keys::CLI_SUBCOMMAND_CLEAN_ABOUT),
+        "graph" => Some(keys::CLI_SUBCOMMAND_GRAPH_ABOUT),
+        "manifest" => Some(keys::CLI_SUBCOMMAND_MANIFEST_ABOUT),
+        _ => None,
+    }
+}
+
+fn subcommand_long_about_key(name: &str) -> Option<&'static str> {
+    match name {
+        "build" => Some(keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT),
+        "clean" => Some(keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT),
+        "graph" => Some(keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT),
+        "manifest" => Some(keys::CLI_SUBCOMMAND_MANIFEST_LONG_ABOUT),
+        _ => None,
     }
 }
 

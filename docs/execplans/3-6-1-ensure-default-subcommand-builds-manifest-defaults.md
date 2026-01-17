@@ -17,8 +17,8 @@ experience. When a manifest file is missing, the CLI should emit a clear,
 actionable error with a hint rather than a generic file I/O error. All CLI help
 text (subcommands and flags) should be plain-language, localizable, and
 consistent with the documentation style guide. A step-by-step quickstart
-tutorial should demonstrate running Netsuke end-to-end, exercised via an example
-build fixture. Success is observable by:
+tutorial should demonstrate running Netsuke end-to-end, exercised via an
+example build fixture. Success is observable by:
 
 1. Running `netsuke` in an empty directory and seeing:
 
@@ -54,14 +54,15 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 - Observation: The `thiserror` derive macro's `#[error(...)]` attribute captures
   struct fields for formatting, but Clippy's `unused_assignments` lint does not
   recognize this usage, triggering false-positive warnings for fields only used
-  in error messages.
-  Evidence: `src/runner/mod.rs` required `#![allow(unused_assignments)]` with an
-  explanatory comment referencing upstream issue `rust-lang/rust#130021`.
+  in error messages. Evidence: `src/runner/mod.rs` required
+  `#![allow(unused_assignments)]` with an explanatory comment referencing
+  upstream issue `rust-lang/rust#130021`.
 
 - Observation: Fluent localization keys must use snake_case to match clap's
   `Arg::id()` output, not kebab-case as initially assumed from the flag names.
-  Evidence: `localize_arguments()` generates keys like `cli.flag.fetch_allow_scheme.help`
-  from `--fetch-allow-scheme`, requiring snake_case keys in `.ftl` files.
+  Evidence: `localize_arguments()` generates keys like
+  `cli.flag.fetch_allow_scheme.help` from `--fetch-allow-scheme`, requiring
+  snake_case keys in `.ftl` files.
 
 - Observation: No other surprises encountered during implementation.
   Evidence: Implementation matched expectations for error handling, help
@@ -77,8 +78,9 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 - Decision: Use `miette::Diagnostic` with static English messages initially;
   full Fluent integration for runtime errors deferred to roadmap item 3.7.
   Rationale: The existing error infrastructure uses `miette` derives with
-  compile-time strings, and Fluent integration for `miette` diagnostics requires
-  additional infrastructure not yet in place. Date/Author: 2026-01-08 (Terry)
+  compile-time strings, and Fluent integration for `miette` diagnostics
+  requires additional infrastructure not yet in place. Date/Author: 2026-01-08
+  (Terry)
 
 - Decision: Check file existence with `Path::exists()` before calling
   `fs::read_to_string()`. Rationale: Allows differentiation between "file
@@ -91,8 +93,8 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
   one module. Date/Author: 2026-01-08 (Terry)
 
 - Decision: Use text processing (not C compilation) for the hello-world example.
-  Rationale: Avoids compiler dependencies, making the quickstart portable across
-  systems without a C toolchain. Date/Author: 2026-01-08 (Terry)
+  Rationale: Avoids compiler dependencies, making the quickstart portable
+  across systems without a C toolchain. Date/Author: 2026-01-08 (Terry)
 
 - Decision: Create `docs/quickstart.md` as a separate tutorial document rather
   than expanding the user guide. Rationale: Keeps the user guide as a reference
@@ -101,8 +103,8 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
 
 ## Outcomes & retrospective
 
-- Outcome: All three roadmap items (3.6.1, 3.6.2, 3.6.3) implemented and PR ready
-  for review.
+- Outcome: All three roadmap items (3.6.1, 3.6.2, 3.6.3) implemented and PR
+  ready for review.
   - The default subcommand now validates manifest existence before loading,
     producing a clear error with actionable hint when the manifest is missing.
   - CLI help text fully localized via `localize_arguments()` helper; Spanish
@@ -118,7 +120,8 @@ This behaviour is specified in `docs/netsuke-cli-design-document.md` (lines
     access CLI context for directory descriptions in error messages.
   - Used `miette::Diagnostic` with static English messages; full Fluent
     integration for runtime errors deferred to roadmap item 3.7.
-  - Hello-world example uses text processing (not C compilation) for portability.
+  - Hello-world example uses text processing (not C compilation) for
+    portability.
 
 - Known limitations:
   - Module-level `#![allow(unused_assignments)]` required to suppress
@@ -150,8 +153,9 @@ Key runtime entry points and relevant files:
   definitions using `rstest-bdd` v0.3.2.
 - `test_support/src/netsuke.rs` provides `run_netsuke_in()` for CLI integration
   tests.
-- `examples/` contains 5 existing example manifests (basic_c.yml, photo_edit.yml,
-  visual_design.yml, website.yml, writing.yml) but no step-by-step tutorial.
+- `examples/` contains 5 existing example manifests (basic_c.yml,
+  photo_edit.yml, visual_design.yml, website.yml, writing.yml) but no
+  step-by-step tutorial.
 
 Design expectations are in `docs/netsuke-cli-design-document.md` (Friendly UX
 section, lines 29-82). Testing guidance is in
@@ -302,8 +306,8 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 ## Validation and acceptance
 
 - Running `netsuke` in an empty directory prints:
-  `Error: No \`Netsukefile\` found in the current directory.` followed by a hint
-  mentioning `--help`.
+  `Error: No \`Netsukefile\` found in the current directory.` followed by a
+  hint mentioning `--help`.
 - Running `netsuke --file custom.yml` where `custom.yml` does not exist prints a
   similar error with the custom filename.
 - The `netsuke --help` output shows localized descriptions for all flags.
@@ -342,9 +346,9 @@ Keep the following transcripts for evidence:
 - **Detection location**: `src/runner/mod.rs` function `generate_ninja()` — add
   `Path::exists()` check before `manifest::from_path_with_policy()` call.
 - **Flag localization**: `src/cli_l10n.rs` — add `localize_arguments()` helper.
-- **Localization**: `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`
-  — add `error-manifest-not-found`, `error-manifest-not-found-hint`, and
-  `cli.flag.{arg_id}.help` keys.
+- **Localization**: `locales/en-US/messages.ftl` and
+  `locales/es-ES/messages.ftl` — add `error-manifest-not-found`,
+  `error-manifest-not-found-hint`, and `cli.flag.{arg_id}.help` keys.
 - **BDD tests**: `tests/features/missing_manifest.feature` (new file) and
   `tests/features/quickstart.feature` (new file).
 - **Step definitions**: Reuse existing steps from `tests/bdd/steps/process.rs`
@@ -358,20 +362,20 @@ Keep the following transcripts for evidence:
 
 ## Critical files to modify
 
-| File | Change |
-|------|--------|
-| `src/runner/mod.rs` | Add `ManifestNotFound` error; existence check in `generate_ninja()` |
-| `src/cli_l10n.rs` | Add `localize_arguments()` to localize flag help strings |
-| `locales/en-US/messages.ftl` | Add error keys + all flag help descriptions |
-| `locales/es-ES/messages.ftl` | Add Spanish translations |
-| `tests/features/missing_manifest.feature` | **New** — BDD scenarios for missing manifest |
-| `tests/features/quickstart.feature` | **New** — BDD scenario exercising hello-world example |
-| `docs/quickstart.md` | **New** — step-by-step tutorial |
-| `examples/hello-world/Netsukefile` | **New** — minimal working example |
-| `examples/hello-world/input.txt` | **New** — sample input |
-| `examples/hello-world/README.md` | **New** — example documentation |
-| `docs/users-guide.md` | Link to quickstart; document error behaviour |
-| `docs/roadmap.md` | Mark 3.6.1, 3.6.2, 3.6.3 as done |
+| File                                      | Change                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| `src/runner/mod.rs`                       | Add `ManifestNotFound` error; existence check in `generate_ninja()` |
+| `src/cli_l10n.rs`                         | Add `localize_arguments()` to localize flag help strings            |
+| `locales/en-US/messages.ftl`              | Add error keys + all flag help descriptions                         |
+| `locales/es-ES/messages.ftl`              | Add Spanish translations                                            |
+| `tests/features/missing_manifest.feature` | **New** — BDD scenarios for missing manifest                        |
+| `tests/features/quickstart.feature`       | **New** — BDD scenario exercising hello-world example               |
+| `docs/quickstart.md`                      | **New** — step-by-step tutorial                                     |
+| `examples/hello-world/Netsukefile`        | **New** — minimal working example                                   |
+| `examples/hello-world/input.txt`          | **New** — sample input                                              |
+| `examples/hello-world/README.md`          | **New** — example documentation                                     |
+| `docs/users-guide.md`                     | Link to quickstart; document error behaviour                        |
+| `docs/roadmap.md`                         | Mark 3.6.1, 3.6.2, 3.6.3 as done                                    |
 
 ## Revision note (required when editing an ExecPlan)
 

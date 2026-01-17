@@ -10,6 +10,7 @@ use minijinja::{Error, ErrorKind};
 
 use super::fs_utils::{ParentDir, open_parent_dir};
 use super::io_helpers::io_to_error;
+use crate::localization::{self, keys};
 
 pub(super) fn basename(path: &Utf8Path) -> String {
     path.file_name().unwrap_or(path.as_str()).to_owned()
@@ -28,7 +29,7 @@ pub(super) fn with_suffix(
     if sep.is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "with_suffix requires a non-empty separator",
+            localization::message(keys::STDLIB_PATH_WITH_SUFFIX_EMPTY_SEPARATOR).to_string(),
         ));
     }
     let mut base = path.to_path_buf();
@@ -58,15 +59,23 @@ pub(super) fn relative_to(path: &Utf8Path, root: &Utf8Path) -> Result<String, Er
         .map_err(|_| {
             Error::new(
                 ErrorKind::InvalidOperation,
-                format!("{path} is not relative to {root}"),
+                localization::message(keys::STDLIB_PATH_RELATIVE_TO_MISMATCH)
+                    .with_arg("path", path.as_str())
+                    .with_arg("root", root.as_str())
+                    .to_string(),
             )
         })
 }
 
 pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
     if path.as_str().is_empty() || path == Utf8Path::new(".") {
-        return current_dir_utf8()
-            .map_err(|err| io_to_error(Utf8Path::new("."), "canonicalise", err));
+        return current_dir_utf8().map_err(|err| {
+            io_to_error(
+                Utf8Path::new("."),
+                &localization::message(keys::STDLIB_PATH_ACTION_CANONICALISE),
+                err,
+            )
+        });
     }
     if is_root(path) {
         return Ok(path.to_path_buf());
@@ -87,7 +96,13 @@ pub(super) fn canonicalize_any(path: &Utf8Path) -> Result<Utf8PathBuf, Error> {
                 absolute
             }
         })
-        .map_err(|err| io_to_error(path, "canonicalise", err))
+        .map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_CANONICALISE),
+                err,
+            )
+        })
 }
 
 pub(super) fn is_user_specific_expansion(stripped: &str) -> bool {
@@ -102,7 +117,7 @@ pub(super) fn expanduser(raw: &str) -> Result<String, Error> {
         if is_user_specific_expansion(stripped) {
             return Err(Error::new(
                 ErrorKind::InvalidOperation,
-                "user-specific ~ expansion is unsupported",
+                localization::message(keys::STDLIB_PATH_EXPANDUSER_UNSUPPORTED).to_string(),
             ));
         }
         let home = resolve_home()?;
@@ -122,7 +137,7 @@ fn resolve_home() -> Result<String, Error> {
     home_from_env().ok_or_else(|| {
         Error::new(
             ErrorKind::InvalidOperation,
-            "cannot expand ~: no home directory environment variables are set",
+            localization::message(keys::STDLIB_PATH_EXPANDUSER_NO_HOME).to_string(),
         )
     })
 }

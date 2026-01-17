@@ -6,6 +6,7 @@
 
 use crate::ast::Recipe;
 use crate::ir::{BuildEdge, BuildGraph};
+use crate::localization::{self, LocalizedMessage, keys};
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 use std::collections::HashSet;
@@ -16,14 +17,31 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum NinjaGenError {
     /// The build graph referenced an action that was not defined.
-    #[error("action '{id}' referenced by build edge was not found")]
+    #[error("{message}")]
     MissingAction {
         /// Identifier of the missing action referenced by a build edge.
         id: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Formatting the Ninja output failed.
-    #[error("failed to format Ninja output")]
-    Format(#[from] fmt::Error),
+    #[error("{message}")]
+    Format {
+        /// Underlying formatting error.
+        #[source]
+        source: fmt::Error,
+        /// Localised error message.
+        message: LocalizedMessage,
+    },
+}
+
+impl From<fmt::Error> for NinjaGenError {
+    fn from(source: fmt::Error) -> Self {
+        Self::Format {
+            message: localization::message(keys::NINJA_GEN_FORMAT),
+            source,
+        }
+    }
 }
 
 macro_rules! write_kv {
@@ -131,6 +149,8 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
                 .get(&edge.action_id)
                 .ok_or_else(|| NinjaGenError::MissingAction {
                     id: edge.action_id.clone(),
+                    message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
+                        .with_arg("id", &edge.action_id),
                 })?;
         write!(
             out,

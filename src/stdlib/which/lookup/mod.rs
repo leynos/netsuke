@@ -6,6 +6,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
 use minijinja::{Error, ErrorKind};
 
+use crate::localization::{self, keys};
+
 use super::options::CwdMode;
 
 #[cfg(windows)]
@@ -248,13 +250,16 @@ pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, 
         let canonical = fs::canonicalize(path.as_std_path()).map_err(|err| {
             Error::new(
                 ErrorKind::InvalidOperation,
-                format!("failed to canonicalise '{path}': {err}"),
+                localization::message(keys::STDLIB_WHICH_CANONICALISE_FAILED)
+                    .with_arg("path", path.as_str())
+                    .with_arg("details", err.to_string())
+                    .to_string(),
             )
         })?;
         let utf8 = Utf8PathBuf::from_path_buf(canonical).map_err(|_| {
             Error::new(
                 ErrorKind::InvalidOperation,
-                "canonical path contains non-UTF-8 characters",
+                localization::message(keys::STDLIB_WHICH_CANONICALISE_NON_UTF8).to_string(),
             )
         })?;
         if unique.insert(utf8.clone()) {

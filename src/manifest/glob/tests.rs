@@ -5,6 +5,7 @@ use super::normalize::normalize_separators;
 use super::validate::validate_brace_matching;
 use super::walk::process_glob_entry;
 use super::{GlobPattern, glob_paths};
+use crate::localization::{self, keys};
 use anyhow::{Context, Result, anyhow, ensure};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
@@ -117,9 +118,13 @@ fn validate_brace_matching_rejects_unmatched_opening() -> Result<()> {
             // Additional message check for opening brace context.
             let err = validate_brace_matching("foo{")
                 .expect_err("brace mismatch should produce error after helper pass");
+            let expected = localization::message(keys::MANIFEST_GLOB_UNMATCHED_BRACE)
+                .with_arg("pattern", "foo{")
+                .with_arg("character", '{')
+                .with_arg("position", 3)
+                .to_string();
             ensure!(
-                err.to_string()
-                    .contains("invalid glob pattern 'foo{': unmatched '{' at position 3"),
+                err.to_string().contains(&expected),
                 "unexpected error message: {err}"
             );
             Ok(())

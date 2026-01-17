@@ -1,5 +1,6 @@
 //! Build graph data structures and manifest conversion helpers.
 
+use crate::localization::LocalizedMessage;
 use camino::Utf8PathBuf;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -105,12 +106,14 @@ pub enum IrGenError {
     ///         if rule_name == "compile"
     /// ));
     /// ```
-    #[error("rule '{rule_name}' referenced by target '{target_name}' was not found")]
+    #[error("{message}")]
     RuleNotFound {
         /// Name of the target referencing the missing rule.
         target_name: String,
         /// Rule identifier that was not declared.
         rule_name: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 
     /// Triggered when multiple rule names are supplied for a single target.
@@ -130,12 +133,14 @@ pub enum IrGenError {
     ///     );
     /// }
     /// ```
-    #[error("multiple rules for target '{target_name}': {rules:?}")]
+    #[error("{message}")]
     MultipleRules {
         /// Name of the target that specified conflicting rules.
         target_name: String,
         /// Set of rule identifiers provided simultaneously.
         rules: Vec<String>,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 
     /// Returned when a target declares no rule at all.
@@ -150,10 +155,12 @@ pub enum IrGenError {
     ///     "No rules specified for target docs"
     /// );
     /// ```
-    #[error("No rules specified for target {target_name}")]
+    #[error("{message}")]
     EmptyRule {
         /// Target lacking an associated rule.
         target_name: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 
     /// Indicates that more than one build edge produces the same output file.
@@ -172,10 +179,12 @@ pub enum IrGenError {
     ///     );
     /// }
     /// ```
-    #[error("duplicate target outputs: {outputs:?}")]
+    #[error("{message}")]
     DuplicateOutput {
         /// Outputs produced by more than one build edge.
         outputs: Vec<String>,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 
     /// Emitted when a cycle exists in the target graph.
@@ -196,12 +205,14 @@ pub enum IrGenError {
     ///     );
     /// }
     /// ```
-    #[error("circular dependency detected: {cycle:?}")]
+    #[error("{message}")]
     CircularDependency {
         /// Sequence of outputs that forms the dependency cycle.
         cycle: Vec<Utf8PathBuf>,
         /// Dependencies that could not be resolved during analysis.
         missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 
     /// Wraps failures encountered while serialising an action to JSON.
@@ -214,8 +225,14 @@ pub enum IrGenError {
     /// let err = IrGenError::ActionSerialisation(source);
     /// assert!(err.to_string().contains("invalid action"));
     /// ```
-    #[error("failed to serialise action: {0}")]
-    ActionSerialisation(#[from] serde_json::Error),
+    #[error("{message}")]
+    ActionSerialisation {
+        /// Underlying serialisation error.
+        #[source]
+        source: serde_json::Error,
+        /// Localised error message.
+        message: LocalizedMessage,
+    },
 
     /// Raised when command interpolation yields an invalid shell snippet.
     ///
@@ -232,11 +249,13 @@ pub enum IrGenError {
     ///     "command is not a valid shell command: echo $in"
     /// );
     /// ```
-    #[error("command is not a valid shell command: {snippet}")]
+    #[error("{message}")]
     InvalidCommand {
         /// Original command string provided in the manifest.
         command: String,
         /// Rendered snippet that failed validation.
         snippet: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 }

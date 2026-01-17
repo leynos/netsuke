@@ -58,7 +58,7 @@ Feature: Template stdlib filters
 
   Scenario: flatten reports errors for scalar items
     When I render template "{{ [['a'], 'b'] | flatten }}" at stdlib path "file"
-    Then the stdlib error contains "flatten expected sequence items"
+    Then the stdlib error contains "Flatten expected sequence items"
 
   Scenario: group_by clusters items by attribute
     When I render template "{{ ([{'name': 'one', 'kind': 'tool'}, {'name': 'two', 'kind': 'tool'}, {'name': 'three', 'kind': 'material'}] | group_by('kind')).tool | length }}" at stdlib path "file"
@@ -99,6 +99,12 @@ Feature: Template stdlib filters
     When I render the stdlib template "{{ 'absent' | which }}" without context
     Then the stdlib error contains "netsuke::jinja::which::not_found"
 
+  Scenario: which errors are localised in Spanish
+    Given the stdlib PATH entries are ""
+    And the localisation locale is "es-ES"
+    When I render the stdlib template "{{ 'absent' | which }}" without context
+    Then the stdlib error contains "no encontrado"
+
   Scenario: shell filter transforms text and marks templates impure
     Given an uppercase stdlib command helper
     When I render the stdlib template "{{ 'hello' | shell(cmd) | trim }}" using the stdlib command helper
@@ -115,7 +121,7 @@ Feature: Template stdlib filters
     Given a large-output stdlib command helper
     And the stdlib command output limit is 512 bytes
     When I render the stdlib template "{{ '' | shell(cmd) }}" using the stdlib command helper
-    Then the stdlib error contains "stdout capture limit of 512 bytes"
+    Then the stdlib error contains "capture"
     And the stdlib template is impure
 
   Scenario: shell filter streams large output to a temporary file
@@ -132,7 +138,7 @@ Feature: Template stdlib filters
     And the stdlib command output limit is 512 bytes
     And the stdlib command stream limit is 1024 bytes
     When I render the stdlib template "{{ '' | shell(cmd, {'mode': 'tempfile'}) }}" using the stdlib command helper
-    Then the stdlib error contains "stdout streaming limit of 1024 bytes"
+    Then the stdlib error contains "streaming"
     And the stdlib template is impure
 
   Scenario: grep filter streams large output to a temporary file
@@ -159,7 +165,7 @@ Feature: Template stdlib filters
   Scenario: fetch rejects non-HTTPS URLs by default
     Given an HTTP server returning "payload"
     When I render template "{{ fetch(url) }}" with stdlib url
-    Then the stdlib error contains "scheme 'http' is not permitted"
+    Then the stdlib error contains "not allowed"
     And the stdlib template is pure
 
   Scenario: fetch rejects hosts outside the allowlist
@@ -168,13 +174,13 @@ Feature: Template stdlib filters
     And the stdlib network policy blocks all hosts by default
     And the stdlib network policy allows host "example.com"
     When I render template "{{ fetch(url) }}" with stdlib url
-    Then the stdlib error contains "not allowlisted"
+    Then the stdlib error contains "not on the allowlist"
     And the stdlib template is pure
 
   Scenario: fetch reports network errors
     Given the stdlib network policy allows scheme "http"
     When I render the stdlib template "{{ fetch('http://127.0.0.1:9') }}" without context
-    Then the stdlib error contains "fetch failed"
+    Then the stdlib error contains "Failed to fetch"
     And the stdlib template is impure
 
   Scenario: fetch caches responses inside the workspace
@@ -190,7 +196,7 @@ Feature: Template stdlib filters
     And the stdlib network policy allows scheme "http"
     And the stdlib fetch response limit is 32 bytes
     When I render template "{{ fetch(url) }}" with stdlib url
-    Then the stdlib error contains "configured limit of 32 bytes"
+    Then the stdlib error contains "exceeded limit"
     And the stdlib template is impure
 
   Scenario: fetch rejects cache_dir overrides

@@ -1,5 +1,6 @@
 //! Filter implementations exposed to `MiniJinja` templates.
 
+use crate::localization::{self, keys};
 use minijinja::{
     Error, ErrorKind, State,
     value::{Value, ValueKind},
@@ -26,7 +27,7 @@ pub(super) fn execute_shell(
     if cmd.is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "shell filter requires a non-empty command",
+            localization::message(keys::COMMAND_SHELL_EMPTY).to_string(),
         ));
     }
 
@@ -49,7 +50,7 @@ pub(super) fn execute_grep(
     if pattern.is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "grep filter requires a search pattern",
+            localization::message(keys::COMMAND_GREP_EMPTY_PATTERN).to_string(),
         ));
     }
 
@@ -85,17 +86,19 @@ fn collect_flag_args(flags: Option<Value>) -> Result<Vec<String>, Error> {
                     || {
                         Err(Error::new(
                             ErrorKind::InvalidOperation,
-                            "grep flags must be strings",
+                            localization::message(keys::COMMAND_GREP_FLAGS_NOT_STRING).to_string(),
                         ))
                     },
                     |s| Ok(s.to_owned()),
                 )
             })
             .collect(),
-        _ => value
-            .as_str()
-            .map(|s| vec![s.to_owned()])
-            .ok_or_else(|| Error::new(ErrorKind::InvalidOperation, "grep flags must be strings")),
+        _ => value.as_str().map(|s| vec![s.to_owned()]).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::COMMAND_GREP_FLAGS_NOT_STRING).to_string(),
+            )
+        }),
     }
 }
 
@@ -106,7 +109,10 @@ fn format_command(base: &str, args: &[String]) -> Result<String, Error> {
         let quoted = quote(arg).map_err(|err| {
             Error::new(
                 ErrorKind::InvalidOperation,
-                format!("argument {arg:?} cannot be safely quoted: {err}"),
+                localization::message(keys::COMMAND_QUOTE_INVALID)
+                    .with_arg("arg", format!("{arg:?}"))
+                    .with_arg("details", err.to_string())
+                    .to_string(),
             )
         })?;
         command.push_str(&quoted);
@@ -118,7 +124,7 @@ fn to_bytes(value: &Value) -> Result<Vec<u8>, Error> {
     if value.is_undefined() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "input value is undefined",
+            localization::message(keys::COMMAND_INPUT_UNDEFINED).to_string(),
         ));
     }
 
