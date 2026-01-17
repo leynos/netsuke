@@ -95,6 +95,21 @@ fn store_run_result(world: &TestWorld, result: RunResult) {
     }
 }
 
+/// Run netsuke with the given arguments and store the result.
+fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
+    let temp_path = get_temp_path(world)?;
+    let run = run_netsuke_in(&temp_path, args)?;
+    store_run_result(
+        world,
+        RunResult {
+            stdout: run.stdout,
+            stderr: run.stderr,
+            success: run.success,
+        },
+    );
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
@@ -183,4 +198,175 @@ fn file_should_exist(world: &TestWorld, name: &str) -> Result<()> {
 fn file_should_not_exist(world: &TestWorld, name: &str) -> Result<()> {
     let name = FileName::new(name);
     assert_file_existence(world, &name, false)
+}
+
+// ---------------------------------------------------------------------------
+// Missing manifest scenario steps
+// ---------------------------------------------------------------------------
+
+/// Create an empty workspace (no Netsukefile).
+#[given("an empty workspace")]
+fn empty_workspace(world: &TestWorld) -> Result<()> {
+    let temp = tempfile::tempdir().context("create temp dir for empty workspace")?;
+    // Store the workspace path for use by run_netsuke_with_directory_flag
+    *world.workspace_path.borrow_mut() = Some(temp.path().to_path_buf());
+    *world.temp_dir.borrow_mut() = Some(temp);
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
+    Ok(())
+}
+
+/// Normalize a path by resolving `.` and `..` components without requiring the
+/// path to exist (unlike `std::fs::canonicalize`).
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::CurDir => {}
+            c => normalized.push(c),
+        }
+    }
+    normalized
+}
+
+/// Resolve a path as fully as possible, canonicalizing existing ancestors and
+/// normalizing the remaining components. This handles symlinks in existing
+/// parts of the path while still allowing the final target to not yet exist.
+fn resolve_path_safe(path: &Path) -> Result<PathBuf> {
+    // First normalize the path to remove . and .. components
+    let normalized = normalize_path(path);
+
+    // Find the longest existing ancestor we can canonicalize
+    let mut existing_ancestor = normalized.clone();
+    let mut remaining_components = Vec::new();
+
+    while !existing_ancestor.as_os_str().is_empty() && !existing_ancestor.exists() {
+        if let Some(file_name) = existing_ancestor.file_name() {
+            remaining_components.push(file_name.to_owned());
+        }
+        if !existing_ancestor.pop() {
+            break;
+        }
+    }
+
+    // Canonicalize the existing ancestor to resolve any symlinks
+    let resolved_base = if existing_ancestor.exists() {
+        fs::canonicalize(&existing_ancestor)
+            .with_context(|| format!("canonicalize {}", existing_ancestor.display()))?
+    } else {
+        // No existing ancestor found, use the normalized path as-is
+        normalized.clone()
+    };
+
+    // Append the remaining components that didn't exist
+    let mut resolved = resolved_base;
+    for component in remaining_components.into_iter().rev() {
+        resolved.push(component);
+    }
+
+    Ok(resolved)
+}
+
+/// Create an empty workspace at a specific path.
+///
+/// This step sets up a fixed-path workspace for scenarios that test the `-C`
+/// flag by creating the directory at the specified path and storing a tempdir
+/// in the world so subsequent steps can access it.
+///
+/// # Errors
+///
+/// Returns an error if the path is outside expected test locations (must be a
+/// subdirectory of `/tmp` or the system temp directory, not the root itself)
+/// to prevent accidental deletion of sensitive directories.
+#[given("an empty workspace at path {path:string}")]
+fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
+    let dir = Path::new(path);
+    // Resolve the path by canonicalizing existing ancestors and normalizing the
+    // rest. This prevents symlink-based traversal attacks like creating a
+    // symlink `/tmp/escape -> /` and then using `/tmp/escape/etc/passwd`.
+    let resolved = resolve_path_safe(dir)?;
+
+    // Canonicalize the system temp directory for accurate comparison
+    let temp_dir_raw = std::env::temp_dir();
+    let temp_dir = fs::canonicalize(&temp_dir_raw).unwrap_or(temp_dir_raw);
+
+    // Also canonicalize /tmp if it exists (it may be a symlink on some systems)
+    let tmp_path = Path::new("/tmp");
+    let canonical_tmp = fs::canonicalize(tmp_path).unwrap_or_else(|_| tmp_path.to_path_buf());
+
+    // Safeguard: only allow paths that are proper subdirectories of /tmp or
+    // the system temp directory (not the root temp directory itself).
+    let is_safe_tmp = resolved.starts_with(&canonical_tmp) && resolved != canonical_tmp;
+    let is_safe_temp = resolved.starts_with(&temp_dir) && resolved != temp_dir;
+    ensure!(
+        is_safe_tmp || is_safe_temp,
+        "test workspace path must be a subdirectory of /tmp or system temp directory, not the root itself: {}",
+        resolved.display()
+    );
+    // Ensure the directory exists and is empty.
+    if resolved.exists() {
+        fs::remove_dir_all(&resolved)
+            .with_context(|| format!("remove existing {}", resolved.display()))?;
+    }
+    fs::create_dir_all(&resolved)
+        .with_context(|| format!("create directory {}", resolved.display()))?;
+
+    // Store the workspace path for use by run_netsuke_with_directory_flag
+    *world.workspace_path.borrow_mut() = Some(resolved);
+    // Use a normal temp dir as the working directory for the netsuke command.
+    // The -C flag in the arguments will override where netsuke looks for files.
+    let temp = tempfile::tempdir().context("create temp dir for command execution")?;
+    *world.temp_dir.borrow_mut() = Some(temp);
+    // Clear world state for consistency.
+    world.run_status.clear();
+    world.run_error.clear();
+    world.command_stdout.clear();
+    world.command_stderr.clear();
+    Ok(())
+}
+
+/// Run netsuke without any arguments.
+#[when("netsuke is run without arguments")]
+fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
+    run_netsuke_and_store(world, &[])
+}
+
+/// Run netsuke with specified arguments.
+///
+/// # Limitations
+///
+/// Arguments are split on whitespace using `split_whitespace()`, which does not
+/// handle quoted arguments containing spaces. For example, `-f "my file.yml"`
+/// would be incorrectly split into `["-f", "\"my", "file.yml\""]`. Current test
+/// scenarios use only simple arguments without embedded spaces.
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
+#[when("netsuke is run with arguments {args:string}")]
+fn run_netsuke_with_args(world: &TestWorld, args: &str) -> Result<()> {
+    let args: Vec<&str> = args.split_whitespace().collect();
+    run_netsuke_and_store(world, &args)
+}
+
+/// Run netsuke with `-C` pointing to the workspace directory.
+///
+/// This step runs netsuke with the `-C` flag set to the workspace path created
+/// by `empty_workspace_at_path`, allowing tests to verify the directory flag
+/// behaviour without hardcoded paths.
+#[when("netsuke is run with directory flag pointing to the workspace")]
+fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
+    let workspace_path = world
+        .workspace_path
+        .borrow()
+        .clone()
+        .context("workspace_path must be set by empty_workspace_at_path step")?;
+    let dir_arg = workspace_path.to_string_lossy().to_string();
+    run_netsuke_and_store(world, &["-C", &dir_arg])
 }

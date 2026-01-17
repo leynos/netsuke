@@ -20,6 +20,7 @@ use rstest_bdd::Slot;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
+use std::path::PathBuf;
 use test_support::PathGuard;
 use test_support::env::{NinjaEnvGuard, restore_many};
 use test_support::http::HttpServer;
@@ -67,6 +68,8 @@ pub struct TestWorld {
     pub command_stderr: Slot<String>,
     /// Temporary directory handle for test isolation (non-Clone).
     pub temp_dir: RefCell<Option<tempfile::TempDir>>,
+    /// Explicit workspace path created by `empty_workspace_at_path` for `-C` flag tests.
+    pub workspace_path: RefCell<Option<PathBuf>>,
     /// Guard that restores `PATH` after each scenario (non-Clone).
     pub path_guard: RefCell<Option<PathGuard>>,
     /// Guard that overrides `NINJA_ENV` for deterministic Ninja resolution (non-Clone).

@@ -1,0 +1,19 @@
+netsuke_version: "1.0.0"
+
+# A minimal "Hello World" example demonstrating Netsuke basics.
+# This manifest transforms input.txt to output.txt by converting to uppercase.
+
+vars:
+  greeting: "Hello from Netsuke"
+
+targets:
+  - name: output.txt
+    command: "cat input.txt | tr 'a-z' 'A-Z' > output.txt"
+    sources: input.txt
+
+  - name: greeting.txt
+    command: "printf '%s\\n' '{{ greeting }}!' > greeting.txt"
+
+defaults:
+  - output.txt
+  - greeting.txt

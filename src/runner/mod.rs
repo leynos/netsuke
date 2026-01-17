@@ -4,6 +4,10 @@
 //! handles command execution. It now delegates build requests to the Ninja
 //! subprocess, streaming its output back to the user.
 
+mod error;
+
+pub use error::RunnerError;
+
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
@@ -243,6 +247,32 @@ fn handle_graph(cli: &Cli) -> Result<()> {
 /// ```
 fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli)?;
+
+    // Check for missing manifest and provide a helpful error with hint.
+    if !manifest_path.as_std_path().exists() {
+        // `resolve_manifest_path()` validates that `file_name()` is Some.
+        let manifest_name = manifest_path
+            .file_name()
+            .ok_or_else(|| anyhow!("manifest path '{}' has no file name", manifest_path))?
+            .to_owned();
+        let directory = if cli.directory.is_some() {
+            format!(
+                "directory `{}`",
+                manifest_path
+                    .parent()
+                    .map_or_else(|| manifest_path.as_str(), camino::Utf8Path::as_str)
+            )
+        } else {
+            "the current directory".to_owned()
+        };
+        return Err(RunnerError::ManifestNotFound {
+            manifest_name,
+            directory,
+            path: manifest_path.into_std_path_buf(),
+        }
+        .into());
+    }
+
     let policy = cli
         .network_policy()
         .context("derive network policy from CLI flags")?;
@@ -284,13 +314,20 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
     let file = Utf8PathBuf::from_path_buf(cli.file.clone())
         .map_err(|path| anyhow!("manifest path '{path:?}' must be valid UTF-8"))?;
-    if let Some(dir) = &cli.directory {
+    let resolved = if let Some(dir) = &cli.directory {
         let base = Utf8PathBuf::from_path_buf(dir.clone())
             .map_err(|path| anyhow!("manifest directory '{path:?}' must be valid UTF-8"))?;
-        Ok(base.join(&file))
+        base.join(&file)
     } else {
-        Ok(file)
+        file
+    };
+    if resolved.file_name().is_none() {
+        return Err(anyhow!(
+            "manifest path '{}' must include a file name",
+            resolved
+        ));
     }
+    Ok(resolved)
 }
 
 /// Resolve an output path relative to the CLI working directory.

@@ -2,9 +2,10 @@
 //!
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
+use miette::Report;
 use netsuke::{cli, cli_localization, runner};
 use std::ffi::OsString;
-use std::io;
+use std::io::{self, Write};
 use std::process::ExitCode;
 use tracing::Level;
 use tracing_subscriber::fmt;
@@ -40,7 +41,16 @@ fn main() -> ExitCode {
     match runner::run(&merged_cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            tracing::error!(error = %err, "runner failed");
+            // Check if the error is a RunnerError with diagnostic info.
+            match err.downcast::<runner::RunnerError>() {
+                Ok(runner_err) => {
+                    let report = Report::new(runner_err);
+                    drop(writeln!(io::stderr(), "{report:?}"));
+                }
+                Err(other_err) => {
+                    tracing::error!(error = %other_err, "runner failed");
+                }
+            }
             ExitCode::FAILURE
         }
     }
