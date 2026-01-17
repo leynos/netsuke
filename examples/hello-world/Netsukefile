@@ -11,10 +11,8 @@ targets:
     command: "cat input.txt | tr 'a-z' 'A-Z' > output.txt"
     sources: input.txt
 
-  # Note: Single quotes around the Jinja template work for simple strings but
-  # will break if the variable contains a single quote character.
   - name: greeting.txt
-    command: "echo '{{ greeting }}!' > greeting.txt"
+    command: "printf '%s\\n' '{{ greeting }}!' > greeting.txt"
 
 defaults:
   - output.txt
