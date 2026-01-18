@@ -121,7 +121,7 @@ fn invalid_command_errors(#[case] cmd: &str) -> Result<()> {
         bail!("expected invalid command to fail");
     };
     ensure!(
-        err.to_string().contains("not a valid shell command"),
+        err.to_string().contains("Invalid command interpolation"),
         "unexpected error: {err}"
     );
     Ok(())

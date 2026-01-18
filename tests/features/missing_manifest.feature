@@ -4,17 +4,17 @@ Feature: Missing manifest error handling
     Given an empty workspace
     When netsuke is run without arguments
     Then the command should fail
-    And stderr should contain "No `Netsukefile` found"
-    And stderr should contain "netsuke --help"
+    And stderr should contain "not found in"
+    And stderr should contain "Ensure the manifest exists"
 
   Scenario: Running netsuke with custom manifest path that does not exist
     Given an empty workspace
     When netsuke is run with arguments "--file nonexistent.yml"
     Then the command should fail
-    And stderr should contain "No `nonexistent.yml` found"
+    And stderr should contain "not found in"
 
   Scenario: Running netsuke in specified directory without manifest
     Given an empty workspace
     When netsuke is run with directory flag pointing to the workspace
     Then the command should fail
-    And stderr should contain "No `Netsukefile` found"
+    And stderr should contain "not found in"

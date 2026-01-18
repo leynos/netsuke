@@ -18,6 +18,8 @@ use cap_std::{ambient_authority, fs, fs_utf8::Dir};
 use minijinja::{Environment, Error, value::Value};
 use std::sync::Arc;
 
+use crate::localization::{self, keys};
+
 type FileTest = (&'static str, fn(fs::FileType) -> bool);
 
 /// Register standard library helpers with the `MiniJinja` environment.
@@ -45,11 +47,15 @@ type FileTest = (&'static str, fn(fs::FileType) -> bool);
 /// non-UTF-8 components and cannot be converted into a UTF-8 workspace root.
 pub fn register(env: &mut Environment<'_>) -> anyhow::Result<StdlibState> {
     let root = Dir::open_ambient_dir(".", ambient_authority())
-        .context("open current directory for stdlib registration")?;
-    let cwd =
-        std::env::current_dir().context("resolve current directory for stdlib registration")?;
+        .context(localization::message(keys::STDLIB_REGISTER_OPEN_DIR))?;
+    let cwd = std::env::current_dir()
+        .context(localization::message(keys::STDLIB_REGISTER_RESOLVE_DIR))?;
     let path = camino::Utf8PathBuf::from_path_buf(cwd).map_err(|path| {
-        anyhow::anyhow!("current directory contains non-UTF-8 components: {path:?}")
+        anyhow::anyhow!(
+            "{}",
+            localization::message(keys::STDLIB_REGISTER_DIR_NON_UTF8)
+                .with_arg("path", path.display().to_string())
+        )
     })?;
     register_with_config(
         env,

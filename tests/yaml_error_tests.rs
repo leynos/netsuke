@@ -17,7 +17,7 @@ fn normalise_report(report: &str) -> Result<String> {
     "targets:\n\t- name: test\n",
     &[
         "line 2, column 2",
-        "Use spaces for indentation; tabs are invalid in YAML.",
+        "tabs disallowed within this context",
     ],
 )]
 #[case(
@@ -59,24 +59,24 @@ fn normalise_report(report: &str) -> Result<String> {
 #[case(
     "",
     &[
-        "manifest parse error",
-        "manifest structure error",
+        "Manifest parse failed.",
+        "Manifest structure error",
         "invalid type: null, expected struct NetsukeManifest",
     ],
 )]
 #[case(
     "    \n    ",
     &[
-        "manifest parse error",
-        "manifest structure error",
+        "Manifest parse failed.",
+        "Manifest structure error",
         "invalid type: null, expected struct NetsukeManifest",
     ],
 )]
 #[case(
     "# just a comment\n# another comment",
     &[
-        "manifest parse error",
-        "manifest structure error",
+        "Manifest parse failed.",
+        "Manifest structure error",
         "invalid type: null, expected struct NetsukeManifest",
     ],
 )]

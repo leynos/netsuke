@@ -4,6 +4,7 @@ use super::super::jinja_macros::{
 };
 use super::super::{ManifestMap, ManifestValue};
 use crate::ast::MacroDefinition;
+use crate::localization::{self, keys};
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use minijinja::value::{Kwargs, Value};
 use minijinja::{Environment, UndefinedBehavior};
@@ -43,9 +44,9 @@ fn parse_macro_name_extracts_identifier(
 }
 
 #[rstest]
-#[case("greet", "include parameter list")]
-#[case("(name)", "missing an identifier")]
-#[case("   ", "missing an identifier")]
+#[case("greet", "Macro signature is missing parameters.")]
+#[case("(name)", "Macro signature is missing an identifier.")]
+#[case("   ", "Macro signature is missing an identifier.")]
 fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) -> AnyResult<()> {
     match parse_macro_name(signature) {
         Ok(name) => Err(anyhow!(
@@ -168,11 +169,8 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>
     match register_manifest_macros(&doc, &mut strict_env) {
         Ok(()) => Err(anyhow!("expected error for non-mapping macro entry")),
         Err(err) => {
-            ensure!(
-                err.to_string()
-                    .contains("macros must be a sequence of mappings"),
-                "{err}"
-            );
+            let expected = localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID).to_string();
+            ensure!(err.to_string().contains(&expected), "{err}");
             Ok(())
         }
     }
@@ -199,7 +197,8 @@ fn register_manifest_macros_rejects_non_string_values(
         )),
         Err(err) => {
             let msg = err.to_string();
-            ensure!(msg.contains("macros"), "unexpected error: {msg}");
+            let expected = localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID).to_string();
+            ensure!(msg.contains(&expected), "unexpected error: {msg}");
             Ok(())
         }
     }
@@ -240,7 +239,8 @@ fn register_manifest_macros_requires_body(mut strict_env: Environment<'static>) 
     match register_manifest_macros(&doc_value, &mut strict_env) {
         Ok(()) => Err(anyhow!("expected missing macro body to trigger an error")),
         Err(err) => {
-            ensure!(err.to_string().contains("body"), "{err}");
+            let expected = localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID).to_string();
+            ensure!(err.to_string().contains(&expected), "{err}");
             Ok(())
         }
     }

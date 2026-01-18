@@ -5,6 +5,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::localization::{self, LocalizedMessage, keys};
 use thiserror::Error;
 use url::Url;
 
@@ -37,17 +38,25 @@ pub struct NetworkPolicy {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum NetworkPolicyConfigError {
     /// The supplied scheme was empty.
-    #[error("scheme must not be empty")]
-    EmptyScheme,
+    #[error("{message}")]
+    EmptyScheme {
+        /// Localised error message.
+        message: LocalizedMessage,
+    },
     /// The supplied scheme contained invalid characters.
-    #[error("scheme '{scheme}' contains invalid characters")]
+    #[error("{message}")]
     InvalidScheme {
         /// The rejected scheme string.
         scheme: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// Attempted to enable default-deny without providing any allowlist entries.
-    #[error("host allowlist must contain at least one entry")]
-    EmptyAllowlist,
+    #[error("{message}")]
+    EmptyAllowlist {
+        /// Localised error message.
+        message: LocalizedMessage,
+    },
     /// Host pattern parsing failed.
     #[error(transparent)]
     HostPattern(#[from] HostPatternError),
@@ -107,17 +116,23 @@ impl NetworkPolicy {
     ) -> Result<Self, NetworkPolicyConfigError> {
         let candidate = scheme.as_ref();
         if candidate.is_empty() {
-            return Err(NetworkPolicyConfigError::EmptyScheme);
+            return Err(NetworkPolicyConfigError::EmptyScheme {
+                message: localization::message(keys::NETWORK_POLICY_SCHEME_EMPTY),
+            });
         }
         let mut chars = candidate.chars();
         if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
             return Err(NetworkPolicyConfigError::InvalidScheme {
                 scheme: candidate.to_owned(),
+                message: localization::message(keys::NETWORK_POLICY_SCHEME_INVALID)
+                    .with_arg("scheme", candidate),
             });
         }
         if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
             return Err(NetworkPolicyConfigError::InvalidScheme {
                 scheme: candidate.to_owned(),
+                message: localization::message(keys::NETWORK_POLICY_SCHEME_INVALID)
+                    .with_arg("scheme", candidate),
             });
         }
         self.allowed_schemes.insert(candidate.to_ascii_lowercase());
@@ -131,7 +146,9 @@ impl NetworkPolicy {
         let mut patterns = self.allowed_hosts.take().unwrap_or_default();
         patterns.extend(patterns_iter);
         if patterns.is_empty() {
-            return Err(NetworkPolicyConfigError::EmptyAllowlist);
+            return Err(NetworkPolicyConfigError::EmptyAllowlist {
+                message: localization::message(keys::NETWORK_POLICY_ALLOWLIST_EMPTY),
+            });
         }
         self.allowed_hosts = Some(patterns);
         Ok(self)
@@ -288,13 +305,16 @@ impl NetworkPolicy {
         if !self.allowed_schemes.contains(scheme) {
             return Err(NetworkPolicyViolation::SchemeNotAllowed {
                 scheme: scheme.to_owned(),
+                message: localization::message(keys::NETWORK_POLICY_SCHEME_NOT_ALLOWED)
+                    .with_arg("scheme", scheme),
             });
         }
 
-        let host = url
-            .host_str()
-            .filter(|host| !host.is_empty())
-            .ok_or(NetworkPolicyViolation::MissingHost)?;
+        let host = url.host_str().filter(|host| !host.is_empty()).ok_or(
+            NetworkPolicyViolation::MissingHost {
+                message: localization::message(keys::NETWORK_POLICY_MISSING_HOST),
+            },
+        )?;
         if self
             .blocked_hosts
             .iter()
@@ -302,6 +322,8 @@ impl NetworkPolicy {
         {
             return Err(NetworkPolicyViolation::HostBlocked {
                 host: host.to_owned(),
+                message: localization::message(keys::NETWORK_POLICY_HOST_BLOCKED)
+                    .with_arg("host", host),
             });
         }
 
@@ -312,6 +334,8 @@ impl NetworkPolicy {
         }) {
             return Err(NetworkPolicyViolation::HostNotAllowlisted {
                 host: host.to_owned(),
+                message: localization::message(keys::NETWORK_POLICY_HOST_NOT_ALLOWLISTED)
+                    .with_arg("host", host),
             });
         }
 
@@ -329,25 +353,34 @@ impl Default for NetworkPolicy {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum NetworkPolicyViolation {
     /// The URL scheme is not present in the allowlist.
-    #[error("scheme '{scheme}' is not permitted")]
+    #[error("{message}")]
     SchemeNotAllowed {
         /// The scheme provided by the caller.
         scheme: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// The URL does not contain a host portion.
-    #[error("URL must include a host")]
-    MissingHost,
+    #[error("{message}")]
+    MissingHost {
+        /// Localised error message.
+        message: LocalizedMessage,
+    },
     /// The host is absent from the allowlist when default deny is active.
-    #[error("host '{host}' is not allowlisted")]
+    #[error("{message}")]
     HostNotAllowlisted {
         /// Hostname that is absent from the allowlist.
         host: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
     /// The host matches one of the configured blocklist rules.
-    #[error("host '{host}' is blocked")]
+    #[error("{message}")]
     HostBlocked {
         /// Hostname that matched a blocklist entry.
         host: String,
+        /// Localised error message.
+        message: LocalizedMessage,
     },
 }
 

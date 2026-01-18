@@ -7,6 +7,7 @@
 
 use super::ManifestValue;
 use crate::ast::MacroDefinition;
+use crate::localization::{self, keys};
 use anyhow::{Context, Result};
 use minijinja::{
     Environment, Error, State,
@@ -38,18 +39,24 @@ pub(crate) fn parse_macro_name(signature: &str) -> Result<String> {
     let trimmed = signature.trim();
     if trimmed.is_empty() {
         return Err(anyhow::anyhow!(
-            "macro signature '{signature}' is missing an identifier"
+            "{}",
+            localization::message(keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)
+                .with_arg("signature", signature)
         ));
     }
     let Some((name_segment, _rest)) = trimmed.split_once('(') else {
         return Err(anyhow::anyhow!(
-            "macro signature '{signature}' must include parameter list"
+            "{}",
+            localization::message(keys::MANIFEST_MACRO_SIGNATURE_MISSING_PARAMS)
+                .with_arg("signature", signature)
         ));
     };
     let identifier = name_segment.trim();
     if identifier.is_empty() {
         return Err(anyhow::anyhow!(
-            "macro signature '{signature}' is missing an identifier"
+            "{}",
+            localization::message(keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)
+                .with_arg("signature", signature)
         ));
     }
     Ok(identifier.to_owned())
@@ -84,7 +91,9 @@ pub(crate) fn register_macro(
     );
 
     env.add_template_owned(template_name.clone(), template_source)
-        .with_context(|| format!("compile macro '{name}'"))?;
+        .with_context(|| {
+            localization::message(keys::MANIFEST_MACRO_COMPILE_FAILED).with_arg("name", &name)
+        })?;
 
     let cache = Arc::new(MacroCache::new(template_name, name.clone()));
     cache.prepare(env)?;
@@ -111,11 +120,13 @@ pub(crate) fn register_manifest_macros(
     };
 
     let defs: Vec<MacroDefinition> = serde_json::from_value(macros)
-        .context("macros must be a sequence of mappings with string signature/body")?;
+        .context(localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID))?;
 
     for (idx, def) in defs.iter().enumerate() {
-        register_macro(env, def, idx)
-            .with_context(|| format!("register macro '{}'", def.signature))?;
+        register_macro(env, def, idx).with_context(|| {
+            localization::message(keys::MANIFEST_MACRO_REGISTER_FAILED)
+                .with_arg("signature", &def.signature)
+        })?;
     }
     Ok(())
 }

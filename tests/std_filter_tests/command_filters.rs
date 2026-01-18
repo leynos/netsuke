@@ -267,7 +267,7 @@ fn shell_filter_enforces_output_limit() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("stdout capture limit of 1024 bytes"),
+        err.to_string().contains("exceeded capture stdout limit of 1024 bytes"),
         "limit error should mention configured budget: {err}"
     );
     ensure!(fixture.state().is_impure(), "limit error should mark template impure");
@@ -345,7 +345,7 @@ fn shell_streaming_honours_size_limit() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("stdout streaming limit of 1024 bytes"),
+        err.to_string().contains("exceeded streaming stdout limit of 1024 bytes"),
         "streaming limit error should mention configured budget: {err}"
     );
     ensure!(fixture.state().is_impure(), "streaming limit should mark template impure");
@@ -415,7 +415,7 @@ fn grep_filter_enforces_output_limit() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("stdout capture limit of 1024 bytes"),
+        err.to_string().contains("exceeded capture stdout limit of 1024 bytes"),
         "grep error should mention configured limit: {err}"
     );
     ensure!(state.is_impure(), "grep limit should mark template impure");
@@ -457,7 +457,7 @@ fn grep_filter_rejects_invalid_flags() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("grep flags must be strings"),
+        err.to_string().contains("Grep flags must be strings"),
         "error should explain invalid flags: {err}"
     );
     Ok(())
@@ -481,7 +481,7 @@ fn grep_filter_rejects_empty_pattern() -> Result<()> {
         err.kind()
     );
     ensure!(
-        err.to_string().contains("requires a search pattern"),
+        err.to_string().contains("Grep pattern must not be empty"),
         "error message should mention missing pattern: {err}"
     );
     ensure!(state.is_impure(), "grep should mark template impure");

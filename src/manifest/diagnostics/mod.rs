@@ -5,6 +5,7 @@
 //! origin, and mapping helpers (e.g. [`map_yaml_error`], [`map_data_error`])
 //! convert parser and deserialisation failures into rich [`miette`]
 //! diagnostics with spans, hints, and stable diagnostic codes.
+use crate::localization::{self, LocalizedMessage, keys};
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -123,13 +124,15 @@ impl std::fmt::Display for ManifestName {
 #[derive(Debug, Error, Diagnostic)]
 pub enum ManifestError {
     /// Manifest parsing failed and produced the supplied diagnostic.
-    #[error("manifest parse error")]
+    #[error("{message}")]
     #[diagnostic(code(netsuke::manifest::parse))]
     Parse {
         /// Underlying diagnostic reported by the parser or validator.
         #[source]
         #[diagnostic_source]
         source: Box<dyn Diagnostic + Send + Sync + 'static>,
+        /// Localised parse summary.
+        message: LocalizedMessage,
     },
 }
 
@@ -139,7 +142,7 @@ pub enum ManifestError {
 struct DataDiagnostic {
     #[source]
     source: serde_json::Error,
-    message: String,
+    message: LocalizedMessage,
 }
 
 /// Map a [`serde_json`] structural error into a diagnostic without a source
@@ -151,7 +154,9 @@ pub fn map_data_error(
     err: serde_json::Error,
     name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
-    let message = format!("manifest structure error in {}: {err}", name.as_ref());
+    let message = localization::message(keys::MANIFEST_STRUCTURE_ERROR)
+        .with_arg("name", name.as_ref())
+        .with_arg("details", err.to_string());
     Box::new(DataDiagnostic {
         source: err,
         message,
@@ -170,12 +175,14 @@ mod tests {
         let name = ManifestName::new("test.json");
         let err = serde_json::from_str::<Value>("{\"key\":}")
             .expect_err("expected serde_json parse error");
+        let details = err.to_string();
         let diag = map_data_error(err, &name);
         let message = diag.to_string();
-        ensure!(
-            message.starts_with("manifest structure error in test.json:"),
-            "unexpected message: {message}"
-        );
+        let expected = localization::message(keys::MANIFEST_STRUCTURE_ERROR)
+            .with_arg("name", "test.json")
+            .with_arg("details", details)
+            .to_string();
+        ensure!(message == expected, "unexpected message: {message}");
         let code = diag
             .code()
             .map(|c| c.to_string())
@@ -193,9 +200,13 @@ mod tests {
         let err = serde_json::from_str::<Value>("not json")
             .expect_err("expected serde_json parse failure");
         let diag = map_data_error(err, &name);
-        let wrapped = ManifestError::Parse { source: diag };
+        let wrapped = ManifestError::Parse {
+            source: diag,
+            message: localization::message(keys::MANIFEST_PARSE),
+        };
+        let expected = localization::message(keys::MANIFEST_PARSE).to_string();
         ensure!(
-            wrapped.to_string() == "manifest parse error",
+            wrapped.to_string() == expected,
             "unexpected outer error message: {wrapped}"
         );
         let parse_code = wrapped
@@ -207,7 +218,7 @@ mod tests {
             "unexpected parse diagnostic code {parse_code}"
         );
         let inner_code = match &wrapped {
-            ManifestError::Parse { source } => source
+            ManifestError::Parse { source, .. } => source
                 .code()
                 .map(|c| c.to_string())
                 .context("source diagnostic should have a code")?,

@@ -16,6 +16,7 @@
     unused_assignments
 )]
 
+use crate::localization::LocalizedMessage;
 use miette::Diagnostic;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -24,11 +25,8 @@ use thiserror::Error;
 #[derive(Debug, Error, Diagnostic)]
 pub enum RunnerError {
     /// The manifest file does not exist at the expected path.
-    #[error("No `{manifest_name}` found in {directory}")]
-    #[diagnostic(
-        code(netsuke::runner::manifest_not_found),
-        help("Run `netsuke --help` to see how to specify or create a manifest.")
-    )]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::runner::manifest_not_found))]
     ManifestNotFound {
         /// Name of the expected manifest file (e.g., "Netsukefile").
         manifest_name: String,
@@ -36,5 +34,10 @@ pub enum RunnerError {
         directory: String,
         /// The path that was attempted.
         path: PathBuf,
+        /// Localised error message.
+        message: LocalizedMessage,
+        /// Localised hint for resolving the error.
+        #[help]
+        help: LocalizedMessage,
     },
 }

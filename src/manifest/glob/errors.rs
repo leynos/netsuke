@@ -1,6 +1,8 @@
 //! Error helpers for glob processing.
 use minijinja::{Error, ErrorKind};
 
+use crate::localization::{self, keys};
+
 #[derive(Debug)]
 pub(super) struct GlobErrorContext {
     pub pattern: String,
@@ -20,26 +22,35 @@ pub(super) fn create_glob_error(context: &GlobErrorContext, details: Option<Stri
     match context.error_type {
         GlobErrorType::UnmatchedBrace => Error::new(
             ErrorKind::SyntaxError,
-            format!(
-                "invalid glob pattern '{}': unmatched '{}' at position {}",
-                context.pattern, context.error_char, context.position
-            ),
+            localization::message(keys::MANIFEST_GLOB_UNMATCHED_BRACE)
+                .with_arg("pattern", &context.pattern)
+                .with_arg("character", context.error_char)
+                .with_arg("position", context.position)
+                .to_string(),
         ),
         GlobErrorType::InvalidPattern => {
-            let detail = details.unwrap_or_else(|| "unknown pattern error".to_owned());
+            let detail = details.unwrap_or_else(|| {
+                localization::message(keys::MANIFEST_GLOB_UNKNOWN_PATTERN_ERROR).to_string()
+            });
             Error::new(
                 ErrorKind::SyntaxError,
-                format!("invalid glob pattern '{}': {detail}", context.pattern),
+                localization::message(keys::MANIFEST_GLOB_INVALID_PATTERN)
+                    .with_arg("pattern", &context.pattern)
+                    .with_arg("detail", detail)
+                    .to_string(),
             )
         }
         GlobErrorType::IoError => {
-            let detail = details.unwrap_or_else(|| "unknown IO error".to_owned());
-            let message = if detail.starts_with("glob ") {
-                detail
-            } else {
-                format!("glob failed for '{}': {detail}", context.pattern)
-            };
-            Error::new(ErrorKind::InvalidOperation, message)
+            let detail = details.unwrap_or_else(|| {
+                localization::message(keys::MANIFEST_GLOB_UNKNOWN_IO_ERROR).to_string()
+            });
+            Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::MANIFEST_GLOB_IO_FAILED)
+                    .with_arg("pattern", &context.pattern)
+                    .with_arg("detail", detail)
+                    .to_string(),
+            )
         }
     }
 }

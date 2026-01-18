@@ -3,10 +3,11 @@
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
 use miette::Report;
-use netsuke::{cli, cli_localization, runner};
+use netsuke::{cli, cli_localization, localization, runner};
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process::ExitCode;
+use std::sync::Arc;
 use tracing::Level;
 use tracing_subscriber::fmt;
 
@@ -15,7 +16,9 @@ fn main() -> ExitCode {
     let locale_hint = cli::locale_hint_from_args(&args);
     let env_locale = std::env::var("NETSUKE_LOCALE").ok();
     let locale = locale_hint.as_deref().or(env_locale.as_deref());
-    let localizer = cli_localization::build_localizer(locale);
+    let localizer = Arc::from(cli_localization::build_localizer(locale));
+    localization::set_localizer(Arc::clone(&localizer));
+    cli::set_validation_localizer(Arc::clone(&localizer));
 
     let (parsed_cli, matches) = match cli::parse_with_localizer_from(args, localizer.as_ref()) {
         Ok(parsed) => parsed,

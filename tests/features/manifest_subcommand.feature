@@ -18,5 +18,4 @@ Feature: Manifest subcommand
     And a directory named "out.ninja" exists
     When the netsuke manifest subcommand is run with "out.ninja"
     Then the command should fail
-    And stderr should contain "failed to create Ninja file"
-
+    And stderr should contain "Failed to create Ninja file"

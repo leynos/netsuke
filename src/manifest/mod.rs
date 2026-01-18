@@ -20,6 +20,7 @@
 
 use crate::{
     ast::NetsukeManifest,
+    localization::{self, keys},
     stdlib::{NetworkPolicy, StdlibConfig},
 };
 use anyhow::{Context, Result, anyhow};
@@ -74,11 +75,15 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
         Ok(val) => Ok(val),
         Err(std::env::VarError::NotPresent) => Err(Error::new(
             ErrorKind::UndefinedError,
-            format!("environment variable '{name}' is not set"),
+            localization::message(keys::MANIFEST_ENV_MISSING)
+                .with_arg("name", name)
+                .to_string(),
         )),
         Err(std::env::VarError::NotUnicode(_)) => Err(Error::new(
             ErrorKind::InvalidOperation,
-            format!("environment variable '{name}' is set but contains invalid UTF-8"),
+            localization::message(keys::MANIFEST_ENV_INVALID_UTF8)
+                .with_arg("name", name)
+                .to_string(),
         )),
     }
 }
@@ -99,6 +104,7 @@ fn from_str_named(
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
             source: map_yaml_error(e, &ManifestSource::from(yaml), name),
+            message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
     let mut jinja = Environment::new();
@@ -117,9 +123,12 @@ fn from_str_named(
             .cloned()
             .ok_or_else(|| ManifestError::Parse {
                 source: map_data_error(
-                    serde_json::Error::custom("manifest vars must be an object with string keys"),
+                    serde_json::Error::custom(
+                        localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string(),
+                    ),
                     name,
                 ),
+                message: localization::message(keys::MANIFEST_PARSE),
             })?;
         for (key, value) in vars {
             jinja.add_global(key, Value::from_serialize(value));
@@ -133,6 +142,7 @@ fn from_str_named(
     let manifest: NetsukeManifest =
         serde_json::from_value(doc).map_err(|e| ManifestError::Parse {
             source: map_data_error(e, name),
+            message: localization::message(keys::MANIFEST_PARSE),
         })?;
 
     render_manifest(manifest, &jinja)
@@ -181,8 +191,10 @@ pub fn from_path_with_policy(
     policy: NetworkPolicy,
 ) -> Result<NetsukeManifest> {
     let path_ref = path.as_ref();
-    let data = fs::read_to_string(path_ref)
-        .with_context(|| format!("failed to read {}", path_ref.display()))?;
+    let data = fs::read_to_string(path_ref).with_context(|| {
+        localization::message(keys::MANIFEST_READ_FAILED)
+            .with_arg("path", path_ref.display().to_string())
+    })?;
     let name = ManifestName::new(path_ref.display().to_string());
     let config = stdlib_config_for_manifest(path_ref, policy)?;
     from_str_named(&data, &name, Some(config))
@@ -197,13 +209,14 @@ fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf
         utf8_parent.to_path_buf().into_std_path_buf()
     } else {
         env::current_dir()
-            .context("resolve current directory for manifest workspace root")?
+            .context(localization::message(keys::MANIFEST_RESOLVE_WORKSPACE_ROOT))?
             .join(utf8_parent.as_std_path())
     };
     Utf8PathBuf::from_path_buf(workspace_base).map_err(|invalid| {
         anyhow!(
-            "workspace root '{}' contains non-UTF-8 components",
-            invalid.display()
+            "{}",
+            localization::message(keys::MANIFEST_WORKSPACE_NON_UTF8)
+                .with_arg("path", invalid.display().to_string())
         )
     })
 }
@@ -219,18 +232,18 @@ fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<Stdl
         .map_or_else(|| path.display().to_string(), str::to_owned);
     let utf8_parent = Utf8Path::from_path(parent).ok_or_else(|| {
         anyhow!(
-            "manifest '{}' path '{}' contains non-UTF-8 components",
-            manifest_label,
-            path.display()
+            "{}",
+            localization::message(keys::MANIFEST_PATH_NON_UTF8)
+                .with_arg("manifest", &manifest_label)
+                .with_arg("path", path.display().to_string())
         )
     })?;
     let workspace_root = resolve_absolute_workspace_root(utf8_parent)?;
     let dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority()).with_context(
         || {
-            format!(
-                "failed to open workspace directory '{workspace_root}' \
-                 for manifest '{manifest_label}'"
-            )
+            localization::message(keys::MANIFEST_OPEN_WORKSPACE_FAILED)
+                .with_arg("workspace", workspace_root.as_str())
+                .with_arg("manifest", &manifest_label)
         },
     )?;
     Ok(StdlibConfig::new(dir)?

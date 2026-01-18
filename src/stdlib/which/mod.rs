@@ -23,6 +23,7 @@ pub(crate) use lookup::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 pub(crate) use cache::WhichResolver;
 pub(crate) use options::WhichOptions;
 
+use crate::localization::{self, keys};
 use error::args_error;
 
 #[derive(Clone, Debug)]
@@ -85,7 +86,7 @@ fn resolve_with(
         .as_str()
         .map(str::trim)
         .filter(|candidate| !candidate.is_empty())
-        .ok_or_else(|| args_error("which requires a non-empty string"))?;
+        .ok_or_else(|| args_error(localization::message(keys::STDLIB_WHICH_COMMAND_EMPTY)))?;
     let options = WhichOptions::from_kwargs(kwargs)?;
     let matches = resolver.resolve(name, &options)?;
     Ok(render_value(&matches, &options))

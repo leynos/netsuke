@@ -18,6 +18,7 @@
 )]
 
 use super::{ManifestName, ManifestSource};
+use crate::localization::{self, LocalizedMessage, keys};
 use crate::manifest::hints::YAML_HINTS;
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use serde_saphyr::{Error as YamlError, Location};
@@ -84,13 +85,14 @@ fn to_span(src: &ManifestSource, loc: Location) -> SourceSpan {
 struct YamlDiagnostic {
     #[source_code]
     src: NamedSource<String>,
-    #[label("parse error here")]
+    #[label("{label}")]
     span: Option<SourceSpan>,
+    label: LocalizedMessage,
     #[help]
-    help: Option<String>,
+    help: Option<LocalizedMessage>,
     #[source]
     source: YamlError,
-    message: String,
+    message: LocalizedMessage,
 }
 
 fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
@@ -104,15 +106,19 @@ fn has_tab_indent(src: &ManifestSource, location: Option<Location>) -> bool {
         .any(|c| c == '\t')
 }
 
-fn hint_for(err_str: &str, src: &ManifestSource, loc: Option<Location>) -> Option<String> {
+fn hint_for(
+    err_str: &str,
+    src: &ManifestSource,
+    loc: Option<Location>,
+) -> Option<LocalizedMessage> {
     if has_tab_indent(src, loc) {
-        return Some("Use spaces for indentation; tabs are invalid in YAML.".into());
+        return Some(localization::message(keys::MANIFEST_YAML_HINT_TABS));
     }
     let lower = err_str.to_lowercase();
     YAML_HINTS
         .iter()
         .find(|(needle, _)| lower.contains(*needle))
-        .map(|(_, hint)| (*hint).into())
+        .map(|(_, key)| localization::message(key))
 }
 
 /// Map a `serde_saphyr` YAML parse error into a [`miette`] diagnostic.
@@ -132,15 +138,15 @@ pub fn map_yaml_error(
     });
     let err_str = err.to_string();
     let hint = hint_for(&err_str, src, loc);
-    let mut message = format!("YAML parse error at line {line}, column {col}: {err_str}");
-    if let Some(ref h) = hint {
-        message.push_str("\nhelp: ");
-        message.push_str(h);
-    }
+    let message = localization::message(keys::MANIFEST_YAML_PARSE)
+        .with_arg("line", line)
+        .with_arg("column", col)
+        .with_arg("details", err_str);
 
     Box::new(YamlDiagnostic {
         src: NamedSource::new(name.as_ref(), src.as_ref().to_owned()),
         span,
+        label: localization::message(keys::MANIFEST_YAML_LABEL),
         help: hint,
         source: err,
         message,
@@ -173,11 +179,16 @@ mod tests {
         };
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
-        let msg = diag.to_string();
-        ensure!(
-            msg.contains("Use spaces for indentation"),
-            "message missing tab hint: {msg}"
-        );
+        let yaml_diag = (&*diag as &(dyn StdError + 'static))
+            .downcast_ref::<YamlDiagnostic>()
+            .ok_or_else(|| anyhow!("expected YAML diagnostic"))?;
+        let expected = localization::message(keys::MANIFEST_YAML_HINT_TABS).to_string();
+        let help = yaml_diag
+            .help
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        ensure!(help == expected, "message missing tab hint: {help}");
         Ok(())
     }
 
@@ -187,10 +198,16 @@ mod tests {
         let err = serde_saphyr::Error::Eof {
             location: serde_saphyr::Location::UNKNOWN,
         };
+        let details = err.to_string();
         let name = ManifestName::from("test");
         let diag = map_yaml_error(err, &src, &name);
+        let expected = localization::message(keys::MANIFEST_YAML_PARSE)
+            .with_arg("line", 1)
+            .with_arg("column", 1)
+            .with_arg("details", details)
+            .to_string();
         ensure!(
-            diag.to_string().contains("line 1, column 1"),
+            diag.to_string() == expected,
             "diagnostic should default to line 1 column 1"
         );
         Ok(())

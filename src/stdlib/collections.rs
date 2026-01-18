@@ -8,6 +8,8 @@ use minijinja::{
     value::{Enumerator, Object, ObjectRepr, Value, ValueKind},
 };
 
+use crate::localization::{self, keys};
+
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter("uniq", |values: Value| uniq_filter(&values));
     env.add_filter("flatten", |values: Value| flatten_filter(&values));
@@ -89,7 +91,9 @@ fn flatten_filter(values: &Value) -> Result<Value, Error> {
             kind => {
                 return Err(Error::new(
                     ErrorKind::InvalidOperation,
-                    format!("flatten expected sequence items but found {kind}"),
+                    localization::message(keys::STDLIB_COLLECTIONS_FLATTEN_EXPECTED_SEQUENCE)
+                        .with_arg("kind", kind.to_string())
+                        .to_string(),
                 ));
             }
         }
@@ -117,7 +121,7 @@ fn group_by_filter(values: &Value, attr: &str) -> Result<Value, Error> {
     if attr.trim().is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "group_by requires a non-empty attribute".to_owned(),
+            localization::message(keys::STDLIB_COLLECTIONS_GROUP_BY_EMPTY_ATTR).to_string(),
         ));
     }
 
@@ -147,10 +151,10 @@ fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Erro
     if value.is_undefined() {
         Err(Error::new(
             ErrorKind::InvalidOperation,
-            format!(
-                "group_by could not resolve '{attr}' on item of kind {}",
-                item.kind()
-            ),
+            localization::message(keys::STDLIB_COLLECTIONS_GROUP_BY_UNRESOLVED)
+                .with_arg("attr", attr)
+                .with_arg("kind", item.kind().to_string())
+                .to_string(),
         ))
     } else {
         Ok(value)

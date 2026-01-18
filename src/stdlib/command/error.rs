@@ -1,7 +1,7 @@
 //! Error types and helpers for translating command failures into `MiniJinja`
 //! errors.
 
-use std::{fmt::Write as _, io, time::Duration};
+use std::{io, time::Duration};
 
 use minijinja::{Error, ErrorKind};
 
@@ -9,6 +9,7 @@ use super::{
     config::{OutputMode, OutputStream},
     context::CommandLocation,
 };
+use crate::localization::{self, keys};
 
 /// Represents command execution failures that can be surfaced to `MiniJinja`
 /// callers.
@@ -84,14 +85,20 @@ pub(super) fn command_error(err: CommandFailure, template: &str, command: &str) 
 fn spawn_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
-        format!("failed to spawn {}: {err}", location.describe()),
+        localization::message(keys::COMMAND_SPAWN_FAILED)
+            .with_arg("location", location.describe())
+            .with_arg("details", err.to_string())
+            .to_string(),
     )
 }
 
 fn io_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
-    let mut message = format!("{} failed: {err}", location.describe());
+    let mut message = localization::message(keys::COMMAND_IO_FAILED)
+        .with_arg("location", location.describe())
+        .with_arg("details", err.to_string())
+        .to_string();
     if err.kind() == io::ErrorKind::BrokenPipe {
-        message.push_str(" (command closed input early)");
+        message.push_str(&localization::message(keys::COMMAND_CLOSED_INPUT_EARLY).to_string());
     }
     Error::new(ErrorKind::InvalidOperation, message)
 }
@@ -101,10 +108,10 @@ fn broken_pipe_error(
     err: &io::Error,
     details: ExitDetails<'_>,
 ) -> Error {
-    let mut message = format!(
-        "{} failed: {err} (command closed input early)",
-        location.describe()
-    );
+    let mut message = localization::message(keys::COMMAND_BROKEN_PIPE)
+        .with_arg("location", location.describe())
+        .with_arg("details", err.to_string())
+        .to_string();
     append_exit_status(&mut message, details.status);
     append_stderr(&mut message, details.stderr);
     Error::new(ErrorKind::InvalidOperation, message)
@@ -112,45 +119,54 @@ fn broken_pipe_error(
 
 fn exit_error(location: CommandLocation<'_>, details: ExitDetails<'_>) -> Error {
     let mut message = details.status.map_or_else(
-        || format!("{} terminated by signal", location.describe()),
-        |code| format!("{} exited with status {code}", location.describe()),
+        || {
+            localization::message(keys::COMMAND_TERMINATED_BY_SIGNAL)
+                .with_arg("location", location.describe())
+                .to_string()
+        },
+        |code| {
+            localization::message(keys::COMMAND_EXITED_WITH_STATUS)
+                .with_arg("location", location.describe())
+                .with_arg("status", code)
+                .to_string()
+        },
     );
     append_stderr(&mut message, details.stderr);
     Error::new(ErrorKind::InvalidOperation, message)
 }
 
 fn output_limit_error(location: CommandLocation<'_>, exceeded: LimitExceeded) -> Error {
+    let stream_label = localization::message(exceeded.stream.label_key()).to_string();
+    let mode_label = localization::message(exceeded.mode.label_key()).to_string();
     Error::new(
         ErrorKind::InvalidOperation,
-        format!(
-            "{} exceeded {stream} {mode} limit of {limit} bytes",
-            location.describe(),
-            stream = exceeded.stream.describe(),
-            mode = exceeded.mode.describe(),
-            limit = exceeded.limit,
-        ),
+        localization::message(keys::COMMAND_OUTPUT_LIMIT_EXCEEDED)
+            .with_arg("location", location.describe())
+            .with_arg("stream", stream_label)
+            .with_arg("mode", mode_label)
+            .with_arg("limit", exceeded.limit)
+            .to_string(),
     )
 }
 
 fn timeout_error(location: CommandLocation<'_>, duration: Duration) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
-        format!(
-            "{} timed out after {}s",
-            location.describe(),
-            duration.as_secs_f64()
-        ),
+        localization::message(keys::COMMAND_TIMEOUT)
+            .with_arg("location", location.describe())
+            .with_arg("seconds", duration.as_secs_f64())
+            .to_string(),
     )
 }
 
 fn append_exit_status(message: &mut String, status: Option<i32>) {
     if let Some(code) = status {
-        assert!(
-            write!(message, "; exited with status {code}").is_ok(),
-            "write to String cannot fail"
-        );
+        let suffix = localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
+            .with_arg("status", code)
+            .to_string();
+        message.push_str(&suffix);
     } else {
-        message.push_str("; terminated by signal");
+        message.push_str(&localization::message(keys::COMMAND_SIGNAL_SUFFIX).to_string());
     }
 }
 
@@ -195,6 +211,7 @@ impl LimitExceeded {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::localization::{self, keys};
 
     #[test]
     fn spawn_errors_include_source() {
@@ -204,15 +221,12 @@ mod tests {
             "missing_cmd",
         );
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-        let message = err.to_string();
-        assert!(
-            message.contains("failed to spawn"),
-            "spawn error should explain failure: {message}"
-        );
-        assert!(
-            message.contains("command not found"),
-            "spawn error should include io::Error text: {message}"
-        );
+        let location = CommandLocation::new("template.html", "missing_cmd").describe();
+        let expected = localization::message(keys::COMMAND_SPAWN_FAILED)
+            .with_arg("location", location)
+            .with_arg("details", "command not found")
+            .to_string();
+        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
     }
 
     #[test]
@@ -223,8 +237,9 @@ mod tests {
             "cat",
         );
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
+        let expected = localization::message(keys::COMMAND_CLOSED_INPUT_EARLY).to_string();
         assert!(
-            err.to_string().contains("closed input early"),
+            err.to_string().contains(&expected),
             "io error should mention closed input: {err}"
         );
     }
@@ -241,8 +256,17 @@ mod tests {
             "grep",
         );
         let message = err.to_string();
-        assert!(message.contains("closed input early"));
-        assert!(message.contains("status 1"));
+        let location = CommandLocation::new("template.html", "grep").describe();
+        let expected_prefix = localization::message(keys::COMMAND_BROKEN_PIPE)
+            .with_arg("location", location)
+            .with_arg("details", "pipe error")
+            .to_string();
+        let expected_message = format!("invalid operation: {expected_prefix}");
+        let status_suffix = localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
+            .with_arg("status", 1)
+            .to_string();
+        assert!(message.starts_with(&expected_message));
+        assert!(message.contains(&status_suffix));
         assert!(message.contains("error message"));
     }
 
@@ -257,11 +281,16 @@ mod tests {
             "template.html",
             "cat",
         );
-        let message = err.to_string();
-        assert!(message.contains("exceeded"));
-        assert!(message.contains("stdout"));
-        assert!(message.contains("capture"));
-        assert!(message.contains("1024"));
+        let location = CommandLocation::new("template.html", "cat").describe();
+        let stream = localization::message(keys::COMMAND_OUTPUT_STREAM_STDOUT).to_string();
+        let mode = localization::message(keys::COMMAND_OUTPUT_MODE_CAPTURE).to_string();
+        let expected = localization::message(keys::COMMAND_OUTPUT_LIMIT_EXCEEDED)
+            .with_arg("location", location)
+            .with_arg("stream", stream)
+            .with_arg("mode", mode)
+            .with_arg("limit", 1024)
+            .to_string();
+        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
     }
 
     #[test]
@@ -275,15 +304,14 @@ mod tests {
             "echo",
         );
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-        let message = err.to_string();
-        assert!(
-            message.contains("status 42"),
-            "exit error should mention status: {message}"
+        let location = CommandLocation::new("template.html", "echo").describe();
+        let expected = format!(
+            "{}: boom!",
+            localization::message(keys::COMMAND_EXITED_WITH_STATUS)
+                .with_arg("location", location)
+                .with_arg("status", 42)
         );
-        assert!(
-            message.contains("boom!"),
-            "exit error should include stderr: {message}"
-        );
+        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
     }
 
     #[test]
@@ -294,9 +322,11 @@ mod tests {
             "sleep",
         );
         assert_eq!(err.kind(), ErrorKind::InvalidOperation);
-        assert!(
-            err.to_string().contains("3s"),
-            "timeout error should mention duration: {err}"
-        );
+        let location = CommandLocation::new("template.html", "sleep").describe();
+        let expected = localization::message(keys::COMMAND_TIMEOUT)
+            .with_arg("location", location)
+            .with_arg("seconds", 3.0)
+            .to_string();
+        assert_eq!(err.to_string(), format!("invalid operation: {expected}"));
     }
 }

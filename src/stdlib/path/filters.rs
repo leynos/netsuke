@@ -7,6 +7,7 @@ use camino::Utf8Path;
 use minijinja::{Environment, Error, ErrorKind};
 
 use super::{fs_utils, hash_utils, path_utils};
+use crate::localization::{self, keys};
 
 pub(crate) fn register_filters(env: &mut Environment<'_>) {
     env.add_filter("basename", |raw: String| -> Result<String, Error> {
@@ -52,7 +53,9 @@ pub(crate) fn register_filters(env: &mut Environment<'_>) {
                 "utf-8" | "utf8" => fs_utils::read_utf8(Utf8Path::new(&raw)),
                 other => Err(Error::new(
                     ErrorKind::InvalidOperation,
-                    format!("unsupported encoding '{other}'"),
+                    localization::message(keys::STDLIB_PATH_UNSUPPORTED_ENCODING)
+                        .with_arg("encoding", other)
+                        .to_string(),
                 )),
             }
         },

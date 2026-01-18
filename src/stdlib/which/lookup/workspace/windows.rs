@@ -6,6 +6,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
 
+use crate::localization::{self, keys};
+
 use super::super::is_executable;
 use super::{
     WORKSPACE_MAX_DEPTH, WorkspaceSkipList, log_if_no_matches, should_visit_entry,
@@ -104,9 +106,10 @@ fn match_workspace_entry(
         let lossy_path = path_buf.to_string_lossy();
         Error::new(
             ErrorKind::InvalidOperation,
-            format!(
-                "workspace path contains non-UTF-8 components while resolving command '{command}': {lossy_path}",
-            ),
+            localization::message(keys::STDLIB_WHICH_WORKSPACE_NON_UTF8)
+                .with_arg("command", command)
+                .with_arg("path", lossy_path)
+                .to_string(),
         )
     })?;
 

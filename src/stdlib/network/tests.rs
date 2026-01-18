@@ -12,6 +12,7 @@ use std::{
     },
 };
 
+use crate::localization::{self, keys};
 use crate::stdlib::{DEFAULT_FETCH_CACHE_DIR, DEFAULT_FETCH_MAX_RESPONSE_BYTES};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -81,16 +82,22 @@ fn to_value_returns_bytes_for_invalid_utf8() {
 }
 
 #[rstest]
-#[case("", "must not be empty")]
-#[case("/etc/netsuke-cache", "must be relative to the workspace")]
-#[case("../escape", "must stay within the workspace")]
+#[case::empty("", keys::STDLIB_FETCH_CACHE_EMPTY, None)]
+#[case::absolute(
+    "/etc/netsuke-cache",
+    keys::STDLIB_FETCH_CACHE_NOT_RELATIVE,
+    Some("/etc/netsuke-cache")
+)]
+#[case::escape("../escape", keys::STDLIB_FETCH_CACHE_ESCAPES, Some("../escape"))]
 fn open_cache_dir_rejects_invalid_paths(
     cache_workspace: Result<CacheWorkspace>,
     #[case] path: &str,
-    #[case] description: &str,
+    #[case] key: &'static str,
+    #[case] path_arg: Option<&str>,
 ) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
-    assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new(path), description)
+    let expected = cache_relative_error(key, path_arg);
+    assert_open_cache_dir_rejects(root.as_ref(), Utf8Path::new(path), &expected)
 }
 
 /// Write an entry to the cache directory and assert it exists within the workspace.
@@ -117,11 +124,11 @@ fn open_cache_dir_errors_for_file_path(cache_workspace: Result<CacheWorkspace>) 
     let (_temp, root, path) = cache_workspace?;
     let file_path = path.join("file");
     fs::write(file_path.as_std_path(), b"data").context("write file placeholder")?;
-    assert_open_cache_dir_rejects(
-        root.as_ref(),
-        file_path.as_path(),
-        "must be relative to the workspace",
-    )
+    let expected = cache_relative_error(
+        keys::STDLIB_FETCH_CACHE_NOT_RELATIVE,
+        Some(file_path.as_str()),
+    );
+    assert_open_cache_dir_rejects(root.as_ref(), file_path.as_path(), &expected)
 }
 
 #[rstest]
@@ -193,8 +200,13 @@ fn fetch_rejects_responses_over_the_limit(cache_workspace: Result<CacheWorkspace
     let Err(err) = fetch(&url, &kwargs, &impure, &context) else {
         return Err(anyhow!("expected fetch to reject response exceeding limit"));
     };
+    let parsed = Url::parse(&url).context("parse URL for response limit error")?;
+    let expected = localization::message(keys::STDLIB_FETCH_RESPONSE_LIMIT_EXCEEDED)
+        .with_arg("url", parsed.as_str())
+        .with_arg("limit", limit)
+        .to_string();
     ensure!(
-        err.to_string().contains("configured limit of 16 bytes"),
+        err.to_string().contains(&expected),
         "error should describe limit: {err}",
     );
     ensure!(
@@ -271,8 +283,12 @@ fn fetch_clears_partial_cache_on_limit_error(
             "expected fetch to reject oversized cached response"
         ));
     };
+    let expected = localization::message(keys::STDLIB_FETCH_RESPONSE_LIMIT_EXCEEDED)
+        .with_arg("url", parsed.as_str())
+        .with_arg("limit", limit)
+        .to_string();
     ensure!(
-        err.to_string().contains("configured limit"),
+        err.to_string().contains(&expected),
         "limit error should mention configured limit: {err}",
     );
     ensure!(
@@ -324,9 +340,12 @@ fn fetch_rejects_cached_entries_exceeding_limit(
     let Err(err) = fetch(&url, &kwargs, &impure, &context) else {
         return Err(anyhow!("expected fetch to reject oversized cache entry"));
     };
+    let expected = localization::message(keys::STDLIB_FETCH_CACHE_LIMIT_EXCEEDED)
+        .with_arg("name", key.as_str())
+        .with_arg("limit", limit)
+        .to_string();
     ensure!(
-        err.to_string()
-            .contains("exceeded the configured fetch limit of 24 bytes"),
+        err.to_string().contains(&expected),
         "error should mention cached entry limit: {err}",
     );
     ensure!(
@@ -346,31 +365,42 @@ fn fetch_rejects_cached_entries_exceeding_limit(
 #[rstest]
 fn fetch_rejects_disallowed_scheme(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
-    assert_fetch_policy_rejection(
-        root,
-        NetworkPolicy::default(),
-        "http://example.com",
-        "scheme 'http' is not permitted",
-    )
+    let url = "http://example.com";
+    let details = localization::message(keys::NETWORK_POLICY_SCHEME_NOT_ALLOWED)
+        .with_arg("scheme", "http")
+        .to_string();
+    let expected = localization::message(keys::STDLIB_FETCH_DISALLOWED)
+        .with_arg("url", url)
+        .with_arg("details", details)
+        .to_string();
+    assert_fetch_policy_rejection(root, NetworkPolicy::default(), url, &expected)
 }
 
 #[rstest]
 fn fetch_rejects_not_allowlisted_host(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
     let (_temp, root, _path) = cache_workspace?;
+    let url = "https://example.com";
+    let details = localization::message(keys::NETWORK_POLICY_HOST_NOT_ALLOWLISTED)
+        .with_arg("host", "example.com")
+        .to_string();
+    let expected = localization::message(keys::STDLIB_FETCH_DISALLOWED)
+        .with_arg("url", url)
+        .with_arg("details", details)
+        .to_string();
     assert_fetch_policy_rejection(
         root,
         NetworkPolicy::default().deny_all_hosts(),
-        "https://example.com",
-        "not allowlisted",
+        url,
+        &expected,
     )
 }
 
-/// Asserts that `open_cache_dir` rejects the `path` with an error message containing `description`.
-fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, description: &str) -> Result<()> {
+/// Asserts that `open_cache_dir` rejects the `path` with an error message containing `expected`.
+fn assert_open_cache_dir_rejects(root: &Dir, path: &Utf8Path, expected: &str) -> Result<()> {
     let err = open_cache_dir(root, path).expect_err("open_cache_dir should reject invalid path");
     ensure!(
-        err.to_string().contains(description),
-        "error should mention {description}, got {err}",
+        err.to_string().contains(expected),
+        "error should mention {expected}, got {err}",
     );
     Ok(())
 }
@@ -380,7 +410,7 @@ fn assert_fetch_policy_rejection(
     root: Arc<Dir>,
     policy: NetworkPolicy,
     url: &str,
-    expected_substring: &str,
+    expected_message: &str,
 ) -> Result<()> {
     let config = NetworkConfig {
         cache_root: root,
@@ -400,8 +430,8 @@ fn assert_fetch_policy_rejection(
         err.kind(),
     );
     ensure!(
-        err.to_string().contains(expected_substring),
-        "error should mention expected substring '{expected_substring}': {err}",
+        err.to_string().contains(expected_message),
+        "error should mention expected message '{expected_message}': {err}",
     );
     ensure!(
         !impure.load(Ordering::Relaxed),
@@ -411,3 +441,11 @@ fn assert_fetch_policy_rejection(
 }
 
 type CacheWorkspace = (tempfile::TempDir, Arc<Dir>, Utf8PathBuf);
+
+fn cache_relative_error(key: &'static str, path: Option<&str>) -> String {
+    let message = path.map_or_else(
+        || localization::message(key),
+        |value| localization::message(key).with_arg("path", value),
+    );
+    message.to_string()
+}

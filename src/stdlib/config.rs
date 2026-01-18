@@ -1,6 +1,7 @@
 //! Configuration types and defaults for wiring the stdlib into `MiniJinja`.
 
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
+use crate::localization::{self, keys};
 use anyhow::{anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -47,10 +48,20 @@ impl StdlibConfig {
     pub fn new(workspace_root: Dir) -> anyhow::Result<Self> {
         let default = Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR);
         // Rationale: the constant is static and validated for defence in depth.
-        Self::validate_cache_relative(&default)
-            .map_err(|err| anyhow!("default fetch cache path should be valid: {err}"))?;
-        let which_cache_capacity = NonZeroUsize::new(DEFAULT_WHICH_CACHE_CAPACITY)
-            .ok_or_else(|| anyhow!("default which cache capacity should be positive"))?;
+        Self::validate_cache_relative(&default).map_err(|err| {
+            anyhow!(
+                "{}",
+                localization::message(keys::STDLIB_DEFAULT_FETCH_CACHE_INVALID)
+                    .with_arg("details", err.to_string())
+            )
+        })?;
+        let which_cache_capacity =
+            NonZeroUsize::new(DEFAULT_WHICH_CACHE_CAPACITY).ok_or_else(|| {
+                anyhow!(
+                    "{}",
+                    localization::message(keys::STDLIB_DEFAULT_WHICH_CACHE_INVALID)
+                )
+            })?;
         Ok(Self {
             workspace_root: Arc::new(workspace_root),
             workspace_root_path: None,
@@ -77,7 +88,11 @@ impl StdlibConfig {
     /// programmer-provided paths reach this builder.
     pub fn with_workspace_root_path(mut self, path: impl AsRef<Utf8Path>) -> anyhow::Result<Self> {
         let absolute = path.as_ref();
-        ensure!(absolute.is_absolute(), "workspace root must be absolute");
+        ensure!(
+            absolute.is_absolute(),
+            "{}",
+            localization::message(keys::STDLIB_WORKSPACE_ROOT_ABSOLUTE)
+        );
         self.workspace_root_path = Some(absolute.to_owned());
         Ok(self)
     }
@@ -111,7 +126,11 @@ impl StdlibConfig {
     ///
     /// Returns an error when `max_bytes` is zero.
     pub fn with_fetch_max_response_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
-        ensure!(max_bytes > 0, "fetch response limit must be positive");
+        ensure!(
+            max_bytes > 0,
+            "{}",
+            localization::message(keys::STDLIB_FETCH_RESPONSE_LIMIT_POSITIVE)
+        );
         self.fetch_max_response_bytes = max_bytes;
         Ok(self)
     }
@@ -122,7 +141,11 @@ impl StdlibConfig {
     ///
     /// Returns an error when `max_bytes` is zero.
     pub fn with_command_max_output_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
-        ensure!(max_bytes > 0, "command output limit must be positive");
+        ensure!(
+            max_bytes > 0,
+            "{}",
+            localization::message(keys::STDLIB_COMMAND_OUTPUT_LIMIT_POSITIVE)
+        );
         self.command_max_output_bytes = max_bytes;
         Ok(self)
     }
@@ -133,7 +156,11 @@ impl StdlibConfig {
     ///
     /// Returns an error when `max_bytes` is zero.
     pub fn with_command_max_stream_bytes(mut self, max_bytes: u64) -> anyhow::Result<Self> {
-        ensure!(max_bytes > 0, "command stream limit must be positive");
+        ensure!(
+            max_bytes > 0,
+            "{}",
+            localization::message(keys::STDLIB_COMMAND_STREAM_LIMIT_POSITIVE)
+        );
         self.command_max_stream_bytes = max_bytes;
         Ok(self)
     }
@@ -158,8 +185,12 @@ impl StdlibConfig {
     /// // Config can now be passed to stdlib registration with a larger cache.
     /// ```
     pub fn with_which_cache_capacity(mut self, capacity: usize) -> anyhow::Result<Self> {
-        let non_zero_capacity = NonZeroUsize::new(capacity)
-            .ok_or_else(|| anyhow!("which cache capacity must be positive"))?;
+        let non_zero_capacity = NonZeroUsize::new(capacity).ok_or_else(|| {
+            anyhow!(
+                "{}",
+                localization::message(keys::STDLIB_WHICH_CACHE_CAPACITY_POSITIVE)
+            )
+        })?;
         self.which_cache_capacity = non_zero_capacity;
         Ok(self)
     }
@@ -181,15 +212,18 @@ impl StdlibConfig {
             let candidate = dir.as_ref().trim();
             ensure!(
                 !candidate.is_empty(),
-                "workspace skip entries must not be empty"
+                "{}",
+                localization::message(keys::STDLIB_SKIP_DIR_EMPTY)
             );
             ensure!(
                 !matches!(candidate, "." | ".."),
-                "workspace skip entries must name a directory, not navigation segments"
+                "{}",
+                localization::message(keys::STDLIB_SKIP_DIR_NAVIGATION)
             );
             ensure!(
                 !candidate.contains(['/', '\\']),
-                "workspace skip entries must be basenames without separators"
+                "{}",
+                localization::message(keys::STDLIB_SKIP_DIR_SEPARATOR)
             );
             validated.insert(candidate.to_owned());
         }
@@ -258,13 +292,14 @@ impl StdlibConfig {
 
     pub(crate) fn validate_cache_relative(relative: &Utf8Path) -> anyhow::Result<()> {
         if relative.as_str().is_empty() {
-            bail!("fetch cache path must not be empty");
+            bail!("{}", localization::message(keys::STDLIB_FETCH_CACHE_EMPTY));
         }
 
         if relative.is_absolute() {
             bail!(
-                "fetch cache path '{}' must be relative to the workspace",
-                relative
+                "{}",
+                localization::message(keys::STDLIB_FETCH_CACHE_NOT_RELATIVE)
+                    .with_arg("path", relative.as_str())
             );
         }
 
@@ -274,8 +309,9 @@ impl StdlibConfig {
                 Utf8Component::ParentDir | Utf8Component::Prefix(_)
             ) {
                 bail!(
-                    "fetch cache path '{}' must stay within the workspace",
-                    relative
+                    "{}",
+                    localization::message(keys::STDLIB_FETCH_CACHE_ESCAPES)
+                        .with_arg("path", relative.as_str())
                 );
             }
         }
@@ -334,6 +370,7 @@ mod tests {
         DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES,
         DEFAULT_WHICH_CACHE_CAPACITY, StdlibConfig,
     };
+    use crate::localization::{self, keys};
     use camino::{Utf8Path, Utf8PathBuf};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use rstest::{fixture, rstest};
@@ -360,22 +397,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Utf8Path::new(""), "fetch cache path must not be empty")]
-    #[case(
-        Utf8Path::new("/cache"),
-        "fetch cache path '/cache' must be relative to the workspace"
-    )]
-    #[case(
-        Utf8Path::new("../escape"),
-        "fetch cache path '../escape' must stay within the workspace"
-    )]
+    #[case(Utf8Path::new(""), keys::STDLIB_FETCH_CACHE_EMPTY)]
+    #[case(Utf8Path::new("/cache"), keys::STDLIB_FETCH_CACHE_NOT_RELATIVE)]
+    #[case(Utf8Path::new("../escape"), keys::STDLIB_FETCH_CACHE_ESCAPES)]
     fn validate_cache_relative_rejects_invalid_inputs(
         #[case] path: &Utf8Path,
-        #[case] message: &str,
+        #[case] message_key: &'static str,
     ) {
         let err =
             StdlibConfig::validate_cache_relative(path).expect_err("invalid paths should fail");
-        assert_eq!(err.to_string(), message);
+        let expected = match message_key {
+            keys::STDLIB_FETCH_CACHE_EMPTY => localization::message(message_key).to_string(),
+            keys::STDLIB_FETCH_CACHE_NOT_RELATIVE | keys::STDLIB_FETCH_CACHE_ESCAPES => {
+                localization::message(message_key)
+                    .with_arg("path", path.as_str())
+                    .to_string()
+            }
+            _ => panic!("unexpected message key {message_key}"),
+        };
+        assert_eq!(err.to_string(), expected);
     }
 
     #[rstest]
@@ -390,14 +430,14 @@ mod tests {
         accessor: |cfg: &StdlibConfig| cfg.command_max_output_bytes,
         default_value: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
         updated: 2_048,
-        zero_err: "command output limit must be positive",
+        zero_err: "Command output capture limit must be positive.",
     })]
     #[case::stream(CommandLimitCase {
         builder: StdlibConfig::with_command_max_stream_bytes,
         accessor: |cfg: &StdlibConfig| cfg.command_max_stream_bytes,
         default_value: DEFAULT_COMMAND_MAX_STREAM_BYTES,
         updated: 65_536,
-        zero_err: "command stream limit must be positive",
+        zero_err: "Command stream limit must be positive.",
     })]
     fn command_limit_builders_validate_and_update(
         base_config: StdlibConfig,
@@ -449,15 +489,15 @@ mod tests {
         let err = base_config
             .with_which_cache_capacity(0)
             .expect_err("zero capacity must be rejected");
-        assert_eq!(err.to_string(), "which cache capacity must be positive");
+        assert_eq!(err.to_string(), "Which cache capacity must be positive.");
     }
 
     #[rstest]
-    #[case(vec![""], "workspace skip entries must not be empty")]
-    #[case(vec!["."], "workspace skip entries must name a directory, not navigation segments")]
-    #[case(vec![".."], "workspace skip entries must name a directory, not navigation segments")]
-    #[case(vec!["dir/name"], "workspace skip entries must be basenames without separators")]
-    #[case(vec!["dir\\name"], "workspace skip entries must be basenames without separators")]
+    #[case(vec![""], "Skip directory entries must not be empty.")]
+    #[case(vec!["."], "Skip directory entries must not contain '..'.")]
+    #[case(vec![".."], "Skip directory entries must not contain '..'.")]
+    #[case(vec!["dir/name"], "Skip directory entries must not contain path separators.")]
+    #[case(vec!["dir\\name"], "Skip directory entries must not contain path separators.")]
     fn workspace_skip_dirs_validate_inputs(
         base_config: StdlibConfig,
         #[case] entries: Vec<&str>,

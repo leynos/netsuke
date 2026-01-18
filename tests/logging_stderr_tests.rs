@@ -20,6 +20,6 @@ fn main_logs_errors_to_stderr() {
         .arg("graph")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No `Netsukefile` found"))
+        .stderr(predicate::str::contains("not found in"))
         .stdout(predicate::str::contains("Netsukefile").not());
 }

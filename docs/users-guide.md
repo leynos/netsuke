@@ -540,7 +540,7 @@ policy is configured by these global options:
   the generated `build.ninja`, outputting DOT to stdout (suitable for
   Graphviz). Future versions may support other formats like `--html`.
 
-### Configuration and Localization
+### Configuration and Localisation
 
 Netsuke layers configuration in this order, with later entries overriding
 earlier ones: defaults, configuration files, environment variables, and
@@ -556,8 +556,10 @@ Environment variables use the `NETSUKE_` prefix (for example,
 `NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
 configuration.
 
-Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localized CLI copy and
-error messages. Spanish (`es-ES`) is included as a reference translation;
+Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localised CLI copy and
+error messages. The same locale also applies to user-facing runtime
+diagnostics, including manifest parse failures, stdlib template errors, and
+runner failures. Spanish (`es-ES`) is included as a reference translation;
 unsupported locales fall back to English.
 
 ### Exit Codes

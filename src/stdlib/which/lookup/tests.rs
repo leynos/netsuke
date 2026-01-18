@@ -136,18 +136,23 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
 fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
+    use crate::localization::{self, keys};
+
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
     let err = EnvSnapshot::capture(Some(workspace.root()), Some(invalid_path))
         .expect_err("invalid PATH should fail EnvSnapshot::capture");
     let msg = err.to_string();
 
+    let details = localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
+        .with_arg("index", 1)
+        .to_string();
+    let expected = localization::message(keys::STDLIB_WHICH_ARGS_ERROR)
+        .with_arg("details", details)
+        .to_string();
+
     ensure!(
-        msg.contains("netsuke::jinja::which::args"),
+        msg.contains(&expected),
         "expected PATH parsing error, got: {msg}"
-    );
-    ensure!(
-        msg.contains("PATH entry #1"),
-        "expected PATH entry index in message, got: {msg}"
     );
 
     Ok(())

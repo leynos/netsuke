@@ -14,6 +14,7 @@
 
 use camino::Utf8PathBuf;
 use netsuke::cli::Cli;
+use netsuke::localization::LocalizerGuard;
 use netsuke::stdlib::{NetworkPolicy, StdlibState as NetsukeStdlibState};
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -99,6 +100,10 @@ pub struct TestWorld {
     /// Text payload injected into stdlib templates for streaming scenarios.
     pub stdlib_text: Slot<String>,
 
+    // Localisation state (non-Clone)
+    /// Localiser guard for scenario-level localisation overrides.
+    pub localization_guard: RefCell<Option<LocalizerGuard>>,
+
     // HTTP server state (non-Clone)
     /// Last HTTP server fixture started by stdlib steps.
     pub http_server: RefCell<Option<HttpServer>>,
@@ -148,6 +153,7 @@ impl Drop for TestWorld {
     fn drop(&mut self) {
         self.shutdown_http_server();
         self.ninja_env_guard.borrow_mut().take();
+        self.localization_guard.borrow_mut().take();
         self.restore_environment();
         self.stdlib_text.clear();
     }
