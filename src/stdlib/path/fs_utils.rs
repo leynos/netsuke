@@ -77,7 +77,9 @@ where
 
 pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
     with_parent_dir(path, keys::STDLIB_PATH_ACTION_STAT, |handle, entry| {
-        handle.metadata(Utf8Path::new(entry)).map(|metadata| metadata.len())
+        handle
+            .metadata(Utf8Path::new(entry))
+            .map(|metadata| metadata.len())
     })
 }
 
