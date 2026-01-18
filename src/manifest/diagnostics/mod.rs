@@ -5,6 +5,18 @@
 //! origin, and mapping helpers (e.g. [`map_yaml_error`], [`map_data_error`])
 //! convert parser and deserialisation failures into rich [`miette`]
 //! diagnostics with spans, hints, and stable diagnostic codes.
+//
+// Module-level suppression for version-dependent lint false positives from
+// miette/thiserror derive macros. The unused_assignments lint fires in some
+// Rust versions but not others. Since `#[expect]` fails when the lint doesn't
+// fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
+// `#[allow]` here. FIXME: remove once upstream is fixed.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    unused_assignments
+)]
+
 use crate::localization::{self, LocalizedMessage, keys};
 use miette::Diagnostic;
 use thiserror::Error;
