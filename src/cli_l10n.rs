@@ -72,11 +72,11 @@ fn localize_field(
     key: Option<&'static str>,
     current_value: Option<String>,
 ) -> Option<String> {
-    let key = key?;
+    let key_id = key?;
     if let Some(value) = current_value {
-        return Some(localizer.message(key, None, &value));
+        return Some(localizer.message(key_id, None, &value));
     }
-    localizer.lookup(key, None)
+    localizer.lookup(key_id, None)
 }
 
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
