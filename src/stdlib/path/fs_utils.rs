@@ -43,7 +43,11 @@ pub(super) fn open_parent_dir(path: &Utf8Path) -> Result<ParentDir, Error> {
 
 /// Execute an operation on a file's parent directory handle, translating I/O errors
 /// with the appropriate localized action message.
-fn with_parent_dir<T, F>(path: &Utf8Path, action_key: &str, operation: F) -> Result<T, Error>
+fn with_parent_dir<T, F>(
+    path: &Utf8Path,
+    action_key: &'static str,
+    operation: F,
+) -> Result<T, Error>
 where
     F: FnOnce(&Dir, &str) -> io::Result<T>,
 {
