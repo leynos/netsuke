@@ -97,12 +97,16 @@ fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box<dyn std::e
     Ok(keys)
 }
 
+fn should_skip_ftl_line(trimmed: &str) -> bool {
+    trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('.')
+}
+
 fn extract_ftl_keys(path: &Path) -> Result<BTreeSet<String>, Box<dyn std::error::Error>> {
     let source = fs::read_to_string(path)?;
     let mut keys = BTreeSet::new();
     for line in source.lines() {
         let trimmed = line.trim_start();
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('.') {
+        if should_skip_ftl_line(trimmed) {
             continue;
         }
         let Some((id_raw, _)) = trimmed.split_once('=') else {

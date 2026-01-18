@@ -41,6 +41,17 @@ pub(super) fn open_parent_dir(path: &Utf8Path) -> Result<ParentDir, Error> {
     })
 }
 
+/// Execute an operation on a file's parent directory handle, translating I/O errors
+/// with the appropriate localized action message.
+fn with_parent_dir<T, F>(path: &Utf8Path, action_key: &str, operation: F) -> Result<T, Error>
+where
+    F: FnOnce(&Dir, &str) -> io::Result<T>,
+{
+    let parent = open_parent_dir(path)?;
+    operation(&parent.handle, &parent.entry)
+        .map_err(|err| io_to_error(path, &localization::message(action_key), err))
+}
+
 pub(crate) fn file_type_matches<F>(path: &Utf8Path, predicate: F) -> Result<bool, Error>
 where
     F: Fn(fs::FileType) -> bool,
@@ -65,32 +76,15 @@ where
 }
 
 pub(super) fn file_size(path: &Utf8Path) -> Result<u64, Error> {
-    let parent = open_parent_dir(path)?;
-    parent
-        .handle
-        .metadata(Utf8Path::new(&parent.entry))
-        .map(|metadata| metadata.len())
-        .map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_STAT),
-                err,
-            )
-        })
+    with_parent_dir(path, keys::STDLIB_PATH_ACTION_STAT, |handle, entry| {
+        handle.metadata(Utf8Path::new(entry)).map(|metadata| metadata.len())
+    })
 }
 
 pub(super) fn read_utf8(path: &Utf8Path) -> Result<String, Error> {
-    let parent = open_parent_dir(path)?;
-    parent
-        .handle
-        .read_to_string(Utf8Path::new(&parent.entry))
-        .map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_READ),
-                err,
-            )
-        })
+    with_parent_dir(path, keys::STDLIB_PATH_ACTION_READ, |handle, entry| {
+        handle.read_to_string(Utf8Path::new(entry))
+    })
 }
 
 pub(super) fn linecount(path: &Utf8Path) -> Result<usize, Error> {
@@ -99,17 +93,9 @@ pub(super) fn linecount(path: &Utf8Path) -> Result<usize, Error> {
 }
 
 pub(crate) fn open_file(path: &Utf8Path) -> Result<File, Error> {
-    let parent = open_parent_dir(path)?;
-    let mut options = OpenOptions::new();
-    options.read(true);
-    parent
-        .handle
-        .open_with(Utf8Path::new(&parent.entry), &options)
-        .map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
-                err,
-            )
-        })
+    with_parent_dir(path, keys::STDLIB_PATH_ACTION_OPEN_FILE, |handle, entry| {
+        let mut options = OpenOptions::new();
+        options.read(true);
+        handle.open_with(Utf8Path::new(entry), &options)
+    })
 }

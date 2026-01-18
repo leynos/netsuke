@@ -67,26 +67,36 @@ fn localize_arguments(
     })
 }
 
+fn localize_field(
+    localizer: &dyn Localizer,
+    key: Option<&'static str>,
+    current_value: Option<String>,
+) -> Option<String> {
+    let key = key?;
+    if let Some(value) = current_value {
+        return Some(localizer.message(key, None, &value));
+    }
+    localizer.lookup(key, None)
+}
+
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     for subcommand in command.get_subcommands_mut() {
         let name = subcommand.get_name().to_owned();
         let mut updated = std::mem::take(subcommand);
-        if let Some(about_key) = subcommand_about_key(&name) {
-            if let Some(about) = updated.get_about().map(ToString::to_string) {
-                let message = localizer.message(about_key, None, &about);
-                updated = updated.about(message);
-            } else if let Some(message) = localizer.lookup(about_key, None) {
-                updated = updated.about(message);
-            }
+        if let Some(localized) = localize_field(
+            localizer,
+            subcommand_about_key(&name),
+            updated.get_about().map(ToString::to_string),
+        ) {
+            updated = updated.about(localized);
         }
 
-        if let Some(long_key) = subcommand_long_about_key(&name) {
-            if let Some(long_about) = updated.get_long_about().map(ToString::to_string) {
-                let message = localizer.message(long_key, None, &long_about);
-                updated = updated.long_about(message);
-            } else if let Some(message) = localizer.lookup(long_key, None) {
-                updated = updated.long_about(message);
-            }
+        if let Some(localized) = localize_field(
+            localizer,
+            subcommand_long_about_key(&name),
+            updated.get_long_about().map(ToString::to_string),
+        ) {
+            updated = updated.long_about(localized);
         }
 
         // Localise subcommand argument help text.
