@@ -51,13 +51,7 @@ fn with_parent_dir<T, F>(
 where
     F: FnOnce(&Dir, &str) -> io::Result<T>,
 {
-    let parent = parent_dir(path).map_err(|err| {
-        io_to_error(
-            path,
-            &localization::message(keys::STDLIB_PATH_ACTION_OPEN_DIRECTORY),
-            err,
-        )
-    })?;
+    let parent = open_parent_dir(path)?;
     operation(&parent.handle, &parent.entry)
         .map_err(|err| io_to_error(path, &localization::message(action_key), err))
 }
