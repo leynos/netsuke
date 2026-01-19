@@ -17,7 +17,7 @@ code. This item delivers three concrete outcomes:
 - All user-facing strings move into `locales/*/messages.ftl` and are rendered
   through `ortho_config::Localizer`.
 - A compile-time audit fails the build when a referenced message key is
-  missing, preventing silent regressions in CI.
+  missing, preventing silent regressions in continuous integration (CI).
 - Spanish (`es-ES`) is included as a non-English example locale.
 
 Success is observable when common failures (missing manifest, invalid CLI

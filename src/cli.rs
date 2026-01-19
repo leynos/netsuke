@@ -11,57 +11,39 @@ use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::localize_clap_error_with_command;
 use ortho_config::uncased::Uncased;
 use ortho_config::{
-    ConfigDiscovery, LocalizationArgs, Localizer, MergeComposer, NoOpLocalizer, OrthoConfig,
-    OrthoMergeExt, OrthoResult, sanitize_value,
+    ConfigDiscovery, LocalizationArgs, Localizer, MergeComposer, OrthoConfig, OrthoMergeExt,
+    OrthoResult, sanitize_value,
 };
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::Arc;
 
 pub use crate::cli_l10n::locale_hint_from_args;
 use crate::cli_l10n::localize_command;
 use crate::host_pattern::HostPattern;
-use crate::localization::keys;
+use crate::localization::{self, keys};
 
 /// Maximum number of jobs accepted by the CLI.
 const MAX_JOBS: usize = 64;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
 const ENV_PREFIX: &str = "NETSUKE_";
 
-static VALIDATION_LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
-
-fn validation_localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
-    VALIDATION_LOCALIZER.get_or_init(|| RwLock::new(Arc::new(NoOpLocalizer::new())))
-}
-
-fn validation_localizer() -> Arc<dyn Localizer> {
-    let lock = validation_localizer_storage();
-    let guard = lock
-        .read()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    Arc::clone(&guard)
-}
-
-/// Set the localiser used for CLI validation errors.
-pub fn set_validation_localizer(localizer: Arc<dyn Localizer>) {
-    let lock = validation_localizer_storage();
-    let mut guard = lock
-        .write()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    *guard = localizer;
-}
-
-const _: fn(Arc<dyn Localizer>) = set_validation_localizer;
-
 fn validation_message(
     key: &'static str,
     args: Option<&LocalizationArgs<'_>>,
     fallback: &str,
 ) -> String {
-    validation_localizer().message(key, args, fallback)
+    localization::localizer().message(key, args, fallback)
 }
+
+/// Set the localiser used for CLI validation errors.
+pub fn set_validation_localizer(localizer: Arc<dyn Localizer>) {
+    localization::set_localizer(localizer);
+}
+
+const _: fn(Arc<dyn Localizer>) = set_validation_localizer;
 
 fn parse_jobs(s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
