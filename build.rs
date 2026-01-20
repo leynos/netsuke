@@ -299,8 +299,14 @@ fn audit_localization_keys() -> Result<(), Box<dyn std::error::Error>> {
 
     let missing_en_us: Vec<_> = declared.difference(&en_us_keys).cloned().collect();
     let missing_es_es: Vec<_> = declared.difference(&es_es_keys).cloned().collect();
+    let orphaned_en_us: Vec<_> = en_us_keys.difference(&declared).cloned().collect();
+    let orphaned_es_es: Vec<_> = es_es_keys.difference(&declared).cloned().collect();
 
-    if missing_en_us.is_empty() && missing_es_es.is_empty() {
+    if missing_en_us.is_empty()
+        && missing_es_es.is_empty()
+        && orphaned_en_us.is_empty()
+        && orphaned_es_es.is_empty()
+    {
         return Ok(());
     }
 
@@ -312,6 +318,14 @@ fn audit_localization_keys() -> Result<(), Box<dyn std::error::Error>> {
     if !missing_es_es.is_empty() {
         message.push_str("\n- missing in es-ES: ");
         message.push_str(&missing_es_es.join(", "));
+    }
+    if !orphaned_en_us.is_empty() {
+        message.push_str("\n- orphaned in en-US: ");
+        message.push_str(&orphaned_en_us.join(", "));
+    }
+    if !orphaned_es_es.is_empty() {
+        message.push_str("\n- orphaned in es-ES: ");
+        message.push_str(&orphaned_es_es.join(", "));
     }
     Err(message.into())
 }
