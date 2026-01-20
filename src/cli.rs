@@ -43,6 +43,7 @@ pub fn set_validation_localizer(localizer: Arc<dyn Localizer>) {
     localization::set_localizer(localizer);
 }
 
+/// Compile-time assertion that `set_validation_localizer` has the expected signature.
 const _: fn(Arc<dyn Localizer>) = set_validation_localizer;
 
 fn parse_jobs(s: &str) -> Result<usize, String> {

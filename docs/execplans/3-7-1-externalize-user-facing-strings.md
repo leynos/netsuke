@@ -10,7 +10,7 @@ PLANS.md is not present in the repository.
 
 ## Purpose / Big picture
 
-Netsuke should render all user-facing text (help, status, warnings, errors)
+Netsuke should render all user-facing text (help, status, warnings, and errors)
 from Fluent `.ftl` bundles so translations can be managed without touching
 code. This item delivers three concrete outcomes:
 
@@ -91,7 +91,7 @@ Escalate immediately if a tolerance is hit.
 
 - Decision: Use `ortho_config::Localizer` as the single rendering interface
   for all user-facing copy, keeping the Fluent resources under `locales/`.
-  Rationale: aligns with existing CLI localisation and the OrthoConfig guide.
+  Rationale: aligns with existing CLI localization and the OrthoConfig guide.
   Date/Author: 2026-01-17 (Terry)
 
 - Decision: Add a compile-time audit in `build.rs` to validate Fluent keys.
@@ -105,26 +105,26 @@ Escalate immediately if a tolerance is hit.
 
 ## Outcomes & Retrospective
 
-- Fluent keys now cover CLI copy, diagnostics, and stdlib errors with Spanish
-  as the reference translation and English fallback.
+- Fluent keys now cover CLI copy, diagnostics, and stdlib errors with English
+  as the reference translation and Spanish as an example locale.
 - The compile-time Fluent key audit prevents missing-key regressions in CI.
-- Unit + BDD coverage updated for localisation-aware messages; quality gates
+- Unit + BDD coverage updated for localization-aware messages; quality gates
   (`make check-fmt`, `make lint`, `make test`) pass.
 
 ## Context and orientation
 
 Relevant files and modules:
 
-- `src/main.rs` builds the CLI localiser and prints runner errors.
-- `src/cli_localization.rs` builds a Fluent-backed localiser with an
+- `src/main.rs` builds the CLI localizer and prints runner errors.
+- `src/cli_localization.rs` builds a Fluent-backed localizer with an
   English fallback and Spanish resources.
-- `src/cli_l10n.rs` localises clap usage, help, and subcommand copy.
+- `src/cli_l10n.rs` localizes clap usage, help, and subcommand copy.
 - `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl` currently
   contain help text and clap error strings.
 - User-facing error strings are embedded in `thiserror`/`miette` derives in
   `src/runner/error.rs`, `src/manifest/diagnostics/*`, `src/ir/graph.rs`,
   `src/ninja_gen.rs`, and `src/stdlib/**/error.rs`.
-- Design expectations for localisation are in
+- Design expectations for localization are in
   `docs/netsuke-cli-design-document.md` and `docs/ortho-config-users-guide.md`.
 - Testing conventions and fixtures are documented in
   `docs/rust-testing-with-rstest-fixtures.md` and
@@ -143,9 +143,9 @@ Relevant files and modules:
 3. Decide which strings are strictly user-facing and which are internal logs.
    Log-only strings stay as-is for now to avoid scope creep.
 
-### Stage B: Localisation infrastructure and key audit
+### Stage B: Localization infrastructure and key audit
 
-1. Create a dedicated localisation module (for example
+1. Create a dedicated localization module (for example
    `src/localization/mod.rs`) with a `//!` doc comment. This module should
    define:
    - A typed way to refer to message keys (constants or an enum).
@@ -164,25 +164,25 @@ Relevant files and modules:
 1. Replace user-facing `thiserror` messages and `miette` diagnostics with
    Fluent key lookups. Preserve structured data (paths, target names, counts)
    as Fluent variables rather than interpolating in code.
-2. Update error types to carry the data needed for localisation while keeping
+2. Update error types to carry the data needed for localization while keeping
    public signatures stable. Prefer adding helper methods to format errors
    rather than changing core return types.
 3. Extend `locales/en-US/messages.ftl` with the new keys and add matching
    `es-ES` translations. Keep key names snake_case where they map to clap
    argument IDs.
-4. Ensure the CLI output path uses the localiser when rendering diagnostics
+4. Ensure the CLI output path uses the localizer when rendering diagnostics
    (for example, when mapping `RunnerError` and manifest diagnostics to the
    final stderr output).
 
 ### Stage D: Tests, docs, and finalisation
 
-1. Add `rstest` unit tests for the localisation helpers and at least one
+1. Add `rstest` unit tests for the localization helpers and at least one
    error mapping that uses variables (for example, manifest not found).
 2. Add `rstest-bdd` scenarios that assert:
    - English output for a default error (no locale specified).
    - Spanish output when `--locale es-ES` or `NETSUKE_LOCALE=es-ES` is set.
    Include both a happy path (help output) and an unhappy path (error).
-3. Update `docs/users-guide.md` to describe the expanded localisation
+3. Update `docs/users-guide.md` to describe the expanded localization
    behaviour and any new CLI output differences.
 4. Record design decisions in `docs/netsuke-cli-design-document.md` (or the
    most relevant design doc) covering the key taxonomy and compile-time audit.
@@ -221,16 +221,16 @@ Quality criteria (done means all of these are true):
 - All user-facing strings are sourced from Fluent bundles under `locales/`.
 - A compile-time audit fails the build if a referenced Fluent key is missing.
 - Spanish (`es-ES`) translations exist for every new key used by the CLI.
-- `rstest` unit tests cover localised rendering (happy and unhappy paths).
+- `rstest` unit tests cover localized rendering (happy and unhappy paths).
 - `rstest-bdd` scenarios cover English and Spanish CLI output.
-- `docs/users-guide.md` documents the localisation behaviour.
-- The design document records localisation decisions.
+- `docs/users-guide.md` documents the localization behaviour.
+- The design document records localization decisions.
 - `make check-fmt`, `make lint`, and `make test` all pass.
 - `docs/roadmap.md` marks 3.7.1 as done.
 
 ## Idempotence and recovery
 
-- The Fluent audit and localisation helpers are safe to re-run; rebuild after
+- The Fluent audit and localization helpers are safe to re-run; rebuild after
   any `.ftl` changes.
 - If a gate fails, fix the underlying issue and re-run the same command,
   overwriting the log file to keep evidence current.
@@ -245,7 +245,7 @@ Keep these logs as evidence of success:
 
 ## Interfaces and dependencies
 
-- Localisation helper module (new): `src/localization/mod.rs` (exact name to
+- Localization helper module (new): `src/localization/mod.rs` (exact name to
   be decided during implementation).
 - Compile-time audit: `build.rs` should validate Fluent keys against the list
   referenced in code and the `locales/en-US/messages.ftl` bundle.
@@ -254,7 +254,7 @@ Keep these logs as evidence of success:
 - Error mapping: `src/runner/error.rs`, `src/manifest/diagnostics/*`,
   `src/ir/graph.rs`, `src/ninja_gen.rs`, and `src/stdlib/**/error.rs` should
   route user-facing messages through Fluent.
-- CLI output: `src/main.rs` should render diagnostics using the localiser so
+- CLI output: `src/main.rs` should render diagnostics using the localizer so
   errors appear in the selected locale.
 
 ## Revision note (required when editing an ExecPlan)

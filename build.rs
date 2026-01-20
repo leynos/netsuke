@@ -1,5 +1,11 @@
-//! Build script: generate the CLI manual page into target/generated-man/<target>/<profile> for
-//! release packaging.
+//! Build script for Netsuke.
+//!
+//! This script performs two main tasks:
+//! - Generate the CLI manual page into `target/generated-man/<target>/<profile>` for release
+//!   packaging.
+//! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
+//!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
+//!   locale.
 use clap::{ArgMatches, CommandFactory};
 use clap_mangen::Man;
 use std::{
