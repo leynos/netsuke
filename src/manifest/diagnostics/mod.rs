@@ -129,9 +129,14 @@ impl std::fmt::Display for ManifestName {
 /// ```rust
 /// use miette::miette;
 /// use netsuke::manifest::ManifestError;
+/// use netsuke::localization::{self, keys};
 ///
-/// let err = ManifestError::Parse { source: Box::new(miette!("bad manifest")) };
-/// assert_eq!(format!("{err}"), "manifest parse error");
+/// let msg = localization::message(keys::MANIFEST_PARSE);
+/// let err = ManifestError::Parse {
+///     source: Box::new(miette!("bad manifest")),
+///     message: msg.clone(),
+/// };
+/// assert_eq!(format!("{err}"), msg.to_string());
 /// ```
 #[derive(Debug, Error, Diagnostic)]
 pub enum ManifestError {

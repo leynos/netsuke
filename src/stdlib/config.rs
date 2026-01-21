@@ -430,14 +430,14 @@ mod tests {
         accessor: |cfg: &StdlibConfig| cfg.command_max_output_bytes,
         default_value: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
         updated: 2_048,
-        zero_err: "Command output capture limit must be positive.",
+        zero_err_key: keys::STDLIB_COMMAND_OUTPUT_LIMIT_POSITIVE,
     })]
     #[case::stream(CommandLimitCase {
         builder: StdlibConfig::with_command_max_stream_bytes,
         accessor: |cfg: &StdlibConfig| cfg.command_max_stream_bytes,
         default_value: DEFAULT_COMMAND_MAX_STREAM_BYTES,
         updated: 65_536,
-        zero_err: "Command stream limit must be positive.",
+        zero_err_key: keys::STDLIB_COMMAND_STREAM_LIMIT_POSITIVE,
     })]
     fn command_limit_builders_validate_and_update(
         base_config: StdlibConfig,
@@ -450,7 +450,8 @@ mod tests {
         assert_eq!((case.accessor)(&updated_config), case.updated);
 
         let err = (case.builder)(base_config, 0).expect_err("zero-byte limits must be rejected");
-        assert_eq!(err.to_string(), case.zero_err);
+        let expected = localization::message(case.zero_err_key).to_string();
+        assert_eq!(err.to_string(), expected);
     }
 
     struct CommandLimitCase {
@@ -458,7 +459,7 @@ mod tests {
         accessor: fn(&StdlibConfig) -> u64,
         default_value: u64,
         updated: u64,
-        zero_err: &'static str,
+        zero_err_key: &'static str,
     }
 
     #[rstest]
@@ -489,24 +490,27 @@ mod tests {
         let err = base_config
             .with_which_cache_capacity(0)
             .expect_err("zero capacity must be rejected");
-        assert_eq!(err.to_string(), "Which cache capacity must be positive.");
+        let expected =
+            localization::message(keys::STDLIB_WHICH_CACHE_CAPACITY_POSITIVE).to_string();
+        assert_eq!(err.to_string(), expected);
     }
 
     #[rstest]
-    #[case(vec![""], "Skip directory entries must not be empty.")]
-    #[case(vec!["."], "Skip directory entries must not contain '..'.")]
-    #[case(vec![".."], "Skip directory entries must not contain '..'.")]
-    #[case(vec!["dir/name"], "Skip directory entries must not contain path separators.")]
-    #[case(vec!["dir\\name"], "Skip directory entries must not contain path separators.")]
+    #[case(vec![""], keys::STDLIB_SKIP_DIR_EMPTY)]
+    #[case(vec!["."], keys::STDLIB_SKIP_DIR_NAVIGATION)]
+    #[case(vec![".."], keys::STDLIB_SKIP_DIR_NAVIGATION)]
+    #[case(vec!["dir/name"], keys::STDLIB_SKIP_DIR_SEPARATOR)]
+    #[case(vec!["dir\\name"], keys::STDLIB_SKIP_DIR_SEPARATOR)]
     fn workspace_skip_dirs_validate_inputs(
         base_config: StdlibConfig,
         #[case] entries: Vec<&str>,
-        #[case] message: &str,
+        #[case] message_key: &'static str,
     ) {
         let err = base_config
             .with_workspace_skip_dirs(entries)
             .expect_err("invalid skip entries should error");
-        assert_eq!(err.to_string(), message);
+        let expected = localization::message(message_key).to_string();
+        assert_eq!(err.to_string(), expected);
     }
 
     #[rstest]

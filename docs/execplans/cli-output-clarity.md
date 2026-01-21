@@ -58,7 +58,8 @@ outputs and configuration precedence.
 
 Key runtime entry points and CLI definitions live in these files:
 
-- `src/cli.rs` defines the clap CLI (flags, subcommands, help text) and default
+- `src/cli/mod.rs` defines the clap CLI (flags, subcommands, help text) and
+  default
   command behaviour.
 - `src/main.rs` parses the CLI, configures logging, and dispatches to the
   runner.
@@ -114,7 +115,7 @@ development (BDD) lives in:
    fallback path preserves stock clap output when localization fails.
 
 4. Refine CLI output messages. Update docstrings and help text in
-   `src/cli.rs` (or the new config module) to be plain language and
+   `src/cli/mod.rs` (or the new config module) to be plain language and
    action-oriented. Review `tracing::info!` messages for build/manifest/graph
    flows and update wording to align with the user guide. Ensure stderr/stdout
    separation remains correct and messages are consistent across subcommands.

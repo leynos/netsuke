@@ -18,7 +18,7 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
 
-#[path = "src/cli.rs"]
+#[path = "src/cli/mod.rs"]
 mod cli;
 
 #[path = "src/cli_localization.rs"]
@@ -98,7 +98,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
 
     // Regenerate the manual page when the CLI or metadata changes.
-    println!("cargo:rerun-if-changed=src/cli.rs");
+    println!("cargo:rerun-if-changed=src/cli/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_NAME");
     println!("cargo:rerun-if-env-changed=CARGO_BIN_NAME");
