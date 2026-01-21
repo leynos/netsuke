@@ -11,6 +11,7 @@ use minijinja::value::{Kwargs, Value};
 use minijinja::{Environment, UndefinedBehavior};
 use rstest::{fixture, rstest};
 use std::sync::Arc;
+use test_support::localizer_test_lock;
 
 struct MacroRenderCase<'a> {
     signature: &'a str,
@@ -50,6 +51,7 @@ fn parse_macro_name_extracts_identifier(
 #[case("(name)", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
 #[case("   ", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
 fn parse_macro_name_errors(#[case] signature: &str, #[case] key: &'static str) -> AnyResult<()> {
+    let _lock = localizer_test_lock();
     let localizer = cli_localization::build_localizer(Some("en-US"));
     let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
     let expected = localization::message(key).to_string();

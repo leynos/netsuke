@@ -5,24 +5,18 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
-use netsuke::cli_localization;
 use netsuke::localization::{self, keys};
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
-use std::sync::Arc;
 use test_support::{
     check_ninja::{self, ToolName},
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
+    localizer_test_lock, set_en_localizer,
 };
 
 mod fixtures;
 use fixtures::create_test_manifest;
-
-fn set_en_localizer() -> localization::LocalizerGuard {
-    let localizer = cli_localization::build_localizer(Some("en-US"));
-    localization::set_localizer_for_tests(Arc::from(localizer))
-}
 
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
 ///
@@ -39,6 +33,7 @@ fn ninja_with_exit_code(
 
 /// Helper: test that a command fails when ninja exits with non-zero status.
 fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
+    let _lock = localizer_test_lock();
     let _guard = set_en_localizer();
     let (_ninja_dir, _ninja_path, _ninja_guard) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
@@ -104,6 +99,7 @@ fn assert_subcommand_fails_with_invalid_manifest(
     command: Commands,
     name: &'static str,
 ) -> Result<()> {
+    let _lock = localizer_test_lock();
     let _guard = set_en_localizer();
     let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
     let manifest_path = temp.path().join("Netsukefile");

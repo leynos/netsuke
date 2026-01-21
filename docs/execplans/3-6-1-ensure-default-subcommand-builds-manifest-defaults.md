@@ -140,8 +140,7 @@ Key runtime entry points and relevant files:
 - `src/main.rs` parses CLI, merges config layers via OrthoConfig, and dispatches
   to `runner::run()`.
 - `src/cli/mod.rs` defines the clap CLI with `#[derive(Parser, OrthoConfig)]`
-  and
-  default command behaviour via `.with_default_command()`.
+  and default command behaviour via `.with_default_command()`.
 - `src/cli_l10n.rs` contains clap localization logic; currently localizes
   subcommand about/long_about but not flag help strings.
 - `src/runner/mod.rs` implements subcommand execution; `generate_ninja()`

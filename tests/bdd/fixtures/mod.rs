@@ -22,6 +22,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::sync::MutexGuard;
 use test_support::PathGuard;
 use test_support::env::{NinjaEnvGuard, restore_many};
 use test_support::http::HttpServer;
@@ -101,6 +102,8 @@ pub struct TestWorld {
     pub stdlib_text: Slot<String>,
 
     // Localisation state (non-Clone)
+    /// Lock guarding process-wide localizer mutations during scenarios.
+    pub localization_lock: RefCell<Option<MutexGuard<'static, ()>>>,
     /// Localizer guard for scenario-level localization overrides.
     pub localization_guard: RefCell<Option<LocalizerGuard>>,
 
@@ -154,6 +157,7 @@ impl Drop for TestWorld {
         self.shutdown_http_server();
         self.ninja_env_guard.borrow_mut().take();
         self.localization_guard.borrow_mut().take();
+        self.localization_lock.borrow_mut().take();
         self.restore_environment();
         self.stdlib_text.clear();
     }

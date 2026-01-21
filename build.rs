@@ -13,6 +13,7 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
@@ -37,8 +38,10 @@ mod build_l10n_audit;
 
 use host_pattern::{HostPattern, HostPatternError};
 
-type LocalizedParseFn =
-    fn(Vec<OsString>, &dyn ortho_config::Localizer) -> Result<(cli::Cli, ArgMatches), clap::Error>;
+type LocalizedParseFn = fn(
+    Vec<OsString>,
+    &Arc<dyn ortho_config::Localizer>,
+) -> Result<(cli::Cli, ArgMatches), clap::Error>;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {

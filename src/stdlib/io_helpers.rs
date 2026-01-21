@@ -13,10 +13,10 @@ use crate::localization::{self, LocalizedMessage, keys};
 pub(crate) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::Error) -> Error {
     let io_kind = err.kind();
     let label = localization::message(io_error_kind_label(io_kind)).to_string();
-    let label_lower = label.to_ascii_lowercase();
+    let label_lower = label.to_lowercase();
     let action_text = action.to_string();
     let detail = err.to_string();
-    let detail_lower = detail.to_ascii_lowercase();
+    let detail_lower = detail.to_lowercase();
 
     let message = if detail.is_empty() {
         localization::message(keys::STDLIB_PATH_IO_FAILED)

@@ -6,6 +6,7 @@ use rstest::rstest;
 use crate::helpers::os_args;
 use netsuke::cli::locale_hint_from_args;
 use netsuke::cli_localization;
+use std::sync::Arc;
 
 #[rstest]
 fn locale_hint_from_args_accepts_space_form() -> Result<()> {
@@ -64,10 +65,10 @@ fn locale_hint_from_args_uses_last_locale_flag() -> Result<()> {
 
 #[rstest]
 fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
-    let localizer = cli_localization::build_localizer(Some("es-ES"));
+    let localizer = Arc::from(cli_localization::build_localizer(Some("es-ES")));
     let err = netsuke::cli::parse_with_localizer_from(
         ["netsuke", "--locale", "es-ES", "unknown"],
-        localizer.as_ref(),
+        &localizer,
     )
     .err()
     .context("parser should reject invalid subcommand")?;

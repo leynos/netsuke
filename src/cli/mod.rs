@@ -3,6 +3,8 @@
 //! This module defines the [`Cli`] structure and its subcommands.
 //! It mirrors the design described in `docs/netsuke-design.md`.
 
+use clap::builder::{TypedValueParser, ValueParser};
+use clap::error::ErrorKind;
 use clap::parser::ValueSource;
 use clap::{ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ortho_config::declarative::LayerComposition;
@@ -31,21 +33,48 @@ const MAX_JOBS: usize = 64;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
 const ENV_PREFIX: &str = "NETSUKE_";
 
+#[derive(Clone)]
+struct LocalizedValueParser<F> {
+    localizer: Arc<dyn Localizer>,
+    parser: F,
+}
+
+impl<F> LocalizedValueParser<F> {
+    fn new(localizer: Arc<dyn Localizer>, parser: F) -> Self {
+        Self { localizer, parser }
+    }
+}
+
+impl<F, T> TypedValueParser for LocalizedValueParser<F>
+where
+    F: Fn(&dyn Localizer, &str) -> Result<T, String> + Clone + Send + Sync + 'static,
+    T: Send + Sync + Clone + 'static,
+{
+    type Value = T;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let mut command = cmd.clone();
+        let Some(raw_value) = value.to_str() else {
+            return Err(command.error(ErrorKind::InvalidUtf8, "invalid UTF-8"));
+        };
+        (self.parser)(self.localizer.as_ref(), raw_value)
+            .map_err(|err| command.error(ErrorKind::ValueValidation, err))
+    }
+}
+
 fn validation_message(
+    localizer: &dyn Localizer,
     key: &'static str,
     args: Option<&LocalizationArgs<'_>>,
     fallback: &str,
 ) -> String {
-    localization::localizer().message(key, args, fallback)
+    localizer.message(key, args, fallback)
 }
-
-/// Set the localizer used for CLI validation errors.
-pub fn set_validation_localizer(localizer: Arc<dyn Localizer>) {
-    localization::set_localizer(localizer);
-}
-
-/// Compile-time assertion that `set_validation_localizer` has the expected signature.
-const _: fn(Arc<dyn Localizer>) = set_validation_localizer;
 
 /// A modern, friendly build system that uses YAML and Jinja, powered by Ninja.
 #[derive(Debug, Parser, Serialize, Deserialize, OrthoConfig)]
@@ -66,7 +95,7 @@ pub struct Cli {
     /// Set the number of parallel build jobs.
     ///
     /// Values must be between 1 and 64.
-    #[arg(short, long, value_name = "N", value_parser = parse_jobs)]
+    #[arg(short, long, value_name = "N")]
     pub jobs: Option<usize>,
 
     /// Enable verbose diagnostic logging.
@@ -75,37 +104,25 @@ pub struct Cli {
     pub verbose: bool,
 
     /// Locale tag for CLI copy (for example: en-US, es-ES).
-    #[arg(long, value_name = "LOCALE", value_parser = parse_locale)]
+    #[arg(long, value_name = "LOCALE")]
     pub locale: Option<String>,
 
     /// Additional URL schemes allowed for the `fetch` helper.
-    #[arg(
-        long = "fetch-allow-scheme",
-        value_name = "SCHEME",
-        value_parser = parse_scheme
-    )]
+    #[arg(long = "fetch-allow-scheme", value_name = "SCHEME")]
     #[ortho_config(merge_strategy = "append")]
     pub fetch_allow_scheme: Vec<String>,
 
     /// Hostnames that are permitted when default deny is enabled.
     ///
     /// Supports wildcards such as `*.example.com`.
-    #[arg(
-        long = "fetch-allow-host",
-        value_name = "HOST",
-        value_parser = parse_host_pattern
-    )]
+    #[arg(long = "fetch-allow-host", value_name = "HOST")]
     #[ortho_config(merge_strategy = "append")]
     pub fetch_allow_host: Vec<HostPattern>,
 
     /// Hostnames that are always blocked, even when allowed elsewhere.
     ///
     /// Supports wildcards such as `*.example.com`.
-    #[arg(
-        long = "fetch-block-host",
-        value_name = "HOST",
-        value_parser = parse_host_pattern
-    )]
+    #[arg(long = "fetch-block-host", value_name = "HOST")]
     #[ortho_config(merge_strategy = "append")]
     pub fetch_block_host: Vec<HostPattern>,
 
@@ -205,22 +222,23 @@ fn default_manifest_path() -> PathBuf {
 /// Returns a `clap::Error` with localization applied when parsing fails.
 pub fn parse_with_localizer_from<I, T>(
     iter: I,
-    localizer: &dyn Localizer,
+    localizer: &Arc<dyn Localizer>,
 ) -> Result<(Cli, ArgMatches), clap::Error>
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let mut command = localize_command(Cli::command(), localizer);
+    let mut command = localize_command(Cli::command(), localizer.as_ref());
+    command = configure_validation_parsers(command, localizer);
     let matches = command
         .try_get_matches_from_mut(iter)
-        .map_err(|err| localize_clap_error_with_command(err, localizer, Some(&command)))?;
+        .map_err(|err| localize_clap_error_with_command(err, localizer.as_ref(), Some(&command)))?;
     // Clone matches before from_arg_matches_mut consumes the values.
     let matches_for_merge = matches.clone();
     let mut matches_for_parse = matches;
     let cli = Cli::from_arg_matches_mut(&mut matches_for_parse).map_err(|clap_err| {
         let with_cmd = clap_err.with_cmd(&command);
-        localize_clap_error_with_command(with_cmd, localizer, Some(&command))
+        localize_clap_error_with_command(with_cmd, localizer.as_ref(), Some(&command))
     })?;
     Ok((cli, matches_for_merge))
 }
@@ -253,9 +271,11 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         other => {
             let mut args = LocalizationArgs::default();
             args.insert("value", format!("{other:?}").into());
+            let localizer = localization::localizer();
             return Err(Arc::new(ortho_config::OrthoError::Validation {
                 key: String::from("cli"),
                 message: validation_message(
+                    localizer.as_ref(),
                     keys::CLI_CONFIG_EXPECTED_OBJECT,
                     Some(&args),
                     &format!("expected parsed CLI values to serialize to an object, got {other:?}",),
@@ -279,6 +299,33 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
     }
 
     Ok(serde_json::Value::Object(map))
+}
+
+fn configure_validation_parsers(
+    mut command: clap::Command,
+    localizer: &Arc<dyn Localizer>,
+) -> clap::Command {
+    let jobs_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_jobs);
+    let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
+    let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
+    let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
+
+    command = command.mut_arg("jobs", |arg| {
+        arg.value_parser(ValueParser::new(jobs_parser))
+    });
+    command = command.mut_arg("locale", |arg| {
+        arg.value_parser(ValueParser::new(locale_parser))
+    });
+    command = command.mut_arg("fetch_allow_scheme", |arg| {
+        arg.value_parser(ValueParser::new(scheme_parser.clone()))
+    });
+    command = command.mut_arg("fetch_allow_host", |arg| {
+        arg.value_parser(ValueParser::new(host_parser.clone()))
+    });
+    command = command.mut_arg("fetch_block_host", |arg| {
+        arg.value_parser(ValueParser::new(host_parser))
+    });
+    command
 }
 
 /// Merge configuration layers over the parsed CLI values.

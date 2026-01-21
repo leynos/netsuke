@@ -58,21 +58,40 @@ const ARGS_STUB: &str = concat!(
     "}\n",
 );
 
-#[rstest]
-fn grep_on_windows_bypasses_shell(env_lock: EnvLock) -> Result<()> {
-    let _lock = env_lock;
-    let temp = tempdir().context("create windows grep tempdir")?;
+fn windows_command_setup(
+    tempdir_context: &'static str,
+    root_context: &'static str,
+    dir_context: &'static str,
+    compile_context: &'static str,
+    helper_name: &str,
+    helper_source: &str,
+) -> Result<(tempfile::TempDir, EnvVarGuard, Utf8PathBuf)> {
+    let temp = tempdir().context(tempdir_context)?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("windows grep root is not valid UTF-8: {path:?}"))?;
-    let dir = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open windows grep temp dir")?;
-    compile_rust_helper(&dir, &root, "grep", GREP_STUB)
-        .context("compile grep helper for windows tests")?;
+        .map_err(|path| anyhow!("{root_context}: {path:?}"))?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority()).context(dir_context)?;
+    let helper = compile_rust_helper(&dir, &root, helper_name, helper_source)
+        .with_context(|| compile_context.to_string())?;
 
     let mut path_value = OsString::from(root.as_str());
     path_value.push(";");
     path_value.push(std::env::var_os("PATH").unwrap_or_default());
-    let _path = EnvVarGuard::set("PATH", &path_value);
+    let path_guard = EnvVarGuard::set("PATH", &path_value);
+
+    Ok((temp, path_guard, helper))
+}
+
+#[rstest]
+fn grep_on_windows_bypasses_shell(env_lock: EnvLock) -> Result<()> {
+    let _lock = env_lock;
+    let (_temp, _path, _helper) = windows_command_setup(
+        "create windows grep tempdir",
+        "windows grep root is not valid UTF-8",
+        "open windows grep temp dir",
+        "compile grep helper for windows tests",
+        "grep",
+        GREP_STUB,
+    )?;
 
     let (mut env, mut state) = fallible::stdlib_env_with_state()?;
     state.reset_impure();
@@ -97,18 +116,14 @@ line2
 #[rstest]
 fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
-    let temp = tempdir().context("create windows grep stream tempdir")?;
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("windows grep root is not valid UTF-8: {path:?}"))?;
-    let dir = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open windows grep stream temp dir")?;
-    compile_rust_helper(&dir, &root, "grep", GREP_STREAM_STUB)
-        .context("compile streaming grep helper for windows tests")?;
-
-    let mut path_value = OsString::from(root.as_str());
-    path_value.push(";");
-    path_value.push(std::env::var_os("PATH").unwrap_or_default());
-    let _path = EnvVarGuard::set("PATH", &path_value);
+    let (_temp, _path, _helper) = windows_command_setup(
+        "create windows grep stream tempdir",
+        "windows grep root is not valid UTF-8",
+        "open windows grep stream temp dir",
+        "compile streaming grep helper for windows tests",
+        "grep",
+        GREP_STREAM_STUB,
+    )?;
 
     let config = StdlibConfig::default()
         .with_command_max_output_bytes(512)?
@@ -147,13 +162,14 @@ fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
 #[rstest]
 fn shell_preserves_cmd_meta_characters(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
-    let temp = tempdir().context("create windows shell tempdir")?;
-    let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("windows shell root is not valid UTF-8: {path:?}"))?;
-    let dir = Dir::open_ambient_dir(&root, ambient_authority())
-        .context("open windows shell temp dir")?;
-    let exe = compile_rust_helper(&dir, &root, "echo_args", ARGS_STUB)
-        .context("compile echo_args helper for windows tests")?;
+    let (_temp, _path, exe) = windows_command_setup(
+        "create windows shell tempdir",
+        "windows shell root is not valid UTF-8",
+        "open windows shell temp dir",
+        "compile echo_args helper for windows tests",
+        "echo_args",
+        ARGS_STUB,
+    )?;
 
     let command = format!("\"{}\" \"literal %%^!\"", exe);
     let (mut env, mut state) = fallible::stdlib_env_with_state()?;

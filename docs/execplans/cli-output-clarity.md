@@ -59,8 +59,7 @@ outputs and configuration precedence.
 Key runtime entry points and CLI definitions live in these files:
 
 - `src/cli/mod.rs` defines the clap CLI (flags, subcommands, help text) and
-  default
-  command behaviour.
+  default command behaviour.
 - `src/main.rs` parses the CLI, configures logging, and dispatches to the
   runner.
 - `src/runner/mod.rs` and `src/runner/process/` implement subcommand behaviour

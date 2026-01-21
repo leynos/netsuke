@@ -1,7 +1,7 @@
 //! Command filter integration tests for stdlib shell and grep filters.
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{context, value::Value, Environment, ErrorKind};
 use rstest::rstest;

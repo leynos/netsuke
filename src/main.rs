@@ -18,9 +18,8 @@ fn main() -> ExitCode {
     let locale = locale_hint.as_deref().or(env_locale.as_deref());
     let localizer = Arc::from(cli_localization::build_localizer(locale));
     localization::set_localizer(Arc::clone(&localizer));
-    cli::set_validation_localizer(Arc::clone(&localizer));
 
-    let (parsed_cli, matches) = match cli::parse_with_localizer_from(args, localizer.as_ref()) {
+    let (parsed_cli, matches) = match cli::parse_with_localizer_from(args, &localizer) {
         Ok(parsed) => parsed,
         Err(err) => err.exit(),
     };
@@ -40,7 +39,6 @@ fn main() -> ExitCode {
         .or(env_locale.as_deref());
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale));
     localization::set_localizer(Arc::clone(&runtime_localizer));
-    cli::set_validation_localizer(Arc::clone(&runtime_localizer));
 
     let max_level = if merged_cli.verbose {
         Level::DEBUG

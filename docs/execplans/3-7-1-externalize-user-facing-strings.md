@@ -1,14 +1,14 @@
 # Externalize user-facing strings into Fluent (roadmap 3.7.1)
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+`Risks`, `Progress`, `Surprises and discoveries`, `Decision log`, and
+`Outcomes and retrospective` must be kept up to date as work proceeds.
 
 Status: DONE
 
 PLANS.md is not present in the repository.
 
-## Purpose / Big picture
+## Purpose and big picture
 
 Netsuke should render all user-facing text (help, status, warnings, and errors)
 from Fluent `.ftl` bundles so translations can be managed without touching
@@ -39,7 +39,7 @@ if a referenced Fluent key is missing.
   (British English, 80-column wrapping, no fenced code blocks inside this plan
   file).
 
-## Tolerances (Exception triggers)
+## Tolerances (exception triggers)
 
 - Scope: more than 30 files changed or more than 1,500 net new lines.
 - Interface: any public API signature change (for example `runner::run`).
@@ -81,13 +81,13 @@ Escalate immediately if a tolerance is hit.
 - [x] (2026-01-17) Add unit and behavioural tests.
 - [x] (2026-01-17) Update documentation and roadmap; run quality gates.
 
-## Surprises & Discoveries
+## Surprises and discoveries
 
 - Proc-macro ingestion of `tests/features/*.feature` does not always trigger a
   rebuild locally; touching `tests/bdd_tests.rs` forces the scenarios to
   regenerate when feature text changes.
 
-## Decision Log
+## Decision log
 
 - Decision: Use `ortho_config::Localizer` as the single rendering interface
   for all user-facing copy, keeping the Fluent resources under `locales/`.
@@ -103,7 +103,7 @@ Escalate immediately if a tolerance is hit.
   keeps key usage consistent and makes audits deterministic. Date/Author:
   2026-01-17 (Terry)
 
-## Outcomes & Retrospective
+## Outcomes and retrospective
 
 - Fluent keys now cover CLI copy, diagnostics, and stdlib errors with English
   as the reference translation and Spanish as an example locale (with English
@@ -134,7 +134,7 @@ Relevant files and modules:
 
 ## Plan of work
 
-### Stage A: Inventory and key taxonomy (no code changes)
+### Stage A: inventory and key taxonomy (no code changes)
 
 1. Enumerate user-facing strings by searching for `#[error("...")]`,
    `Diagnostic` messages, and other `Display`/`Context` strings that reach the
@@ -145,7 +145,7 @@ Relevant files and modules:
 3. Decide which strings are strictly user-facing and which are internal logs.
    Log-only strings stay as-is for now to avoid scope creep.
 
-### Stage B: Localization infrastructure and key audit
+### Stage B: localization infrastructure and key audit
 
 1. Create a dedicated localization module (for example
    `src/localization/mod.rs`) with a `//!` doc comment. This module should
@@ -161,7 +161,7 @@ Relevant files and modules:
    access. If an extra crate is needed for Fluent parsing, pause and escalate
    before adding it (tolerance: new dependency).
 
-### Stage C: Externalize user-facing strings
+### Stage C: externalize user-facing strings
 
 1. Replace user-facing `thiserror` messages and `miette` diagnostics with
    Fluent key lookups. Preserve structured data (paths, target names, counts)
@@ -176,7 +176,7 @@ Relevant files and modules:
    (for example, when mapping `RunnerError` and manifest diagnostics to the
    final stderr output).
 
-### Stage D: Tests, docs, and finalization
+### Stage D: tests, docs, and finalization
 
 1. Add `rstest` unit tests for the localization helpers and at least one
    error mapping that uses variables (for example, manifest not found).

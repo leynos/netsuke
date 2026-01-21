@@ -1,20 +1,19 @@
 //! Tests covering localization helpers and fallback behaviour.
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, ensure};
 use rstest::rstest;
+use test_support::localizer::LOCALIZER_TEST_LOCK;
 
 use netsuke::cli_localization;
 use netsuke::localization::{self, keys};
-
-static LOCALIZER_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn localizer_test_lock() -> std::sync::MutexGuard<'static, ()> {
     LOCALIZER_TEST_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(|err| panic!("localizer test lock poisoned: {err}"))
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn which_message(command: &str) -> String {

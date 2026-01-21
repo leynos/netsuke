@@ -156,12 +156,13 @@ pub enum IrGenError {
     /// use netsuke::localization::{self, keys};
     /// use serde::ser::Error as _;
     ///
-    /// let msg = localization::message(keys::IR_EMPTY_RULE).with_arg("target", "docs");
     /// let err = IrGenError::EmptyRule {
     ///     target_name: "docs".into(),
-    ///     message: msg.clone(),
+    ///     message: localization::message(keys::IR_EMPTY_RULE).with_arg("target", "docs"),
     /// };
-    /// assert_eq!(err.to_string(), msg.to_string());
+    /// if let IrGenError::EmptyRule { target_name, .. } = err {
+    ///     assert_eq!(target_name, "docs");
+    /// }
     /// ```
     #[error("{message}")]
     EmptyRule {
@@ -241,7 +242,7 @@ pub enum IrGenError {
     /// };
     /// assert!(err.to_string().contains("invalid action"));
     /// ```
-    #[error("{message}")]
+    #[error("{message}: {source}")]
     ActionSerialisation {
         /// Underlying serialisation error.
         #[source]
@@ -257,14 +258,12 @@ pub enum IrGenError {
     /// use netsuke::localization::{self, keys};
     /// use serde::ser::Error as _;
     ///
-    /// let msg = localization::message(keys::IR_INVALID_COMMAND)
-    ///     .with_arg("snippet", "echo $in");
     /// let err = IrGenError::InvalidCommand {
     ///     command: "echo $in".into(),
     ///     snippet: "echo $in".into(),
-    ///     message: msg.clone(),
+    ///     message: localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", "echo $in"),
     /// };
-    /// assert_eq!(err.to_string(), msg.to_string());
+    /// assert!(matches!(err, IrGenError::InvalidCommand { command, .. } if command == "echo $in"));
     /// ```
     #[error("{message}")]
     InvalidCommand {

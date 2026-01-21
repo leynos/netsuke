@@ -288,6 +288,7 @@ mod tests {
 
     use anyhow::{Result, ensure};
     use rstest::rstest;
+    use test_support::{localizer_test_lock, set_en_localizer};
 
     #[rstest]
     #[case("example.com", false)]
@@ -330,6 +331,8 @@ mod tests {
     #[case("exa mple.com")]
     #[case("*.bad-.test")]
     fn host_pattern_rejects_invalid_shapes(#[case] pattern: &str) {
+        let _lock = localizer_test_lock();
+        let _guard = set_en_localizer();
         let err = HostPattern::parse(pattern).expect_err("invalid pattern should fail");
         let message = err.to_string();
         assert!(

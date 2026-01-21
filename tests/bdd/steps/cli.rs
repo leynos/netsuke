@@ -13,6 +13,7 @@ use netsuke::cli_localization;
 use rstest_bdd_macros::{given, then, when};
 use std::ffi::OsString;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -23,8 +24,8 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let tokens = build_token_list(args);
     let os_tokens: Vec<OsString> = tokens.iter().map(OsString::from).collect();
     let locale_hint = netsuke::cli::locale_hint_from_args(&os_tokens);
-    let localizer = cli_localization::build_localizer(locale_hint.as_deref());
-    let outcome = netsuke::cli::parse_with_localizer_from(os_tokens, localizer.as_ref())
+    let localizer = Arc::from(cli_localization::build_localizer(locale_hint.as_deref()));
+    let outcome = netsuke::cli::parse_with_localizer_from(os_tokens, &localizer)
         .map(|(cli, _matches)| normalize_cli(cli))
         .map_err(|e| e.to_string());
     store_parse_outcome(&world.cli, &world.cli_error, outcome);

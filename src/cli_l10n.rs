@@ -14,7 +14,7 @@ fn usage_body(usage: &str) -> &str {
 }
 
 pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) -> Command {
-    let rendered_usage = command.render_usage().to_string();
+    let rendered_usage = command.clone().render_usage().to_string();
     let fallback_usage = usage_body(&rendered_usage).to_owned();
     let mut args = LocalizationArgs::default();
     args.insert("binary", command.get_name().to_owned().into());
