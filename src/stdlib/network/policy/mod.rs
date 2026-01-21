@@ -40,7 +40,7 @@ pub enum NetworkPolicyConfigError {
     /// The supplied scheme was empty.
     #[error("{message}")]
     EmptyScheme {
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The supplied scheme contained invalid characters.
@@ -48,13 +48,13 @@ pub enum NetworkPolicyConfigError {
     InvalidScheme {
         /// The rejected scheme string.
         scheme: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Attempted to enable default-deny without providing any allowlist entries.
     #[error("{message}")]
     EmptyAllowlist {
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Host pattern parsing failed.
@@ -357,13 +357,13 @@ pub enum NetworkPolicyViolation {
     SchemeNotAllowed {
         /// The scheme provided by the caller.
         scheme: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The URL does not contain a host portion.
     #[error("{message}")]
     MissingHost {
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The host is absent from the allowlist when default deny is active.
@@ -371,7 +371,7 @@ pub enum NetworkPolicyViolation {
     HostNotAllowlisted {
         /// Hostname that is absent from the allowlist.
         host: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The host matches one of the configured blocklist rules.
@@ -379,7 +379,7 @@ pub enum NetworkPolicyViolation {
     HostBlocked {
         /// Hostname that matched a blocklist entry.
         host: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 }

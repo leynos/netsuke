@@ -34,9 +34,9 @@ pub enum RunnerError {
         directory: String,
         /// The path that was attempted.
         path: PathBuf,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
-        /// Localised hint for resolving the error.
+        /// Localized hint for resolving the error.
         #[help]
         help: LocalizedMessage,
     },

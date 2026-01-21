@@ -143,7 +143,7 @@ pub enum ManifestError {
         #[source]
         #[diagnostic_source]
         source: Box<dyn Diagnostic + Send + Sync + 'static>,
-        /// Localised parse summary.
+        /// Localized parse summary.
         message: LocalizedMessage,
     },
 }

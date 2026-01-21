@@ -38,7 +38,7 @@ fn validation_message(
     localization::localizer().message(key, args, fallback)
 }
 
-/// Set the localiser used for CLI validation errors.
+/// Set the localizer used for CLI validation errors.
 pub fn set_validation_localizer(localizer: Arc<dyn Localizer>) {
     localization::set_localizer(localizer);
 }

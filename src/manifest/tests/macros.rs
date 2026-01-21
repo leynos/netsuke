@@ -4,11 +4,13 @@ use super::super::jinja_macros::{
 };
 use super::super::{ManifestMap, ManifestValue};
 use crate::ast::MacroDefinition;
+use crate::cli_localization;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use minijinja::value::{Kwargs, Value};
 use minijinja::{Environment, UndefinedBehavior};
 use rstest::{fixture, rstest};
+use std::sync::Arc;
 
 struct MacroRenderCase<'a> {
     signature: &'a str,
@@ -44,18 +46,21 @@ fn parse_macro_name_extracts_identifier(
 }
 
 #[rstest]
-#[case("greet", "Macro signature is missing parameters.")]
-#[case("(name)", "Macro signature is missing an identifier.")]
-#[case("   ", "Macro signature is missing an identifier.")]
-fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) -> AnyResult<()> {
+#[case("greet", keys::MANIFEST_MACRO_SIGNATURE_MISSING_PARAMS)]
+#[case("(name)", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
+#[case("   ", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
+fn parse_macro_name_errors(#[case] signature: &str, #[case] key: &'static str) -> AnyResult<()> {
+    let localizer = cli_localization::build_localizer(Some("en-US"));
+    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    let expected = localization::message(key).to_string();
     match parse_macro_name(signature) {
         Ok(name) => Err(anyhow!(
             "expected parse_macro_name to fail for {signature:?} but succeeded with {name}"
         )),
         Err(err) => {
             ensure!(
-                err.to_string().contains(message),
-                "expected error to contain {message:?}, got {err:?}"
+                err.to_string().contains(&expected),
+                "expected error to contain {expected:?}, got {err:?}"
             );
             Ok(())
         }

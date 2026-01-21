@@ -101,7 +101,7 @@ pub struct TestWorld {
     pub stdlib_text: Slot<String>,
 
     // Localisation state (non-Clone)
-    /// Localiser guard for scenario-level localisation overrides.
+    /// Localizer guard for scenario-level localization overrides.
     pub localization_guard: RefCell<Option<LocalizerGuard>>,
 
     // HTTP server state (non-Clone)

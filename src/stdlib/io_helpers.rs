@@ -1,17 +1,22 @@
-//! IO error adapters for the stdlib path filters.
-//! Convert `io::Error` values into `MiniJinja` `InvalidOperation` diagnostics with human-readable labels.
-use std::io::{self, ErrorKind as IoErrorKind};
+//! IO error adapters for stdlib helpers.
+//!
+//! Convert `io::Error` values into `MiniJinja` `InvalidOperation` diagnostics
+//! with localized labels and action context.
 
-use crate::localization::{self, LocalizedMessage, keys};
+use std::io::{self, ErrorKind as IoErrorKind};
 
 use camino::Utf8Path;
 use minijinja::{Error, ErrorKind};
 
-pub(super) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::Error) -> Error {
+use crate::localization::{self, LocalizedMessage, keys};
+
+pub(crate) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::Error) -> Error {
     let io_kind = err.kind();
     let label = localization::message(io_error_kind_label(io_kind)).to_string();
+    let label_lower = label.to_ascii_lowercase();
     let action_text = action.to_string();
     let detail = err.to_string();
+    let detail_lower = detail.to_ascii_lowercase();
 
     let message = if detail.is_empty() {
         localization::message(keys::STDLIB_PATH_IO_FAILED)
@@ -20,7 +25,7 @@ pub(super) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::E
             .with_arg("label", &label)
             .with_arg("kind", format!("{io_kind:?}"))
             .to_string()
-    } else if detail.to_ascii_lowercase().contains(label.as_str()) {
+    } else if detail_lower.contains(label_lower.as_str()) {
         localization::message(keys::STDLIB_PATH_IO_FAILED_WITH_DETAIL)
             .with_arg("action", &action_text)
             .with_arg("path", path.as_str())
@@ -37,6 +42,20 @@ pub(super) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::E
             .to_string()
     };
 
+    Error::new(ErrorKind::InvalidOperation, message).with_source(err)
+}
+
+pub(crate) fn io_action_error(
+    template_key: &'static str,
+    action: &LocalizedMessage,
+    path: &Utf8Path,
+    err: io::Error,
+) -> Error {
+    let message = localization::message(template_key)
+        .with_arg("action", action.to_string())
+        .with_arg("path", path.as_str())
+        .with_arg("details", err.to_string())
+        .to_string();
     Error::new(ErrorKind::InvalidOperation, message).with_source(err)
 }
 

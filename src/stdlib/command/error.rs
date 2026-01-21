@@ -98,6 +98,7 @@ fn io_error(location: CommandLocation<'_>, err: &io::Error) -> Error {
         .with_arg("details", err.to_string())
         .to_string();
     if err.kind() == io::ErrorKind::BrokenPipe {
+        message.push(' ');
         message.push_str(&localization::message(keys::COMMAND_CLOSED_INPUT_EARLY).to_string());
     }
     Error::new(ErrorKind::InvalidOperation, message)
@@ -164,8 +165,10 @@ fn append_exit_status(message: &mut String, status: Option<i32>) {
         let suffix = localization::message(keys::COMMAND_EXIT_STATUS_SUFFIX)
             .with_arg("status", code)
             .to_string();
+        message.push(' ');
         message.push_str(&suffix);
     } else {
+        message.push(' ');
         message.push_str(&localization::message(keys::COMMAND_SIGNAL_SUFFIX).to_string());
     }
 }

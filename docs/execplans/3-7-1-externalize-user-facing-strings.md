@@ -21,9 +21,9 @@ code. This item delivers three concrete outcomes:
 - Spanish (`es-ES`) is included as a non-English example locale.
 
 Success is observable when common failures (missing manifest, invalid CLI
-flags, manifest parse errors) are displayed in English by default, in Spanish
-when `--locale es-ES` (or `NETSUKE_LOCALE=es-ES`) is set, and CI fails if a
-referenced Fluent key is missing.
+flags, and manifest parse errors) are displayed in English by default, in
+Spanish when `--locale es-ES` (or `NETSUKE_LOCALE=es-ES`) is set, and CI fails
+if a referenced Fluent key is missing.
 
 ## Constraints
 
@@ -106,8 +106,10 @@ Escalate immediately if a tolerance is hit.
 ## Outcomes & Retrospective
 
 - Fluent keys now cover CLI copy, diagnostics, and stdlib errors with English
-  as the reference translation and Spanish as an example locale.
-- The compile-time Fluent key audit prevents missing-key regressions in CI.
+  as the reference translation and Spanish as an example locale (with English
+  fallback).
+- The compile-time Fluent key audit prevents missing-key regressions in CI by
+  validating against the English reference.
 - Unit + BDD coverage updated for localization-aware messages; quality gates
   (`make check-fmt`, `make lint`, `make test`) pass.
 
@@ -174,7 +176,7 @@ Relevant files and modules:
    (for example, when mapping `RunnerError` and manifest diagnostics to the
    final stderr output).
 
-### Stage D: Tests, docs, and finalisation
+### Stage D: Tests, docs, and finalization
 
 1. Add `rstest` unit tests for the localization helpers and at least one
    error mapping that uses variables (for example, manifest not found).

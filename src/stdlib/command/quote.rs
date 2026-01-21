@@ -16,7 +16,11 @@ impl fmt::Display for QuoteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ContainsLineBreak => {
-                f.write_str(&localization::message(keys::COMMAND_QUOTE_LINE_BREAK).to_string())
+                write!(
+                    f,
+                    "{}",
+                    localization::message(keys::COMMAND_QUOTE_LINE_BREAK)
+                )
             }
         }
     }

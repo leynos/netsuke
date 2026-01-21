@@ -21,7 +21,7 @@ pub enum NinjaGenError {
     MissingAction {
         /// Identifier of the missing action referenced by a build edge.
         id: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Formatting the Ninja output failed.
@@ -30,7 +30,7 @@ pub enum NinjaGenError {
         /// Underlying formatting error.
         #[source]
         source: fmt::Error,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 }

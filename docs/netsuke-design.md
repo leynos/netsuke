@@ -2017,11 +2017,11 @@ OrthoConfig (defaults, configuration files, environment variables, then CLI
 overrides) while treating clap defaults as absent so file or environment values
 are not masked. Configuration discovery honours `NETSUKE_CONFIG_PATH` and the
 standard OrthoConfig search order; environment variables use the `NETSUKE_`
-prefix with `__` as a nesting separator. CLI help and clap errors are localised
+prefix with `__` as a nesting separator. CLI help and clap errors are localized
 via Fluent resources; `--locale` or `NETSUKE_LOCALE` selects the locale, and
 English plus Spanish catalogues ship in `locales/`. Runtime diagnostics (for
 example manifest parsing, stdlib template errors, and runner failures) use the
-same Fluent localiser so the locale selection is consistent across user-facing
+same Fluent localizer so the locale selection is consistent across user-facing
 output. A build-time audit in `build.rs` validates that all referenced Fluent
 message keys exist in the bundled catalogues, ensuring missing strings fail CI
 before release. CLI execution and dispatch live in `src/runner.rs`, keeping

@@ -106,7 +106,7 @@ pub(super) enum OutputMode {
 }
 
 impl OutputMode {
-    /// Returns the localisation key used in diagnostics.
+    /// Returns the localization key used in diagnostics.
     pub(super) const fn label_key(self) -> &'static str {
         match self {
             Self::Capture => keys::COMMAND_OUTPUT_MODE_CAPTURE,
@@ -124,7 +124,7 @@ pub(super) enum OutputStream {
 }
 
 impl OutputStream {
-    /// Returns the localisation key used in human-readable errors.
+    /// Returns the localization key used in human-readable errors.
     pub(super) const fn label_key(self) -> &'static str {
         match self {
             Self::Stdout => keys::COMMAND_OUTPUT_STREAM_STDOUT,

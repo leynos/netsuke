@@ -229,7 +229,7 @@ library, and CLI ergonomics.
 ### 3.7. Localization with Fluent
 
 - [x] 3.7.1. Externalize user-facing strings into Fluent `.ftl` bundles.
-  - [ ] Implement compile-time audit that fails CI on missing message keys.
+  - [x] Implement compile-time audit that fails CI on missing message keys.
 - [ ] 3.7.2. Implement locale resolution.
   - [ ] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
     defaults.

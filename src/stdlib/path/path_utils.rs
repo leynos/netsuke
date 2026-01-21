@@ -9,8 +9,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use minijinja::{Error, ErrorKind};
 
 use super::fs_utils::{ParentDir, open_parent_dir};
-use super::io_helpers::io_to_error;
 use crate::localization::{self, keys};
+use crate::stdlib::io_helpers::io_to_error;
 
 pub(super) fn basename(path: &Utf8Path) -> String {
     path.file_name().unwrap_or(path.as_str()).to_owned()

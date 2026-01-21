@@ -75,7 +75,7 @@ pub enum HostPatternError {
     /// Input was empty or whitespace.
     #[error("{message}")]
     Empty {
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The pattern erroneously included a URL scheme.
@@ -83,7 +83,7 @@ pub enum HostPatternError {
     ContainsScheme {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The pattern contained path delimiters.
@@ -91,7 +91,7 @@ pub enum HostPatternError {
     ContainsSlash {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Wildcard patterns must include a suffix after `*.`.
@@ -99,7 +99,7 @@ pub enum HostPatternError {
     MissingSuffix {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Patterns may not contain empty labels between dots.
@@ -107,7 +107,7 @@ pub enum HostPatternError {
     EmptyLabel {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Patterns must only contain alphanumeric characters or `-`.
@@ -115,7 +115,7 @@ pub enum HostPatternError {
     InvalidCharacters {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Labels must not begin or end with a hyphen.
@@ -123,7 +123,7 @@ pub enum HostPatternError {
     InvalidLabelEdge {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// Individual labels may not exceed 63 characters.
@@ -131,7 +131,7 @@ pub enum HostPatternError {
     LabelTooLong {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
     /// The full host (including dots) may not exceed 255 characters.
@@ -139,7 +139,7 @@ pub enum HostPatternError {
     HostTooLong {
         /// Original host pattern string.
         pattern: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 }

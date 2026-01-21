@@ -1,4 +1,4 @@
-//! Tests covering localisation helpers and fallback behaviour.
+//! Tests covering localization helpers and fallback behaviour.
 
 use std::sync::{Arc, Mutex, OnceLock};
 

@@ -2,7 +2,7 @@
 //!
 //! This module owns the global `Localizer` handle used throughout Netsuke so
 //! errors and diagnostics can render translated copy without threading
-//! localiser references everywhere. The default localiser uses the embedded
+//! localizer references everywhere. The default localizer uses the embedded
 //! English catalogue, while callers can override it (for example in `main`) to
 //! respect `--locale` or `NETSUKE_LOCALE`.
 
@@ -23,7 +23,7 @@ fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     })
 }
 
-/// Replace the global localiser used for error rendering.
+/// Replace the global localizer used for error rendering.
 pub fn set_localizer(localizer: Arc<dyn Localizer>) {
     let lock = localizer_storage();
     let mut guard = lock
@@ -32,7 +32,7 @@ pub fn set_localizer(localizer: Arc<dyn Localizer>) {
     *guard = localizer;
 }
 
-/// Returns the active localiser.
+/// Returns the active localizer.
 #[must_use]
 pub fn localizer() -> Arc<dyn Localizer> {
     let lock = localizer_storage();
@@ -42,7 +42,7 @@ pub fn localizer() -> Arc<dyn Localizer> {
     Arc::clone(&guard)
 }
 
-/// Scoped helper that restores the previous localiser when dropped.
+/// Scoped helper that restores the previous localizer when dropped.
 pub struct LocalizerGuard {
     previous: Arc<dyn Localizer>,
 }
@@ -53,7 +53,7 @@ impl Drop for LocalizerGuard {
     }
 }
 
-/// Override the localiser within a test scope.
+/// Override the localizer within a test scope.
 #[must_use]
 pub fn set_localizer_for_tests(new_localizer: Arc<dyn Localizer>) -> LocalizerGuard {
     let previous = localizer();
@@ -61,6 +61,7 @@ pub fn set_localizer_for_tests(new_localizer: Arc<dyn Localizer>) -> LocalizerGu
     LocalizerGuard { previous }
 }
 
+// Compile-time assertions that the public setters keep their signatures.
 const _: fn(Arc<dyn Localizer>) = set_localizer;
 const _: fn(Arc<dyn Localizer>) -> LocalizerGuard = set_localizer_for_tests;
 
@@ -72,7 +73,7 @@ pub struct LocalizedMessage {
 }
 
 impl LocalizedMessage {
-    /// Create a new localised message with no arguments.
+    /// Create a new localized message with no arguments.
     #[must_use]
     pub const fn new(key: &'static str) -> Self {
         Self {
@@ -113,7 +114,7 @@ impl fmt::Display for LocalizedMessage {
     }
 }
 
-/// Convenience helper to build a localised message.
+/// Convenience helper to build a localized message.
 #[must_use]
 pub const fn message(key: &'static str) -> LocalizedMessage {
     LocalizedMessage::new(key)

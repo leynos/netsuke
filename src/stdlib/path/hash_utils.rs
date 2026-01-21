@@ -14,8 +14,9 @@ use minijinja::{Error, ErrorKind};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
-use super::{fs_utils, io_helpers::io_to_error};
+use super::fs_utils;
 use crate::localization::{self, keys};
+use crate::stdlib::io_helpers::io_to_error;
 
 pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
     if alg.eq_ignore_ascii_case("sha256") {

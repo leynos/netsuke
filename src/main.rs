@@ -33,6 +33,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let runtime_locale = merged_cli
+        .locale
+        .as_deref()
+        .or(locale_hint.as_deref())
+        .or(env_locale.as_deref());
+    let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale));
+    localization::set_localizer(Arc::clone(&runtime_localizer));
+    cli::set_validation_localizer(Arc::clone(&runtime_localizer));
 
     let max_level = if merged_cli.verbose {
         Level::DEBUG

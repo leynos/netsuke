@@ -112,7 +112,7 @@ pub enum IrGenError {
         target_name: String,
         /// Rule identifier that was not declared.
         rule_name: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 
@@ -139,7 +139,7 @@ pub enum IrGenError {
         target_name: String,
         /// Set of rule identifiers provided simultaneously.
         rules: Vec<String>,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 
@@ -159,7 +159,7 @@ pub enum IrGenError {
     EmptyRule {
         /// Target lacking an associated rule.
         target_name: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 
@@ -183,7 +183,7 @@ pub enum IrGenError {
     DuplicateOutput {
         /// Outputs produced by more than one build edge.
         outputs: Vec<String>,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 
@@ -211,7 +211,7 @@ pub enum IrGenError {
         cycle: Vec<Utf8PathBuf>,
         /// Dependencies that could not be resolved during analysis.
         missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 
@@ -230,7 +230,7 @@ pub enum IrGenError {
         /// Underlying serialisation error.
         #[source]
         source: serde_json::Error,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 
@@ -255,7 +255,7 @@ pub enum IrGenError {
         command: String,
         /// Rendered snippet that failed validation.
         snippet: String,
-        /// Localised error message.
+        /// Localized error message.
         message: LocalizedMessage,
     },
 }

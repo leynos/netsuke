@@ -27,6 +27,7 @@ use std::{
 
 use super::{NetworkConfig, StdlibConfig, value_from_bytes};
 use crate::localization::{self, keys};
+use crate::stdlib::io_helpers::io_action_error;
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::fs_utf8::{Dir, File, OpenOptions};
 use minijinja::{
@@ -150,9 +151,8 @@ fn fetch_remote_with_cache(
     let mut file = cache.open_writer()?;
     match read_response(url, response.into_reader(), limit, Some(&mut file)) {
         Ok(bytes) => {
-            file.sync_all().map_err(|err| {
-                io_error(keys::STDLIB_FETCH_ACTION_SYNC_CACHE, cache.path(), &err)
-            })?;
+            file.sync_all()
+                .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_SYNC_CACHE, cache.path(), err))?;
             Ok(bytes)
         }
         Err(err) => {
@@ -198,9 +198,9 @@ fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
     }
 
     root.create_dir_all(relative)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_CREATE_CACHE_DIR, relative, &err))?;
+        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_CREATE_CACHE_DIR, relative, err))?;
     root.open_dir(relative)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_DIR, relative, &err))
+        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_DIR, relative, err))
 }
 
 fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Error> {
@@ -211,7 +211,7 @@ fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Err
         Ok(mut file) => {
             let metadata = dir
                 .metadata(path)
-                .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_STAT_CACHE, path, &err))?;
+                .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_STAT_CACHE, path, err))?;
             if metadata.len() > limit {
                 return Err(response_limit_error_from_cache(name, limit));
             }
@@ -292,7 +292,7 @@ fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
     let mut options = OpenOptions::new();
     options.create(true).truncate(true).write(true);
     dir.open_with(path, &options)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_ENTRY, path, &err))
+        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_ENTRY, path, err))
 }
 
 fn response_limit_error(url: &Url, limit: u64) -> Error {
@@ -334,14 +334,12 @@ fn hex_string(bytes: &[u8]) -> String {
     out
 }
 
-fn io_error(action_key: &'static str, path: &Utf8Path, err: &io::Error) -> Error {
-    Error::new(
-        ErrorKind::InvalidOperation,
-        localization::message(keys::STDLIB_FETCH_IO_FAILED)
-            .with_arg("action", localization::message(action_key).to_string())
-            .with_arg("path", path.as_str())
-            .with_arg("details", err.to_string())
-            .to_string(),
+fn io_error(action_key: &'static str, path: &Utf8Path, err: io::Error) -> Error {
+    io_action_error(
+        keys::STDLIB_FETCH_IO_FAILED,
+        &localization::message(action_key),
+        path,
+        err,
     )
 }
 

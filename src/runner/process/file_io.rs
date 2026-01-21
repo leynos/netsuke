@@ -84,9 +84,9 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
         })
         .ok_or_else(|| {
             anyhow!(
-                "{}",
                 localization::message(keys::RUNNER_IO_NO_EXISTING_ANCESTOR)
                     .with_arg("path", path.as_str())
+                    .to_string()
             )
         })?;
     let relative = path
@@ -99,9 +99,9 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
 pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     let utf8_path = Utf8Path::from_path(path).ok_or_else(|| {
         anyhow!(
-            "{}",
             localization::message(keys::RUNNER_IO_NON_UTF8_PATH)
                 .with_arg("path", path.display().to_string())
+                .to_string()
         )
     })?;
     let (dir, relative) = derive_dir_and_relative(utf8_path)?;

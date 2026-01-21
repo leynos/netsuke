@@ -10,6 +10,7 @@
 mod collections;
 mod command;
 mod config;
+mod io_helpers;
 mod network;
 mod path;
 mod register;
