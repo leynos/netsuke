@@ -257,6 +257,14 @@ fn parse_define_keys_body(body: &str) -> Result<BTreeSet<String>, Box<dyn std::e
     Ok(keys)
 }
 
+/// Extracts localization key values from `keys.rs`.
+///
+/// Parses the `define_keys!` macro invocation to extract Fluent key identifiers.
+/// Expects entries of the form: `CONST_NAME => "fluent-key-id",` within the macro body.
+///
+/// # Errors
+///
+/// Returns an error if the macro cannot be parsed or no keys are found.
 fn extract_key_constants(path: &Path) -> Result<BTreeSet<String>, Box<dyn std::error::Error>> {
     let source = fs::read_to_string(path)?;
     let body = extract_define_keys_body(&source)?;
