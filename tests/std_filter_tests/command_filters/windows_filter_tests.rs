@@ -1,4 +1,8 @@
 //! Windows-only command filter tests.
+//!
+//! These tests cover shell bypass behavior (commands run directly without shell
+//! interpretation), streaming and handling of large outputs, and preservation of
+//! shell metacharacters when invoking external processes.
 
 use anyhow::{anyhow, ensure, Context, Result};
 use camino::Utf8PathBuf;
@@ -87,7 +91,7 @@ fn windows_command_setup(
         .map_err(|path| anyhow!("{}: {path:?}", ctx.root))?;
     let dir = Dir::open_ambient_dir(&root, ambient_authority()).context(ctx.dir)?;
     let helper = compile_rust_helper(&dir, &root, helper_name, helper_source)
-        .with_context(|| ctx.compile.to_string())?;
+        .context(ctx.compile)?;
 
     let mut path_value = OsString::from(root.as_str());
     path_value.push(";");
