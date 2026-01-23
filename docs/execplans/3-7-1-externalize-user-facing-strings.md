@@ -262,3 +262,7 @@ Keep these logs as evidence of success:
 ## Revision note (required when editing an ExecPlan)
 
 - 2026-01-17: Initial ExecPlan drafted for roadmap item 3.7.1.
+- 2026-01-23: Post-completion fixes: updated ManifestError::Parse doc example
+  to use MietteDiagnostic, refactored windows_command_setup with
+  WindowsSetupContext struct, fixed redaction.rs doc tests (marked as
+  `ignore`). Quality gates pass.

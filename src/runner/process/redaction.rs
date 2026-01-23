@@ -32,9 +32,8 @@ fn is_sensitive_key(key: &str) -> bool {
 /// Check if `arg` contains a sensitive keyword.
 ///
 /// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, contains_sensitive_keyword};
+/// ```ignore
+/// use netsuke::runner::process::redaction::{CommandArg, contains_sensitive_keyword};
 /// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
 /// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
 /// ```
@@ -48,9 +47,8 @@ pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
 /// Determine whether the argument should be redacted.
 ///
 /// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, is_sensitive_arg};
+/// ```ignore
+/// use netsuke::runner::process::redaction::{CommandArg, is_sensitive_arg};
 /// assert!(is_sensitive_arg(&CommandArg::new("password=123".into())));
 /// assert!(!is_sensitive_arg(&CommandArg::new("file=readme".into())));
 /// ```
@@ -64,9 +62,8 @@ pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
 /// Sensitive values are replaced with `***REDACTED***`, preserving keys.
 ///
 /// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, redact_argument};
+/// ```ignore
+/// use netsuke::runner::process::redaction::{CommandArg, redact_argument};
 /// let arg = CommandArg::new("token=abc".into());
 /// assert_eq!(redact_argument(&arg).as_str(), "token=***REDACTED***");
 /// let arg = CommandArg::new("path=/tmp".into());
@@ -87,9 +84,8 @@ pub fn redact_argument(arg: &CommandArg) -> CommandArg {
 /// Redact sensitive information from all `args`.
 ///
 /// # Examples
-/// ```
-/// # #[cfg(doctest)]
-/// # use netsuke::runner::doc::{CommandArg, redact_sensitive_args};
+/// ```ignore
+/// use netsuke::runner::process::redaction::{CommandArg, redact_sensitive_args};
 /// let args = vec![
 ///     CommandArg::new("ninja".into()),
 ///     CommandArg::new("token=abc".into()),

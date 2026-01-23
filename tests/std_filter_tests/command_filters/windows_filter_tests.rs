@@ -58,20 +58,36 @@ const ARGS_STUB: &str = concat!(
     "}\n",
 );
 
+/// Error context messages for Windows command helper setup.
+struct WindowsSetupContext {
+    tempdir: &'static str,
+    root: &'static str,
+    dir: &'static str,
+    compile: &'static str,
+}
+
+impl WindowsSetupContext {
+    const fn new(
+        tempdir: &'static str,
+        root: &'static str,
+        dir: &'static str,
+        compile: &'static str,
+    ) -> Self {
+        Self { tempdir, root, dir, compile }
+    }
+}
+
 fn windows_command_setup(
-    tempdir_context: &'static str,
-    root_context: &'static str,
-    dir_context: &'static str,
-    compile_context: &'static str,
+    ctx: WindowsSetupContext,
     helper_name: &str,
     helper_source: &str,
 ) -> Result<(tempfile::TempDir, EnvVarGuard, Utf8PathBuf)> {
-    let temp = tempdir().context(tempdir_context)?;
+    let temp = tempdir().context(ctx.tempdir)?;
     let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-        .map_err(|path| anyhow!("{root_context}: {path:?}"))?;
-    let dir = Dir::open_ambient_dir(&root, ambient_authority()).context(dir_context)?;
+        .map_err(|path| anyhow!("{}: {path:?}", ctx.root))?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority()).context(ctx.dir)?;
     let helper = compile_rust_helper(&dir, &root, helper_name, helper_source)
-        .with_context(|| compile_context.to_string())?;
+        .with_context(|| ctx.compile.to_string())?;
 
     let mut path_value = OsString::from(root.as_str());
     path_value.push(";");
@@ -85,10 +101,12 @@ fn windows_command_setup(
 fn grep_on_windows_bypasses_shell(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
     let (_temp, _path, _helper) = windows_command_setup(
-        "create windows grep tempdir",
-        "windows grep root is not valid UTF-8",
-        "open windows grep temp dir",
-        "compile grep helper for windows tests",
+        WindowsSetupContext::new(
+            "create windows grep tempdir",
+            "windows grep root is not valid UTF-8",
+            "open windows grep temp dir",
+            "compile grep helper for windows tests",
+        ),
         "grep",
         GREP_STUB,
     )?;
@@ -117,10 +135,12 @@ line2
 fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
     let (_temp, _path, _helper) = windows_command_setup(
-        "create windows grep stream tempdir",
-        "windows grep root is not valid UTF-8",
-        "open windows grep stream temp dir",
-        "compile streaming grep helper for windows tests",
+        WindowsSetupContext::new(
+            "create windows grep stream tempdir",
+            "windows grep root is not valid UTF-8",
+            "open windows grep stream temp dir",
+            "compile streaming grep helper for windows tests",
+        ),
         "grep",
         GREP_STREAM_STUB,
     )?;
@@ -163,10 +183,12 @@ fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
 fn shell_preserves_cmd_meta_characters(env_lock: EnvLock) -> Result<()> {
     let _lock = env_lock;
     let (_temp, _path, exe) = windows_command_setup(
-        "create windows shell tempdir",
-        "windows shell root is not valid UTF-8",
-        "open windows shell temp dir",
-        "compile echo_args helper for windows tests",
+        WindowsSetupContext::new(
+            "create windows shell tempdir",
+            "windows shell root is not valid UTF-8",
+            "open windows shell temp dir",
+            "compile echo_args helper for windows tests",
+        ),
         "echo_args",
         ARGS_STUB,
     )?;
