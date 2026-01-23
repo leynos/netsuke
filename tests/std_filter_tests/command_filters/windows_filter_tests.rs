@@ -1,6 +1,6 @@
 //! Windows-only command filter tests.
 //!
-//! These tests cover shell bypass behavior (commands run directly without shell
+//! These tests cover shell bypass behaviour (commands run directly without shell
 //! interpretation), streaming and handling of large outputs, and preservation of
 //! shell metacharacters when invoking external processes.
 
