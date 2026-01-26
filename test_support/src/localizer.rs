@@ -12,7 +12,7 @@ pub fn localizer_test_lock() -> MutexGuard<'static, ()> {
     LOCALIZER_TEST_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .expect("localizer test lock poisoned")
 }
 
 /// Install the English localizer for tests.

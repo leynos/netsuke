@@ -41,7 +41,7 @@ pub fn ensure_manifest_exists(temp_dir: &Utf8Path, cli_file: &Utf8Path) -> io::R
 
     if manifest_path.is_dir() {
         return Err(io::Error::new(
-            io::ErrorKind::NotADirectory,
+            io::ErrorKind::IsADirectory,
             format!(
                 "Manifest path points to a directory, expected a file: {}",
                 manifest_path
@@ -208,7 +208,7 @@ mod tests {
 
         let err = ensure_manifest_exists(temp_path, Utf8Path::new("dir"))
             .expect_err("existing directory should be rejected");
-        assert_eq!(err.kind(), io::ErrorKind::NotADirectory);
+        assert_eq!(err.kind(), io::ErrorKind::IsADirectory);
         let msg = err.to_string();
         let dir_str = dir
             .to_str()
