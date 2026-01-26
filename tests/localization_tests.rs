@@ -18,29 +18,20 @@ fn which_message(command: &str) -> String {
 }
 
 #[rstest]
-fn localisation_uses_spanish_messages() -> Result<()> {
+#[case("es-ES", "no encontrado")]
+#[case("fr-FR", "not found")]
+fn localisation_resolves_expected_message(
+    #[case] locale: &str,
+    #[case] expected_substring: &str,
+) -> Result<()> {
     let _lock = localizer_test_lock();
-    let localizer = cli_localization::build_localizer(Some("es-ES"));
+    let localizer = cli_localization::build_localizer(Some(locale));
     let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
 
     let message = which_message("tool");
     ensure!(
-        message.contains("no encontrado"),
-        "expected Spanish translation, got: {message}"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn localisation_falls_back_to_english_for_unknown_locale() -> Result<()> {
-    let _lock = localizer_test_lock();
-    let localizer = cli_localization::build_localizer(Some("fr-FR"));
-    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
-
-    let message = which_message("tool");
-    ensure!(
-        message.contains("not found"),
-        "expected English fallback, got: {message}"
+        message.contains(expected_substring),
+        "expected message to contain {expected_substring:?} for locale {locale}, got: {message}"
     );
     Ok(())
 }
