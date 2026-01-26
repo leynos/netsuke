@@ -24,7 +24,7 @@ fn localisation_resolves_expected_message(
     #[case] locale: &str,
     #[case] expected_substring: &str,
 ) -> Result<()> {
-    let _lock = localizer_test_lock();
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let localizer = cli_localization::build_localizer(Some(locale));
     let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
 

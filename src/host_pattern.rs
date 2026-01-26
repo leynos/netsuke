@@ -331,7 +331,7 @@ mod tests {
     #[case("exa mple.com")]
     #[case("*.bad-.test")]
     fn host_pattern_rejects_invalid_shapes(#[case] pattern: &str) {
-        let _lock = localizer_test_lock();
+        let _lock = localizer_test_lock().expect("localizer test lock poisoned");
         let _guard = set_en_localizer();
         let err = HostPattern::parse(pattern).expect_err("invalid pattern should fail");
         let message = err.to_string();

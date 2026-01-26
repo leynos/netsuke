@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn map_data_error_formats_message_and_code() -> Result<()> {
-        let _lock = localizer_test_lock();
+        let _lock = localizer_test_lock().expect("localizer test lock poisoned");
         let _guard = set_en_localizer();
         let name = ManifestName::new("test.json");
         let err = serde_json::from_str::<Value>("{\"key\":}")
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn map_data_error_is_wrapped_by_manifest_error() -> Result<()> {
-        let _lock = localizer_test_lock();
+        let _lock = localizer_test_lock().expect("localizer test lock poisoned");
         let _guard = set_en_localizer();
         let name = ManifestName::new("example");
         let err = serde_json::from_str::<Value>("not json")

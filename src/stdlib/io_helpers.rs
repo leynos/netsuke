@@ -140,7 +140,7 @@ mod tests {
         "unexpected end of file"
     )]
     fn io_to_error_includes_label(#[case] err: io::Error, #[case] expected_label: &str) {
-        let _lock = localizer_test_lock();
+        let _lock = localizer_test_lock().expect("localizer test lock poisoned");
         let _guard = set_en_localizer();
         let path = Utf8PathBuf::from("/tmp/example");
         let error = io_to_error(

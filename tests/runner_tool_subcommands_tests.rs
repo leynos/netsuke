@@ -33,7 +33,11 @@ fn ninja_with_exit_code(
 
 /// Helper: test that a command fails when ninja exits with non-zero status.
 fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
-    let _lock = localizer_test_lock();
+    #[expect(
+        clippy::expect_used,
+        reason = "test lock poisoning indicates prior test panic and should fail fast"
+    )]
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
     let (_ninja_dir, _ninja_path, _ninja_guard) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
@@ -99,7 +103,11 @@ fn assert_subcommand_fails_with_invalid_manifest(
     command: Commands,
     name: &'static str,
 ) -> Result<()> {
-    let _lock = localizer_test_lock();
+    #[expect(
+        clippy::expect_used,
+        reason = "test lock poisoning indicates prior test panic and should fail fast"
+    )]
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
     let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
     let manifest_path = temp.path().join("Netsukefile");

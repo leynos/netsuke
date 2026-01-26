@@ -136,7 +136,7 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     }
 
     let mut edges: Vec<_> = graph.targets.values().collect();
-    edges.sort_by(|a, b| path_key(&a.explicit_outputs).cmp(&path_key(&b.explicit_outputs)));
+    edges.sort_by_key(|a| path_key(&a.explicit_outputs));
     let mut seen = HashSet::new();
     for edge in edges {
         let key = path_key(&edge.explicit_outputs);

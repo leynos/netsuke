@@ -2,17 +2,16 @@
 
 use netsuke::cli_localization;
 use netsuke::localization::{self, LocalizerGuard};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// Mutex used to serialize process-wide localizer mutations in tests.
 pub static LOCALIZER_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 /// Acquire the global localizer test lock.
-pub fn localizer_test_lock() -> MutexGuard<'static, ()> {
+pub fn localizer_test_lock() -> Result<MutexGuard<'static, ()>, PoisonError<MutexGuard<'static, ()>>> {
     LOCALIZER_TEST_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .expect("localizer test lock poisoned")
 }
 
 /// Install the English localizer for tests.

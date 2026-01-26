@@ -49,7 +49,7 @@ fn parse_macro_name_extracts_identifier(
 #[case("(name)", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
 #[case("   ", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
 fn parse_macro_name_errors(#[case] signature: &str, #[case] key: &'static str) -> AnyResult<()> {
-    let _lock = localizer_test_lock();
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
     let expected = localization::message(key).to_string();
     match parse_macro_name(signature) {
@@ -164,7 +164,7 @@ fn register_macro_is_reusable(mut strict_env: Environment<'static>) -> AnyResult
 
 #[rstest]
 fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>) -> AnyResult<()> {
-    let _lock = localizer_test_lock();
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
     let mut mapping = ManifestMap::new();
     mapping.insert(
@@ -186,7 +186,7 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>
 fn register_manifest_macros_rejects_non_string_values(
     mut strict_env: Environment<'static>,
 ) -> AnyResult<()> {
-    let _lock = localizer_test_lock();
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
@@ -237,7 +237,7 @@ macros:
 
 #[rstest]
 fn register_manifest_macros_requires_body(mut strict_env: Environment<'static>) -> AnyResult<()> {
-    let _lock = localizer_test_lock();
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));

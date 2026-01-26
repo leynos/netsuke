@@ -37,7 +37,11 @@ type EnLocalizerFixture = (
 
 #[fixture]
 fn en_localizer() -> EnLocalizerFixture {
-    let lock = localizer_test_lock();
+    #[expect(
+        clippy::expect_used,
+        reason = "fixture should fail fast when test lock is poisoned"
+    )]
+    let lock = localizer_test_lock().expect("localizer test lock poisoned");
     let localizer = cli_localization::build_localizer(Some("en-US"));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
     (lock, guard)
