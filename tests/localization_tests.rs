@@ -1,20 +1,13 @@
 //! Tests covering localization helpers and fallback behaviour.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Result, ensure};
 use rstest::rstest;
-use test_support::localizer::LOCALIZER_TEST_LOCK;
+use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
 use netsuke::localization::{self, keys};
-
-fn localizer_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    LOCALIZER_TEST_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
 
 fn which_message(command: &str) -> String {
     localization::message(keys::STDLIB_WHICH_NOT_FOUND)

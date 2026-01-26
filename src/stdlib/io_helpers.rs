@@ -10,36 +10,60 @@ use minijinja::{Error, ErrorKind};
 
 use crate::localization::{self, LocalizedMessage, keys};
 
+/// Variants for IO error message formatting.
+enum IoMessageVariant {
+    /// No detail available; use label only.
+    Failed,
+    /// Detail contains the label; use detail only.
+    FailedWithDetail,
+    /// Detail does not contain label; use both.
+    FailedWithLabelAndDetail,
+}
+
+/// Determine which message variant to use based on detail and label content.
+fn io_message_variant(detail: &str, label: &str) -> IoMessageVariant {
+    if detail.is_empty() {
+        IoMessageVariant::Failed
+    } else if detail
+        .to_lowercase()
+        .contains(label.to_lowercase().as_str())
+    {
+        IoMessageVariant::FailedWithDetail
+    } else {
+        IoMessageVariant::FailedWithLabelAndDetail
+    }
+}
+
 pub(crate) fn io_to_error(path: &Utf8Path, action: &LocalizedMessage, err: io::Error) -> Error {
     let io_kind = err.kind();
     let label = localization::message(io_error_kind_label(io_kind)).to_string();
-    let label_lower = label.to_lowercase();
     let action_text = action.to_string();
     let detail = err.to_string();
-    let detail_lower = detail.to_lowercase();
 
-    let message = if detail.is_empty() {
-        localization::message(keys::STDLIB_PATH_IO_FAILED)
+    let message = match io_message_variant(&detail, &label) {
+        IoMessageVariant::Failed => localization::message(keys::STDLIB_PATH_IO_FAILED)
             .with_arg("action", &action_text)
             .with_arg("path", path.as_str())
             .with_arg("label", &label)
             .with_arg("kind", format!("{io_kind:?}"))
-            .to_string()
-    } else if detail_lower.contains(label_lower.as_str()) {
-        localization::message(keys::STDLIB_PATH_IO_FAILED_WITH_DETAIL)
-            .with_arg("action", &action_text)
-            .with_arg("path", path.as_str())
-            .with_arg("detail", &detail)
-            .with_arg("kind", format!("{io_kind:?}"))
-            .to_string()
-    } else {
-        localization::message(keys::STDLIB_PATH_IO_FAILED_WITH_LABEL_AND_DETAIL)
-            .with_arg("action", &action_text)
-            .with_arg("path", path.as_str())
-            .with_arg("label", &label)
-            .with_arg("kind", format!("{io_kind:?}"))
-            .with_arg("detail", &detail)
-            .to_string()
+            .to_string(),
+        IoMessageVariant::FailedWithDetail => {
+            localization::message(keys::STDLIB_PATH_IO_FAILED_WITH_DETAIL)
+                .with_arg("action", &action_text)
+                .with_arg("path", path.as_str())
+                .with_arg("detail", &detail)
+                .with_arg("kind", format!("{io_kind:?}"))
+                .to_string()
+        }
+        IoMessageVariant::FailedWithLabelAndDetail => {
+            localization::message(keys::STDLIB_PATH_IO_FAILED_WITH_LABEL_AND_DETAIL)
+                .with_arg("action", &action_text)
+                .with_arg("path", path.as_str())
+                .with_arg("label", &label)
+                .with_arg("kind", format!("{io_kind:?}"))
+                .with_arg("detail", &detail)
+                .to_string()
+        }
     };
 
     Error::new(ErrorKind::InvalidOperation, message).with_source(err)
@@ -103,6 +127,7 @@ mod tests {
     use super::*;
     use camino::Utf8PathBuf;
     use rstest::rstest;
+    use test_support::{localizer_test_lock, set_en_localizer};
 
     #[rstest]
     #[case(io::Error::new(io::ErrorKind::NotFound, ""), "not found")]
@@ -115,6 +140,8 @@ mod tests {
         "unexpected end of file"
     )]
     fn io_to_error_includes_label(#[case] err: io::Error, #[case] expected_label: &str) {
+        let _lock = localizer_test_lock();
+        let _guard = set_en_localizer();
         let path = Utf8PathBuf::from("/tmp/example");
         let error = io_to_error(
             path.as_path(),

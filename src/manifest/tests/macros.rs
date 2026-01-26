@@ -4,14 +4,12 @@ use super::super::jinja_macros::{
 };
 use super::super::{ManifestMap, ManifestValue};
 use crate::ast::MacroDefinition;
-use crate::cli_localization;
 use crate::localization::{self, keys};
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use minijinja::value::{Kwargs, Value};
 use minijinja::{Environment, UndefinedBehavior};
 use rstest::{fixture, rstest};
-use std::sync::Arc;
-use test_support::localizer_test_lock;
+use test_support::{localizer_test_lock, set_en_localizer};
 
 struct MacroRenderCase<'a> {
     signature: &'a str,
@@ -52,8 +50,7 @@ fn parse_macro_name_extracts_identifier(
 #[case("   ", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
 fn parse_macro_name_errors(#[case] signature: &str, #[case] key: &'static str) -> AnyResult<()> {
     let _lock = localizer_test_lock();
-    let localizer = cli_localization::build_localizer(Some("en-US"));
-    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    let _guard = set_en_localizer();
     let expected = localization::message(key).to_string();
     match parse_macro_name(signature) {
         Ok(name) => Err(anyhow!(
@@ -167,6 +164,8 @@ fn register_macro_is_reusable(mut strict_env: Environment<'static>) -> AnyResult
 
 #[rstest]
 fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>) -> AnyResult<()> {
+    let _lock = localizer_test_lock();
+    let _guard = set_en_localizer();
     let mut mapping = ManifestMap::new();
     mapping.insert(
         "macros".into(),
@@ -187,6 +186,8 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>
 fn register_manifest_macros_rejects_non_string_values(
     mut strict_env: Environment<'static>,
 ) -> AnyResult<()> {
+    let _lock = localizer_test_lock();
+    let _guard = set_en_localizer();
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
     macro_mapping.insert(
@@ -236,6 +237,8 @@ macros:
 
 #[rstest]
 fn register_manifest_macros_requires_body(mut strict_env: Environment<'static>) -> AnyResult<()> {
+    let _lock = localizer_test_lock();
+    let _guard = set_en_localizer();
     let mut macro_mapping = ManifestMap::new();
     macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
     let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
