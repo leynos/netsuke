@@ -7,10 +7,21 @@
 //! diagnostics with spans, hints, and stable diagnostic codes.
 //
 // Module-level suppression for version-dependent lint false positives from
-// miette/thiserror derive macros. The unused_assignments lint fires in some
-// Rust versions but not others. Since `#[expect]` fails when the lint doesn't
-// fire, and `unfulfilled_lint_expectations` cannot be expected, we must use
-// `#[allow]` here. FIXME: remove once upstream is fixed.
+// miette/thiserror derive macros.
+//
+// Rationale:
+// - The `unused_assignments` lint fires in some Rust versions but not others
+//   due to generated code in the derive macros. Since `#[expect]` fails when
+//   the lint doesn't fire, and `unfulfilled_lint_expectations` cannot itself
+//   be expected, we must use `#[allow]` here.
+// - The `clippy::allow_attributes` lints complain about using `#[allow]`
+//   itself, creating a circular dependency—scoping the suppression to item
+//   level with `#[allow]` would still trigger these same clippy lints.
+//
+// FIXME: Once upstream miette/thiserror fixes the version-dependent behaviour,
+// remove this module-level suppression and replace with item-level
+// `#[expect(..., reason = "...")]` on the two Error derives (`ManifestError`
+// and `DataError`).
 #![allow(
     clippy::allow_attributes,
     clippy::allow_attributes_without_reason,
