@@ -32,16 +32,18 @@ pub(crate) fn configure_stdlib_text(world: &TestWorld, lines: usize, line: &str)
 }
 
 #[given("the localisation locale is {locale:string}")]
-pub(crate) fn configure_localisation(world: &TestWorld, locale: &str) {
+pub(crate) fn configure_localisation(
+    world: &TestWorld,
+    locale: &str,
+) -> Result<(), std::sync::PoisonError<std::sync::MutexGuard<'static, ()>>> {
+    // Acquire the lock first, before releasing any existing guards.
+    let lock = localizer_test_lock()?;
+    // Now safe to release previous guards while holding the new lock.
     world.localization_guard.take_value();
     world.localization_lock.take_value();
-    #[expect(
-        clippy::expect_used,
-        reason = "BDD step should fail fast when test lock is poisoned"
-    )]
-    let lock = localizer_test_lock().expect("localizer test lock poisoned");
     let localizer = cli_localization::build_localizer(Some(locale));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
     world.localization_lock.set_value(lock);
     world.localization_guard.set_value(guard);
+    Ok(())
 }
