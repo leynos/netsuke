@@ -37,7 +37,9 @@ type EnLocalizerFixture = (
 
 #[fixture]
 fn en_localizer() -> Result<EnLocalizerFixture> {
-    let lock = localizer_test_lock().map_err(|e| anyhow!("localizer test lock poisoned: {e}"))?;
+    let lock = localizer_test_lock()
+        .map_err(|e| anyhow!("{e}"))
+        .context("localizer test lock poisoned")?;
     let localizer = cli_localization::build_localizer(Some("en-US"));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
     Ok((lock, guard))
@@ -82,6 +84,26 @@ fn parse_error_msg(yaml: &str) -> Result<String> {
         )),
         Err(err) => Ok(display_error_chain(err.as_ref())),
     }
+}
+
+/// Helper to assert that a glob pattern produces an error message containing expected substrings.
+fn assert_glob_error_contains(
+    en_localizer: Result<EnLocalizerFixture>,
+    pattern: &str,
+    expected_substrings: &[&str],
+) -> Result<()> {
+    let (_lock, _guard) = en_localizer?;
+    let yaml = manifest_yaml(&format!(
+        "targets:\n  - foreach: glob('{pattern}')\n    name: bad\n    command: echo hi\n"
+    ));
+    let msg = parse_error_msg(&yaml)?;
+    for substring in expected_substrings {
+        ensure!(
+            msg.contains(substring),
+            "expected '{substring}' in error: {msg}"
+        );
+    }
+    Ok(())
 }
 
 #[fixture]
@@ -188,13 +210,11 @@ fn test_glob_behavior(temp_dir: tempfile::TempDir, #[case] case: GlobTestCase) -
 
 #[rstest]
 fn glob_unmatched_bracket_errors(en_localizer: Result<EnLocalizerFixture>) -> Result<()> {
-    let (_lock, _guard) = en_localizer?;
-    let yaml =
-        manifest_yaml("targets:\n  - foreach: glob('[')\n    name: bad\n    command: echo hi\n");
-    let msg = parse_error_msg(&yaml)?;
-    ensure!(msg.contains("Invalid glob pattern"), "{msg}");
-    ensure!(msg.contains("Pattern syntax error"), "{msg}");
-    Ok(())
+    assert_glob_error_contains(
+        en_localizer,
+        "[",
+        &["Invalid glob pattern", "Pattern syntax error"],
+    )
 }
 
 #[rstest]
@@ -241,26 +261,14 @@ fn glob_unmatched_brace_errors_with_escapes(
 fn glob_unmatched_opening_brace_reports_position(
     en_localizer: Result<EnLocalizerFixture>,
 ) -> Result<()> {
-    let (_lock, _guard) = en_localizer?;
-    let yaml =
-        manifest_yaml("targets:\n  - foreach: glob('{')\n    name: bad\n    command: echo hi\n");
-    let msg = parse_error_msg(&yaml)?;
-    ensure!(msg.contains("unmatched"), "{msg}");
-    ensure!(msg.contains("position"), "{msg}");
-    Ok(())
+    assert_glob_error_contains(en_localizer, "{", &["unmatched", "position"])
 }
 
 #[rstest]
 fn glob_unmatched_closing_brace_reports_position(
     en_localizer: Result<EnLocalizerFixture>,
 ) -> Result<()> {
-    let (_lock, _guard) = en_localizer?;
-    let yaml =
-        manifest_yaml("targets:\n  - foreach: glob('foo}')\n    name: bad\n    command: echo hi\n");
-    let msg = parse_error_msg(&yaml)?;
-    ensure!(msg.contains("unmatched"), "{msg}");
-    ensure!(msg.contains("position"), "{msg}");
-    Ok(())
+    assert_glob_error_contains(en_localizer, "foo}", &["unmatched", "position"])
 }
 
 #[rstest]
