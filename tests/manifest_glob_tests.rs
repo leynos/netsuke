@@ -38,7 +38,7 @@ type EnLocalizerFixture = (
 #[fixture]
 fn en_localizer() -> Result<EnLocalizerFixture> {
     let lock = localizer_test_lock()
-        .map_err(|e| anyhow!("{e}"))
+        .map_err(|e| anyhow::Error::msg(e.to_string()))
         .context("localizer test lock poisoned")?;
     let localizer = cli_localization::build_localizer(Some("en-US"));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
