@@ -40,7 +40,7 @@ pub(crate) fn configure_localisation(
     world.localization_guard.take_value();
 
     // Reuse existing lock if present to avoid deadlock; otherwise acquire a new one.
-    // Using take_value().or_else() combines the check and take into a single operation.
+    // Using take_value().map_or_else() combines the check and take into a single operation.
     let lock = world
         .localization_lock
         .take_value()

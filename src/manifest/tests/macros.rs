@@ -38,7 +38,7 @@ type EnLocalizerFixture = (
 #[fixture]
 fn en_localizer() -> AnyResult<EnLocalizerFixture> {
     let lock = localizer_test_lock()
-        .map_err(|e| anyhow!("{e}"))
+        .map_err(|e| anyhow::Error::msg(e.to_string()))
         .context("localizer test lock poisoned")?;
     let localizer = crate::cli_localization::build_localizer(Some("en-US"));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
@@ -193,7 +193,10 @@ fn assert_macro_registration_fails(
         Ok(()) => Err(anyhow!("{fail_message}")),
         Err(err) => {
             let expected = localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID).to_string();
-            ensure!(err.to_string().contains(&expected), "{err}");
+            ensure!(
+                err.to_string().contains(&expected),
+                "expected error to contain {expected:?}, got {err:?}"
+            );
             Ok(())
         }
     }
