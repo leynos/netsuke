@@ -36,21 +36,19 @@ pub(crate) fn configure_localisation(
     world: &TestWorld,
     locale: &str,
 ) -> Result<(), std::sync::PoisonError<std::sync::MutexGuard<'static, ()>>> {
-    // Release existing guards first.
+    // Release existing localizer guard first.
     world.localization_guard.take_value();
 
     // Reuse existing lock if present to avoid deadlock; otherwise acquire a new one.
-    let lock = if world.localization_lock.is_some() {
-        world.localization_lock.take_value()
-    } else {
-        Some(localizer_test_lock()?)
-    };
+    // Using take_value().or_else() combines the check and take into a single operation.
+    let lock = world
+        .localization_lock
+        .take_value()
+        .map_or_else(|| localizer_test_lock(), Ok)?;
 
     let localizer = cli_localization::build_localizer(Some(locale));
     let guard = localization::set_localizer_for_tests(Arc::from(localizer));
-    if let Some(l) = lock {
-        world.localization_lock.set_value(l);
-    }
+    world.localization_lock.set_value(lock);
     world.localization_guard.set_value(guard);
     Ok(())
 }
