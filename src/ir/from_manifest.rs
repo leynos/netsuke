@@ -7,6 +7,7 @@ use camino::Utf8PathBuf;
 
 use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
 use crate::hasher::ActionHasher;
+use crate::localization::{self, keys};
 
 use super::{
     cmd_interpolate::interpolate_command,
@@ -97,7 +98,11 @@ impl BuildGraph {
             };
 
             if let Some(dups) = find_duplicates(&outputs, targets) {
-                return Err(IrGenError::DuplicateOutput { outputs: dups });
+                return Err(IrGenError::DuplicateOutput {
+                    message: localization::message(keys::IR_DUPLICATE_OUTPUTS)
+                        .with_arg("outputs", format!("{dups:?}")),
+                    outputs: dups,
+                });
             }
             for out in outputs {
                 targets.insert(out, edge.clone());
@@ -116,9 +121,12 @@ impl BuildGraph {
             missing_dependencies,
         } = cycle::analyse(&self.targets);
         if let Some(detected_cycle) = cycle {
+            let message = localization::message(keys::IR_CIRCULAR_DEPENDENCY)
+                .with_arg("cycle", format!("{detected_cycle:?}"));
             return Err(IrGenError::CircularDependency {
                 cycle: detected_cycle,
                 missing_dependencies,
+                message,
             });
         }
         Ok(())
@@ -154,7 +162,11 @@ fn register_action(
         pool: None,
         restat: false,
     };
-    let hash = ActionHasher::hash(&action).map_err(IrGenError::ActionSerialisation)?;
+    let hash = ActionHasher::hash(&action).map_err(|err| IrGenError::ActionSerialisation {
+        message: localization::message(keys::IR_ACTION_SERIALISATION)
+            .with_arg("details", err.to_string()),
+        source: err,
+    })?;
     actions.entry(hash.clone()).or_insert(action);
     Ok(hash)
 }
@@ -197,12 +209,18 @@ fn resolve_rule(
             if rules.is_empty() {
                 Err(IrGenError::EmptyRule {
                     target_name: target_name.to_owned(),
+                    message: localization::message(keys::IR_EMPTY_RULE)
+                        .with_arg("target", target_name),
                 })
             } else {
                 rules.sort();
+                let rules_message = format!("{rules:?}");
                 Err(IrGenError::MultipleRules {
                     target_name: target_name.to_owned(),
                     rules,
+                    message: localization::message(keys::IR_MULTIPLE_RULES)
+                        .with_arg("target", target_name)
+                        .with_arg("rules", rules_message),
                 })
             }
         },
@@ -213,6 +231,9 @@ fn resolve_rule(
                 .ok_or_else(|| IrGenError::RuleNotFound {
                     target_name: target_name.to_owned(),
                     rule_name: name.to_owned(),
+                    message: localization::message(keys::IR_RULE_NOT_FOUND)
+                        .with_arg("target", target_name)
+                        .with_arg("rule", name),
                 })
         },
     )

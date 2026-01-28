@@ -90,7 +90,7 @@ Feature: CLI parsing
   Scenario: Blocklist overrides allowlist for network policy flags
     When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"
     Then parsing succeeds
-    And the CLI network policy rejects "https://example.com" with "host 'example.com' is blocked"
+    And the CLI network policy rejects "https://example.com" with "blocked by policy"
 
   Scenario: CLI parses single-quoted argument with space
     When the CLI is parsed with "--file 'my manifest.yml' manifest out.ninja"

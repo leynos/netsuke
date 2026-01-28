@@ -14,7 +14,9 @@ use minijinja::{Error, ErrorKind};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
 
-use super::{fs_utils, io_helpers::io_to_error};
+use super::fs_utils;
+use crate::localization::{self, keys};
+use crate::stdlib::io_helpers::io_to_error;
 
 pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> {
     if alg.eq_ignore_ascii_case("sha256") {
@@ -30,7 +32,10 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
         {
             Err(Error::new(
                 ErrorKind::InvalidOperation,
-                "unsupported hash algorithm 'sha1' (enable feature 'legacy-digests')",
+                localization::message(keys::STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM_LEGACY)
+                    .with_arg("algorithm", "sha1")
+                    .with_arg("feature", "legacy-digests")
+                    .to_string(),
             ))
         }
     } else if alg.eq_ignore_ascii_case("md5") {
@@ -42,13 +47,18 @@ pub(super) fn compute_hash(path: &Utf8Path, alg: &str) -> Result<String, Error> 
         {
             Err(Error::new(
                 ErrorKind::InvalidOperation,
-                "unsupported hash algorithm 'md5' (enable feature 'legacy-digests')",
+                localization::message(keys::STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM_LEGACY)
+                    .with_arg("algorithm", "md5")
+                    .with_arg("feature", "legacy-digests")
+                    .to_string(),
             ))
         }
     } else {
         Err(Error::new(
             ErrorKind::InvalidOperation,
-            format!("unsupported hash algorithm '{alg}'"),
+            localization::message(keys::STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM)
+                .with_arg("algorithm", alg)
+                .to_string(),
         ))
     }
 }
@@ -68,9 +78,13 @@ where
     let mut hasher = H::new();
     let mut buffer = [0_u8; 8192];
     loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|err| io_to_error(path, "read", err))?;
+        let read = file.read(&mut buffer).map_err(|err| {
+            io_to_error(
+                path,
+                &localization::message(keys::STDLIB_PATH_ACTION_READ),
+                err,
+            )
+        })?;
         if read == 0 {
             break;
         }

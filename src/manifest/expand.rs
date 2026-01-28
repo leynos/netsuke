@@ -1,5 +1,6 @@
 //! Expands manifest foreach directives into concrete targets.
 use super::{ManifestMap, ManifestValue};
+use crate::localization::{self, keys};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
@@ -59,7 +60,7 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
     let seq = eval_expression(env, "foreach", expr, context! {})?;
     let iter = seq
         .try_iter()
-        .context("foreach expression did not yield an iterable")?;
+        .context(localization::message(keys::MANIFEST_FOREACH_NOT_ITERABLE))?;
     Ok(iter.collect())
 }
 
@@ -75,21 +76,25 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
 ///
 /// Empty expressions are rejected as invalid.
 fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
-    anyhow::ensure!(!expr.is_empty(), "empty when expression");
+    anyhow::ensure!(
+        !expr.is_empty(),
+        "{}",
+        localization::message(keys::MANIFEST_WHEN_EMPTY)
+    );
 
     // Try expression compilation first - this handles plain expressions
     // like "item > 1" or "true" without needing template delimiters.
     if let Ok(compiled) = env.compile_expression(expr) {
-        let result = compiled
-            .eval(ctx)
-            .with_context(|| format!("when expression evaluation error for '{expr}'"))?;
+        let result = compiled.eval(ctx).with_context(|| {
+            localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expr)
+        })?;
         return Ok(result.is_true());
     }
 
     // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
-    let rendered = env
-        .render_str(expr, ctx)
-        .with_context(|| format!("when template evaluation error for '{expr}'"))?;
+    let rendered = env.render_str(expr, ctx).with_context(|| {
+        localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", expr)
+    })?;
     // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
     Ok(matches!(
         rendered.trim().to_lowercase().as_str(),
@@ -126,19 +131,25 @@ fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> R
                 ManifestValue::Object(_) => value,
                 other => {
                     return Err(anyhow::anyhow!(
-                        "target.vars must be an object, got: {other:?}"
+                        "{}",
+                        localization::message(keys::MANIFEST_TARGET_VARS_NOT_OBJECT)
+                            .with_arg("value", format!("{other:?}"))
                     ));
                 }
             }
         }
     };
 
-    let vars = vars_value
-        .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("vars entry ensured to be an object"))?;
+    let vars = vars_value.as_object_mut().ok_or_else(|| {
+        anyhow::anyhow!(
+            "{}",
+            localization::message(keys::MANIFEST_VARS_ENTRY_NOT_OBJECT)
+        )
+    })?;
     vars.insert(
         "item".into(),
-        serde_json::to_value(item).context("serialise item")?,
+        serde_json::to_value(item)
+            .context(localization::message(keys::MANIFEST_FOREACH_SERIALISE_ITEM))?,
     );
     let index_value = ManifestValue::Number(JsonNumber::from(index as u64));
     vars.insert("index".into(), index_value);
@@ -146,16 +157,23 @@ fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> R
 }
 
 fn as_str<'a>(value: &'a ManifestValue, field: &str) -> Result<&'a str> {
-    value
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("{field} must be a string expression"))
+    value.as_str().ok_or_else(|| {
+        anyhow::anyhow!(
+            "{}",
+            localization::message(keys::MANIFEST_FIELD_NOT_STRING).with_arg("field", field)
+        )
+    })
 }
 
 fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Result<Value> {
     env.compile_expression(expr)
-        .with_context(|| format!("{name} expression parse error"))?
+        .with_context(|| {
+            localization::message(keys::MANIFEST_EXPRESSION_PARSE_ERROR).with_arg("name", name)
+        })?
         .eval(ctx)
-        .with_context(|| format!("{name} evaluation error"))
+        .with_context(|| {
+            localization::message(keys::MANIFEST_EXPRESSION_EVAL_ERROR).with_arg("name", name)
+        })
 }
 
 #[cfg(test)]

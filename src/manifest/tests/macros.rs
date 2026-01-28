@@ -4,10 +4,13 @@ use super::super::jinja_macros::{
 };
 use super::super::{ManifestMap, ManifestValue};
 use crate::ast::MacroDefinition;
+use crate::localization::{self, keys};
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use minijinja::value::{Kwargs, Value};
 use minijinja::{Environment, UndefinedBehavior};
 use rstest::{fixture, rstest};
+use std::sync::Arc;
+use test_support::localizer_test_lock;
 
 struct MacroRenderCase<'a> {
     signature: &'a str,
@@ -27,6 +30,21 @@ fn strict_env() -> Environment<'static> {
     env
 }
 
+type EnLocalizerFixture = (
+    std::sync::MutexGuard<'static, ()>,
+    crate::localization::LocalizerGuard,
+);
+
+#[fixture]
+fn en_localizer() -> AnyResult<EnLocalizerFixture> {
+    let lock = localizer_test_lock()
+        .map_err(|e| anyhow::Error::msg(e.to_string()))
+        .context("localizer test lock poisoned")?;
+    let localizer = crate::cli_localization::build_localizer(Some("en-US"));
+    let guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    Ok((lock, guard))
+}
+
 #[rstest]
 #[case("greet(name)", "greet")]
 #[case("shout(text='hi')", "shout")]
@@ -43,18 +61,24 @@ fn parse_macro_name_extracts_identifier(
 }
 
 #[rstest]
-#[case("greet", "include parameter list")]
-#[case("(name)", "missing an identifier")]
-#[case("   ", "missing an identifier")]
-fn parse_macro_name_errors(#[case] signature: &str, #[case] message: &str) -> AnyResult<()> {
+#[case("greet", keys::MANIFEST_MACRO_SIGNATURE_MISSING_PARAMS)]
+#[case("(name)", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
+#[case("   ", keys::MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER)]
+fn parse_macro_name_errors(
+    en_localizer: AnyResult<EnLocalizerFixture>,
+    #[case] signature: &str,
+    #[case] key: &'static str,
+) -> AnyResult<()> {
+    let (_lock, _guard) = en_localizer?;
+    let expected = localization::message(key).to_string();
     match parse_macro_name(signature) {
         Ok(name) => Err(anyhow!(
             "expected parse_macro_name to fail for {signature:?} but succeeded with {name}"
         )),
         Err(err) => {
             ensure!(
-                err.to_string().contains(message),
-                "expected error to contain {message:?}, got {err:?}"
+                err.to_string().contains(&expected),
+                "expected error to contain {expected:?}, got {err:?}"
             );
             Ok(())
         }
@@ -157,21 +181,21 @@ fn register_macro_is_reusable(mut strict_env: Environment<'static>) -> AnyResult
     Ok(())
 }
 
-#[rstest]
-fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>) -> AnyResult<()> {
-    let mut mapping = ManifestMap::new();
-    mapping.insert(
-        "macros".into(),
-        ManifestValue::Array(vec![ManifestValue::from(42)]),
-    );
-    let doc = ManifestValue::Object(mapping);
-    match register_manifest_macros(&doc, &mut strict_env) {
-        Ok(()) => Err(anyhow!("expected error for non-mapping macro entry")),
+/// Helper to verify macro registration fails with expected error.
+fn assert_macro_registration_fails(
+    en_localizer: AnyResult<EnLocalizerFixture>,
+    doc: &ManifestValue,
+    env: &mut Environment<'static>,
+    fail_message: &str,
+) -> AnyResult<()> {
+    let (_lock, _guard) = en_localizer?;
+    match register_manifest_macros(doc, env) {
+        Ok(()) => Err(anyhow!("{fail_message}")),
         Err(err) => {
+            let expected = localization::message(keys::MANIFEST_MACRO_SEQUENCE_INVALID).to_string();
             ensure!(
-                err.to_string()
-                    .contains("macros must be a sequence of mappings"),
-                "{err}"
+                err.to_string().contains(&expected),
+                "expected error to contain {expected:?}, got {err:?}"
             );
             Ok(())
         }
@@ -179,30 +203,58 @@ fn register_manifest_macros_validates_shape(mut strict_env: Environment<'static>
 }
 
 #[rstest]
-fn register_manifest_macros_rejects_non_string_values(
+fn register_manifest_macros_validates_shape(
     mut strict_env: Environment<'static>,
+    en_localizer: AnyResult<EnLocalizerFixture>,
 ) -> AnyResult<()> {
-    let mut macro_mapping = ManifestMap::new();
-    macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
-    macro_mapping.insert(
-        "body".into(),
-        ManifestValue::Number(serde_json::Number::from(42)),
+    let mut mapping = ManifestMap::new();
+    mapping.insert(
+        "macros".into(),
+        ManifestValue::Array(vec![ManifestValue::from(42)]),
     );
+    let doc = ManifestValue::Object(mapping);
+    assert_macro_registration_fails(
+        en_localizer,
+        &doc,
+        &mut strict_env,
+        "expected error for non-mapping macro entry",
+    )
+}
+
+/// Build a macro document from a mapping for testing.
+fn build_macro_doc(macro_mapping: ManifestMap) -> ManifestValue {
     let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
     let mut doc = ManifestMap::new();
     doc.insert("macros".into(), macros);
-    let doc_value = ManifestValue::Object(doc);
+    ManifestValue::Object(doc)
+}
 
-    match register_manifest_macros(&doc_value, &mut strict_env) {
-        Ok(()) => Err(anyhow!(
-            "register_manifest_macros should fail when macro body is not a string"
-        )),
-        Err(err) => {
-            let msg = err.to_string();
-            ensure!(msg.contains("macros"), "unexpected error: {msg}");
-            Ok(())
-        }
-    }
+#[rstest]
+#[case::non_string_body(
+    {
+        let mut m = ManifestMap::new();
+        m.insert("signature".into(), ManifestValue::from("greet(name)"));
+        m.insert("body".into(), ManifestValue::Number(serde_json::Number::from(42)));
+        m
+    },
+    "register_manifest_macros should fail when macro body is not a string"
+)]
+#[case::missing_body(
+    {
+        let mut m = ManifestMap::new();
+        m.insert("signature".into(), ManifestValue::from("greet(name)"));
+        m
+    },
+    "expected missing macro body to trigger an error"
+)]
+fn register_manifest_macros_invalid_macro_entry(
+    mut strict_env: Environment<'static>,
+    en_localizer: AnyResult<EnLocalizerFixture>,
+    #[case] macro_mapping: ManifestMap,
+    #[case] fail_message: &str,
+) -> AnyResult<()> {
+    let doc = build_macro_doc(macro_mapping);
+    assert_macro_registration_fails(en_localizer, &doc, &mut strict_env, fail_message)
 }
 
 #[test]
@@ -223,24 +275,6 @@ macros:
                     || msg.contains("mapping"),
                 "{msg}"
             );
-            Ok(())
-        }
-    }
-}
-
-#[rstest]
-fn register_manifest_macros_requires_body(mut strict_env: Environment<'static>) -> AnyResult<()> {
-    let mut macro_mapping = ManifestMap::new();
-    macro_mapping.insert("signature".into(), ManifestValue::from("greet(name)"));
-    let macros = ManifestValue::Array(vec![ManifestValue::Object(macro_mapping)]);
-    let mut doc = ManifestMap::new();
-    doc.insert("macros".into(), macros);
-    let doc_value = ManifestValue::Object(doc);
-
-    match register_manifest_macros(&doc_value, &mut strict_env) {
-        Ok(()) => Err(anyhow!("expected missing macro body to trigger an error")),
-        Err(err) => {
-            ensure!(err.to_string().contains("body"), "{err}");
             Ok(())
         }
     }

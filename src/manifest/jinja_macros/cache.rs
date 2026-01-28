@@ -1,5 +1,6 @@
 //! Macro caching and invocation helpers for manifest-defined Jinja macros.
 use super::call_macro_value;
+use crate::localization::{self, keys};
 use anyhow::Context;
 use minijinja::{
     AutoEscape, Environment, Error, ErrorKind, State,
@@ -19,10 +20,10 @@ pub(super) fn make_macro_fn(
         let macro_instance = cache.instance().ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidOperation,
-                format!(
-                    "macro '{}' from template '{}' must be initialised before use",
-                    cache.macro_name, cache.template_name
-                ),
+                localization::message(keys::MANIFEST_MACRO_NOT_INITIALISED)
+                    .with_arg("macro", cache.macro_name.as_str())
+                    .with_arg("template", cache.template_name.as_str())
+                    .to_string(),
             )
         })?;
         // MiniJinja requires keyword arguments to be appended as a trailing
@@ -69,7 +70,9 @@ fn adapt_caller_argument(state: &State, value: Value) -> Result<Value, Error> {
     } else {
         Err(Error::new(
             ErrorKind::InvalidOperation,
-            format!("'caller' argument must be callable, got {}", value.kind()),
+            localization::message(keys::MANIFEST_MACRO_CALLER_INVALID)
+                .with_arg("kind", value.kind())
+                .to_string(),
         ))
     }
 }
@@ -122,14 +125,18 @@ struct MacroInstance {
 
 impl MacroInstance {
     fn new(env: &Environment, template_name: &str, macro_name: &str) -> anyhow::Result<Self> {
-        let template = env
-            .get_template(template_name)
-            .with_context(|| format!("load template '{template_name}'"))?;
-        let state = template
-            .eval_to_state(())
-            .with_context(|| format!("initialise macro '{macro_name}'"))?;
+        let template = env.get_template(template_name).with_context(|| {
+            localization::message(keys::MANIFEST_MACRO_TEMPLATE_LOAD_FAILED)
+                .with_arg("template", template_name)
+        })?;
+        let state = template.eval_to_state(()).with_context(|| {
+            localization::message(keys::MANIFEST_MACRO_INIT_FAILED).with_arg("macro", macro_name)
+        })?;
         let value = state.lookup(macro_name).ok_or_else(|| {
-            anyhow::anyhow!("macro '{macro_name}' missing from compiled template")
+            anyhow::anyhow!(
+                "{}",
+                localization::message(keys::MANIFEST_MACRO_MISSING).with_arg("macro", macro_name)
+            )
         })?;
         // SAFETY: `register_macro` requires an `Environment<'static>`, so the template
         // bytecode outlives the cached state stored in the macro instance.

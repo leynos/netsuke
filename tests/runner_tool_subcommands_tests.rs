@@ -5,12 +5,14 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
+use netsuke::localization::{self, keys};
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
 use test_support::{
     check_ninja::{self, ToolName},
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env},
+    localizer_test_lock, set_en_localizer,
 };
 
 mod fixtures;
@@ -31,7 +33,11 @@ fn ninja_with_exit_code(
 
 /// Helper: test that a command fails when ninja exits with non-zero status.
 fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
-    let (_ninja_dir, _ninja_path, _guard) = ninja_with_exit_code(7)?;
+    let _lock = localizer_test_lock()
+        .map_err(|e| anyhow::anyhow!("{e}"))
+        .context("localizer test lock poisoned")?;
+    let _guard = set_en_localizer();
+    let (_ninja_dir, _ninja_path, _ninja_guard) = ninja_with_exit_code(7)?;
     let (temp, manifest_path) = create_test_manifest()?;
     let expected_tool = match &command {
         Commands::Clean => "clean",
@@ -95,6 +101,10 @@ fn assert_subcommand_fails_with_invalid_manifest(
     command: Commands,
     name: &'static str,
 ) -> Result<()> {
+    let _lock = localizer_test_lock()
+        .map_err(|e| anyhow::anyhow!("{e}"))
+        .context("localizer test lock poisoned")?;
+    let _guard = set_en_localizer();
     let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
     let manifest_path = temp.path().join("Netsukefile");
     std::fs::copy("tests/data/invalid_version.yml", &manifest_path)
@@ -109,8 +119,11 @@ fn assert_subcommand_fails_with_invalid_manifest(
         bail!("expected {name} to fail for invalid manifest");
     };
     let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let expected = localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+        .with_arg("path", manifest_path.display().to_string())
+        .to_string();
     ensure!(
-        messages.iter().any(|m| m.contains("loading manifest at")),
+        messages.iter().any(|m| m.contains(&expected)),
         "error should mention manifest loading, got: {messages:?}"
     );
     Ok(())

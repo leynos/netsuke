@@ -2010,8 +2010,8 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The CLI is implemented using clap's derive API in `src/cli.rs`. Netsuke applies
-`Cli::with_default_command` after parsing so invoking `netsuke` with no
+The CLI is implemented using clap's derive API in `src/cli/mod.rs`. Netsuke
+applies `Cli::with_default_command` after parsing so invoking `netsuke` with no
 explicit command still triggers a build. Configuration is layered with
 OrthoConfig (defaults, configuration files, environment variables, then CLI
 overrides) while treating clap defaults as absent so file or environment values
@@ -2019,16 +2019,50 @@ are not masked. Configuration discovery honours `NETSUKE_CONFIG_PATH` and the
 standard OrthoConfig search order; environment variables use the `NETSUKE_`
 prefix with `__` as a nesting separator. CLI help and clap errors are localized
 via Fluent resources; `--locale` or `NETSUKE_LOCALE` selects the locale, and
-English plus Spanish catalogues ship in `locales/`. CLI execution and dispatch
-live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
-management, Ninja invocation, argument redaction, and the temporary file
-helpers reside in `src/runner/process.rs`, allowing the runner entry point to
-delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
-option but is resolved internally: Netsuke runs Ninja with a configured working
-directory and resolves relative output paths (for example `build --emit` and
-`manifest`) under the same directory so behaviour matches a real directory
-change. Error scenarios are validated using clap's `ErrorKind` enumeration in
-unit tests and via Cucumber steps for behavioural coverage.
+English plus Spanish catalogues ship in `locales/`. Runtime diagnostics (for
+example manifest parsing, stdlib template errors, and runner failures) use the
+same Fluent localizer so the locale selection is consistent across user-facing
+output. A build-time audit in `build.rs` validates that all referenced Fluent
+message keys exist in the bundled catalogues, ensuring missing strings fail CI
+before release. CLI execution and dispatch live in `src/runner.rs`, keeping
+`main.rs` focused on parsing. Process management, Ninja invocation, argument
+redaction, and the temporary file helpers reside in `src/runner/process.rs`,
+allowing the runner entry point to delegate low-level concerns. The working
+directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
+runs Ninja with a configured working directory and resolves relative output
+paths (for example `build --emit` and `manifest`) under the same directory so
+behaviour matches a real directory change. Error scenarios are validated using
+clap's `ErrorKind` enumeration in unit tests and via Cucumber steps for
+behavioural coverage.
+
+For screen readers: The following flowchart shows how the build script audits
+localization keys against English and Spanish Fluent bundles.
+
+```mermaid
+flowchart TD
+    A_Start[Start build.rs] --> B_ReadKeys
+    B_ReadKeys[extract_key_constants
+from src/localization/keys.rs] --> C_ReadEn
+    C_ReadEn[extract_ftl_keys
+from locales/en-US/messages.ftl] --> D_ReadEs
+    D_ReadEs[extract_ftl_keys
+from locales/es-ES/messages.ftl] --> E_Compare
+
+    E_Compare[Compute differences
+between declared and en-US/es-ES keys] --> F_CheckMissing
+
+    F_CheckMissing{Any missing
+keys?} -->|No| G_Success[Audit passes
+continue build]
+    F_CheckMissing -->|Yes| H_Error[Emit error message
+with missing keys per locale
+and fail build]
+
+    H_Error --> I_End[Build script returns Err]
+    G_Success --> I_End
+```
+
+Figure: Build script localization audit flow for Fluent key validation.
 
 The Ninja executable may be overridden via the `NINJA_ENV` environment
 variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces

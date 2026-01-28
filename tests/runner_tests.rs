@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::localization::{self, keys};
 use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
 use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
@@ -76,14 +77,18 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
     let Err(err) = run(&cli) else {
         bail!("expected run to fail for invalid manifest");
     };
+    let expected = localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+        .with_arg("path", manifest_path.display().to_string())
+        .to_string();
     ensure!(
-        err.to_string().contains("loading manifest at"),
+        err.to_string().contains(&expected),
         "error should mention manifest loading, got: {err}"
     );
     let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let parse_message = localization::message(keys::MANIFEST_PARSE).to_string();
     ensure!(
-        chain.iter().any(|s| s.contains("manifest parse error")),
-        "expected error chain to include 'manifest parse error', got: {chain:?}"
+        chain.iter().any(|s| s.contains(&parse_message)),
+        "expected error chain to include parse error, got: {chain:?}"
     );
     Ok(())
 }

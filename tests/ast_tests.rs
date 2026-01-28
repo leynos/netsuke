@@ -1,7 +1,8 @@
 //! Unit tests for Netsuke manifest AST deserialisation.
 
 use anyhow::{Context, Result, bail, ensure};
-use netsuke::{ast::*, manifest};
+use netsuke::localization::keys;
+use netsuke::{ast::*, localization, manifest};
 use rstest::rstest;
 use semver::Version;
 
@@ -130,8 +131,9 @@ fn vars_section_must_be_object() -> Result<()> {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n");
+    let expected = localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string();
     ensure!(
-        chain.contains("vars must be an object with string keys"),
+        chain.contains(&expected),
         "unexpected error message: {chain}"
     );
     Ok(())

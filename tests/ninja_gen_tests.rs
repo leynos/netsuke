@@ -378,7 +378,7 @@ fn errors_when_action_missing() -> Result<()> {
         bail!("expected missing action to error");
     };
     ensure!(
-        matches!(err, NinjaGenError::MissingAction { ref id } if id == "missing"),
+        matches!(err, NinjaGenError::MissingAction { ref id, .. } if id == "missing"),
         "unexpected error variant: {err:?}"
     );
     Ok(())
@@ -423,7 +423,7 @@ fn generate_format_error() -> Result<()> {
         bail!("expected format error when writer fails");
     };
     ensure!(
-        matches!(err, NinjaGenError::Format(_)),
+        matches!(err, NinjaGenError::Format { .. }),
         "unexpected error: {err:?}"
     );
     Ok(())

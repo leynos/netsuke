@@ -557,7 +557,9 @@ Environment variables use the `NETSUKE_` prefix (for example,
 configuration.
 
 Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localized CLI copy and
-error messages. Spanish (`es-ES`) is included as a reference translation;
+error messages. The same locale also applies to user-facing runtime
+diagnostics, including manifest parse failures, stdlib template errors, and
+runner failures. Spanish (`es-ES`) is included as a reference translation;
 unsupported locales fall back to English.
 
 ### Exit Codes

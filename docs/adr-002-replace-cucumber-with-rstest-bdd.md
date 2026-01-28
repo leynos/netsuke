@@ -109,7 +109,7 @@ for unit tests.
 
 ### Phase 3 – Feature ports (incremental)
 
-Port features in self-contained slices so regressions stay localised. For each
+Port features in self-contained slices so regressions stay localized. For each
 slice, create `#[scenario]` functions, translate the step macros, and delete
 the cucumber equivalents once the new tests pass.
 

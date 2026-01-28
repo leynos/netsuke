@@ -93,7 +93,7 @@ Feature: Manifest Parsing
     Given the manifest file "tests/data/jinja_macro_missing_parens.yml" is parsed
     When the parsing result is checked
     Then parsing the manifest fails
-    And the error message contains "parameter list"
+    And the error message contains "Macro signature is missing parameters."
 
   Scenario: Rendering Jinja conditionals in a manifest
     Given the manifest file "tests/data/jinja_if.yml" is parsed

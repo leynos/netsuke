@@ -1,5 +1,6 @@
 //! Command interpolation utilities for IR actions.
 
+use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
 use shell_quote::{QuoteRefExt, Sh};
 
@@ -43,9 +44,11 @@ pub(crate) fn interpolate_command(
     let interpolated = substitute(template, &ins, &outs);
     if has_unmatched_backticks(&interpolated) || shlex::split(&interpolated).is_none() {
         let snippet = interpolated.chars().take(160).collect();
+        let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
         return Err(IrGenError::InvalidCommand {
             command: interpolated,
             snippet,
+            message,
         });
     }
     Ok(interpolated)

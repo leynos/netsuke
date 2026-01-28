@@ -5,6 +5,7 @@ use std::sync::Arc;
 use minijinja::value::Value;
 
 use super::config::{CommandConfig, CommandOptions, OutputMode};
+use crate::localization::{self, keys};
 
 #[derive(Clone)]
 pub(super) struct CommandContext {
@@ -53,6 +54,9 @@ impl<'a> CommandLocation<'a> {
     }
 
     pub(super) fn describe(self) -> String {
-        format!("command '{}' in template '{}'", self.command, self.template)
+        localization::message(keys::COMMAND_LOCATION)
+            .with_arg("command", self.command)
+            .with_arg("template", self.template)
+            .to_string()
     }
 }

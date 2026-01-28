@@ -182,7 +182,7 @@ fn fetch_function_allows_wildcard_hosts(http_policy: Result<NetworkPolicy>) -> R
     deny_all_policy as fn(NetworkPolicy) -> Result<NetworkPolicy>,
     FetchErrorExpectation::new(
         "http://127.0.0.1",
-        "not allowlisted",
+        "not on the allowlist",
         "expected fetch to reject not-allowlisted host",
         false,
     ),
@@ -191,7 +191,7 @@ fn fetch_function_allows_wildcard_hosts(http_policy: Result<NetworkPolicy>) -> R
     identity_policy as fn(NetworkPolicy) -> Result<NetworkPolicy>,
     FetchErrorExpectation::new(
         "http://127.0.0.1:9",
-        "fetch failed",
+        "Failed to fetch",
         "expected fetch to report connection error",
         true,
     ),

@@ -104,7 +104,10 @@ fn manifest_error_cases(
         .err()
         .with_context(|| format!("expected {manifest_path} to produce an error"))?;
     match (err, expected) {
-        (IrGenError::DuplicateOutput { outputs }, ExpectedError::DuplicateOutput(exp_outputs)) => {
+        (
+            IrGenError::DuplicateOutput { outputs, .. },
+            ExpectedError::DuplicateOutput(exp_outputs),
+        ) => {
             ensure!(
                 outputs == exp_outputs,
                 "unexpected duplicate outputs: got {:?}, expected {:?}",
@@ -113,7 +116,9 @@ fn manifest_error_cases(
             );
         }
         (
-            IrGenError::MultipleRules { target_name, rules },
+            IrGenError::MultipleRules {
+                target_name, rules, ..
+            },
             ExpectedError::MultipleRules {
                 target_name: exp_target,
                 rules: exp_rules,
@@ -130,7 +135,7 @@ fn manifest_error_cases(
                 exp_rules
             );
         }
-        (IrGenError::EmptyRule { target_name }, ExpectedError::EmptyRule(exp_target)) => {
+        (IrGenError::EmptyRule { target_name, .. }, ExpectedError::EmptyRule(exp_target)) => {
             ensure!(
                 target_name == exp_target,
                 "unexpected target: got {target_name}, expected {exp_target}"
@@ -146,6 +151,7 @@ fn manifest_error_cases(
             IrGenError::CircularDependency {
                 cycle,
                 missing_dependencies,
+                ..
             },
             ExpectedError::CircularDependency(exp_cycle),
         ) => {

@@ -531,7 +531,7 @@ fn foreach_vars_must_be_mapping() -> Result<()> {
     ensure!(
         err.chain()
             .map(ToString::to_string)
-            .any(|msg| msg.contains("target.vars must be an object")),
+            .any(|msg| msg.contains("Target `vars` must be an object")),
         "unexpected error: {err}"
     );
     Ok(())

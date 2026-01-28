@@ -1,5 +1,11 @@
-//! Build script: generate the CLI manual page into target/generated-man/<target>/<profile> for
-//! release packaging.
+//! Build script for Netsuke.
+//!
+//! This script performs two main tasks:
+//! - Generate the CLI manual page into `target/generated-man/<target>/<profile>` for release
+//!   packaging.
+//! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
+//!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
+//!   locale.
 use clap::{ArgMatches, CommandFactory};
 use clap_mangen::Man;
 use std::{
@@ -7,13 +13,17 @@ use std::{
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
 
-#[path = "src/cli.rs"]
+#[path = "src/cli/mod.rs"]
 mod cli;
+
+#[path = "src/cli_localization.rs"]
+mod cli_localization;
 
 #[path = "src/cli_l10n.rs"]
 mod cli_l10n;
@@ -21,10 +31,17 @@ mod cli_l10n;
 #[path = "src/host_pattern.rs"]
 mod host_pattern;
 
+#[path = "src/localization/mod.rs"]
+mod localization;
+
+mod build_l10n_audit;
+
 use host_pattern::{HostPattern, HostPatternError};
 
-type LocalizedParseFn =
-    fn(Vec<OsString>, &dyn ortho_config::Localizer) -> Result<(cli::Cli, ArgMatches), clap::Error>;
+type LocalizedParseFn = fn(
+    Vec<OsString>,
+    &Arc<dyn ortho_config::Localizer>,
+) -> Result<(cli::Cli, ArgMatches), clap::Error>;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -84,7 +101,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
 
     // Regenerate the manual page when the CLI or metadata changes.
-    println!("cargo:rerun-if-changed=src/cli.rs");
+    println!("cargo:rerun-if-changed=src/cli/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_NAME");
     println!("cargo:rerun-if-env-changed=CARGO_BIN_NAME");
@@ -93,6 +111,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
     println!("cargo:rerun-if-env-changed=TARGET");
     println!("cargo:rerun-if-env-changed=PROFILE");
+    println!("cargo:rerun-if-changed=src/localization/keys.rs");
+    println!("cargo:rerun-if-changed=locales/en-US/messages.ftl");
+    println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
+
+    build_l10n_audit::audit_localization_keys()?;
 
     // Packagers expect man pages under target/generated-man/<target>/<profile>.
     let out_dir = out_dir_for_target_profile();

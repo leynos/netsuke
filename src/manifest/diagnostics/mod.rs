@@ -5,6 +5,30 @@
 //! origin, and mapping helpers (e.g. [`map_yaml_error`], [`map_data_error`])
 //! convert parser and deserialisation failures into rich [`miette`]
 //! diagnostics with spans, hints, and stable diagnostic codes.
+//
+// Module-level suppression for version-dependent lint false positives from
+// miette/thiserror derive macros.
+//
+// Rationale:
+// - The `unused_assignments` lint fires in some Rust versions but not others
+//   due to generated code in the derive macros. Since `#[expect]` fails when
+//   the lint doesn't fire, and `unfulfilled_lint_expectations` cannot itself
+//   be expected, we must use `#[allow]` here.
+// - The `clippy::allow_attributes` lints complain about using `#[allow]`
+//   itself, creating a circular dependency—scoping the suppression to item
+//   level with `#[allow]` would still trigger these same clippy lints.
+//
+// FIXME: Once upstream miette/thiserror fixes the version-dependent behaviour,
+// remove this module-level suppression and replace with item-level
+// `#[expect(..., reason = "...")]` on the two Error derives (`ManifestError`
+// and `DataError`).
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    unused_assignments
+)]
+
+use crate::localization::{self, LocalizedMessage, keys};
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -114,22 +138,32 @@ impl std::fmt::Display for ManifestName {
 ///
 /// # Examples
 /// ```rust
-/// use miette::miette;
+/// use miette::MietteDiagnostic;
 /// use netsuke::manifest::ManifestError;
+/// use netsuke::localization::{self, keys};
 ///
-/// let err = ManifestError::Parse { source: Box::new(miette!("bad manifest")) };
-/// assert_eq!(format!("{err}"), "manifest parse error");
+/// let msg = localization::message(keys::MANIFEST_PARSE);
+/// let err = ManifestError::Parse {
+///     source: Box::new(MietteDiagnostic::new("bad manifest")),
+///     message: msg.clone(),
+/// };
+/// // Match on the variant to verify fields without asserting on message text
+/// if let ManifestError::Parse { message, .. } = &err {
+///     assert_eq!(message.to_string(), msg.to_string());
+/// }
 /// ```
 #[derive(Debug, Error, Diagnostic)]
 pub enum ManifestError {
     /// Manifest parsing failed and produced the supplied diagnostic.
-    #[error("manifest parse error")]
+    #[error("{message}")]
     #[diagnostic(code(netsuke::manifest::parse))]
     Parse {
         /// Underlying diagnostic reported by the parser or validator.
         #[source]
         #[diagnostic_source]
         source: Box<dyn Diagnostic + Send + Sync + 'static>,
+        /// Localized parse summary.
+        message: LocalizedMessage,
     },
 }
 
@@ -139,7 +173,7 @@ pub enum ManifestError {
 struct DataDiagnostic {
     #[source]
     source: serde_json::Error,
-    message: String,
+    message: LocalizedMessage,
 }
 
 /// Map a [`serde_json`] structural error into a diagnostic without a source
@@ -151,7 +185,9 @@ pub fn map_data_error(
     err: serde_json::Error,
     name: &ManifestName,
 ) -> Box<dyn Diagnostic + Send + Sync + 'static> {
-    let message = format!("manifest structure error in {}: {err}", name.as_ref());
+    let message = localization::message(keys::MANIFEST_STRUCTURE_ERROR)
+        .with_arg("name", name.as_ref())
+        .with_arg("details", err.to_string());
     Box::new(DataDiagnostic {
         source: err,
         message,
@@ -164,18 +200,23 @@ mod tests {
     use anyhow::{Context, Result, ensure};
     use miette::Diagnostic;
     use serde_json::Value;
+    use test_support::{localizer_test_lock, set_en_localizer};
 
     #[test]
     fn map_data_error_formats_message_and_code() -> Result<()> {
+        let _lock = localizer_test_lock().expect("localizer test lock poisoned");
+        let _guard = set_en_localizer();
         let name = ManifestName::new("test.json");
         let err = serde_json::from_str::<Value>("{\"key\":}")
             .expect_err("expected serde_json parse error");
+        let details = err.to_string();
         let diag = map_data_error(err, &name);
         let message = diag.to_string();
-        ensure!(
-            message.starts_with("manifest structure error in test.json:"),
-            "unexpected message: {message}"
-        );
+        let expected = localization::message(keys::MANIFEST_STRUCTURE_ERROR)
+            .with_arg("name", "test.json")
+            .with_arg("details", details)
+            .to_string();
+        ensure!(message == expected, "unexpected message: {message}");
         let code = diag
             .code()
             .map(|c| c.to_string())
@@ -189,13 +230,19 @@ mod tests {
 
     #[test]
     fn map_data_error_is_wrapped_by_manifest_error() -> Result<()> {
+        let _lock = localizer_test_lock().expect("localizer test lock poisoned");
+        let _guard = set_en_localizer();
         let name = ManifestName::new("example");
         let err = serde_json::from_str::<Value>("not json")
             .expect_err("expected serde_json parse failure");
         let diag = map_data_error(err, &name);
-        let wrapped = ManifestError::Parse { source: diag };
+        let wrapped = ManifestError::Parse {
+            source: diag,
+            message: localization::message(keys::MANIFEST_PARSE),
+        };
+        let expected = localization::message(keys::MANIFEST_PARSE).to_string();
         ensure!(
-            wrapped.to_string() == "manifest parse error",
+            wrapped.to_string() == expected,
             "unexpected outer error message: {wrapped}"
         );
         let parse_code = wrapped
@@ -207,7 +254,7 @@ mod tests {
             "unexpected parse diagnostic code {parse_code}"
         );
         let inner_code = match &wrapped {
-            ManifestError::Parse { source } => source
+            ManifestError::Parse { source, .. } => source
                 .code()
                 .map(|c| c.to_string())
                 .context("source diagnostic should have a code")?,

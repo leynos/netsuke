@@ -2,6 +2,8 @@
 
 use minijinja::{Error, value::Kwargs};
 
+use crate::localization::{self, keys};
+
 use super::error::args_error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
@@ -45,9 +47,10 @@ impl WhichOptions {
             .map(|mode| {
                 let lower = mode.to_ascii_lowercase();
                 CwdMode::parse(&lower).ok_or_else(|| {
-                    args_error(format!(
-                        "cwd_mode must be 'auto', 'always', or 'never', got '{mode}'",
-                    ))
+                    args_error(
+                        localization::message(keys::STDLIB_WHICH_CWD_MODE_INVALID)
+                            .with_arg("mode", mode),
+                    )
                 })
             })
             .transpose()?;

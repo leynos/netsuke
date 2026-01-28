@@ -12,6 +12,7 @@ use serde_json::json;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
@@ -79,8 +80,8 @@ fetch_default_deny = true
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
     let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
 
-    let localizer = cli_localization::build_localizer(None);
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], localizer.as_ref())
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI args for merge")?;
     let merged = netsuke::cli::merge_with_config(&cli, &matches)
         .context("merge CLI and configuration layers")?
