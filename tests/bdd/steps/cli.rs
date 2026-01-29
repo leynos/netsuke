@@ -10,10 +10,36 @@ use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::cli_localization;
+use netsuke::locale_resolution::{self, EnvProvider, SystemLocale};
 use rstest_bdd_macros::{given, then, when};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+#[derive(Debug, Default)]
+struct StubEnv {
+    locale: Option<String>,
+}
+
+impl EnvProvider for StubEnv {
+    fn var(&self, key: &str) -> Option<String> {
+        if key == locale_resolution::NETSUKE_LOCALE_ENV {
+            return self.locale.clone();
+        }
+        None
+    }
+}
+
+#[derive(Debug, Default)]
+struct StubSystemLocale {
+    locale: Option<String>,
+}
+
+impl SystemLocale for StubSystemLocale {
+    fn system_locale(&self) -> Option<String> {
+        self.locale.clone()
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -23,8 +49,14 @@ use std::sync::Arc;
 fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let tokens = build_token_list(args);
     let os_tokens: Vec<OsString> = tokens.iter().map(OsString::from).collect();
-    let locale_hint = netsuke::cli::locale_hint_from_args(&os_tokens);
-    let localizer = Arc::from(cli_localization::build_localizer(locale_hint.as_deref()));
+    let env = StubEnv {
+        locale: world.locale_env.get(),
+    };
+    let system = StubSystemLocale {
+        locale: world.locale_system.get(),
+    };
+    let locale = locale_resolution::resolve_startup_locale(&os_tokens, &env, &system);
+    let localizer = Arc::from(cli_localization::build_localizer(locale.as_deref()));
     let outcome = netsuke::cli::parse_with_localizer_from(os_tokens, &localizer)
         .map(|(cli, _matches)| normalize_cli(cli))
         .map_err(|e| e.to_string());

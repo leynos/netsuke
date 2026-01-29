@@ -17,6 +17,7 @@ mod cli;
 #[cfg(unix)]
 mod fs;
 mod ir;
+mod locale_resolution;
 mod manifest;
 mod manifest_command;
 mod ninja;

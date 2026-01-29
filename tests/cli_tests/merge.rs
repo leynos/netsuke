@@ -73,6 +73,7 @@ jobs = 2
 fetch_allow_scheme = ["https"]
 verbose = true
 fetch_default_deny = true
+locale = "es-ES"
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
@@ -107,6 +108,27 @@ fetch_default_deny = true
         merged.fetch_allow_scheme == vec!["https".to_owned()],
         "config values should apply when CLI overrides are empty",
     );
+    ensure!(
+        merged.locale.as_deref() == Some("es-ES"),
+        "config locale should be retained when CLI does not override",
+    );
 
+    Ok(())
+}
+
+#[rstest]
+fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale() -> Result<()> {
+    let mut composer = MergeComposer::new();
+    let defaults = sanitize_value(&Cli::default())?;
+    composer.push_defaults(defaults);
+    composer.push_file(json!({ "locale": "fr-FR" }), None);
+    composer.push_environment(json!({ "locale": "es-ES" }));
+    composer.push_cli(json!({ "locale": "en-US" }));
+
+    let merged = Cli::merge_from_layers(composer.layers())?;
+    ensure!(
+        merged.locale.as_deref() == Some("en-US"),
+        "CLI locale should override env and file layers",
+    );
     Ok(())
 }

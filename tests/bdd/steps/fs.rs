@@ -1,7 +1,7 @@
 //! Steps for preparing file-system fixtures used in Jinja tests (Unix only).
 
 use crate::bdd::fixtures::TestWorld;
-use anyhow::{Context, Result, anyhow, bail, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs::FileTypeExt as CapFileTypeExt, fs_utf8::Dir};
 use rstest_bdd_macros::given;
@@ -60,7 +60,7 @@ fn find_block_device_fallback() -> Result<Utf8PathBuf> {
             return Ok(utf8);
         }
     }
-    bail!("no block device found in /dev");
+    rstest_bdd::skip!("no block device found in /dev");
 }
 
 fn create_device_fixtures() -> Result<(Utf8PathBuf, Utf8PathBuf)> {

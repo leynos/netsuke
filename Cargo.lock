@@ -1378,6 +1378,7 @@ dependencies = [
  "shell-quote",
  "shlex",
  "strip-ansi-escapes",
+ "sys-locale",
  "tempfile",
  "test_support",
  "thiserror 1.0.69",
@@ -1841,9 +1842,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7451d147800bd8b0b8621116a2c553b13408f2b7914a5b818eccaa37240ed9a"
+checksum = "5e741d97bce6ea0a7d0f074716041e0d0eebe6ab9edcd243e7d12f9fd2b5e8b6"
 dependencies = [
  "ctor",
  "derive_more",
@@ -1853,9 +1854,9 @@ dependencies = [
  "i18n-embed",
  "inventory",
  "log",
- "once_cell",
  "regex",
  "rstest-bdd-patterns",
+ "rstest-bdd-policy",
  "rust-embed",
  "serde",
  "serde_json",
@@ -1865,9 +1866,9 @@ dependencies = [
 
 [[package]]
 name = "rstest-bdd-macros"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c58aca0e441b276f7e52a6fe1b9bb8c341004110f610e7dfda112578c0c18837"
+checksum = "a7e3b51c032a6174f82d87843a5e62cfd08ce4606005eafde07ed12561d73196"
 dependencies = [
  "camino",
  "cap-std",
@@ -1875,27 +1876,34 @@ dependencies = [
  "convert_case 0.6.0",
  "gherkin",
  "newt-hype",
- "once_cell",
  "proc-macro-crate",
  "proc-macro-error",
  "proc-macro2",
  "quote",
  "regex",
  "rstest-bdd-patterns",
+ "rstest-bdd-policy",
  "syn 2.0.104",
+ "thiserror 1.0.69",
  "walkdir",
 ]
 
 [[package]]
 name = "rstest-bdd-patterns"
-version = "0.3.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59a52766aaee3793eec30ff351a5ebddba34dddab8500b18891cddece364a66d"
+checksum = "75d730afd8727e5b18bd276ebf5ea4c881760138762d0cd7d415dc6b6662c6c6"
 dependencies = [
  "gherkin",
  "regex",
  "thiserror 1.0.69",
 ]
+
+[[package]]
+name = "rstest-bdd-policy"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d256efeb01f08e281cef9cd1e54dab33d8778e871090f5fa49b7a9a70f0caf81"
 
 [[package]]
 name = "rstest_macros"

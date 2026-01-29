@@ -107,6 +107,20 @@ pub struct TestWorld {
     /// Localizer guard for scenario-level localization overrides.
     pub localization_guard: RefCell<Option<LocalizerGuard>>,
 
+    // Locale resolution state (Clone)
+    /// Locale override supplied via configuration layers for resolution scenarios.
+    pub locale_config: Slot<String>,
+    /// Locale override supplied via environment layers for resolution scenarios.
+    pub locale_env: Slot<String>,
+    /// Locale override supplied via CLI layers for resolution scenarios.
+    pub locale_cli_override: Slot<String>,
+    /// System locale value supplied for resolution scenarios.
+    pub locale_system: Slot<String>,
+    /// Resolved locale output captured for resolution scenarios.
+    pub resolved_locale: Slot<String>,
+    /// Localised message output captured for resolution scenarios.
+    pub locale_message: Slot<String>,
+
     // HTTP server state (non-Clone)
     /// Last HTTP server fixture started by stdlib steps.
     pub http_server: RefCell<Option<HttpServer>>,
