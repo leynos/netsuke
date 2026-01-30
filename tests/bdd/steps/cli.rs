@@ -6,14 +6,16 @@
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;
+use crate::bdd::helpers::tokens::build_tokens;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::cli_localization;
+use netsuke::locale_resolution;
 use rstest_bdd_macros::{given, then, when};
-use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
+use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -21,11 +23,16 @@ use std::sync::Arc;
 
 /// Apply CLI parsing, storing result or error in world state.
 fn apply_cli(world: &TestWorld, args: &CliArgs) {
-    let tokens = build_token_list(args);
-    let os_tokens: Vec<OsString> = tokens.iter().map(OsString::from).collect();
-    let locale_hint = netsuke::cli::locale_hint_from_args(&os_tokens);
-    let localizer = Arc::from(cli_localization::build_localizer(locale_hint.as_deref()));
-    let outcome = netsuke::cli::parse_with_localizer_from(os_tokens, &localizer)
+    let env = StubEnv {
+        locale: world.locale_env.get(),
+    };
+    let system = StubSystemLocale {
+        locale: world.locale_system.get(),
+    };
+    let tokens = build_tokens(args.as_str());
+    let locale = locale_resolution::resolve_startup_locale(&tokens, &env, &system);
+    let localizer = Arc::from(cli_localization::build_localizer(locale.as_deref()));
+    let outcome = netsuke::cli::parse_with_localizer_from(tokens, &localizer)
         .map(|(cli, _matches)| normalize_cli(cli))
         .map_err(|e| e.to_string());
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
@@ -67,20 +74,6 @@ fn get_command(world: &TestWorld) -> Result<Commands> {
 // ---------------------------------------------------------------------------
 // CLI parsing helpers
 // ---------------------------------------------------------------------------
-
-/// Build the token list from CLI arguments for parsing.
-///
-/// Uses shell-like splitting via `shlex` to handle quoted arguments correctly,
-/// matching the behaviour of `std::env::args_os()` more closely. Falls back to
-/// whitespace splitting if shlex fails (e.g., unbalanced quotes).
-fn build_token_list(args: &CliArgs) -> Vec<String> {
-    let mut tokens = vec!["netsuke".to_owned()];
-    match shlex::split(args.as_str()) {
-        Some(mut split_args) => tokens.append(&mut split_args),
-        None => tokens.extend(args.as_str().split_whitespace().map(str::to_owned)),
-    }
-    tokens
-}
 
 /// Normalise a parsed CLI by setting default command if missing.
 fn normalize_cli(cli: Cli) -> Cli {

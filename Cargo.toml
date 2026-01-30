@@ -52,6 +52,7 @@ ureq = { version = "2.10.5" }
 wait-timeout = "0.2"
 url = "^2.5.0"
 ortho_config = { version = "0.7.0", features = ["serde_json"] }
+sys-locale = "0.3.2"
 
 [build-dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
@@ -141,8 +142,8 @@ unescaped_backticks                 = "deny"
 
 [dev-dependencies]
 rstest = "0.18.0"
-rstest-bdd = "0.3.2"
-rstest-bdd-macros = { version = "0.3.2", features = ["strict-compile-time-validation"] }
+rstest-bdd = "0.4.0"
+rstest-bdd-macros = { version = "0.4.0", features = ["strict-compile-time-validation"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], default-features = false }
 insta = { version = "1", features = ["yaml"] }
 assert_cmd = "2.0.0"

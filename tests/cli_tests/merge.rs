@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
 use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde_json::json;
 use std::ffi::OsStr;
 use std::fs;
@@ -16,10 +16,17 @@ use std::sync::Arc;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
+#[fixture]
+fn default_cli_json() -> Result<serde_json::Value> {
+    sanitize_value(&Cli::default())
+}
+
 #[rstest]
-fn cli_merge_layers_respects_precedence_and_appends_lists() -> Result<()> {
+fn cli_merge_layers_respects_precedence_and_appends_lists(
+    default_cli_json: Result<serde_json::Value>,
+) -> Result<()> {
     let mut composer = MergeComposer::new();
-    let mut defaults = sanitize_value(&Cli::default())?;
+    let mut defaults = default_cli_json?;
     let defaults_object = defaults
         .as_object_mut()
         .context("defaults should be an object")?;
@@ -73,6 +80,7 @@ jobs = 2
 fetch_allow_scheme = ["https"]
 verbose = true
 fetch_default_deny = true
+locale = "es-ES"
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
@@ -107,6 +115,29 @@ fetch_default_deny = true
         merged.fetch_allow_scheme == vec!["https".to_owned()],
         "config values should apply when CLI overrides are empty",
     );
+    ensure!(
+        merged.locale.as_deref() == Some("es-ES"),
+        "config locale should be retained when CLI does not override",
+    );
 
+    Ok(())
+}
+
+#[rstest]
+fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
+    default_cli_json: Result<serde_json::Value>,
+) -> Result<()> {
+    let mut composer = MergeComposer::new();
+    let defaults = default_cli_json?;
+    composer.push_defaults(defaults);
+    composer.push_file(json!({ "locale": "fr-FR" }), None);
+    composer.push_environment(json!({ "locale": "es-ES" }));
+    composer.push_cli(json!({ "locale": "en-US" }));
+
+    let merged = Cli::merge_from_layers(composer.layers())?;
+    ensure!(
+        merged.locale.as_deref() == Some("en-US"),
+        "CLI locale should override env and file layers",
+    );
     Ok(())
 }

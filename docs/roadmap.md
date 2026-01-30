@@ -230,10 +230,10 @@ library, and CLI ergonomics.
 
 - [x] 3.7.1. Externalize user-facing strings into Fluent `.ftl` bundles.
   - [x] Implement compile-time audit that fails CI on missing message keys.
-- [ ] 3.7.2. Implement locale resolution.
-  - [ ] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
+- [x] 3.7.2. Implement locale resolution.
+  - [x] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
     defaults.
-  - [ ] Fall back to `en-US` when translations are absent.
+  - [x] Fall back to `en-US` when translations are absent.
 - [ ] 3.7.3. Provide translator tooling and documentation.
   - [ ] Cover message keys, plural forms, and variable usage.
   - [ ] Ensure localization smoke tests cover at least one secondary locale.

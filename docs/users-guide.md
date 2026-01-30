@@ -556,11 +556,13 @@ Environment variables use the `NETSUKE_` prefix (for example,
 `NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
 configuration.
 
-Use `--locale <LOCALE>` or `NETSUKE_LOCALE` to select localized CLI copy and
-error messages. The same locale also applies to user-facing runtime
+Use `--locale <LOCALE>`, `NETSUKE_LOCALE`, or a `locale = "..."` entry in a
+configuration file to select localized CLI copy and error messages. Locale
+precedence is: command-line flag, environment variable, configuration file,
+then the system default. The same locale applies to user-facing runtime
 diagnostics, including manifest parse failures, stdlib template errors, and
 runner failures. Spanish (`es-ES`) is included as a reference translation;
-unsupported locales fall back to English.
+unsupported locales fall back to English (`en-US`).
 
 ### Exit Codes
 

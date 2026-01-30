@@ -3,7 +3,7 @@
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
 use miette::Report;
-use netsuke::{cli, cli_localization, localization, runner};
+use netsuke::{cli, cli_localization, locale_resolution, localization, runner};
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -13,10 +13,10 @@ use tracing_subscriber::fmt;
 
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
-    let locale_hint = cli::locale_hint_from_args(&args);
-    let env_locale = std::env::var("NETSUKE_LOCALE").ok();
-    let locale = locale_hint.as_deref().or(env_locale.as_deref());
-    let localizer = Arc::from(cli_localization::build_localizer(locale));
+    let env = locale_resolution::SystemEnv;
+    let system_locale = locale_resolution::SysLocale;
+    let startup_locale = locale_resolution::resolve_startup_locale(&args, &env, &system_locale);
+    let localizer = Arc::from(cli_localization::build_localizer(startup_locale.as_deref()));
     localization::set_localizer(Arc::clone(&localizer));
 
     let (parsed_cli, matches) = match cli::parse_with_localizer_from(args, &localizer) {
@@ -32,12 +32,8 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let runtime_locale = merged_cli
-        .locale
-        .as_deref()
-        .or(locale_hint.as_deref())
-        .or(env_locale.as_deref());
-    let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale));
+    let runtime_locale = locale_resolution::resolve_runtime_locale(&merged_cli, &system_locale);
+    let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
 
     let max_level = if merged_cli.verbose {
