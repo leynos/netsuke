@@ -48,7 +48,8 @@ behavioural tests.
 - Tests: if `make test` still fails after two investigation cycles, stop and
   escalate.
 - Ambiguity: if locale precedence or system-default behaviour remains unclear
-  after reviewing docs, stop and request clarification before coding.
+  after reviewing docs, stop, request clarification, and pause implementation
+  before coding.
 
 ## Risks
 
@@ -245,7 +246,7 @@ Quality criteria (what "done" means):
 - Documentation: `make fmt`, `make markdownlint`, and `make nixie` pass after
   documentation updates.
 
-Quality method (how we check):
+Quality method (how checks are performed):
 
 - Run each make target with `set -o pipefail` and inspect the log outputs for
   errors or warnings.
@@ -257,7 +258,7 @@ and rerun the same command. If `Cargo.lock` changes unexpectedly during
 dependency updates, re-run `cargo update -p <crate>` to ensure only intended
 crates are modified.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Expected new/updated artefacts include:
 

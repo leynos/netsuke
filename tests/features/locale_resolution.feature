@@ -36,8 +36,14 @@ Feature: Locale resolution
     When the runtime locale is resolved
     Then the resolved locale is "en-US"
 
+  Scenario: No valid locale available returns nothing
+    Given the configuration locale is "bad locale"
+    And the system locale is "also bad"
+    When the runtime locale is resolved
+    Then no locale is resolved
+
   Scenario: Unsupported locale falls back to English messages
     Given the configuration locale is "fr-FR"
     And the system locale is "fr-FR"
-    When the runtime localizer is built
-    Then the localized message contains "not found"
+    When the runtime localiser is built
+    Then the localised message contains "not found"

@@ -94,7 +94,7 @@ fn resolve_runtime_locale(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-#[when("the runtime localizer is built")]
+#[when("the runtime localiser is built")]
 fn build_runtime_localizer(world: &TestWorld) -> Result<()> {
     let merged = merge_locale_layers(world)?;
     let system = StubSystemLocale {
@@ -119,7 +119,7 @@ fn resolved_locale_is(world: &TestWorld, locale: &str) -> Result<()> {
     Ok(())
 }
 
-#[then("the localized message contains {fragment:string}")]
+#[then("the localised message contains {fragment:string}")]
 fn localized_message_contains(world: &TestWorld, fragment: &str) -> Result<()> {
     let message = world
         .locale_message
@@ -128,6 +128,16 @@ fn localized_message_contains(world: &TestWorld, fragment: &str) -> Result<()> {
     ensure!(
         message.contains(fragment),
         "expected localized message to contain '{fragment}', got '{message}'"
+    );
+    Ok(())
+}
+
+#[then("no locale is resolved")]
+fn no_locale_is_resolved(world: &TestWorld) -> Result<()> {
+    let resolved = world.resolved_locale.get();
+    ensure!(
+        resolved.is_none(),
+        "expected no resolved locale, got {resolved:?}"
     );
     Ok(())
 }
