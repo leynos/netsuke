@@ -21,6 +21,7 @@ pub mod env_var_guard;
 pub mod exec;
 pub mod hash;
 pub mod http;
+pub mod locale_stubs;
 pub mod localizer;
 pub mod manifest;
 pub mod netsuke;

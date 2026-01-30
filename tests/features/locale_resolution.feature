@@ -12,6 +12,18 @@ Feature: Locale resolution
     When the startup locale is resolved for ""
     Then the resolved locale is "fr-FR"
 
+  Scenario: Invalid CLI locale falls back to the environment locale
+    Given the system locale is "en_US.UTF-8"
+    And the environment locale is "fr-FR"
+    When the startup locale is resolved for "--locale @@@"
+    Then the resolved locale is "fr-FR"
+
+  Scenario: Invalid environment locale falls back to system defaults
+    Given the system locale is "en_US.UTF-8"
+    And the environment locale is "bad locale"
+    When the startup locale is resolved for ""
+    Then the resolved locale is "en-US"
+
   Scenario: Configuration locale is used for runtime when no overrides exist
     Given the configuration locale is "es-ES"
     And the system locale is "en_US"

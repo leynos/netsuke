@@ -4,53 +4,16 @@
 //! production resolution helpers.
 
 use crate::bdd::fixtures::TestWorld;
+use crate::bdd::helpers::tokens::build_tokens;
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
 use netsuke::cli_localization;
-use netsuke::locale_resolution::{self, EnvProvider, SystemLocale};
+use netsuke::locale_resolution;
 use netsuke::localization::keys;
 use ortho_config::{LocalizationArgs, Localizer, MergeComposer, sanitize_value};
 use rstest_bdd_macros::{given, then, when};
 use serde_json::json;
-use std::ffi::OsString;
-
-#[derive(Debug, Default)]
-struct StubEnv {
-    locale: Option<String>,
-}
-
-impl EnvProvider for StubEnv {
-    fn var(&self, key: &str) -> Option<String> {
-        if key == locale_resolution::NETSUKE_LOCALE_ENV {
-            return self.locale.clone();
-        }
-        None
-    }
-}
-
-#[derive(Debug, Default)]
-struct StubSystemLocale {
-    locale: Option<String>,
-}
-
-impl SystemLocale for StubSystemLocale {
-    fn system_locale(&self) -> Option<String> {
-        self.locale.clone()
-    }
-}
-
-fn build_tokens(args: &str) -> Vec<OsString> {
-    let mut tokens = vec![OsString::from("netsuke")];
-    let trimmed = args.trim();
-    if trimmed.is_empty() {
-        return tokens;
-    }
-    match shlex::split(trimmed) {
-        Some(split_args) => tokens.extend(split_args.into_iter().map(OsString::from)),
-        None => tokens.extend(trimmed.split_whitespace().map(OsString::from)),
-    }
-    tokens
-}
+use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 
 fn merge_locale_layers(world: &TestWorld) -> Result<Cli> {
     let mut composer = MergeComposer::new();
@@ -72,9 +35,9 @@ fn merge_locale_layers(world: &TestWorld) -> Result<Cli> {
     Cli::merge_from_layers(composer.layers()).context("merge locale layers")
 }
 
-fn record_resolved_locale(world: &TestWorld, resolved: Option<String>) {
+fn record_resolved_locale(world: &TestWorld, resolved: Option<&str>) {
     match resolved {
-        Some(locale) => world.resolved_locale.set(locale),
+        Some(locale) => world.resolved_locale.set(locale.to_owned()),
         None => world.resolved_locale.clear(),
     }
 }
@@ -117,7 +80,7 @@ fn resolve_startup_locale(world: &TestWorld, args: &str) {
     };
     let tokens = build_tokens(args);
     let resolved = locale_resolution::resolve_startup_locale(&tokens, &env, &system);
-    record_resolved_locale(world, resolved);
+    record_resolved_locale(world, resolved.as_deref());
 }
 
 #[when("the runtime locale is resolved")]
@@ -127,7 +90,7 @@ fn resolve_runtime_locale(world: &TestWorld) -> Result<()> {
         locale: world.locale_system.get(),
     };
     let resolved = locale_resolution::resolve_runtime_locale(&merged, &system);
-    record_resolved_locale(world, resolved);
+    record_resolved_locale(world, resolved.as_deref());
     Ok(())
 }
 
@@ -138,7 +101,7 @@ fn build_runtime_localizer(world: &TestWorld) -> Result<()> {
         locale: world.locale_system.get(),
     };
     let resolved = locale_resolution::resolve_runtime_locale(&merged, &system);
-    record_resolved_locale(world, resolved.clone());
+    record_resolved_locale(world, resolved.as_deref());
 
     let localizer = cli_localization::build_localizer(resolved.as_deref());
     let message = which_message(localizer.as_ref());

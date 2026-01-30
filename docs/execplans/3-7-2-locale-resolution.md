@@ -1,4 +1,4 @@
-# Implement locale resolution for CLI and runtime
+# Implement locale resolution for command-line interface (CLI) and runtime
 
 This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
@@ -42,8 +42,9 @@ behavioural tests.
 - Dependencies: if any new external dependency beyond upgrading to
   `rstest-bdd` 0.4.0 and adding a single system-locale helper crate is
   required, stop and escalate.
-- Interfaces: if a public API signature must change in `src/cli/mod.rs` or
-  `src/localization/mod.rs`, stop and escalate.
+- Interfaces: if a public application programming interface (API) signature
+  must change in `src/cli/mod.rs` or `src/localization/mod.rs`, stop and
+  escalate.
 - Tests: if `make test` still fails after two investigation cycles, stop and
   escalate.
 - Ambiguity: if locale precedence or system-default behaviour remains unclear
@@ -52,9 +53,9 @@ behavioural tests.
 ## Risks
 
 - Risk: system locale strings often include encodings or separators
-  (`en_US.UTF-8`) that are not valid BCP 47 tags. Severity: medium Likelihood:
-  high Mitigation: implement a normalization helper and cover representative
-  cases with unit tests.
+  (`en_US.UTF-8`) that are not valid Best Current Practice (BCP) 47 tags.
+  Severity: medium Likelihood: high Mitigation: implement a normalization
+  helper and cover representative cases with unit tests.
 
 - Risk: upgrading `rstest-bdd` to 0.4.0 may require API adjustments to step
   macros or fixtures. Severity: medium Likelihood: medium Mitigation: review
@@ -78,10 +79,10 @@ behavioural tests.
 
 ## Surprises & discoveries
 
-- Observation: BDD filesystem scenarios now skip when no block devices are
-  available. Evidence: `tests/bdd/steps/fs.rs` uses `rstest_bdd::skip!` to
-  avoid environment-specific failures. Impact: tests remain stable across
-  minimal environments.
+- Observation: behaviour-driven development (BDD) filesystem scenarios now
+  skip when no block devices are available. Evidence: `tests/bdd/steps/fs.rs`
+  uses `rstest_bdd::skip!` to avoid environment-specific failures. Impact:
+  tests remain stable across minimal environments.
 
 ## Decision log
 
@@ -92,8 +93,8 @@ behavioural tests.
 
 - Decision: Use a system-locale helper crate (e.g. `sys-locale`) plus
   normalization logic rather than platform-specific code. Rationale:
-  Cross-platform defaults are otherwise error-prone and would require
-  OS-specific implementations. Date/Author: 2026-01-28 (Codex)
+  Cross-platform defaults are otherwise error-prone and would require operating
+  system (OS)-specific implementations. Date/Author: 2026-01-28 (Codex)
 
 - Decision: Introduce lightweight environment and system-locale provider
   traits instead of adding `mockable` to production dependencies. Rationale:
@@ -117,18 +118,18 @@ Locale handling is currently split across several modules:
 - `src/main.rs` builds a localizer before parsing CLI arguments using
   `cli::locale_hint_from_args` and `NETSUKE_LOCALE`, then rebuilds a runtime
   localizer after `cli::merge_with_config`.
-- `src/cli_l10n.rs` extracts `--locale` from raw arguments to localise clap
+- `src/cli_l10n.rs` extracts `--locale` from raw arguments to localize clap
   help and errors before full parsing.
 - `src/cli_localization.rs` builds Fluent localizers, providing an English
   fallback and optional Spanish resources.
 - `src/cli/mod.rs` defines `Cli` (with `locale: Option<String>`) and provides
   OrthoConfig merging via `merge_with_config`.
 - Tests in `tests/cli_tests`, `tests/localization_tests.rs`, and BDD features
-  validate existing localisation behaviour.
+  validate existing localization behaviour.
 
 The new work should consolidate locale resolution so precedence across
 `--locale`, `NETSUKE_LOCALE`, configuration files, and system defaults is
-consistent. The outcome must update both CLI help localisation and runtime
+consistent. The outcome must update both CLI help localization and runtime
 localization for diagnostics.
 
 ## Plan of work
@@ -150,7 +151,7 @@ Stage B: scaffolding and tests (small, verifiable diffs)
   `Cargo.toml`, respecting caret requirements, and update `Cargo.lock`.
 - Add unit tests (rstest) for a new locale-resolution helper covering:
   - CLI > env > config > system precedence.
-  - Normalisation of `en_US.UTF-8`, `es_ES`, and already-normal tags.
+  - Normalization of `en_US.UTF-8`, `es_ES`, and already-normal tags.
   - Fallback to `en-US` when preferred locales are unsupported.
 - Add behavioural tests (rstest-bdd) that exercise the locale resolution
   behaviour using step definitions and a feature file. Include:
@@ -260,7 +261,7 @@ crates are modified.
 
 Expected new/updated artefacts include:
 
-- `src/locale_resolution.rs` (or equivalent) for centralised locale logic.
+- `src/locale_resolution.rs` (or equivalent) for centralized locale logic.
 - Updated `Cargo.toml` and `Cargo.lock` for dependency changes.
 - New/updated tests in `tests/` and `tests/bdd/`.
 - Updated documentation in `docs/users-guide.md`, `docs/netsuke-design.md`,

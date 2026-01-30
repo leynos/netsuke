@@ -3,36 +3,11 @@
 use anyhow::{Result, ensure};
 use netsuke::cli::Cli;
 use netsuke::locale_resolution::{
-    EnvProvider, NETSUKE_LOCALE_ENV, SystemLocale, normalize_locale_tag, resolve_runtime_locale,
-    resolve_startup_locale,
+    normalize_locale_tag, resolve_runtime_locale, resolve_startup_locale,
 };
 use rstest::rstest;
 use std::ffi::OsString;
-
-#[derive(Debug, Default)]
-struct StubEnv {
-    locale: Option<&'static str>,
-}
-
-impl EnvProvider for StubEnv {
-    fn var(&self, key: &str) -> Option<String> {
-        if key == NETSUKE_LOCALE_ENV {
-            return self.locale.map(ToString::to_string);
-        }
-        None
-    }
-}
-
-#[derive(Debug, Default)]
-struct StubSystemLocale {
-    locale: Option<&'static str>,
-}
-
-impl SystemLocale for StubSystemLocale {
-    fn system_locale(&self) -> Option<String> {
-        self.locale.map(ToString::to_string)
-    }
-}
+use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 
 fn build_args(args: &[&str]) -> Vec<OsString> {
     args.iter().map(|arg| OsString::from(*arg)).collect()
@@ -63,12 +38,8 @@ fn normalize_locale_tag_handles_common_formats(
 #[rstest]
 fn resolve_startup_locale_prefers_cli_over_env_and_system() -> Result<()> {
     let args = build_args(&["netsuke", "--locale", "es-ES"]);
-    let env = StubEnv {
-        locale: Some("fr-FR"),
-    };
-    let system = StubSystemLocale {
-        locale: Some("en_US"),
-    };
+    let env = StubEnv::with_locale("fr-FR");
+    let system = StubSystemLocale::with_locale("en_US");
     let resolved = resolve_startup_locale(&args, &env, &system);
     ensure!(
         resolved.as_deref() == Some("es-ES"),
@@ -80,19 +51,15 @@ fn resolve_startup_locale_prefers_cli_over_env_and_system() -> Result<()> {
 #[rstest]
 fn resolve_startup_locale_uses_env_then_system() -> Result<()> {
     let args = build_args(&["netsuke"]);
-    let env = StubEnv {
-        locale: Some("fr-FR"),
-    };
-    let system = StubSystemLocale {
-        locale: Some("es_ES.UTF-8"),
-    };
+    let env = StubEnv::with_locale("fr-FR");
+    let system = StubSystemLocale::with_locale("es_ES.UTF-8");
     let resolved = resolve_startup_locale(&args, &env, &system);
     ensure!(
         resolved.as_deref() == Some("fr-FR"),
         "expected env locale to win, got {resolved:?}"
     );
 
-    let env_fallback = StubEnv { locale: None };
+    let env_fallback = StubEnv::default();
     let resolved_fallback = resolve_startup_locale(&args, &env_fallback, &system);
     ensure!(
         resolved_fallback.as_deref() == Some("es-ES"),
@@ -107,9 +74,7 @@ fn resolve_runtime_locale_uses_merged_config_then_system() -> Result<()> {
         locale: Some("es-ES".to_owned()),
         ..Cli::default()
     };
-    let system = StubSystemLocale {
-        locale: Some("en_US"),
-    };
+    let system = StubSystemLocale::with_locale("en_US");
     let resolved = resolve_runtime_locale(&cli, &system);
     ensure!(
         resolved.as_deref() == Some("es-ES"),
@@ -124,6 +89,32 @@ fn resolve_runtime_locale_uses_merged_config_then_system() -> Result<()> {
     ensure!(
         resolved_invalid.as_deref() == Some("en-US"),
         "expected system locale fallback, got {resolved_invalid:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn resolve_runtime_locale_returns_none_when_no_valid_locale() -> Result<()> {
+    let cli_invalid = Cli {
+        locale: Some("bad locale".to_owned()),
+        ..Cli::default()
+    };
+    let system_invalid = StubSystemLocale::with_locale("also bad");
+    let resolved_both_invalid = resolve_runtime_locale(&cli_invalid, &system_invalid);
+    ensure!(
+        resolved_both_invalid.is_none(),
+        "expected None when both merged and system locales are invalid, got {resolved_both_invalid:?}"
+    );
+
+    let cli_none = Cli {
+        locale: None,
+        ..Cli::default()
+    };
+    let system_none = StubSystemLocale::default();
+    let resolved_both_none = resolve_runtime_locale(&cli_none, &system_none);
+    ensure!(
+        resolved_both_none.is_none(),
+        "expected None when no usable locale is available, got {resolved_both_none:?}"
     );
     Ok(())
 }

@@ -101,7 +101,7 @@ pub struct TestWorld {
     /// Text payload injected into stdlib templates for streaming scenarios.
     pub stdlib_text: Slot<String>,
 
-    // Localisation state (non-Clone)
+    // Localization state (non-Clone)
     /// Lock guarding process-wide localizer mutations during scenarios.
     pub localization_lock: RefCell<Option<MutexGuard<'static, ()>>>,
     /// Localizer guard for scenario-level localization overrides.
@@ -118,7 +118,7 @@ pub struct TestWorld {
     pub locale_system: Slot<String>,
     /// Resolved locale output captured for resolution scenarios.
     pub resolved_locale: Slot<String>,
-    /// Localised message output captured for resolution scenarios.
+    /// Localized message output captured for resolution scenarios.
     pub locale_message: Slot<String>,
 
     // HTTP server state (non-Clone)
