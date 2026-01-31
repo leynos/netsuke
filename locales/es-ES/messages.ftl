@@ -328,7 +328,7 @@ example.files_processed = { $count ->
 }
 
 example.errors_found = { $count ->
-    [zero] No se encontraron errores.
+    [0] No se encontraron errores.
     [one] Se encontró { $count } error.
    *[other] Se encontraron { $count } errores.
 }

@@ -1,13 +1,13 @@
-# Netsuke Translator Guide
+# Netsuke translator guide
 
 This guide explains how to translate Netsuke's user-facing messages into new
 languages or update existing translations.
 
 ## 1. Introduction
 
-Netsuke uses [Project Fluent][fluent] for localization. Fluent is a modern
-localization system designed to handle the complexities of natural language
-whilst keeping translations simple and readable.
+Netsuke uses [Project Fluent](https://projectfluent.org/) for localization.
+Fluent is a modern localization system designed to handle the complexities of
+natural language whilst keeping translations simple and readable.
 
 **Current locales:**
 
@@ -22,9 +22,7 @@ whilst keeping translations simple and readable.
 4. System default locale
 5. Fallback to `en-US`
 
-[fluent]: https://projectfluent.org/
-
-## 2. File Structure
+## 2. File structure
 
 Translation files are located in the `locales/` directory:
 
@@ -38,7 +36,7 @@ locales/
 
 Each locale has a single `messages.ftl` file containing all translations.
 
-### FTL File Format
+### FTL file format
 
 Fluent Translation List (FTL) files use a simple key-value format:
 
@@ -58,9 +56,11 @@ greeting = Hello, { $name }!
 - Lines starting with `.` are attributes (sub-messages)
 - Lines starting with `-` are terms (reusable fragments, not referenced in code)
 
-## 3. Message Key Conventions
+## 3. Message key conventions
 
-Netsuke uses hierarchical dot-notation for message keys, organised by domain:
+Netsuke uses hierarchical dot-notation for message keys, organized by domain:
+
+<!-- Table 1: Message key domains and their purposes -->
 
 | Domain | Purpose | Example |
 | ------ | ------- | ------- |
@@ -80,7 +80,7 @@ Netsuke uses hierarchical dot-notation for message keys, organised by domain:
 The corresponding Rust constants are defined in `src/localization/keys.rs`
 using UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to `cli.flag.file.help`).
 
-## 4. Variable Usage
+## 4. Variable usage
 
 Variables are placeholders replaced with dynamic values at runtime.
 
@@ -94,7 +94,9 @@ error-at-path = Error at { $path }: { $details }
 range-error = Value { $value } must be between { $min } and { $max }.
 ```
 
-### Variable Types
+### Variable types
+
+<!-- Table 2: Variable types used in Fluent messages -->
 
 | Type | Description | Example |
 | ---- | ----------- | ------- |
@@ -102,7 +104,7 @@ range-error = Value { $value } must be between { $min } and { $max }.
 | Number | Numeric values (used with plurals) | `{ $count }`, `{ $limit }` |
 | Path | File system paths | `{ $path }`, `{ $directory }` |
 
-### Variable Catalogue by Domain
+### Variable catalogue by domain
 
 **CLI validation (`cli.validation.*`):**
 
@@ -137,12 +139,12 @@ range-error = Value { $value } must be between { $min } and { $max }.
 - `$limit` - Size limit in bytes
 - `$mode`, `$stream` - Output configuration
 
-## 5. Plural Forms
+## 5. Plural forms
 
-Fluent uses CLDR plural rules to handle grammatical number. Different languages
-have different plural categories.
+Fluent uses Common Locale Data Repository (CLDR) plural rules to handle
+grammatical number. Different languages have different plural categories.
 
-### English Plural Categories
+### English plural categories
 
 English uses two categories: `one` (singular) and `other` (plural).
 
@@ -155,7 +157,7 @@ example.files_processed = { $count ->
 
 The `*` marks the default variant (required).
 
-### Spanish Plural Categories
+### Spanish plural categories
 
 Spanish also uses `one` and `other`, but verb conjugation often differs:
 
@@ -166,7 +168,7 @@ example.files_processed = { $count ->
 }
 ```
 
-### Special Cases
+### Special cases
 
 Use explicit numeric matches for special cases like zero:
 
@@ -178,22 +180,23 @@ example.errors_found = { $count ->
 }
 ```
 
-### CLDR Plural Categories by Language
+### CLDR plural categories by language
+
+<!-- Table 3: CLDR plural categories for common languages -->
 
 | Language | Categories |
 | -------- | ---------- |
 | English | `one`, `other` |
 | Spanish | `one`, `other` |
-| French | `one`, `many`, `other` |
+| French | `one`, `other` |
 | Russian | `one`, `few`, `many`, `other` |
 | Arabic | `zero`, `one`, `two`, `few`, `many`, `other` |
 | Japanese | `other` (no grammatical plural) |
 
-Consult the [CLDR plural rules][cldr-plural] for your target language.
+Consult the [CLDR plural rules](https://cldr.unicode.org/index/cldr-spec/plural-rules)
+for the target language.
 
-[cldr-plural]: https://cldr.unicode.org/index/cldr-spec/plural-rules
-
-### Current Limitation
+### Current limitation
 
 The netsuke localization API currently passes all arguments as strings rather
 than preserving numeric types. This means CLDR plural selectors like `[one]`
@@ -204,7 +207,7 @@ for CLDR category selection.
 The FTL files include plural form examples demonstrating correct Fluent syntax
 for future compatibility when numeric argument support is added.
 
-## 6. Adding a New Locale
+## 6. Adding a new locale
 
 To add support for a new language (e.g., French `fr-FR`):
 
@@ -263,7 +266,7 @@ cargo run -- --locale fr-FR --help
 
 Verify the output appears in French.
 
-## 7. Quality Checklist
+## 7. Quality checklist
 
 Before submitting translations, verify:
 
@@ -275,7 +278,7 @@ Before submitting translations, verify:
 - [ ] The build passes (`cargo build`)
 - [ ] The locale renders correctly (`netsuke --locale <tag> --help`)
 
-## 8. Compile-Time Validation
+## 8. Compile-time validation
 
 Netsuke validates translations at compile time via `build_l10n_audit.rs`:
 
@@ -285,7 +288,7 @@ Netsuke validates translations at compile time via `build_l10n_audit.rs`:
 Both conditions cause the build to fail with a clear error message listing
 the problematic keys.
 
-## 9. Testing Translations
+## 9. Testing translations
 
 Localization is tested via:
 

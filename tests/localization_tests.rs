@@ -1,13 +1,40 @@
 //! Tests covering localization helpers and fallback behaviour.
 
-use std::sync::Arc;
+use std::sync::{Arc, MutexGuard};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
-use netsuke::localization::{self, keys};
+use netsuke::localization::{self, LocalizerGuard, keys};
+
+/// Guard pair holding both the test lock and the localizer override.
+///
+/// The test lock ensures localization tests run serially, and the localizer
+/// guard restores the previous localizer when dropped.
+struct LocalizerTestGuards {
+    #[expect(dead_code, reason = "Held for lifetime, not accessed directly")]
+    lock: MutexGuard<'static, ()>,
+    #[expect(dead_code, reason = "Held for lifetime, not accessed directly")]
+    localizer: LocalizerGuard,
+}
+
+/// Create localizer guards for a given locale.
+///
+/// This helper acquires the test lock and sets up the localizer for the
+/// specified locale, returning guards that restore state when dropped.
+fn localizer_guards(locale: &str) -> Result<LocalizerTestGuards> {
+    let lock = localizer_test_lock()
+        .map_err(|e| anyhow::anyhow!("{e}"))
+        .context("localizer test lock poisoned")?;
+    let localizer = cli_localization::build_localizer(Some(locale));
+    let guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    Ok(LocalizerTestGuards {
+        lock,
+        localizer: guard,
+    })
+}
 
 fn which_message(command: &str) -> String {
     localization::message(keys::STDLIB_WHICH_NOT_FOUND)
@@ -24,9 +51,7 @@ fn localisation_resolves_expected_message(
     #[case] locale: &str,
     #[case] expected_substring: &str,
 ) -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let localizer = cli_localization::build_localizer(Some(locale));
-    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    let _guards = localizer_guards(locale)?;
 
     let message = which_message("tool");
     ensure!(
@@ -49,9 +74,7 @@ fn example_files_processed_message_resolves(
     #[case] expected_verb: &str,
     #[case] expected_noun: &str,
 ) -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let localizer = cli_localization::build_localizer(Some(locale));
-    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    let _guards = localizer_guards(locale)?;
 
     let message = localization::message(keys::EXAMPLE_FILES_PROCESSED)
         .with_arg("count", 5)
@@ -81,9 +104,7 @@ fn example_errors_found_message_resolves(
     #[case] locale: &str,
     #[case] expected_substring: &str,
 ) -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let localizer = cli_localization::build_localizer(Some(locale));
-    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    let _guards = localizer_guards(locale)?;
 
     let message = localization::message(keys::EXAMPLE_ERRORS_FOUND)
         .with_arg("count", 3)
@@ -103,9 +124,7 @@ fn example_errors_found_message_resolves(
 
 #[rstest]
 fn variable_interpolation_works_correctly() -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let localizer = cli_localization::build_localizer(Some("en-US"));
-    let _guard = localization::set_localizer_for_tests(Arc::from(localizer));
+    let _guards = localizer_guards("en-US")?;
 
     let message = localization::message(keys::STDLIB_FETCH_URL_INVALID)
         .with_arg("url", "https://example.com")

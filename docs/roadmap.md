@@ -234,9 +234,12 @@ library, and CLI ergonomics.
   - [x] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
     defaults.
   - [x] Fall back to `en-US` when translations are absent.
-- [x] 3.7.3. Provide translator tooling and documentation.
-  - [x] Cover message keys, plural forms, and variable usage.
-  - [x] Ensure localization smoke tests cover at least one secondary locale.
+- [x] 3.7.3. Translator tooling and documentation published.
+  - [x] `docs/translators-guide.md` covers FTL syntax, key conventions, variable
+    catalogue, plural forms, and adding new locales.
+  - [x] Plural form examples (`example.files_processed`, `example.errors_found`)
+    added to en-US and es-ES FTL files with corresponding key constants.
+  - [x] Localization smoke tests verify en-US and es-ES message resolution.
 
 ### 3.8. Accessibility and Section 508 compliance
 

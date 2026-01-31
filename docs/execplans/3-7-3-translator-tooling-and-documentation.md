@@ -64,7 +64,7 @@ Success is observable by:
   documentation in the guide.
 
 - Risk: Adding example messages may cause compile-time audit failures if keys
-  are not synchronised across all locales. Severity: low. Likelihood: medium.
+  are not synchronized across all locales. Severity: low. Likelihood: medium.
   Mitigation: add keys to both en-US and es-ES FTL files and keys.rs
   simultaneously.
 
@@ -142,7 +142,7 @@ Localization is implemented via:
 - `build_l10n_audit.rs` - Compile-time audit ensuring key parity
 
 Message keys use hierarchical dot-notation (e.g., `cli.flag.file.help`,
-`stdlib.fetch.url_invalid`) organised by domain:
+`stdlib.fetch.url_invalid`) organized by domain:
 
 - `cli.*` - CLI help text and validation errors
 - `runner.*` - Manifest loading and I/O contexts
@@ -160,7 +160,7 @@ currently implemented; all messages use simple string interpolation.
 Create `docs/translators-guide.md` covering:
 
 1. **Introduction** - Purpose, how Fluent works, locale precedence
-2. **FTL file structure** - Location, section organisation, comments
+2. **FTL file structure** - Location, section organization, comments
 3. **Message key conventions** - Hierarchical naming, domain prefixes
 4. **Variable usage** - Syntax, types, catalogue by domain
 5. **Plural forms** - Fluent syntax, CLDR categories, examples
@@ -169,7 +169,7 @@ Create `docs/translators-guide.md` covering:
 
 ### Stage B: Add plural form examples
 
-Add demonstration messages showing pluralisation:
+Add demonstration messages showing pluralization:
 
 **en-US:**
 
