@@ -276,4 +276,6 @@ define_keys! {
     STDLIB_REGISTER_OPEN_DIR => "stdlib.register.open_dir",
     STDLIB_REGISTER_RESOLVE_DIR => "stdlib.register.resolve_dir",
     STDLIB_REGISTER_DIR_NON_UTF8 => "stdlib.register.dir_non_utf8",
+    EXAMPLE_FILES_PROCESSED => "example.files_processed",
+    EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }

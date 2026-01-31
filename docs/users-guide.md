@@ -564,6 +564,9 @@ diagnostics, including manifest parse failures, stdlib template errors, and
 runner failures. Spanish (`es-ES`) is included as a reference translation;
 unsupported locales fall back to English (`en-US`).
 
+For information on contributing translations, see the
+[Translator Guide](translators-guide.md).
+
 ### Exit Codes
 
 - `0`: Success.
