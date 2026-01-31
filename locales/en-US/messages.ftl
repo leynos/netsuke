@@ -315,3 +315,19 @@ stdlib.which.workspace_non_utf8 = Workspace path contains non-UTF-8 components w
 stdlib.register.open_dir = Failed to open current directory for stdlib registration.
 stdlib.register.resolve_dir = Failed to resolve current directory for stdlib registration.
 stdlib.register.dir_non_utf8 = Current directory contains non-UTF-8 components: { $path }.
+
+# Plural form examples for translators.
+# These messages demonstrate Fluent's select expression syntax using CLDR
+# plural categories. Note: These require numeric FluentValue arguments to
+# properly select variants; the netsuke localization API currently passes
+# all arguments as strings, so selection falls back to the default variant.
+example.files_processed = { $count ->
+    [one] Processed { $count } file.
+   *[other] Processed { $count } files.
+}
+
+example.errors_found = { $count ->
+    [zero] No errors found.
+    [one] { $count } error found.
+   *[other] { $count } errors found.
+}

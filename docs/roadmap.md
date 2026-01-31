@@ -234,9 +234,9 @@ library, and CLI ergonomics.
   - [x] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
     defaults.
   - [x] Fall back to `en-US` when translations are absent.
-- [ ] 3.7.3. Provide translator tooling and documentation.
-  - [ ] Cover message keys, plural forms, and variable usage.
-  - [ ] Ensure localization smoke tests cover at least one secondary locale.
+- [x] 3.7.3. Provide translator tooling and documentation.
+  - [x] Cover message keys, plural forms, and variable usage.
+  - [x] Ensure localization smoke tests cover at least one secondary locale.
 
 ### 3.8. Accessibility and Section 508 compliance
 
