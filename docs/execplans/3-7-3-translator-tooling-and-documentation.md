@@ -104,7 +104,7 @@ Success is observable by:
   translator guide is sufficient for this milestone. Date/Author: 2026-01-31
   (Plan)
 
-- Decision: Keep plural form examples as documentation despite selection not
+- Decision: Keep plural form examples as documentation, despite selection not
   working. Rationale: The FTL syntax is valid and demonstrates correct Fluent
   patterns for future compatibility when numeric argument support is added.
   Tests verify variable interpolation works correctly. Date/Author: 2026-01-31

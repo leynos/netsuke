@@ -58,9 +58,9 @@ greeting = Hello, { $name }!
 
 ## 3. Message key conventions
 
-Netsuke uses hierarchical dot-notation for message keys, organized by domain:
+Netsuke uses hierarchical dot-notation for message keys, organized by domain.
 
-<!-- Table 1: Message key domains and their purposes -->
+Table 1: Message key domains and their purposes
 
 | Domain | Purpose | Example |
 | ------ | ------- | ------- |
@@ -96,7 +96,7 @@ range-error = Value { $value } must be between { $min } and { $max }.
 
 ### Variable types
 
-<!-- Table 2: Variable types used in Fluent messages -->
+Table 2: Variable types used in Fluent messages
 
 | Type | Description | Example |
 | ---- | ----------- | ------- |
@@ -182,7 +182,7 @@ example.errors_found = { $count ->
 
 ### CLDR plural categories by language
 
-<!-- Table 3: CLDR plural categories for common languages -->
+Table 3: CLDR plural categories for common languages
 
 | Language | Categories |
 | -------- | ---------- |
