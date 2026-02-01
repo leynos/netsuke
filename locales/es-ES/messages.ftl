@@ -315,3 +315,20 @@ stdlib.which.workspace_non_utf8 = La ruta del workspace contiene componentes no 
 stdlib.register.open_dir = No se pudo abrir el directorio actual para registrar la stdlib.
 stdlib.register.resolve_dir = No se pudo resolver el directorio actual para registrar la stdlib.
 stdlib.register.dir_non_utf8 = El directorio actual contiene componentes no UTF-8: { $path }.
+
+# Ejemplos de formas plurales para traductores.
+# Estos mensajes demuestran la sintaxis de expresiones select de Fluent
+# usando categorías plurales CLDR. Nota: Estas requieren argumentos
+# FluentValue numéricos para seleccionar correctamente las variantes;
+# la API de localización de netsuke actualmente pasa todos los argumentos
+# como cadenas, por lo que la selección usa la variante predeterminada.
+example.files_processed = { $count ->
+    [one] Se procesó { $count } archivo.
+   *[other] Se procesaron { $count } archivos.
+}
+
+example.errors_found = { $count ->
+    [0] No se encontraron errores.
+    [one] Se encontró { $count } error.
+   *[other] Se encontraron { $count } errores.
+}
