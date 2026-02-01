@@ -31,8 +31,10 @@ The primary deliverables are:
 Success is observable by:
 
 - A comprehensive translator guide existing in `docs/translators-guide.md`
-- FTL files containing working plural form examples
-- Unit tests validating plural form rendering in both en-US and es-ES
+- FTL files containing plural form examples (note: due to string argument
+  passing, selection defaults to `[other]` variant)
+- Unit tests validating message resolution and variable interpolation in both
+  en-US and es-ES
 - All quality gates passing (`make check-fmt`, `make lint`, `make test`)
 
 ## Constraints

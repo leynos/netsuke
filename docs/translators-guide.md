@@ -78,7 +78,8 @@ Table 1: Message key domains and their purposes
 **Naming pattern:** `domain.subdomain.specific_message`
 
 The corresponding Rust constants are defined in `src/localization/keys.rs`
-using UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to `cli.flag.file.help`).
+using UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to
+`cli.flag.file.help`).
 
 ## 4. Variable usage
 
@@ -198,7 +199,7 @@ for the target language.
 
 ### Current limitation
 
-The netsuke localization API currently passes all arguments as strings rather
+The Netsuke localization API currently passes all arguments as strings rather
 than preserving numeric types. This means CLDR plural selectors like `[one]`
 will not match as expected because Fluent requires numeric `FluentValue` types
 for CLDR category selection.
