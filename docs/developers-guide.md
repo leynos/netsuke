@@ -1,4 +1,4 @@
-# Developers guide
+# Developer guide
 
 This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the

@@ -90,6 +90,9 @@ the conflict in `Decision Log` before proceeding.
 - [x] (2026-02-08 19:25Z) Execute stage D documentation updates for the new
   behavioural test usage.
 - [x] (2026-02-08 19:40Z) Execute stage E final quality gates.
+- [x] (2026-02-08 21:28Z) Address PR review follow-up comments by correcting
+  documentation heading grammar, fixing invalid cross-document links, and
+  aligning scenario fixture examples with idiomatic `_scenario_db` usage.
 
 ## Surprises & Discoveries
 
@@ -116,6 +119,13 @@ the conflict in `Decision Log` before proceeding.
   `cargo test --test bdd_tests` passed immediately after updating the lockfile.
   Impact: migration effort focused on adopting new v0.5.0 usage patterns for
   clarity and reduced boilerplate.
+
+- Observation: post-migration PR review identified stale documentation links
+  and less-idiomatic example signatures in the users guide. Evidence:
+  unresolved discussions `#discussion_r2779844231` and
+  `#discussion_r2779844235` plus `rg` hits for missing files and
+  `let _ = scenario_db;`. Impact: docs required a corrective pass to restore
+  link integrity and ensure guidance matches the preferred v0.5.0 style.
 
 ## Decision Log
 
@@ -145,6 +155,12 @@ the conflict in `Decision Log` before proceeding.
   behaviour and removes repetitive literal annotations. Date/Author: 2026-02-08
   (Codex)
 
+- Decision: standardize migration-related documentation links on
+  `docs/rstest-bdd-v0-5-0-migration-guide.md` and reference the existing ADR as
+  "Architecture Decision Record 002 (ADR-002)". Rationale: this avoids broken
+  links, expands acronyms on first use, and keeps citations aligned with files
+  that actually exist in `docs/`. Date/Author: 2026-02-08 (Codex)
+
 ## Outcomes & retrospective
 
 Migration complete. Implemented outcomes:
@@ -158,6 +174,9 @@ Migration complete. Implemented outcomes:
 - Applied inferred `#[then]` patterns for simple no-argument CLI step
   definitions.
 - Updated `docs/developers-guide.md` to reflect active v0.5.0 usage policy.
+- Resolved PR follow-up documentation issues by fixing guide heading grammar,
+  replacing stale migration/ADR links with valid targets, and updating scenario
+  examples to use `_scenario_db: ScenarioDb` without placeholder statements.
 - Revalidated quality gates: `make check-fmt`, `make lint`, and `make test`
   passing after migration.
 
@@ -353,3 +372,6 @@ pair in this plan's `Surprises & Discoveries` section before retrying.
 - 2026-02-08: Updated status to `COMPLETE` after implementing dependency
   migration, typed step refactors, inferred step patterns, and final gate
   validation.
+- 2026-02-08: Added a post-completion revision for unresolved PR review
+  comments, including docs link repairs, acronym expansion, idiomatic scenario
+  fixture examples, and a fresh full-gate validation pass.

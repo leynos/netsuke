@@ -132,7 +132,7 @@ argument, the wrapper panics with
 mismatch explicit.
 
 For cucumber-rs migration compatibility notes, see
-[Migration and async patterns](cucumber-rs-migration-and-async-patterns.md).
+[Migration and async patterns](rstest-bdd-v0-5-0-migration-guide.md).
 
 The procedural macro implementation expands the annotated function into two
 parts: the original function and a wrapper function that registers the step in
@@ -634,14 +634,10 @@ fn assert_update_succeeds(scenario_db: &ScenarioDb) {
 }
 
 #[scenario(path = "tests/features/user_management.feature", name = "Create user")]
-fn create_user_scenario(scenario_db: ScenarioDb) {
-    let _ = scenario_db;
-}
+fn create_user_scenario(_scenario_db: ScenarioDb) {}
 
 #[scenario(path = "tests/features/user_management.feature", name = "Update user")]
-fn update_user_scenario(scenario_db: ScenarioDb) {
-    let _ = scenario_db;
-}
+fn update_user_scenario(_scenario_db: ScenarioDb) {}
 ```
 
 In this pattern:
@@ -992,7 +988,7 @@ Async scenarios run on Tokio's current-thread runtime. Step functions may be
 `async fn` and are awaited sequentially, keeping fixture borrows valid across
 `.await` points. Use one of the following patterns to keep async work safe and
 predictable. This section summarizes the canonical guidance in
-[Migration and async patterns](cucumber-rs-migration-and-async-patterns.md).
+[Migration and async patterns](rstest-bdd-v0-5-0-migration-guide.md).
 
 - **Prefer async fixtures:** If a step needs async data, move the async call
   into a fixture and inject the resolved value into the step. The scenario
@@ -1156,8 +1152,9 @@ fn async_wrapper_with_aliases<'ctx>(
 
 - **Tokio current-thread mode only:** Multi-threaded Tokio mode would require
   `Send` futures, which conflicts with the `RefCell`-backed fixture storage.
-  See [ADR-001](adr-001-async-fixtures-and-test.md) for the full design
-  rationale.
+  See Architecture Decision Record 002 (ADR-002),
+  [Replace cucumber with rstest-bdd](adr-002-replace-cucumber-with-rstest-bdd.md),
+  for the full design rationale.
 - **Nested runtime safeguards:** Async-only steps running in synchronous
   scenarios use a per-step runtime fallback, which refuses to run when a Tokio
   runtime is already active on the current thread.
