@@ -64,14 +64,16 @@ scenario test.
 `rstest-bdd-macros` is configured with `strict-compile-time-validation`, so
 missing or ambiguous step bindings should be treated as compile-time failures.
 
-## rstest-bdd v0.5.0 migration usage
+## rstest-bdd v0.5.0 usage
 
-The migration plan is tracked in
+The migration plan and implementation record are tracked in
 `docs/execplans/rstest-bdd-v0-5-0-behavioural-suite-migration.md`.
 
-The intended post-migration usage is:
+Current usage in this repository is:
 
 - `rstest-bdd` and `rstest-bdd-macros` pinned to `0.5.0`.
+- Step parameters favour typed wrappers from `tests/bdd/types.rs`; wrappers
+  implement `FromStr` so step signatures can use domain types directly.
 - Prefer inferred step patterns for simple, no-argument steps when this
   reduces duplication and keeps feature wording clear.
 - Use `rstest_bdd::async_step::sync_to_async` for manual sync-to-async wrappers

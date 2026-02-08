@@ -53,6 +53,20 @@ macro_rules! define_newtype {
             }
         }
 
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                Self::new(s)
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = std::convert::Infallible;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Ok(Self::new(s))
+            }
+        }
+
         impl fmt::Display for $name {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(f, "{}", self.0)
