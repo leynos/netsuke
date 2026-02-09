@@ -116,28 +116,24 @@ fn output_mode_is_standard(world: &TestWorld) -> Result<()> {
 // Then steps: verify CLI accessible field
 // ---------------------------------------------------------------------------
 
-#[then]
-fn accessible_mode_is_enabled(world: &TestWorld) -> Result<()> {
+fn verify_accessible_mode(world: &TestWorld, expected: Option<bool>) -> Result<()> {
     let accessible = world
         .cli
         .with_ref(|cli| cli.accessible)
         .ok_or_else(|| anyhow::anyhow!("CLI has not been parsed"))?;
     ensure!(
-        accessible == Some(true),
-        "expected accessible to be Some(true), got {accessible:?}"
+        accessible == expected,
+        "expected accessible to be {expected:?}, got {accessible:?}"
     );
     Ok(())
 }
 
 #[then]
+fn accessible_mode_is_enabled(world: &TestWorld) -> Result<()> {
+    verify_accessible_mode(world, Some(true))
+}
+
+#[then]
 fn accessible_mode_is_disabled(world: &TestWorld) -> Result<()> {
-    let accessible = world
-        .cli
-        .with_ref(|cli| cli.accessible)
-        .ok_or_else(|| anyhow::anyhow!("CLI has not been parsed"))?;
-    ensure!(
-        accessible == Some(false),
-        "expected accessible to be Some(false), got {accessible:?}"
-    );
-    Ok(())
+    verify_accessible_mode(world, Some(false))
 }
