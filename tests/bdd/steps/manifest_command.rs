@@ -2,7 +2,9 @@
 
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::helpers::assertions::assert_slot_contains;
-use crate::bdd::types::{DirectoryName, FileName, ManifestOutputPath, OutputFragment};
+use crate::bdd::types::{
+    CliArgs, DirectoryName, FileName, ManifestOutputPath, OutputFragment, PathString,
+};
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
@@ -128,13 +130,8 @@ fn minimal_workspace(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[given("a directory named {name:string} exists")]
-fn directory_named_exists(world: &TestWorld, name: &str) -> Result<()> {
-    let name = DirectoryName::new(name);
+fn directory_named_exists(world: &TestWorld, name: DirectoryName) -> Result<()> {
     let temp_path = get_temp_path(world)?;
     create_directory_in_workspace(&temp_path, &name)
 }
@@ -143,13 +140,8 @@ fn directory_named_exists(world: &TestWorld, name: &str) -> Result<()> {
 // When steps
 // ---------------------------------------------------------------------------
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[when("the netsuke manifest subcommand is run with {output:string}")]
-fn run_manifest_subcommand(world: &TestWorld, output: &str) -> Result<()> {
-    let output = ManifestOutputPath::new(output);
+fn run_manifest_subcommand(world: &TestWorld, output: ManifestOutputPath) -> Result<()> {
     let temp_path = get_temp_path(world)?;
     let result = run_manifest_command(&temp_path, &output)?;
     store_run_result(world, result);
@@ -160,43 +152,23 @@ fn run_manifest_subcommand(world: &TestWorld, output: &str) -> Result<()> {
 // Then steps
 // ---------------------------------------------------------------------------
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[then("stdout should contain {fragment:string}")]
-fn stdout_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
-    let fragment = OutputFragment::new(fragment);
+fn stdout_should_contain(world: &TestWorld, fragment: OutputFragment) -> Result<()> {
     assert_output_contains(&world.command_stdout, OutputType::Stdout, &fragment)
 }
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[then("stderr should contain {fragment:string}")]
-fn stderr_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
-    let fragment = OutputFragment::new(fragment);
+fn stderr_should_contain(world: &TestWorld, fragment: OutputFragment) -> Result<()> {
     assert_output_contains(&world.command_stderr, OutputType::Stderr, &fragment)
 }
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[then("the file {name:string} should exist")]
-fn file_should_exist(world: &TestWorld, name: &str) -> Result<()> {
-    let name = FileName::new(name);
+fn file_should_exist(world: &TestWorld, name: FileName) -> Result<()> {
     assert_file_existence(world, &name, true)
 }
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[then("the file {name:string} should not exist")]
-fn file_should_not_exist(world: &TestWorld, name: &str) -> Result<()> {
-    let name = FileName::new(name);
+fn file_should_not_exist(world: &TestWorld, name: FileName) -> Result<()> {
     assert_file_existence(world, &name, false)
 }
 
@@ -285,8 +257,8 @@ fn resolve_path_safe(path: &Path) -> Result<PathBuf> {
 /// subdirectory of `/tmp` or the system temp directory, not the root itself)
 /// to prevent accidental deletion of sensitive directories.
 #[given("an empty workspace at path {path:string}")]
-fn empty_workspace_at_path(world: &TestWorld, path: &str) -> Result<()> {
-    let dir = Path::new(path);
+fn empty_workspace_at_path(world: &TestWorld, path: PathString) -> Result<()> {
+    let dir = path.as_path();
     // Resolve the path by canonicalizing existing ancestors and normalizing the
     // rest. This prevents symlink-based traversal attacks like creating a
     // symlink `/tmp/escape -> /` and then using `/tmp/escape/etc/passwd`.
@@ -350,8 +322,8 @@ fn run_netsuke_no_args(world: &TestWorld) -> Result<()> {
     reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
 )]
 #[when("netsuke is run with arguments {args:string}")]
-fn run_netsuke_with_args(world: &TestWorld, args: &str) -> Result<()> {
-    let args: Vec<&str> = args.split_whitespace().collect();
+fn run_netsuke_with_args(world: &TestWorld, args: CliArgs) -> Result<()> {
+    let args: Vec<&str> = args.as_str().split_whitespace().collect();
     run_netsuke_and_store(world, &args)
 }
 

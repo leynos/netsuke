@@ -276,9 +276,8 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 #[given("the CLI is parsed with {args:string}")]
 #[when("the CLI is parsed with {args:string}")]
 #[when("the CLI is parsed with invalid arguments {args:string}")]
-fn parse_cli(world: &TestWorld, args: &str) -> Result<()> {
-    let cli_args = CliArgs::new(args);
-    apply_cli(world, &cli_args);
+fn parse_cli(world: &TestWorld, args: CliArgs) -> Result<()> {
+    apply_cli(world, &args);
     Ok(())
 }
 
@@ -286,44 +285,44 @@ fn parse_cli(world: &TestWorld, args: &str) -> Result<()> {
 // Then steps
 // ---------------------------------------------------------------------------
 
-#[then("parsing succeeds")]
+#[then]
 fn parsing_succeeds(world: &TestWorld) -> Result<()> {
     verify_parsing_succeeded(world)
 }
 
-#[then("the command is build")]
-fn command_is_build(world: &TestWorld) -> Result<()> {
+#[then]
+fn the_command_is_build(world: &TestWorld) -> Result<()> {
     verify_command(world, ExpectedCommand::Build)
 }
 
-#[then("the command is clean")]
-fn command_is_clean(world: &TestWorld) -> Result<()> {
+#[then]
+fn the_command_is_clean(world: &TestWorld) -> Result<()> {
     verify_command(world, ExpectedCommand::Clean)
 }
 
-#[then("the command is graph")]
-fn command_is_graph(world: &TestWorld) -> Result<()> {
+#[then]
+fn the_command_is_graph(world: &TestWorld) -> Result<()> {
     verify_command(world, ExpectedCommand::Graph)
 }
 
-#[then("the command is manifest")]
-fn command_is_manifest(world: &TestWorld) -> Result<()> {
+#[then]
+fn the_command_is_manifest(world: &TestWorld) -> Result<()> {
     verify_command(world, ExpectedCommand::Manifest)
 }
 
 #[then("the manifest path is {path:string}")]
-fn manifest_path(world: &TestWorld, path: &str) -> Result<()> {
-    verify_manifest_path(world, &PathString::new(path))
+fn manifest_path(world: &TestWorld, path: PathString) -> Result<()> {
+    verify_manifest_path(world, &path)
 }
 
 #[then("the first target is {target:string}")]
-fn first_target(world: &TestWorld, target: &str) -> Result<()> {
-    verify_first_target(world, &TargetName::new(target))
+fn first_target(world: &TestWorld, target: TargetName) -> Result<()> {
+    verify_first_target(world, &target)
 }
 
 #[then("the working directory is {directory:string}")]
-fn working_directory(world: &TestWorld, directory: &str) -> Result<()> {
-    verify_working_directory(world, &PathString::new(directory))
+fn working_directory(world: &TestWorld, directory: PathString) -> Result<()> {
+    verify_working_directory(world, &directory)
 }
 
 #[then("the job count is {count:usize}")]
@@ -332,31 +331,31 @@ fn job_count(world: &TestWorld, count: usize) -> Result<()> {
 }
 
 #[then("the emit path is {path:string}")]
-fn emit_path(world: &TestWorld, path: &str) -> Result<()> {
-    verify_emit_path(world, &PathString::new(path))
+fn emit_path(world: &TestWorld, path: PathString) -> Result<()> {
+    verify_emit_path(world, &path)
 }
 
 #[then("the CLI network policy allows {url:string}")]
-fn cli_policy_allows(world: &TestWorld, url: &str) -> Result<()> {
-    verify_cli_policy_allows(world, &UrlString::new(url))
+fn cli_policy_allows(world: &TestWorld, url: UrlString) -> Result<()> {
+    verify_cli_policy_allows(world, &url)
 }
 
 #[then("the CLI network policy rejects {url:string} with {message:string}")]
-fn cli_policy_rejects(world: &TestWorld, url: &str, message: &str) -> Result<()> {
-    verify_cli_policy_rejects(world, &UrlString::new(url), &ErrorFragment::new(message))
+fn cli_policy_rejects(world: &TestWorld, url: UrlString, message: ErrorFragment) -> Result<()> {
+    verify_cli_policy_rejects(world, &url, &message)
 }
 
 #[then("the manifest command path is {path:string}")]
-fn manifest_command_path(world: &TestWorld, path: &str) -> Result<()> {
-    verify_manifest_command_path(world, &PathString::new(path))
+fn manifest_command_path(world: &TestWorld, path: PathString) -> Result<()> {
+    verify_manifest_command_path(world, &path)
 }
 
-#[then("an error should be returned")]
-fn error_should_be_returned(world: &TestWorld) -> Result<()> {
+#[then]
+fn an_error_should_be_returned(world: &TestWorld) -> Result<()> {
     verify_error_returned(world)
 }
 
 #[then("the error message should contain {fragment:string}")]
-fn error_message_should_contain(world: &TestWorld, fragment: &str) -> Result<()> {
-    verify_error_contains(world, &ErrorFragment::new(fragment))
+fn error_message_should_contain(world: &TestWorld, fragment: ErrorFragment) -> Result<()> {
+    verify_error_contains(world, &fragment)
 }
