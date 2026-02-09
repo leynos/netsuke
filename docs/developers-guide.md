@@ -100,4 +100,4 @@ These points are strategy rules, not optional style guidance.
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the
-same change-set so the documented approach remains aligned with the codebase.
+same change-set, so the documented approach remains aligned with the codebase.
