@@ -243,10 +243,10 @@ library, and CLI ergonomics.
 
 ### 3.8. Accessibility and Section 508 compliance
 
-- [ ] 3.8.1. Add accessible output mode.
-  - [ ] Auto-enable for `TERM=dumb`, `NO_COLOR`, or explicit config.
-  - [ ] Replace spinners with static status lines.
-  - [ ] Guarantee textual labels for every status.
+- [x] 3.8.1. Add accessible output mode.
+  - [x] Auto-enable for `TERM=dumb`, `NO_COLOR`, or explicit config.
+  - [x] Replace spinners with static status lines.
+  - [x] Guarantee textual labels for every status.
 - [ ] 3.8.2. Respect accessibility preferences.
   - [ ] Honour `NO_COLOR`, `NETSUKE_NO_EMOJI`, and ASCII-only preferences.
   - [ ] Keep semantic prefixes (Error, Warning, Success) in all modes.

@@ -127,6 +127,14 @@ pub struct TestWorld {
     /// URL exposed by the active HTTP server fixture.
     pub stdlib_url: Slot<String>,
 
+    // Output mode state (Clone)
+    /// Resolved output mode for accessible output scenarios.
+    pub output_mode: Slot<String>,
+    /// Simulated `NO_COLOR` value for output mode detection scenarios.
+    pub simulated_no_color: Slot<String>,
+    /// Simulated `TERM` value for output mode detection scenarios.
+    pub simulated_term: Slot<String>,
+
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
