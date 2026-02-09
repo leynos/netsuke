@@ -91,11 +91,12 @@ Success is observable by:
 
 ## Surprises & discoveries
 
-- Discovery: The netsuke localization API (`LocalizedMessage::with_arg`) converts
+- Discovery: The netsuke localization API (`LocalizedMessage::with_arg`)
+  converts
   all arguments to strings via `.to_string()`. This means Fluent's CLDR plural
   categories (e.g., `[one]`, `[few]`) do not work because they require numeric
-  `FluentValue` types. All plural selections fall back to the `*[other]` variant.
-  Documented this limitation in the translator guide.
+  `FluentValue` types. All plural selections fall back to the `*[other]`
+  variant. Documented this limitation in the translator guide.
 
 ## Decision log
 
@@ -285,8 +286,8 @@ Quality method (how checks are performed):
 ## Idempotence and recovery
 
 All steps are re-runnable. If a test fails, fix the issue and rerun. The
-compile-time audit will immediately report any key mismatches between
-FTL files and keys.rs.
+compile-time audit will immediately report any key mismatches between FTL files
+and keys.rs.
 
 ## Artefacts and notes
 
@@ -310,12 +311,12 @@ No new dependencies required. Uses existing:
 
 ## Critical files
 
-| File | Purpose |
-| ---- | ------- |
-| `locales/en-US/messages.ftl` | Add plural examples |
-| `locales/es-ES/messages.ftl` | Add Spanish plurals |
-| `src/localization/keys.rs` | Add key constants |
-| `tests/localization_tests.rs` | Add plural tests |
-| `docs/users-guide.md` | Add guide reference |
-| `docs/roadmap.md` | Mark 3.7.3 done |
-| `build_l10n_audit.rs` | Existing audit (no changes) |
+| File                          | Purpose                     |
+| ----------------------------- | --------------------------- |
+| `locales/en-US/messages.ftl`  | Add plural examples         |
+| `locales/es-ES/messages.ftl`  | Add Spanish plurals         |
+| `src/localization/keys.rs`    | Add key constants           |
+| `tests/localization_tests.rs` | Add plural tests            |
+| `docs/users-guide.md`         | Add guide reference         |
+| `docs/roadmap.md`             | Mark 3.7.3 done             |
+| `build_l10n_audit.rs`         | Existing audit (no changes) |

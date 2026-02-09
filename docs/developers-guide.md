@@ -14,8 +14,10 @@ Run these commands before finalizing any change:
 
 When command output is long, preserve exit codes and logs:
 
-    set -o pipefail
-    make test 2>&1 | tee /tmp/netsuke-make-test.log
+```bash
+set -o pipefail
+make test 2>&1 | tee /tmp/netsuke-make-test.log
+```
 
 For documentation changes, also run:
 

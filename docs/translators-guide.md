@@ -62,18 +62,18 @@ Netsuke uses hierarchical dot-notation for message keys, organized by domain.
 
 Table 1: Message key domains and their purposes
 
-| Domain | Purpose | Example |
-| ------ | ------- | ------- |
-| `cli.*` | CLI help text and validation | `cli.flag.file.help` |
-| `clap-error-*` | Command-line parser errors | `clap-error-missing-argument` |
-| `runner.*` | Manifest loading and I/O | `runner.manifest.not_found` |
-| `manifest.*` | YAML parse and template errors | `manifest.yaml.parse` |
-| `ir.*` | Intermediate representation errors | `ir.rule_not_found` |
-| `ninja_gen.*` | Ninja file generation | `ninja_gen.missing_action` |
-| `stdlib.*` | Standard library helpers | `stdlib.fetch.url_invalid` |
-| `host_pattern.*` | Network host validation | `host_pattern.empty` |
-| `network_policy.*` | Network access control | `network_policy.host.blocked` |
-| `example.*` | Translator examples | `example.files_processed` |
+| Domain             | Purpose                            | Example                       |
+| ------------------ | ---------------------------------- | ----------------------------- |
+| `cli.*`            | CLI help text and validation       | `cli.flag.file.help`          |
+| `clap-error-*`     | Command-line parser errors         | `clap-error-missing-argument` |
+| `runner.*`         | Manifest loading and I/O           | `runner.manifest.not_found`   |
+| `manifest.*`       | YAML parse and template errors     | `manifest.yaml.parse`         |
+| `ir.*`             | Intermediate representation errors | `ir.rule_not_found`           |
+| `ninja_gen.*`      | Ninja file generation              | `ninja_gen.missing_action`    |
+| `stdlib.*`         | Standard library helpers           | `stdlib.fetch.url_invalid`    |
+| `host_pattern.*`   | Network host validation            | `host_pattern.empty`          |
+| `network_policy.*` | Network access control             | `network_policy.host.blocked` |
+| `example.*`        | Translator examples                | `example.files_processed`     |
 
 **Naming pattern:** `domain.subdomain.specific_message`
 
@@ -99,11 +99,11 @@ range-error = Value { $value } must be between { $min } and { $max }.
 
 Table 2: Variable types used in Fluent messages
 
-| Type | Description | Example |
-| ---- | ----------- | ------- |
-| String | Text values | `{ $path }`, `{ $name }` |
-| Number | Numeric values (used with plurals) | `{ $count }`, `{ $limit }` |
-| Path | File system paths | `{ $path }`, `{ $directory }` |
+| Type   | Description                        | Example                       |
+| ------ | ---------------------------------- | ----------------------------- |
+| String | Text values                        | `{ $path }`, `{ $name }`      |
+| Number | Numeric values (used with plurals) | `{ $count }`, `{ $limit }`    |
+| Path   | File system paths                  | `{ $path }`, `{ $directory }` |
 
 ### Variable catalogue by domain
 
@@ -185,17 +185,18 @@ example.errors_found = { $count ->
 
 Table 3: CLDR plural categories for common languages
 
-| Language | Categories |
-| -------- | ---------- |
-| English | `one`, `other` |
-| Spanish | `one`, `other` |
-| French | `one`, `other` |
-| Russian | `one`, `few`, `many`, `other` |
-| Arabic | `zero`, `one`, `two`, `few`, `many`, `other` |
-| Japanese | `other` (no grammatical plural) |
+| Language | Categories                                   |
+| -------- | -------------------------------------------- |
+| English  | `one`, `other`                               |
+| Spanish  | `one`, `other`                               |
+| French   | `one`, `other`                               |
+| Russian  | `one`, `few`, `many`, `other`                |
+| Arabic   | `zero`, `one`, `two`, `few`, `many`, `other` |
+| Japanese | `other` (no grammatical plural)              |
 
-Consult the [CLDR plural rules](https://cldr.unicode.org/index/cldr-spec/plural-rules)
-for the target language.
+Consult the
+[CLDR plural rules](https://cldr.unicode.org/index/cldr-spec/plural-rules) for
+the target language.
 
 ### Current limitation
 
@@ -204,9 +205,9 @@ than preserving numeric types. This means CLDR plural selectors like `[one]`
 will not match as expected because Fluent requires numeric `FluentValue` types
 for CLDR category selection.
 
-**Workaround:** Messages will resolve using the default `*[other]` variant.
-The FTL files include plural form examples demonstrating correct Fluent syntax
-for future compatibility when numeric argument support is added.
+**Workaround:** Messages will resolve using the default `*[other]` variant. The
+FTL files include plural form examples demonstrating correct Fluent syntax for
+future compatibility when numeric argument support is added.
 
 ## 6. Adding a new locale
 
@@ -286,8 +287,8 @@ Netsuke validates translations at compile time via `build_l10n_audit.rs`:
 - **Missing keys**: Keys in `keys.rs` but not in the FTL file
 - **Orphaned keys**: Keys in the FTL file but not in `keys.rs`
 
-Both conditions cause the build to fail with a clear error message listing
-the problematic keys.
+Both conditions cause the build to fail with a clear error message listing the
+problematic keys.
 
 ## 9. Testing translations
 
