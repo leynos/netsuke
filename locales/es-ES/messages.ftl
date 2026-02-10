@@ -323,8 +323,11 @@ status.stage.manifest_load = Cargando manifiesto
 status.stage.network_policy = Configurando política de red
 status.stage.build_graph = Construyendo grafo de dependencias
 status.stage.generate_ninja = Generando archivo Ninja
-status.stage.execute = Ejecutando compilación
-status.complete = Compilación completa.
+status.stage.execute = Ejecutando { $tool }
+status.complete = { $tool } completo.
+status.tool.build = Compilación
+status.tool.clean = Limpieza
+status.tool.graph = Grafo
 
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent

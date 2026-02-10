@@ -20,7 +20,10 @@ pub trait StatusReporter {
     fn report_stage(&self, current: u32, total: u32, description: &str);
 
     /// Emit a completion message after a successful pipeline run.
-    fn report_complete(&self);
+    ///
+    /// The `tool_key` is a Fluent message key identifying the tool name
+    /// (e.g., [`keys::STATUS_TOOL_BUILD`]).
+    fn report_complete(&self, tool_key: &'static str);
 }
 
 /// Accessible reporter: writes static, labelled lines to stderr.
@@ -40,8 +43,9 @@ impl StatusReporter for AccessibleReporter {
         drop(writeln!(io::stderr(), "{message}"));
     }
 
-    fn report_complete(&self) {
-        let message = localization::message(keys::STATUS_COMPLETE);
+    fn report_complete(&self, tool_key: &'static str) {
+        let tool = localization::message(tool_key);
+        let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
         // Intentionally discard the write result (see above).
         drop(writeln!(io::stderr(), "{message}"));
     }
@@ -55,7 +59,7 @@ pub struct SilentReporter;
 
 impl StatusReporter for SilentReporter {
     fn report_stage(&self, _current: u32, _total: u32, _description: &str) {}
-    fn report_complete(&self) {}
+    fn report_complete(&self, _tool_key: &'static str) {}
 }
 
 /// The total number of pipeline stages reported during a build.
@@ -87,9 +91,13 @@ impl PipelineStage {
         self as u32
     }
 
-    /// Localised description of this stage.
+    /// Localized description of this stage.
+    ///
+    /// For [`PipelineStage::Execute`], the description includes a
+    /// `{$tool}` placeholder resolved from the provided `tool_key`. Pass
+    /// [`None`] for non-Execute stages.
     #[must_use]
-    pub fn description(self) -> String {
+    pub fn description(self, tool_key: Option<&'static str>) -> String {
         match self {
             Self::NetworkPolicy => {
                 localization::message(keys::STATUS_STAGE_NETWORK_POLICY).to_string()
@@ -101,7 +109,13 @@ impl PipelineStage {
             Self::GenerateNinja => {
                 localization::message(keys::STATUS_STAGE_GENERATE_NINJA).to_string()
             }
-            Self::Execute => localization::message(keys::STATUS_STAGE_EXECUTE).to_string(),
+            Self::Execute => {
+                let tool =
+                    tool_key.map_or_else(String::new, |k| localization::message(k).to_string());
+                localization::message(keys::STATUS_STAGE_EXECUTE)
+                    .with_arg("tool", tool)
+                    .to_string()
+            }
         }
     }
 }
@@ -109,7 +123,18 @@ impl PipelineStage {
 /// Report a pipeline stage via a [`StatusReporter`].
 ///
 /// Centralizes the use of [`PIPELINE_STAGE_COUNT`] so call sites do not
-/// need to know the numeric indices or total stage count.
-pub fn report_pipeline_stage(reporter: &dyn StatusReporter, stage: PipelineStage) {
-    reporter.report_stage(stage.index(), PIPELINE_STAGE_COUNT, &stage.description());
+/// need to know the numeric indices or total stage count. Pass a
+/// `tool_key` for the [`PipelineStage::Execute`] stage to produce a
+/// tool-specific description (e.g., "Executing clean"); other stages
+/// ignore it.
+pub fn report_pipeline_stage(
+    reporter: &dyn StatusReporter,
+    stage: PipelineStage,
+    tool_key: Option<&'static str>,
+) {
+    reporter.report_stage(
+        stage.index(),
+        PIPELINE_STAGE_COUNT,
+        &stage.description(tool_key),
+    );
 }

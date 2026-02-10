@@ -596,7 +596,7 @@ Stage 1/5: Configuring network policy
 Stage 2/5: Loading manifest
 Stage 3/5: Building dependency graph
 Stage 4/5: Generating Ninja file
-Stage 5/5: Executing build
+Stage 5/5: Executing Build
 Build complete.
 ```
 

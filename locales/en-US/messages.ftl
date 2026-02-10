@@ -323,8 +323,11 @@ status.stage.manifest_load = Loading manifest
 status.stage.network_policy = Configuring network policy
 status.stage.build_graph = Building dependency graph
 status.stage.generate_ninja = Generating Ninja file
-status.stage.execute = Executing build
-status.complete = Build complete.
+status.stage.execute = Executing { $tool }
+status.complete = { $tool } complete.
+status.tool.build = Build
+status.tool.clean = Clean
+status.tool.graph = Graph
 
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR

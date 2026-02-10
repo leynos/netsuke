@@ -284,6 +284,9 @@ define_keys! {
     STATUS_STAGE_GENERATE_NINJA => "status.stage.generate_ninja",
     STATUS_STAGE_EXECUTE => "status.stage.execute",
     STATUS_COMPLETE => "status.complete",
+    STATUS_TOOL_BUILD => "status.tool.build",
+    STATUS_TOOL_CLEAN => "status.tool.clean",
+    STATUS_TOOL_GRAPH => "status.tool.graph",
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }

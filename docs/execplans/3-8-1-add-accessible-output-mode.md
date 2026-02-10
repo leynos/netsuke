@@ -10,10 +10,10 @@ No `PLANS.md` file exists in this repository.
 
 ## Purpose / big picture
 
-Netsuke currently produces no user-visible progress output during its six-stage
-build pipeline (manifest ingestion through Ninja synthesis). Future work
-(roadmap 3.9) will add animated spinners and progress bars via `indicatif`.
-Before that can happen, the tool needs an accessible output mode that guarantees
+Netsuke currently produces no user-visible progress output during its five-stage
+build pipeline (network policy through build execution). Future work (roadmap
+3.9) will add animated spinners and progress bars via `indicatif`. Before that
+can happen, the tool needs an accessible output mode that guarantees
 screen-reader-friendly, static text output for users who cannot consume animated
 terminal UI.
 
@@ -24,7 +24,7 @@ After this change:
   environment variable, or `--accessible` CLI flag) receive static, labelled
   status lines instead of any future animated output.
 - Every pipeline stage emits a textual status line to stderr (e.g.,
-  "Stage 1/6: Loading manifest...") when accessible mode is active.
+  "Stage 1/5: Configuring network policy") when accessible mode is active.
 - The accessible mode detection is wired through the existing OrthoConfig
   layered configuration system.
 - The output mode abstraction provides the foundation that future spinner work
@@ -32,7 +32,7 @@ After this change:
   while accessible terminals always get static text.
 
 Observable success: running `TERM=dumb netsuke build` (or `NO_COLOR=1` or
-`--accessible`) against a valid manifest produces static "Stage N/6: ..." lines
+`--accessible`) against a valid manifest produces static "Stage N/5: ..." lines
 on stderr before the Ninja output. Running `make check-fmt && make lint &&
 make test` passes with new unit and BDD tests covering the detection logic and
 status output.
@@ -49,7 +49,8 @@ status output.
 - Existing public API signatures in `src/cli/mod.rs` must remain backward
   compatible (new fields with defaults are acceptable).
 - The `Cli::default()` implementation must remain consistent with the new
-  field (accessible defaults to `false`).
+  field (`Cli::default()` sets `accessible` to `None`, enabling auto-detection
+  via `src/cli/mod.rs`).
 - Fluent message keys must be added to both `locales/en-US/messages.ftl` and
   `locales/es-ES/messages.ftl`.
 - `docs/users-guide.md` must document the new flag and auto-detection
@@ -89,9 +90,10 @@ status output.
 
 - Risk: Emitting status lines to stderr during the pipeline may interleave with
   tracing output when `--verbose` is active.
-  Severity: low. Likelihood: medium. Mitigation: Status lines use `eprintln!`
-  which holds the stderr lock atomically per line, matching tracing behaviour.
-  In verbose mode both streams are informational, so interleaving is acceptable.
+  Severity: low. Likelihood: medium. Mitigation: Status lines use
+  `writeln!(io::stderr(), ...)` which holds the stderr lock atomically per
+  line, matching tracing behaviour. In verbose mode both streams are
+  informational, so interleaving is acceptable.
 
 ## Progress
 
@@ -137,12 +139,14 @@ status output.
   enforce handling all modes.
   Date/Author: 2026-02-09 (plan phase).
 
-- Decision: Use `eprintln!` for status lines rather than `tracing::info!`.
+- Decision: Use `writeln!(io::stderr(), ...)` for status lines rather than
+  `tracing::info!`. (Originally planned as `eprintln!`, changed to `writeln!`
+  due to the global `clippy::print_stderr` denial.)
   Rationale: Status lines are user-facing progress output, not diagnostic logs.
   They should appear at the default verbosity level (tracing is gated to
-  `ERROR` unless `--verbose` is set). Using `eprintln!` ensures they always
-  appear on stderr regardless of tracing configuration.
-  Date/Author: 2026-02-09 (plan phase).
+  `ERROR` unless `--verbose` is set). Writing directly to stderr ensures they
+  always appear regardless of tracing configuration.
+  Date/Author: 2026-02-09 (plan phase; updated during implementation).
 
 - Decision: Auto-detection checks `NO_COLOR` (any value), `TERM=dumb`, and
   the explicit `accessible` config field, with explicit config taking
@@ -195,8 +199,8 @@ Implementation complete. All quality gates pass (`make check-fmt`,
   merge. The `cli_overrides_from_matches` function (line 267) strips fields
   not explicitly provided on the command line.
 - `src/runner/mod.rs` — `run()` dispatches to `handle_build`,
-  `handle_clean`, `handle_graph`; `generate_ninja()` runs the six-stage
-  pipeline.
+  `handle_clean`, `handle_graph`; `generate_ninja()` runs the first four
+  pipeline stages.
 - `src/runner/process/mod.rs` — Ninja subprocess management and I/O
   streaming.
 - `src/localization/keys.rs` — Fluent message key constants via
@@ -235,9 +239,9 @@ Implementation complete. All quality gates pass (`make check-fmt`,
   (defaults < config file < environment < CLI).
 - **Fluent**: the localization framework; `.ftl` files contain message
   definitions with argument interpolation.
-- **Pipeline stages**: the six sequential phases Netsuke executes: manifest
-  ingestion, YAML parsing, template expansion, deserialization, IR generation,
-  Ninja synthesis/execution.
+- **Pipeline stages**: the five sequential phases Netsuke executes: network
+  policy configuration, manifest loading, dependency graph construction,
+  Ninja file generation, and build execution.
 
 ## Plan of work
 
@@ -369,20 +373,21 @@ implementations:
 
 The `AccessibleReporter` uses `localization::message` with the
 `STATUS_STAGE_LABEL` key to produce localized status lines, writing them via
-`eprintln!`.
+`drop(writeln!(io::stderr(), ...))` (not `eprintln!`, which is denied by the
+global `clippy::print_stderr` lint).
 
 **`src/runner/mod.rs`** — modify `generate_ninja` to accept a
-`&dyn StatusReporter` and call `report_stage` at each pipeline stage:
+`&dyn StatusReporter` and call `report_pipeline_stage` at each stage:
 
-1. Before `manifest::from_path_with_policy` — stage 1 "Loading manifest"
-2. Before `cli.network_policy()` — stage 2 "Configuring network policy"
+1. Before `cli.network_policy()` — stage 1 "Configuring network policy"
+2. Before `manifest::from_path_with_policy` — stage 2 "Loading manifest"
 3. Before `BuildGraph::from_manifest` — stage 3 "Building dependency graph"
 4. Before `ninja_gen::generate` — stage 4 "Generating Ninja file"
 
 And in `handle_build` / `handle_ninja_tool`:
 
-1. Before `run_ninja` / `run_ninja_tool` — stage 5 "Executing build"
-2. After successful completion — "Build complete."
+5. Before `run_ninja` / `run_ninja_tool` — stage 5 "Executing {tool}"
+6. After successful completion — "{tool} complete."
 
 The `run` function resolves the `OutputMode` using
 `output_mode::resolve(cli.accessible)` and creates the appropriate reporter
@@ -467,11 +472,11 @@ section:
     When accessible mode is active, each pipeline stage produces a labelled
     status line on stderr:
 
-        Stage 1/5: Loading manifest
-        Stage 2/5: Configuring network policy
+        Stage 1/5: Configuring network policy
+        Stage 2/5: Loading manifest
         Stage 3/5: Building dependency graph
         Stage 4/5: Generating Ninja file
-        Stage 5/5: Executing build
+        Stage 5/5: Executing Build
         Build complete.
 
 **`docs/roadmap.md`** — change `- [ ] 3.8.1.` to `- [x] 3.8.1.` and the
@@ -547,7 +552,7 @@ Manual verification:
 
     # With a valid Netsukefile in the current directory:
     TERM=dumb cargo run -- build 2>&1 | grep "Stage"
-    # Should show "Stage 1/5: Loading manifest" etc. on stderr
+    # Should show "Stage 1/5: Configuring network policy" etc. on stderr
 
     NO_COLOR=1 cargo run -- build 2>&1 | grep "Stage"
     # Same output

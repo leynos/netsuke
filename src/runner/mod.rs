@@ -154,7 +154,11 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
         _tmp_file_guard = Some(tmp);
     }
 
-    report_pipeline_stage(reporter, PipelineStage::Execute);
+    report_pipeline_stage(
+        reporter,
+        PipelineStage::Execute,
+        Some(keys::STATUS_TOOL_BUILD),
+    );
     let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
@@ -163,7 +167,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
             build_path.display()
         )
     })?;
-    reporter.report_complete();
+    reporter.report_complete(keys::STATUS_TOOL_BUILD);
     Ok(())
 }
 
@@ -176,7 +180,12 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-fn handle_ninja_tool(cli: &Cli, tool: &str, reporter: &dyn StatusReporter) -> Result<()> {
+fn handle_ninja_tool(
+    cli: &Cli,
+    tool: &str,
+    tool_key: &'static str,
+    reporter: &dyn StatusReporter,
+) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
         subcommand = tool,
@@ -187,7 +196,7 @@ fn handle_ninja_tool(cli: &Cli, tool: &str, reporter: &dyn StatusReporter) -> Re
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
-    report_pipeline_stage(reporter, PipelineStage::Execute);
+    report_pipeline_stage(reporter, PipelineStage::Execute, Some(tool_key));
     let program = process::resolve_ninja_program();
     run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
         format!(
@@ -197,18 +206,18 @@ fn handle_ninja_tool(cli: &Cli, tool: &str, reporter: &dyn StatusReporter) -> Re
             build_path.display()
         )
     })?;
-    reporter.report_complete();
+    reporter.report_complete(tool_key);
     Ok(())
 }
 
 /// Remove build artefacts by invoking `ninja -t clean`.
 fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(cli, "clean", reporter)
+    handle_ninja_tool(cli, "clean", keys::STATUS_TOOL_CLEAN, reporter)
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
 fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(cli, "graph", reporter)
+    handle_ninja_tool(cli, "graph", keys::STATUS_TOOL_GRAPH, reporter)
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
@@ -267,12 +276,12 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         .into());
     }
 
-    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy);
+    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy, None);
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
 
-    report_pipeline_stage(reporter, PipelineStage::ManifestLoad);
+    report_pipeline_stage(reporter, PipelineStage::ManifestLoad, None);
     let manifest = manifest::from_path_with_policy(manifest_path.as_std_path(), policy)
         .with_context(|| {
             localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
@@ -285,11 +294,11 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         debug!("AST:\n{ast_json}");
     }
 
-    report_pipeline_stage(reporter, PipelineStage::BuildGraph);
+    report_pipeline_stage(reporter, PipelineStage::BuildGraph, None);
     let graph = BuildGraph::from_manifest(&manifest)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
-    report_pipeline_stage(reporter, PipelineStage::GenerateNinja);
+    report_pipeline_stage(reporter, PipelineStage::GenerateNinja, None);
     let ninja = ninja_gen::generate(&graph)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
     Ok(NinjaContent::new(ninja))

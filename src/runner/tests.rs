@@ -1,3 +1,5 @@
+//! Unit tests for the runner module's path resolution helpers.
+
 use super::*;
 use rstest::rstest;
 use std::path::PathBuf;
