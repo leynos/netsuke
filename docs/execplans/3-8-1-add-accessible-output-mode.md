@@ -98,7 +98,7 @@ status output.
 - [x] Write ExecPlan to `docs/execplans/3-8-1-add-accessible-output-mode.md`.
 - [x] Stage A: Define `OutputMode` enum and detection logic in new module
       `src/output_mode.rs`.
-- [x] Stage A: Add unit tests for `OutputMode` detection (rstest parameterised).
+- [x] Stage A: Add unit tests for `OutputMode` detection (rstest parameterized).
 - [x] Stage B: Add `accessible` field to `Cli` struct with OrthoConfig wiring.
 - [x] Stage B: Update `cli_overrides_from_matches` to include `accessible`.
 - [x] Stage B: Update `Cli::default()` to include `accessible: None`.
@@ -282,7 +282,7 @@ environment variable lookup (matching the pattern used in
     { ... }
 
 Unit tests in the same file (gated by `#[cfg(test)]`) use `rstest`
-parameterised cases:
+parameterized cases:
 
     #[rstest]
     #[case(Some(true), None, None, OutputMode::Accessible)]
@@ -303,7 +303,7 @@ Register the new module in `src/lib.rs`:
 
     pub mod output_mode;
 
-### Stage B: CLI integration (config field, merge, localisation)
+### Stage B: CLI integration (config field, merge, localization)
 
 **`src/cli/mod.rs`** — add `accessible` field to `Cli`:
 
@@ -368,7 +368,7 @@ implementations:
     pub struct SilentReporter;
 
 The `AccessibleReporter` uses `localization::message` with the
-`STATUS_STAGE_LABEL` key to produce localised status lines, writing them via
+`STATUS_STAGE_LABEL` key to produce localized status lines, writing them via
 `eprintln!`.
 
 **`src/runner/mod.rs`** — modify `generate_ninja` to accept a
@@ -381,8 +381,8 @@ The `AccessibleReporter` uses `localization::message` with the
 
 And in `handle_build` / `handle_ninja_tool`:
 
-5. Before `run_ninja` / `run_ninja_tool` — stage 5 "Executing build"
-6. After successful completion — "Build complete."
+1. Before `run_ninja` / `run_ninja_tool` — stage 5 "Executing build"
+2. After successful completion — "Build complete."
 
 The `run` function resolves the `OutputMode` using
 `output_mode::resolve(cli.accessible)` and creates the appropriate reporter
@@ -447,7 +447,7 @@ real environment.
 **`docs/users-guide.md`** — add a new subsection under the CLI/Configuration
 section:
 
-    ### Accessible Output Mode
+    ### Accessible output mode
 
     Netsuke supports an accessible output mode that replaces animated progress
     indicators with static, labelled status lines suitable for screen readers
@@ -458,7 +458,7 @@ section:
     - `TERM` is set to `dumb`
     - `NO_COLOR` is set (any value)
 
-    You can force accessible mode on or off:
+    Accessible mode can be forced on or off:
 
     - CLI flag: `--accessible true` or `--accessible false`
     - Environment variable: `NETSUKE_ACCESSIBLE=true`
@@ -491,7 +491,7 @@ All commands are run from the repository root `/home/user/project`.
    pass and new unit tests in `output_mode` to pass.
 
 4. Add `accessible: Option<bool>` to `Cli` in `src/cli/mod.rs`. Update
-   `Default`, `cli_overrides_from_matches`, and help localisation.
+   `Default`, `cli_overrides_from_matches`, and help localization.
 
 5. Add Fluent keys to `src/localization/keys.rs` and translations to both
    `.ftl` files.
@@ -531,7 +531,7 @@ Expected final test output (appended to existing):
 Quality criteria:
 
 - Tests: `make test` passes. New tests:
-  - `output_mode::tests::resolve_output_mode` (7+ parameterised cases)
+  - `output_mode::tests::resolve_output_mode` (7+ parameterized cases)
   - BDD scenarios in `accessible_output.feature` (7 scenarios)
 - Lint: `make lint` passes (clippy, rustdoc).
 - Format: `make check-fmt` passes.

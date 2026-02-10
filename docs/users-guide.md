@@ -567,7 +567,7 @@ unsupported locales fall back to English (`en-US`).
 For information on contributing translations, see the
 [Translator Guide](translators-guide.md).
 
-### Accessible Output Mode
+### Accessible output mode
 
 Netsuke supports an accessible output mode that replaces animated progress
 indicators with static, labelled status lines suitable for screen readers
@@ -578,7 +578,7 @@ Accessible mode is auto-enabled when:
 - `TERM` is set to `dumb`
 - `NO_COLOR` is set (any value)
 
-You can force accessible mode on or off:
+Accessible mode can be forced on or off:
 
 - CLI flag: `--accessible true` or `--accessible false`
 - Environment variable: `NETSUKE_ACCESSIBLE=true`

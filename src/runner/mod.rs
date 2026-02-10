@@ -12,7 +12,7 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
 use crate::status::{
-    self, AccessibleReporter, PIPELINE_STAGE_COUNT, SilentReporter, StatusReporter,
+    AccessibleReporter, PipelineStage, SilentReporter, StatusReporter, report_pipeline_stage,
 };
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
@@ -154,11 +154,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
         _tmp_file_guard = Some(tmp);
     }
 
-    reporter.report_stage(
-        PIPELINE_STAGE_COUNT,
-        PIPELINE_STAGE_COUNT,
-        &status::stage_execute(),
-    );
+    report_pipeline_stage(reporter, PipelineStage::Execute);
     let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
@@ -191,11 +187,7 @@ fn handle_ninja_tool(cli: &Cli, tool: &str, reporter: &dyn StatusReporter) -> Re
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
-    reporter.report_stage(
-        PIPELINE_STAGE_COUNT,
-        PIPELINE_STAGE_COUNT,
-        &status::stage_execute(),
-    );
+    report_pipeline_stage(reporter, PipelineStage::Execute);
     let program = process::resolve_ninja_program();
     run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
         format!(
@@ -210,25 +202,11 @@ fn handle_ninja_tool(cli: &Cli, tool: &str, reporter: &dyn StatusReporter) -> Re
 }
 
 /// Remove build artefacts by invoking `ninja -t clean`.
-///
-/// Generates the Ninja manifest to a temporary file, then invokes Ninja's clean
-/// tool to remove all outputs defined by the build graph.
-///
-/// # Errors
-///
-/// Returns an error if manifest generation or Ninja execution fails.
 fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
     handle_ninja_tool(cli, "clean", reporter)
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
-///
-/// Generates the Ninja manifest to a temporary file, then invokes Ninja's graph
-/// tool to emit a DOT representation to stdout.
-///
-/// # Errors
-///
-/// Returns an error if manifest generation or Ninja execution fails.
 fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
     handle_ninja_tool(cli, "graph", reporter)
 }
@@ -289,12 +267,12 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         .into());
     }
 
-    reporter.report_stage(1, PIPELINE_STAGE_COUNT, &status::stage_network_policy());
+    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy);
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
 
-    reporter.report_stage(2, PIPELINE_STAGE_COUNT, &status::stage_manifest_load());
+    report_pipeline_stage(reporter, PipelineStage::ManifestLoad);
     let manifest = manifest::from_path_with_policy(manifest_path.as_std_path(), policy)
         .with_context(|| {
             localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
@@ -307,11 +285,11 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         debug!("AST:\n{ast_json}");
     }
 
-    reporter.report_stage(3, PIPELINE_STAGE_COUNT, &status::stage_build_graph());
+    report_pipeline_stage(reporter, PipelineStage::BuildGraph);
     let graph = BuildGraph::from_manifest(&manifest)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
-    reporter.report_stage(4, PIPELINE_STAGE_COUNT, &status::stage_generate_ninja());
+    report_pipeline_stage(reporter, PipelineStage::GenerateNinja);
     let ninja = ninja_gen::generate(&graph)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
     Ok(NinjaContent::new(ninja))
@@ -378,25 +356,4 @@ fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-    use std::path::PathBuf;
-
-    #[rstest]
-    #[case(None, "out.ninja", "out.ninja")]
-    #[case(Some("work"), "out.ninja", "work/out.ninja")]
-    #[case(Some("work"), "/tmp/out.ninja", "/tmp/out.ninja")]
-    fn resolve_output_path_respects_directory(
-        #[case] directory: Option<&str>,
-        #[case] input: &str,
-        #[case] expected: &str,
-    ) {
-        let cli = Cli {
-            directory: directory.map(PathBuf::from),
-            ..Cli::default()
-        };
-        let resolved = resolve_output_path(&cli, Path::new(input));
-        assert_eq!(resolved.as_ref(), Path::new(expected));
-    }
-}
+mod tests;
