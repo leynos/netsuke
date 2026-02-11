@@ -251,27 +251,29 @@ Create `src/output_mode.rs` defining the `OutputMode` enum and detection logic.
 
 The module exports:
 
-    /// Whether terminal output should use accessible (static text) or
-    /// standard (potentially animated) formatting.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub enum OutputMode {
-        /// Static text output with explicit labels. Suitable for screen
-        /// readers, dumb terminals, and CI environments.
-        Accessible,
-        /// Standard terminal output. May include animated progress indicators
-        /// when future features are added.
-        Standard,
-    }
+```rust
+/// Whether terminal output should use accessible (static text) or
+/// standard (potentially animated) formatting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputMode {
+    /// Static text output with explicit labels. Suitable for screen
+    /// readers, dumb terminals, and CI environments.
+    Accessible,
+    /// Standard terminal output. May include animated progress indicators
+    /// when future features are added.
+    Standard,
+}
 
-    /// Resolve the output mode from explicit configuration and environment.
-    ///
-    /// Precedence:
-    /// 1. Explicit configuration (`accessible` field): `Some(true)` forces
-    ///    `Accessible`, `Some(false)` forces `Standard`.
-    /// 2. `NO_COLOR` environment variable (any value): `Accessible`.
-    /// 3. `TERM=dumb`: `Accessible`.
-    /// 4. Default: `Standard`.
-    pub fn resolve(explicit: Option<bool>) -> OutputMode { ... }
+/// Resolve the output mode from explicit configuration and environment.
+///
+/// Precedence:
+/// 1. Explicit configuration (`accessible` field): `Some(true)` forces
+///    `Accessible`, `Some(false)` forces `Standard`.
+/// 2. `NO_COLOR` environment variable (any value): `Accessible`.
+/// 3. `TERM=dumb`: `Accessible`.
+/// 4. Default: `Standard`.
+pub fn resolve(explicit: Option<bool>) -> OutputMode { ... }
+```
 
 The `resolve` function accepts the tri-state `Option<bool>` from CLI config.
 It calls `std::env::var` for `NO_COLOR` and `TERM` internally but is also
@@ -279,44 +281,52 @@ provided with a testable variant `resolve_with` that accepts a closure for
 environment variable lookup (matching the pattern used in
 `src/runner/process/mod.rs` for `resolve_ninja_program_utf8_with`).
 
-    /// Testable variant that accepts an environment lookup function.
-    pub fn resolve_with<F>(explicit: Option<bool>, read_env: F) -> OutputMode
-    where
-        F: Fn(&str) -> Option<String>,
-    { ... }
+```rust
+/// Testable variant that accepts an environment lookup function.
+pub fn resolve_with<F>(explicit: Option<bool>, read_env: F) -> OutputMode
+where
+    F: Fn(&str) -> Option<String>,
+{ ... }
+```
 
 Unit tests in the same file (gated by `#[cfg(test)]`) use `rstest`
 parameterized cases:
 
-    #[rstest]
-    #[case(Some(true), None, None, OutputMode::Accessible)]
-    #[case(Some(false), Some("1"), Some("dumb"), OutputMode::Standard)]
-    #[case(None, Some("1"), None, OutputMode::Accessible)]
-    #[case(None, None, Some("dumb"), OutputMode::Accessible)]
-    #[case(None, None, Some("xterm-256color"), OutputMode::Standard)]
-    #[case(None, None, None, OutputMode::Standard)]
-    #[case(None, Some(""), None, OutputMode::Accessible)]
-    fn resolve_output_mode(
-        #[case] explicit: Option<bool>,
-        #[case] no_color: Option<&str>,
-        #[case] term: Option<&str>,
-        #[case] expected: OutputMode,
-    ) { ... }
+```rust
+#[rstest]
+#[case(Some(true), None, None, OutputMode::Accessible)]
+#[case(Some(false), Some("1"), Some("dumb"), OutputMode::Standard)]
+#[case(None, Some("1"), None, OutputMode::Accessible)]
+#[case(None, None, Some("dumb"), OutputMode::Accessible)]
+#[case(None, None, Some("xterm-256color"), OutputMode::Standard)]
+#[case(None, None, None, OutputMode::Standard)]
+#[case(None, Some(""), None, OutputMode::Accessible)]
+fn resolve_output_mode(
+    #[case] explicit: Option<bool>,
+    #[case] no_color: Option<&str>,
+    #[case] term: Option<&str>,
+    #[case] expected: OutputMode,
+) { ... }
+```
 
 Register the new module in `src/lib.rs`:
 
-    pub mod output_mode;
+```rust
+pub mod output_mode;
+```
 
 ### Stage B: CLI integration (config field, merge, localization)
 
 **`src/cli/mod.rs`** — add `accessible` field to `Cli`:
 
-    /// Force accessible output mode on or off.
-    ///
-    /// When set, overrides automatic detection from `NO_COLOR` and
-    /// `TERM=dumb`. When omitted, Netsuke auto-detects.
-    #[arg(long)]
-    pub accessible: Option<bool>,
+```rust
+/// Force accessible output mode on or off.
+///
+/// When set, overrides automatic detection from `NO_COLOR` and
+/// `TERM=dumb`. When omitted, Netsuke auto-detects.
+#[arg(long)]
+pub accessible: Option<bool>,
+```
 
 Add `"accessible"` to the `value_source` check array in
 `cli_overrides_from_matches` (alongside `"file"`, `"verbose"`, etc.) so it
@@ -326,25 +336,29 @@ Update `Cli::default()` to include `accessible: None`.
 
 **`src/localization/keys.rs`** — add keys:
 
-    CLI_FLAG_ACCESSIBLE_HELP => "cli.flag.accessible.help",
-    STATUS_STAGE_LABEL => "status.stage.label",
-    STATUS_STAGE_MANIFEST_LOAD => "status.stage.manifest_load",
-    STATUS_STAGE_NETWORK_POLICY => "status.stage.network_policy",
-    STATUS_STAGE_BUILD_GRAPH => "status.stage.build_graph",
-    STATUS_STAGE_GENERATE_NINJA => "status.stage.generate_ninja",
-    STATUS_STAGE_EXECUTE => "status.stage.execute",
-    STATUS_COMPLETE => "status.complete",
+```rust
+CLI_FLAG_ACCESSIBLE_HELP => "cli.flag.accessible.help",
+STATUS_STAGE_LABEL => "status.stage.label",
+STATUS_STAGE_MANIFEST_LOAD => "status.stage.manifest_load",
+STATUS_STAGE_NETWORK_POLICY => "status.stage.network_policy",
+STATUS_STAGE_BUILD_GRAPH => "status.stage.build_graph",
+STATUS_STAGE_GENERATE_NINJA => "status.stage.generate_ninja",
+STATUS_STAGE_EXECUTE => "status.stage.execute",
+STATUS_COMPLETE => "status.complete",
+```
 
 **`locales/en-US/messages.ftl`** — add:
 
-    cli.flag.accessible.help = Force accessible output mode on or off.
-    status.stage.label = Stage { $current }/{ $total }: { $description }
-    status.stage.manifest_load = Loading manifest
-    status.stage.network_policy = Configuring network policy
-    status.stage.build_graph = Building dependency graph
-    status.stage.generate_ninja = Generating Ninja file
-    status.stage.execute = Executing build
-    status.complete = Build complete.
+```properties
+cli.flag.accessible.help = Force accessible output mode on or off.
+status.stage.label = Stage { $current }/{ $total }: { $description }
+status.stage.manifest_load = Loading manifest
+status.stage.network_policy = Configuring network policy
+status.stage.build_graph = Building dependency graph
+status.stage.generate_ninja = Generating Ninja file
+status.stage.execute = Executing build
+status.complete = Build complete.
+```
 
 **`locales/es-ES/messages.ftl`** — add corresponding Spanish translations.
 
@@ -356,20 +370,22 @@ Update `Cli::default()` to include `accessible: None`.
 Create `src/status.rs` with a `StatusReporter` trait and concrete
 implementations:
 
-    /// Report pipeline progress to the user.
-    pub trait StatusReporter {
-        /// Emit a status line for the given pipeline stage.
-        fn report_stage(&self, current: u32, total: u32, description: &str);
-        /// Emit a completion message.
-        fn report_complete(&self);
-    }
+```rust
+/// Report pipeline progress to the user.
+pub trait StatusReporter {
+    /// Emit a status line for the given pipeline stage.
+    fn report_stage(&self, current: u32, total: u32, description: &str);
+    /// Emit a completion message.
+    fn report_complete(&self);
+}
 
-    /// Accessible reporter: writes static labelled lines to stderr.
-    pub struct AccessibleReporter;
+/// Accessible reporter: writes static labelled lines to stderr.
+pub struct AccessibleReporter;
 
-    /// Silent reporter: emits nothing (used in standard mode until
-    /// future spinner work adds an animated reporter).
-    pub struct SilentReporter;
+/// Silent reporter: emits nothing (used in standard mode until
+/// future spinner work adds an animated reporter).
+pub struct SilentReporter;
+```
 
 The `AccessibleReporter` uses `localization::message` with the
 `STATUS_STAGE_LABEL` key to produce localized status lines, writing them via
@@ -396,49 +412,53 @@ The `run` function resolves the `OutputMode` using
 
 **BDD feature file**: `tests/features/accessible_output.feature`
 
-    Feature: Accessible output mode
+```gherkin
+Feature: Accessible output mode
 
-      Scenario: Accessible mode is auto-detected from TERM=dumb
-        Given the environment variable "TERM" is set to "dumb"
-        When the output mode is resolved with no explicit setting
-        Then the output mode is accessible
+  Scenario: Accessible mode is auto-detected from TERM=dumb
+    Given the environment variable "TERM" is set to "dumb"
+    When the output mode is resolved with no explicit setting
+    Then the output mode is accessible
 
-      Scenario: Accessible mode is auto-detected from NO_COLOR
-        Given the environment variable "NO_COLOR" is set to "1"
-        When the output mode is resolved with no explicit setting
-        Then the output mode is accessible
+  Scenario: Accessible mode is auto-detected from NO_COLOR
+    Given the environment variable "NO_COLOR" is set to "1"
+    When the output mode is resolved with no explicit setting
+    Then the output mode is accessible
 
-      Scenario: Explicit accessible flag overrides TERM
-        Given the environment variable "TERM" is set to "xterm-256color"
-        When the output mode is resolved with accessible set to true
-        Then the output mode is accessible
+  Scenario: Explicit accessible flag overrides TERM
+    Given the environment variable "TERM" is set to "xterm-256color"
+    When the output mode is resolved with accessible set to true
+    Then the output mode is accessible
 
-      Scenario: Explicit non-accessible overrides NO_COLOR
-        Given the environment variable "NO_COLOR" is set to "1"
-        When the output mode is resolved with accessible set to false
-        Then the output mode is standard
+  Scenario: Explicit non-accessible overrides NO_COLOR
+    Given the environment variable "NO_COLOR" is set to "1"
+    When the output mode is resolved with accessible set to false
+    Then the output mode is standard
 
-      Scenario: Default output mode is standard
-        When the output mode is resolved with no explicit setting
-        Then the output mode is standard
+  Scenario: Default output mode is standard
+    When the output mode is resolved with no explicit setting
+    Then the output mode is standard
 
-      Scenario: CLI parses accessible flag
-        When the CLI is parsed with "--accessible true"
-        Then parsing succeeds
-        And accessible mode is enabled
+  Scenario: CLI parses accessible flag
+    When the CLI is parsed with "--accessible true"
+    Then parsing succeeds
+    And accessible mode is enabled
 
-      Scenario: CLI parses accessible false
-        When the CLI is parsed with "--accessible false"
-        Then parsing succeeds
-        And accessible mode is disabled
+  Scenario: CLI parses accessible false
+    When the CLI is parsed with "--accessible false"
+    Then parsing succeeds
+    And accessible mode is disabled
+```
 
 **BDD step definitions**: `tests/bdd/steps/accessible_output.rs`
 
 New step module registered in `tests/bdd/steps/mod.rs`. The `TestWorld`
 struct needs new fields:
 
-    /// Resolved output mode for accessible output scenarios.
-    pub output_mode: Slot<String>,
+```rust
+/// Resolved output mode for accessible output scenarios.
+pub output_mode: Slot<String>,
+```
 
 Steps use the `resolve_with` function to test detection without mutating the
 real environment.
@@ -451,32 +471,34 @@ real environment.
 **`docs/users-guide.md`** — add a new subsection under the CLI/Configuration
 section:
 
-    ### Accessible output mode
+```markdown
+### Accessible output mode
 
-    Netsuke supports an accessible output mode that replaces animated progress
-    indicators with static, labelled status lines suitable for screen readers
-    and dumb terminals.
+Netsuke supports an accessible output mode that replaces animated progress
+indicators with static, labelled status lines suitable for screen readers
+and dumb terminals.
 
-    Accessible mode is auto-enabled when:
+Accessible mode is auto-enabled when:
 
-    - `TERM` is set to `dumb`
-    - `NO_COLOR` is set (any value)
+- `TERM` is set to `dumb`
+- `NO_COLOR` is set (any value)
 
-    Accessible mode can be forced on or off:
+Accessible mode can be forced on or off:
 
-    - CLI flag: `--accessible true` or `--accessible false`
-    - Environment variable: `NETSUKE_ACCESSIBLE=true`
-    - Configuration file: `accessible = true`
+- CLI flag: `--accessible true` or `--accessible false`
+- Environment variable: `NETSUKE_ACCESSIBLE=true`
+- Configuration file: `accessible = true`
 
-    When accessible mode is active, each pipeline stage produces a labelled
-    status line on stderr:
+When accessible mode is active, each pipeline stage produces a labelled
+status line on stderr:
 
-        Stage 1/5: Configuring network policy
-        Stage 2/5: Loading manifest
-        Stage 3/5: Building dependency graph
-        Stage 4/5: Generating Ninja file
-        Stage 5/5: Executing Build
-        Build complete.
+    Stage 1/5: Configuring network policy
+    Stage 2/5: Loading manifest
+    Stage 3/5: Building dependency graph
+    Stage 4/5: Generating Ninja file
+    Stage 5/5: Executing Build
+    Build complete.
+```
 
 **`docs/roadmap.md`** — change `- [ ] 3.8.1.` to `- [x] 3.8.1.` and the
 sub-items likewise.
@@ -525,10 +547,12 @@ All commands are run from the repository root `/home/user/project`.
 
 Expected final test output (appended to existing):
 
-    test output_mode::tests::resolve_output_mode::case_1 ... ok
-    test output_mode::tests::resolve_output_mode::case_2 ... ok
-    ...
-    test bdd_tests::accessible_output::... ... ok
+```plaintext
+test output_mode::tests::resolve_output_mode::case_1 ... ok
+test output_mode::tests::resolve_output_mode::case_2 ... ok
+...
+test bdd_tests::accessible_output::... ... ok
+```
 
 ## Validation and acceptance
 
@@ -542,25 +566,29 @@ Quality criteria:
 
 Quality method:
 
-    set -o pipefail
-    make check-fmt 2>&1 | tee /tmp/check-fmt.log
-    make lint 2>&1 | tee /tmp/lint.log
-    make test 2>&1 | tee /tmp/test.log
+```shell
+set -o pipefail
+make check-fmt 2>&1 | tee /tmp/check-fmt.log
+make lint 2>&1 | tee /tmp/lint.log
+make test 2>&1 | tee /tmp/test.log
+```
 
 Manual verification:
 
-    # With a valid Netsukefile in the current directory:
-    TERM=dumb cargo run -- build 2>&1 | grep "Stage"
-    # Should show "Stage 1/5: Configuring network policy" etc. on stderr
+```shell
+# With a valid Netsukefile in the current directory:
+TERM=dumb cargo run -- build 2>&1 | grep "Stage"
+# Should show "Stage 1/5: Configuring network policy" etc. on stderr
 
-    NO_COLOR=1 cargo run -- build 2>&1 | grep "Stage"
-    # Same output
+NO_COLOR=1 cargo run -- build 2>&1 | grep "Stage"
+# Same output
 
-    cargo run -- --accessible true build 2>&1 | grep "Stage"
-    # Same output
+cargo run -- --accessible true build 2>&1 | grep "Stage"
+# Same output
 
-    cargo run -- --accessible false build 2>&1 | grep "Stage"
-    # No "Stage" lines (standard mode, currently silent)
+cargo run -- --accessible false build 2>&1 | grep "Stage"
+# No "Stage" lines (standard mode, currently silent)
+```
 
 ## Idempotence and recovery
 
@@ -599,27 +627,33 @@ No new external dependencies. All detection uses `std::env`.
 
 In `src/output_mode.rs`:
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub enum OutputMode {
-        Accessible,
-        Standard,
-    }
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputMode {
+    Accessible,
+    Standard,
+}
 
-    pub fn resolve(explicit: Option<bool>) -> OutputMode
-    pub fn resolve_with<F>(explicit: Option<bool>, read_env: F) -> OutputMode
-    where
-        F: Fn(&str) -> Option<String>
+pub fn resolve(explicit: Option<bool>) -> OutputMode
+pub fn resolve_with<F>(explicit: Option<bool>, read_env: F) -> OutputMode
+where
+    F: Fn(&str) -> Option<String>
+```
 
 In `src/status.rs`:
 
-    pub trait StatusReporter {
-        fn report_stage(&self, current: u32, total: u32, description: &str);
-        fn report_complete(&self);
-    }
+```rust
+pub trait StatusReporter {
+    fn report_stage(&self, current: u32, total: u32, description: &str);
+    fn report_complete(&self);
+}
 
-    pub struct AccessibleReporter;
-    pub struct SilentReporter;
+pub struct AccessibleReporter;
+pub struct SilentReporter;
+```
 
 In `src/cli/mod.rs`, the `Cli` struct gains:
 
-    pub accessible: Option<bool>,
+```rust
+pub accessible: Option<bool>,
+```
