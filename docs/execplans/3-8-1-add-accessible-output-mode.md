@@ -92,7 +92,7 @@ status output.
   tracing output when `--verbose` is active.
   Severity: low. Likelihood: medium. Mitigation: Status lines use
   `writeln!(io::stderr(), ...)` which holds the stderr lock atomically per
-  line, matching tracing behaviour. In verbose mode both streams are
+  line, matching tracing behaviour. In verbose mode, both streams are
   informational, so interleaving is acceptable.
 
 ## Progress
@@ -116,6 +116,8 @@ status output.
 - [x] Stage D: Mark roadmap entry 3.8.1 as done.
 - [x] Stage D: Run `make check-fmt && make lint && make test` and verify all
       pass.
+- [x] Stage D: Run `make fmt && make markdownlint && make nixie` for
+      documentation QA.
 
 ## Surprises & discoveries
 
@@ -151,7 +153,7 @@ status output.
 - Decision: Auto-detection checks `NO_COLOR` (any value), `TERM=dumb`, and
   the explicit `accessible` config field, with explicit config taking
   precedence.
-  Rationale: `NO_COLOR` is a de facto standard (https://no-color.org/).
+  Rationale: `NO_COLOR` is a de facto standard[^1].
   `TERM=dumb` is standard for dumb terminals and screen readers. Explicit
   config (`--accessible`, `NETSUKE_ACCESSIBLE`, or config file) overrides
   auto-detection in both directions (user can force accessible on or off).
@@ -543,7 +545,9 @@ All commands are run from the repository root `/home/user/project`.
 
 13. Mark `docs/roadmap.md` entry 3.8.1 as done.
 
-14. Final `make check-fmt && make lint && make test` via tee to confirm.
+14. Run `make fmt && make markdownlint && make nixie` for documentation QA.
+
+15. Final `make check-fmt && make lint && make test` via tee to confirm.
 
 Expected final test output (appended to existing):
 
@@ -563,6 +567,7 @@ Quality criteria:
   - BDD scenarios in `accessible_output.feature` (7 scenarios)
 - Lint: `make lint` passes (clippy, rustdoc).
 - Format: `make check-fmt` passes.
+- Documentation: `make fmt`, `make markdownlint`, and `make nixie` pass.
 
 Quality method:
 
@@ -571,6 +576,9 @@ set -o pipefail
 make check-fmt 2>&1 | tee /tmp/check-fmt.log
 make lint 2>&1 | tee /tmp/lint.log
 make test 2>&1 | tee /tmp/test.log
+make fmt 2>&1 | tee /tmp/fmt.log
+make markdownlint 2>&1 | tee /tmp/markdownlint.log
+make nixie 2>&1 | tee /tmp/nixie.log
 ```
 
 Manual verification:
@@ -657,3 +665,5 @@ In `src/cli/mod.rs`, the `Cli` struct gains:
 ```rust
 pub accessible: Option<bool>,
 ```
+
+[^1]: <https://no-color.org/>

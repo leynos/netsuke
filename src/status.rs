@@ -62,9 +62,6 @@ impl StatusReporter for SilentReporter {
     fn report_complete(&self, _tool_key: &'static str) {}
 }
 
-/// The total number of pipeline stages reported during a build.
-pub const PIPELINE_STAGE_COUNT: u32 = 5;
-
 /// Enumerates the known pipeline stages in the order they are reported.
 ///
 /// Keeping stage indices and descriptions centralized here avoids
@@ -85,6 +82,19 @@ pub enum PipelineStage {
 }
 
 impl PipelineStage {
+    /// All pipeline stages in reporting order.
+    ///
+    /// Adding a new variant to [`PipelineStage`] without updating this
+    /// array will cause [`PIPELINE_STAGE_COUNT`] to drift, so keep them
+    /// in sync.
+    const ALL: [Self; 5] = [
+        Self::NetworkPolicy,
+        Self::ManifestLoad,
+        Self::BuildGraph,
+        Self::GenerateNinja,
+        Self::Execute,
+    ];
+
     /// 1-based index of this stage within the pipeline.
     #[must_use]
     pub const fn index(self) -> u32 {
@@ -119,6 +129,21 @@ impl PipelineStage {
         }
     }
 }
+
+/// The total number of pipeline stages reported during a build.
+///
+/// Derived from `PipelineStage::ALL` so that changes to the enum
+/// cannot desynchronize the reported total.
+pub const PIPELINE_STAGE_COUNT: u32 = {
+    // SAFETY: the array length is a small compile-time constant.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "PipelineStage::ALL.len() is a small compile-time constant"
+    )]
+    {
+        PipelineStage::ALL.len() as u32
+    }
+};
 
 /// Report a pipeline stage via a [`StatusReporter`].
 ///

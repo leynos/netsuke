@@ -15,6 +15,7 @@
 use camino::Utf8PathBuf;
 use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
+use netsuke::output_mode::OutputMode;
 use netsuke::stdlib::{NetworkPolicy, StdlibState as NetsukeStdlibState};
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -129,7 +130,7 @@ pub struct TestWorld {
 
     // Output mode state (Clone)
     /// Resolved output mode for accessible output scenarios.
-    pub output_mode: Slot<String>,
+    pub output_mode: Slot<OutputMode>,
     /// Simulated `NO_COLOR` value for output mode detection scenarios.
     pub simulated_no_color: Slot<String>,
     /// Simulated `TERM` value for output mode detection scenarios.
