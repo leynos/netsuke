@@ -383,11 +383,10 @@ global `clippy::print_stderr` lint).
 2. Before `manifest::from_path_with_policy` — stage 2 "Loading manifest"
 3. Before `BuildGraph::from_manifest` — stage 3 "Building dependency graph"
 4. Before `ninja_gen::generate` — stage 4 "Generating Ninja file"
-
-And in `handle_build` / `handle_ninja_tool`:
-
-5. Before `run_ninja` / `run_ninja_tool` — stage 5 "Executing {tool}"
-6. After successful completion — "{tool} complete."
+5. (`handle_build` / `handle_ninja_tool`) Before `run_ninja` /
+   `run_ninja_tool` — stage 5 "Executing {tool}"
+6. (`handle_build` / `handle_ninja_tool`) After successful completion —
+   "{tool} complete."
 
 The `run` function resolves the `OutputMode` using
 `output_mode::resolve(cli.accessible)` and creates the appropriate reporter
