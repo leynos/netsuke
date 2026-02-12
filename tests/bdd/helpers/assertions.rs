@@ -7,6 +7,18 @@
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
 
+/// Remove Fluent bidi isolate characters used around placeables.
+///
+/// Fluent inserts these markers (`\u{2068}` and `\u{2069}`) to preserve
+/// directionality when interpolating values. They are invisible to users but
+/// can make plain substring assertions fail.
+#[must_use]
+fn normalize_fluent_isolates(text: &str) -> String {
+    text.chars()
+        .filter(|ch| *ch != '\u{2068}' && *ch != '\u{2069}')
+        .collect()
+}
+
 /// Assert that optional content contains an expected fragment.
 ///
 /// This unifies the pattern from `ninja.rs::assert_content_contains`.
@@ -32,8 +44,10 @@ pub fn assert_optional_contains(
     content_label: &str,
 ) -> Result<()> {
     let text = content.context(format!("{content_label} should be available"))?;
+    let normalized_text = normalize_fluent_isolates(&text);
+    let normalized_fragment = normalize_fluent_isolates(fragment);
     ensure!(
-        text.contains(fragment),
+        normalized_text.contains(&normalized_fragment),
         "{content_label} should contain '{fragment}'"
     );
     Ok(())
@@ -66,8 +80,10 @@ pub fn assert_slot_contains(
     let content = slot
         .get()
         .with_context(|| format!("no {content_label} captured"))?;
+    let normalized_content = normalize_fluent_isolates(&content);
+    let normalized_fragment = normalize_fluent_isolates(fragment);
     ensure!(
-        content.contains(fragment),
+        normalized_content.contains(&normalized_fragment),
         "expected {content_label} to contain '{fragment}', got '{content}'"
     );
     Ok(())

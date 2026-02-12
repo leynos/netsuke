@@ -69,6 +69,7 @@ struct IndicatifState {
     descriptions: Vec<String>,
     running_index: Option<usize>,
     completed: bool,
+    is_hidden: bool,
 }
 
 /// Standard reporter backed by `indicatif::MultiProgress`.
@@ -104,6 +105,7 @@ impl IndicatifReporter {
 
         Self {
             state: Mutex::new(IndicatifState {
+                is_hidden: progress.is_hidden(),
                 progress,
                 bars,
                 descriptions,
@@ -128,6 +130,10 @@ impl IndicatifReporter {
             .cloned()
             .unwrap_or_else(String::new);
         let message = stage_summary(status_key, current, PIPELINE_STAGE_COUNT, &description);
+        if state.is_hidden {
+            drop(writeln!(io::stderr(), "{message}"));
+            return;
+        }
         if let Some(bar) = state.bars.get(index) {
             if finish_line {
                 bar.finish_with_message(message);

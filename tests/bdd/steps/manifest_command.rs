@@ -29,6 +29,13 @@ impl fmt::Display for OutputType {
     }
 }
 
+#[must_use]
+fn normalize_fluent_isolates(text: &str) -> String {
+    text.chars()
+        .filter(|ch| *ch != '\u{2068}' && *ch != '\u{2069}')
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -55,8 +62,10 @@ fn assert_output_not_contains(
     let value = output
         .get()
         .with_context(|| format!("{output_type} output should be captured"))?;
+    let normalized_value = normalize_fluent_isolates(&value);
+    let normalized_fragment = normalize_fluent_isolates(fragment.as_str());
     ensure!(
-        !value.contains(fragment.as_str()),
+        !normalized_value.contains(&normalized_fragment),
         "expected {output_type} to omit '{fragment}', but it was present in:\n{value}",
     );
     Ok(())

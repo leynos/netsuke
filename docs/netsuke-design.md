@@ -2043,6 +2043,8 @@ Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
 persistent summary line per stage and updates each line through localized state
 labels (`pending`, `in progress`, `done`, `failed`) plus localized stage text.
+When stderr is not a TTY, the same reporter falls back to emitting localized
+summary lines so non-interactive runs still surface deterministic stage state.
 Accessible output remains text-first and static; it does not animate. The
 standard reporter is configurable through OrthoConfig layering via
 `progress: Option<bool>` (`--progress`, `NETSUKE_PROGRESS`, or config file),

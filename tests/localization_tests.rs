@@ -44,6 +44,13 @@ fn which_message(command: &str) -> String {
         .to_string()
 }
 
+#[must_use]
+fn normalize_fluent_isolates(text: &str) -> String {
+    text.chars()
+        .filter(|ch| *ch != '\u{2068}' && *ch != '\u{2069}')
+        .collect()
+}
+
 #[rstest]
 #[case("es-ES", "no encontrado")]
 #[case("fr-FR", "not found")]
@@ -164,13 +171,15 @@ fn progress_stage_messages_resolve(
         .with_arg("state", localization::message(keys::STATUS_STATE_PENDING))
         .with_arg("label", &label)
         .to_string();
+    let normalized_label = normalize_fluent_isolates(&label);
+    let normalized_summary = normalize_fluent_isolates(&summary);
 
     ensure!(
-        label.contains(expected_label),
+        normalized_label.contains(expected_label),
         "expected stage label for locale {locale} to contain {expected_label:?}, got: {label}"
     );
     ensure!(
-        summary.contains(expected_state),
+        normalized_summary.contains(expected_state),
         "expected summary state for locale {locale} to contain {expected_state:?}, got: {summary}"
     );
     Ok(())

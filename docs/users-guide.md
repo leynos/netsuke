@@ -605,6 +605,8 @@ Build complete.
 
 In standard mode, Netsuke uses persistent progress summaries for the six-stage
 pipeline. The summaries are localized and remain visible as stages complete.
+When stderr is not a TTY (for example, in CI logs), Netsuke emits deterministic
+summary lines instead of animated redraws.
 
 Progress summaries are enabled by default in standard mode. You can force them
 on or off through layered configuration:

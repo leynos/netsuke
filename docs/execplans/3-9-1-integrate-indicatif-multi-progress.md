@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: DONE
 
 No `PLANS.md` file exists in this repository.
 
@@ -98,13 +98,13 @@ Observable success:
 - [x] Implement six-stage progress model and `indicatif::MultiProgress`
       standard reporter.
 - [x] Add OrthoConfig-backed progress configuration and localized help.
-- [ ] Add unit tests (`rstest`) for reporter logic, stage mapping, and config
+- [x] Add unit tests (`rstest`) for reporter logic, stage mapping, and config
       precedence.
-- [ ] Add behavioural tests (`rstest-bdd` v0.5.0) for standard/accessible,
+- [x] Add behavioural tests (`rstest-bdd` v0.5.0) for standard/accessible,
       localized, and failure paths.
-- [ ] Update `docs/users-guide.md` and design document decisions.
-- [ ] Mark roadmap item 3.9.1 done.
-- [ ] Run and pass required quality gates:
+- [x] Update `docs/users-guide.md` and design document decisions.
+- [x] Mark roadmap item 3.9.1 done.
+- [x] Run and pass required quality gates:
       `make check-fmt`, `make lint`, `make test`.
 
 ## Surprises & Discoveries
@@ -120,6 +120,9 @@ Observable success:
 - The runtime `manifest` command path needed an explicit completion call after
   synthesis; otherwise an in-progress stage was finalized as failed in the new
   reporter drop path.
+- `indicatif` automatically hides progress drawing when stderr is not a TTY,
+  so non-interactive tests and CI required a deterministic summary-line
+  fallback in the standard reporter.
 
 ## Decision Log
 
@@ -140,9 +143,24 @@ Observable success:
   provides deterministic behavioural testing in non-TTY environments.
   Date/Author: 2026-02-12 / Codex.
 
+- Decision: keep `indicatif::MultiProgress` as the canonical standard-mode
+  reporter, but emit localized summary lines when its draw target is hidden.
+  Rationale: preserves interactive persistent summaries while keeping CI/log
+  runs observable and testable in non-TTY environments. Date/Author: 2026-02-12
+  / Codex.
+
 ## Outcomes & Retrospective
 
-Pending implementation.
+Implemented and validated.
+
+- Added six-stage progress reporting with localized stage/state labels and
+  standard-mode `indicatif::MultiProgress`.
+- Added OrthoConfig layering for `progress` (`--progress`,
+  `NETSUKE_PROGRESS`, and config file support) and localized help text.
+- Added deterministic non-TTY fallback summaries for standard mode.
+- Added/updated `rstest` unit coverage and `rstest-bdd` behavioural coverage
+  for happy and unhappy paths.
+- Updated user and design documentation and marked roadmap 3.9.1 as done.
 
 ## Context and orientation
 
