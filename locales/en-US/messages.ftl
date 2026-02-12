@@ -14,6 +14,7 @@ cli.flag.fetch_allow_scheme.help = Additional URL schemes allowed for the fetch 
 cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny is enabled.
 cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
+cli.flag.accessible.help = Force accessible output mode on or off.
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).
@@ -315,6 +316,18 @@ stdlib.which.workspace_non_utf8 = Workspace path contains non-UTF-8 components w
 stdlib.register.open_dir = Failed to open current directory for stdlib registration.
 stdlib.register.resolve_dir = Failed to resolve current directory for stdlib registration.
 stdlib.register.dir_non_utf8 = Current directory contains non-UTF-8 components: { $path }.
+
+# Status reporting for accessible output mode.
+status.stage.label = Stage { $current }/{ $total }: { $description }
+status.stage.manifest_load = Loading manifest
+status.stage.network_policy = Configuring network policy
+status.stage.build_graph = Building dependency graph
+status.stage.generate_ninja = Generating Ninja file
+status.stage.execute = Executing { $tool }
+status.complete = { $tool } complete.
+status.tool.build = Build
+status.tool.clean = Clean
+status.tool.graph = Graph
 
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR

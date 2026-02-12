@@ -10,6 +10,10 @@ pub use error::RunnerError;
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
+use crate::output_mode::{self, OutputMode};
+use crate::status::{
+    AccessibleReporter, PipelineStage, SilentReporter, StatusReporter, report_pipeline_stage,
+};
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
 use camino::Utf8PathBuf;
@@ -88,14 +92,20 @@ impl Default for BuildTargets<'_> {
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli) -> Result<()> {
+    let mode = output_mode::resolve(cli.accessible);
+    let reporter: Box<dyn StatusReporter> = match mode {
+        OutputMode::Accessible => Box::new(AccessibleReporter),
+        OutputMode::Standard => Box::new(SilentReporter),
+    };
+
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
         targets: Vec::new(),
     }));
     match command {
-        Commands::Build(args) => handle_build(cli, &args),
+        Commands::Build(args) => handle_build(cli, &args, reporter.as_ref()),
         Commands::Manifest { file } => {
-            let ninja = generate_ninja(cli)?;
+            let ninja = generate_ninja(cli, reporter.as_ref())?;
             if process::is_stdout_path(file.as_path()) {
                 process::write_ninja_stdout(&ninja)?;
             } else {
@@ -104,8 +114,8 @@ pub fn run(cli: &Cli) -> Result<()> {
             }
             Ok(())
         }
-        Commands::Clean => handle_clean(cli),
-        Commands::Graph => handle_graph(cli),
+        Commands::Clean => handle_clean(cli, reporter.as_ref()),
+        Commands::Graph => handle_graph(cli, reporter.as_ref()),
     }
 }
 
@@ -119,23 +129,13 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// ```ignore
 /// use netsuke::cli::{BuildArgs, Cli};
 /// use netsuke::runner::handle_build;
-/// let cli = Cli {
-///     file: "Netsukefile".into(),
-///     directory: None,
-///     jobs: None,
-///     verbose: false,
-///     locale: None,
-///     fetch_allow_scheme: Vec::new(),
-///     fetch_allow_host: Vec::new(),
-///     fetch_block_host: Vec::new(),
-///     fetch_default_deny: false,
-///     command: None,
-/// };
+/// use netsuke::status::SilentReporter;
+/// let cli = Cli::default();
 /// let args = BuildArgs { emit: None, targets: vec![] };
-/// handle_build(&cli, &args).unwrap();
+/// handle_build(&cli, &args, &SilentReporter).unwrap();
 /// ```
-fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
-    let ninja = generate_ninja(cli)?;
+fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> Result<()> {
+    let ninja = generate_ninja(cli, reporter)?;
     let targets = BuildTargets::new(&args.targets);
 
     // Normalize the build file path and keep the temporary file alive for the
@@ -154,6 +154,11 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
         _tmp_file_guard = Some(tmp);
     }
 
+    report_pipeline_stage(
+        reporter,
+        PipelineStage::Execute,
+        Some(keys::STATUS_TOOL_BUILD),
+    );
     let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
@@ -162,6 +167,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
             build_path.display()
         )
     })?;
+    reporter.report_complete(keys::STATUS_TOOL_BUILD);
     Ok(())
 }
 
@@ -174,17 +180,23 @@ fn handle_build(cli: &Cli, args: &BuildArgs) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-fn handle_ninja_tool(cli: &Cli, tool: &str) -> Result<()> {
+fn handle_ninja_tool(
+    cli: &Cli,
+    tool: &str,
+    tool_key: &'static str,
+    reporter: &dyn StatusReporter,
+) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
         subcommand = tool,
         "Preparing Ninja tool invocation"
     );
-    let ninja = generate_ninja(cli)?;
+    let ninja = generate_ninja(cli, reporter)?;
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
+    report_pipeline_stage(reporter, PipelineStage::Execute, Some(tool_key));
     let program = process::resolve_ninja_program();
     run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
         format!(
@@ -194,34 +206,23 @@ fn handle_ninja_tool(cli: &Cli, tool: &str) -> Result<()> {
             build_path.display()
         )
     })?;
+    reporter.report_complete(tool_key);
     Ok(())
 }
 
 /// Remove build artefacts by invoking `ninja -t clean`.
-///
-/// Generates the Ninja manifest to a temporary file, then invokes Ninja's clean
-/// tool to remove all outputs defined by the build graph.
-///
-/// # Errors
-///
-/// Returns an error if manifest generation or Ninja execution fails.
-fn handle_clean(cli: &Cli) -> Result<()> {
-    handle_ninja_tool(cli, "clean")
+fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
+    handle_ninja_tool(cli, "clean", keys::STATUS_TOOL_CLEAN, reporter)
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
-///
-/// Generates the Ninja manifest to a temporary file, then invokes Ninja's graph
-/// tool to emit a DOT representation to stdout.
-///
-/// # Errors
-///
-/// Returns an error if manifest generation or Ninja execution fails.
-fn handle_graph(cli: &Cli) -> Result<()> {
-    handle_ninja_tool(cli, "graph")
+fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
+    handle_ninja_tool(cli, "graph", keys::STATUS_TOOL_GRAPH, reporter)
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
+///
+/// Reports pipeline stages 1 through 4 via the provided [`StatusReporter`].
 ///
 /// # Errors
 ///
@@ -229,24 +230,14 @@ fn handle_graph(cli: &Cli) -> Result<()> {
 ///
 /// # Examples
 /// ```ignore
-/// use netsuke::cli::{Cli, Commands};
+/// use netsuke::cli::Cli;
 /// use netsuke::runner::generate_ninja;
-/// let cli = Cli {
-///     file: "Netsukefile".into(),
-///     directory: None,
-///     jobs: None,
-///     verbose: false,
-///     locale: None,
-///     fetch_allow_scheme: Vec::new(),
-///     fetch_allow_host: Vec::new(),
-///     fetch_block_host: Vec::new(),
-///     fetch_default_deny: false,
-///     command: Some(Commands::Build(BuildArgs { emit: None, targets: vec![] })),
-/// };
-/// let ninja = generate_ninja(&cli).expect("generate");
+/// use netsuke::status::SilentReporter;
+/// let cli = Cli::default();
+/// let ninja = generate_ninja(&cli, &SilentReporter).expect("generate");
 /// assert!(ninja.as_str().contains("rule"));
 /// ```
-fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
+fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli)?;
 
     // Check for missing manifest and provide a helpful error with hint.
@@ -285,9 +276,12 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
         .into());
     }
 
+    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy, None);
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
+
+    report_pipeline_stage(reporter, PipelineStage::ManifestLoad, None);
     let manifest = manifest::from_path_with_policy(manifest_path.as_std_path(), policy)
         .with_context(|| {
             localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
@@ -299,8 +293,12 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
         ))?;
         debug!("AST:\n{ast_json}");
     }
+
+    report_pipeline_stage(reporter, PipelineStage::BuildGraph, None);
     let graph = BuildGraph::from_manifest(&manifest)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
+
+    report_pipeline_stage(reporter, PipelineStage::GenerateNinja, None);
     let ninja = ninja_gen::generate(&graph)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
     Ok(NinjaContent::new(ninja))
@@ -315,18 +313,7 @@ fn generate_ninja(cli: &Cli) -> Result<NinjaContent> {
 /// ```ignore
 /// use crate::cli::Cli;
 /// use crate::runner::resolve_manifest_path;
-/// let cli = Cli {
-///     file: "Netsukefile".into(),
-///     directory: None,
-///     jobs: None,
-///     verbose: false,
-///     locale: None,
-///     fetch_allow_scheme: Vec::new(),
-///     fetch_allow_host: Vec::new(),
-///     fetch_block_host: Vec::new(),
-///     fetch_default_deny: false,
-///     command: None,
-/// };
+/// let cli = Cli::default();
 /// let path = resolve_manifest_path(&cli).expect("valid manifest path");
 /// assert!(path.as_str().ends_with("Netsukefile"));
 /// ```
@@ -378,25 +365,4 @@ fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-    use std::path::PathBuf;
-
-    #[rstest]
-    #[case(None, "out.ninja", "out.ninja")]
-    #[case(Some("work"), "out.ninja", "work/out.ninja")]
-    #[case(Some("work"), "/tmp/out.ninja", "/tmp/out.ninja")]
-    fn resolve_output_path_respects_directory(
-        #[case] directory: Option<&str>,
-        #[case] input: &str,
-        #[case] expected: &str,
-    ) {
-        let cli = Cli {
-            directory: directory.map(PathBuf::from),
-            ..Cli::default()
-        };
-        let resolved = resolve_output_path(&cli, Path::new(input));
-        assert_eq!(resolved.as_ref(), Path::new(expected));
-    }
-}
+mod tests;
