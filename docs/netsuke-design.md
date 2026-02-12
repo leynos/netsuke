@@ -2039,6 +2039,15 @@ a configured working directory and resolves relative output paths (for example
 real directory change. Error scenarios are validated using clap's `ErrorKind`
 enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
+Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
+by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
+persistent summary line per stage and updates each line through localized state
+labels (`pending`, `in progress`, `done`, `failed`) plus localized stage text.
+Accessible output remains text-first and static; it does not animate. The
+standard reporter is configurable through OrthoConfig layering via
+`progress: Option<bool>` (`--progress`, `NETSUKE_PROGRESS`, or config file),
+with accessible mode taking precedence when enabled.
+
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.
 

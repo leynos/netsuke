@@ -119,6 +119,7 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
             "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
             "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
+            "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
             _ => None,
         },
         Some("build") => match arg_id {

@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 No `PLANS.md` file exists in this repository.
 
@@ -95,9 +95,9 @@ Observable success:
       modules, localization files, and existing BDD/unit test surfaces.
 - [x] 2026-02-12: Drafted this ExecPlan in
       `docs/execplans/3-9-1-integrate-indicatif-multi-progress.md`.
-- [ ] Implement six-stage progress model and `indicatif::MultiProgress`
+- [x] Implement six-stage progress model and `indicatif::MultiProgress`
       standard reporter.
-- [ ] Add OrthoConfig-backed progress configuration and localized help.
+- [x] Add OrthoConfig-backed progress configuration and localized help.
 - [ ] Add unit tests (`rstest`) for reporter logic, stage mapping, and config
       precedence.
 - [ ] Add behavioural tests (`rstest-bdd` v0.5.0) for standard/accessible,
@@ -117,6 +117,9 @@ Observable success:
   present.
 - No project-memory MCP resources were available in this environment during
   planning, so repository docs were used as the authoritative source.
+- The runtime `manifest` command path needed an explicit completion call after
+  synthesis; otherwise an in-progress stage was finalized as failed in the new
+  reporter drop path.
 
 ## Decision Log
 

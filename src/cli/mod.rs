@@ -138,6 +138,12 @@ pub struct Cli {
     #[arg(long)]
     pub accessible: Option<bool>,
 
+    /// Force standard progress summaries on or off.
+    ///
+    /// When omitted, Netsuke enables progress summaries in standard mode.
+    #[arg(long)]
+    pub progress: Option<bool>,
+
     /// Optional subcommand to execute; defaults to `build` when omitted.
     ///
     /// `OrthoConfig` merging ignores this field; CLI parsing supplies it.
@@ -174,6 +180,7 @@ impl Default for Cli {
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
             accessible: None,
+            progress: None,
             command: None,
         }
         .with_default_command()
@@ -301,6 +308,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "fetch_allow_host",
         "fetch_block_host",
         "accessible",
+        "progress",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
             map.remove(field);

@@ -570,8 +570,8 @@ For information on contributing translations, see the
 ### Accessible output mode
 
 Netsuke supports an accessible output mode that replaces animated progress
-indicators with static, labelled status lines suitable for screen readers
-and dumb terminals.
+indicators with static, labelled status lines suitable for screen readers and
+dumb terminals.
 
 Accessible mode is auto-enabled when:
 
@@ -588,20 +588,46 @@ Explicit configuration always takes precedence over auto-detection, in either
 direction (`--accessible false` disables accessible mode even when `NO_COLOR`
 is set).
 
-When accessible mode is active, each pipeline stage produces a labelled
-status line on stderr:
+When accessible mode is active, each pipeline stage produces a labelled status
+line on stderr:
 
 ```text
-Stage 1/5: Configuring network policy
-Stage 2/5: Loading manifest
-Stage 3/5: Building dependency graph
-Stage 4/5: Generating Ninja file
-Stage 5/5: Executing Build
+Stage 1/6: Reading manifest file
+Stage 2/6: Parsing YAML document
+Stage 3/6: Expanding template directives
+Stage 4/6: Deserializing and rendering manifest values
+Stage 5/6: Building and validating dependency graph
+Stage 6/6: Synthesizing Ninja plan and executing Build
 Build complete.
 ```
 
-In standard mode, no status lines are emitted. Future versions may add
-animated progress indicators for standard mode terminals.
+### Real-time progress summaries
+
+In standard mode, Netsuke uses persistent progress summaries for the six-stage
+pipeline. The summaries are localized and remain visible as stages complete.
+
+Progress summaries are enabled by default in standard mode. You can force them
+on or off through layered configuration:
+
+- CLI flag: `--progress true` or `--progress false`
+- Environment variable: `NETSUKE_PROGRESS=true`
+- Configuration file: `progress = true`
+
+Accessible mode takes precedence. When `--accessible true` (or auto-detected
+accessible mode) is active, Netsuke uses static accessible lines even when
+`progress = true`.
+
+Typical standard-mode output includes localized state prefixes:
+
+```text
+[done] Stage 1/6: Reading manifest file
+[done] Stage 2/6: Parsing YAML document
+[done] Stage 3/6: Expanding template directives
+[done] Stage 4/6: Deserializing and rendering manifest values
+[done] Stage 5/6: Building and validating dependency graph
+[in progress] Stage 6/6: Synthesizing Ninja plan and executing Build
+Build complete.
+```
 
 ### Exit Codes
 

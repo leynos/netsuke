@@ -32,23 +32,27 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         .context("defaults should be an object")?;
     defaults_object.insert("jobs".to_owned(), json!(1));
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
+    defaults_object.insert("progress".to_owned(), json!(true));
     composer.push_defaults(defaults);
     composer.push_file(
         json!({
             "file": "Configfile",
             "jobs": 2,
             "fetch_allow_scheme": ["http"],
-            "locale": "en-US"
+            "locale": "en-US",
+            "progress": false
         }),
         None,
     );
     composer.push_environment(json!({
         "jobs": 3,
-        "fetch_allow_scheme": ["ftp"]
+        "fetch_allow_scheme": ["ftp"],
+        "progress": true
     }));
     composer.push_cli(json!({
         "jobs": 4,
         "fetch_allow_scheme": ["git"],
+        "progress": false,
         "verbose": true
     }));
     let merged = Cli::merge_from_layers(composer.layers())?;
@@ -60,6 +64,10 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     ensure!(
         merged.fetch_allow_scheme == vec!["https", "http", "ftp", "git"],
         "list values should append in layer order",
+    );
+    ensure!(
+        merged.progress == Some(false),
+        "CLI layer should override progress setting",
     );
     ensure!(
         merged.locale.as_deref() == Some("en-US"),
@@ -81,6 +89,7 @@ fetch_allow_scheme = ["https"]
 verbose = true
 fetch_default_deny = true
 locale = "es-ES"
+progress = false
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
@@ -118,6 +127,10 @@ locale = "es-ES"
     ensure!(
         merged.locale.as_deref() == Some("es-ES"),
         "config locale should be retained when CLI does not override",
+    );
+    ensure!(
+        merged.progress == Some(false),
+        "config progress should apply when CLI and env do not override",
     );
 
     Ok(())

@@ -12,7 +12,8 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
 use crate::status::{
-    AccessibleReporter, PipelineStage, SilentReporter, StatusReporter, report_pipeline_stage,
+    AccessibleReporter, IndicatifReporter, PipelineStage, SilentReporter, StatusReporter,
+    report_pipeline_stage,
 };
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
@@ -93,9 +94,10 @@ impl Default for BuildTargets<'_> {
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible);
-    let reporter: Box<dyn StatusReporter> = match mode {
-        OutputMode::Accessible => Box::new(AccessibleReporter),
-        OutputMode::Standard => Box::new(SilentReporter),
+    let reporter: Box<dyn StatusReporter> = match (mode, cli.progress.unwrap_or(true)) {
+        (OutputMode::Accessible, _) => Box::new(AccessibleReporter),
+        (OutputMode::Standard, true) => Box::new(IndicatifReporter::new()),
+        (OutputMode::Standard, false) => Box::new(SilentReporter),
     };
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
@@ -105,13 +107,14 @@ pub fn run(cli: &Cli) -> Result<()> {
     match command {
         Commands::Build(args) => handle_build(cli, &args, reporter.as_ref()),
         Commands::Manifest { file } => {
-            let ninja = generate_ninja(cli, reporter.as_ref())?;
+            let ninja = generate_ninja(cli, reporter.as_ref(), None)?;
             if process::is_stdout_path(file.as_path()) {
                 process::write_ninja_stdout(&ninja)?;
             } else {
                 let output_path = resolve_output_path(cli, file.as_path());
                 process::write_ninja_file(output_path.as_ref(), &ninja)?;
             }
+            reporter.report_complete(keys::STATUS_TOOL_MANIFEST);
             Ok(())
         }
         Commands::Clean => handle_clean(cli, reporter.as_ref()),
@@ -135,7 +138,7 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// handle_build(&cli, &args, &SilentReporter).unwrap();
 /// ```
 fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> Result<()> {
-    let ninja = generate_ninja(cli, reporter)?;
+    let ninja = generate_ninja(cli, reporter, Some(keys::STATUS_TOOL_BUILD))?;
     let targets = BuildTargets::new(&args.targets);
 
     // Normalize the build file path and keep the temporary file alive for the
@@ -154,11 +157,6 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
         _tmp_file_guard = Some(tmp);
     }
 
-    report_pipeline_stage(
-        reporter,
-        PipelineStage::Execute,
-        Some(keys::STATUS_TOOL_BUILD),
-    );
     let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
@@ -191,12 +189,11 @@ fn handle_ninja_tool(
         subcommand = tool,
         "Preparing Ninja tool invocation"
     );
-    let ninja = generate_ninja(cli, reporter)?;
+    let ninja = generate_ninja(cli, reporter, Some(tool_key))?;
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
-    report_pipeline_stage(reporter, PipelineStage::Execute, Some(tool_key));
     let program = process::resolve_ninja_program();
     run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
         format!(
@@ -222,7 +219,8 @@ fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
 ///
-/// Reports pipeline stages 1 through 4 via the provided [`StatusReporter`].
+/// Reports manifest and graph/synthesis pipeline stages via the provided
+/// [`StatusReporter`].
 ///
 /// # Errors
 ///
@@ -237,56 +235,18 @@ fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
 /// let ninja = generate_ninja(&cli, &SilentReporter).expect("generate");
 /// assert!(ninja.as_str().contains("rule"));
 /// ```
-fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaContent> {
+fn generate_ninja(
+    cli: &Cli,
+    reporter: &dyn StatusReporter,
+    tool_key: Option<&'static str>,
+) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli)?;
+    ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
-    // Check for missing manifest and provide a helpful error with hint.
-    if !manifest_path.as_std_path().exists() {
-        // `resolve_manifest_path()` validates that `file_name()` is Some.
-        let manifest_name = manifest_path
-            .file_name()
-            .ok_or_else(|| {
-                anyhow!(
-                    "{}",
-                    localization::message(keys::RUNNER_MANIFEST_PATH_MISSING_NAME)
-                        .with_arg("path", manifest_path.as_str())
-                )
-            })?
-            .to_owned();
-        let directory = if cli.directory.is_some() {
-            let parent = manifest_path
-                .parent()
-                .map_or_else(|| manifest_path.as_str(), camino::Utf8Path::as_str);
-            localization::message(keys::RUNNER_MANIFEST_DIRECTORY)
-                .with_arg("directory", parent)
-                .to_string()
-        } else {
-            localization::message(keys::RUNNER_MANIFEST_CURRENT_DIRECTORY).to_string()
-        };
-        let message = localization::message(keys::RUNNER_MANIFEST_NOT_FOUND)
-            .with_arg("manifest_name", manifest_name.as_str())
-            .with_arg("directory", &directory);
-        return Err(RunnerError::ManifestNotFound {
-            manifest_name,
-            directory,
-            path: manifest_path.into_std_path_buf(),
-            message,
-            help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
-        }
-        .into());
-    }
-
-    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy, None);
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
-
-    report_pipeline_stage(reporter, PipelineStage::ManifestLoad, None);
-    let manifest = manifest::from_path_with_policy(manifest_path.as_std_path(), policy)
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", manifest_path.as_str())
-        })?;
+    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
     if tracing::enabled!(tracing::Level::DEBUG) {
         let ast_json = serde_json::to_string_pretty(&manifest).context(localization::message(
             keys::RUNNER_CONTEXT_SERIALISE_MANIFEST,
@@ -294,14 +254,91 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         debug!("AST:\n{ast_json}");
     }
 
-    report_pipeline_stage(reporter, PipelineStage::BuildGraph, None);
+    report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
     let graph = BuildGraph::from_manifest(&manifest)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
-    report_pipeline_stage(reporter, PipelineStage::GenerateNinja, None);
+    report_pipeline_stage(
+        reporter,
+        PipelineStage::NinjaSynthesisAndExecution,
+        tool_key,
+    );
     let ninja = ninja_gen::generate(&graph)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
     Ok(NinjaContent::new(ninja))
+}
+
+fn ensure_manifest_exists_or_error(
+    cli: &Cli,
+    reporter: &dyn StatusReporter,
+    manifest_path: &Utf8PathBuf,
+) -> Result<()> {
+    if manifest_path.as_std_path().exists() {
+        return Ok(());
+    }
+
+    report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
+    // `resolve_manifest_path()` validates that `file_name()` is Some.
+    let manifest_name = manifest_path
+        .file_name()
+        .ok_or_else(|| {
+            anyhow!(
+                "{}",
+                localization::message(keys::RUNNER_MANIFEST_PATH_MISSING_NAME)
+                    .with_arg("path", manifest_path.as_str())
+            )
+        })?
+        .to_owned();
+    let directory = if cli.directory.is_some() {
+        let parent = manifest_path
+            .parent()
+            .map_or_else(|| manifest_path.as_str(), camino::Utf8Path::as_str);
+        localization::message(keys::RUNNER_MANIFEST_DIRECTORY)
+            .with_arg("directory", parent)
+            .to_string()
+    } else {
+        localization::message(keys::RUNNER_MANIFEST_CURRENT_DIRECTORY).to_string()
+    };
+    let message = localization::message(keys::RUNNER_MANIFEST_NOT_FOUND)
+        .with_arg("manifest_name", manifest_name.as_str())
+        .with_arg("directory", &directory);
+    Err(RunnerError::ManifestNotFound {
+        manifest_name,
+        directory,
+        path: manifest_path.to_path_buf().into_std_path_buf(),
+        message,
+        help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
+    }
+    .into())
+}
+
+fn load_manifest_with_stage_reporting(
+    manifest_path: &Utf8PathBuf,
+    policy: crate::stdlib::NetworkPolicy,
+    reporter: &dyn StatusReporter,
+) -> Result<crate::ast::NetsukeManifest> {
+    manifest::from_path_with_policy_and_stage_callback(
+        manifest_path.as_std_path(),
+        policy,
+        |stage| match stage {
+            manifest::ManifestLoadStage::ManifestIngestion => {
+                report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
+            }
+            manifest::ManifestLoadStage::InitialYamlParsing => {
+                report_pipeline_stage(reporter, PipelineStage::InitialYamlParsing, None);
+            }
+            manifest::ManifestLoadStage::TemplateExpansion => {
+                report_pipeline_stage(reporter, PipelineStage::TemplateExpansion, None);
+            }
+            manifest::ManifestLoadStage::FinalRendering => {
+                report_pipeline_stage(reporter, PipelineStage::FinalRendering, None);
+            }
+        },
+    )
+    .with_context(|| {
+        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+            .with_arg("path", manifest_path.as_str())
+    })
 }
 
 /// Determine the manifest path respecting the CLI's directory option.
