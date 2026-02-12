@@ -171,6 +171,7 @@ Implementation complete. All quality gates pass (`make check-fmt`,
 `make lint`, `make test`).
 
 **What went well:**
+
 - The `resolve_with` dependency-injection pattern for environment variable
   lookup made both unit tests and BDD tests clean and deterministic.
 - The `OutputMode` enum and `StatusReporter` trait provide a clean
@@ -179,6 +180,7 @@ Implementation complete. All quality gates pass (`make check-fmt`,
   worked well with checkpoint validation between stages.
 
 **What was surprising:**
+
 - `clippy::print_stderr` is denied globally, requiring `writeln!(io::stderr())`
   instead of `eprintln!`. The `drop()` wrapper follows the `main.rs` pattern.
 - The BDD `Given the environment variable` step already existed in
@@ -186,6 +188,7 @@ Implementation complete. All quality gates pass (`make check-fmt`,
   env vars in the TestWorld avoided test interference.
 
 **Metrics:**
+
 - 4 new files created, 10 files modified.
 - 12 unit tests (output_mode), 7 BDD scenarios (accessible_output).
 - ~300 net new lines of code (well within the 800-line tolerance).
