@@ -3,7 +3,7 @@
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 
 use miette::Report;
-use netsuke::{cli, cli_localization, locale_resolution, localization, runner};
+use netsuke::{cli, cli_localization, locale_resolution, localization, output_prefs, runner};
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process::ExitCode;
@@ -43,17 +43,18 @@ fn main() -> ExitCode {
     };
     init_tracing(max_level);
 
+    let prefs = output_prefs::resolve(merged_cli.no_emoji);
     match runner::run(&merged_cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            // Check if the error is a RunnerError with diagnostic info.
+            let prefix = prefs.error_prefix();
             match err.downcast::<runner::RunnerError>() {
                 Ok(runner_err) => {
                     let report = Report::new(runner_err);
-                    drop(writeln!(io::stderr(), "{report:?}"));
+                    drop(writeln!(io::stderr(), "{prefix} {report:?}"));
                 }
                 Err(other_err) => {
-                    tracing::error!(error = %other_err, "runner failed");
+                    drop(writeln!(io::stderr(), "{prefix} {other_err}"));
                 }
             }
             ExitCode::FAILURE

@@ -631,6 +631,30 @@ Typical standard-mode output includes localized state prefixes:
 Build complete.
 ```
 
+### Emoji and accessibility preferences
+
+Netsuke supports suppressing emoji glyphs in output for users who prefer
+ASCII-only output or use environments where emoji are not rendered correctly.
+
+Emoji is automatically suppressed when:
+
+- `NO_COLOR` is set (any value)
+- `NETSUKE_NO_EMOJI` is set (any value)
+
+Emoji suppression can be controlled explicitly:
+
+- CLI flag: `--no-emoji true` or `--no-emoji false`
+- Environment variable: `NETSUKE_NO_EMOJI=true`
+- Configuration file: `no_emoji = true`
+
+Explicit configuration always takes precedence over auto-detection. Setting
+`--no-emoji false` re-enables emoji even when `NO_COLOR` is set.
+
+In all output modes, Netsuke uses semantic text prefixes (`Error:`,
+`Warning:`, `Success:`) so that meaning is never conveyed solely by colour
+or symbol. When emoji is permitted, these prefixes include a leading glyph
+for quick visual scanning.
+
 ### Exit Codes
 
 - `0`: Success.

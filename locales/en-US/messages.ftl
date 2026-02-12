@@ -338,6 +338,23 @@ status.tool.clean = Clean
 status.tool.graph = Graph
 status.tool.manifest = Manifest
 
+# Accessibility preferences.
+cli.flag.no_emoji.help = Suppress emoji glyphs in output.
+
+# Semantic prefixes for accessible output.
+semantic.prefix.error = { $emoji ->
+    [yes] ✖ Error:
+   *[no] Error:
+}
+semantic.prefix.warning = { $emoji ->
+    [yes] ⚠ Warning:
+   *[no] Warning:
+}
+semantic.prefix.success = { $emoji ->
+    [yes] ✔ Success:
+   *[no] Success:
+}
+
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR
 # plural categories. Note: These require numeric FluentValue arguments to

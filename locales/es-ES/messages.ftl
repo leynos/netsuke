@@ -338,6 +338,23 @@ status.tool.clean = Limpieza
 status.tool.graph = Grafo
 status.tool.manifest = Manifiesto
 
+# Preferencias de accesibilidad.
+cli.flag.no_emoji.help = Suprimir glifos emoji en la salida.
+
+# Prefijos semánticos para salida accesible.
+semantic.prefix.error = { $emoji ->
+    [yes] ✖ Error:
+   *[no] Error:
+}
+semantic.prefix.warning = { $emoji ->
+    [yes] ⚠ Advertencia:
+   *[no] Advertencia:
+}
+semantic.prefix.success = { $emoji ->
+    [yes] ✔ Éxito:
+   *[no] Éxito:
+}
+
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent
 # usando categorías plurales CLDR. Nota: Estas requieren argumentos

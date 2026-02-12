@@ -13,6 +13,7 @@
 //! FIXME(rstest-bdd): Once <https://github.com/leynos/rstest-bdd/issues/381>
 //! is resolved, these suppressions may be removable.
 
+mod accessibility_preferences;
 mod accessible_output;
 mod cli;
 #[cfg(unix)]

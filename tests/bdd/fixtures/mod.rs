@@ -16,6 +16,7 @@ use camino::Utf8PathBuf;
 use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
 use netsuke::output_mode::OutputMode;
+use netsuke::output_prefs::OutputPrefs;
 use netsuke::stdlib::{NetworkPolicy, StdlibState as NetsukeStdlibState};
 use rstest::fixture;
 use rstest_bdd::Slot;
@@ -135,6 +136,14 @@ pub struct TestWorld {
     pub simulated_no_color: Slot<String>,
     /// Simulated `TERM` value for output mode detection scenarios.
     pub simulated_term: Slot<String>,
+
+    // Output preferences state (Clone)
+    /// Resolved output preferences for accessibility preference scenarios.
+    pub output_prefs: Slot<OutputPrefs>,
+    /// Simulated `NETSUKE_NO_EMOJI` value for preference resolution scenarios.
+    pub simulated_no_emoji: Slot<String>,
+    /// Rendered semantic prefix for assertion scenarios.
+    pub rendered_prefix: Slot<String>,
 
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.

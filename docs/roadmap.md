@@ -247,9 +247,9 @@ library, and CLI ergonomics.
   - [x] Auto-enable for `TERM=dumb`, `NO_COLOR`, or explicit config.
   - [x] Replace spinners with static status lines.
   - [x] Guarantee textual labels for every status.
-- [ ] 3.8.2. Respect accessibility preferences.
-  - [ ] Honour `NO_COLOR`, `NETSUKE_NO_EMOJI`, and ASCII-only preferences.
-  - [ ] Keep semantic prefixes (Error, Warning, Success) in all modes.
+- [x] 3.8.2. Respect accessibility preferences.
+  - [x] Honour `NO_COLOR`, `NETSUKE_NO_EMOJI`, and ASCII-only preferences.
+  - [x] Keep semantic prefixes (Error, Warning, Success) in all modes.
 - [ ] 3.8.3. Conduct assistive technology verification.
   - [ ] Test with NVDA on Windows, VoiceOver on macOS, and a Linux screen
     reader.

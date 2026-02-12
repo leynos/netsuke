@@ -296,6 +296,10 @@ define_keys! {
     STATUS_TOOL_CLEAN => "status.tool.clean",
     STATUS_TOOL_GRAPH => "status.tool.graph",
     STATUS_TOOL_MANIFEST => "status.tool.manifest",
+    CLI_FLAG_NO_EMOJI_HELP => "cli.flag.no_emoji.help",
+    SEMANTIC_PREFIX_ERROR => "semantic.prefix.error",
+    SEMANTIC_PREFIX_WARNING => "semantic.prefix.warning",
+    SEMANTIC_PREFIX_SUCCESS => "semantic.prefix.success",
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }

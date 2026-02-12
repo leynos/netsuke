@@ -11,6 +11,7 @@ pub use error::RunnerError;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
+use crate::output_prefs;
 use crate::status::{
     AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
     StatusReporter, report_pipeline_stage,
@@ -90,11 +91,15 @@ impl Default for BuildTargets<'_> {
     }
 }
 
-/// Build the appropriate [`StatusReporter`] for the resolved output mode and
-/// progress preference.
-fn make_reporter(mode: OutputMode, progress_enabled: bool) -> Box<dyn StatusReporter> {
+/// Build the appropriate [`StatusReporter`] for the resolved output mode,
+/// progress preference, and output preferences.
+fn make_reporter(
+    mode: OutputMode,
+    progress_enabled: bool,
+    prefs: output_prefs::OutputPrefs,
+) -> Box<dyn StatusReporter> {
     match (mode, progress_enabled) {
-        (OutputMode::Accessible, _) => Box::new(AccessibleReporter),
+        (OutputMode::Accessible, _) => Box::new(AccessibleReporter::new(prefs)),
         (OutputMode::Standard, true) => Box::new(IndicatifReporter::new()),
         (OutputMode::Standard, false) => Box::new(SilentReporter),
     }
@@ -107,7 +112,8 @@ fn make_reporter(mode: OutputMode, progress_enabled: bool) -> Box<dyn StatusRepo
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible);
-    let reporter = make_reporter(mode, cli.progress.unwrap_or(true));
+    let prefs = output_prefs::resolve(cli.no_emoji);
+    let reporter = make_reporter(mode, cli.progress.unwrap_or(true), prefs);
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,

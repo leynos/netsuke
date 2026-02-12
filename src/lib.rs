@@ -17,6 +17,7 @@ pub mod localization;
 pub mod manifest;
 pub mod ninja_gen;
 pub mod output_mode;
+pub mod output_prefs;
 pub mod runner;
 pub mod status;
 pub mod stdlib;
