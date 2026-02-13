@@ -12,8 +12,8 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
 use crate::status::{
-    AccessibleReporter, IndicatifReporter, PipelineStage, SilentReporter, StatusReporter,
-    report_pipeline_stage,
+    AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
+    StatusReporter, report_pipeline_stage,
 };
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
@@ -114,7 +114,7 @@ pub fn run(cli: &Cli) -> Result<()> {
                 let output_path = resolve_output_path(cli, file.as_path());
                 process::write_ninja_file(output_path.as_ref(), &ninja)?;
             }
-            reporter.report_complete(keys::STATUS_TOOL_MANIFEST);
+            reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
             Ok(())
         }
         Commands::Clean => handle_clean(cli, reporter.as_ref()),
@@ -138,7 +138,11 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// handle_build(&cli, &args, &SilentReporter).unwrap();
 /// ```
 fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> Result<()> {
-    let ninja = generate_ninja(cli, reporter, Some(keys::STATUS_TOOL_BUILD))?;
+    let ninja = generate_ninja(
+        cli,
+        reporter,
+        Some(LocalizationKey::new(keys::STATUS_TOOL_BUILD)),
+    )?;
     let targets = BuildTargets::new(&args.targets);
 
     // Normalize the build file path and keep the temporary file alive for the
@@ -165,7 +169,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
             build_path.display()
         )
     })?;
-    reporter.report_complete(keys::STATUS_TOOL_BUILD);
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_BUILD));
     Ok(())
 }
 
@@ -181,7 +185,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
 fn handle_ninja_tool(
     cli: &Cli,
     tool: &str,
-    tool_key: &'static str,
+    tool_key: LocalizationKey,
     reporter: &dyn StatusReporter,
 ) -> Result<()> {
     info!(
@@ -209,12 +213,22 @@ fn handle_ninja_tool(
 
 /// Remove build artefacts by invoking `ninja -t clean`.
 fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(cli, "clean", keys::STATUS_TOOL_CLEAN, reporter)
+    handle_ninja_tool(
+        cli,
+        "clean",
+        LocalizationKey::new(keys::STATUS_TOOL_CLEAN),
+        reporter,
+    )
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
 fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(cli, "graph", keys::STATUS_TOOL_GRAPH, reporter)
+    handle_ninja_tool(
+        cli,
+        "graph",
+        LocalizationKey::new(keys::STATUS_TOOL_GRAPH),
+        reporter,
+    )
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
@@ -238,7 +252,7 @@ fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
 fn generate_ninja(
     cli: &Cli,
     reporter: &dyn StatusReporter,
-    tool_key: Option<&'static str>,
+    tool_key: Option<LocalizationKey>,
 ) -> Result<NinjaContent> {
     let manifest_path = resolve_manifest_path(cli)?;
     ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;

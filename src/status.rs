@@ -1,25 +1,111 @@
 //! Pipeline status reporting for accessible and standard output modes.
-//!
-//! This module provides a [`StatusReporter`] trait plus concrete reporters for
-//! both accessibility-first textual output and standard terminal progress
-//! output. Standard mode uses `indicatif::MultiProgress` to keep stage summaries
-//! persistent while the pipeline advances.
 
 use crate::localization::{self, keys};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::{self, Write};
 use std::sync::Mutex;
+use thiserror::Error;
 
-fn stage_label(current: u32, total: u32, description: &str) -> String {
+/// Total count of user-visible pipeline stages.
+pub const PIPELINE_STAGE_COUNT: u32 = 6;
+
+/// Validation error when constructing a [`StageNumber`].
+#[derive(Debug, Error, Copy, Clone, PartialEq, Eq)]
+pub enum StageNumberError {
+    /// Provided value is not within the inclusive stage range.
+    #[error("stage number {0} is out of range (expected 1..={PIPELINE_STAGE_COUNT})")]
+    OutOfRange(u32),
+}
+
+/// Validated stage index in the range `1..=PIPELINE_STAGE_COUNT`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct StageNumber(u32);
+
+impl StageNumber {
+    /// Build a validated stage number.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StageNumberError::OutOfRange`] when `value` is not between 1
+    /// and [`PIPELINE_STAGE_COUNT`] inclusive.
+    #[must_use = "validate and use the constructed stage number"]
+    pub const fn new(value: u32) -> Result<Self, StageNumberError> {
+        if value >= 1 && value <= PIPELINE_STAGE_COUNT {
+            Ok(Self(value))
+        } else {
+            Err(StageNumberError::OutOfRange(value))
+        }
+    }
+
+    /// Return the raw numeric stage index.
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+/// Localized description text for a pipeline stage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StageDescription(String);
+
+impl StageDescription {
+    /// Wrap a localized stage description.
+    #[must_use]
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Borrow the wrapped description.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for StageDescription {
+    fn from(value: String) -> Self {
+        Self::new(value)
+    }
+}
+
+/// Fluent localization key used for status output messages.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct LocalizationKey(&'static str);
+
+impl LocalizationKey {
+    /// Wrap a static Fluent key string.
+    #[must_use]
+    pub const fn new(value: &'static str) -> Self {
+        Self(value)
+    }
+
+    /// Return the wrapped Fluent key.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
+const PIPELINE_STAGE_TOTAL: StageNumber = StageNumber(PIPELINE_STAGE_COUNT);
+#[path = "status_pipeline.rs"]
+mod pipeline;
+pub use pipeline::{PipelineStage, report_pipeline_stage};
+
+fn stage_label(current: StageNumber, total: StageNumber, description: &StageDescription) -> String {
     localization::message(keys::STATUS_STAGE_LABEL)
-        .with_arg("current", current.to_string())
-        .with_arg("total", total.to_string())
-        .with_arg("description", description)
+        .with_arg("current", current.get().to_string())
+        .with_arg("total", total.get().to_string())
+        .with_arg("description", description.as_str())
         .to_string()
 }
 
-fn stage_summary(state_key: &'static str, current: u32, total: u32, description: &str) -> String {
-    let state = localization::message(state_key).to_string();
+fn stage_summary(
+    state_key: LocalizationKey,
+    current: StageNumber,
+    total: StageNumber,
+    description: &StageDescription,
+) -> String {
+    let state = localization::message(state_key.as_str()).to_string();
     let label = stage_label(current, total, description);
     localization::message(keys::STATUS_STAGE_SUMMARY)
         .with_arg("state", state)
@@ -27,46 +113,54 @@ fn stage_summary(state_key: &'static str, current: u32, total: u32, description:
         .to_string()
 }
 
-/// Report pipeline progress to the user.
+/// Reports pipeline stage transitions and completion.
 pub trait StatusReporter {
-    /// Emit a status update for the given pipeline stage.
-    fn report_stage(&self, current: u32, total: u32, description: &str);
-
-    /// Emit a completion message after a successful pipeline run.
-    fn report_complete(&self, tool_key: &'static str);
+    /// Emit a stage update.
+    fn report_stage(&self, current: StageNumber, total: StageNumber, description: StageDescription);
+    /// Emit a final completion message.
+    fn report_complete(&self, tool_key: LocalizationKey);
 }
 
-/// Accessible reporter: writes static, labelled lines to stderr.
+/// Accessible reporter that emits static lines.
 pub struct AccessibleReporter;
 
 impl StatusReporter for AccessibleReporter {
-    fn report_stage(&self, current: u32, total: u32, description: &str) {
-        let message = stage_label(current, total, description);
-        // Intentionally discard the write result: status output failures should
-        // not abort the build pipeline.
+    fn report_stage(
+        &self,
+        current: StageNumber,
+        total: StageNumber,
+        description: StageDescription,
+    ) {
+        let message = stage_label(current, total, &description);
         drop(writeln!(io::stderr(), "{message}"));
     }
 
-    fn report_complete(&self, tool_key: &'static str) {
-        let tool = localization::message(tool_key);
+    fn report_complete(&self, tool_key: LocalizationKey) {
+        let tool = localization::message(tool_key.as_str());
         let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
         drop(writeln!(io::stderr(), "{message}"));
     }
 }
 
-/// Silent reporter: emits nothing.
+/// Reporter that suppresses status output.
 pub struct SilentReporter;
 
 impl StatusReporter for SilentReporter {
-    fn report_stage(&self, _current: u32, _total: u32, _description: &str) {}
-    fn report_complete(&self, _tool_key: &'static str) {}
+    fn report_stage(
+        &self,
+        _current: StageNumber,
+        _total: StageNumber,
+        _description: StageDescription,
+    ) {
+    }
+    fn report_complete(&self, _tool_key: LocalizationKey) {}
 }
 
 #[derive(Debug)]
 struct IndicatifState {
     progress: MultiProgress,
     bars: Vec<ProgressBar>,
-    descriptions: Vec<String>,
+    descriptions: Vec<StageDescription>,
     running_index: Option<usize>,
     completed: bool,
     is_hidden: bool,
@@ -78,7 +172,7 @@ pub struct IndicatifReporter {
 }
 
 impl IndicatifReporter {
-    /// Construct an `indicatif` reporter with one persistent line per stage.
+    /// Build a multi-progress reporter with one line per pipeline stage.
     #[must_use]
     pub fn new() -> Self {
         let progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(12));
@@ -94,9 +188,9 @@ impl IndicatifReporter {
             let bar = progress.add(ProgressBar::new(1));
             bar.set_style(style.clone());
             bar.set_message(stage_summary(
-                keys::STATUS_STATE_PENDING,
+                LocalizationKey::new(keys::STATUS_STATE_PENDING),
                 current,
-                PIPELINE_STAGE_COUNT,
+                PIPELINE_STAGE_TOTAL,
                 &description,
             ));
             bars.push(bar);
@@ -118,18 +212,21 @@ impl IndicatifReporter {
     fn set_stage_state(
         state: &mut IndicatifState,
         index: usize,
-        status_key: &'static str,
+        status_key: LocalizationKey,
         finish_line: bool,
     ) {
-        let Ok(current) = u32::try_from(index + 1) else {
+        let Ok(current_raw) = u32::try_from(index + 1) else {
+            return;
+        };
+        let Ok(current) = StageNumber::new(current_raw) else {
             return;
         };
         let description = state
             .descriptions
             .get(index)
             .cloned()
-            .unwrap_or_else(String::new);
-        let message = stage_summary(status_key, current, PIPELINE_STAGE_COUNT, &description);
+            .unwrap_or_else(|| StageDescription::new(String::new()));
+        let message = stage_summary(status_key, current, PIPELINE_STAGE_TOTAL, &description);
         if state.is_hidden {
             drop(writeln!(io::stderr(), "{message}"));
             return;
@@ -160,15 +257,25 @@ impl Drop for IndicatifReporter {
             return;
         }
         if let Some(index) = state.running_index.take() {
-            Self::set_stage_state(&mut state, index, keys::STATUS_STATE_FAILED, true);
+            Self::set_stage_state(
+                &mut state,
+                index,
+                LocalizationKey::new(keys::STATUS_STATE_FAILED),
+                true,
+            );
         }
         let _ = &state.progress;
     }
 }
 
 impl StatusReporter for IndicatifReporter {
-    fn report_stage(&self, current: u32, _total: u32, description: &str) {
-        let Ok(index) = usize::try_from(current.saturating_sub(1)) else {
+    fn report_stage(
+        &self,
+        current: StageNumber,
+        _total: StageNumber,
+        description: StageDescription,
+    ) {
+        let Ok(index) = usize::try_from(current.get().saturating_sub(1)) else {
             return;
         };
 
@@ -183,156 +290,49 @@ impl StatusReporter for IndicatifReporter {
         let Some(existing_description) = state.descriptions.get_mut(index) else {
             return;
         };
-        description.clone_into(existing_description);
+        *existing_description = description;
         if let Some(previous) = state.running_index
             && previous != index
         {
-            Self::set_stage_state(&mut state, previous, keys::STATUS_STATE_DONE, true);
+            Self::set_stage_state(
+                &mut state,
+                previous,
+                LocalizationKey::new(keys::STATUS_STATE_DONE),
+                true,
+            );
         }
 
-        Self::set_stage_state(&mut state, index, keys::STATUS_STATE_RUNNING, false);
+        Self::set_stage_state(
+            &mut state,
+            index,
+            LocalizationKey::new(keys::STATUS_STATE_RUNNING),
+            false,
+        );
         state.running_index = Some(index);
     }
 
-    fn report_complete(&self, tool_key: &'static str) {
+    fn report_complete(&self, tool_key: LocalizationKey) {
         let mut state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some(index) = state.running_index.take() {
-            Self::set_stage_state(&mut state, index, keys::STATUS_STATE_DONE, true);
+            Self::set_stage_state(
+                &mut state,
+                index,
+                LocalizationKey::new(keys::STATUS_STATE_DONE),
+                true,
+            );
         }
         state.completed = true;
         let _ = &state.progress;
 
-        let tool = localization::message(tool_key);
+        let tool = localization::message(tool_key.as_str());
         let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
         drop(writeln!(io::stderr(), "{message}"));
     }
 }
 
-/// Enumerates the known pipeline stages in reporting order.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum PipelineStage {
-    /// Stage 1: read the manifest from disk.
-    ManifestIngestion = 1,
-    /// Stage 2: parse raw YAML into an intermediate tree.
-    InitialYamlParsing = 2,
-    /// Stage 3: expand `foreach` and `when` template directives.
-    TemplateExpansion = 3,
-    /// Stage 4: deserialize and render manifest values.
-    FinalRendering = 4,
-    /// Stage 5: build and validate the dependency graph.
-    IrGenerationValidation = 5,
-    /// Stage 6: synthesize Ninja and execute the selected tool.
-    NinjaSynthesisAndExecution = 6,
-}
-
-impl PipelineStage {
-    /// All pipeline stages in reporting order.
-    pub const ALL: [Self; 6] = [
-        Self::ManifestIngestion,
-        Self::InitialYamlParsing,
-        Self::TemplateExpansion,
-        Self::FinalRendering,
-        Self::IrGenerationValidation,
-        Self::NinjaSynthesisAndExecution,
-    ];
-
-    /// 1-based index of this stage within the pipeline.
-    #[must_use]
-    pub const fn index(self) -> u32 {
-        self as u32
-    }
-
-    /// Convert a 1-based stage index into a [`PipelineStage`].
-    #[must_use]
-    pub const fn from_index(index: u32) -> Option<Self> {
-        match index {
-            1 => Some(Self::ManifestIngestion),
-            2 => Some(Self::InitialYamlParsing),
-            3 => Some(Self::TemplateExpansion),
-            4 => Some(Self::FinalRendering),
-            5 => Some(Self::IrGenerationValidation),
-            6 => Some(Self::NinjaSynthesisAndExecution),
-            _ => None,
-        }
-    }
-
-    /// Localized description of this stage.
-    #[must_use]
-    pub fn description(self, tool_key: Option<&'static str>) -> String {
-        match self {
-            Self::ManifestIngestion => {
-                localization::message(keys::STATUS_STAGE_MANIFEST_INGESTION).to_string()
-            }
-            Self::InitialYamlParsing => {
-                localization::message(keys::STATUS_STAGE_INITIAL_YAML_PARSING).to_string()
-            }
-            Self::TemplateExpansion => {
-                localization::message(keys::STATUS_STAGE_TEMPLATE_EXPANSION).to_string()
-            }
-            Self::FinalRendering => {
-                localization::message(keys::STATUS_STAGE_FINAL_RENDERING).to_string()
-            }
-            Self::IrGenerationValidation => {
-                localization::message(keys::STATUS_STAGE_IR_GENERATION_VALIDATION).to_string()
-            }
-            Self::NinjaSynthesisAndExecution => tool_key.map_or_else(
-                || localization::message(keys::STATUS_STAGE_NINJA_SYNTHESIS).to_string(),
-                |tool_message_key| {
-                    let tool = localization::message(tool_message_key).to_string();
-                    localization::message(keys::STATUS_STAGE_NINJA_SYNTHESIS_EXECUTE)
-                        .with_arg("tool", tool)
-                        .to_string()
-                },
-            ),
-        }
-    }
-}
-
-/// The total number of pipeline stages reported during a build.
-pub const PIPELINE_STAGE_COUNT: u32 = 6;
-
-/// Report a pipeline stage via a [`StatusReporter`].
-pub fn report_pipeline_stage(
-    reporter: &dyn StatusReporter,
-    stage: PipelineStage,
-    tool_key: Option<&'static str>,
-) {
-    reporter.report_stage(
-        stage.index(),
-        PIPELINE_STAGE_COUNT,
-        &stage.description(tool_key),
-    );
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    #[test]
-    fn pipeline_stage_count_matches_stage_array() {
-        let stage_count = u32::try_from(PipelineStage::ALL.len()).unwrap_or(0);
-        assert_eq!(PIPELINE_STAGE_COUNT, stage_count);
-    }
-
-    #[rstest]
-    #[case(PipelineStage::ManifestIngestion, 1)]
-    #[case(PipelineStage::InitialYamlParsing, 2)]
-    #[case(PipelineStage::TemplateExpansion, 3)]
-    #[case(PipelineStage::FinalRendering, 4)]
-    #[case(PipelineStage::IrGenerationValidation, 5)]
-    #[case(PipelineStage::NinjaSynthesisAndExecution, 6)]
-    fn stage_index_round_trips(#[case] stage: PipelineStage, #[case] expected: u32) {
-        assert_eq!(stage.index(), expected);
-        assert_eq!(PipelineStage::from_index(expected), Some(stage));
-    }
-
-    #[test]
-    fn invalid_stage_index_returns_none() {
-        assert_eq!(PipelineStage::from_index(0), None);
-        assert_eq!(PipelineStage::from_index(7), None);
-    }
-}
+#[path = "status_tests.rs"]
+mod tests;
