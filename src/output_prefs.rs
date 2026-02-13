@@ -199,75 +199,29 @@ mod tests {
         assert!(!prefs.emoji_allowed());
     }
 
-    #[test]
-    fn error_prefix_contains_error_text_with_emoji() {
-        let prefs = OutputPrefs { emoji: true };
-        let rendered = prefs.error_prefix().to_string();
+    #[rstest]
+    #[case::error_with_emoji(true, OutputPrefs::error_prefix, "Error:")]
+    #[case::error_without_emoji(false, OutputPrefs::error_prefix, "Error:")]
+    #[case::success_with_emoji(true, OutputPrefs::success_prefix, "Success:")]
+    #[case::success_without_emoji(false, OutputPrefs::success_prefix, "Success:")]
+    #[case::warning_with_emoji(true, OutputPrefs::warning_prefix, "Warning:")]
+    #[case::warning_without_emoji(false, OutputPrefs::warning_prefix, "Warning:")]
+    fn prefix_rendering(
+        #[case] emoji: bool,
+        #[case] prefix_fn: fn(OutputPrefs) -> LocalizedMessage,
+        #[case] expected_text: &str,
+    ) {
+        let prefs = OutputPrefs { emoji };
+        let rendered = prefix_fn(prefs).to_string();
         assert!(
-            rendered.contains("Error:"),
-            "expected 'Error:' in '{rendered}'"
+            rendered.contains(expected_text),
+            "expected '{expected_text}' in '{rendered}'"
         );
-    }
-
-    #[test]
-    fn error_prefix_contains_error_text_without_emoji() {
-        let prefs = OutputPrefs { emoji: false };
-        let rendered = prefs.error_prefix().to_string();
-        assert!(
-            rendered.contains("Error:"),
-            "expected 'Error:' in '{rendered}'"
-        );
-        assert!(
-            rendered.is_ascii(),
-            "expected ASCII-only prefix, got '{rendered}'"
-        );
-    }
-
-    #[test]
-    fn success_prefix_contains_success_text_with_emoji() {
-        let prefs = OutputPrefs { emoji: true };
-        let rendered = prefs.success_prefix().to_string();
-        assert!(
-            rendered.contains("Success:"),
-            "expected 'Success:' in '{rendered}'"
-        );
-    }
-
-    #[test]
-    fn success_prefix_contains_success_text_without_emoji() {
-        let prefs = OutputPrefs { emoji: false };
-        let rendered = prefs.success_prefix().to_string();
-        assert!(
-            rendered.contains("Success:"),
-            "expected 'Success:' in '{rendered}'"
-        );
-        assert!(
-            rendered.is_ascii(),
-            "expected ASCII-only prefix, got '{rendered}'"
-        );
-    }
-
-    #[test]
-    fn warning_prefix_contains_warning_text_with_emoji() {
-        let prefs = OutputPrefs { emoji: true };
-        let rendered = prefs.warning_prefix().to_string();
-        assert!(
-            rendered.contains("Warning:"),
-            "expected 'Warning:' in '{rendered}'"
-        );
-    }
-
-    #[test]
-    fn warning_prefix_contains_warning_text_without_emoji() {
-        let prefs = OutputPrefs { emoji: false };
-        let rendered = prefs.warning_prefix().to_string();
-        assert!(
-            rendered.contains("Warning:"),
-            "expected 'Warning:' in '{rendered}'"
-        );
-        assert!(
-            rendered.is_ascii(),
-            "expected ASCII-only prefix, got '{rendered}'"
-        );
+        if !emoji {
+            assert!(
+                rendered.is_ascii(),
+                "expected ASCII-only prefix, got '{rendered}'"
+            );
+        }
     }
 }

@@ -97,26 +97,27 @@ fn resolve_no_emoji_false(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-#[when("the error prefix is rendered")]
-fn render_error_prefix(world: &TestWorld) -> Result<()> {
+/// Retrieve resolved output preferences and render a prefix via `prefix_fn`.
+fn render_prefix_with(
+    world: &TestWorld,
+    prefix_fn: impl FnOnce(&output_prefs::OutputPrefs) -> String,
+) -> Result<()> {
     let prefs = world
         .output_prefs
         .get()
         .ok_or_else(|| anyhow::anyhow!("output prefs have not been resolved"))?;
-    world.rendered_prefix.set(prefs.error_prefix().to_string());
+    world.rendered_prefix.set(prefix_fn(&prefs));
     Ok(())
+}
+
+#[when("the error prefix is rendered")]
+fn render_error_prefix(world: &TestWorld) -> Result<()> {
+    render_prefix_with(world, |prefs| prefs.error_prefix().to_string())
 }
 
 #[when("the success prefix is rendered")]
 fn render_success_prefix(world: &TestWorld) -> Result<()> {
-    let prefs = world
-        .output_prefs
-        .get()
-        .ok_or_else(|| anyhow::anyhow!("output prefs have not been resolved"))?;
-    world
-        .rendered_prefix
-        .set(prefs.success_prefix().to_string());
-    Ok(())
+    render_prefix_with(world, |prefs| prefs.success_prefix().to_string())
 }
 
 // ---------------------------------------------------------------------------
