@@ -636,7 +636,7 @@ Build complete.
 Netsuke supports suppressing emoji glyphs in output for users who prefer
 ASCII-only output or use environments where emoji are not rendered correctly.
 
-Emoji is automatically suppressed when:
+Emoji are automatically suppressed when:
 
 - `NO_COLOR` is set (any value)
 - `NETSUKE_NO_EMOJI` is set (any value)

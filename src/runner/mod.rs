@@ -11,7 +11,7 @@ pub use error::RunnerError;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
-use crate::output_prefs;
+use crate::output_prefs::OutputPrefs;
 use crate::status::{
     AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
     StatusReporter, report_pipeline_stage,
@@ -105,14 +105,13 @@ fn make_reporter(
     }
 }
 
-/// Execute the parsed [`Cli`] commands.
+/// Execute the parsed [`Cli`] commands with the given output preferences.
 ///
 /// # Errors
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
-pub fn run(cli: &Cli) -> Result<()> {
+pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible);
-    let prefs = output_prefs::resolve(cli.no_emoji);
     let reporter = make_reporter(mode, cli.progress.unwrap_or(true), prefs);
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {

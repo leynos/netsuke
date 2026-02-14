@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::localization::{self, keys};
+use netsuke::output_prefs;
 use netsuke::runner::run;
 use rstest::{fixture, rstest};
 use std::path::PathBuf;
@@ -51,7 +52,7 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli) else {
+    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -91,7 +92,8 @@ fn assert_subcommand_succeeds_without_persisting_file(
         ..Cli::default()
     };
 
-    run(&cli).with_context(|| format!("expected {name} subcommand to succeed"))?;
+    run(&cli, output_prefs::resolve(None))
+        .with_context(|| format!("expected {name} subcommand to succeed"))?;
 
     ensure!(
         !temp.path().join("build.ninja").exists(),
@@ -118,7 +120,7 @@ fn assert_subcommand_fails_with_invalid_manifest(
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli) else {
+    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
         bail!("expected {name} to fail for invalid manifest");
     };
     let messages: Vec<String> = err

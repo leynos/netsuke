@@ -44,7 +44,7 @@ fn main() -> ExitCode {
     init_tracing(max_level);
 
     let prefs = output_prefs::resolve(merged_cli.no_emoji);
-    match runner::run(&merged_cli) {
+    match runner::run(&merged_cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             let prefix = prefs.error_prefix();
@@ -54,6 +54,7 @@ fn main() -> ExitCode {
                     drop(writeln!(io::stderr(), "{prefix} {report:?}"));
                 }
                 Err(other_err) => {
+                    tracing::error!(error = %other_err, "runner failed");
                     drop(writeln!(io::stderr(), "{prefix} {other_err}"));
                 }
             }

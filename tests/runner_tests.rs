@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::localization::{self, keys};
+use netsuke::output_prefs;
 use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
 use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
@@ -74,7 +75,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli) else {
+    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
         bail!("expected run to fail for invalid manifest");
     };
     let expected = localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
@@ -107,7 +108,7 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli) else {
+    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -165,7 +166,7 @@ fn run_ninja_not_found() -> Result<()> {
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
     let (_ninja_dir, _ninja_path, temp, cli, _guard) = setup_ninja_env_test()?;
 
-    run(&cli).context("expected run to succeed without emit path")?;
+    run(&cli, output_prefs::resolve(None)).context("expected run to succeed without emit path")?;
 
     // Ensure no ninja file remains in project directory
     ensure!(
@@ -191,7 +192,7 @@ fn run_build_with_emit_keeps_file() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected run to succeed with emit path")?;
+    run(&cli, output_prefs::resolve(None)).context("expected run to succeed with emit path")?;
 
     ensure!(emit_path.exists(), "emit path should exist after build");
     let emitted = std::fs::read_to_string(&emit_path)
@@ -232,7 +233,8 @@ fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected run to succeed with nested emit path")?;
+    run(&cli, output_prefs::resolve(None))
+        .context("expected run to succeed with nested emit path")?;
     ensure!(emit_path.exists(), "emit path should be created");
     ensure!(nested_dir.exists(), "nested directory should be created");
     Ok(())
@@ -251,7 +253,7 @@ fn run_manifest_subcommand_writes_file() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected manifest subcommand to succeed")?;
+    run(&cli, output_prefs::resolve(None)).context("expected manifest subcommand to succeed")?;
     ensure!(
         output_path.exists(),
         "manifest command should create output file"
@@ -276,7 +278,8 @@ fn run_manifest_subcommand_accepts_relative_manifest_path() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected manifest subcommand to accept relative manifest path")?;
+    run(&cli, output_prefs::resolve(None))
+        .context("expected manifest subcommand to accept relative manifest path")?;
     ensure!(
         output_path.exists(),
         "manifest command should create output file for relative manifest path"
@@ -299,7 +302,8 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli).context("expected run to prefer NINJA_ENV over PATH entry")?;
+    run(&cli, output_prefs::resolve(None))
+        .context("expected run to prefer NINJA_ENV over PATH entry")?;
     Ok(())
 }
 
@@ -307,7 +311,8 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
 fn run_succeeds_with_checking_ninja_env() -> Result<()> {
     let (_ninja_dir, ninja_path, _temp, cli, _guard) = setup_ninja_env_test()?;
 
-    run(&cli).context("expected run to succeed using NINJA_ENV check binary")?;
+    run(&cli, output_prefs::resolve(None))
+        .context("expected run to succeed using NINJA_ENV check binary")?;
     ensure!(ninja_path.exists(), "fake ninja should remain present");
     Ok(())
 }

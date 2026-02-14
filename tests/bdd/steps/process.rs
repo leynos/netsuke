@@ -3,6 +3,7 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8Path;
+use netsuke::output_prefs;
 use netsuke::runner::{self, BuildTargets, NINJA_PROGRAM};
 use rstest_bdd_macros::{given, then, when};
 use std::fs;
@@ -226,7 +227,7 @@ fn run_subcommand(world: &TestWorld) -> Result<()> {
     prepare_cli_with_absolute_file(world)?;
     let result = world
         .cli
-        .with_ref(runner::run)
+        .with_ref(|cli| runner::run(cli, output_prefs::resolve(None)))
         .ok_or_else(|| anyhow!("CLI configuration has not been initialised"))?
         .map_err(|e| format!("{e:#}"));
     record_result(world, result);

@@ -40,6 +40,17 @@ Feature: Accessibility preferences
     Then the prefix contains "Success:"
     And the prefix contains no non-ASCII characters
 
+  Scenario: Warning prefix includes text in no-emoji mode
+    Given emoji is suppressed
+    When the warning prefix is rendered
+    Then the prefix contains "Warning:"
+    And the prefix contains no non-ASCII characters
+
+  Scenario: Warning prefix includes emoji glyph in standard mode
+    Given emoji is allowed
+    When the warning prefix is rendered
+    Then the prefix contains "Warning:"
+
   Scenario: CLI parses no-emoji true
     When the CLI is parsed with "--no-emoji true"
     Then parsing succeeds

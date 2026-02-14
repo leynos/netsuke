@@ -67,7 +67,8 @@ covering preference resolution, semantic prefix rendering, and edge cases.
 
 - Risk: `cli_overrides_from_matches` must be updated for `no_emoji`.
   Severity: high. Likelihood: high.
-  Mitigation: add to `value_source` check array; covered by BDD scenario.
+  Mitigation: add to `value_source` check array; covered by Behaviour-Driven
+  Development (BDD) scenario.
 
 ## Progress
 
@@ -96,7 +97,7 @@ covering preference resolution, semantic prefix rendering, and edge cases.
 - `NO_COLOR` implies no-emoji (visual decoration suppressed with colour).
 - `no_emoji` is `Option<bool>` (tri-state: None/auto, Some(true)/off,
   Some(false)/on).
-- Semantic prefixes use localised Fluent messages with `$emoji` select.
+- Semantic prefixes use localized Fluent messages with `$emoji` select.
 - Emoji-allowed mode: `✖ Error:`, `⚠ Warning:`, `✔ Success:`.
   No-emoji mode: `Error:`, `Warning:`, `Success:`.
 
