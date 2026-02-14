@@ -113,20 +113,8 @@ fn from_str_named(
     yaml: &str,
     name: &ManifestName,
     stdlib_config: Option<StdlibConfig>,
+    on_stage: &mut dyn FnMut(ManifestLoadStage),
 ) -> Result<NetsukeManifest> {
-    let mut no_op = |_stage| {};
-    from_str_named_with_stage_callback(yaml, name, stdlib_config, &mut no_op)
-}
-
-fn from_str_named_with_stage_callback<F>(
-    yaml: &str,
-    name: &ManifestName,
-    stdlib_config: Option<StdlibConfig>,
-    on_stage: &mut F,
-) -> Result<NetsukeManifest>
-where
-    F: FnMut(ManifestLoadStage),
-{
     on_stage(ManifestLoadStage::InitialYamlParsing);
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
@@ -186,7 +174,7 @@ where
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    from_str_named(yaml, &ManifestName::new("Netsukefile"), None)
+    from_str_named(yaml, &ManifestName::new("Netsukefile"), None, &mut |_| {})
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
@@ -219,7 +207,7 @@ pub fn from_path_with_policy(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
 ) -> Result<NetsukeManifest> {
-    from_path_with_policy_and_stage_callback(path, policy, |_stage| {})
+    from_path_with_policy_and_stage_callback(path, policy, |_| {})
 }
 
 /// Load a [`NetsukeManifest`] from the given file path using an explicit
@@ -230,14 +218,11 @@ pub fn from_path_with_policy(
 /// # Errors
 ///
 /// Returns an error if the file cannot be read or the YAML fails to parse.
-pub fn from_path_with_policy_and_stage_callback<F>(
+pub fn from_path_with_policy_and_stage_callback(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
-    mut on_stage: F,
-) -> Result<NetsukeManifest>
-where
-    F: FnMut(ManifestLoadStage),
-{
+    mut on_stage: impl FnMut(ManifestLoadStage),
+) -> Result<NetsukeManifest> {
     on_stage(ManifestLoadStage::ManifestIngestion);
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref).with_context(|| {
@@ -246,7 +231,7 @@ where
     })?;
     let name = ManifestName::new(path_ref.display().to_string());
     let config = stdlib_config_for_manifest(path_ref, policy)?;
-    from_str_named_with_stage_callback(&data, &name, Some(config), &mut on_stage)
+    from_str_named(&data, &name, Some(config), &mut on_stage)
 }
 
 #[cfg(test)]

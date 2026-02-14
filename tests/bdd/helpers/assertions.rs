@@ -6,18 +6,7 @@
 
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
-
-/// Remove Fluent bidi isolate characters used around placeables.
-///
-/// Fluent inserts these markers (`\u{2068}` and `\u{2069}`) to preserve
-/// directionality when interpolating values. They are invisible to users but
-/// can make plain substring assertions fail.
-#[must_use]
-fn normalize_fluent_isolates(text: &str) -> String {
-    text.chars()
-        .filter(|ch| *ch != '\u{2068}' && *ch != '\u{2069}')
-        .collect()
-}
+pub use test_support::fluent::normalize_fluent_isolates;
 
 /// Assert that optional content contains an expected fragment.
 ///

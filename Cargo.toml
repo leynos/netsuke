@@ -27,7 +27,7 @@ cap-std = { version = "3.4.4", features = ["fs_utf8"] }
 camino = "1.2.0"
 semver = { version = "1", features = ["serde"] }
 anyhow = "1"
-indicatif = "0.17.11"
+indicatif = "0.18.4"
 thiserror = "1"
 miette = { version = "7.6.0", features = ["fancy"] }
 digest = "0.10"

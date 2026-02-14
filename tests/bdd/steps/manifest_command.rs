@@ -1,7 +1,7 @@
 //! Step definitions for `netsuke manifest` behavioural tests.
 
 use crate::bdd::fixtures::TestWorld;
-use crate::bdd::helpers::assertions::assert_slot_contains;
+use crate::bdd::helpers::assertions::{assert_slot_contains, normalize_fluent_isolates};
 use crate::bdd::types::{
     CliArgs, DirectoryName, FileName, ManifestOutputPath, OutputFragment, PathString,
 };
@@ -27,13 +27,6 @@ impl fmt::Display for OutputType {
             Self::Stderr => write!(f, "stderr"),
         }
     }
-}
-
-#[must_use]
-fn normalize_fluent_isolates(text: &str) -> String {
-    text.chars()
-        .filter(|ch| *ch != '\u{2068}' && *ch != '\u{2069}')
-        .collect()
 }
 
 // ---------------------------------------------------------------------------

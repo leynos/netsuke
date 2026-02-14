@@ -114,7 +114,7 @@ pub fn run(cli: &Cli) -> Result<()> {
                 let output_path = resolve_output_path(cli, file.as_path());
                 process::write_ninja_file(output_path.as_ref(), &ninja)?;
             }
-            reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+            reporter.report_complete(keys::STATUS_TOOL_MANIFEST.into());
             Ok(())
         }
         Commands::Clean => handle_clean(cli, reporter.as_ref()),
@@ -138,11 +138,7 @@ pub fn run(cli: &Cli) -> Result<()> {
 /// handle_build(&cli, &args, &SilentReporter).unwrap();
 /// ```
 fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> Result<()> {
-    let ninja = generate_ninja(
-        cli,
-        reporter,
-        Some(LocalizationKey::new(keys::STATUS_TOOL_BUILD)),
-    )?;
+    let ninja = generate_ninja(cli, reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
     let targets = BuildTargets::new(&args.targets);
 
     // Normalize the build file path and keep the temporary file alive for the
@@ -169,7 +165,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
             build_path.display()
         )
     })?;
-    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_BUILD));
+    reporter.report_complete(keys::STATUS_TOOL_BUILD.into());
     Ok(())
 }
 
@@ -213,22 +209,12 @@ fn handle_ninja_tool(
 
 /// Remove build artefacts by invoking `ninja -t clean`.
 fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(
-        cli,
-        "clean",
-        LocalizationKey::new(keys::STATUS_TOOL_CLEAN),
-        reporter,
-    )
+    handle_ninja_tool(cli, "clean", keys::STATUS_TOOL_CLEAN.into(), reporter)
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
 fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(
-        cli,
-        "graph",
-        LocalizationKey::new(keys::STATUS_TOOL_GRAPH),
-        reporter,
-    )
+    handle_ninja_tool(cli, "graph", keys::STATUS_TOOL_GRAPH.into(), reporter)
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
@@ -246,7 +232,7 @@ fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
 /// use netsuke::runner::generate_ninja;
 /// use netsuke::status::SilentReporter;
 /// let cli = Cli::default();
-/// let ninja = generate_ninja(&cli, &SilentReporter).expect("generate");
+/// let ninja = generate_ninja(&cli, &SilentReporter, None).expect("generate");
 /// assert!(ninja.as_str().contains("rule"));
 /// ```
 fn generate_ninja(

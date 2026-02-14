@@ -36,7 +36,7 @@ Observable success:
 
 - Keep the pipeline model aligned with the six-stage build flow documented in
   `docs/netsuke-design.md`: Manifest Ingestion, Initial YAML Parsing, Template
-  Expansion, Deserialisation & Final Rendering, IR Generation & Validation, and
+  Expansion, Deserialization & Final Rendering, IR Generation & Validation, and
   Ninja Synthesis & Execution.
 - Preserve accessible mode guarantees from roadmap 3.8.1.
 - Integrate progress configuration with OrthoConfig conventions and localized
@@ -92,7 +92,8 @@ Observable success:
 ## Progress
 
 - [x] 2026-02-12: Gathered context from roadmap, design docs, status/runner
-      modules, localization files, and existing BDD/unit test surfaces.
+      modules, localization files, and existing behaviour-driven
+      development (BDD)/unit test surfaces.
 - [x] 2026-02-12: Drafted this ExecPlan in
       `docs/execplans/3-9-1-integrate-indicatif-multi-progress.md`.
 - [x] Implement six-stage progress model and `indicatif::MultiProgress`
@@ -115,8 +116,9 @@ Observable success:
   inside one function, so stage-level reporting needs extraction.
 - Standard mode currently uses `SilentReporter`; no `indicatif` dependency is
   present.
-- No project-memory MCP resources were available in this environment during
-  planning, so repository docs were used as the authoritative source.
+- No project-memory Model Context Protocol (MCP) resources were
+  available in this environment during planning, so repository docs were
+  used as the authoritative source.
 - The runtime `manifest` command path needed an explicit completion call after
   synthesis; otherwise an in-progress stage was finalized as failed in the new
   reporter drop path.
@@ -333,17 +335,21 @@ Planned changes:
 
 Run all required gates with `tee` and `pipefail`:
 
-    set -o pipefail
-    make check-fmt 2>&1 | tee /tmp/3-9-1-check-fmt.log
-    make lint 2>&1 | tee /tmp/3-9-1-lint.log
-    make test 2>&1 | tee /tmp/3-9-1-test.log
+```sh
+set -o pipefail
+make check-fmt 2>&1 | tee /tmp/3-9-1-check-fmt.log
+make lint 2>&1 | tee /tmp/3-9-1-lint.log
+make test 2>&1 | tee /tmp/3-9-1-test.log
+```
 
 Documentation gates after doc updates:
 
-    set -o pipefail
-    make fmt 2>&1 | tee /tmp/3-9-1-fmt.log
-    make markdownlint 2>&1 | tee /tmp/3-9-1-markdownlint.log
-    make nixie 2>&1 | tee /tmp/3-9-1-nixie.log
+```sh
+set -o pipefail
+make fmt 2>&1 | tee /tmp/3-9-1-fmt.log
+make markdownlint 2>&1 | tee /tmp/3-9-1-markdownlint.log
+make nixie 2>&1 | tee /tmp/3-9-1-nixie.log
+```
 
 Record concise evidence in commit/PR notes:
 

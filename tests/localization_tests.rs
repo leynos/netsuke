@@ -8,6 +8,7 @@ use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
 use netsuke::localization::{self, LocalizerGuard, keys};
+use test_support::fluent::normalize_fluent_isolates;
 
 /// Guard pair holding both the test lock and the localizer override.
 ///
@@ -42,13 +43,6 @@ fn which_message(command: &str) -> String {
         .with_arg("count", 0)
         .with_arg("preview", "<none>")
         .to_string()
-}
-
-#[must_use]
-fn normalize_fluent_isolates(text: &str) -> String {
-    text.chars()
-        .filter(|ch| *ch != '\u{2068}' && *ch != '\u{2069}')
-        .collect()
 }
 
 #[rstest]
