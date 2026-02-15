@@ -187,7 +187,7 @@ fn to_paths(sol: &StringOrList) -> Vec<Utf8PathBuf> {
 }
 
 fn to_string_vec(sol: &StringOrList) -> Vec<String> {
-    map_string_or_list(sol, str::to_string)
+    map_string_or_list(sol, str::to_owned)
 }
 
 fn extract_single(sol: &StringOrList) -> Option<&str> {
@@ -257,5 +257,8 @@ fn find_duplicates(
 }
 
 fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
-    paths.first().map(ToString::to_string).unwrap_or_default()
+    paths
+        .first()
+        .map(|p: &Utf8PathBuf| p.to_string())
+        .unwrap_or_default()
 }
