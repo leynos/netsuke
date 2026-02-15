@@ -5,9 +5,6 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::{self, Write};
 use std::sync::Mutex;
 
-/// Total count of user-visible pipeline stages.
-pub const PIPELINE_STAGE_COUNT: u32 = 6;
-
 /// Thin wrapper for a 1-based stage index.
 ///
 /// All current call sites derive stage numbers from the `PipelineStage` enum
@@ -54,9 +51,9 @@ impl From<&'static str> for LocalizationKey {
     }
 }
 
-const PIPELINE_STAGE_TOTAL: StageNumber = StageNumber(PIPELINE_STAGE_COUNT);
 #[path = "status_pipeline.rs"]
 mod pipeline;
+use pipeline::PIPELINE_STAGE_TOTAL;
 pub use pipeline::{PipelineStage, report_pipeline_stage};
 
 fn stage_label(current: StageNumber, total: StageNumber, description: &str) -> String {

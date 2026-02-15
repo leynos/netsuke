@@ -127,6 +127,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
             .deny_all_hosts()
             .allow_hosts(["127.0.0.1", "localhost"])?
             .allow_scheme("http")?,
+        None,
     )?;
     if let Err(err) = server.join() {
         return Err(anyhow!("join server thread panicked: {err:?}"));

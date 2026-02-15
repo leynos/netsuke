@@ -16,7 +16,7 @@ use crate::status::{
     StatusReporter, report_pipeline_stage,
 };
 use crate::{ir::BuildGraph, manifest, ninja_gen};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use std::borrow::Cow;
 use std::path::Path;
@@ -28,10 +28,13 @@ pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
 pub use ninja_env::NINJA_ENV;
 
+mod path_helpers;
 mod process;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{run_ninja, run_ninja_tool};
+
+use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
 
 /// Wrapper around generated Ninja manifest text.
 #[derive(Debug, Clone)]
@@ -87,6 +90,16 @@ impl Default for BuildTargets<'_> {
     }
 }
 
+/// Build the appropriate [`StatusReporter`] for the resolved output mode and
+/// progress preference.
+fn make_reporter(mode: OutputMode, progress_enabled: bool) -> Box<dyn StatusReporter> {
+    match (mode, progress_enabled) {
+        (OutputMode::Accessible, _) => Box::new(AccessibleReporter),
+        (OutputMode::Standard, true) => Box::new(IndicatifReporter::new()),
+        (OutputMode::Standard, false) => Box::new(SilentReporter),
+    }
+}
+
 /// Execute the parsed [`Cli`] commands.
 ///
 /// # Errors
@@ -94,11 +107,7 @@ impl Default for BuildTargets<'_> {
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible);
-    let reporter: Box<dyn StatusReporter> = match (mode, cli.progress.unwrap_or(true)) {
-        (OutputMode::Accessible, _) => Box::new(AccessibleReporter),
-        (OutputMode::Standard, true) => Box::new(IndicatifReporter::new()),
-        (OutputMode::Standard, false) => Box::new(SilentReporter),
-    };
+    let reporter = make_reporter(mode, cli.progress.unwrap_or(true));
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
@@ -268,137 +277,30 @@ fn generate_ninja(
     Ok(NinjaContent::new(ninja))
 }
 
-fn ensure_manifest_exists_or_error(
-    cli: &Cli,
-    reporter: &dyn StatusReporter,
-    manifest_path: &Utf8PathBuf,
-) -> Result<()> {
-    if manifest_path.as_std_path().exists() {
-        return Ok(());
-    }
-
-    report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
-    // `resolve_manifest_path()` validates that `file_name()` is Some.
-    let manifest_name = manifest_path
-        .file_name()
-        .ok_or_else(|| {
-            anyhow!(
-                "{}",
-                localization::message(keys::RUNNER_MANIFEST_PATH_MISSING_NAME)
-                    .with_arg("path", manifest_path.as_str())
-            )
-        })?
-        .to_owned();
-    let directory = if cli.directory.is_some() {
-        let parent = manifest_path
-            .parent()
-            .map_or_else(|| manifest_path.as_str(), camino::Utf8Path::as_str);
-        localization::message(keys::RUNNER_MANIFEST_DIRECTORY)
-            .with_arg("directory", parent)
-            .to_string()
-    } else {
-        localization::message(keys::RUNNER_MANIFEST_CURRENT_DIRECTORY).to_string()
-    };
-    let message = localization::message(keys::RUNNER_MANIFEST_NOT_FOUND)
-        .with_arg("manifest_name", manifest_name.as_str())
-        .with_arg("directory", &directory);
-    Err(RunnerError::ManifestNotFound {
-        manifest_name,
-        directory,
-        path: manifest_path.to_path_buf().into_std_path_buf(),
-        message,
-        help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
-    }
-    .into())
-}
-
 fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,
     reporter: &dyn StatusReporter,
 ) -> Result<crate::ast::NetsukeManifest> {
-    manifest::from_path_with_policy_and_stage_callback(
-        manifest_path.as_std_path(),
-        policy,
-        |stage| match stage {
-            manifest::ManifestLoadStage::ManifestIngestion => {
-                report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
-            }
-            manifest::ManifestLoadStage::InitialYamlParsing => {
-                report_pipeline_stage(reporter, PipelineStage::InitialYamlParsing, None);
-            }
-            manifest::ManifestLoadStage::TemplateExpansion => {
-                report_pipeline_stage(reporter, PipelineStage::TemplateExpansion, None);
-            }
-            manifest::ManifestLoadStage::FinalRendering => {
-                report_pipeline_stage(reporter, PipelineStage::FinalRendering, None);
-            }
-        },
-    )
-    .with_context(|| {
-        localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-            .with_arg("path", manifest_path.as_str())
-    })
-}
-
-/// Determine the manifest path respecting the CLI's directory option.
-///
-/// # Errors
-/// Returns an error when the CLI `file` or `directory` paths are not valid UTF-8.
-///
-/// # Examples
-/// ```ignore
-/// use crate::cli::Cli;
-/// use crate::runner::resolve_manifest_path;
-/// let cli = Cli::default();
-/// let path = resolve_manifest_path(&cli).expect("valid manifest path");
-/// assert!(path.as_str().ends_with("Netsukefile"));
-/// ```
-fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
-    let file = Utf8PathBuf::from_path_buf(cli.file.clone()).map_err(|path| {
-        anyhow!(
-            "{}",
-            localization::message(keys::RUNNER_MANIFEST_PATH_UTF8)
-                .with_arg("path", path.display().to_string())
-        )
-    })?;
-    let resolved = if let Some(dir) = &cli.directory {
-        let base = Utf8PathBuf::from_path_buf(dir.clone()).map_err(|path| {
-            anyhow!(
-                "{}",
-                localization::message(keys::RUNNER_MANIFEST_DIR_UTF8)
-                    .with_arg("path", path.display().to_string())
-            )
-        })?;
-        base.join(&file)
-    } else {
-        file
+    let mut on_stage = |stage: manifest::ManifestLoadStage| match stage {
+        manifest::ManifestLoadStage::ManifestIngestion => {
+            report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
+        }
+        manifest::ManifestLoadStage::InitialYamlParsing => {
+            report_pipeline_stage(reporter, PipelineStage::InitialYamlParsing, None);
+        }
+        manifest::ManifestLoadStage::TemplateExpansion => {
+            report_pipeline_stage(reporter, PipelineStage::TemplateExpansion, None);
+        }
+        manifest::ManifestLoadStage::FinalRendering => {
+            report_pipeline_stage(reporter, PipelineStage::FinalRendering, None);
+        }
     };
-    if resolved.file_name().is_none() {
-        return Err(anyhow!(
-            "{}",
-            localization::message(keys::RUNNER_MANIFEST_PATH_MISSING_NAME)
-                .with_arg("path", resolved.as_str())
-        ));
-    }
-    Ok(resolved)
-}
-
-/// Resolve an output path relative to the CLI working directory.
-///
-/// The Netsuke `-C/--directory` option behaves like a working directory change
-/// for any filesystem paths supplied on the command line. When `path` is
-/// relative and a directory has been configured, the returned path is
-/// `directory/path`.
-#[must_use]
-fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
-    if path.is_relative() {
-        cli.directory
-            .as_ref()
-            .map_or_else(|| Cow::Borrowed(path), |dir| Cow::Owned(dir.join(path)))
-    } else {
-        Cow::Borrowed(path)
-    }
+    manifest::from_path_with_policy(manifest_path.as_std_path(), policy, Some(&mut on_stage))
+        .with_context(|| {
+            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
+                .with_arg("path", manifest_path.as_str())
+        })
 }
 
 #[cfg(test)]

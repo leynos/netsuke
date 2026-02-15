@@ -1,7 +1,25 @@
 //! Pipeline stage model and stage reporting helper.
 
-use super::{LocalizationKey, PIPELINE_STAGE_TOTAL, StageNumber, StatusReporter};
+use super::{LocalizationKey, StageNumber, StatusReporter};
 use crate::localization::{self, keys};
+
+/// Total pipeline stage count, derived from the canonical stage list.
+///
+/// The array length is a small compile-time constant (currently 6) so the
+/// truncating cast is safe. A static assertion below guards against the
+/// theoretical case where the array exceeds `u32::MAX` entries.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "PipelineStage::ALL length is a small compile-time constant"
+)]
+pub(crate) const PIPELINE_STAGE_TOTAL: StageNumber =
+    StageNumber::new_unchecked(PipelineStage::ALL.len() as u32);
+
+/// Guard that the stage array never exceeds `u32::MAX` entries.
+const _: () = assert!(
+    PipelineStage::ALL.len() <= u32::MAX as usize,
+    "PipelineStage::ALL length must fit in u32"
+);
 
 /// Enumerates pipeline stages in user-visible execution order.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -68,13 +86,6 @@ impl PipelineStage {
         }
     }
 }
-
-/// Compile-time guard ensuring `PipelineStage::ALL` stays in sync with the
-/// declared `PIPELINE_STAGE_COUNT`.
-const _: () = assert!(
-    PipelineStage::ALL.len() == super::PIPELINE_STAGE_COUNT as usize,
-    "PipelineStage::ALL length must equal PIPELINE_STAGE_COUNT"
-);
 
 /// Emit a localized status update for a concrete pipeline stage.
 pub fn report_pipeline_stage(

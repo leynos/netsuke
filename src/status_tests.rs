@@ -15,9 +15,9 @@ fn stage_index_matches_discriminant(#[case] stage: PipelineStage, #[case] expect
 }
 
 #[test]
-fn pipeline_stage_count_matches_stage_array() {
-    let stage_count = u32::try_from(PipelineStage::ALL.len()).expect("stage array length fits u32");
-    assert_eq!(PIPELINE_STAGE_COUNT, stage_count);
+fn pipeline_stage_total_derived_from_all() {
+    let expected = u32::try_from(PipelineStage::ALL.len()).expect("stage array length fits u32");
+    assert_eq!(PIPELINE_STAGE_TOTAL.get(), expected);
 }
 
 #[test]

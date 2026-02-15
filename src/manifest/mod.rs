@@ -101,6 +101,16 @@ fn env_var(name: &str) -> std::result::Result<String, Error> {
     }
 }
 
+/// Invoke the stage callback when present.
+fn notify_stage(
+    on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
+    stage: ManifestLoadStage,
+) {
+    if let Some(cb) = on_stage.as_mut() {
+        cb(stage);
+    }
+}
+
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
@@ -113,9 +123,9 @@ fn from_str_named(
     yaml: &str,
     name: &ManifestName,
     stdlib_config: Option<StdlibConfig>,
-    on_stage: &mut dyn FnMut(ManifestLoadStage),
+    on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    on_stage(ManifestLoadStage::InitialYamlParsing);
+    notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
     let mut doc: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
             source: map_yaml_error(e, &ManifestSource::from(yaml), name),
@@ -150,12 +160,12 @@ fn from_str_named(
         }
     }
 
-    on_stage(ManifestLoadStage::TemplateExpansion);
+    notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros(&doc, &mut jinja)?;
 
     expand_foreach(&mut doc, &jinja)?;
 
-    on_stage(ManifestLoadStage::FinalRendering);
+    notify_stage(on_stage, ManifestLoadStage::FinalRendering);
     let manifest: NetsukeManifest =
         serde_json::from_value(doc).map_err(|e| ManifestError::Parse {
             source: map_data_error(e, name),
@@ -174,7 +184,7 @@ fn from_str_named(
 ///
 /// Returns an error if YAML parsing or Jinja evaluation fails.
 pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
-    from_str_named(yaml, &ManifestName::new("Netsukefile"), None, &mut |_| {})
+    from_str_named(yaml, &ManifestName::new("Netsukefile"), None, &mut None)
 }
 
 /// Load a [`NetsukeManifest`] from the given file path.
@@ -183,11 +193,13 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// Returns an error if the file cannot be read or the YAML fails to parse.
 pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
-    from_path_with_policy(path, NetworkPolicy::default())
+    from_path_with_policy(path, NetworkPolicy::default(), None)
 }
 
-/// Load a [`NetsukeManifest`] from the given file path using an explicit network
-/// policy.
+/// Load a [`NetsukeManifest`] from the given file path using an explicit
+/// network policy and an optional stage callback.
+///
+/// The callback, when provided, is invoked in order for each manifest stage.
 ///
 /// # Errors
 ///
@@ -200,30 +212,15 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<NetsukeManifest> {
 /// use netsuke::stdlib::NetworkPolicy;
 ///
 /// let policy = NetworkPolicy::default();
-/// let manifest = manifest::from_path_with_policy("Netsukefile", policy);
+/// let manifest = manifest::from_path_with_policy("Netsukefile", policy, None);
 /// assert!(manifest.is_ok());
 /// ```
 pub fn from_path_with_policy(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
+    mut on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    from_path_with_policy_and_stage_callback(path, policy, |_| {})
-}
-
-/// Load a [`NetsukeManifest`] from the given file path using an explicit
-/// network policy and a stage callback.
-///
-/// The callback is invoked in order for each manifest stage.
-///
-/// # Errors
-///
-/// Returns an error if the file cannot be read or the YAML fails to parse.
-pub fn from_path_with_policy_and_stage_callback(
-    path: impl AsRef<Path>,
-    policy: NetworkPolicy,
-    mut on_stage: impl FnMut(ManifestLoadStage),
-) -> Result<NetsukeManifest> {
-    on_stage(ManifestLoadStage::ManifestIngestion);
+    notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
     let path_ref = path.as_ref();
     let data = fs::read_to_string(path_ref).with_context(|| {
         localization::message(keys::MANIFEST_READ_FAILED)
