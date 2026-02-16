@@ -82,19 +82,6 @@ pub enum PipelineStage {
 }
 
 impl PipelineStage {
-    /// All pipeline stages in reporting order.
-    ///
-    /// Adding a new variant to [`PipelineStage`] without updating this
-    /// array will cause [`PIPELINE_STAGE_COUNT`] to drift, so keep them
-    /// in sync.
-    const ALL: [Self; 5] = [
-        Self::NetworkPolicy,
-        Self::ManifestLoad,
-        Self::BuildGraph,
-        Self::GenerateNinja,
-        Self::Execute,
-    ];
-
     /// 1-based index of this stage within the pipeline.
     #[must_use]
     pub const fn index(self) -> u32 {
@@ -103,11 +90,13 @@ impl PipelineStage {
 
     /// Localized description of this stage.
     ///
-    /// For [`PipelineStage::Execute`], the description includes a
-    /// `{$tool}` placeholder resolved from the provided `tool_key`. Pass
-    /// [`None`] for non-Execute stages.
+    /// For [`PipelineStage::Execute`] the returned description uses a
+    /// generic message without a tool name. Use [`execute_description`]
+    /// instead when a tool-specific label is needed.
+    ///
+    /// [`execute_description`]: PipelineStage::execute_description
     #[must_use]
-    pub fn description(self, tool_key: Option<&'static str>) -> String {
+    pub fn description(self) -> String {
         match self {
             Self::NetworkPolicy => {
                 localization::message(keys::STATUS_STAGE_NETWORK_POLICY).to_string()
@@ -119,47 +108,47 @@ impl PipelineStage {
             Self::GenerateNinja => {
                 localization::message(keys::STATUS_STAGE_GENERATE_NINJA).to_string()
             }
-            Self::Execute => {
-                let tool =
-                    tool_key.map_or_else(String::new, |k| localization::message(k).to_string());
-                localization::message(keys::STATUS_STAGE_EXECUTE)
-                    .with_arg("tool", tool)
-                    .to_string()
-            }
+            Self::Execute => localization::message(keys::STATUS_STAGE_EXECUTE)
+                .with_arg("tool", String::new())
+                .to_string(),
         }
+    }
+
+    /// Localized description for the Execute stage with a tool name.
+    ///
+    /// The `tool_key` is a Fluent message key identifying the tool
+    /// (e.g., [`keys::STATUS_TOOL_BUILD`]).
+    #[must_use]
+    pub fn execute_description(tool_key: &'static str) -> String {
+        let tool = localization::message(tool_key).to_string();
+        localization::message(keys::STATUS_STAGE_EXECUTE)
+            .with_arg("tool", tool)
+            .to_string()
     }
 }
 
 /// The total number of pipeline stages reported during a build.
 ///
-/// Derived from `PipelineStage::ALL` so that changes to the enum
-/// cannot desynchronize the reported total.
-pub const PIPELINE_STAGE_COUNT: u32 = {
-    // SAFETY: the array length is a small compile-time constant.
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "PipelineStage::ALL.len() is a small compile-time constant"
-    )]
-    {
-        PipelineStage::ALL.len() as u32
-    }
-};
+/// Tied to the last enum variant so that adding a new stage after
+/// `Execute` will automatically update the count.
+pub const PIPELINE_STAGE_COUNT: u32 = PipelineStage::Execute.index();
 
-/// Report a pipeline stage via a [`StatusReporter`].
+/// Report a non-Execute pipeline stage via a [`StatusReporter`].
 ///
 /// Centralizes the use of [`PIPELINE_STAGE_COUNT`] so call sites do not
-/// need to know the numeric indices or total stage count. Pass a
-/// `tool_key` for the [`PipelineStage::Execute`] stage to produce a
-/// tool-specific description (e.g., "Executing clean"); other stages
-/// ignore it.
-pub fn report_pipeline_stage(
-    reporter: &dyn StatusReporter,
-    stage: PipelineStage,
-    tool_key: Option<&'static str>,
-) {
+/// need to know the numeric indices or total stage count.
+pub fn report_pipeline_stage(reporter: &dyn StatusReporter, stage: PipelineStage) {
+    reporter.report_stage(stage.index(), PIPELINE_STAGE_COUNT, &stage.description());
+}
+
+/// Report the Execute pipeline stage with a tool-specific description.
+///
+/// The `tool_key` is a Fluent message key identifying the tool name
+/// (e.g., [`keys::STATUS_TOOL_BUILD`]).
+pub fn report_execute_stage(reporter: &dyn StatusReporter, tool_key: &'static str) {
     reporter.report_stage(
-        stage.index(),
+        PipelineStage::Execute.index(),
         PIPELINE_STAGE_COUNT,
-        &stage.description(tool_key),
+        &PipelineStage::execute_description(tool_key),
     );
 }

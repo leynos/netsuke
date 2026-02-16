@@ -1,8 +1,9 @@
 # Add accessible output mode (roadmap 3.8.1)
 
-This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
-`Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
-`Outcomes & Retrospective` must be kept up to date as work proceeds.
+This execution plan (ExecPlan) is a living document. The sections
+`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
+`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
+proceeds.
 
 Status: COMPLETE
 
@@ -10,12 +11,12 @@ No `PLANS.md` file exists in this repository.
 
 ## Purpose / big picture
 
-Netsuke currently produces no user-visible progress output during its five-stage
-build pipeline (network policy through build execution). Future work (roadmap
-3.9) will add animated spinners and progress bars via `indicatif`. Before that
-can happen, the tool needs an accessible output mode that guarantees
-screen-reader-friendly, static text output for users who cannot consume animated
-terminal UI.
+Netsuke currently produces no user-visible progress output during its
+five-stage build pipeline (network policy through build execution). Future work
+(roadmap 3.9) will add animated spinners and progress bars via `indicatif`.
+Before that can happen, the tool needs an accessible output mode that
+guarantees screen-reader-friendly, static text output for users who cannot
+consume animated terminal UI.
 
 After this change:
 
@@ -32,9 +33,10 @@ After this change:
   while accessible terminals always get static text.
 
 Observable success: running `TERM=dumb netsuke build` (or `NO_COLOR=1` or
-`--accessible`) against a valid manifest produces static "Stage N/5: ..." lines
-on stderr before the Ninja output. Running `make check-fmt && make lint &&
-make test` passes with new unit and BDD tests covering the detection logic and
+`--accessible`) against a valid manifest produces static "Stage N/5: …" lines
+on stderr before the Ninja output. Running
+`make check-fmt && make lint && make test` passes with new unit and
+Behaviour-Driven Development (BDD) tests covering the detection logic and
 status output.
 
 ## Constraints
@@ -70,30 +72,26 @@ status output.
 - Tests: if `make test` still fails after three investigation cycles, stop and
   escalate.
 - Ambiguity: if the interaction between `NO_COLOR`, `TERM=dumb`, and explicit
-  config produces conflicting signals, escalate with the options and
-  trade-offs.
+  config produces conflicting signals, escalate with the options and trade-offs.
 
 ## Risks
 
 - Risk: Adding a new field to `Cli` may break existing config files that use
-  `deny_unknown_fields` or strict parsing.
-  Severity: low. Likelihood: low. Mitigation: OrthoConfig merge is additive;
-  unknown fields in config files are ignored by default. Verify with existing
-  config-merge tests.
+  `deny_unknown_fields` or strict parsing. Severity: low. Likelihood: low.
+  Mitigation: OrthoConfig merge is additive; unknown fields in config files are
+  ignored by default. Verify with existing config-merge tests.
 
 - Risk: The `cli_overrides_from_matches` function strips non-CLI-sourced fields
   and must be updated for the new `accessible` field, or it will be silently
-  dropped during merge.
-  Severity: high. Likelihood: high. Mitigation: Add `"accessible"` to the
-  `value_source` check array in `cli_overrides_from_matches`. Covered by a
-  config-merge BDD scenario.
+  dropped during merge. Severity: high. Likelihood: high. Mitigation: Add
+  `"accessible"` to the `value_source` check array in
+  `cli_overrides_from_matches`. Covered by a config-merge BDD scenario.
 
 - Risk: Emitting status lines to stderr during the pipeline may interleave with
-  tracing output when `--verbose` is active.
-  Severity: low. Likelihood: medium. Mitigation: Status lines use
-  `writeln!(io::stderr(), ...)` which holds the stderr lock atomically per
-  line, matching tracing behaviour. In verbose mode, both streams are
-  informational, so interleaving is acceptable.
+  tracing output when `--verbose` is active. Severity: low. Likelihood: medium.
+  Mitigation: Status lines use `writeln!(io::stderr(), ...)` which holds the
+  stderr lock atomically per line, matching tracing behaviour. In verbose mode,
+  both streams are informational, so interleaving is acceptable.
 
 ## Progress
 
@@ -124,38 +122,39 @@ status output.
 - The project has `clippy::print_stderr` denied globally, so `eprintln!`
   cannot be used. The `AccessibleReporter` uses
   `drop(writeln!(io::stderr(), ...))` following the pattern from `main.rs`.
-- BDD step "the environment variable X is set to Y" already exists in
-  `manifest/mod.rs` and sets the real process environment. To avoid
-  test interference, the accessible output BDD scenarios use
-  "the simulated TERM/NO_COLOR is" steps that store values in `TestWorld`
-  and pass them to `resolve_with` via a closure.
+- BDD step `"the environment variable X is set to Y"` already exists in
+  `manifest/mod.rs` and mutates the real process environment.
+- To avoid test interference, the accessible-output BDD scenarios do
+  *not* use that step. Instead, their steps such as
+  `Given the environment variable "TERM" is set to "xterm-256color"` are bound
+  to step definitions that store TERM/NO_COLOR values in `TestWorld` and pass
+  them into `resolve_with` via a closure, so the real process environment is
+  never changed.
 - `Cli::default()` for `accessible` uses `None` (not `false`) since the
   field is `Option<bool>` to support tri-state auto-detection.
 
 ## Decision log
 
 - Decision: Model the output mode as a two-variant enum (`Accessible` vs
-  `Standard`) rather than a boolean.
-  Rationale: Extensibility for future modes (e.g., `Json`, `Quiet`) without
-  changing call sites. The enum also makes match exhaustiveness checks
-  enforce handling all modes.
-  Date/Author: 2026-02-09 (plan phase).
+  `Standard`) rather than a boolean. Rationale: Extensibility for future modes
+  (e.g., `Json`, `Quiet`) without changing call sites. The enum also makes
+  match exhaustiveness checks enforce handling all modes. Date/Author:
+  2026-02-09 (plan phase).
 
 - Decision: Use `writeln!(io::stderr(), ...)` for status lines rather than
   `tracing::info!`. (Originally planned as `eprintln!`, changed to `writeln!`
-  due to the global `clippy::print_stderr` denial.)
-  Rationale: Status lines are user-facing progress output, not diagnostic logs.
-  They should appear at the default verbosity level (tracing is gated to
-  `ERROR` unless `--verbose` is set). Writing directly to stderr ensures they
-  always appear regardless of tracing configuration.
-  Date/Author: 2026-02-09 (plan phase; updated during implementation).
+  due to the global `clippy::print_stderr` denial.) Rationale: Status lines are
+  user-facing progress output, not diagnostic logs. They should appear at the
+  default verbosity level (tracing is gated to `ERROR` unless `--verbose` is
+  set). Writing directly to stderr ensures they always appear regardless of
+  tracing configuration. Date/Author: 2026-02-09 (plan phase; updated during
+  implementation).
 
 - Decision: Auto-detection checks `NO_COLOR` (any value), `TERM=dumb`, and
   the explicit `accessible` config field, with explicit config taking
-  precedence.
-  Rationale: `NO_COLOR` is a de facto standard[^1].
-  `TERM=dumb` is standard for dumb terminals and screen readers. Explicit
-  config (`--accessible`, `NETSUKE_ACCESSIBLE`, or config file) overrides
+  precedence. Rationale: `NO_COLOR` is a de facto standard[^1]. `TERM=dumb` is
+  standard for dumb terminals and screen readers. Explicit config
+  (`--accessible`, `NETSUKE_ACCESSIBLE`, or config file) overrides
   auto-detection in both directions (user can force accessible on or off).
   Date/Author: 2026-02-09 (plan phase).
 
@@ -167,10 +166,11 @@ status output.
 
 ## Outcomes & retrospective
 
-Implementation complete. All quality gates pass (`make check-fmt`,
-`make lint`, `make test`).
+Implementation complete. All quality gates pass (`make check-fmt`, `make lint`,
+`make test`).
 
 **What went well:**
+
 - The `resolve_with` dependency-injection pattern for environment variable
   lookup made both unit tests and BDD tests clean and deterministic.
 - The `OutputMode` enum and `StatusReporter` trait provide a clean
@@ -179,13 +179,15 @@ Implementation complete. All quality gates pass (`make check-fmt`,
   worked well with checkpoint validation between stages.
 
 **What was surprising:**
+
 - `clippy::print_stderr` is denied globally, requiring `writeln!(io::stderr())`
   instead of `eprintln!`. The `drop()` wrapper follows the `main.rs` pattern.
 - The BDD `Given the environment variable` step already existed in
-  `manifest/mod.rs` and sets real process env vars. Using "simulated"
-  env vars in the TestWorld avoided test interference.
+  `manifest/mod.rs` and sets real process env vars. Using "simulated" env vars
+  in the TestWorld avoided test interference.
 
 **Metrics:**
+
 - 4 new files created, 10 files modified.
 - 12 unit tests (output_mode), 7 BDD scenarios (accessible_output).
 - ~300 net new lines of code (well within the 800-line tolerance).
@@ -198,8 +200,8 @@ Implementation complete. All quality gates pass (`make check-fmt`,
 - `src/main.rs` — entry point; parses CLI, merges config, calls
   `runner::run`.
 - `src/cli/mod.rs` — `Cli` struct (clap + OrthoConfig), parsing, config
-  merge. The `cli_overrides_from_matches` function (line 267) strips fields
-  not explicitly provided on the command line.
+  merge. The `cli_overrides_from_matches` function (line 267) strips fields not
+  explicitly provided on the command line.
 - `src/runner/mod.rs` — `run()` dispatches to `handle_build`,
   `handle_clean`, `handle_graph`; `generate_ninja()` runs the first four
   pipeline stages.
@@ -227,8 +229,8 @@ Implementation complete. All quality gates pass (`make check-fmt`,
   set on the CLI so they don't override file/env layers. New boolean fields
   must be added to the `value_source` check array.
 - **BDD steps**: use `#[given]`, `#[when]`, `#[then]` macros from
-  `rstest_bdd_macros`. Steps receive `&TestWorld` and return `Result<()>`.
-  New step modules are registered in `tests/bdd/steps/mod.rs`.
+  `rstest_bdd_macros`. Steps receive `&TestWorld` and return `Result<()>`. New
+  step modules are registered in `tests/bdd/steps/mod.rs`.
 - **Localization**: keys defined in `src/localization/keys.rs` via
   `define_keys!`. Messages retrieved via
   `localization::message(keys::KEY_NAME)`.
@@ -242,8 +244,8 @@ Implementation complete. All quality gates pass (`make check-fmt`,
 - **Fluent**: the localization framework; `.ftl` files contain message
   definitions with argument interpolation.
 - **Pipeline stages**: the five sequential phases Netsuke executes: network
-  policy configuration, manifest loading, dependency graph construction,
-  Ninja file generation, and build execution.
+  policy configuration, manifest loading, dependency graph construction, Ninja
+  file generation, and build execution.
 
 ## Plan of work
 
@@ -277,11 +279,11 @@ pub enum OutputMode {
 pub fn resolve(explicit: Option<bool>) -> OutputMode { ... }
 ```
 
-The `resolve` function accepts the tri-state `Option<bool>` from CLI config.
-It calls `std::env::var` for `NO_COLOR` and `TERM` internally but is also
-provided with a testable variant `resolve_with` that accepts a closure for
-environment variable lookup (matching the pattern used in
-`src/runner/process/mod.rs` for `resolve_ninja_program_utf8_with`).
+The `resolve` function accepts the tri-state `Option<bool>` from CLI config. It
+calls `std::env::var` for `NO_COLOR` and `TERM` internally but is also provided
+with a testable variant `resolve_with` that accepts a closure for environment
+variable lookup (matching the pattern used in `src/runner/process/mod.rs` for
+`resolve_ninja_program_utf8_with`).
 
 ```rust
 /// Testable variant that accepts an environment lookup function.
@@ -331,8 +333,8 @@ pub accessible: Option<bool>,
 ```
 
 Add `"accessible"` to the `value_source` check array in
-`cli_overrides_from_matches` (alongside `"file"`, `"verbose"`, etc.) so it
-is stripped from merge overrides when not explicitly set on the command line.
+`cli_overrides_from_matches` (alongside `"file"`, `"verbose"`, etc.) so it is
+stripped from merge overrides when not explicitly set on the command line.
 
 Update `Cli::default()` to include `accessible: None`.
 
@@ -454,8 +456,8 @@ Feature: Accessible output mode
 
 **BDD step definitions**: `tests/bdd/steps/accessible_output.rs`
 
-New step module registered in `tests/bdd/steps/mod.rs`. The `TestWorld`
-struct needs new fields:
+New step module registered in `tests/bdd/steps/mod.rs`. The `TestWorld` struct
+needs new fields:
 
 ```rust
 /// Resolved output mode for accessible output scenarios.

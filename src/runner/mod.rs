@@ -12,7 +12,8 @@ use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
 use crate::status::{
-    AccessibleReporter, PipelineStage, SilentReporter, StatusReporter, report_pipeline_stage,
+    AccessibleReporter, PipelineStage, SilentReporter, StatusReporter, report_execute_stage,
+    report_pipeline_stage,
 };
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result, anyhow};
@@ -105,7 +106,11 @@ pub fn run(cli: &Cli) -> Result<()> {
     match command {
         Commands::Build(args) => handle_build(cli, &args, reporter.as_ref()),
         Commands::Manifest { file } => {
-            let ninja = generate_ninja(cli, reporter.as_ref())?;
+            // The manifest command outputs generated Ninja text without
+            // executing a build, so it never reaches the Execute stage or
+            // completion. Suppress stage reporting to avoid showing a
+            // partial "4/5" progress sequence that looks incomplete.
+            let ninja = generate_ninja(cli, &SilentReporter)?;
             if process::is_stdout_path(file.as_path()) {
                 process::write_ninja_stdout(&ninja)?;
             } else {
@@ -154,11 +159,7 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
         _tmp_file_guard = Some(tmp);
     }
 
-    report_pipeline_stage(
-        reporter,
-        PipelineStage::Execute,
-        Some(keys::STATUS_TOOL_BUILD),
-    );
+    report_execute_stage(reporter, keys::STATUS_TOOL_BUILD);
     let program = process::resolve_ninja_program();
     run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
         format!(
@@ -196,7 +197,7 @@ fn handle_ninja_tool(
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
-    report_pipeline_stage(reporter, PipelineStage::Execute, Some(tool_key));
+    report_execute_stage(reporter, tool_key);
     let program = process::resolve_ninja_program();
     run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
         format!(
@@ -276,12 +277,12 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         .into());
     }
 
-    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy, None);
+    report_pipeline_stage(reporter, PipelineStage::NetworkPolicy);
     let policy = cli
         .network_policy()
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
 
-    report_pipeline_stage(reporter, PipelineStage::ManifestLoad, None);
+    report_pipeline_stage(reporter, PipelineStage::ManifestLoad);
     let manifest = manifest::from_path_with_policy(manifest_path.as_std_path(), policy)
         .with_context(|| {
             localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
@@ -294,11 +295,11 @@ fn generate_ninja(cli: &Cli, reporter: &dyn StatusReporter) -> Result<NinjaConte
         debug!("AST:\n{ast_json}");
     }
 
-    report_pipeline_stage(reporter, PipelineStage::BuildGraph, None);
+    report_pipeline_stage(reporter, PipelineStage::BuildGraph);
     let graph = BuildGraph::from_manifest(&manifest)
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
 
-    report_pipeline_stage(reporter, PipelineStage::GenerateNinja, None);
+    report_pipeline_stage(reporter, PipelineStage::GenerateNinja);
     let ninja = ninja_gen::generate(&graph)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
     Ok(NinjaContent::new(ninja))
