@@ -413,7 +413,7 @@ fn expands_foreach_with_item_and_index(
         names
             == expected_names
                 .iter()
-                .map(ToString::to_string)
+                .map(ToOwned::to_owned)
                 .collect::<Vec<_>>(),
         "unexpected names: {names:?}"
     );
@@ -423,7 +423,7 @@ fn expands_foreach_with_item_and_index(
         commands
             == expected_commands
                 .iter()
-                .map(ToString::to_string)
+                .map(ToOwned::to_owned)
                 .collect::<Vec<_>>(),
         "unexpected commands: {commands:?}"
     );
