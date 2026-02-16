@@ -106,7 +106,7 @@ covering preference resolution, semantic prefix rendering, and edge cases.
 Implementation completed successfully. All quality gates pass:
 `make check-fmt`, `make lint`, `make test`.
 
-New tests: 18 unit tests in `output_prefs::tests` (10 parameterised resolve
+New tests: 18 unit tests in `output_prefs::tests` (10 parameterized resolve
 cases + 8 prefix assertion tests) and 10 BDD scenarios in
 `accessibility_preferences.feature`. Total test count rose from 149 to 159
 BDD scenarios.
@@ -115,6 +115,6 @@ Files created: 3 (`src/output_prefs.rs`, `tests/features/accessibility_preferenc
 `tests/bdd/steps/accessibility_preferences.rs`).
 Files modified: 13 (within 20-file tolerance).
 
-The `src/cli/mod.rs` 400-line risk materialised (387 + new field). Mitigated
+The `src/cli/mod.rs` 400-line risk materialized (387 + new field). Mitigated
 by shortening the `accessible` doc comment from 4 lines to 1 line, landing at
 390 lines.

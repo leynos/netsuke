@@ -90,21 +90,27 @@ impl OutputPrefs {
 /// Resolve output preferences from explicit configuration and environment.
 ///
 /// Precedence:
-/// 1. Explicit configuration (`no_emoji` field): `Some(true)` forces
-///    no emoji, `Some(false)` forces emoji on.
+/// 1. Explicit `Some(true)` forces emoji off unconditionally.
 /// 2. `NO_COLOR` environment variable (any value, including empty):
-///    no emoji.
+///    emoji off.
 /// 3. `NETSUKE_NO_EMOJI` environment variable (any value, including empty):
-///    no emoji.
+///    emoji off.
 /// 4. Default: emoji allowed.
+///
+/// `Some(false)` does **not** override environment checks — it is treated
+/// the same as `None`. Only `Some(true)` acts as a hard override. This
+/// ensures that `NETSUKE_NO_EMOJI` (with any value, including `"false"`)
+/// always suppresses emoji unless the CLI explicitly passes
+/// `--no-emoji true`, which sets `Some(true)` at the CLI merge layer.
 ///
 /// # Examples
 ///
 /// ```
 /// use netsuke::output_prefs::{OutputPrefs, resolve};
 ///
-/// // Explicit configuration takes highest precedence.
+/// // Explicit true forces emoji off.
 /// assert!(!resolve(Some(true)).emoji_allowed());
+/// // Some(false) falls through to environment / default.
 /// assert!(resolve(Some(false)).emoji_allowed());
 /// ```
 #[must_use]
@@ -116,6 +122,11 @@ pub fn resolve(no_emoji: Option<bool>) -> OutputPrefs {
 ///
 /// The `read_env` closure receives an environment variable name and returns
 /// `Some(value)` when the variable is set.
+///
+/// `Some(true)` forces emoji off, bypassing all environment checks.
+/// `Some(false)` and `None` both fall through to the environment checks,
+/// so that presence-based variables like `NETSUKE_NO_EMOJI` are honoured
+/// regardless of their textual value.
 ///
 /// # Examples
 ///
@@ -133,8 +144,8 @@ pub fn resolve_with<F>(no_emoji: Option<bool>, read_env: F) -> OutputPrefs
 where
     F: Fn(&str) -> Option<String>,
 {
-    if let Some(forced) = no_emoji {
-        return OutputPrefs { emoji: !forced };
+    if no_emoji == Some(true) {
+        return OutputPrefs { emoji: false };
     }
 
     if read_env("NO_COLOR").is_some() {
@@ -168,8 +179,8 @@ mod tests {
 
     #[rstest]
     #[case::explicit_no_emoji_forces_off(Some(true), None, None, false)]
-    #[case::explicit_emoji_on_overrides_no_color(Some(false), Some("1"), None, true)]
-    #[case::explicit_emoji_on_overrides_netsuke_no_emoji(Some(false), None, Some("1"), true)]
+    #[case::false_defers_to_no_color(Some(false), Some("1"), None, false)]
+    #[case::false_defers_to_netsuke_no_emoji(Some(false), None, Some("1"), false)]
     #[case::no_color_disables_emoji(None, Some("1"), None, false)]
     #[case::no_color_empty_disables_emoji(None, Some(""), None, false)]
     #[case::netsuke_no_emoji_disables(None, None, Some("1"), false)]

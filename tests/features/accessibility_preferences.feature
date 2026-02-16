@@ -14,10 +14,10 @@ Feature: Accessibility preferences
     When output preferences are resolved with no_emoji set to true
     Then emoji is disabled
 
-  Scenario: Explicit emoji-on overrides NO_COLOR
+  Scenario: no_emoji false defers to NO_COLOR
     Given the simulated NO_COLOR is "1"
     When output preferences are resolved with no_emoji set to false
-    Then emoji is enabled
+    Then emoji is disabled
 
   Scenario: Default allows emoji
     When output preferences are resolved with no explicit setting

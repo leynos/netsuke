@@ -641,14 +641,16 @@ Emoji are automatically suppressed when:
 - `NO_COLOR` is set (any value)
 - `NETSUKE_NO_EMOJI` is set (any value)
 
-Emoji suppression can be controlled explicitly:
+Emoji suppression can be forced on explicitly:
 
-- CLI flag: `--no-emoji true` or `--no-emoji false`
-- Environment variable: `NETSUKE_NO_EMOJI=true`
+- CLI flag: `--no-emoji true`
+- Environment variable: `NETSUKE_NO_EMOJI` (any value, including empty)
 - Configuration file: `no_emoji = true`
 
-Explicit configuration always takes precedence over auto-detection. Setting
-`--no-emoji false` re-enables emoji even when `NO_COLOR` is set.
+Only `--no-emoji true` acts as a hard override; `--no-emoji false` and
+omitting the flag both defer to environment variable detection.
+`NETSUKE_NO_EMOJI` uses presence-based semantics — setting it to any value
+(including `"false"` or `"0"`) suppresses emoji.
 
 In all output modes, Netsuke uses semantic text prefixes (`Error:`,
 `Warning:`, `Success:`) so that meaning is never conveyed solely by colour

@@ -89,8 +89,10 @@ pub trait StatusReporter {
 
 /// Accessible reporter that emits static, labelled lines to stderr.
 ///
-/// Completion messages are prefixed with a semantic `Success:` label
-/// (with or without an emoji glyph depending on [`OutputPrefs`]).
+/// Each line follows the pattern `Stage N/M: Description`, using
+/// localized messages from the Fluent resource bundle. Completion
+/// messages are prefixed with a semantic `Success:` label (with or
+/// without an emoji glyph depending on [`OutputPrefs`]).
 pub struct AccessibleReporter {
     prefs: OutputPrefs,
 }

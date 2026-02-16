@@ -55,7 +55,7 @@ fn emoji_is_suppressed(world: &TestWorld) -> Result<()> {
 )]
 #[given("emoji is allowed")]
 fn emoji_is_allowed(world: &TestWorld) -> Result<()> {
-    let prefs = output_prefs::resolve_with(Some(false), |_| None);
+    let prefs = output_prefs::resolve_with(None, |_| None);
     world.output_prefs.set(prefs);
     Ok(())
 }
