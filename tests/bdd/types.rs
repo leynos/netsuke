@@ -230,7 +230,7 @@ impl NamesList {
 
     /// Collect the names into a set.
     pub fn to_set(&self) -> std::collections::BTreeSet<String> {
-        self.iter().map(str::to_string).collect()
+        self.iter().map(ToOwned::to_owned).collect()
     }
 }
 

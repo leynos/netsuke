@@ -5,10 +5,15 @@ use netsuke::localization::keys;
 use netsuke::{ast::*, localization, manifest};
 use rstest::rstest;
 use semver::Version;
+use std::error::Error as StdError;
 
 /// Convenience wrapper around the library manifest parser for tests.
 fn parse_manifest(yaml: &str) -> Result<NetsukeManifest> {
     manifest::from_str(yaml)
+}
+
+fn format_error_message(error: &(dyn StdError + 'static)) -> String {
+    error.to_string()
 }
 
 #[rstest]
@@ -128,7 +133,7 @@ fn vars_section_must_be_object() -> Result<()> {
         .context("vars should be an object")?;
     let chain = err
         .chain()
-        .map(ToString::to_string)
+        .map(format_error_message)
         .collect::<Vec<_>>()
         .join("\n");
     let expected = localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string();
