@@ -84,7 +84,10 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
         err.to_string().contains(&expected),
         "error should mention manifest loading, got: {err}"
     );
-    let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let chain: Vec<String> = err
+        .chain()
+        .map(|e: &(dyn std::error::Error + '_)| e.to_string())
+        .collect();
     let parse_message = localization::message(keys::MANIFEST_PARSE).to_string();
     ensure!(
         chain.iter().any(|s| s.contains(&parse_message)),
@@ -107,7 +110,10 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
     let Err(err) = run(&cli) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
-    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let messages: Vec<String> = err
+        .chain()
+        .map(|e: &(dyn std::error::Error + '_)| e.to_string())
+        .collect();
     ensure!(
         messages.iter().any(|m| m.contains("ninja exited")),
         "error should report ninja exit status, got: {messages:?}"

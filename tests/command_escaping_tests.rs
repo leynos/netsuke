@@ -41,7 +41,7 @@ fn inputs_and_outputs_are_quoted() -> Result<()> {
     let words = command_words(
         "targets:\n  - name: 'out file'\n    sources: 'in file'\n    command: \"cat $in > $out\"\n",
     )?;
-    let expected = ["cat", "in file", ">", "out file"].map(str::to_string);
+    let expected = ["cat", "in file", ">", "out file"].map(str::to_owned);
     ensure!(
         words == expected,
         "expected shell words to match quoted inputs/outputs"
@@ -57,7 +57,7 @@ fn multiple_inputs_outputs_with_special_chars_are_quoted() -> Result<()> {
     let expected = [
         "echo", "in file", "input$1", "&&", "echo", "out file", "out&2",
     ]
-    .map(str::to_string);
+    .map(str::to_owned);
     ensure!(
         words == expected,
         "expected words to preserve quoting for lists"
@@ -70,7 +70,7 @@ fn variable_name_overlap_not_rewritten() -> Result<()> {
     let words = command_words(
         "targets:\n  - name: 'out file'\n    sources: in\n    command: \"echo $input > $out\"\n",
     )?;
-    let expected = ["echo", "$input", ">", "out file"].map(str::to_string);
+    let expected = ["echo", "$input", ">", "out file"].map(str::to_owned);
     ensure!(words == expected, "unexpected placeholder rewriting");
     Ok(())
 }
@@ -80,7 +80,7 @@ fn output_variable_overlap_not_rewritten() -> Result<()> {
     let words = command_words(
         "targets:\n  - name: out\n    sources: in\n    command: \"echo $output_dir > $out\"\n",
     )?;
-    let expected = ["echo", "$output_dir", ">", "out"].map(str::to_string);
+    let expected = ["echo", "$output_dir", ">", "out"].map(str::to_owned);
     ensure!(words == expected, "unexpected output placeholder rewriting");
     Ok(())
 }
@@ -90,7 +90,7 @@ fn newline_in_paths_is_quoted() -> Result<()> {
     let words = command_words(
         "targets:\n  - name: \"o'ut\\nfile\"\n    sources: \"-in file\"\n    command: \"printf %s $in > $out\"\n",
     )?;
-    let expected = ["printf", "%s", "-in file", ">", "o'ut\nfile"].map(str::to_string);
+    let expected = ["printf", "%s", "-in file", ">", "o'ut\nfile"].map(str::to_owned);
     ensure!(words == expected, "expected newline to be preserved");
     Ok(())
 }
@@ -99,7 +99,7 @@ fn newline_in_paths_is_quoted() -> Result<()> {
 fn command_without_placeholders_remains_valid() -> Result<()> {
     let words =
         command_words("targets:\n  - name: out\n    sources: in\n    command: \"echo hi\"\n")?;
-    let expected = ["echo", "hi"].map(str::to_string);
+    let expected = ["echo", "hi"].map(str::to_owned);
     ensure!(
         words == expected,
         "command without placeholders should split literally"

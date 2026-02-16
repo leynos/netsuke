@@ -19,6 +19,7 @@ struct CliCase {
     allow_host: Vec<&'static str>,
     block_host: Vec<&'static str>,
     default_deny: bool,
+    progress: Option<bool>,
     expected_cmd: Commands,
 }
 
@@ -35,6 +36,7 @@ impl Default for CliCase {
             allow_host: Vec::new(),
             block_host: Vec::new(),
             default_deny: false,
+            progress: None,
             expected_cmd: Commands::Build(BuildArgs {
                 emit: None,
                 targets: Vec::new(),
@@ -59,6 +61,11 @@ impl Default for CliCase {
 #[case(CliCase {
     argv: vec!["netsuke", "--verbose"],
     verbose: true,
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--progress", "false"],
+    progress: Some(false),
     ..CliCase::default()
 })]
 #[case(CliCase {
@@ -154,6 +161,10 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
     ensure!(
         cli.fetch_default_deny == case.default_deny,
         "default-deny flag should match input",
+    );
+    ensure!(
+        cli.progress == case.progress,
+        "progress flag should match input",
     );
     let command = cli.command.context("command should be set")?;
     ensure!(

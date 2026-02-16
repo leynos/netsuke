@@ -413,7 +413,7 @@ fn expands_foreach_with_item_and_index(
         names
             == expected_names
                 .iter()
-                .map(ToString::to_string)
+                .map(ToOwned::to_owned)
                 .collect::<Vec<_>>(),
         "unexpected names: {names:?}"
     );
@@ -423,7 +423,7 @@ fn expands_foreach_with_item_and_index(
         commands
             == expected_commands
                 .iter()
-                .map(ToString::to_string)
+                .map(ToOwned::to_owned)
                 .collect::<Vec<_>>(),
         "unexpected commands: {commands:?}"
     );
@@ -530,7 +530,7 @@ fn foreach_vars_must_be_mapping() -> Result<()> {
         .context("vars must be a mapping")?;
     ensure!(
         err.chain()
-            .map(ToString::to_string)
+            .map(|e: &(dyn std::error::Error + '_)| e.to_string())
             .any(|msg| msg.contains("Target `vars` must be an object")),
         "unexpected error: {err}"
     );

@@ -15,6 +15,7 @@ cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny 
 cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
 cli.flag.accessible.help = Force accessible output mode on or off.
+cli.flag.progress.help = Force standard progress summaries on or off.
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).
@@ -318,16 +319,24 @@ stdlib.register.resolve_dir = Failed to resolve current directory for stdlib reg
 stdlib.register.dir_non_utf8 = Current directory contains non-UTF-8 components: { $path }.
 
 # Status reporting for accessible output mode.
+status.state.pending = pending
+status.state.running = in progress
+status.state.done = done
+status.state.failed = failed
 status.stage.label = Stage { $current }/{ $total }: { $description }
-status.stage.manifest_load = Loading manifest
-status.stage.network_policy = Configuring network policy
-status.stage.build_graph = Building dependency graph
-status.stage.generate_ninja = Generating Ninja file
-status.stage.execute = Executing { $tool }
+status.stage.summary = [{ $state }] { $label }
+status.stage.manifest_ingestion = Reading manifest file
+status.stage.initial_yaml_parsing = Parsing YAML document
+status.stage.template_expansion = Expanding template directives
+status.stage.final_rendering = Deserializing and rendering manifest values
+status.stage.ir_generation_validation = Building and validating dependency graph
+status.stage.ninja_synthesis = Synthesizing Ninja build plan
+status.stage.ninja_synthesis_execute = Synthesizing Ninja plan and executing { $tool }
 status.complete = { $tool } complete.
 status.tool.build = Build
 status.tool.clean = Clean
 status.tool.graph = Graph
+status.tool.manifest = Manifest
 
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR

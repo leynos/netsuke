@@ -8,6 +8,7 @@ use test_support::localizer_test_lock;
 
 use netsuke::cli_localization;
 use netsuke::localization::{self, LocalizerGuard, keys};
+use test_support::fluent::normalize_fluent_isolates;
 
 /// Guard pair holding both the test lock and the localizer override.
 ///
@@ -138,6 +139,42 @@ fn variable_interpolation_works_correctly() -> Result<()> {
     ensure!(
         message.contains("connection refused"),
         "details variable should be interpolated, got: {message}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("en-US", "Stage 2/6", "pending")]
+#[case("es-ES", "Etapa 2/6", "pendiente")]
+fn progress_stage_messages_resolve(
+    #[case] locale: &str,
+    #[case] expected_label: &str,
+    #[case] expected_state: &str,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let label = localization::message(keys::STATUS_STAGE_LABEL)
+        .with_arg("current", 2)
+        .with_arg("total", 6)
+        .with_arg(
+            "description",
+            localization::message(keys::STATUS_STAGE_TEMPLATE_EXPANSION),
+        )
+        .to_string();
+    let summary = localization::message(keys::STATUS_STAGE_SUMMARY)
+        .with_arg("state", localization::message(keys::STATUS_STATE_PENDING))
+        .with_arg("label", &label)
+        .to_string();
+    let normalized_label = normalize_fluent_isolates(&label);
+    let normalized_summary = normalize_fluent_isolates(&summary);
+
+    ensure!(
+        normalized_label.contains(expected_label),
+        "expected stage label for locale {locale} to contain {expected_label:?}, got: {label}"
+    );
+    ensure!(
+        normalized_summary.contains(expected_state),
+        "expected summary state for locale {locale} to contain {expected_state:?}, got: {summary}"
     );
     Ok(())
 }

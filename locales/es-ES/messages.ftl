@@ -15,6 +15,7 @@ cli.flag.fetch_allow_host.help = Nombres de host permitidos cuando la denegació
 cli.flag.fetch_block_host.help = Nombres de host siempre bloqueados, incluso cuando están permitidos.
 cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
 cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desactivado).
+cli.flag.progress.help = Forzar los resúmenes de progreso estándar (activados o desactivados).
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
@@ -318,16 +319,24 @@ stdlib.register.resolve_dir = No se pudo resolver el directorio actual para regi
 stdlib.register.dir_non_utf8 = El directorio actual contiene componentes no UTF-8: { $path }.
 
 # Informes de estado para el modo de salida accesible.
+status.state.pending = pendiente
+status.state.running = en progreso
+status.state.done = completada
+status.state.failed = fallida
 status.stage.label = Etapa { $current }/{ $total }: { $description }
-status.stage.manifest_load = Cargando manifiesto
-status.stage.network_policy = Configurando política de red
-status.stage.build_graph = Construyendo grafo de dependencias
-status.stage.generate_ninja = Generando archivo Ninja
-status.stage.execute = Ejecutando { $tool }
+status.stage.summary = [{ $state }] { $label }
+status.stage.manifest_ingestion = Leyendo el archivo del manifiesto
+status.stage.initial_yaml_parsing = Analizando el documento YAML
+status.stage.template_expansion = Expandiendo directivas de plantilla
+status.stage.final_rendering = Deserializando y renderizando valores del manifiesto
+status.stage.ir_generation_validation = Construyendo y validando el grafo de dependencias
+status.stage.ninja_synthesis = Sintetizando el plan de compilación Ninja
+status.stage.ninja_synthesis_execute = Sintetizando el plan Ninja y ejecutando { $tool }
 status.complete = { $tool } completo.
 status.tool.build = Compilación
 status.tool.clean = Limpieza
 status.tool.graph = Grafo
+status.tool.manifest = Manifiesto
 
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent

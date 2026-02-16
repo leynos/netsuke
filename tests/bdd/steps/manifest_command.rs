@@ -1,7 +1,7 @@
 //! Step definitions for `netsuke manifest` behavioural tests.
 
 use crate::bdd::fixtures::TestWorld;
-use crate::bdd::helpers::assertions::assert_slot_contains;
+use crate::bdd::helpers::assertions::{assert_slot_contains, normalize_fluent_isolates};
 use crate::bdd::types::{
     CliArgs, DirectoryName, FileName, ManifestOutputPath, OutputFragment, PathString,
 };
@@ -45,6 +45,23 @@ fn assert_output_contains(
     fragment: &OutputFragment,
 ) -> Result<()> {
     assert_slot_contains(output, fragment.as_str(), &output_type.to_string())
+}
+
+fn assert_output_not_contains(
+    output: &Slot<String>,
+    output_type: OutputType,
+    fragment: &OutputFragment,
+) -> Result<()> {
+    let value = output
+        .get()
+        .with_context(|| format!("{output_type} output should be captured"))?;
+    let normalized_value = normalize_fluent_isolates(&value);
+    let normalized_fragment = normalize_fluent_isolates(fragment.as_str());
+    ensure!(
+        !normalized_value.contains(&normalized_fragment),
+        "expected {output_type} to omit '{fragment}', but it was present in:\n{value}",
+    );
+    Ok(())
 }
 
 fn assert_file_existence(world: &TestWorld, name: &FileName, should_exist: bool) -> Result<()> {
@@ -160,6 +177,16 @@ fn stdout_should_contain(world: &TestWorld, fragment: OutputFragment) -> Result<
 #[then("stderr should contain {fragment:string}")]
 fn stderr_should_contain(world: &TestWorld, fragment: OutputFragment) -> Result<()> {
     assert_output_contains(&world.command_stderr, OutputType::Stderr, &fragment)
+}
+
+#[then("stdout should not contain {fragment:string}")]
+fn stdout_should_not_contain(world: &TestWorld, fragment: OutputFragment) -> Result<()> {
+    assert_output_not_contains(&world.command_stdout, OutputType::Stdout, &fragment)
+}
+
+#[then("stderr should not contain {fragment:string}")]
+fn stderr_should_not_contain(world: &TestWorld, fragment: OutputFragment) -> Result<()> {
+    assert_output_not_contains(&world.command_stderr, OutputType::Stderr, &fragment)
 }
 
 #[then("the file {name:string} should exist")]

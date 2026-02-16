@@ -128,7 +128,7 @@ fn vars_section_must_be_object() -> Result<()> {
         .context("vars should be an object")?;
     let chain = err
         .chain()
-        .map(ToString::to_string)
+        .map(|e: &(dyn std::error::Error + '_)| e.to_string())
         .collect::<Vec<_>>()
         .join("\n");
     let expected = localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string();

@@ -19,6 +19,7 @@ pub mod env_guard;
 pub mod env_lock;
 pub mod env_var_guard;
 pub mod exec;
+pub mod fluent;
 pub mod hash;
 pub mod http;
 pub mod locale_stubs;
