@@ -48,6 +48,7 @@ Feature: Accessibility preferences
     Given emoji is allowed
     When the error prefix is rendered
     Then the prefix contains "Error:"
+    And the prefix contains non-ASCII characters
 
   Scenario: Success prefix includes text in no-emoji mode
     Given emoji is suppressed
@@ -59,6 +60,7 @@ Feature: Accessibility preferences
     Given emoji is allowed
     When the success prefix is rendered
     Then the prefix contains "Success:"
+    And the prefix contains non-ASCII characters
 
   Scenario: Warning prefix includes text in no-emoji mode
     Given emoji is suppressed
@@ -70,6 +72,7 @@ Feature: Accessibility preferences
     Given emoji is allowed
     When the warning prefix is rendered
     Then the prefix contains "Warning:"
+    And the prefix contains non-ASCII characters
 
   Scenario: CLI parses no-emoji true
     When the CLI is parsed with "--no-emoji true"

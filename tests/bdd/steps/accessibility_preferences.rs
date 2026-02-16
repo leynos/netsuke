@@ -179,6 +179,19 @@ fn prefix_is_ascii(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+#[then("the prefix contains non-ASCII characters")]
+fn prefix_has_non_ascii(world: &TestWorld) -> Result<()> {
+    let rendered = world
+        .rendered_prefix
+        .get()
+        .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
+    ensure!(
+        !rendered.is_ascii(),
+        "expected non-ASCII (emoji) characters in prefix, got '{rendered}'"
+    );
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Then steps: verify CLI no_emoji field
 // ---------------------------------------------------------------------------
