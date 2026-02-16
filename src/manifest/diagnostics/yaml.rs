@@ -167,6 +167,10 @@ mod tests {
     use anyhow::{Context, Result, anyhow, ensure};
     use std::error::Error as StdError;
 
+    fn localised_message_to_string(message: &LocalizedMessage) -> String {
+        message.to_string()
+    }
+
     #[test]
     fn map_yaml_error_includes_tab_hint() -> Result<()> {
         let src = ManifestSource::from("\tkey: \"unterminated");
@@ -186,7 +190,7 @@ mod tests {
         let help = yaml_diag
             .help
             .as_ref()
-            .map(ToString::to_string)
+            .map(localised_message_to_string)
             .unwrap_or_default();
         ensure!(help == expected, "message missing tab hint: {help}");
         Ok(())

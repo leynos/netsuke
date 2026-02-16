@@ -131,6 +131,13 @@ pub struct Cli {
     #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
 
+    /// Force accessible output mode on or off.
+    ///
+    /// When set, overrides automatic detection from `NO_COLOR` and
+    /// `TERM=dumb`. When omitted, Netsuke auto-detects.
+    #[arg(long)]
+    pub accessible: Option<bool>,
+
     /// Optional subcommand to execute; defaults to `build` when omitted.
     ///
     /// `OrthoConfig` merging ignores this field; CLI parsing supplies it.
@@ -166,6 +173,7 @@ impl Default for Cli {
             fetch_allow_host: Vec::new(),
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
+            accessible: None,
             command: None,
         }
         .with_default_command()
@@ -292,6 +300,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "fetch_allow_scheme",
         "fetch_allow_host",
         "fetch_block_host",
+        "accessible",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
             map.remove(field);

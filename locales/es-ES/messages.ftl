@@ -14,6 +14,7 @@ cli.flag.fetch_allow_scheme.help = Esquemas de URL adicionales permitidos para e
 cli.flag.fetch_allow_host.help = Nombres de host permitidos cuando la denegación predeterminada está habilitada.
 cli.flag.fetch_block_host.help = Nombres de host siempre bloqueados, incluso cuando están permitidos.
 cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
+cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desactivado).
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
@@ -315,6 +316,18 @@ stdlib.which.workspace_non_utf8 = La ruta del workspace contiene componentes no 
 stdlib.register.open_dir = No se pudo abrir el directorio actual para registrar la stdlib.
 stdlib.register.resolve_dir = No se pudo resolver el directorio actual para registrar la stdlib.
 stdlib.register.dir_non_utf8 = El directorio actual contiene componentes no UTF-8: { $path }.
+
+# Informes de estado para el modo de salida accesible.
+status.stage.label = Etapa { $current }/{ $total }: { $description }
+status.stage.manifest_load = Cargando manifiesto
+status.stage.network_policy = Configurando política de red
+status.stage.build_graph = Construyendo grafo de dependencias
+status.stage.generate_ninja = Generando archivo Ninja
+status.stage.execute = Ejecutando { $tool }
+status.complete = { $tool } completo.
+status.tool.build = Compilación
+status.tool.clean = Limpieza
+status.tool.graph = Grafo
 
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent

@@ -3,7 +3,7 @@
 //! This module keeps clap localization logic separate from the core CLI
 //! definitions.
 
-use clap::Command;
+use clap::{Command, builder::StyledStr};
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
 
@@ -11,6 +11,10 @@ use crate::localization::keys;
 
 fn usage_body(usage: &str) -> &str {
     usage.strip_prefix("Usage: ").unwrap_or(usage)
+}
+
+fn styled_to_plain_text(styled: &StyledStr) -> String {
+    styled.to_string()
 }
 
 pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) -> Command {
@@ -22,14 +26,14 @@ pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) 
     let usage = localizer.message(keys::CLI_USAGE, Some(&args), &fallback_usage);
     command = command.override_usage(usage);
 
-    if let Some(about) = command.get_about().map(ToString::to_string) {
+    if let Some(about) = command.get_about().map(styled_to_plain_text) {
         let localized_text = localizer.message(keys::CLI_ABOUT, None, &about);
         command = command.about(localized_text);
     } else if let Some(message) = localizer.lookup(keys::CLI_ABOUT, None) {
         command = command.about(message);
     }
 
-    if let Some(long_about) = command.get_long_about().map(ToString::to_string) {
+    if let Some(long_about) = command.get_long_about().map(styled_to_plain_text) {
         let localized_text = localizer.message(keys::CLI_LONG_ABOUT, None, &long_about);
         command = command.long_about(localized_text);
     } else if let Some(message) = localizer.lookup(keys::CLI_LONG_ABOUT, None) {
@@ -56,7 +60,7 @@ fn localize_arguments(
         let Some(key) = flag_help_key(arg_id, subcommand_name) else {
             return arg;
         };
-        if let Some(help) = arg.get_help().map(ToString::to_string) {
+        if let Some(help) = arg.get_help().map(styled_to_plain_text) {
             let message = localizer.message(key, None, &help);
             return arg.help(message);
         }
@@ -86,7 +90,7 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
         if let Some(localized) = localize_field(
             localizer,
             subcommand_about_key(&name),
-            updated.get_about().map(ToString::to_string),
+            updated.get_about().map(styled_to_plain_text),
         ) {
             updated = updated.about(localized);
         }
@@ -94,7 +98,7 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
         if let Some(localized) = localize_field(
             localizer,
             subcommand_long_about_key(&name),
-            updated.get_long_about().map(ToString::to_string),
+            updated.get_long_about().map(styled_to_plain_text),
         ) {
             updated = updated.long_about(localized);
         }
@@ -118,6 +122,7 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
             "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
             "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
+            "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
             _ => None,
         },
         Some("build") => match arg_id {

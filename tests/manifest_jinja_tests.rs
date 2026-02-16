@@ -5,6 +5,7 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::ast::{NetsukeManifest, Recipe, StringOrList, Target};
 use netsuke::manifest::{self, ManifestError};
 use rstest::{fixture, rstest};
+use std::error::Error as StdError;
 use test_support::{EnvVarGuard, env_lock::EnvLock, manifest::manifest_yaml};
 
 /// Domain-specific environment variables exercised by manifest tests.
@@ -128,6 +129,10 @@ fn extract_target_commands(manifest: &NetsukeManifest) -> Result<Vec<String>> {
         Recipe::Command { command } => Ok(command.clone()),
         other => bail!("expected command recipe, got {other:?}"),
     })
+}
+
+fn format_error_message(error: &(dyn StdError + 'static)) -> String {
+    error.to_string()
 }
 
 #[rstest]
@@ -413,7 +418,8 @@ fn expands_foreach_with_item_and_index(
         names
             == expected_names
                 .iter()
-                .map(ToString::to_string)
+                .copied()
+                .map(ToOwned::to_owned)
                 .collect::<Vec<_>>(),
         "unexpected names: {names:?}"
     );
@@ -423,7 +429,8 @@ fn expands_foreach_with_item_and_index(
         commands
             == expected_commands
                 .iter()
-                .map(ToString::to_string)
+                .copied()
+                .map(ToOwned::to_owned)
                 .collect::<Vec<_>>(),
         "unexpected commands: {commands:?}"
     );
@@ -530,7 +537,7 @@ fn foreach_vars_must_be_mapping() -> Result<()> {
         .context("vars must be a mapping")?;
     ensure!(
         err.chain()
-            .map(ToString::to_string)
+            .map(format_error_message)
             .any(|msg| msg.contains("Target `vars` must be an object")),
         "unexpected error: {err}"
     );

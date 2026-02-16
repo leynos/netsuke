@@ -5,7 +5,10 @@ use netsuke::cli::{BuildArgs, Cli, Commands};
 use netsuke::localization::{self, keys};
 use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool};
 use rstest::{fixture, rstest};
-use std::path::{Path, PathBuf};
+use std::{
+    error::Error as StdError,
+    path::{Path, PathBuf},
+};
 use test_support::{
     check_ninja,
     env::{NinjaEnvGuard, SystemEnv, override_ninja_env, prepend_dir_to_path},
@@ -63,6 +66,10 @@ fn setup_ninja_env_test() -> Result<(
     Ok((ninja_dir, ninja_path, temp, cli, guard))
 }
 
+fn format_error_message(error: &(dyn StdError + 'static)) -> String {
+    error.to_string()
+}
+
 #[test]
 fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for invalid manifest test")?;
@@ -84,7 +91,7 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
         err.to_string().contains(&expected),
         "error should mention manifest loading, got: {err}"
     );
-    let chain: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let chain: Vec<String> = err.chain().map(format_error_message).collect();
     let parse_message = localization::message(keys::MANIFEST_PARSE).to_string();
     ensure!(
         chain.iter().any(|s| s.contains(&parse_message)),
@@ -107,7 +114,7 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
     let Err(err) = run(&cli) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
-    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let messages: Vec<String> = err.chain().map(format_error_message).collect();
     ensure!(
         messages.iter().any(|m| m.contains("ninja exited")),
         "error should report ninja exit status, got: {messages:?}"

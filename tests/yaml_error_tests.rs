@@ -6,10 +6,15 @@
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::manifest;
 use rstest::rstest;
+use std::error::Error as StdError;
 use strip_ansi_escapes::strip;
 
 fn normalise_report(report: &str) -> Result<String> {
     String::from_utf8(strip(report.as_bytes())).context("YAML diagnostic should be valid UTF-8")
+}
+
+fn format_error_message(error: &(dyn StdError + 'static)) -> String {
+    error.to_string()
 }
 
 #[rstest]
@@ -91,7 +96,7 @@ fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str])
     };
     let msg = normalise_report(
         &err.chain()
-            .map(ToString::to_string)
+            .map(format_error_message)
             .collect::<Vec<_>>()
             .join("\n"),
     )?;

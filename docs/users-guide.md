@@ -567,6 +567,42 @@ unsupported locales fall back to English (`en-US`).
 For information on contributing translations, see the
 [Translator Guide](translators-guide.md).
 
+### Accessible output mode
+
+Netsuke supports an accessible output mode that replaces animated progress
+indicators with static, labelled status lines suitable for screen readers and
+dumb terminals.
+
+Accessible mode is auto-enabled when:
+
+- `TERM` is set to `dumb`
+- `NO_COLOR` is set (any value)
+
+Accessible mode can be forced on or off:
+
+- CLI flag: `--accessible true` or `--accessible false`
+- Environment variable: `NETSUKE_ACCESSIBLE=true`
+- Configuration file: `accessible = true`
+
+Explicit configuration always takes precedence over auto-detection, in either
+direction (`--accessible false` disables accessible mode even when `NO_COLOR`
+is set).
+
+When accessible mode is active, each pipeline stage produces a labelled status
+line on stderr:
+
+```text
+Stage 1/5: Configuring network policy
+Stage 2/5: Loading manifest
+Stage 3/5: Building dependency graph
+Stage 4/5: Generating Ninja file
+Stage 5/5: Executing Build
+Build complete.
+```
+
+In standard mode, no status lines are emitted. Future versions may add animated
+progress indicators for standard mode terminals.
+
 ### Exit Codes
 
 - `0`: Success.
