@@ -13,7 +13,7 @@ No `PLANS.md` file exists in this repository.
 Netsuke's accessible output mode (roadmap 3.8.1, complete) auto-detects
 `NO_COLOR` and `TERM=dumb` to switch from animated to static status output.
 However, the tool does not yet honour emoji preferences, enforce ASCII-only
-output when requested, or guarantee semantic prefixes (Error, Warning, Success)
+output when requested, or guarantee semantic prefixes (Error, Warning, and Success)
 in every output mode. This plan completes the remaining accessibility
 preferences so that:
 

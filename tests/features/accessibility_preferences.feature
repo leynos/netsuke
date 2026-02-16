@@ -19,6 +19,21 @@ Feature: Accessibility preferences
     When output preferences are resolved with no_emoji set to false
     Then emoji is disabled
 
+  Scenario: NETSUKE_NO_EMOJI set to false string still disables emoji
+    Given the simulated NETSUKE_NO_EMOJI is "false"
+    When output preferences are resolved with no explicit setting
+    Then emoji is disabled
+
+  Scenario: NETSUKE_NO_EMOJI set to zero string still disables emoji
+    Given the simulated NETSUKE_NO_EMOJI is "0"
+    When output preferences are resolved with no explicit setting
+    Then emoji is disabled
+
+  Scenario: no_emoji false defers to NETSUKE_NO_EMOJI false string
+    Given the simulated NETSUKE_NO_EMOJI is "false"
+    When output preferences are resolved with no_emoji set to false
+    Then emoji is disabled
+
   Scenario: Default allows emoji
     When output preferences are resolved with no explicit setting
     Then emoji is enabled

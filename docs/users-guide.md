@@ -653,9 +653,9 @@ omitting the flag both defer to environment variable detection.
 (including `"false"` or `"0"`) suppresses emoji.
 
 In all output modes, Netsuke uses semantic text prefixes (`Error:`,
-`Warning:`, `Success:`) so that meaning is never conveyed solely by colour
-or symbol. When emoji is permitted, these prefixes include a leading glyph
-for quick visual scanning.
+`Warning:`, and `Success:`) so that meaning is never conveyed solely
+by colour or symbol. When emoji is permitted, these prefixes include a
+leading glyph for quick visual scanning.
 
 ### Exit Codes
 

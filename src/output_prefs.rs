@@ -1,7 +1,7 @@
 //! Output preference resolution for emoji and semantic prefix formatting.
 //!
 //! This module determines whether Netsuke should include emoji glyphs in its
-//! output and provides localised semantic prefix helpers (`Error:`,
+//! output and provides localized semantic prefix helpers (`Error:`,
 //! `Warning:`, `Success:`) that adapt to the resolved preference. Preferences
 //! are auto-detected from the `NO_COLOR` and `NETSUKE_NO_EMOJI` environment
 //! variables, or forced via explicit configuration.
@@ -42,7 +42,7 @@ impl OutputPrefs {
         if self.emoji { "yes" } else { "no" }
     }
 
-    /// Render the localised error prefix for the current preferences.
+    /// Render the localized error prefix for the current preferences.
     ///
     /// Returns `"✖ Error:"` when emoji is allowed, `"Error:"` otherwise.
     ///
@@ -60,7 +60,7 @@ impl OutputPrefs {
         localization::message(keys::SEMANTIC_PREFIX_ERROR).with_arg("emoji", self.emoji_arg())
     }
 
-    /// Render the localised warning prefix for the current preferences.
+    /// Render the localized warning prefix for the current preferences.
     ///
     /// Returns `"⚠ Warning:"` when emoji is allowed, `"Warning:"` otherwise.
     #[must_use]
@@ -68,7 +68,7 @@ impl OutputPrefs {
         localization::message(keys::SEMANTIC_PREFIX_WARNING).with_arg("emoji", self.emoji_arg())
     }
 
-    /// Render the localised success prefix for the current preferences.
+    /// Render the localized success prefix for the current preferences.
     ///
     /// Returns `"✔ Success:"` when emoji is allowed, `"Success:"` otherwise.
     ///
@@ -123,10 +123,16 @@ pub fn resolve(no_emoji: Option<bool>) -> OutputPrefs {
 /// The `read_env` closure receives an environment variable name and returns
 /// `Some(value)` when the variable is set.
 ///
-/// `Some(true)` forces emoji off, bypassing all environment checks.
-/// `Some(false)` and `None` both fall through to the environment checks,
-/// so that presence-based variables like `NETSUKE_NO_EMOJI` are honoured
-/// regardless of their textual value.
+/// Override semantics:
+/// - `Some(true)` — explicit CLI `--no-emoji true`: forces emoji off,
+///   bypassing all environment checks.
+/// - `Some(false)` — explicit CLI `--no-emoji false`: **does not** re-enable
+///   emoji unconditionally. Falls through to environment checks so that
+///   presence-based variables (`NETSUKE_NO_EMOJI`) are still honoured.
+///   This prevents `NETSUKE_NO_EMOJI=false` (which is still *set*) from
+///   being silently overridden when the value originates from environment
+///   parsing rather than a deliberate CLI flag.
+/// - `None` — no explicit setting: environment checks apply.
 ///
 /// # Examples
 ///
@@ -144,7 +150,10 @@ pub fn resolve_with<F>(no_emoji: Option<bool>, read_env: F) -> OutputPrefs
 where
     F: Fn(&str) -> Option<String>,
 {
-    if no_emoji == Some(true) {
+    // Explicit CLI override: only `Some(true)` forces emoji off.
+    // `Some(false)` deliberately falls through — it does not re-enable
+    // emoji when an environment variable is present.
+    if let Some(true) = no_emoji {
         return OutputPrefs { emoji: false };
     }
 
@@ -185,6 +194,9 @@ mod tests {
     #[case::no_color_empty_disables_emoji(None, Some(""), None, false)]
     #[case::netsuke_no_emoji_disables(None, None, Some("1"), false)]
     #[case::netsuke_no_emoji_empty_disables(None, None, Some(""), false)]
+    #[case::netsuke_no_emoji_false_string_disables(None, None, Some("false"), false)]
+    #[case::netsuke_no_emoji_zero_string_disables(None, None, Some("0"), false)]
+    #[case::false_defers_to_netsuke_no_emoji_false_string(Some(false), None, Some("false"), false)]
     #[case::default_allows_emoji(None, None, None, true)]
     #[case::no_color_takes_precedence_over_missing_netsuke(None, Some("1"), None, false)]
     #[case::both_env_vars_disable(None, Some("1"), Some("1"), false)]
