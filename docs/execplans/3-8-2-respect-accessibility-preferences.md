@@ -13,8 +13,8 @@ No `PLANS.md` file exists in this repository.
 Netsuke's accessible output mode (roadmap 3.8.1, complete) auto-detects
 `NO_COLOR` and `TERM=dumb` to switch from animated to static status output.
 However, the tool does not yet honour emoji preferences, enforce ASCII-only
-output when requested, or guarantee semantic prefixes (Error, Warning, and Success)
-in every output mode. This plan completes the remaining accessibility
+output when requested, or guarantee semantic prefixes (Error, Warning, and
+Success) in every output mode. This plan completes the remaining accessibility
 preferences so that:
 
 - Users who set `NETSUKE_NO_EMOJI=1`, pass `--no-emoji`, or write
@@ -22,9 +22,9 @@ preferences so that:
   `NO_COLOR` also implies no-emoji automatically (emoji are visual decoration;
   when colour is suppressed, emoji should be too).
 - Semantic text prefixes ("Error: ", "Warning: ", "Success: ") appear in every
-  mode so that meaning is never conveyed solely by colour, symbol, or emoji.
-  In standard mode (when emoji is permitted), these prefixes include an emoji
-  glyph alongside the text (e.g., "✖ Error: ..."); in no-emoji mode, the
+  mode so that meaning is never conveyed solely by colour, symbol, or emoji. In
+  standard mode (when emoji is permitted), these prefixes include an emoji
+  glyph alongside the text (e.g., "✖ Error: …"); in no-emoji mode, the
   plain-text prefix alone provides the semantic marker.
 - A new `OutputPrefs` struct encapsulates resolved preferences (emoji allowed
   or not) so that all formatting code can query a single authority rather than
@@ -62,13 +62,12 @@ covering preference resolution, semantic prefix rendering, and edge cases.
 ## Risks
 
 - Risk: `src/cli/mod.rs` is 387 lines; adding `no_emoji` may push past 400.
-  Severity: medium. Likelihood: high.
-  Mitigation: keep doc comments minimal; shorten `accessible` comment if needed.
+  Severity: medium. Likelihood: high. Mitigation: keep doc comments minimal;
+  shorten `accessible` comment if needed.
 
 - Risk: `cli_overrides_from_matches` must be updated for `no_emoji`.
-  Severity: high. Likelihood: high.
-  Mitigation: add to `value_source` check array; covered by Behaviour-Driven
-  Development (BDD) scenario.
+  Severity: high. Likelihood: high. Mitigation: add to `value_source` check
+  array; covered by Behaviour-Driven Development (BDD) scenario.
 
 ## Progress
 
@@ -108,13 +107,14 @@ Implementation completed successfully. All quality gates pass:
 
 New tests: 18 unit tests in `output_prefs::tests` (10 parameterized resolve
 cases + 8 prefix assertion tests) and 10 BDD scenarios in
-`accessibility_preferences.feature`. Total test count rose from 149 to 159
-BDD scenarios.
+`accessibility_preferences.feature`. Total test count rose from 149 to 159 BDD
+scenarios.
 
-Files created: 3 (`src/output_prefs.rs`, `tests/features/accessibility_preferences.feature`,
-`tests/bdd/steps/accessibility_preferences.rs`).
-Files modified: 13 (within 20-file tolerance).
+Files created: 3 (`src/output_prefs.rs`,
+`tests/features/accessibility_preferences.feature`,
+`tests/bdd/steps/accessibility_preferences.rs`). Files modified: 13 (within
+20-file tolerance).
 
-The `src/cli/mod.rs` 400-line risk materialized (387 + new field). Mitigated
-by shortening the `accessible` doc comment from 4 lines to 1 line, landing at
-390 lines.
+The `src/cli/mod.rs` 400-line risk materialized (387 + new field). Mitigated by
+shortening the `accessible` doc comment from 4 lines to 1 line, landing at 390
+lines.

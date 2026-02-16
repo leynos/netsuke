@@ -592,44 +592,16 @@ When accessible mode is active, each pipeline stage produces a labelled status
 line on stderr:
 
 ```text
-Stage 1/6: Reading manifest file
-Stage 2/6: Parsing YAML document
-Stage 3/6: Expanding template directives
-Stage 4/6: Deserializing and rendering manifest values
-Stage 5/6: Building and validating dependency graph
-Stage 6/6: Synthesizing Ninja plan and executing Build
+Stage 1/5: Configuring network policy
+Stage 2/5: Loading manifest
+Stage 3/5: Building dependency graph
+Stage 4/5: Generating Ninja file
+Stage 5/5: Executing Build
 Build complete.
 ```
 
-### Real-time progress summaries
-
-In standard mode, Netsuke uses persistent progress summaries for the six-stage
-pipeline. The summaries are localized and remain visible as stages complete.
-When stderr is not a TTY (for example, in continuous integration (CI) logs),
-Netsuke emits deterministic summary lines instead of animated redraws.
-
-Progress summaries are enabled by default in standard mode. They can be forced
-on or off through layered configuration:
-
-- CLI flag: `--progress true` or `--progress false`
-- Environment variable: `NETSUKE_PROGRESS=true`
-- Configuration file: `progress = true`
-
-Accessible mode takes precedence. When `--accessible true` (or auto-detected
-accessible mode) is active, Netsuke uses static accessible lines even when
-`progress = true`.
-
-Typical standard-mode output includes localized state prefixes:
-
-```text
-[done] Stage 1/6: Reading manifest file
-[done] Stage 2/6: Parsing YAML document
-[done] Stage 3/6: Expanding template directives
-[done] Stage 4/6: Deserializing and rendering manifest values
-[done] Stage 5/6: Building and validating dependency graph
-[in progress] Stage 6/6: Synthesizing Ninja plan and executing Build
-Build complete.
-```
+In standard mode, no status lines are emitted. Future versions may add animated
+progress indicators for standard mode terminals.
 
 ### Emoji and accessibility preferences
 
@@ -647,15 +619,15 @@ Emoji suppression can be forced on explicitly:
 - Environment variable: `NETSUKE_NO_EMOJI` (any value, including empty)
 - Configuration file: `no_emoji = true`
 
-Only `--no-emoji true` acts as a hard override; `--no-emoji false` and
-omitting the flag both defer to environment variable detection.
-`NETSUKE_NO_EMOJI` uses presence-based semantics — setting it to any value
-(including `"false"` or `"0"`) suppresses emoji.
+Only `--no-emoji true` acts as a hard override; `--no-emoji false` and omitting
+the flag both defer to environment variable detection. `NETSUKE_NO_EMOJI` uses
+presence-based semantics — setting it to any value (including `"false"` or
+`"0"`) suppresses emoji.
 
-In all output modes, Netsuke uses semantic text prefixes (`Error:`,
-`Warning:`, and `Success:`) so that meaning is never conveyed solely
-by colour or symbol. When emoji is permitted, these prefixes include a
-leading glyph for quick visual scanning.
+In all output modes, Netsuke uses semantic text prefixes (`Error:`, `Warning:`,
+and `Success:`) so that meaning is never conveyed solely by colour or symbol.
+When emoji is permitted, these prefixes include a leading glyph for quick
+visual scanning.
 
 ### Exit Codes
 

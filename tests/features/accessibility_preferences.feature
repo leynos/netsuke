@@ -55,6 +55,11 @@ Feature: Accessibility preferences
     Then the prefix contains "Success:"
     And the prefix contains no non-ASCII characters
 
+  Scenario: Success prefix includes emoji glyph in standard mode
+    Given emoji is allowed
+    When the success prefix is rendered
+    Then the prefix contains "Success:"
+
   Scenario: Warning prefix includes text in no-emoji mode
     Given emoji is suppressed
     When the warning prefix is rendered
