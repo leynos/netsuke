@@ -91,7 +91,7 @@ fn yaml_diagnostics_are_actionable(#[case] yaml: &str, #[case] needles: &[&str])
     };
     let msg = normalise_report(
         &err.chain()
-            .map(ToString::to_string)
+            .map(|e: &(dyn std::error::Error + '_)| e.to_string())
             .collect::<Vec<_>>()
             .join("\n"),
     )?;

@@ -530,7 +530,7 @@ fn foreach_vars_must_be_mapping() -> Result<()> {
         .context("vars must be a mapping")?;
     ensure!(
         err.chain()
-            .map(ToString::to_string)
+            .map(|e: &(dyn std::error::Error + '_)| e.to_string())
             .any(|msg| msg.contains("Target `vars` must be an object")),
         "unexpected error: {err}"
     );

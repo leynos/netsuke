@@ -54,7 +54,10 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
     let Err(err) = run(&cli) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
-    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let messages: Vec<String> = err
+        .chain()
+        .map(|e: &(dyn std::error::Error + '_)| e.to_string())
+        .collect();
     ensure!(
         messages.iter().any(|m| m.contains("ninja exited")),
         "error should report ninja exit status, got: {messages:?}"
@@ -118,7 +121,10 @@ fn assert_subcommand_fails_with_invalid_manifest(
     let Err(err) = run(&cli) else {
         bail!("expected {name} to fail for invalid manifest");
     };
-    let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+    let messages: Vec<String> = err
+        .chain()
+        .map(|e: &(dyn std::error::Error + '_)| e.to_string())
+        .collect();
     let expected = localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
         .with_arg("path", manifest_path.display().to_string())
         .to_string();
