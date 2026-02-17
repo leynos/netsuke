@@ -96,7 +96,7 @@ impl Default for BuildTargets<'_> {
 fn make_reporter(
     mode: OutputMode,
     progress_enabled: bool,
-    prefs: output_prefs::OutputPrefs,
+    prefs: OutputPrefs,
 ) -> Box<dyn StatusReporter> {
     match (mode, progress_enabled) {
         (OutputMode::Accessible, _) => Box::new(AccessibleReporter::new(prefs)),
