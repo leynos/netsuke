@@ -131,12 +131,13 @@ pub struct Cli {
     #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
 
-    /// Force accessible output mode on or off.
-    ///
-    /// When set, overrides automatic detection from `NO_COLOR` and
-    /// `TERM=dumb`. When omitted, Netsuke auto-detects.
+    /// Force accessible output mode on or off (overrides auto-detection).
     #[arg(long)]
     pub accessible: Option<bool>,
+
+    /// Suppress emoji glyphs in output (overrides auto-detection).
+    #[arg(long)]
+    pub no_emoji: Option<bool>,
 
     /// Force standard progress summaries on or off.
     ///
@@ -181,6 +182,7 @@ impl Default for Cli {
             fetch_default_deny: false,
             accessible: None,
             progress: None,
+            no_emoji: None,
             command: None,
         }
         .with_default_command()
@@ -309,6 +311,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "fetch_block_host",
         "accessible",
         "progress",
+        "no_emoji",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
             map.remove(field);

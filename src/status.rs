@@ -1,6 +1,7 @@
 //! Pipeline status reporting for accessible and standard output modes.
 
 use crate::localization::{self, keys};
+use crate::output_prefs::OutputPrefs;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::{self, Write};
 use std::sync::Mutex;
@@ -86,8 +87,23 @@ pub trait StatusReporter {
     fn report_complete(&self, tool_key: LocalizationKey);
 }
 
-/// Accessible reporter that emits static lines.
-pub struct AccessibleReporter;
+/// Accessible reporter that emits static, labelled lines to stderr.
+///
+/// Each line follows the pattern `Stage N/M: Description`, using
+/// localized messages from the Fluent resource bundle. Completion
+/// messages are prefixed with a semantic `Success:` label (with or
+/// without an emoji glyph depending on [`OutputPrefs`]).
+pub struct AccessibleReporter {
+    prefs: OutputPrefs,
+}
+
+impl AccessibleReporter {
+    /// Create a reporter with the given output preferences.
+    #[must_use]
+    pub const fn new(prefs: OutputPrefs) -> Self {
+        Self { prefs }
+    }
+}
 
 impl StatusReporter for AccessibleReporter {
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str) {
@@ -97,8 +113,9 @@ impl StatusReporter for AccessibleReporter {
 
     fn report_complete(&self, tool_key: LocalizationKey) {
         let tool = localization::message(tool_key.as_str());
+        let prefix = self.prefs.success_prefix();
         let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
-        drop(writeln!(io::stderr(), "{message}"));
+        drop(writeln!(io::stderr(), "{prefix} {message}"));
     }
 }
 

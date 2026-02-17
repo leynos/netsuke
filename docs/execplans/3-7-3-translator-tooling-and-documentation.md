@@ -92,11 +92,10 @@ Success is observable by:
 ## Surprises & discoveries
 
 - Discovery: The netsuke localization API (`LocalizedMessage::with_arg`)
-  converts
-  all arguments to strings via `.to_string()`. This means Fluent's CLDR plural
-  categories (e.g., `[one]`, `[few]`) do not work because they require numeric
-  `FluentValue` types. All plural selections fall back to the `*[other]`
-  variant. Documented this limitation in the translator guide.
+  converts all arguments to strings via `.to_string()`. This means Fluent's
+  CLDR plural categories (e.g., `[one]`, `[few]`) do not work because they
+  require numeric `FluentValue` types. All plural selections fall back to the
+  `*[other]` variant. Documented this limitation in the translator guide.
 
 ## Decision log
 
