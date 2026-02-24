@@ -23,7 +23,7 @@ After this change:
 - Standard interactive mode keeps the existing `indicatif`-based user
   experience (UX), now with task counters.
 - Non-interactive stdout and accessible mode emit textual task updates.
-- Progress control continues through OrthoConfig layering with localized help
+- Progress control continues through OrthoConfig layering with localised help
   copy (`--progress`, `NETSUKE_PROGRESS`, and config file key).
 
 Observable success:
@@ -44,7 +44,7 @@ Observable success:
 - Keep accessible mode text-first and non-animated.
 - Use OrthoConfig layering for user control; do not introduce ad-hoc config
   reads. Existing `progress: Option<bool>` remains the controlling switch.
-- Keep command-line interface (CLI) help localization wired through Fluent and
+- Keep command-line interface (CLI) help localisation wired through Fluent and
   `src/cli_l10n.rs`.
 - Maintain public behaviour compatibility for existing commands.
 - Add unit tests using `rstest`.
@@ -54,7 +54,7 @@ Observable success:
 - Update `docs/users-guide.md` with user-visible changes.
 - Mark roadmap item `3.9.2` done only after implementation and validation.
 - Run required quality gates with logged output:
-  `make check-fmt`, `make lint`, `make test`.
+  `make check-fmt`, `make lint`, and `make test`.
 
 ## Tolerances (exception triggers)
 
@@ -130,7 +130,7 @@ Observable success:
 - Model Context Protocol (MCP) project-memory tools (`qdrant-find` /
   `qdrant-store`) were not available in this environment; repository docs were
   used as the only source of truth.
-- Fluent rendering includes bidirectional (bidi) isolation markers in localized
+- Fluent rendering includes bidirectional (bidi) isolation markers in localised
   strings, so brittle literal assertions were replaced with content assertions
   that strip isolation code points in unit tests.
 - The initial fake-Ninja fixture shell script used `cat`, which failed under
@@ -145,9 +145,9 @@ Observable success:
   parser complexity low. Date/Author: 2026-02-22 / Codex.
 
 - Decision: use the existing OrthoConfig-backed `progress` setting as the sole
-  control for stage and task progress output, and update localized help text to
+  control for stage and task progress output, and update localised help text to
   reflect the expanded behaviour. Rationale: avoids unnecessary configuration
-  sprawl while satisfying layered config and localization requirements.
+  sprawl while satisfying layered config and localisation requirements.
   Date/Author: 2026-02-22 / Codex.
 
 - Decision: emit explicit textual task updates whenever stdout is non-TTY or
@@ -188,9 +188,9 @@ Primary implementation surfaces:
 - `src/status.rs`: reporter trait and implementations.
 - `src/status_pipeline.rs`: six-stage canonical ordering and labels.
 - `src/cli/mod.rs`: OrthoConfig-derived CLI configuration.
-- `src/cli_l10n.rs`: localized clap help mapping.
+- `src/cli_l10n.rs`: localised clap help mapping.
 - `src/localization/keys.rs`: Fluent message key constants.
-- `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`: localized
+- `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`: localised
   user-facing strings.
 - `tests/features/progress_output.feature` and `tests/bdd/steps/*`: behavioural
   test coverage.
@@ -260,7 +260,7 @@ Planned edits:
 - Centralize fallback predicate:
   - fallback when stdout is not a TTY, or
   - accessible mode is active.
-- Update localized help copy for `progress` to clarify that it controls stage
+- Update localised help copy for `progress` to clarify that it controls stage
   and task progress summaries.
 - Keep precedence through OrthoConfig (`config < env < CLI`) with existing
   `progress: Option<bool>` semantics.
@@ -328,7 +328,7 @@ The implementation should remain dependency-neutral (no new external crates).
 Use existing crates already in `Cargo.toml`:
 
 - `indicatif` for standard mode rendering.
-- `ortho_config` for layered configuration and localized help integration.
+- `ortho_config` for layered configuration and localised help integration.
 - `rstest` and `rstest-bdd` v0.5.0 for unit and behavioural tests.
 
 Expected new internal interfaces (names may vary, behaviour is required):
@@ -347,7 +347,7 @@ Run all commands from the repository root.
 1. Implement parser module and parser unit tests.
 2. Wire parser into process forwarding path with observer callbacks.
 3. Extend reporter trait/implementations for task-progress updates.
-4. Implement fallback predicate and update localized `progress` help strings.
+4. Implement fallback predicate and update localised `progress` help strings.
 5. Add/extend BDD scenarios and steps using fake Ninja emitters.
 6. Update `docs/users-guide.md`, `docs/netsuke-design.md`, and
    `docs/roadmap.md`.
@@ -414,12 +414,14 @@ Acceptance requires all of the following:
   `features_scenarios::progress_output_accessible_mode_emits_textual_task_updates`
   — PASSED.
 - Non-TTY stderr excerpt (stdout redirected):
+
   ```text
   [⁨in progress⁩] ⁨Stage ⁨6⁩/⁨6⁩: ⁨Synthesizing Ninja plan and executing ⁨Build⁩⁩⁩
   ⁨Task ⁨1⁩/⁨2⁩⁩: ⁨cc -c src/a.c⁩
   ⁨Task ⁨2⁩/⁨2⁩⁩: ⁨cc -c src/b.c⁩
   [⁨done⁩] ⁨Stage ⁨6⁩/⁨6⁩: ⁨Synthesizing Ninja plan and executing ⁨Build⁩⁩⁩
   ```
+
 - `make check-fmt`: `0`.
 - `make lint`: `0`.
 - `make test`: `0`.
