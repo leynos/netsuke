@@ -144,8 +144,24 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
             reporter.report_complete(keys::STATUS_TOOL_MANIFEST.into());
             Ok(())
         }
-        Commands::Clean => handle_clean(cli, reporter.as_ref(), progress_enabled),
-        Commands::Graph => handle_graph(cli, reporter.as_ref(), progress_enabled),
+        Commands::Clean => handle_ninja_tool(
+            cli,
+            NinjaToolSpec {
+                name: "clean",
+                key: keys::STATUS_TOOL_CLEAN.into(),
+            },
+            reporter.as_ref(),
+            progress_enabled,
+        ),
+        Commands::Graph => handle_ninja_tool(
+            cli,
+            NinjaToolSpec {
+                name: "graph",
+                key: keys::STATUS_TOOL_GRAPH.into(),
+            },
+            reporter.as_ref(),
+            progress_enabled,
+        ),
     }
 }
 
@@ -288,32 +304,6 @@ fn handle_ninja_tool(
     }
     reporter.report_complete(tool.key);
     Ok(())
-}
-
-/// Remove build artefacts by invoking `ninja -t clean`.
-fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter, progress_enabled: bool) -> Result<()> {
-    handle_ninja_tool(
-        cli,
-        NinjaToolSpec {
-            name: "clean",
-            key: keys::STATUS_TOOL_CLEAN.into(),
-        },
-        reporter,
-        progress_enabled,
-    )
-}
-
-/// Display build dependency graph by invoking `ninja -t graph`.
-fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter, progress_enabled: bool) -> Result<()> {
-    handle_ninja_tool(
-        cli,
-        NinjaToolSpec {
-            name: "graph",
-            key: keys::STATUS_TOOL_GRAPH.into(),
-        },
-        reporter,
-        progress_enabled,
-    )
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.
