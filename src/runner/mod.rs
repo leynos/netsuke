@@ -178,7 +178,8 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 /// use netsuke::status::SilentReporter;
 /// let cli = Cli::default();
 /// let args = BuildArgs { emit: None, targets: vec![] };
-/// handle_build(&cli, &args, &SilentReporter).unwrap();
+/// let progress_enabled = true;
+/// handle_build(&cli, &args, &SilentReporter, progress_enabled).unwrap();
 /// ```
 fn handle_build(
     cli: &Cli,

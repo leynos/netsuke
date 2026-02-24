@@ -277,6 +277,9 @@ fn spawn_and_stream_output(
         forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
     });
 
+    // Intentionally drain stdout on the main thread when `status_observer` is
+    // present so forwarding and callback-driven status updates keep a stable
+    // ordering; moving this elsewhere can regress output timing/interleaving.
     let stdout_stats = {
         let mut lock = io::stdout().lock();
         match status_observer {

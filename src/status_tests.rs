@@ -20,7 +20,6 @@ fn stage6_message(reporter: &IndicatifReporter) -> String {
         .get(STAGE6_INDEX)
         .expect("stage 6 progress bar should exist")
         .message()
-        .clone()
 }
 
 #[fixture]

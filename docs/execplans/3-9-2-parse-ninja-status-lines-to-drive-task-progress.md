@@ -14,7 +14,8 @@ Netsuke currently reports six pipeline stages, but Stage 6 does not yet derive
 task-level progress from Ninja execution lines. Roadmap item 3.9.2 requires
 Ninja status-line parsing, so Netsuke can present task progress during build
 execution. The same milestone also requires deterministic textual fallback
-updates when stdout is not a TTY and whenever accessible mode is active.
+updates when stdout is not a teletype terminal (TTY) and whenever accessible
+mode is active.
 
 After this change:
 
