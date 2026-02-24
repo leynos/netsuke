@@ -12,7 +12,7 @@ No `PLANS.md` file exists in this repository.
 
 Netsuke currently reports six pipeline stages, but Stage 6 does not yet derive
 task-level progress from Ninja execution lines. Roadmap item 3.9.2 requires
-Ninja status-line parsing so Netsuke can present task progress during build
+Ninja status-line parsing, so Netsuke can present task progress during build
 execution. The same milestone also requires deterministic textual fallback
 updates when stdout is not a TTY and whenever accessible mode is active.
 
@@ -140,19 +140,19 @@ Observable success:
 - Decision: parse bracketed Ninja status tokens of the form `[current/total]`
   at line start for Stage 6 progress, treating malformed lines as non-events.
   Rationale: this is the documented, stable surface from Ninja output and keeps
-  parser complexity low. Date/Author: 2026-02-22 / Codex
+  parser complexity low. Date/Author: 2026-02-22 / Codex.
 
 - Decision: use the existing OrthoConfig-backed `progress` setting as the sole
   control for stage and task progress output, and update localized help text to
   reflect the expanded behaviour. Rationale: avoids unnecessary configuration
   sprawl while satisfying layered config and localization requirements.
-  Date/Author: 2026-02-22 / Codex
+  Date/Author: 2026-02-22 / Codex.
 
 - Decision: emit explicit textual task updates whenever stdout is non-TTY or
   accessible mode is active, regardless of `indicatif` draw target details.
   Rationale: roadmap requirement is about deterministic accessibility/log
   readability and must not depend solely on terminal redraw support.
-  Date/Author: 2026-02-22 / Codex
+  Date/Author: 2026-02-22 / Codex.
 
 ## Outcomes & Retrospective
 

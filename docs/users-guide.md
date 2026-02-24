@@ -605,7 +605,7 @@ Build complete.
 In standard mode, Netsuke uses `indicatif` stage summaries when progress is
 enabled. During Stage 6, Netsuke parses Ninja status lines (`[current/total]`)
 and emits task progress updates. When stdout is not a TTY, task progress
-automatically falls back to textual updates so continuous integration (CI) and
+automatically falls back to textual updates, so continuous integration (CI) and
 redirected logs remain readable.
 
 Progress output can be controlled via OrthoConfig layering:

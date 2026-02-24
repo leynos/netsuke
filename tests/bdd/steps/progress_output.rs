@@ -69,6 +69,8 @@ fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
     make_script_executable(&script_path)?;
 
     let env = SystemEnv::new();
+    // Drop any existing guard first so its environment override is restored
+    // before installing a replacement for this scenario.
     world.ninja_env_guard.borrow_mut().take();
     *world.ninja_env_guard.borrow_mut() = Some(override_ninja_env(&env, &script_path));
     Ok(())

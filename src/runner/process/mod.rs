@@ -145,6 +145,7 @@ fn run_command_and_stream(
     check_exit_status(status)
 }
 
+/// Borrowed parameter bundle for `ninja` build execution helpers.
 #[derive(Clone, Copy)]
 pub(crate) struct NinjaBuildRequest<'a> {
     pub(crate) program: &'a Path,
@@ -153,6 +154,7 @@ pub(crate) struct NinjaBuildRequest<'a> {
     pub(crate) targets: &'a BuildTargets<'a>,
 }
 
+/// Borrowed parameter bundle for `ninja -t` tool execution helpers.
 #[derive(Clone, Copy)]
 pub(crate) struct NinjaToolRequest<'a> {
     pub(crate) program: &'a Path,
@@ -269,8 +271,9 @@ fn spawn_and_stream_output(
     };
 
     let err_handle = thread::spawn(move || {
-        // Avoid holding a long-lived stderr lock while stdout parsing may emit
-        // task updates to stderr from the observer callback.
+        // Avoid a long-lived stderr lock: status observers invoked while
+        // draining stdout may emit task updates to stderr, and that path must
+        // not block behind stderr forwarding.
         forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
     });
 

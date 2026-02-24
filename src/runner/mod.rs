@@ -106,7 +106,9 @@ fn make_reporter(
     let force_text_task_updates = should_force_text_task_updates(mode, stdout_is_tty);
     match mode {
         OutputMode::Accessible => Box::new(AccessibleReporter::new(prefs)),
-        OutputMode::Standard => Box::new(IndicatifReporter::new(force_text_task_updates)),
+        OutputMode::Standard => Box::new(IndicatifReporter::with_force_text_task_updates(
+            force_text_task_updates,
+        )),
     }
 }
 

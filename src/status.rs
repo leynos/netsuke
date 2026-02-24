@@ -98,6 +98,9 @@ pub trait StatusReporter {
     /// Emit a stage update.
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str);
     /// Emit task progress for Stage 6 execution.
+    ///
+    /// Callers must pass validated, monotonic task updates for a single Ninja
+    /// execution stream (`total > 0`, `current > 0`, `current <= total`).
     fn report_task_progress(&self, _current: u32, _total: u32, _description: &str) {}
     /// Emit a final completion message.
     fn report_complete(&self, tool_key: LocalizationKey);
@@ -205,6 +208,15 @@ impl IndicatifReporter {
         }
     }
 
+    /// Build a reporter while explicitly controlling task-update text fallback.
+    ///
+    /// This forwards to [`Self::new`] and sets
+    /// `IndicatifState::force_text_task_updates` with the same value.
+    #[must_use]
+    pub fn with_force_text_task_updates(force_text_task_updates: bool) -> Self {
+        Self::new(force_text_task_updates)
+    }
+
     fn is_stage6_active(state: &IndicatifState) -> bool {
         state.running_index == Some(STAGE6_INDEX) && STAGE6_INDEX < state.bars.len()
     }
@@ -237,7 +249,7 @@ impl IndicatifReporter {
 
 impl Default for IndicatifReporter {
     fn default() -> Self {
-        Self::new(false)
+        Self::with_force_text_task_updates(false)
     }
 }
 

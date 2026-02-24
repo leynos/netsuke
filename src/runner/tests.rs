@@ -1,4 +1,4 @@
-//! Unit tests for the runner module's path resolution helpers.
+//! Unit tests for runner path resolution, predicate helpers, and core helpers.
 
 use super::*;
 use rstest::rstest;

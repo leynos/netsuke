@@ -1,13 +1,49 @@
 //! Tests for status stage modelling and index conversions.
 
 use super::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 
 fn strip_isolates(value: &str) -> String {
     value
         .chars()
         .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
         .collect()
+}
+
+fn stage6_message(reporter: &IndicatifReporter) -> String {
+    let state = reporter
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    state
+        .bars
+        .get(STAGE6_INDEX)
+        .expect("stage 6 progress bar should exist")
+        .message()
+        .to_string()
+}
+
+#[fixture]
+fn force_text_reporter() -> IndicatifReporter {
+    IndicatifReporter::with_force_text_task_updates(true)
+}
+
+#[fixture]
+fn running_stage6_reporter() -> IndicatifReporter {
+    let reporter = IndicatifReporter::with_force_text_task_updates(false);
+    {
+        let mut state = reporter
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.is_hidden = false;
+    }
+    reporter.report_stage(
+        PipelineStage::NinjaSynthesisAndExecution.index(),
+        PIPELINE_STAGE_TOTAL,
+        "Executing Build",
+    );
+    reporter
 }
 
 #[rstest]
@@ -52,51 +88,21 @@ fn task_progress_update_formats_expected_text(
     assert_eq!(strip_isolates(&rendered), expected);
 }
 
-#[test]
-fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running() {
-    let reporter = IndicatifReporter::new(true);
-    reporter.report_task_progress(1, 2, "cc -c src/a.c");
-
-    let state = reporter
-        .state
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let stage6_message = state
-        .bars
-        .get(STAGE6_INDEX)
-        .expect("stage 6 progress bar should exist")
-        .message()
-        .to_string();
+#[rstest]
+fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
+    force_text_reporter: IndicatifReporter,
+) {
+    force_text_reporter.report_task_progress(1, 2, "cc -c src/a.c");
+    let stage6_message = stage6_message(&force_text_reporter);
     assert!(!strip_isolates(&stage6_message).contains("Task 1/2"));
 }
 
-#[test]
-fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates() {
-    let reporter = IndicatifReporter::new(false);
-    {
-        let mut state = reporter
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        state.is_hidden = false;
-    }
-    reporter.report_stage(
-        PipelineStage::NinjaSynthesisAndExecution.index(),
-        PIPELINE_STAGE_TOTAL,
-        "Executing Build",
-    );
-    reporter.report_task_progress(1, 2, "cc -c src/a.c");
-
-    let state = reporter
-        .state
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let stage6_message = state
-        .bars
-        .get(STAGE6_INDEX)
-        .expect("stage 6 progress bar should exist")
-        .message()
-        .to_string();
+#[rstest]
+fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
+    running_stage6_reporter: IndicatifReporter,
+) {
+    running_stage6_reporter.report_task_progress(1, 2, "cc -c src/a.c");
+    let stage6_message = stage6_message(&running_stage6_reporter);
     let task = task_progress_update(1, 2, "cc -c src/a.c");
     let state_label = localization::message(keys::STATUS_STATE_RUNNING).to_string();
     let stage_line = stage_label(
