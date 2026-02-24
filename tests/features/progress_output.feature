@@ -54,6 +54,14 @@ Feature: Progress output
     And stderr should not contain "Stage 1/6"
     And stderr should not contain "Task 1/2"
 
+  Scenario: Progress output can be disabled in accessible mode
+    Given a minimal Netsuke workspace
+    And a fake ninja executable that emits task status lines
+    When netsuke is run with arguments "--accessible true --progress false build"
+    Then the command should succeed
+    And stderr should not contain "Stage 1/6"
+    And stderr should not contain "Task 1/2"
+
   Scenario: Failed runs mark the active stage as failed
     Given an empty workspace
     When netsuke is run with arguments "--accessible false --progress true"

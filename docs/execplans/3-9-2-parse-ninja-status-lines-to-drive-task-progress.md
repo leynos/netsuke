@@ -30,7 +30,7 @@ Observable success:
 - Running `netsuke --accessible false --progress true build` against a manifest
   that executes multiple Ninja edges shows Stage 6 task advancement.
 - Running the same command with stdout redirected still emits textual task
-  updates suitable for logs and CI.
+  updates suitable for logs and continuous integration (CI).
 - Running with `--accessible true` emits text-only task updates (no animated
   redraw dependency).
 - `make check-fmt`, `make lint`, and `make test` pass.
@@ -46,7 +46,7 @@ Observable success:
 - Keep CLI help localization wired through Fluent and `src/cli_l10n.rs`.
 - Maintain public behaviour compatibility for existing commands.
 - Add unit tests using `rstest`.
-- Add behavioural tests using `rstest-bdd` v0.5.0.
+- Add behaviour-driven development (BDD) tests using `rstest-bdd` v0.5.0.
 - Cover happy path, unhappy path, and edge conditions.
 - Record final design decisions in `docs/netsuke-design.md`.
 - Update `docs/users-guide.md` with user-visible changes.
@@ -125,8 +125,9 @@ Observable success:
 - Current BDD progress scenarios (`tests/features/progress_output.feature`) use
   `manifest -`, which does not invoke Ninja. New scenarios must exercise build
   execution with controlled Ninja output.
-- MCP project-memory tools (`qdrant-find` / `qdrant-store`) were not available
-  in this environment; repository docs were used as the only source of truth.
+- Model Context Protocol (MCP) project-memory tools (`qdrant-find` /
+  `qdrant-store`) were not available in this environment; repository docs were
+  used as the only source of truth.
 - Fluent rendering includes bidi isolation markers in localized strings, so
   brittle literal assertions were replaced with content assertions that strip
   isolation code points in unit tests.

@@ -53,19 +53,61 @@ fn task_progress_update_formats_expected_text(
 }
 
 #[test]
-fn indicatif_reporter_rejects_regressive_task_updates() {
+fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running() {
     let reporter = IndicatifReporter::new(true);
-    reporter.report_stage(
-        PipelineStage::NinjaSynthesisAndExecution.index(),
-        PIPELINE_STAGE_TOTAL,
-        "Executing Build",
-    );
-    reporter.report_task_progress(2, 3, "cc -c src/b.c");
-    reporter.report_task_progress(1, 3, "stale");
+    reporter.report_task_progress(1, 2, "cc -c src/a.c");
 
     let state = reporter
         .state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(state.last_task_progress, Some((2, 3)));
+    let stage6_message = state
+        .bars
+        .get(STAGE6_INDEX)
+        .expect("stage 6 progress bar should exist")
+        .message()
+        .to_string();
+    assert!(!strip_isolates(&stage6_message).contains("Task 1/2"));
+}
+
+#[test]
+fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates() {
+    let reporter = IndicatifReporter::new(false);
+    {
+        let mut state = reporter
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.is_hidden = false;
+    }
+    reporter.report_stage(
+        PipelineStage::NinjaSynthesisAndExecution.index(),
+        PIPELINE_STAGE_TOTAL,
+        "Executing Build",
+    );
+    reporter.report_task_progress(1, 2, "cc -c src/a.c");
+
+    let state = reporter
+        .state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let stage6_message = state
+        .bars
+        .get(STAGE6_INDEX)
+        .expect("stage 6 progress bar should exist")
+        .message()
+        .to_string();
+    let task = task_progress_update(1, 2, "cc -c src/a.c");
+    let state_label = localization::message(keys::STATUS_STATE_RUNNING).to_string();
+    let stage_line = stage_label(
+        PipelineStage::NinjaSynthesisAndExecution.index(),
+        PIPELINE_STAGE_TOTAL,
+        "Executing Build",
+    );
+    let expected = localization::message(keys::STATUS_STAGE_SUMMARY_WITH_TASK)
+        .with_arg("state", state_label)
+        .with_arg("label", stage_line)
+        .with_arg("task_progress", &task)
+        .to_string();
+    assert_eq!(strip_isolates(&stage6_message), strip_isolates(&expected));
 }

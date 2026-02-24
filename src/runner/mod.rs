@@ -100,11 +100,13 @@ fn make_reporter(
     prefs: OutputPrefs,
     stdout_is_tty: bool,
 ) -> Box<dyn StatusReporter> {
+    if !progress_enabled {
+        return Box::new(SilentReporter);
+    }
     let force_text_task_updates = should_force_text_task_updates(mode, stdout_is_tty);
-    match (mode, progress_enabled) {
-        (OutputMode::Accessible, _) => Box::new(AccessibleReporter::new(prefs)),
-        (OutputMode::Standard, true) => Box::new(IndicatifReporter::new(force_text_task_updates)),
-        (OutputMode::Standard, false) => Box::new(SilentReporter),
+    match mode {
+        OutputMode::Accessible => Box::new(AccessibleReporter::new(prefs)),
+        OutputMode::Standard => Box::new(IndicatifReporter::new(force_text_task_updates)),
     }
 }
 
@@ -128,7 +130,7 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
         targets: Vec::new(),
     }));
     match command {
-        Commands::Build(args) => handle_build(cli, &args, reporter.as_ref()),
+        Commands::Build(args) => handle_build(cli, &args, reporter.as_ref(), progress_enabled),
         Commands::Manifest { file } => {
             let ninja = generate_ninja(cli, reporter.as_ref(), None)?;
             if process::is_stdout_path(file.as_path()) {
@@ -140,8 +142,8 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
             reporter.report_complete(keys::STATUS_TOOL_MANIFEST.into());
             Ok(())
         }
-        Commands::Clean => handle_clean(cli, reporter.as_ref()),
-        Commands::Graph => handle_graph(cli, reporter.as_ref()),
+        Commands::Clean => handle_clean(cli, reporter.as_ref(), progress_enabled),
+        Commands::Graph => handle_graph(cli, reporter.as_ref(), progress_enabled),
     }
 }
 
@@ -160,7 +162,12 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 /// let args = BuildArgs { emit: None, targets: vec![] };
 /// handle_build(&cli, &args, &SilentReporter).unwrap();
 /// ```
-fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> Result<()> {
+fn handle_build(
+    cli: &Cli,
+    args: &BuildArgs,
+    reporter: &dyn StatusReporter,
+    progress_enabled: bool,
+) -> Result<()> {
     let ninja = generate_ninja(cli, reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
     let targets = BuildTargets::new(&args.targets);
 
@@ -181,25 +188,35 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
     }
 
     let program = process::resolve_ninja_program();
-    let mut on_task_progress = |current: u32, total: u32, description: &str| {
-        reporter.report_task_progress(current, total, description);
-    };
-    process::run_ninja_invocation(
-        &process::NinjaInvocation::Build {
-            program: program.as_path(),
-            cli,
-            build_file: build_path.as_ref(),
-            targets: &targets,
-        },
-        Some(&mut on_task_progress),
-    )
-    .with_context(|| {
-        format!(
-            "running {} with build file {}",
-            program.display(),
-            build_path.display()
+    if progress_enabled {
+        let mut on_task_progress = |current: u32, total: u32, description: &str| {
+            reporter.report_task_progress(current, total, description);
+        };
+        process::run_ninja_with_status(
+            process::NinjaBuildRequest {
+                program: program.as_path(),
+                cli,
+                build_file: build_path.as_ref(),
+                targets: &targets,
+            },
+            &mut on_task_progress,
         )
-    })?;
+        .with_context(|| {
+            format!(
+                "running {} with build file {}",
+                program.display(),
+                build_path.display()
+            )
+        })?;
+    } else {
+        run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
+            format!(
+                "running {} with build file {}",
+                program.display(),
+                build_path.display()
+            )
+        })?;
+    }
     reporter.report_complete(keys::STATUS_TOOL_BUILD.into());
     Ok(())
 }
@@ -213,55 +230,88 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
+#[derive(Clone, Copy)]
+struct NinjaToolSpec<'a> {
+    name: &'a str,
+    key: LocalizationKey,
+}
+
 fn handle_ninja_tool(
     cli: &Cli,
-    tool: &str,
-    tool_key: LocalizationKey,
+    tool: NinjaToolSpec<'_>,
     reporter: &dyn StatusReporter,
+    progress_enabled: bool,
 ) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
-        subcommand = tool,
+        subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let ninja = generate_ninja(cli, reporter, Some(tool_key))?;
+    let ninja = generate_ninja(cli, reporter, Some(tool.key))?;
 
     let tmp = process::create_temp_ninja_file(&ninja)?;
     let build_path = tmp.path();
 
     let program = process::resolve_ninja_program();
-    let mut on_task_progress = |current: u32, total: u32, description: &str| {
-        reporter.report_task_progress(current, total, description);
-    };
-    process::run_ninja_invocation(
-        &process::NinjaInvocation::Tool {
-            program: program.as_path(),
-            cli,
-            build_file: build_path,
-            tool,
-        },
-        Some(&mut on_task_progress),
-    )
-    .with_context(|| {
-        format!(
-            "running {} -t {} with build file {}",
-            program.display(),
-            tool,
-            build_path.display()
+    if progress_enabled {
+        let mut on_task_progress = |current: u32, total: u32, description: &str| {
+            reporter.report_task_progress(current, total, description);
+        };
+        process::run_ninja_tool_with_status(
+            process::NinjaToolRequest {
+                program: program.as_path(),
+                cli,
+                build_file: build_path,
+                tool: tool.name,
+            },
+            &mut on_task_progress,
         )
-    })?;
-    reporter.report_complete(tool_key);
+        .with_context(|| {
+            format!(
+                "running {} -t {} with build file {}",
+                program.display(),
+                tool.name,
+                build_path.display()
+            )
+        })?;
+    } else {
+        run_ninja_tool(program.as_path(), cli, build_path, tool.name).with_context(|| {
+            format!(
+                "running {} -t {} with build file {}",
+                program.display(),
+                tool.name,
+                build_path.display()
+            )
+        })?;
+    }
+    reporter.report_complete(tool.key);
     Ok(())
 }
 
 /// Remove build artefacts by invoking `ninja -t clean`.
-fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(cli, "clean", keys::STATUS_TOOL_CLEAN.into(), reporter)
+fn handle_clean(cli: &Cli, reporter: &dyn StatusReporter, progress_enabled: bool) -> Result<()> {
+    handle_ninja_tool(
+        cli,
+        NinjaToolSpec {
+            name: "clean",
+            key: keys::STATUS_TOOL_CLEAN.into(),
+        },
+        reporter,
+        progress_enabled,
+    )
 }
 
 /// Display build dependency graph by invoking `ninja -t graph`.
-fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter) -> Result<()> {
-    handle_ninja_tool(cli, "graph", keys::STATUS_TOOL_GRAPH.into(), reporter)
+fn handle_graph(cli: &Cli, reporter: &dyn StatusReporter, progress_enabled: bool) -> Result<()> {
+    handle_ninja_tool(
+        cli,
+        NinjaToolSpec {
+            name: "graph",
+            key: keys::STATUS_TOOL_GRAPH.into(),
+        },
+        reporter,
+        progress_enabled,
+    )
 }
 
 /// Generate the Ninja manifest string from the Netsuke manifest referenced by `cli`.

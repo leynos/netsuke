@@ -28,24 +28,6 @@ use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ni
 
 type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
 
-/// Prepared Ninja invocation variant.
-pub(crate) enum NinjaInvocation<'a> {
-    /// Standard build invocation.
-    Build {
-        program: &'a Path,
-        cli: &'a Cli,
-        build_file: &'a Path,
-        targets: &'a BuildTargets<'a>,
-    },
-    /// Ninja tool invocation (`ninja -t <tool>`).
-    Tool {
-        program: &'a Path,
-        cli: &'a Cli,
-        build_file: &'a Path,
-        tool: &'a str,
-    },
-}
-
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
 #[cfg(doctest)]
@@ -163,6 +145,22 @@ fn run_command_and_stream(
     check_exit_status(status)
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct NinjaBuildRequest<'a> {
+    pub(crate) program: &'a Path,
+    pub(crate) cli: &'a Cli,
+    pub(crate) build_file: &'a Path,
+    pub(crate) targets: &'a BuildTargets<'a>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct NinjaToolRequest<'a> {
+    pub(crate) program: &'a Path,
+    pub(crate) cli: &'a Cli,
+    pub(crate) build_file: &'a Path,
+    pub(crate) tool: &'a str,
+}
+
 /// Invoke the Ninja executable with the provided CLI settings.
 ///
 /// The function forwards the job count and working directory to Ninja,
@@ -179,13 +177,13 @@ pub fn run_ninja(
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
-    let invocation = NinjaInvocation::Build {
+    let request = NinjaBuildRequest {
         program,
         cli,
         build_file,
         targets,
     };
-    run_ninja_invocation(&invocation, None)
+    run_ninja_build_internal(request, None)
 }
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
@@ -199,42 +197,47 @@ pub fn run_ninja(
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
-    let invocation = NinjaInvocation::Tool {
+    let request = NinjaToolRequest {
         program,
         cli,
         build_file,
         tool,
     };
-    run_ninja_invocation(&invocation, None)
+    run_ninja_tool_internal(request, None)
 }
 
-/// Invoke Ninja and stream parsed task updates from status lines.
-pub(crate) fn run_ninja_invocation(
-    invocation: &NinjaInvocation<'_>,
+fn run_ninja_build_internal(
+    request: NinjaBuildRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
 ) -> io::Result<()> {
-    match invocation {
-        NinjaInvocation::Build {
-            program,
-            cli,
-            build_file,
-            targets,
-        } => {
-            let mut cmd = Command::new(program);
-            configure_ninja_build_command(&mut cmd, cli, build_file, targets)?;
-            run_command_and_stream(cmd, status_observer)
-        }
-        NinjaInvocation::Tool {
-            program,
-            cli,
-            build_file,
-            tool,
-        } => {
-            let mut cmd = Command::new(program);
-            configure_ninja_tool_command(&mut cmd, cli, build_file, tool)?;
-            run_command_and_stream(cmd, status_observer)
-        }
-    }
+    let mut cmd = Command::new(request.program);
+    configure_ninja_build_command(&mut cmd, request.cli, request.build_file, request.targets)?;
+    run_command_and_stream(cmd, status_observer)
+}
+
+fn run_ninja_tool_internal(
+    request: NinjaToolRequest<'_>,
+    status_observer: Option<StatusObserver<'_>>,
+) -> io::Result<()> {
+    let mut cmd = Command::new(request.program);
+    configure_ninja_tool_command(&mut cmd, request.cli, request.build_file, request.tool)?;
+    run_command_and_stream(cmd, status_observer)
+}
+
+/// Invoke `ninja` build and stream parsed task updates from status lines.
+pub(crate) fn run_ninja_with_status(
+    request: NinjaBuildRequest<'_>,
+    status_observer: StatusObserver<'_>,
+) -> io::Result<()> {
+    run_ninja_build_internal(request, Some(status_observer))
+}
+
+/// Invoke `ninja -t` and stream parsed task updates from status lines.
+pub(crate) fn run_ninja_tool_with_status(
+    request: NinjaToolRequest<'_>,
+    status_observer: StatusObserver<'_>,
+) -> io::Result<()> {
+    run_ninja_tool_internal(request, Some(status_observer))
 }
 
 fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
@@ -266,8 +269,9 @@ fn spawn_and_stream_output(
     };
 
     let err_handle = thread::spawn(move || {
-        let mut lock = io::stderr().lock();
-        forward_child_output(BufReader::new(stderr), &mut lock, "stderr")
+        // Avoid holding a long-lived stderr lock while stdout parsing may emit
+        // task updates to stderr from the observer callback.
+        forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
     });
 
     let stdout_stats = {

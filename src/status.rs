@@ -79,15 +79,11 @@ fn stage_summary(
         .to_string()
 }
 
-fn task_progress_label(current: u32, total: u32) -> String {
-    localization::message(keys::STATUS_TASK_PROGRESS_LABEL)
+fn task_progress_update(current: u32, total: u32, description: &str) -> String {
+    let task = localization::message(keys::STATUS_TASK_PROGRESS_LABEL)
         .with_arg("current", current.to_string())
         .with_arg("total", total.to_string())
-        .to_string()
-}
-
-fn task_progress_update(current: u32, total: u32, description: &str) -> String {
-    let task = task_progress_label(current, total);
+        .to_string();
     if description.is_empty() {
         return task;
     }
@@ -161,8 +157,9 @@ struct IndicatifState {
     completed: bool,
     is_hidden: bool,
     force_text_task_updates: bool,
-    last_task_progress: Option<(u32, u32)>,
 }
+
+const STAGE6_INDEX: usize = (PipelineStage::NinjaSynthesisAndExecution as usize) - 1;
 
 /// Standard reporter backed by `indicatif::MultiProgress`.
 pub struct IndicatifReporter {
@@ -204,24 +201,12 @@ impl IndicatifReporter {
                 running_index: None,
                 completed: false,
                 force_text_task_updates,
-                last_task_progress: None,
             }),
         }
     }
 
-    const fn is_valid_task_progress(current: u32, total: u32) -> bool {
-        total != 0 && current != 0 && current <= total
-    }
-
-    fn is_stage6_active(state: &IndicatifState, stage_index: usize) -> bool {
-        stage_index < state.bars.len() && state.running_index == Some(stage_index)
-    }
-
-    const fn is_task_progress_monotonic(state: &IndicatifState, current: u32, total: u32) -> bool {
-        match state.last_task_progress {
-            Some((last_current, last_total)) => total == last_total && current >= last_current,
-            None => true,
-        }
+    fn is_stage6_active(state: &IndicatifState) -> bool {
+        state.running_index == Some(STAGE6_INDEX) && STAGE6_INDEX < state.bars.len()
     }
 
     fn set_stage_state(
@@ -312,28 +297,18 @@ impl StatusReporter for IndicatifReporter {
             LocalizationKey::new(keys::STATUS_STATE_RUNNING),
             false,
         );
-        if index != stage6_index() {
-            state.last_task_progress = None;
-        }
         state.running_index = Some(index);
     }
 
     fn report_task_progress(&self, current: u32, total: u32, description: &str) {
-        if !Self::is_valid_task_progress(current, total) {
-            return;
-        }
-        let mut state = self
+        let state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let stage_index = stage6_index();
-        if !Self::is_stage6_active(&state, stage_index) {
+        if !Self::is_stage6_active(&state) {
             return;
         }
-        if !Self::is_task_progress_monotonic(&state, current, total) {
-            return;
-        }
-        state.last_task_progress = Some((current, total));
+        let stage_index = STAGE6_INDEX;
         let task = task_progress_update(current, total, description);
         if state.is_hidden || state.force_text_task_updates {
             drop(writeln!(io::stderr(), "{task}"));
@@ -380,10 +355,6 @@ impl StatusReporter for IndicatifReporter {
         let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
         drop(writeln!(io::stderr(), "{message}"));
     }
-}
-
-const fn stage6_index() -> usize {
-    5
 }
 
 #[cfg(test)]

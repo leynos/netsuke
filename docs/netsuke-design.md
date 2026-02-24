@@ -2047,12 +2047,12 @@ During Stage 6, Netsuke parses Ninja status lines of the form
 `[current/total] ...` and emits localized task progress updates. Parsed updates
 are monotonic: malformed lines, regressive counts, and total-mismatch lines are
 ignored to avoid noisy or inconsistent progress state. Task updates fall back
-to textual output when stdout is not a TTY, ensuring deterministic CI/log
-output; accessible mode always uses textual output. Accessible output remains
-text-first and static; it does not animate. The standard reporter is
-configurable through OrthoConfig layering via `progress: Option<bool>`
-(`--progress`, `NETSUKE_PROGRESS`, or config file), with accessible mode taking
-precedence when enabled.
+to textual output when stdout is not a teletype terminal (TTY), ensuring
+deterministic continuous integration (CI) logs; accessible mode always uses
+textual output. Accessible output remains text-first and static; it does not
+animate. The standard reporter is configurable through OrthoConfig layering via
+`progress: Option<bool>` (`--progress`, `NETSUKE_PROGRESS`, or config file),
+with accessible mode taking precedence when enabled.
 
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.
