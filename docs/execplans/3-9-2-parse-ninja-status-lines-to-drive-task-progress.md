@@ -130,9 +130,9 @@ Observable success:
 - Model Context Protocol (MCP) project-memory tools (`qdrant-find` /
   `qdrant-store`) were not available in this environment; repository docs were
   used as the only source of truth.
-- Fluent rendering includes bidi isolation markers in localized strings, so
-  brittle literal assertions were replaced with content assertions that strip
-  isolation code points in unit tests.
+- Fluent rendering includes bidirectional (bidi) isolation markers in localized
+  strings, so brittle literal assertions were replaced with content assertions
+  that strip isolation code points in unit tests.
 - The initial fake-Ninja fixture shell script used `cat`, which failed under
   test PATH constraints. Replaced with shell built-ins (`read` + `printf`) to
   keep fixtures deterministic.
@@ -398,9 +398,28 @@ Acceptance requires all of the following:
 
 ## Artefacts and notes
 
-Capture concise evidence for review:
-
-- Parser unit test names and pass/fail status.
-- BDD scenario names proving fallback behaviour.
-- A short stderr excerpt showing Stage 6 textual updates in non-TTY mode.
-- Command exit codes for `make check-fmt`, `make lint`, and `make test`.
+- Parser unit test
+  `runner::process::ninja_status::tests::parse_ninja_status_line_parses_expected::case_1`
+  — PASSED.
+- Parser unit test
+  `runner::process::ninja_status::tests::tracker_accepts_only_monotonic_updates::case_1`
+  — PASSED.
+- Parser unit test
+  `runner::process::streaming::tests::forward_output_with_ninja_status_parses_monotonic_updates`
+  — PASSED.
+- BDD scenario
+  `features_scenarios::progress_output_standard_mode_reports_task_updates_from_ninja_status_lines`
+  — PASSED.
+- BDD scenario
+  `features_scenarios::progress_output_accessible_mode_emits_textual_task_updates`
+  — PASSED.
+- Non-TTY stderr excerpt (stdout redirected):
+  ```text
+  [⁨in progress⁩] ⁨Stage ⁨6⁩/⁨6⁩: ⁨Synthesizing Ninja plan and executing ⁨Build⁩⁩⁩
+  ⁨Task ⁨1⁩/⁨2⁩⁩: ⁨cc -c src/a.c⁩
+  ⁨Task ⁨2⁩/⁨2⁩⁩: ⁨cc -c src/b.c⁩
+  [⁨done⁩] ⁨Stage ⁨6⁩/⁨6⁩: ⁨Synthesizing Ninja plan and executing ⁨Build⁩⁩⁩
+  ```
+- `make check-fmt`: `0`.
+- `make lint`: `0`.
+- `make test`: `0`.
