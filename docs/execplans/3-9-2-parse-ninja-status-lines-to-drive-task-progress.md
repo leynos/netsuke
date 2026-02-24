@@ -342,7 +342,7 @@ Expected new internal interfaces (names may vary, behaviour is required):
 
 ## Concrete steps
 
-Run all commands from `/home/user/project`.
+Run all commands from the repository root.
 
 1. Implement parser module and parser unit tests.
 2. Wire parser into process forwarding path with observer callbacks.
@@ -353,21 +353,21 @@ Run all commands from `/home/user/project`.
    `docs/roadmap.md`.
 7. Run quality gates with `tee` logs:
 
-```sh
-set -o pipefail
-make check-fmt 2>&1 | tee /tmp/3-9-2-check-fmt.log
-make lint 2>&1 | tee /tmp/3-9-2-lint.log
-make test 2>&1 | tee /tmp/3-9-2-test.log
-```
+    ```sh
+    set -o pipefail
+    make check-fmt 2>&1 | tee /tmp/3-9-2-check-fmt.log
+    make lint 2>&1 | tee /tmp/3-9-2-lint.log
+    make test 2>&1 | tee /tmp/3-9-2-test.log
+    ```
 
 8. Run documentation gates after doc edits:
 
-```sh
-set -o pipefail
-make fmt 2>&1 | tee /tmp/3-9-2-fmt.log
-make markdownlint 2>&1 | tee /tmp/3-9-2-markdownlint.log
-make nixie 2>&1 | tee /tmp/3-9-2-nixie.log
-```
+    ```sh
+    set -o pipefail
+    make fmt 2>&1 | tee /tmp/3-9-2-fmt.log
+    make markdownlint 2>&1 | tee /tmp/3-9-2-markdownlint.log
+    make nixie 2>&1 | tee /tmp/3-9-2-nixie.log
+    ```
 
 ## Validation and acceptance
 

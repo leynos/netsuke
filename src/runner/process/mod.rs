@@ -233,6 +233,11 @@ fn run_ninja_tool_internal(
 }
 
 /// Invoke `ninja` build and stream parsed task updates from status lines.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub(crate) fn run_ninja_with_status(
     request: NinjaBuildRequest<'_>,
     status_observer: StatusObserver<'_>,
@@ -241,6 +246,11 @@ pub(crate) fn run_ninja_with_status(
 }
 
 /// Invoke `ninja -t` and stream parsed task updates from status lines.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
+/// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub(crate) fn run_ninja_tool_with_status(
     request: NinjaToolRequest<'_>,
     status_observer: StatusObserver<'_>,

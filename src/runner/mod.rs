@@ -165,6 +165,12 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     }
 }
 
+fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
+    move |current: u32, total: u32, description: &str| {
+        reporter.report_task_progress(current, total, description);
+    }
+}
+
 /// Resolve the manifest, generate the Ninja file and invoke the build.
 ///
 /// # Errors
@@ -215,9 +221,7 @@ fn handle_build(
         )
     };
     if progress_enabled {
-        let mut on_task_progress = |current: u32, total: u32, description: &str| {
-            reporter.report_task_progress(current, total, description);
-        };
+        let mut on_task_progress = on_task_progress_callback(reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
                 program: program.as_path(),
@@ -277,9 +281,7 @@ fn handle_ninja_tool(
         )
     };
     if progress_enabled {
-        let mut on_task_progress = |current: u32, total: u32, description: &str| {
-            reporter.report_task_progress(current, total, description);
-        };
+        let mut on_task_progress = on_task_progress_callback(reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
                 program: program.as_path(),
