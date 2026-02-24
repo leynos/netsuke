@@ -209,6 +209,21 @@ impl IndicatifReporter {
         }
     }
 
+    const fn is_valid_task_progress(current: u32, total: u32) -> bool {
+        total != 0 && current != 0 && current <= total
+    }
+
+    fn is_stage6_active(state: &IndicatifState, stage_index: usize) -> bool {
+        stage_index < state.bars.len() && state.running_index == Some(stage_index)
+    }
+
+    const fn is_task_progress_monotonic(state: &IndicatifState, current: u32, total: u32) -> bool {
+        match state.last_task_progress {
+            Some((last_current, last_total)) => total == last_total && current >= last_current,
+            None => true,
+        }
+    }
+
     fn set_stage_state(
         state: &mut IndicatifState,
         index: usize,
@@ -304,7 +319,7 @@ impl StatusReporter for IndicatifReporter {
     }
 
     fn report_task_progress(&self, current: u32, total: u32, description: &str) {
-        if total == 0 || current == 0 || current > total {
+        if !Self::is_valid_task_progress(current, total) {
             return;
         }
         let mut state = self
@@ -312,12 +327,10 @@ impl StatusReporter for IndicatifReporter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let stage_index = stage6_index();
-        if stage_index >= state.bars.len() || state.running_index != Some(stage_index) {
+        if !Self::is_stage6_active(&state, stage_index) {
             return;
         }
-        if let Some((last_current, last_total)) = state.last_task_progress
-            && (total != last_total || current < last_current)
-        {
+        if !Self::is_task_progress_monotonic(&state, current, total) {
             return;
         }
         state.last_task_progress = Some((current, total));

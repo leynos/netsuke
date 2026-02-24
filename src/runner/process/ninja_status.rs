@@ -42,9 +42,14 @@ pub(super) struct NinjaTaskProgressTracker {
 }
 
 impl NinjaTaskProgressTracker {
+    /// Check whether an update is invalid (zero counts or current exceeds total).
+    const fn is_invalid_update(update: &NinjaTaskProgress) -> bool {
+        update.total() == 0 || update.current() == 0 || update.current() > update.total()
+    }
+
     /// Accept a new update when it is consistent and monotonic.
     pub(super) const fn accept(&mut self, update: &NinjaTaskProgress) -> bool {
-        if update.total() == 0 || update.current() == 0 || update.current() > update.total() {
+        if Self::is_invalid_update(update) {
             return false;
         }
         match self.total {
@@ -58,17 +63,17 @@ impl NinjaTaskProgressTracker {
     }
 }
 
+fn is_valid_numeric_string(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit())
+}
+
 /// Parse a Ninja status line in the form `[current/total] description`.
 pub(super) fn parse_ninja_status_line(line: &str) -> Option<NinjaTaskProgress> {
     let trimmed = line.trim_start();
     let rest = trimmed.strip_prefix('[')?;
     let (current_raw, remaining) = rest.split_once('/')?;
     let (total_raw, description_raw) = remaining.split_once(']')?;
-    if current_raw.is_empty()
-        || total_raw.is_empty()
-        || !current_raw.bytes().all(|byte| byte.is_ascii_digit())
-        || !total_raw.bytes().all(|byte| byte.is_ascii_digit())
-    {
+    if !is_valid_numeric_string(current_raw) || !is_valid_numeric_string(total_raw) {
         return None;
     }
     let current = current_raw.parse::<u32>().ok()?;
