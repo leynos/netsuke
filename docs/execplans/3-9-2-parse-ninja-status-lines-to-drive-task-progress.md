@@ -44,7 +44,8 @@ Observable success:
 - Keep accessible mode text-first and non-animated.
 - Use OrthoConfig layering for user control; do not introduce ad-hoc config
   reads. Existing `progress: Option<bool>` remains the controlling switch.
-- Keep CLI help localization wired through Fluent and `src/cli_l10n.rs`.
+- Keep command-line interface (CLI) help localization wired through Fluent and
+  `src/cli_l10n.rs`.
 - Maintain public behaviour compatibility for existing commands.
 - Add unit tests using `rstest`.
 - Add behaviour-driven development (BDD) tests using `rstest-bdd` v0.5.0.
@@ -359,7 +360,7 @@ make lint 2>&1 | tee /tmp/3-9-2-lint.log
 make test 2>&1 | tee /tmp/3-9-2-test.log
 ```
 
-1. Run documentation gates after doc edits:
+8. Run documentation gates after doc edits:
 
 ```sh
 set -o pipefail
@@ -395,7 +396,7 @@ Acceptance requires all of the following:
   `progress = false` temporarily and continue with non-progress execution while
   preserving deterministic command output.
 
-## Artifacts and notes
+## Artefacts and notes
 
 Capture concise evidence for review:
 

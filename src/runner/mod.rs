@@ -207,6 +207,13 @@ fn handle_build(
     }
 
     let program = process::resolve_ninja_program();
+    let ctx = || {
+        format!(
+            "running {} with build file {}",
+            program.display(),
+            build_path.display()
+        )
+    };
     if progress_enabled {
         let mut on_task_progress = |current: u32, total: u32, description: &str| {
             reporter.report_task_progress(current, total, description);
@@ -220,24 +227,19 @@ fn handle_build(
             },
             &mut on_task_progress,
         )
-        .with_context(|| {
-            format!(
-                "running {} with build file {}",
-                program.display(),
-                build_path.display()
-            )
-        })?;
+        .with_context(ctx)?;
     } else {
-        run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
-            format!(
-                "running {} with build file {}",
-                program.display(),
-                build_path.display()
-            )
-        })?;
+        run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(ctx)?;
     }
     reporter.report_complete(keys::STATUS_TOOL_BUILD.into());
     Ok(())
+}
+
+/// Specification for a Ninja tool invocation: name and localization key.
+#[derive(Clone, Copy)]
+struct NinjaToolSpec<'a> {
+    name: &'a str,
+    key: LocalizationKey,
 }
 
 /// Execute a Ninja tool (e.g., `ninja -t clean`) using a temporary build file.
@@ -249,12 +251,6 @@ fn handle_build(
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-#[derive(Clone, Copy)]
-struct NinjaToolSpec<'a> {
-    name: &'a str,
-    key: LocalizationKey,
-}
-
 fn handle_ninja_tool(
     cli: &Cli,
     tool: NinjaToolSpec<'_>,
@@ -272,6 +268,14 @@ fn handle_ninja_tool(
     let build_path = tmp.path();
 
     let program = process::resolve_ninja_program();
+    let ctx = || {
+        format!(
+            "running {} -t {} with build file {}",
+            program.display(),
+            tool.name,
+            build_path.display()
+        )
+    };
     if progress_enabled {
         let mut on_task_progress = |current: u32, total: u32, description: &str| {
             reporter.report_task_progress(current, total, description);
@@ -285,23 +289,9 @@ fn handle_ninja_tool(
             },
             &mut on_task_progress,
         )
-        .with_context(|| {
-            format!(
-                "running {} -t {} with build file {}",
-                program.display(),
-                tool.name,
-                build_path.display()
-            )
-        })?;
+        .with_context(ctx)?;
     } else {
-        run_ninja_tool(program.as_path(), cli, build_path, tool.name).with_context(|| {
-            format!(
-                "running {} -t {} with build file {}",
-                program.display(),
-                tool.name,
-                build_path.display()
-            )
-        })?;
+        run_ninja_tool(program.as_path(), cli, build_path, tool.name).with_context(ctx)?;
     }
     reporter.report_complete(tool.key);
     Ok(())

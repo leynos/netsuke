@@ -26,6 +26,12 @@ pub use paths::*;
 use redaction::{CommandArg, redact_sensitive_args};
 use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
 
+/// Callback contract for task-progress updates from parsed Ninja status lines.
+///
+/// Accepts `(current, total, description)` where `current` and `total` are
+/// progress counters and `description` is a human-readable status string.
+/// This alias appears in `pub(crate)` function signatures and borrows a mutable
+/// callback for the call duration, so callers can retain state across updates.
 type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
