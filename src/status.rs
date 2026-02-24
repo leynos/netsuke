@@ -208,6 +208,13 @@ impl IndicatifReporter {
         }
     }
 
+    /// Build a reporter that forces text-only task updates (for non-TTY /
+    /// accessible fallback).
+    #[must_use]
+    pub fn with_text_task_updates() -> Self {
+        Self::new(true)
+    }
+
     /// Build a reporter while explicitly controlling task-update text fallback.
     ///
     /// This forwards to [`Self::new`] and sets
