@@ -20,11 +20,11 @@ mode is active.
 After this change:
 
 - Stage 6 task progress is driven by parsed Ninja status lines.
-- Standard interactive mode keeps the existing `indicatif`-based UX, now with
-  task counters.
+- Standard interactive mode keeps the existing `indicatif`-based user
+  experience (UX), now with task counters.
 - Non-interactive stdout and accessible mode emit textual task updates.
 - Progress control continues through OrthoConfig layering with localized help
-  copy (`--progress`, `NETSUKE_PROGRESS`, config file key).
+  copy (`--progress`, `NETSUKE_PROGRESS`, and config file key).
 
 Observable success:
 
