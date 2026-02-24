@@ -176,17 +176,6 @@ fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-///
-/// # Examples
-/// ```ignore
-/// use netsuke::cli::{BuildArgs, Cli};
-/// use netsuke::runner::handle_build;
-/// use netsuke::status::SilentReporter;
-/// let cli = Cli::default();
-/// let args = BuildArgs { emit: None, targets: vec![] };
-/// let progress_enabled = true;
-/// handle_build(&cli, &args, &SilentReporter, progress_enabled).unwrap();
-/// ```
 fn handle_build(
     cli: &Cli,
     args: &BuildArgs,

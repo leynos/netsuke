@@ -90,9 +90,7 @@ where
             self.finish_line();
             return Ok(0);
         }
-        let slice = buf
-            .get(..count)
-            .ok_or_else(|| io::Error::other("reader returned out-of-range byte count"))?;
+        let (slice, _) = buf.split_at(count);
         self.consume_bytes(slice);
         Ok(count)
     }

@@ -119,7 +119,7 @@ Observable success:
       `docs/users-guide.md`, `docs/netsuke-design.md`, `docs/roadmap.md`;
       validated with `make check-fmt`, `make lint`, and `make test`.
 
-## Surprises & Discoveries
+## Surprises & discoveries
 
 - `src/runner/process/mod.rs` is already 421 lines, so adding parser logic in
   that file directly would violate project file-size guidance. This work should
@@ -137,7 +137,7 @@ Observable success:
   test PATH constraints. Replaced with shell built-ins (`read` + `printf`) to
   keep fixtures deterministic.
 
-## Decision Log
+## Decision log
 
 - Decision: parse bracketed Ninja status tokens of the form `[current/total]`
   at line start for Stage 6 progress, treating malformed lines as non-events.
@@ -156,7 +156,7 @@ Observable success:
   readability and must not depend solely on terminal redraw support.
   Date/Author: 2026-02-22 / Codex.
 
-## Outcomes & Retrospective
+## Outcomes & retrospective
 
 Implemented outcomes:
 
