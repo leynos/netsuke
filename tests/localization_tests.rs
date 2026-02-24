@@ -178,3 +178,35 @@ fn progress_stage_messages_resolve(
     );
     Ok(())
 }
+
+#[rstest]
+#[case("en-US", "Task 2/6", "cc -c src/main.c")]
+#[case("es-ES", "Tarea 2/6", "cc -c src/main.c")]
+fn progress_task_messages_resolve(
+    #[case] locale: &str,
+    #[case] expected_label: &str,
+    #[case] expected_description: &str,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let task_label = localization::message(keys::STATUS_TASK_PROGRESS_LABEL)
+        .with_arg("current", 2)
+        .with_arg("total", 6)
+        .to_string();
+    let task_update = localization::message(keys::STATUS_TASK_PROGRESS_UPDATE)
+        .with_arg("task", &task_label)
+        .with_arg("description", "cc -c src/main.c")
+        .to_string();
+    let normalized_label = normalize_fluent_isolates(&task_label);
+    let normalized_update = normalize_fluent_isolates(&task_update);
+
+    ensure!(
+        normalized_label.contains(expected_label),
+        "expected task label for locale {locale} to contain {expected_label:?}, got: {task_label}"
+    );
+    ensure!(
+        normalized_update.contains(expected_description),
+        "expected task update for locale {locale} to contain {expected_description:?}, got: {task_update}"
+    );
+    Ok(())
+}

@@ -15,7 +15,7 @@ cli.flag.fetch_allow_host.help = Hostnames that are permitted when default deny 
 cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when allowed elsewhere.
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
 cli.flag.accessible.help = Force accessible output mode on or off.
-cli.flag.progress.help = Force standard progress summaries on or off.
+cli.flag.progress.help = Force standard stage and task progress summaries on or off.
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).
@@ -325,6 +325,9 @@ status.state.done = done
 status.state.failed = failed
 status.stage.label = Stage { $current }/{ $total }: { $description }
 status.stage.summary = [{ $state }] { $label }
+status.stage.summary_with_task = [{ $state }] { $label } ({ $task_progress })
+status.task.progress_label = Task { $current }/{ $total }
+status.task.progress_update = { $task }: { $description }
 status.stage.manifest_ingestion = Reading manifest file
 status.stage.initial_yaml_parsing = Parsing YAML document
 status.stage.template_expansion = Expanding template directives

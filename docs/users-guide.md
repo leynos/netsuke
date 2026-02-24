@@ -569,9 +569,8 @@ For information on contributing translations, see the
 
 ### Accessible output mode
 
-Netsuke supports an accessible output mode that replaces animated progress
-indicators with static, labelled status lines suitable for screen readers and
-dumb terminals.
+Netsuke supports an accessible output mode that uses static, labelled status
+lines suitable for screen readers and dumb terminals.
 
 Accessible mode is auto-enabled when:
 
@@ -592,16 +591,31 @@ When accessible mode is active, each pipeline stage produces a labelled status
 line on stderr:
 
 ```text
-Stage 1/5: Configuring network policy
-Stage 2/5: Loading manifest
-Stage 3/5: Building dependency graph
-Stage 4/5: Generating Ninja file
-Stage 5/5: Executing Build
+Stage 1/6: Reading manifest file
+Stage 2/6: Parsing YAML document
+Stage 3/6: Expanding template directives
+Stage 4/6: Deserializing and rendering manifest values
+Stage 5/6: Building and validating dependency graph
+Stage 6/6: Synthesizing Ninja plan and executing Build
+Task 1/2: cc -c src/a.c
+Task 2/2: cc -c src/b.c
 Build complete.
 ```
 
-In standard mode, no status lines are emitted. Future versions may add animated
-progress indicators for standard mode terminals.
+In standard mode, Netsuke uses `indicatif` stage summaries when progress is
+enabled. During Stage 6, Netsuke parses Ninja status lines (`[current/total]`)
+and emits task progress updates. When stdout is not a TTY, task progress
+automatically falls back to textual updates so CI and redirected logs remain
+readable.
+
+Progress output can be controlled via OrthoConfig layering:
+
+- CLI flag: `--progress true` or `--progress false`
+- Environment variable: `NETSUKE_PROGRESS=true|false`
+- Configuration file: `progress = true|false`
+
+When progress is disabled, Netsuke suppresses stage and task progress output in
+both standard and accessible modes.
 
 ### Emoji and accessibility preferences
 

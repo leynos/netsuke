@@ -8,7 +8,7 @@ use ninja_env::NINJA_ENV;
 use std::{
     env,
     ffi::OsString,
-    io::{self, BufReader, ErrorKind, Read, Write},
+    io::{self, BufReader, ErrorKind},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     thread,
@@ -16,12 +16,35 @@ use std::{
 use tracing::info;
 
 mod file_io;
+mod ninja_status;
 mod paths;
 mod redaction;
+mod streaming;
 
 pub use file_io::*;
 pub use paths::*;
 use redaction::{CommandArg, redact_sensitive_args};
+use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
+
+type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
+
+/// Prepared Ninja invocation variant.
+pub(crate) enum NinjaInvocation<'a> {
+    /// Standard build invocation.
+    Build {
+        program: &'a Path,
+        cli: &'a Cli,
+        build_file: &'a Path,
+        targets: &'a BuildTargets<'a>,
+    },
+    /// Ninja tool invocation (`ninja -t <tool>`).
+    Tool {
+        program: &'a Path,
+        cli: &'a Cli,
+        build_file: &'a Path,
+        tool: &'a str,
+    },
+}
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
 // testing surface without exporting them in release builds.
@@ -61,8 +84,8 @@ pub fn resolve_ninja_program() -> PathBuf {
 
 /// Configure the base Ninja command with working directory, job count, and build file.
 ///
-/// Sets up stdout/stderr pipes for streaming. Callers append targets or tool flags
-/// after this function returns.
+/// Sets up stdout/stderr pipes for streaming. Callers append targets or tool
+/// flags after this function returns.
 fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::Result<()> {
     if let Some(dir) = &cli.directory {
         let canonical = canonicalize_utf8_path(dir.as_path())?;
@@ -130,10 +153,13 @@ fn log_command_execution(cmd: &Command) {
 }
 
 /// Log, spawn, stream output, and check exit status for a prepared command.
-fn run_command_and_stream(mut cmd: Command) -> io::Result<()> {
+fn run_command_and_stream(
+    mut cmd: Command,
+    status_observer: Option<StatusObserver<'_>>,
+) -> io::Result<()> {
     log_command_execution(&cmd);
     let child = cmd.spawn()?;
-    let status = spawn_and_stream_output(child)?;
+    let status = spawn_and_stream_output(child, status_observer)?;
     check_exit_status(status)
 }
 
@@ -147,16 +173,19 @@ fn run_command_and_stream(mut cmd: Command) -> io::Result<()> {
 ///
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
-///
 pub fn run_ninja(
     program: &Path,
     cli: &Cli,
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
-    let mut cmd = Command::new(program);
-    configure_ninja_build_command(&mut cmd, cli, build_file, targets)?;
-    run_command_and_stream(cmd)
+    let invocation = NinjaInvocation::Build {
+        program,
+        cli,
+        build_file,
+        targets,
+    };
+    run_ninja_invocation(&invocation, None)
 }
 
 /// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
@@ -170,27 +199,63 @@ pub fn run_ninja(
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
-    let mut cmd = Command::new(program);
-    configure_ninja_tool_command(&mut cmd, cli, build_file, tool)?;
-    run_command_and_stream(cmd)
+    let invocation = NinjaInvocation::Tool {
+        program,
+        cli,
+        build_file,
+        tool,
+    };
+    run_ninja_invocation(&invocation, None)
+}
+
+/// Invoke Ninja and stream parsed task updates from status lines.
+pub(crate) fn run_ninja_invocation(
+    invocation: &NinjaInvocation<'_>,
+    status_observer: Option<StatusObserver<'_>>,
+) -> io::Result<()> {
+    match invocation {
+        NinjaInvocation::Build {
+            program,
+            cli,
+            build_file,
+            targets,
+        } => {
+            let mut cmd = Command::new(program);
+            configure_ninja_build_command(&mut cmd, cli, build_file, targets)?;
+            run_command_and_stream(cmd, status_observer)
+        }
+        NinjaInvocation::Tool {
+            program,
+            cli,
+            build_file,
+            tool,
+        } => {
+            let mut cmd = Command::new(program);
+            configure_ninja_tool_command(&mut cmd, cli, build_file, tool)?;
+            run_command_and_stream(cmd, status_observer)
+        }
+    }
+}
+
+fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
+    if stats.write_failed {
+        tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
+    }
 }
 
 fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_name: &str) {
     match result {
-        Ok(stats) => {
-            if stats.write_failed {
-                tracing::debug!(
-                    "{stream_name} forwarding encountered closed pipe; output truncated"
-                );
-            }
-        }
+        Ok(stats) => handle_forwarding_stats(stats, stream_name),
         Err(err) => {
             tracing::warn!("{stream_name} forwarding thread panicked: {err:?}");
         }
     }
 }
 
-fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
+fn spawn_and_stream_output(
+    mut child: Child,
+    status_observer: Option<StatusObserver<'_>>,
+) -> io::Result<ExitStatus> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
         return Err(io::Error::other("child process missing stdout pipe"));
@@ -200,17 +265,26 @@ fn spawn_and_stream_output(mut child: Child) -> io::Result<ExitStatus> {
         return Err(io::Error::other("child process missing stderr pipe"));
     };
 
-    let out_handle = thread::spawn(move || {
-        let mut lock = io::stdout().lock();
-        forward_child_output(BufReader::new(stdout), &mut lock, "stdout")
-    });
     let err_handle = thread::spawn(move || {
         let mut lock = io::stderr().lock();
         forward_child_output(BufReader::new(stderr), &mut lock, "stderr")
     });
 
+    let stdout_stats = {
+        let mut lock = io::stdout().lock();
+        match status_observer {
+            Some(observer) => forward_child_output_with_ninja_status(
+                BufReader::new(stdout),
+                &mut lock,
+                observer,
+                "stdout",
+            ),
+            None => forward_child_output(BufReader::new(stdout), &mut lock, "stdout"),
+        }
+    };
+
     let status = child.wait()?;
-    handle_forwarding_thread_result(out_handle.join(), "stdout");
+    handle_forwarding_stats(stdout_stats, "stdout");
     handle_forwarding_thread_result(err_handle.join(), "stderr");
     Ok(status)
 }
@@ -222,98 +296,6 @@ fn terminate_child(child: &mut Child, context: &str) {
     if let Err(err) = child.wait() {
         tracing::debug!("failed to reap child after {context}: {err}");
     }
-}
-
-#[derive(Debug, Default, PartialEq, Eq)]
-struct ForwardStats {
-    bytes_read: usize,
-    bytes_written: usize,
-    write_failed: bool,
-}
-
-struct CountingReader<'a, R> {
-    inner: &'a mut R,
-    read: u64,
-}
-
-impl<R: Read> Read for CountingReader<'_, R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let count = self.inner.read(buf)?;
-        self.read += count as u64;
-        Ok(count)
-    }
-}
-
-struct CountingWriter<'a, W> {
-    inner: &'a mut W,
-    written: u64,
-}
-
-impl<W: Write> Write for CountingWriter<'_, W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self.inner.write(buf) {
-            Ok(count) => {
-                self.written += count as u64;
-                Ok(count)
-            }
-            Err(err) => Err(err),
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
-    }
-}
-
-fn clamp_u64_to_usize(value: u64) -> usize {
-    usize::try_from(value).unwrap_or(usize::MAX)
-}
-
-fn forward_child_output<R, W>(
-    mut reader: R,
-    mut writer: W,
-    stream_name: &'static str,
-) -> ForwardStats
-where
-    R: Read,
-    W: Write,
-{
-    let mut stats = ForwardStats::default();
-    let mut counting_reader = CountingReader {
-        inner: &mut reader,
-        read: 0,
-    };
-    let mut counting_writer = CountingWriter {
-        inner: &mut writer,
-        written: 0,
-    };
-
-    match io::copy(&mut counting_reader, &mut counting_writer) {
-        Ok(_) => {
-            stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
-            stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
-        }
-        Err(err) => {
-            stats.write_failed = true;
-            stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
-            stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
-            tracing::debug!(
-                "Failed to write child {stream_name} output to parent: {err}; discarding remaining bytes"
-            );
-            match io::copy(&mut counting_reader, &mut io::sink()) {
-                Ok(_) => {
-                    stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
-                }
-                Err(drain_err) => {
-                    tracing::debug!(
-                        "Failed to drain child {stream_name} output after writer closed: {drain_err}"
-                    );
-                }
-            }
-        }
-    }
-
-    stats
 }
 
 fn check_exit_status(status: ExitStatus) -> io::Result<()> {
@@ -335,41 +317,7 @@ fn check_exit_status(status: ExitStatus) -> io::Result<()> {
 mod tests {
     use super::*;
     use camino::Utf8PathBuf;
-    use std::{
-        ffi::OsString,
-        io::Cursor,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
-    };
-
-    #[derive(Clone)]
-    struct FailingWriter {
-        writes: Arc<AtomicUsize>,
-    }
-
-    impl FailingWriter {
-        fn new(writes: Arc<AtomicUsize>) -> Self {
-            Self { writes }
-        }
-    }
-
-    impl Write for FailingWriter {
-        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-            let previous = self.writes.fetch_add(1, Ordering::SeqCst);
-            let error_kind = if previous == 0 {
-                io::ErrorKind::BrokenPipe
-            } else {
-                io::ErrorKind::Other
-            };
-            Err(io::Error::new(error_kind, "sink closed"))
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
+    use std::ffi::OsString;
 
     #[test]
     fn resolve_ninja_program_utf8_prefers_env_override() {
@@ -392,30 +340,5 @@ mod tests {
             Some(OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a']))
         });
         assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
-    }
-
-    #[test]
-    fn forward_output_writes_all_bytes_when_parent_alive() {
-        let input = b"alpha\nbravo\ncharlie\n".to_vec();
-        let reader = BufReader::new(Cursor::new(input.clone()));
-        let stats = forward_child_output(reader, Vec::new(), "stdout");
-
-        assert_eq!(stats.bytes_read, input.len());
-        assert_eq!(stats.bytes_written, input.len());
-        assert!(!stats.write_failed);
-    }
-
-    #[test]
-    fn forward_output_continues_draining_after_write_failure() {
-        let input = b"echo-one\necho-two\necho-three\n".to_vec();
-        let reader = BufReader::new(Cursor::new(input.clone()));
-        let write_attempts = Arc::new(AtomicUsize::new(0));
-        let failing_writer = FailingWriter::new(write_attempts.clone());
-        let stats = forward_child_output(reader, failing_writer, "stdout");
-
-        assert_eq!(stats.bytes_read, input.len());
-        assert_eq!(write_attempts.load(Ordering::SeqCst), 1);
-        assert!(stats.write_failed);
-        assert_eq!(stats.bytes_written, 0);
     }
 }

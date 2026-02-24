@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: DONE (2026-02-24)
 
 No `PLANS.md` file exists in this repository.
 
@@ -96,12 +96,26 @@ Observable success:
       surfaces.
 - [x] (2026-02-22 17:55Z) Drafted this ExecPlan at
       `docs/execplans/3-9-2-parse-ninja-status-lines-to-drive-task-progress.md`.
-- [ ] Stage A: Add Ninja status parser and forwarding hooks.
-- [ ] Stage B: Wire parsed task progress into status reporters.
-- [ ] Stage C: Add textual fallback behaviour for non-TTY stdout and
-      accessible mode.
-- [ ] Stage D: Extend unit and behavioural tests (happy/unhappy/edge cases).
-- [ ] Stage E: Update docs/design/roadmap and run quality gates.
+- [x] (2026-02-24) Stage A: Added Ninja status parser and forwarding hooks via
+      `src/runner/process/ninja_status.rs` and
+      `src/runner/process/streaming.rs`; process orchestration in
+      `src/runner/process/mod.rs` now accepts an internal status observer.
+- [x] (2026-02-24) Stage B: Wired parsed task progress into reporters by
+      extending `StatusReporter` with `report_task_progress` and implementing
+      task-progress rendering in `IndicatifReporter` and
+      `AccessibleReporter`.
+- [x] (2026-02-24) Stage C: Added centralized fallback behaviour in
+      `src/runner/mod.rs` (`should_force_text_task_updates`) to emit textual
+      task updates when stdout is non-TTY or accessible mode is enabled.
+- [x] (2026-02-24) Stage D: Added/updated unit and behavioural coverage using
+      `rstest` and `rstest-bdd`:
+      `src/runner/process/ninja_status.rs`,
+      `src/runner/process/streaming.rs`, `src/status_tests.rs`,
+      `src/runner/tests.rs`, `tests/features/progress_output.feature`, and
+      `tests/bdd/steps/progress_output.rs`.
+- [x] (2026-02-24) Stage E: Updated docs and roadmap:
+      `docs/users-guide.md`, `docs/netsuke-design.md`, `docs/roadmap.md`;
+      validated with `make check-fmt`, `make lint`, and `make test`.
 
 ## Surprises & Discoveries
 
@@ -113,6 +127,12 @@ Observable success:
   execution with controlled Ninja output.
 - MCP project-memory tools (`qdrant-find` / `qdrant-store`) were not available
   in this environment; repository docs were used as the only source of truth.
+- Fluent rendering includes bidi isolation markers in localized strings, so
+  brittle literal assertions were replaced with content assertions that strip
+  isolation code points in unit tests.
+- The initial fake-Ninja fixture shell script used `cat`, which failed under
+  test PATH constraints. Replaced with shell built-ins (`read` + `printf`) to
+  keep fixtures deterministic.
 
 ## Decision Log
 
@@ -135,14 +155,26 @@ Observable success:
 
 ## Outcomes & Retrospective
 
-Pending implementation.
+Implemented outcomes:
 
-Target outcomes:
+- Stage 6 task progress now advances from parsed Ninja status lines in
+  `[current/total] description` form, with monotonic filtering to ignore
+  malformed and regressive updates.
+- Non-TTY stdout and accessible mode now force deterministic textual task
+  updates while preserving standard `indicatif` stage rendering elsewhere.
+- Unit + BDD coverage now includes parser happy/unhappy cases, monotonic guard
+  behaviour, fallback predicate combinations, and behavioural scenarios using
+  deterministic fake Ninja output.
+- Documentation and roadmap were synchronized:
+  `docs/users-guide.md`, `docs/netsuke-design.md`, `docs/roadmap.md`.
 
-- Stage 6 task progress advances from parsed Ninja status lines.
-- Non-TTY and accessible flows receive deterministic textual updates.
-- Unit + BDD coverage proves happy, unhappy, and edge behaviour.
-- Documentation and roadmap remain synchronized with implemented behaviour.
+Validation summary:
+
+- `make check-fmt`: pass.
+- `make lint`: pass.
+- `make test`: pass.
+- Additional doc gates run after doc updates:
+  `make fmt`, `make markdownlint`, `make nixie`.
 
 ## Context and orientation
 

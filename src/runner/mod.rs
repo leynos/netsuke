@@ -20,6 +20,7 @@ use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use std::borrow::Cow;
+use std::io::IsTerminal;
 use std::path::Path;
 use tempfile::NamedTempFile;
 use tracing::{debug, info};
@@ -97,12 +98,18 @@ fn make_reporter(
     mode: OutputMode,
     progress_enabled: bool,
     prefs: OutputPrefs,
+    stdout_is_tty: bool,
 ) -> Box<dyn StatusReporter> {
+    let force_text_task_updates = should_force_text_task_updates(mode, stdout_is_tty);
     match (mode, progress_enabled) {
         (OutputMode::Accessible, _) => Box::new(AccessibleReporter::new(prefs)),
-        (OutputMode::Standard, true) => Box::new(IndicatifReporter::new()),
+        (OutputMode::Standard, true) => Box::new(IndicatifReporter::new(force_text_task_updates)),
         (OutputMode::Standard, false) => Box::new(SilentReporter),
     }
+}
+
+const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -> bool {
+    mode.is_accessible() || !stdout_is_tty
 }
 
 /// Execute the parsed [`Cli`] commands with the given output preferences.
@@ -112,7 +119,9 @@ fn make_reporter(
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible);
-    let reporter = make_reporter(mode, cli.progress.unwrap_or(true), prefs);
+    let progress_enabled = cli.progress.unwrap_or(true);
+    let stdout_is_tty = std::io::stdout().is_terminal();
+    let reporter = make_reporter(mode, progress_enabled, prefs, stdout_is_tty);
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
@@ -172,7 +181,19 @@ fn handle_build(cli: &Cli, args: &BuildArgs, reporter: &dyn StatusReporter) -> R
     }
 
     let program = process::resolve_ninja_program();
-    run_ninja(program.as_path(), cli, build_path.as_ref(), &targets).with_context(|| {
+    let mut on_task_progress = |current: u32, total: u32, description: &str| {
+        reporter.report_task_progress(current, total, description);
+    };
+    process::run_ninja_invocation(
+        &process::NinjaInvocation::Build {
+            program: program.as_path(),
+            cli,
+            build_file: build_path.as_ref(),
+            targets: &targets,
+        },
+        Some(&mut on_task_progress),
+    )
+    .with_context(|| {
         format!(
             "running {} with build file {}",
             program.display(),
@@ -209,7 +230,19 @@ fn handle_ninja_tool(
     let build_path = tmp.path();
 
     let program = process::resolve_ninja_program();
-    run_ninja_tool(program.as_path(), cli, build_path, tool).with_context(|| {
+    let mut on_task_progress = |current: u32, total: u32, description: &str| {
+        reporter.report_task_progress(current, total, description);
+    };
+    process::run_ninja_invocation(
+        &process::NinjaInvocation::Tool {
+            program: program.as_path(),
+            cli,
+            build_file: build_path,
+            tool,
+        },
+        Some(&mut on_task_progress),
+    )
+    .with_context(|| {
         format!(
             "running {} -t {} with build file {}",
             program.display(),

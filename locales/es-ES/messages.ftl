@@ -15,7 +15,7 @@ cli.flag.fetch_allow_host.help = Nombres de host permitidos cuando la denegació
 cli.flag.fetch_block_host.help = Nombres de host siempre bloqueados, incluso cuando están permitidos.
 cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
 cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desactivado).
-cli.flag.progress.help = Forzar los resúmenes de progreso estándar (activados o desactivados).
+cli.flag.progress.help = Forzar los resúmenes de progreso estándar de etapas y tareas (activados o desactivados).
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
@@ -325,6 +325,9 @@ status.state.done = completada
 status.state.failed = fallida
 status.stage.label = Etapa { $current }/{ $total }: { $description }
 status.stage.summary = [{ $state }] { $label }
+status.stage.summary_with_task = [{ $state }] { $label } ({ $task_progress })
+status.task.progress_label = Tarea { $current }/{ $total }
+status.task.progress_update = { $task }: { $description }
 status.stage.manifest_ingestion = Leyendo el archivo del manifiesto
 status.stage.initial_yaml_parsing = Analizando el documento YAML
 status.stage.template_expansion = Expandiendo directivas de plantilla
