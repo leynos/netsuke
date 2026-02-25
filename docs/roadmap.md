@@ -260,8 +260,8 @@ library, and CLI ergonomics.
 - [x] 3.9.1. Integrate `indicatif::MultiProgress`.
   - [x] Surface the six pipeline stages with persistent summaries.
   - [x] Apply localization-aware labelling.
-- [ ] 3.9.2. Parse Ninja status lines to drive task progress.
-  - [ ] Emit fallback textual updates when stdout is not a TTY or accessible
+- [x] 3.9.2. Parse Ninja status lines to drive task progress.
+  - [x] Emit fallback textual updates when stdout is not a TTY or accessible
     mode is active.
 - [ ] 3.9.3. Capture per-stage timing metrics in verbose mode.
   - [ ] Include metrics in completion summary.

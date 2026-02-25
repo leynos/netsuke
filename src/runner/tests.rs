@@ -1,4 +1,4 @@
-//! Unit tests for the runner module's path resolution helpers.
+//! Unit tests for runner path resolution, predicate helpers, and core helpers.
 
 use super::*;
 use rstest::rstest;
@@ -19,4 +19,20 @@ fn resolve_output_path_respects_directory(
     };
     let resolved = resolve_output_path(&cli, Path::new(input));
     assert_eq!(resolved.as_ref(), Path::new(expected));
+}
+
+#[rstest]
+#[case(OutputMode::Standard, true, false)]
+#[case(OutputMode::Standard, false, true)]
+#[case(OutputMode::Accessible, true, true)]
+#[case(OutputMode::Accessible, false, true)]
+fn force_text_task_updates_when_required(
+    #[case] mode: OutputMode,
+    #[case] stdout_is_tty: bool,
+    #[case] expected: bool,
+) {
+    assert_eq!(
+        should_force_text_task_updates(mode, stdout_is_tty),
+        expected
+    );
 }
