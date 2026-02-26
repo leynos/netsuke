@@ -295,7 +295,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
                     localizer.as_ref(),
                     keys::CLI_CONFIG_EXPECTED_OBJECT,
                     Some(&args),
-                    &format!("expected parsed CLI values to serialize to an object, got {other:?}",),
+                    &format!("expected parsed CLI values to serialize to an object, got {other:?}"),
                 ),
             }));
         }
