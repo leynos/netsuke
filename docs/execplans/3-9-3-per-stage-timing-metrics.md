@@ -32,12 +32,39 @@ Observable success:
   lines.
 - `make check-fmt`, `make lint`, and `make test` pass.
 
+Expected verbose completion output (illustrative):
+
+```text
+# stdout
+rule cc
+  command = cc -c $in -o $out
+...
+
+# stderr
+[done] Stage 6/6: Synthesizing Ninja plan and executing Build
+Build complete.
+Stage timing summary:
+- Stage 1/6 Reading manifest file: 12ms
+- Stage 2/6 Parsing YAML document: 4ms
+- Stage 3/6 Expanding template directives: 7ms
+- Stage 4/6 Deserializing and rendering manifest values: 6ms
+- Stage 5/6 Building and validating dependency graph: 3ms
+- Stage 6/6 Synthesizing Ninja plan and executing Build: 18ms
+Total pipeline time: 50ms
+```
+
+The summary lines are emitted on `stderr` with other status output. `stdout`
+continues to carry command artefacts (for example `manifest -` output) and is
+not used for timing diagnostics.
+
 ## Constraints
 
 - Implement roadmap item `3.9.3` only:
   capture per-stage timing metrics in verbose mode.
 - Include timing metrics in completion summary output.
 - Keep default output quiet (no new timing lines unless verbose mode is on).
+- On failed runs, suppress timing summary lines entirely (including partially
+  collected stage timings) to avoid implying successful completion.
 - Reuse OrthoConfig layering; do not add ad-hoc configuration reads.
 - Use localized help support for any updated verbose/help wording.
 - Localize all new user-facing runtime strings in both:
@@ -83,9 +110,9 @@ Observable success:
   accessible reporters. Mitigation: centralize timing-summary rendering in one
   helper and reuse it for all reporters.
 
-- Risk: BDD step matching may become ambiguous (known `rstest-bdd` sharp edge).
-  Mitigation: use unambiguous step text and avoid generic patterns that can
-  overlap existing steps.
+- Risk: behaviour-driven development (BDD) step matching may become ambiguous
+  (known `rstest-bdd` sharp edge). Mitigation: use unambiguous step text and
+  avoid generic patterns that can overlap existing steps.
 
 - Risk: Fluent bidi isolation characters can make brittle string assertions.
   Mitigation: normalize isolates in unit assertions and use stable substrings
@@ -122,6 +149,11 @@ Observable success:
 - Decision: keep timing output in completion summary only (verbose mode), not
   as per-stage streaming output. Rationale: roadmap requires metrics in
   completion summary and explicitly avoiding noise in default output.
+  Date/Author: 2026-02-25 / Codex.
+
+- Decision: suppress all timing summary lines on failure, even when verbose
+  mode is enabled. Rationale: a completion-oriented summary on failed runs is
+  misleading; failure details should remain focused on the failed stage/error.
   Date/Author: 2026-02-25 / Codex.
 
 - Decision: prefer deterministic duration formatting with existing std library
@@ -204,11 +236,14 @@ Planned changes:
   shown at completion as verbose diagnostics.
 - Preserve stream discipline:
   emit summary on stderr in the same channel as other status messages.
+- Define failure contract:
+  failed runs do not emit timing summary lines (partial or total).
 
 Acceptance for Stage B:
 
 - `--verbose` reliably adds timing summary on successful completion.
 - Default output remains unchanged when `--verbose` is absent.
+- Failed runs suppress timing summary output entirely.
 
 ### Stage C: Localization and OrthoConfig/localized-help updates
 
@@ -240,8 +275,8 @@ Planned unit tests (`rstest`):
 
 - `src/status_tests.rs` (or new timing test module):
   - happy path: stage durations are captured and rendered in stage order,
-  - unhappy path: incomplete/failure flows do not panic and do not emit
-    completion timing summary,
+  - unhappy path: incomplete/failure flows do not panic and emit no timing
+    summary,
   - edge path: non-verbose mode omits timing summary entirely.
 - `tests/localization_tests.rs`:
   - verify new timing message keys resolve for both locales.
@@ -250,8 +285,7 @@ Planned behavioural tests (`rstest-bdd` v0.5.0):
 
 - Extend `tests/features/progress_output.feature` with scenarios:
   - happy path: `--verbose` includes timing summary in completion output,
-  - unhappy path: command failure does not produce misleading completion timing
-    summary,
+  - unhappy path: command failure emits no timing summary lines,
   - edge path: default (non-verbose) runs do not print timing summary.
 - Extend `tests/bdd/steps/progress_output.rs` only as needed for assertions.
 - Keep step phrases specific to avoid pattern ambiguity.
