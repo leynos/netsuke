@@ -31,6 +31,14 @@ Feature: Progress output
     And stderr should contain "Stage 6/6"
     And stderr should contain "Manifest complete."
 
+  Scenario: Verbose mode includes a completion timing summary
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--accessible false --progress true --verbose manifest -"
+    Then the command should succeed
+    And stderr should contain "Stage timing summary:"
+    And stderr should contain "- Stage 1/6:"
+    And stderr should contain "Total pipeline time:"
+
   Scenario: Stage summaries localize to Spanish
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible false --locale es-ES --progress true manifest -"
@@ -68,3 +76,17 @@ Feature: Progress output
     Then the command should fail
     And stderr should contain "Stage 1/6"
     And stderr should contain "failed"
+
+  Scenario: Failed verbose runs suppress timing summary lines
+    Given an empty workspace
+    When netsuke is run with arguments "--accessible false --progress true --verbose"
+    Then the command should fail
+    And stderr should not contain "Stage timing summary:"
+    And stderr should not contain "Total pipeline time:"
+
+  Scenario: Non-verbose runs omit completion timing summaries
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--accessible false --progress true manifest -"
+    Then the command should succeed
+    And stderr should not contain "Stage timing summary:"
+    And stderr should not contain "Total pipeline time:"

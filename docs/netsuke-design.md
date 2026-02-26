@@ -1942,7 +1942,7 @@ struct Cli { /// Path to the Netsuke manifest file to use.
     #[arg(short, long, value_name = "N")]
     jobs: Option<usize>,
 
-    /// Enable verbose logging output.
+    /// Enable verbose diagnostic logging and completion timing summaries.
     #[arg(short, long)]
     verbose: bool,
 
@@ -2052,7 +2052,17 @@ deterministic continuous integration (CI) logs; accessible mode always uses
 textual output. Accessible output remains text-first and static; it does not
 animate. The standard reporter is configurable through OrthoConfig layering via
 `progress: Option<bool>` (`--progress`, `NETSUKE_PROGRESS`, or config file),
-with accessible mode taking precedence when enabled.
+with accessible mode taking precedence when enabled. Verbose mode (`--verbose`
+through OrthoConfig layers) wraps the resolved reporter with a timing recorder
+that emits a localized completion summary on successful runs:
+
+- `Stage timing summary:`
+- one line per completed stage (`- Stage N/6: ...: 12ms`)
+- `Total pipeline time: ...`
+
+Timing summaries are completion diagnostics. They are suppressed when verbose
+mode is off and also suppressed on failed runs so failures do not imply a
+successful pipeline completion.
 
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.

@@ -263,9 +263,9 @@ library, and CLI ergonomics.
 - [x] 3.9.2. Parse Ninja status lines to drive task progress.
   - [x] Emit fallback textual updates when stdout is not a TTY or accessible
     mode is active.
-- [ ] 3.9.3. Capture per-stage timing metrics in verbose mode.
-  - [ ] Include metrics in completion summary.
-  - [ ] Avoid noise in default output.
+- [x] 3.9.3. Capture per-stage timing metrics in verbose mode.
+  - [x] Include metrics in completion summary.
+  - [x] Avoid noise in default output.
 
 ### 3.10. Output channels and diagnostics
 

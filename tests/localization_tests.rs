@@ -210,3 +210,45 @@ fn progress_task_messages_resolve(
     );
     Ok(())
 }
+
+#[rstest]
+#[case("en-US", "Stage timing summary:", "Total pipeline time:")]
+#[case(
+    "es-ES",
+    "Resumen de tiempos por etapa:",
+    "Tiempo total de la canalización:"
+)]
+fn timing_summary_messages_resolve(
+    #[case] locale: &str,
+    #[case] expected_header: &str,
+    #[case] expected_total_prefix: &str,
+) -> Result<()> {
+    let _guards = localizer_guards(locale)?;
+
+    let header = localization::message(keys::STATUS_TIMING_SUMMARY_HEADER).to_string();
+    let stage_line = localization::message(keys::STATUS_TIMING_STAGE_LINE)
+        .with_arg("label", "Stage 1/6: Reading manifest file")
+        .with_arg("duration", "12ms")
+        .to_string();
+    let total_line = localization::message(keys::STATUS_TIMING_TOTAL_LINE)
+        .with_arg("duration", "50ms")
+        .to_string();
+
+    let normalized_header = normalize_fluent_isolates(&header);
+    let normalized_stage_line = normalize_fluent_isolates(&stage_line);
+    let normalized_total_line = normalize_fluent_isolates(&total_line);
+
+    ensure!(
+        normalized_header.contains(expected_header),
+        "expected timing header for locale {locale} to contain {expected_header:?}, got: {header}"
+    );
+    ensure!(
+        normalized_stage_line.contains("12ms"),
+        "expected timing stage line for locale {locale} to include duration, got: {stage_line}"
+    );
+    ensure!(
+        normalized_total_line.contains(expected_total_prefix),
+        "expected timing total line for locale {locale} to contain {expected_total_prefix:?}, got: {total_line}"
+    );
+    Ok(())
+}

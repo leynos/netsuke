@@ -54,8 +54,11 @@ impl From<&'static str> for LocalizationKey {
 
 #[path = "status_pipeline.rs"]
 mod pipeline;
+#[path = "status_timing.rs"]
+mod timing;
 use pipeline::PIPELINE_STAGE_TOTAL;
 pub use pipeline::{PipelineStage, report_pipeline_stage};
+pub use timing::VerboseTimingReporter;
 
 fn stage_label(current: StageNumber, total: StageNumber, description: &str) -> String {
     localization::message(keys::STATUS_STAGE_LABEL)

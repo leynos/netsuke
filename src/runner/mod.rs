@@ -14,7 +14,7 @@ use crate::output_mode::{self, OutputMode};
 use crate::output_prefs::OutputPrefs;
 use crate::status::{
     AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
-    StatusReporter, report_pipeline_stage,
+    StatusReporter, VerboseTimingReporter, report_pipeline_stage,
 };
 use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
@@ -93,22 +93,34 @@ impl Default for BuildTargets<'_> {
 }
 
 /// Build the appropriate [`StatusReporter`] for the resolved output mode,
-/// progress preference, and output preferences.
-fn make_reporter(
+/// progress preference, verbose preference, and output preferences.
+#[derive(Debug, Clone, Copy)]
+struct ReporterOptions {
     mode: OutputMode,
     progress_enabled: bool,
+    verbose: bool,
     prefs: OutputPrefs,
     stdout_is_tty: bool,
-) -> Box<dyn StatusReporter> {
-    if !progress_enabled {
-        return Box::new(SilentReporter);
-    }
-    let force_text_task_updates = should_force_text_task_updates(mode, stdout_is_tty);
-    match mode {
-        OutputMode::Accessible => Box::new(AccessibleReporter::new(prefs)),
-        OutputMode::Standard => Box::new(IndicatifReporter::with_force_text_task_updates(
-            force_text_task_updates,
-        )),
+}
+
+fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter> {
+    let base: Box<dyn StatusReporter> = if options.progress_enabled {
+        let force_text_task_updates =
+            should_force_text_task_updates(options.mode, options.stdout_is_tty);
+        match options.mode {
+            OutputMode::Accessible => Box::new(AccessibleReporter::new(options.prefs)),
+            OutputMode::Standard => Box::new(IndicatifReporter::with_force_text_task_updates(
+                force_text_task_updates,
+            )),
+        }
+    } else {
+        Box::new(SilentReporter)
+    };
+
+    if options.verbose {
+        Box::new(VerboseTimingReporter::new(base))
+    } else {
+        base
     }
 }
 
@@ -125,7 +137,13 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible);
     let progress_enabled = cli.progress.unwrap_or(true);
     let stdout_is_tty = std::io::stdout().is_terminal();
-    let reporter = make_reporter(mode, progress_enabled, prefs, stdout_is_tty);
+    let reporter = make_reporter(ReporterOptions {
+        mode,
+        progress_enabled,
+        verbose: cli.verbose,
+        prefs,
+        stdout_is_tty,
+    });
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         emit: None,
