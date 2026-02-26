@@ -162,8 +162,8 @@ not used for timing diagnostics.
 
 ## Outcomes & Retrospective
 
-Not implemented yet. This section must be updated with final outcomes, test
-evidence, and lessons learned after execution.
+Not implemented yet. This section must be updated with outcomes, test evidence,
+and lessons learned after execution.
 
 ## Context and orientation
 
