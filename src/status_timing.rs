@@ -6,28 +6,7 @@ use std::io::{self, Write};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-trait MonotonicClock: Send + Sync {
-    fn now(&self) -> Duration;
-}
-
-#[derive(Debug)]
-struct SystemMonotonicClock {
-    start: Instant,
-}
-
-impl Default for SystemMonotonicClock {
-    fn default() -> Self {
-        Self {
-            start: Instant::now(),
-        }
-    }
-}
-
-impl MonotonicClock for SystemMonotonicClock {
-    fn now(&self) -> Duration {
-        self.start.elapsed()
-    }
-}
+type MonotonicClock = dyn Fn() -> Duration + Send + Sync;
 
 #[derive(Debug, Copy, Clone)]
 struct StageMarker {
@@ -50,13 +29,14 @@ struct CompletedStage {
 }
 
 #[derive(Debug, Default)]
-struct StageTimingRecorder {
-    completed: Vec<CompletedStage>,
+struct TimingState {
+    completed: bool,
+    completed_stages: Vec<CompletedStage>,
     running: Option<RunningStage>,
 }
 
-impl StageTimingRecorder {
-    fn record_stage(&mut self, now: Duration, marker: StageMarker, description: &str) {
+impl TimingState {
+    fn start_stage(&mut self, now: Duration, marker: StageMarker, description: &str) {
         self.finish_running(now);
         self.running = Some(RunningStage {
             marker,
@@ -69,8 +49,8 @@ impl StageTimingRecorder {
         self.finish_running(now);
     }
 
-    fn completed(&self) -> &[CompletedStage] {
-        &self.completed
+    fn completed_stages(&self) -> &[CompletedStage] {
+        &self.completed_stages
     }
 
     fn finish_running(&mut self, now: Duration) {
@@ -78,7 +58,7 @@ impl StageTimingRecorder {
             return;
         };
         let elapsed = now.saturating_sub(running.started_at);
-        self.completed.push(CompletedStage {
+        self.completed_stages.push(CompletedStage {
             marker: running.marker,
             description: running.description,
             elapsed,
@@ -86,17 +66,11 @@ impl StageTimingRecorder {
     }
 }
 
-#[derive(Debug, Default)]
-struct TimingState {
-    completed: bool,
-    recorder: StageTimingRecorder,
-}
-
 /// Status reporter wrapper that emits per-stage timings on successful
 /// completion.
 pub struct VerboseTimingReporter {
     inner: Box<dyn StatusReporter>,
-    clock: Box<dyn MonotonicClock>,
+    clock: Box<MonotonicClock>,
     state: Mutex<TimingState>,
 }
 
@@ -104,10 +78,11 @@ impl VerboseTimingReporter {
     /// Wrap an existing reporter with verbose timing summary support.
     #[must_use]
     pub fn new(inner: Box<dyn StatusReporter>) -> Self {
-        Self::with_clock(inner, Box::new(SystemMonotonicClock::default()))
+        let start = Instant::now();
+        Self::with_clock(inner, Box::new(move || start.elapsed()))
     }
 
-    fn with_clock(inner: Box<dyn StatusReporter>, clock: Box<dyn MonotonicClock>) -> Self {
+    fn with_clock(inner: Box<dyn StatusReporter>, clock: Box<MonotonicClock>) -> Self {
         Self {
             inner,
             clock,
@@ -124,11 +99,7 @@ impl StatusReporter for VerboseTimingReporter {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !state.completed {
-                state.recorder.record_stage(
-                    self.clock.now(),
-                    StageMarker { current, total },
-                    description,
-                );
+                state.start_stage((self.clock)(), StageMarker { current, total }, description);
             }
         }
         self.inner.report_stage(current, total, description);
@@ -139,8 +110,6 @@ impl StatusReporter for VerboseTimingReporter {
     }
 
     fn report_complete(&self, tool_key: LocalizationKey) {
-        self.inner.report_complete(tool_key);
-
         let lines = {
             let mut state = self
                 .state
@@ -150,10 +119,12 @@ impl StatusReporter for VerboseTimingReporter {
                 Vec::new()
             } else {
                 state.completed = true;
-                state.recorder.finish(self.clock.now());
-                render_summary_lines(state.recorder.completed())
+                state.finish((self.clock)());
+                render_summary_lines(state.completed_stages())
             }
         };
+
+        self.inner.report_complete(tool_key);
 
         for line in lines {
             drop(writeln!(io::stderr(), "{line}"));
@@ -195,8 +166,13 @@ fn render_summary_lines(entries: &[CompletedStage]) -> Vec<String> {
 }
 
 fn format_duration(duration: Duration) -> String {
-    if duration.as_secs() > 0 {
-        return format!("{}s", duration.as_secs());
+    let seconds = duration.as_secs();
+    if seconds > 0 {
+        let milliseconds = duration.subsec_millis();
+        if milliseconds == 0 {
+            return format!("{seconds}s");
+        }
+        return format!("{seconds}.{milliseconds:03}s");
     }
     if duration.as_millis() > 0 {
         return format!("{}ms", duration.as_millis());
@@ -212,6 +188,8 @@ mod tests {
     use super::*;
     use rstest::rstest;
     use std::collections::VecDeque;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn strip_isolates(value: &str) -> String {
         value
@@ -224,6 +202,7 @@ mod tests {
     struct FakeClock {
         values: Mutex<VecDeque<Duration>>,
         fallback: Duration,
+        call_count: AtomicUsize,
     }
 
     impl FakeClock {
@@ -237,25 +216,29 @@ mod tests {
             Self {
                 values: Mutex::new(points),
                 fallback,
+                call_count: AtomicUsize::new(0),
             }
         }
-    }
 
-    impl MonotonicClock for FakeClock {
         fn now(&self) -> Duration {
+            self.call_count.fetch_add(1, Ordering::SeqCst);
             let mut values = self
                 .values
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             values.pop_front().unwrap_or(self.fallback)
         }
+
+        fn call_count(&self) -> usize {
+            self.call_count.load(Ordering::SeqCst)
+        }
     }
 
     #[rstest]
     fn timing_recorder_renders_happy_path_summary() {
         let total = StageNumber::new_unchecked(6);
-        let mut recorder = StageTimingRecorder::default();
-        recorder.record_stage(
+        let mut state = TimingState::default();
+        state.start_stage(
             Duration::from_millis(0),
             StageMarker {
                 current: StageNumber::new_unchecked(1),
@@ -263,7 +246,7 @@ mod tests {
             },
             "Reading manifest file",
         );
-        recorder.record_stage(
+        state.start_stage(
             Duration::from_millis(12),
             StageMarker {
                 current: StageNumber::new_unchecked(2),
@@ -271,7 +254,7 @@ mod tests {
             },
             "Parsing YAML document",
         );
-        recorder.record_stage(
+        state.start_stage(
             Duration::from_millis(16),
             StageMarker {
                 current: StageNumber::new_unchecked(3),
@@ -279,9 +262,9 @@ mod tests {
             },
             "Expanding template directives",
         );
-        recorder.finish(Duration::from_millis(23));
+        state.finish(Duration::from_millis(23));
 
-        let lines = render_summary_lines(recorder.completed());
+        let lines = render_summary_lines(state.completed_stages());
         let [header, stage1, stage2, stage3, total_line] = lines.as_slice() else {
             panic!("expected 5 timing summary lines");
         };
@@ -304,8 +287,8 @@ mod tests {
     #[rstest]
     fn timing_recorder_incomplete_flow_has_no_summary_lines() {
         let total = StageNumber::new_unchecked(6);
-        let mut recorder = StageTimingRecorder::default();
-        recorder.record_stage(
+        let mut state = TimingState::default();
+        state.start_stage(
             Duration::from_millis(0),
             StageMarker {
                 current: StageNumber::new_unchecked(1),
@@ -314,7 +297,7 @@ mod tests {
             "Reading manifest file",
         );
 
-        let lines = render_summary_lines(recorder.completed());
+        let lines = render_summary_lines(state.completed_stages());
         assert!(lines.is_empty());
     }
 
@@ -322,6 +305,7 @@ mod tests {
     #[case(Duration::from_nanos(7), "7ns")]
     #[case(Duration::from_micros(18), "18us")]
     #[case(Duration::from_millis(22), "22ms")]
+    #[case(Duration::from_millis(1_900), "1.900s")]
     #[case(Duration::from_secs(3), "3s")]
     fn duration_formatting_uses_expected_units(#[case] duration: Duration, #[case] expected: &str) {
         assert_eq!(format_duration(duration), expected);
@@ -329,16 +313,32 @@ mod tests {
 
     #[rstest]
     fn verbose_timing_reporter_finalizes_current_stage_on_complete() {
-        struct NoopReporter;
-        impl StatusReporter for NoopReporter {
-            fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {
-            }
-            fn report_complete(&self, _tool_key: LocalizationKey) {}
+        struct ObservingReporter {
+            observed_clock_calls: Arc<Mutex<Vec<usize>>>,
+            clock: Arc<FakeClock>,
         }
 
+        impl StatusReporter for ObservingReporter {
+            fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {
+            }
+            fn report_complete(&self, _tool_key: LocalizationKey) {
+                let mut observed = self
+                    .observed_clock_calls
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                observed.push(self.clock.call_count());
+            }
+        }
+
+        let observed_clock_calls = Arc::new(Mutex::new(Vec::new()));
+        let clock = Arc::new(FakeClock::from_millis(&[0, 15]));
+        let reporter_clock = Arc::clone(&clock);
         let reporter = VerboseTimingReporter::with_clock(
-            Box::new(NoopReporter),
-            Box::new(FakeClock::from_millis(&[0, 15])),
+            Box::new(ObservingReporter {
+                observed_clock_calls: Arc::clone(&observed_clock_calls),
+                clock: Arc::clone(&clock),
+            }),
+            Box::new(move || reporter_clock.now()),
         );
         reporter.report_stage(
             StageNumber::new_unchecked(1),
@@ -346,5 +346,27 @@ mod tests {
             "Reading manifest file",
         );
         reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+
+        let observed = observed_clock_calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            observed.as_slice(),
+            &[2],
+            "stage timing should be finalized before inner completion output"
+        );
+
+        let state = reporter
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lines = render_summary_lines(state.completed_stages());
+        let [header, stage_line, total_line] = lines.as_slice() else {
+            panic!("expected 3 timing summary lines");
+        };
+        assert_eq!(strip_isolates(header), "Stage timing summary:");
+        assert!(strip_isolates(stage_line).contains("Stage 1/6: Reading manifest file"));
+        assert!(strip_isolates(stage_line).ends_with(": 15ms"));
+        assert_eq!(strip_isolates(total_line), "Total pipeline time: 15ms");
     }
 }

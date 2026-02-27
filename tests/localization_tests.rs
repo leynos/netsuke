@@ -212,22 +212,32 @@ fn progress_task_messages_resolve(
 }
 
 #[rstest]
-#[case("en-US", "Stage timing summary:", "Total pipeline time:")]
+#[case("en-US", "Stage timing summary:", "Stage 1/6", "Total pipeline time:")]
 #[case(
     "es-ES",
     "Resumen de tiempos por etapa:",
+    "Etapa 1/6",
     "Tiempo total de la canalización:"
 )]
 fn timing_summary_messages_resolve(
     #[case] locale: &str,
     #[case] expected_header: &str,
+    #[case] expected_stage_label: &str,
     #[case] expected_total_prefix: &str,
 ) -> Result<()> {
     let _guards = localizer_guards(locale)?;
 
     let header = localization::message(keys::STATUS_TIMING_SUMMARY_HEADER).to_string();
+    let label = localization::message(keys::STATUS_STAGE_LABEL)
+        .with_arg("current", 1)
+        .with_arg("total", 6)
+        .with_arg(
+            "description",
+            localization::message(keys::STATUS_STAGE_MANIFEST_INGESTION),
+        )
+        .to_string();
     let stage_line = localization::message(keys::STATUS_TIMING_STAGE_LINE)
-        .with_arg("label", "Stage 1/6: Reading manifest file")
+        .with_arg("label", &label)
         .with_arg("duration", "12ms")
         .to_string();
     let total_line = localization::message(keys::STATUS_TIMING_TOTAL_LINE)
@@ -235,6 +245,7 @@ fn timing_summary_messages_resolve(
         .to_string();
 
     let normalized_header = normalize_fluent_isolates(&header);
+    let normalized_label = normalize_fluent_isolates(&label);
     let normalized_stage_line = normalize_fluent_isolates(&stage_line);
     let normalized_total_line = normalize_fluent_isolates(&total_line);
 
@@ -243,8 +254,20 @@ fn timing_summary_messages_resolve(
         "expected timing header for locale {locale} to contain {expected_header:?}, got: {header}"
     );
     ensure!(
-        normalized_stage_line.contains("12ms"),
-        "expected timing stage line for locale {locale} to include duration, got: {stage_line}"
+        normalized_label.contains(expected_stage_label),
+        "expected timing label for locale {locale} to contain {expected_stage_label:?}, got: {label}"
+    );
+    ensure!(
+        normalized_stage_line.starts_with("- "),
+        "expected timing stage line for locale {locale} to preserve bullet prefix, got: {stage_line}"
+    );
+    ensure!(
+        normalized_stage_line.contains(&normalized_label),
+        "expected timing stage line for locale {locale} to include stage label {label:?}, got: {stage_line}"
+    );
+    ensure!(
+        normalized_stage_line.ends_with(": 12ms"),
+        "expected timing stage line for locale {locale} to end with ': 12ms', got: {stage_line}"
     );
     ensure!(
         normalized_total_line.contains(expected_total_prefix),
