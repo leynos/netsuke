@@ -93,20 +93,34 @@ impl VerboseTimingReporter {
 
 impl StatusReporter for VerboseTimingReporter {
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str) {
-        {
+        let should_forward = {
             let mut state = self
                 .state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if !state.completed {
+            if state.completed {
+                false
+            } else {
                 state.start_stage((self.clock)(), StageMarker { current, total }, description);
+                true
             }
+        };
+        if should_forward {
+            self.inner.report_stage(current, total, description);
         }
-        self.inner.report_stage(current, total, description);
     }
 
     fn report_task_progress(&self, current: u32, total: u32, description: &str) {
-        self.inner.report_task_progress(current, total, description);
+        let should_forward = {
+            let state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            !state.completed
+        };
+        if should_forward {
+            self.inner.report_task_progress(current, total, description);
+        }
     }
 
     fn report_complete(&self, tool_key: LocalizationKey) {
@@ -368,5 +382,82 @@ mod tests {
         assert!(strip_isolates(stage_line).contains("Stage 1/6: Reading manifest file"));
         assert!(strip_isolates(stage_line).ends_with(": 15ms"));
         assert_eq!(strip_isolates(total_line), "Total pipeline time: 15ms");
+    }
+
+    #[rstest]
+    fn verbose_timing_reporter_suppresses_progress_updates_after_complete() {
+        #[derive(Debug, Default)]
+        struct Counts {
+            stages: usize,
+            tasks: usize,
+            completions: usize,
+        }
+
+        struct CountingReporter {
+            counts: Arc<Mutex<Counts>>,
+        }
+
+        impl StatusReporter for CountingReporter {
+            fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {
+                let mut counts = self
+                    .counts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                counts.stages += 1;
+            }
+
+            fn report_task_progress(&self, _current: u32, _total: u32, _description: &str) {
+                let mut counts = self
+                    .counts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                counts.tasks += 1;
+            }
+
+            fn report_complete(&self, _tool_key: LocalizationKey) {
+                let mut counts = self
+                    .counts
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                counts.completions += 1;
+            }
+        }
+
+        let counts = Arc::new(Mutex::new(Counts::default()));
+        let reporter = VerboseTimingReporter::with_clock(
+            Box::new(CountingReporter {
+                counts: Arc::clone(&counts),
+            }),
+            Box::new(|| Duration::from_millis(50)),
+        );
+        reporter.report_stage(
+            StageNumber::new_unchecked(1),
+            StageNumber::new_unchecked(6),
+            "Reading manifest file",
+        );
+        reporter.report_task_progress(1, 2, "cc -c src/main.c");
+        reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+        reporter.report_stage(
+            StageNumber::new_unchecked(2),
+            StageNumber::new_unchecked(6),
+            "Parsing YAML document",
+        );
+        reporter.report_task_progress(2, 2, "cc -c src/lib.c");
+
+        let final_counts = counts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            final_counts.stages, 1,
+            "stage updates should stop after completion"
+        );
+        assert_eq!(
+            final_counts.tasks, 1,
+            "task updates should stop after completion"
+        );
+        assert_eq!(
+            final_counts.completions, 1,
+            "completion should still be delegated"
+        );
     }
 }
