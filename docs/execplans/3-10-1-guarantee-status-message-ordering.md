@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -87,37 +87,76 @@ Known uncertainties that might affect the plan:
 
 ## Progress
 
-- [ ] Stage A: Audit and understand current output architecture
-  - [ ] Verify all `StatusReporter` implementations write to stderr
-  - [ ] Document any stdout usage in status reporting paths
-  - [ ] Map the subprocess output forwarding flow
-- [ ] Stage B: Add configuration support via `OrthoConfig`
-  - [ ] Design configuration schema for output channel control (if needed)
-  - [ ] Implement CLI flag and environment variable support
-- [ ] Stage C: Implement stream separation guarantees
-  - [ ] Ensure status messages exclusively use stderr
-  - [ ] Ensure subprocess stdout is preserved without status interleaving
-  - [ ] Add any necessary synchronization or ordering guarantees
-- [ ] Stage D: Write comprehensive tests
-  - [ ] Add BDD scenarios for stdout-only capture
-  - [ ] Add BDD scenarios for stderr-only capture
-  - [ ] Add unit tests for stream separation
-- [ ] Stage E: Documentation and validation
-  - [ ] Update `docs/users-guide.md` with stream behavior documentation
-  - [ ] Run full test suite
-  - [ ] Mark roadmap item as complete
+- [x] Stage A: Audit and understand current output architecture
+  - [x] Verify all `StatusReporter` implementations write to stderr
+  - [x] Document any stdout usage in status reporting paths
+  - [x] Map the subprocess output forwarding flow
+- [x] Stage B: Add configuration support via `OrthoConfig`
+  - [x] Determined no new configuration needed (existing implementation correct)
+- [x] Stage C: Implement stream separation guarantees
+  - [x] Verified status messages exclusively use stderr
+  - [x] Verified subprocess stdout is preserved without status interleaving
+  - [x] Existing threading model provides necessary ordering guarantees
+- [x] Stage D: Write comprehensive tests
+  - [x] Add BDD scenarios for stdout-only capture
+  - [x] Add BDD scenarios for stderr-only capture
+  - [x] Add BDD scenarios verifying stream exclusivity
+- [x] Stage E: Documentation and validation
+  - [x] Update `docs/users-guide.md` with stream behavior documentation
+  - [x] Run full test suite
+  - [x] Mark roadmap item as complete
 
 ## Surprises & discoveries
 
-(To be populated during implementation)
+- The existing implementation already correctly separates streams. All
+  `StatusReporter` implementations write exclusively to stderr, and subprocess
+  stdout is forwarded through a separate path.
+- No code changes were required; the work was primarily verification and adding
+  end-to-end tests to guard the existing behaviour.
+- Stage B (configuration) was deemed unnecessary since the existing architecture
+  already provides the required guarantees.
 
 ## Decision log
 
-(To be populated during implementation)
+- **2026-02-28**: Confirmed existing implementation is correct after Stage A
+  audit. No configuration changes needed; skipping Stage B and Stage C code
+  changes.
+- **2026-02-28**: Added three BDD scenarios to verify stream separation:
+  - `Subprocess stdout is separate from status messages`
+  - `Status messages do not contaminate stdout in standard mode`
+  - `Build artifacts can be captured via stdout redirection`
+- **2026-02-28**: Added "Output streams" section to users-guide.md documenting
+  the stream behaviour and common redirection patterns.
 
 ## Outcomes & retrospective
 
-(To be completed at milestone completion)
+**Outcome**: SUCCESS
+
+The existing implementation already correctly separates status messages (stderr)
+from subprocess output (stdout). This plan was primarily a verification and
+documentation exercise rather than an implementation task.
+
+**What went well**:
+
+- The codebase audit was straightforward due to consistent use of
+  `io::stderr()` throughout `StatusReporter` implementations.
+- Existing BDD infrastructure made adding new scenarios trivial.
+- All quality gates passed on the first attempt.
+
+**Lessons learned**:
+
+- Always audit the existing implementation before assuming changes are needed.
+  The roadmap item implied implementation work, but the architecture was already
+  correct.
+- End-to-end tests that verify stream separation provide valuable regression
+  protection even when no code changes are required.
+
+**Artefacts produced**:
+
+- `tests/features/progress_output.feature`: Three new BDD scenarios
+- `tests/bdd/steps/progress_output.rs`: One new fixture function
+- `docs/users-guide.md`: New "Output streams" section
+- `docs/roadmap.md`: Marked 3.10.1 as complete
 
 ## Context and orientation
 
