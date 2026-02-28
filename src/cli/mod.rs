@@ -98,7 +98,7 @@ pub struct Cli {
     #[arg(short, long, value_name = "N")]
     pub jobs: Option<usize>,
 
-    /// Enable verbose diagnostic logging.
+    /// Enable verbose diagnostic logging and completion timing summaries.
     #[arg(short, long)]
     #[ortho_config(default = false)]
     pub verbose: bool,

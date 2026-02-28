@@ -4,7 +4,7 @@ This ExecPlan is a living document. The sections `Constraints`, `Tolerances`,
 `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`, and
 `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT (2026-02-25)
+Status: DONE (2026-02-26)
 
 No `PLANS.md` file exists in this repository.
 
@@ -124,11 +124,19 @@ not used for timing diagnostics.
       architecture, runner stage boundaries, and localization surfaces.
 - [x] (2026-02-25 00:00Z) Drafted this ExecPlan at
       `docs/execplans/3-9-3-per-stage-timing-metrics.md`.
-- [ ] Stage A: design and implement timing recorder/wrapper.
-- [ ] Stage B: wire verbose-gated completion summary output.
-- [ ] Stage C: add localization and localized verbose/help copy updates.
-- [ ] Stage D: add unit + behavioural coverage.
-- [ ] Stage E: update docs/design/roadmap and run quality gates.
+- [x] (2026-02-26 00:00Z) Stage A: implemented `src/status_timing.rs` with a
+      deterministic recorder, duration formatter, and an injectable monotonic
+      clock for unit tests.
+- [x] (2026-02-26 00:00Z) Stage B: wrapped reporter construction with
+      `VerboseTimingReporter` when `cli.verbose` is true, including
+      `--progress false` flows.
+- [x] (2026-02-26 00:00Z) Stage C: added localized timing summary keys and
+      updated verbose help copy in `en-US` and `es-ES`.
+- [x] (2026-02-26 00:00Z) Stage D: added `rstest` unit coverage and extended
+      `progress_output.feature` for verbose timing happy/unhappy/edge paths.
+- [x] (2026-02-26 00:00Z) Stage E: updated docs/design/roadmap and passed all
+      required quality gates (`make check-fmt`, `make lint`, `make test`) plus
+      Markdown validation (`make markdownlint`, `make nixie`).
 
 ## Surprises & Discoveries
 
@@ -139,6 +147,11 @@ not used for timing diagnostics.
   exceed repository file-size guidance.
 - Existing progress BDD scenarios already cover standard/accessibility/progress
   toggles and are the right extension point for verbose timing behaviour.
+- `--progress false` still traverses all stage callbacks internally, so timing
+  capture can remain active while progress output remains suppressed.
+- `VerboseTimingReporter` tests that call `report_complete` emit summary lines
+  on stderr during test execution; this is expected and harmless for gate
+  output.
 
 ## Decision Log
 
@@ -162,8 +175,37 @@ not used for timing diagnostics.
 
 ## Outcomes & Retrospective
 
-Not implemented yet. This section must be updated with outcomes, test evidence,
-and lessons learned after execution.
+Implemented roadmap item `3.9.3` end to end.
+
+What shipped:
+
+- Added `src/status_timing.rs` with:
+  - a deterministic stage-timing recorder,
+  - a duration formatter (`ns`/`us`/`ms`/`s`),
+  - `VerboseTimingReporter` wrapper with an injectable monotonic clock.
+- Wired reporter selection in `src/runner/mod.rs` so verbose mode wraps the
+  resolved base reporter (including silent progress mode).
+- Added localized timing summary runtime strings and updated verbose help copy
+  in both locales.
+- Added `rstest` unit coverage for timing happy/unhappy/edge behaviour.
+- Added `rstest-bdd` behavioural coverage for verbose timing
+  happy/unhappy/edge behaviour.
+- Updated user/design docs and marked roadmap item `3.9.3` complete.
+
+Validation evidence:
+
+- `make check-fmt` passed (log: `/tmp/3-9-3-check-fmt.log`).
+- `make lint` passed (log: `/tmp/3-9-3-lint.log`).
+- `make test` passed (log: `/tmp/3-9-3-test.log`).
+- `make markdownlint` passed (log: `/tmp/3-9-3-markdownlint.log`).
+- `make nixie` passed (log: `/tmp/3-9-3-nixie.log`).
+
+Lessons learned:
+
+- Wrapping status reporters at construction time keeps timing logic additive and
+  avoids invasive changes across existing reporters.
+- `--progress false` can still collect stage timing safely because stage
+  callbacks are independent of visual progress rendering.
 
 ## Context and orientation
 
@@ -190,8 +232,8 @@ Relevant existing behaviour:
 - Six pipeline stages are emitted through `report_pipeline_stage(...)`.
 - Stage 6 task progress is already parsed from Ninja status lines.
 - Progress rendering can be disabled with `--progress false`.
-- `--verbose` currently raises tracing verbosity and should become the timing
-  summary gate as well.
+- `--verbose` now gates completion timing summary output while continuing to
+  raise tracing verbosity.
 
 ## Plan of work
 
@@ -348,5 +390,5 @@ Acceptance for Stage E:
 
 ## Approval gate
 
-This document is ready for review. Implementation should begin only after
-explicit user approval of this plan.
+User approval was granted by requesting: "Please action
+`docs/execplans/3-9-3-per-stage-timing-metrics.md`."

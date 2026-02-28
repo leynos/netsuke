@@ -496,7 +496,8 @@ netsuke [OPTIONS] [COMMAND] [TARGETS...]
 - `-j, --jobs <N>`: Set the number of parallel jobs Ninja should run
   (default: Ninja's default).
 
-- `-v, --verbose`: Enable verbose logging output.
+- `-v, --verbose`: Enable verbose diagnostic logging and completion timing
+  summaries.
 
 - `--locale <LOCALE>`: Localize CLI help and error messages (for example
   `en-US` or `es-ES`).
@@ -608,6 +609,24 @@ and emits task progress updates. When stdout is not a teletype terminal (TTY),
 task progress automatically falls back to textual updates, so continuous
 integration (CI) and redirected logs remain readable.
 
+When verbose mode is enabled, Netsuke appends a completion timing summary on
+stderr after a successful run:
+
+```text
+Build complete.
+Stage timing summary:
+- Stage 1/6: Reading manifest file: 12ms
+- Stage 2/6: Parsing YAML document: 4ms
+- Stage 3/6: Expanding template directives: 7ms
+- Stage 4/6: Deserializing and rendering manifest values: 6ms
+- Stage 5/6: Building and validating dependency graph: 3ms
+- Stage 6/6: Synthesizing Ninja plan and executing Build: 18ms
+Total pipeline time: 50ms
+```
+
+Without `--verbose`, timing lines are not emitted. Failed runs also suppress
+timing summary output, even when verbose mode is enabled.
+
 Progress output can be controlled via OrthoConfig layering:
 
 - CLI flag: `--progress true` or `--progress false`
@@ -615,7 +634,8 @@ Progress output can be controlled via OrthoConfig layering:
 - Configuration file: `progress = true|false`
 
 When progress is disabled, Netsuke suppresses stage and task progress output in
-both standard and accessible modes.
+both standard and accessible modes. If verbose mode is enabled at the same
+time, only the completion timing summary remains visible on successful runs.
 
 ### Emoji and accessibility preferences
 
