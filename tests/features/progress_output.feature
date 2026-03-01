@@ -100,6 +100,7 @@ Feature: Progress output
     Then the command should succeed
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_2"
+    And stdout should contain "NINJA_STDOUT_MARKER_LINE_1" before "NINJA_STDOUT_MARKER_LINE_2"
     And stdout should not contain "Stage 1/6"
     And stdout should not contain "Task 1/2"
     And stderr should contain "Stage 1/6"

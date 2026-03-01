@@ -11,8 +11,8 @@ Status: COMPLETE
 
 Netsuke currently writes both its own status messages (pipeline stage updates,
 task progress, completion summaries) and Ninja subprocess output to the
-terminal. To support reliable scripting, piping, and log capture, we must
-guarantee clear separation between these two streams:
+terminal. To support reliable scripting, piping, and log capture, the
+implementation must guarantee clear separation between these two streams:
 
 - **Status messages** (progress bars, stage announcements, timing summaries)
   must stream exclusively to **stderr**.
@@ -21,8 +21,8 @@ guarantee clear separation between these two streams:
 
 After this change, users can:
 
-1. Redirect `stdout` to capture build artifacts (e.g., `ninja -t graph` DOT
-   output) without status noise.
+1. Redirect `stdout` to capture build artefacts (e.g., `ninja -t graph` DOT
+   graph language output) without status noise.
 2. Redirect `stderr` to capture progress diagnostics without build output.
 3. Verify stream separation with end-to-end tests that redirect each stream
    independently.
@@ -31,8 +31,8 @@ After this change, users can:
 
 Hard invariants that must hold throughout implementation:
 
-- **No functional regressions**: All existing BDD scenarios in
-  `tests/features/progress_output.feature` and
+- **No functional regressions**: All existing Behaviour-Driven Development (BDD)
+  scenarios in `tests/features/progress_output.feature` and
   `tests/features/accessible_output.feature` must pass.
 - **Existing API surface**: The `StatusReporter` trait and its implementations
   must maintain their existing public signatures.
@@ -102,7 +102,7 @@ Known uncertainties that might affect the plan:
   - [x] Add BDD scenarios for stderr-only capture
   - [x] Add BDD scenarios verifying stream exclusivity
 - [x] Stage E: Documentation and validation
-  - [x] Update `docs/users-guide.md` with stream behavior documentation
+  - [x] Update `docs/users-guide.md` with stream behaviour documentation
   - [x] Run full test suite
   - [x] Mark roadmap item as complete
 
@@ -163,8 +163,9 @@ documentation exercise rather than an implementation task.
 ### Repository structure
 
 Netsuke is a build system compiler that transforms YAML+Jinja manifests into
-Ninja build graphs. The CLI is implemented in Rust using `clap` for argument
-parsing, with `OrthoConfig` providing layered configuration support.
+Ninja build graphs. The command-line interface (CLI) is implemented in Rust
+using `clap` for argument parsing, with `OrthoConfig` providing layered
+configuration support.
 
 ### Key files and modules
 
@@ -237,7 +238,7 @@ status messages to stderr and preserve subprocess stdout. The main work is:
 1. **Verification**: Confirm no edge cases exist where status leaks to stdout.
 2. **End-to-end tests**: Add BDD scenarios that explicitly verify stream
    separation by redirecting stdout and stderr independently.
-3. **Documentation**: Update the user's guide to document the stream behavior.
+3. **Documentation**: Update the user's guide to document the stream behaviour.
 
 ## Plan of work
 
@@ -258,8 +259,8 @@ proceed to fix it in Stage C.
 
 ### Stage B: Configuration design
 
-The roadmap item mentions using `ortho_config` for ergonomic configuration. We
-should evaluate whether any new configuration is actually needed:
+The roadmap item mentions using `ortho_config` for ergonomic configuration. An
+evaluation is needed to determine whether any new configuration is required:
 
 - If the current implementation already correctly separates streams, no new
   configuration may be required.
@@ -396,7 +397,7 @@ Quality criteria:
 
 - **Tests**: All tests pass including new stream separation scenarios.
 - **Lint/typecheck**: `make check-fmt` and `make lint` pass.
-- **Documentation**: Users guide documents stream behavior.
+- **Documentation**: User's guide documents stream behaviour.
 
 Quality method:
 
@@ -404,7 +405,7 @@ Quality method:
 - Manual verification: Run `netsuke graph 2>/dev/null` and confirm only DOT
   output appears.
 
-Observable behavior after completion:
+Observable behaviour after completion:
 
 1. Running `netsuke graph > output.dot 2>&1` captures build graph to file
    without status messages in the DOT content.
