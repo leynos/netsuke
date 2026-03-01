@@ -172,11 +172,11 @@ configuration support.
 The output architecture spans several modules:
 
 1. **Status reporting trait and implementations** (`src/status.rs`):
-   - `StatusReporter` trait (lines 99-110): Core interface for progress updates.
-   - `AccessibleReporter` (lines 118-147): Text-only reporter for screen
-     readers, writes to stderr via `writeln!(io::stderr(), ...)`.
-   - `SilentReporter` (lines 150-155): No-op implementation.
-   - `IndicatifReporter` (lines 171-380): Multi-progress bar reporter using
+   - `StatusReporter` trait: Core interface for progress updates.
+   - `AccessibleReporter`: Text-only reporter for screen readers, writes to
+     stderr via `writeln!(io::stderr(), ...)`.
+   - `SilentReporter`: No-op implementation.
+   - `IndicatifReporter`: Multi-progress bar reporter using
      `indicatif::MultiProgress` with `ProgressDrawTarget::stderr_with_hz(12)`.
 
 2. **Timing wrapper** (`src/status_timing.rs`):
@@ -188,13 +188,13 @@ The output architecture spans several modules:
    - `report_pipeline_stage()` helper for stage transitions.
 
 4. **Runner module** (`src/runner/mod.rs`):
-   - `make_reporter()` (lines 106-125): Factory function for selecting reporter.
+   - `make_reporter()`: Factory function for selecting reporter.
    - `handle_build()` and `handle_ninja_tool()`: Orchestrate build execution.
    - `on_task_progress_callback()`: Bridges Ninja status parsing to reporter.
 
 5. **Process execution** (`src/runner/process/mod.rs`):
-   - `spawn_and_stream_output()` (lines 276-316): Core subprocess I/O handling.
-   - Spawns stderr forwarding on a separate thread (lines 289-294).
+   - `spawn_and_stream_output()`: Core subprocess I/O handling.
+   - Spawns stderr forwarding on a separate thread.
    - Drains stdout on main thread to preserve status callback ordering.
    - `run_ninja_with_status()`: Invokes Ninja with progress parsing.
 
@@ -257,7 +257,10 @@ confirms this with targeted verification:
 If any stdout usage is found in status paths, document it in `Decision Log` and
 proceed to fix it in Stage C.
 
-### Stage B: Configuration design
+### Stage B: Configuration design (verification only)
+
+> **Outcome**: Stage A confirmed the existing implementation is correct. No new
+> configuration was required. This stage completed as a verification checkpoint.
 
 The roadmap item mentions using `ortho_config` for ergonomic configuration. An
 evaluation is needed to determine whether any new configuration is required:
@@ -270,7 +273,11 @@ evaluation is needed to determine whether any new configuration is required:
 **Decision point**: Determine whether configuration is needed based on Stage A
 findings.
 
-### Stage C: Implementation (if needed)
+### Stage C: Implementation (verification only)
+
+> **Outcome**: Stage A revealed no issues. No code changes were required. This
+> stage completed as a verification checkpoint confirming the existing threading
+> model provides the necessary ordering guarantees.
 
 If Stage A reveals issues:
 
@@ -433,10 +440,11 @@ If a stage fails:
 
 Key code locations:
 
-- Status reporter trait: `src/status.rs:99-110`
-- Accessible reporter stderr writes: `src/status.rs:133,140,145`
-- Indicatif stderr target: `src/status.rs:179`
-- Subprocess stdout forwarding: `src/runner/process/mod.rs:299-310`
+- Status reporter trait: `src/status.rs` (`StatusReporter` trait definition)
+- Accessible reporter stderr writes: `src/status.rs` (`AccessibleReporter` impl)
+- Indicatif stderr target: `src/status.rs` (`IndicatifReporter::new()`)
+- Subprocess stdout forwarding: `src/runner/process/mod.rs`
+  (`spawn_and_stream_output()`)
 - Existing progress tests: `tests/features/progress_output.feature`
 
 Example test transcript (expected after implementation):

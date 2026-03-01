@@ -92,11 +92,13 @@ Feature: Progress output
     And stderr should not contain "Total pipeline time:"
 
   # Stream separation tests (roadmap 3.10.1)
+  # These scenarios pin --locale en-US to ensure stability against localization
+  # changes. The assertions verify stream separation, not specific wording.
 
   Scenario: Subprocess stdout is separate from status messages
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits stdout output
-    When netsuke is run with arguments "--accessible true --progress true build"
+    When netsuke is run with arguments "--locale en-US --accessible true --progress true build"
     Then the command should succeed
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_2"
@@ -110,7 +112,7 @@ Feature: Progress output
   Scenario: Status messages do not contaminate stdout in standard mode
     Given a minimal Netsuke workspace
     And a fake ninja executable that emits stdout output
-    When netsuke is run with arguments "--accessible false --progress true build"
+    When netsuke is run with arguments "--locale en-US --accessible false --progress true build"
     Then the command should succeed
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
     And stdout should not contain "Stage"
@@ -118,7 +120,7 @@ Feature: Progress output
 
   Scenario: Build artifacts can be captured via stdout redirection
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--progress true manifest -"
+    When netsuke is run with arguments "--locale en-US --progress true manifest -"
     Then the command should succeed
     And stdout should contain "rule "
     And stdout should not contain "Stage"
