@@ -93,7 +93,7 @@ Feature: Progress output
 
   # Stream separation tests (roadmap 3.10.1)
   # These scenarios use stable machine markers (NINJA_STDOUT_MARKER, NINJA_STDERR_MARKER)
-  # to verify stream separation without coupling to localised UI strings.
+  # to verify stream separation without coupling to localized UI strings.
 
   Scenario: Subprocess stdout is separate from status messages
     Given a minimal Netsuke workspace

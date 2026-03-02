@@ -206,7 +206,7 @@ The output architecture spans several modules:
 
 ### Current stream routing
 
-Based on code analysis, the following table summarises stream routing for
+Based on code analysis, the following table summarizes stream routing for
 reporters and subprocesses:
 
 | Component | Output destination | Notes |
@@ -278,7 +278,7 @@ to verify stream separation:
 1. **Subprocess stdout is separate from status messages**: Verifies that stdout
    markers from the fake Ninja appear only in stdout, while stderr markers appear
    only in stderr. Uses stable machine markers (`NINJA_STDOUT_MARKER`,
-   `NINJA_STDERR_MARKER`) to avoid coupling to localised UI strings.
+   `NINJA_STDERR_MARKER`) to avoid coupling to localized UI strings.
 
 2. **Status messages do not contaminate stdout in standard mode**: Verifies stream
    routing in non-accessible mode using the same stable markers.
