@@ -206,7 +206,8 @@ The output architecture spans several modules:
 
 ### Current stream routing
 
-Based on code analysis:
+Based on code analysis, the following table summarises stream routing for
+reporters and subprocesses:
 
 | Component | Output destination | Notes |
 | --------- | ------------------ | ----- |
@@ -249,42 +250,25 @@ confirms this with targeted verification:
 
 1. Review `src/status.rs` to confirm all `writeln!` calls use `io::stderr()`.
 2. Review `src/status_timing.rs` to confirm timing summary writes to stderr.
-3. Review `src/runner/process/mod.rs` line 300-310 to confirm stdout forwarding
-   path does not invoke status callbacks that could write to stdout.
+3. Review `spawn_and_stream_output()` in `src/runner/process/mod.rs` to confirm
+   stdout forwarding does not invoke status callbacks that could write to
+   stdout.
 4. Review `src/runner/process/streaming.rs` to confirm the observer callback
    pattern preserves separation.
 
 If any stdout usage is found in status paths, document it in `Decision Log` and
 proceed to fix it in Stage C.
 
-### Stage B: Configuration design (verification only)
+### Stage B: Configuration design (completed)
 
-> **Outcome**: Stage A confirmed the existing implementation is correct. No new
-> configuration was required. This stage completed as a verification checkpoint.
+**Outcome**: Stage A confirmed the existing implementation is correct. No new
+configuration was required. This stage completed as a verification checkpoint.
 
-The roadmap item mentions using `ortho_config` for ergonomic configuration. An
-evaluation is needed to determine whether any new configuration is required:
+### Stage C: Implementation (completed)
 
-- If the current implementation already correctly separates streams, no new
-  configuration may be required.
-- If users need to override stream destinations (e.g., for testing or custom
-  tooling), design a minimal configuration schema.
-
-**Decision point**: Determine whether configuration is needed based on Stage A
-findings.
-
-### Stage C: Implementation (verification only)
-
-> **Outcome**: Stage A revealed no issues. No code changes were required. This
-> stage completed as a verification checkpoint confirming the existing threading
-> model provides the necessary ordering guarantees.
-
-If Stage A reveals issues:
-
-1. Fix any status output paths that incorrectly use stdout.
-2. Add any necessary synchronization to prevent interleaving issues.
-3. Ensure the observer callback in `spawn_and_stream_output()` does not write
-   to stdout.
+**Outcome**: Stage A revealed no issues. No code changes were required. This
+stage completed as a verification checkpoint confirming the existing threading
+model provides the necessary ordering guarantees.
 
 ### Stage D: End-to-end tests
 
@@ -359,7 +343,7 @@ grep -n "io::stdout\|stdout()" src/status.rs
 # Expected: No matches (all output should be stderr)
 
 grep -n "io::stderr\|stderr()" src/status.rs
-# Expected: Multiple matches at lines 133, 140, 145, 247, 336, 378
+# Expected: Multiple matches in AccessibleReporter and IndicatifReporter impls
 
 # Verify stderr in status_timing.rs
 grep -n "io::stdout\|stdout()" src/status_timing.rs
@@ -367,7 +351,7 @@ grep -n "io::stdout\|stdout()" src/status_timing.rs
 
 # Verify subprocess stdout forwarding
 grep -n "io::stdout" src/runner/process/mod.rs
-# Expected: Line 300 (stdout lock for forwarding subprocess output)
+# Expected: One stdout forwarding site in spawn_and_stream_output()
 
 # Run existing tests
 make test
@@ -502,3 +486,30 @@ fn stdout_should_not_contain(cli_output: &CliOutput, text: &str) {
 
 Note: These step definitions may already exist in the codebase; verify before
 adding duplicates.
+
+## Contingency (archived)
+
+The following contingency guidance was prepared for Stages B and C but was not
+required because the existing implementation already met all requirements.
+
+### Stage B contingency: Configuration design
+
+The roadmap item mentions using `ortho_config` for ergonomic configuration. An
+evaluation is needed to determine whether any new configuration is required:
+
+- If the current implementation already correctly separates streams, no new
+  configuration may be required.
+- If users need to override stream destinations (e.g., for testing or custom
+  tooling), design a minimal configuration schema.
+
+**Decision point**: Determine whether configuration is needed based on Stage A
+findings.
+
+### Stage C contingency: Implementation
+
+If Stage A reveals issues:
+
+1. Fix any status output paths that incorrectly use stdout.
+2. Add any necessary synchronization to prevent interleaving issues.
+3. Ensure the observer callback in `spawn_and_stream_output()` does not write
+   to stdout.

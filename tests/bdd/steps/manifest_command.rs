@@ -199,16 +199,20 @@ fn assert_output_ordering(
         .get()
         .with_context(|| format!("{output_type} output should be captured"))?;
     let normalized_value = normalize_fluent_isolates(&value);
+    let normalized_first = normalize_fluent_isolates(first.as_str());
+    let normalized_second = normalize_fluent_isolates(second.as_str());
     let first_pos = normalized_value
-        .find(first.as_str())
+        .find(&normalized_first)
         .with_context(|| format!("{output_type} should contain '{first}'"))?;
     let second_pos = normalized_value
-        .find(second.as_str())
+        .find(&normalized_second)
         .with_context(|| format!("{output_type} should contain '{second}'"))?;
     ensure!(
         first_pos < second_pos,
-        "expected '{first}' to appear before '{second}' in {output_type}, \
-         but positions were {first_pos} and {second_pos}",
+        concat!(
+            "expected '{first}' to appear before '{second}' in {output_type}, ",
+            "but positions were {first_pos} and {second_pos}"
+        ),
     );
     Ok(())
 }

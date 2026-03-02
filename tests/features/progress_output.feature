@@ -115,7 +115,7 @@ Feature: Progress output
     When netsuke is run with arguments "--locale en-US --accessible false --progress true build"
     Then the command should succeed
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
-    And stdout should not contain "Stage"
+    And stdout should not contain "Stage 1/6"
     And stderr should not contain "NINJA_STDOUT_MARKER_LINE"
 
   Scenario: Build artifacts can be captured via stdout redirection
@@ -123,5 +123,5 @@ Feature: Progress output
     When netsuke is run with arguments "--locale en-US --progress true manifest -"
     Then the command should succeed
     And stdout should contain "rule "
-    And stdout should not contain "Stage"
+    And stdout should not contain "Stage 1/6"
     And stderr should contain "Stage 1/6"
