@@ -30,13 +30,26 @@ fn make_script_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn build_fake_ninja_script(lines: &[&str]) -> String {
+/// Configuration for fake Ninja script generation.
+struct FakeNinjaConfig<'a> {
+    /// Lines to emit to stdout.
+    stdout_lines: &'a [&'a str],
+    /// Optional marker to emit to stderr for stream separation tests.
+    stderr_marker: Option<&'a str>,
+}
+
+fn build_fake_ninja_script(config: &FakeNinjaConfig<'_>) -> String {
     if cfg!(windows) {
         let mut script = String::from("@echo off\r\n");
-        for line in lines {
+        for line in config.stdout_lines {
             script.push_str("echo ");
             script.push_str(line);
             script.push_str("\r\n");
+        }
+        if let Some(marker) = config.stderr_marker {
+            script.push_str("echo ");
+            script.push_str(marker);
+            script.push_str(" 1>&2\r\n");
         }
         script.push_str("exit /B 0\r\n");
         script
@@ -44,11 +57,17 @@ fn build_fake_ninja_script(lines: &[&str]) -> String {
         let mut script = String::from(
             "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone <<'NETSUKE_STATUS'\n",
         );
-        for line in lines {
+        for line in config.stdout_lines {
             script.push_str(line);
             script.push('\n');
         }
-        script.push_str("NETSUKE_STATUS\nexit 0\n");
+        script.push_str("NETSUKE_STATUS\n");
+        if let Some(marker) = config.stderr_marker {
+            script.push_str("printf '%s\\n' '");
+            script.push_str(marker);
+            script.push_str("' >&2\n");
+        }
+        script.push_str("exit 0\n");
         script
     }
 }
@@ -60,10 +79,10 @@ fn fake_ninja_path(root: &Path) -> PathBuf {
     root.join("fake-ninja-progress")
 }
 
-fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
+fn install_fake_ninja_with_config(world: &TestWorld, config: &FakeNinjaConfig<'_>) -> Result<()> {
     let root = workspace_root(world)?;
     let script_path = fake_ninja_path(&root);
-    let script = build_fake_ninja_script(lines);
+    let script = build_fake_ninja_script(config);
     fs::write(&script_path, script)
         .with_context(|| format!("write fake ninja script {}", script_path.display()))?;
     make_script_executable(&script_path)?;
@@ -74,6 +93,16 @@ fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
     world.ninja_env_guard.borrow_mut().take();
     *world.ninja_env_guard.borrow_mut() = Some(override_ninja_env(&env, &script_path));
     Ok(())
+}
+
+fn install_fake_ninja(world: &TestWorld, lines: &[&str]) -> Result<()> {
+    install_fake_ninja_with_config(
+        world,
+        &FakeNinjaConfig {
+            stdout_lines: lines,
+            stderr_marker: None,
+        },
+    )
 }
 
 #[rstest_bdd_macros::given("a fake ninja executable that emits task status lines")]
@@ -88,13 +117,16 @@ fn fake_ninja_emits_malformed_task_status_lines(world: &TestWorld) -> Result<()>
 
 #[rstest_bdd_macros::given("a fake ninja executable that emits stdout output")]
 fn fake_ninja_emits_stdout_output(world: &TestWorld) -> Result<()> {
-    install_fake_ninja(
+    install_fake_ninja_with_config(
         world,
-        &[
-            "[1/2] cc -c src/a.c",
-            "NINJA_STDOUT_MARKER_LINE_1",
-            "[2/2] cc -c src/b.c",
-            "NINJA_STDOUT_MARKER_LINE_2",
-        ],
+        &FakeNinjaConfig {
+            stdout_lines: &[
+                "[1/2] cc -c src/a.c",
+                "NINJA_STDOUT_MARKER_LINE_1",
+                "[2/2] cc -c src/b.c",
+                "NINJA_STDOUT_MARKER_LINE_2",
+            ],
+            stderr_marker: Some("NINJA_STDERR_MARKER"),
+        },
     )
 }

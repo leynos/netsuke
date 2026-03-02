@@ -204,14 +204,22 @@ fn assert_output_ordering(
     let first_pos = normalized_value
         .find(&normalized_first)
         .with_context(|| format!("{output_type} should contain '{first}'"))?;
-    let second_pos = normalized_value
+    // Search for second only after the end of the first match to handle
+    // repeated fragments correctly (e.g., "A" before "A" in "A A").
+    let search_start = first_pos + normalized_first.len();
+    let remainder = normalized_value
+        .get(search_start..)
+        .with_context(|| "search_start should be a valid UTF-8 boundary")?;
+    let second_pos = remainder
         .find(&normalized_second)
-        .with_context(|| format!("{output_type} should contain '{second}'"))?;
+        .with_context(|| format!("{output_type} should contain '{second}' after '{first}'"))?;
+    // Convert relative position to absolute position for error reporting
+    let absolute_second_pos = search_start + second_pos;
     ensure!(
-        first_pos < second_pos,
+        first_pos < absolute_second_pos,
         concat!(
             "expected '{first}' to appear before '{second}' in {output_type}, ",
-            "but positions were {first_pos} and {second_pos}"
+            "but positions were {first_pos} and {absolute_second_pos}"
         ),
     );
     Ok(())

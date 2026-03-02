@@ -270,60 +270,38 @@ configuration was required. This stage completed as a verification checkpoint.
 stage completed as a verification checkpoint confirming the existing threading
 model provides the necessary ordering guarantees.
 
-### Stage D: End-to-end tests
+### Stage D: End-to-end tests (completed)
 
-Add BDD scenarios to `tests/features/progress_output.feature`:
+**Outcome**: Three BDD scenarios were added to `tests/features/progress_output.feature`
+to verify stream separation:
 
-```gherkin
-Scenario: Subprocess stdout is separate from status messages
-  Given a minimal Netsuke workspace
-  And a fake ninja executable that emits output to stdout
-  When netsuke is run with arguments "--accessible true --progress true build"
-  Then the command should succeed
-  And stdout should contain "fake ninja output"
-  And stdout should not contain "Stage 1/6"
-  And stderr should contain "Stage 1/6"
-  And stderr should not contain "fake ninja output"
+1. **Subprocess stdout is separate from status messages**: Verifies that stdout
+   markers from the fake Ninja appear only in stdout, while stderr markers appear
+   only in stderr. Uses stable machine markers (`NINJA_STDOUT_MARKER`,
+   `NINJA_STDERR_MARKER`) to avoid coupling to localised UI strings.
 
-Scenario: Build artifacts can be captured via stdout redirection
-  Given a minimal Netsuke workspace
-  When netsuke is run with arguments "--progress true graph"
-  Then the command should succeed
-  And stdout should contain "digraph"
-  And stdout should not contain "Stage"
-  And stderr should contain "Stage 1/6"
-```
+2. **Status messages do not contaminate stdout in standard mode**: Verifies stream
+   routing in non-accessible mode using the same stable markers.
 
-Implement the step definitions in `tests/bdd/steps/progress_output.rs`:
+3. **Build artifacts can be captured via stdout redirection**: Verifies that
+   `netsuke manifest -` output goes to stdout without status contamination.
 
-1. Create a fake Ninja executable fixture that emits known output to stdout.
-2. Add assertions for stdout content verification.
-3. Add assertions that verify stream exclusivity.
+Supporting infrastructure added:
 
-### Stage E: Documentation
+- `FakeNinjaConfig` struct in `tests/bdd/steps/progress_output.rs` for configurable
+  fixture generation with optional stderr markers.
+- `install_fake_ninja_with_config()` function for flexible fixture setup.
+- Updated `fake_ninja_emits_stdout_output` fixture to emit both stdout and stderr
+  markers for comprehensive stream routing verification.
 
-Update `docs/users-guide.md` to add a section on output streams:
+### Stage E: Documentation (completed)
 
-```markdown
-## Output streams
+**Outcome**: The `docs/users-guide.md` file was updated with an "Output streams"
+section documenting the stream separation behaviour:
 
-Netsuke separates its output into two streams for scriptability:
-
-- **stderr**: Status messages, progress indicators, and diagnostics
-- **stdout**: Subprocess output (e.g., `ninja -t graph` produces DOT on stdout)
-
-This separation allows reliable piping and redirection:
-
-```bash
-# Capture build graph without status noise
-netsuke graph > build.dot
-
-# Capture progress log without build output
-netsuke build 2> progress.log
-
-# Suppress status messages entirely
-netsuke --progress false build
-```
+- Explains that status messages go to stderr and subprocess output goes to stdout.
+- Provides example redirection commands for common use cases.
+- Documents the `--progress false` flag for suppressing status output entirely.
 
 ### Validation gates
 
@@ -332,6 +310,12 @@ At each stage transition:
 1. `make check-fmt` must pass.
 2. `make lint` must pass.
 3. `make test` must pass.
+
+For documentation changes, also run:
+
+1. `make fmt` (formats Markdown files).
+2. `make markdownlint`.
+3. `make nixie` (validates Mermaid diagrams).
 
 ## Concrete steps
 
@@ -378,8 +362,10 @@ cargo test --test rstest_bdd -- progress_output
 # Update users guide
 # Edit docs/users-guide.md
 
-# Verify markdown formatting
+# Format and validate documentation
+make fmt
 make markdownlint
+make nixie
 ```
 
 ## Validation and acceptance
@@ -388,11 +374,14 @@ Quality criteria:
 
 - **Tests**: All tests pass including new stream separation scenarios.
 - **Lint/typecheck**: `make check-fmt` and `make lint` pass.
-- **Documentation**: User's guide documents stream behaviour.
+- **Documentation**: User's guide documents stream behaviour; `make fmt`,
+  `make markdownlint`, and `make nixie` pass.
 
 Quality method:
 
 - Run `make check-fmt && make lint && make test` after each stage.
+- For documentation changes, also run `make fmt`, `make markdownlint`, and
+  `make nixie`.
 - Manual verification: Run `netsuke graph 2>/dev/null` and confirm only DOT
   output appears.
 
