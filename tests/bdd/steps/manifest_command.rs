@@ -189,6 +189,43 @@ fn stderr_should_not_contain(world: &TestWorld, fragment: OutputFragment) -> Res
     assert_output_not_contains(&world.command_stderr, OutputType::Stderr, &fragment)
 }
 
+fn assert_output_ordering(
+    output: &Slot<String>,
+    output_type: OutputType,
+    first: &OutputFragment,
+    second: &OutputFragment,
+) -> Result<()> {
+    let value = output
+        .get()
+        .with_context(|| format!("{output_type} output should be captured"))?;
+    let normalized_value = normalize_fluent_isolates(&value);
+    let normalized_first = normalize_fluent_isolates(first.as_str());
+    let normalized_second = normalize_fluent_isolates(second.as_str());
+    let first_pos = normalized_value
+        .find(&normalized_first)
+        .with_context(|| format!("{output_type} should contain '{first}'"))?;
+    let second_pos = normalized_value
+        .find(&normalized_second)
+        .with_context(|| format!("{output_type} should contain '{second}'"))?;
+    ensure!(
+        first_pos < second_pos,
+        concat!(
+            "expected '{first}' to appear before '{second}' in {output_type}, ",
+            "but positions were {first_pos} and {second_pos}"
+        ),
+    );
+    Ok(())
+}
+
+#[then("stdout should contain {first:string} before {second:string}")]
+fn stdout_should_contain_in_order(
+    world: &TestWorld,
+    first: OutputFragment,
+    second: OutputFragment,
+) -> Result<()> {
+    assert_output_ordering(&world.command_stdout, OutputType::Stdout, &first, &second)
+}
+
 #[then("the file {name:string} should exist")]
 fn file_should_exist(world: &TestWorld, name: FileName) -> Result<()> {
     assert_file_existence(world, &name, true)

@@ -269,10 +269,10 @@ library, and CLI ergonomics.
 
 ### 3.10. Output channels and diagnostics
 
-- [ ] 3.10.1. Guarantee status message and subprocess output ordering.
-  - [ ] Stream Netsuke status messages to stderr.
-  - [ ] Preserve subprocess output ordering on stdout.
-  - [ ] Verify with end-to-end tests redirecting each stream.
+- [x] 3.10.1. Guarantee status message and subprocess output ordering.
+  - [x] Stream Netsuke status messages to stderr.
+  - [x] Preserve subprocess output ordering on stdout.
+  - [x] Verify with end-to-end tests redirecting each stream.
 - [ ] 3.10.2. Introduce consistent prefixes for log differentiation.
   - [ ] Use localizable prefixes or indentation rules.
   - [ ] Support ASCII and Unicode themes.

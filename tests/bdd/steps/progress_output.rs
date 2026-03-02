@@ -85,3 +85,16 @@ fn fake_ninja_emits_task_status_lines(world: &TestWorld) -> Result<()> {
 fn fake_ninja_emits_malformed_task_status_lines(world: &TestWorld) -> Result<()> {
     install_fake_ninja(world, &["[x/2] broken", "[2/] broken", "plain output only"])
 }
+
+#[rstest_bdd_macros::given("a fake ninja executable that emits stdout output")]
+fn fake_ninja_emits_stdout_output(world: &TestWorld) -> Result<()> {
+    install_fake_ninja(
+        world,
+        &[
+            "[1/2] cc -c src/a.c",
+            "NINJA_STDOUT_MARKER_LINE_1",
+            "[2/2] cc -c src/b.c",
+            "NINJA_STDOUT_MARKER_LINE_2",
+        ],
+    )
+}
