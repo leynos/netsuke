@@ -106,8 +106,11 @@ Feature: Progress output
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1" before "NINJA_STDOUT_MARKER_LINE_2"
     # Verify stderr contains the subprocess stderr marker (stream routing)
     And stderr should contain "NINJA_STDERR_MARKER"
+    # Verify task-progress tokens reach stderr
+    And stderr should contain "1/2"
     # Verify stream exclusivity using stable markers
     And stdout should not contain "NINJA_STDERR_MARKER"
+    And stdout should not contain "1/2"
     And stderr should not contain "NINJA_STDOUT_MARKER_LINE"
 
   Scenario: Status messages do not contaminate stdout in standard mode
@@ -119,7 +122,10 @@ Feature: Progress output
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
     # Verify subprocess stderr marker reaches stderr (not stdout)
     And stderr should contain "NINJA_STDERR_MARKER"
+    # Verify task-progress tokens reach stderr
+    And stderr should contain "1/2"
     And stdout should not contain "NINJA_STDERR_MARKER"
+    And stdout should not contain "1/2"
     And stderr should not contain "NINJA_STDOUT_MARKER_LINE"
 
   Scenario: Build artifacts can be captured via stdout redirection
