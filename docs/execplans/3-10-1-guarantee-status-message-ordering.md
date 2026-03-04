@@ -243,21 +243,20 @@ status messages to stderr and preserve subprocess stdout. The main work is:
 
 ## Plan of work
 
-### Stage A: Audit current implementation (verification)
+### Stage A: Audit current implementation (completed)
 
-The code audit above suggests the implementation may already be correct. Stage A
-confirms this with targeted verification:
+**Outcome**: The code audit confirmed the existing implementation is correct.
+All status reporting paths write exclusively to stderr; no stdout contamination
+was found.
 
-1. Review `src/status.rs` to confirm all `writeln!` calls use `io::stderr()`.
-2. Review `src/status_timing.rs` to confirm timing summary writes to stderr.
-3. Review `spawn_and_stream_output()` in `src/runner/process/mod.rs` to confirm
-   stdout forwarding does not invoke status callbacks that could write to
-   stdout.
-4. Review `src/runner/process/streaming.rs` to confirm the observer callback
-   pattern preserves separation.
+Verification steps performed:
 
-If any stdout usage is found in status paths, document it in `Decision Log` and
-proceed to fix it in Stage C.
+1. Reviewed `src/status.rs` - all `writeln!` calls use `io::stderr()`.
+2. Reviewed `src/status_timing.rs` - timing summary writes to stderr.
+3. Reviewed `spawn_and_stream_output()` in `src/runner/process/mod.rs` - stdout
+   forwarding does not invoke status callbacks.
+4. Reviewed `src/runner/process/streaming.rs` - observer callback pattern
+   preserves separation.
 
 ### Stage B: Configuration design (completed)
 
