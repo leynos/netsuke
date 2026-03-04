@@ -119,8 +119,10 @@ Feature: Progress output
     And a fake ninja executable that emits stdout output
     When netsuke is run with arguments "--accessible false --progress true build"
     Then the command should succeed
-    # Verify subprocess stdout reaches stdout
+    # Verify subprocess stdout reaches stdout with preserved ordering
     And stdout should contain "NINJA_STDOUT_MARKER_LINE_1"
+    And stdout should contain "NINJA_STDOUT_MARKER_LINE_2"
+    And stdout should contain "NINJA_STDOUT_MARKER_LINE_1" before "NINJA_STDOUT_MARKER_LINE_2"
     # Verify subprocess stderr marker reaches stderr (not stdout)
     And stderr should contain "NINJA_STDERR_MARKER"
     # Verify task-progress messages reach stderr
