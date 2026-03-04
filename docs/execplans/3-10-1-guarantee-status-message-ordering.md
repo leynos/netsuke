@@ -341,28 +341,33 @@ grep -n "io::stdout" src/runner/process/mod.rs
 make test
 ```
 
-### Stage D test implementation
+### Stage D test implementation (completed)
 
-After Stage A confirms the architecture is correct:
+The following artefacts were created:
+
+- `tests/features/progress_output.feature`: Added three stream separation
+  scenarios using stable machine markers.
+- `tests/bdd/steps/progress_output.rs`: Added `FakeNinjaConfig` struct and
+  `install_fake_ninja_with_config()` function; updated
+  `fake_ninja_emits_stdout_output` fixture to emit both stdout and stderr
+  markers.
+
+Verification command run:
 
 ```bash
-# Add new feature file scenarios
-# Edit tests/features/progress_output.feature
-
-# Add step definitions
-# Edit tests/bdd/steps/progress_output.rs
-
-# Run BDD tests
 cargo test --test rstest_bdd -- progress_output
 ```
 
-### Stage E documentation update
+### Stage E documentation update (completed)
+
+The following artefact was updated:
+
+- `docs/users-guide.md`: Added "Output streams" section documenting stream
+  separation behaviour with example redirection commands.
+
+Validation commands run:
 
 ```bash
-# Update users guide
-# Edit docs/users-guide.md
-
-# Format and validate documentation
 make fmt
 make markdownlint
 make nixie
@@ -387,8 +392,9 @@ Quality method:
 
 Observable behaviour after completion:
 
-1. Running `netsuke graph > output.dot 2>&1` captures build graph to file
-   without status messages in the DOT content.
+1. Running `netsuke graph > output.dot 2> progress.log` captures build graph to
+   file without status messages contaminating the DOT content; status messages
+   go to the separate progress log.
 2. Running `netsuke build 2> log.txt` captures progress to log file while build
    output appears on terminal.
 3. All existing BDD scenarios continue to pass.
@@ -447,34 +453,23 @@ pub trait StatusReporter {
 }
 ```
 
-### Test fixtures to add
+### Test fixtures (archival reference)
 
-In `tests/bdd/steps/progress_output.rs`:
+The following fixture was implemented in `tests/bdd/steps/progress_output.rs`:
 
-```rust
-/// Fixture for a fake Ninja executable that emits known stdout output.
-#[fixture]
-fn fake_ninja_with_stdout_output() -> /* TempDir or similar */ {
-    // Create script that echoes known content to stdout
-}
-```
+- `FakeNinjaConfig` struct with `stdout_lines` and `stderr_marker` fields.
+- `install_fake_ninja_with_config()` function for flexible fixture setup.
+- `fake_ninja_emits_stdout_output` fixture emitting both `NINJA_STDOUT_MARKER`
+  lines and `NINJA_STDERR_MARKER` for comprehensive stream routing verification.
 
-### BDD step definitions to add
+### BDD step definitions (archival reference)
 
-```rust
-#[then("stdout should contain {text}")]
-fn stdout_should_contain(cli_output: &CliOutput, text: &str) {
-    assert!(cli_output.stdout.contains(text));
-}
+The following step definitions were verified to exist in
+`tests/bdd/steps/manifest_command.rs`:
 
-#[then("stdout should not contain {text}")]
-fn stdout_should_not_contain(cli_output: &CliOutput, text: &str) {
-    assert!(!cli_output.stdout.contains(text));
-}
-```
-
-Note: These step definitions may already exist in the codebase; verify before
-adding duplicates.
+- `stdout_should_contain` / `stderr_should_contain`
+- `stdout_should_not_contain` / `stderr_should_not_contain`
+- `stdout_should_contain_in_order` (added for ordering assertions)
 
 ## Contingency (archived)
 
