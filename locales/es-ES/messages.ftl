@@ -360,6 +360,14 @@ semantic.prefix.success = { $emoji ->
     [yes] ✔ Éxito:
    *[no] Éxito:
 }
+semantic.prefix.info = { $emoji ->
+    [yes] ℹ Info:
+   *[no] Info:
+}
+semantic.prefix.timing = { $emoji ->
+    [yes] ⏱ Tiempos:
+   *[no] Tiempos:
+}
 
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent

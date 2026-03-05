@@ -23,23 +23,25 @@ Feature: Progress output
     Then the command should succeed
     And stderr should not contain "Task 1/"
 
-  Scenario: Standard mode shows six stage summaries
+  Scenario: Standard mode shows six stage summaries with success prefix
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible false --progress true manifest -"
     Then the command should succeed
     And stderr should contain "Stage 1/6"
     And stderr should contain "Stage 6/6"
+    And stderr should contain "Success:"
     And stderr should contain "Manifest complete."
 
-  Scenario: Verbose mode includes a completion timing summary
+  Scenario: Verbose mode includes a prefixed completion timing summary
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible false --progress true --verbose manifest -"
     Then the command should succeed
+    And stderr should contain "Timing:"
     And stderr should contain "Stage timing summary:"
     And stderr should contain "- Stage 1/6:"
     And stderr should contain "Total pipeline time:"
 
-  Scenario: Stage summaries localize to Spanish
+  Scenario: Stage summaries localize to Spanish with success prefix
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible false --locale es-ES --progress true manifest -"
     Then the command should succeed
@@ -47,12 +49,14 @@ Feature: Progress output
     And stderr should contain "Etapa 6/6"
     And stderr should contain "Manifiesto completo."
 
-  Scenario: Accessible mode still uses static stage labels
+  Scenario: Accessible mode prefixes stage labels with info marker
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible true --progress true manifest -"
     Then the command should succeed
+    And stderr should contain "Info:"
     And stderr should contain "Stage 1/6"
     And stderr should contain "Stage 6/6"
+    And stderr should contain "Success:"
 
   Scenario: Progress output can be disabled in standard mode
     Given a minimal Netsuke workspace

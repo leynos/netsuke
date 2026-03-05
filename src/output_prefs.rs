@@ -85,6 +85,22 @@ impl OutputPrefs {
     pub fn success_prefix(self) -> LocalizedMessage {
         localization::message(keys::SEMANTIC_PREFIX_SUCCESS).with_arg("emoji", self.emoji_arg())
     }
+
+    /// Render the localized informational prefix for the current preferences.
+    ///
+    /// Returns `"ℹ Info:"` when emoji is allowed, `"Info:"` otherwise.
+    #[must_use]
+    pub fn info_prefix(self) -> LocalizedMessage {
+        localization::message(keys::SEMANTIC_PREFIX_INFO).with_arg("emoji", self.emoji_arg())
+    }
+
+    /// Render the localized timing prefix for the current preferences.
+    ///
+    /// Returns `"⏱ Timing:"` when emoji is allowed, `"Timing:"` otherwise.
+    #[must_use]
+    pub fn timing_prefix(self) -> LocalizedMessage {
+        localization::message(keys::SEMANTIC_PREFIX_TIMING).with_arg("emoji", self.emoji_arg())
+    }
 }
 
 /// Resolve output preferences from explicit configuration and environment.
@@ -229,6 +245,10 @@ mod tests {
     #[case::success_without_emoji(false, OutputPrefs::success_prefix, "Success:")]
     #[case::warning_with_emoji(true, OutputPrefs::warning_prefix, "Warning:")]
     #[case::warning_without_emoji(false, OutputPrefs::warning_prefix, "Warning:")]
+    #[case::info_with_emoji(true, OutputPrefs::info_prefix, "Info:")]
+    #[case::info_without_emoji(false, OutputPrefs::info_prefix, "Info:")]
+    #[case::timing_with_emoji(true, OutputPrefs::timing_prefix, "Timing:")]
+    #[case::timing_without_emoji(false, OutputPrefs::timing_prefix, "Timing:")]
     fn prefix_rendering(
         #[case] emoji: bool,
         #[case] prefix_fn: fn(OutputPrefs) -> LocalizedMessage,

@@ -1,7 +1,12 @@
 //! Tests for status stage modelling and index conversions.
 
 use super::*;
+use crate::output_prefs;
 use rstest::{fixture, rstest};
+
+fn test_prefs() -> crate::output_prefs::OutputPrefs {
+    output_prefs::resolve_with(None, |_| None)
+}
 
 fn strip_isolates(value: &str) -> String {
     value
@@ -24,12 +29,12 @@ fn stage6_message(reporter: &IndicatifReporter) -> String {
 
 #[fixture]
 fn force_text_reporter() -> IndicatifReporter {
-    IndicatifReporter::with_force_text_task_updates(true)
+    IndicatifReporter::with_force_text_task_updates(test_prefs(), true)
 }
 
 #[fixture]
 fn running_stage6_reporter() -> IndicatifReporter {
-    let reporter = IndicatifReporter::with_force_text_task_updates(false);
+    let reporter = IndicatifReporter::with_force_text_task_updates(test_prefs(), false);
     {
         let mut state = reporter
             .state

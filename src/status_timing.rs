@@ -2,6 +2,7 @@
 
 use super::{LocalizationKey, StageNumber, StatusReporter};
 use crate::localization::{self, keys};
+use crate::output_prefs::OutputPrefs;
 use std::io::{self, Write};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -70,6 +71,7 @@ impl TimingState {
 /// completion.
 pub struct VerboseTimingReporter {
     inner: Box<dyn StatusReporter>,
+    prefs: OutputPrefs,
     clock: Box<MonotonicClock>,
     state: Mutex<TimingState>,
 }
@@ -77,14 +79,19 @@ pub struct VerboseTimingReporter {
 impl VerboseTimingReporter {
     /// Wrap an existing reporter with verbose timing summary support.
     #[must_use]
-    pub fn new(inner: Box<dyn StatusReporter>) -> Self {
+    pub fn new(inner: Box<dyn StatusReporter>, prefs: OutputPrefs) -> Self {
         let start = Instant::now();
-        Self::with_clock(inner, Box::new(move || start.elapsed()))
+        Self::with_clock(inner, prefs, Box::new(move || start.elapsed()))
     }
 
-    fn with_clock(inner: Box<dyn StatusReporter>, clock: Box<MonotonicClock>) -> Self {
+    fn with_clock(
+        inner: Box<dyn StatusReporter>,
+        prefs: OutputPrefs,
+        clock: Box<MonotonicClock>,
+    ) -> Self {
         Self {
             inner,
+            prefs,
             clock,
             state: Mutex::new(TimingState::default()),
         }
@@ -134,7 +141,7 @@ impl StatusReporter for VerboseTimingReporter {
             } else {
                 state.completed = true;
                 state.finish((self.clock)());
-                render_summary_lines(state.completed_stages())
+                render_summary_lines(self.prefs, state.completed_stages())
             }
         };
 
@@ -146,13 +153,15 @@ impl StatusReporter for VerboseTimingReporter {
     }
 }
 
-fn render_summary_lines(entries: &[CompletedStage]) -> Vec<String> {
+fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<String> {
     if entries.is_empty() {
         return Vec::new();
     }
 
     let mut lines = Vec::with_capacity(entries.len() + 2);
-    lines.push(localization::message(keys::STATUS_TIMING_SUMMARY_HEADER).to_string());
+    let prefix = prefs.timing_prefix();
+    let header = localization::message(keys::STATUS_TIMING_SUMMARY_HEADER);
+    lines.push(format!("{prefix} {header}"));
 
     for entry in entries {
         let label = localization::message(keys::STATUS_STAGE_LABEL)
@@ -164,17 +173,16 @@ fn render_summary_lines(entries: &[CompletedStage]) -> Vec<String> {
             .with_arg("label", &label)
             .with_arg("duration", format_duration(entry.elapsed))
             .to_string();
-        lines.push(line);
+        lines.push(format!("  {line}"));
     }
 
     let total = entries.iter().fold(Duration::ZERO, |acc, entry| {
         acc.saturating_add(entry.elapsed)
     });
-    lines.push(
-        localization::message(keys::STATUS_TIMING_TOTAL_LINE)
-            .with_arg("duration", format_duration(total))
-            .to_string(),
-    );
+    let total_line = localization::message(keys::STATUS_TIMING_TOTAL_LINE)
+        .with_arg("duration", format_duration(total))
+        .to_string();
+    lines.push(format!("  {total_line}"));
 
     lines
 }

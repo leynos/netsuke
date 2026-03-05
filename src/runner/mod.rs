@@ -110,6 +110,7 @@ fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter> {
         match options.mode {
             OutputMode::Accessible => Box::new(AccessibleReporter::new(options.prefs)),
             OutputMode::Standard => Box::new(IndicatifReporter::with_force_text_task_updates(
+                options.prefs,
                 force_text_task_updates,
             )),
         }
@@ -118,7 +119,7 @@ fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter> {
     };
 
     if options.verbose {
-        Box::new(VerboseTimingReporter::new(base))
+        Box::new(VerboseTimingReporter::new(base, options.prefs))
     } else {
         base
     }

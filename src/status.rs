@@ -111,10 +111,11 @@ pub trait StatusReporter {
 
 /// Accessible reporter that emits static, labelled lines to stderr.
 ///
-/// Each line follows the pattern `Stage N/M: Description`, using
+/// Each line follows the pattern `Info: Stage N/M: Description`, using
 /// localized messages from the Fluent resource bundle. Completion
 /// messages are prefixed with a semantic `Success:` label (with or
-/// without an emoji glyph depending on [`OutputPrefs`]).
+/// without an emoji glyph depending on [`OutputPrefs`]). Task progress
+/// lines are indented with two spaces to show hierarchy.
 pub struct AccessibleReporter {
     prefs: OutputPrefs,
 }
@@ -129,8 +130,9 @@ impl AccessibleReporter {
 
 impl StatusReporter for AccessibleReporter {
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str) {
+        let prefix = self.prefs.info_prefix();
         let message = stage_label(current, total, description);
-        drop(writeln!(io::stderr(), "{message}"));
+        drop(writeln!(io::stderr(), "{prefix} {message}"));
     }
 
     fn report_complete(&self, tool_key: LocalizationKey) {
@@ -142,7 +144,7 @@ impl StatusReporter for AccessibleReporter {
 
     fn report_task_progress(&self, current: u32, total: u32, description: &str) {
         let message = task_progress_update(current, total, description);
-        drop(writeln!(io::stderr(), "{message}"));
+        drop(writeln!(io::stderr(), "  {message}"));
     }
 }
 
@@ -169,13 +171,14 @@ const STAGE6_INDEX: usize = (PipelineStage::NinjaSynthesisAndExecution as usize)
 
 /// Standard reporter backed by `indicatif::MultiProgress`.
 pub struct IndicatifReporter {
+    prefs: OutputPrefs,
     state: Mutex<IndicatifState>,
 }
 
 impl IndicatifReporter {
     /// Build a multi-progress reporter with one line per pipeline stage.
     #[must_use]
-    pub fn new(force_text_task_updates: bool) -> Self {
+    pub fn new(prefs: OutputPrefs, force_text_task_updates: bool) -> Self {
         let progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(12));
         progress.set_move_cursor(false);
         let style = ProgressStyle::with_template("{msg}")
@@ -199,6 +202,7 @@ impl IndicatifReporter {
         }
 
         Self {
+            prefs,
             state: Mutex::new(IndicatifState {
                 is_hidden: progress.is_hidden(),
                 progress,
@@ -211,20 +215,13 @@ impl IndicatifReporter {
         }
     }
 
-    /// Build a reporter that forces text-only task updates (for non-TTY /
-    /// accessible fallback).
-    #[must_use]
-    pub fn with_text_task_updates() -> Self {
-        Self::new(true)
-    }
-
     /// Build a reporter while explicitly controlling task-update text fallback.
     ///
     /// This forwards to [`Self::new`] and sets
     /// `IndicatifState::force_text_task_updates` with the same value.
     #[must_use]
-    pub fn with_force_text_task_updates(force_text_task_updates: bool) -> Self {
-        Self::new(force_text_task_updates)
+    pub fn with_force_text_task_updates(prefs: OutputPrefs, force_text_task_updates: bool) -> Self {
+        Self::new(prefs, force_text_task_updates)
     }
 
     fn is_stage6_active(state: &IndicatifState) -> bool {
@@ -259,7 +256,7 @@ impl IndicatifReporter {
 
 impl Default for IndicatifReporter {
     fn default() -> Self {
-        Self::with_force_text_task_updates(false)
+        Self::with_force_text_task_updates(crate::output_prefs::resolve(None), false)
     }
 }
 
@@ -374,8 +371,9 @@ impl StatusReporter for IndicatifReporter {
         let _ = &state.progress;
 
         let tool = localization::message(tool_key.as_str());
+        let prefix = self.prefs.success_prefix();
         let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
-        drop(writeln!(io::stderr(), "{message}"));
+        drop(writeln!(io::stderr(), "{prefix} {message}"));
     }
 }
 
