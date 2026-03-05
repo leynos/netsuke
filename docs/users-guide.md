@@ -568,6 +568,36 @@ unsupported locales fall back to English (`en-US`).
 For information on contributing translations, see the
 [Translator Guide](translators-guide.md).
 
+### Output streams
+
+Netsuke separates its output into two streams for scriptability:
+
+- **stderr**: Status messages, progress indicators, stage summaries, and
+  diagnostics
+- **stdout**: Subprocess output (for example, `ninja -t graph` produces DOT
+  graphs on stdout)
+
+This separation allows reliable piping and redirection:
+
+```bash
+# Capture build graph without status noise
+netsuke graph > build.dot
+
+# Capture progress log without build output
+netsuke build 2> progress.log
+
+# Suppress status messages entirely
+netsuke --progress false build
+```
+
+When using the `manifest` subcommand with `-` as the output path, the generated
+Ninja file streams to stdout while status messages remain on stderr:
+
+```bash
+# Pipe generated Ninja file for inspection
+netsuke manifest - | grep 'rule '
+```
+
 ### Accessible output mode
 
 Netsuke supports an accessible output mode that uses static, labelled status
