@@ -121,3 +121,65 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
         .to_string();
     assert_eq!(strip_isolates(&stage6_message), strip_isolates(&expected));
 }
+
+#[rstest]
+fn accessible_reporter_formats_stage_with_info_prefix() {
+    let prefs = test_prefs();
+    let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
+    reporter.report_stage(
+        StageNumber::new_unchecked(1),
+        StageNumber::new_unchecked(6),
+        "Reading manifest file",
+    );
+
+    let output = reporter
+        .writer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let line = strip_isolates(&String::from_utf8_lossy(&output));
+    let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
+    assert!(
+        line.starts_with(&info_prefix),
+        "stage line should start with info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
+    );
+    assert!(
+        line.contains("Stage 1/6: Reading manifest file"),
+        "stage line should contain the stage label; line was: {line:?}"
+    );
+}
+
+#[rstest]
+fn accessible_reporter_indents_task_progress() {
+    let prefs = test_prefs();
+    let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
+    reporter.report_task_progress(1, 2, "cc -c src/main.c");
+
+    let output = reporter
+        .writer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let line = strip_isolates(&String::from_utf8_lossy(&output));
+    let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
+    assert!(
+        line.starts_with("  "),
+        "task line should be indented by two spaces; line was: {line:?}"
+    );
+    assert!(
+        !line.trim_start().starts_with(&info_prefix),
+        "task line should not include info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
+    );
+}
+
+#[rstest]
+fn completion_line_includes_success_prefix() {
+    let prefs = test_prefs();
+    let line = strip_isolates(&format_completion_line(
+        prefs,
+        LocalizationKey::new(keys::STATUS_TOOL_MANIFEST),
+    ));
+    let success_prefix = strip_isolates(&prefs.success_prefix().to_string());
+    assert!(
+        line.starts_with(&success_prefix),
+        "completion line should start with success prefix; line was: {line:?}, prefix was: {success_prefix:?}"
+    );
+}

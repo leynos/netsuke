@@ -6,11 +6,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::{self, Write};
 use std::sync::Mutex;
 
-/// Thin wrapper for a 1-based stage index.
-///
-/// All current call sites derive stage numbers from the `PipelineStage` enum
-/// whose discriminants are statically known to be in range, so validation at
-/// construction time is unnecessary.
+/// Thin wrapper for a 1-based stage index (no validation needed).
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StageNumber(u32);
 
@@ -96,55 +92,81 @@ fn task_progress_update(current: u32, total: u32, description: &str) -> String {
         .to_string()
 }
 
+fn format_completion_line(prefs: OutputPrefs, tool_key: LocalizationKey) -> String {
+    let tool = localization::message(tool_key.as_str());
+    let prefix = prefs.success_prefix();
+    let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
+    format!("{prefix} {message}")
+}
+
 /// Reports pipeline stage transitions and completion.
 pub trait StatusReporter {
     /// Emit a stage update.
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str);
-    /// Emit task progress for Stage 6 execution.
-    ///
-    /// Callers must pass validated, monotonic task updates for a single Ninja
-    /// execution stream (`total > 0`, `current > 0`, `current <= total`).
+    /// Emit validated, monotonic task progress for Stage 6 execution.
     fn report_task_progress(&self, _current: u32, _total: u32, _description: &str) {}
     /// Emit a final completion message.
     fn report_complete(&self, tool_key: LocalizationKey);
 }
 
-/// Accessible reporter that emits static, labelled lines to stderr.
+/// Accessible reporter that emits prefixed, labelled lines to a writer.
 ///
-/// Each line follows the pattern `Info: Stage N/M: Description`, using
-/// localized messages from the Fluent resource bundle. Completion
-/// messages are prefixed with a semantic `Success:` label (with or
-/// without an emoji glyph depending on [`OutputPrefs`]). Task progress
-/// lines are indented with two spaces to show hierarchy.
-pub struct AccessibleReporter {
+/// The writer defaults to [`io::Stderr`]; tests can supply a `Vec<u8>`
+/// via [`Self::with_writer`] for output capture.
+pub struct AccessibleReporter<W: Write + Send = io::Stderr> {
     prefs: OutputPrefs,
+    writer: Mutex<W>,
 }
 
 impl AccessibleReporter {
-    /// Create a reporter with the given output preferences.
+    /// Create a reporter that writes to stderr.
     #[must_use]
-    pub const fn new(prefs: OutputPrefs) -> Self {
-        Self { prefs }
+    pub fn new(prefs: OutputPrefs) -> Self {
+        Self {
+            prefs,
+            writer: Mutex::new(io::stderr()),
+        }
     }
 }
 
-impl StatusReporter for AccessibleReporter {
+impl<W: Write + Send> AccessibleReporter<W> {
+    /// Create a reporter that writes to the given sink.
+    #[must_use]
+    pub const fn with_writer(prefs: OutputPrefs, writer: W) -> Self {
+        Self {
+            prefs,
+            writer: Mutex::new(writer),
+        }
+    }
+}
+
+impl<W: Write + Send> StatusReporter for AccessibleReporter<W> {
     fn report_stage(&self, current: StageNumber, total: StageNumber, description: &str) {
         let prefix = self.prefs.info_prefix();
         let message = stage_label(current, total, description);
-        drop(writeln!(io::stderr(), "{prefix} {message}"));
+        let mut w = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        drop(writeln!(w, "{prefix} {message}"));
     }
 
     fn report_complete(&self, tool_key: LocalizationKey) {
-        let tool = localization::message(tool_key.as_str());
-        let prefix = self.prefs.success_prefix();
-        let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
-        drop(writeln!(io::stderr(), "{prefix} {message}"));
+        let line = format_completion_line(self.prefs, tool_key);
+        let mut w = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        drop(writeln!(w, "{line}"));
     }
 
     fn report_task_progress(&self, current: u32, total: u32, description: &str) {
         let message = task_progress_update(current, total, description);
-        drop(writeln!(io::stderr(), "  {message}"));
+        let mut w = self
+            .writer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        drop(writeln!(w, "  {message}"));
     }
 }
 
@@ -215,10 +237,7 @@ impl IndicatifReporter {
         }
     }
 
-    /// Build a reporter while explicitly controlling task-update text fallback.
-    ///
-    /// This forwards to [`Self::new`] and sets
-    /// `IndicatifState::force_text_task_updates` with the same value.
+    /// Build a reporter with explicit task-update text fallback control.
     #[must_use]
     pub fn with_force_text_task_updates(prefs: OutputPrefs, force_text_task_updates: bool) -> Self {
         Self::new(prefs, force_text_task_updates)
@@ -370,10 +389,8 @@ impl StatusReporter for IndicatifReporter {
         // Keep `state` alive so the MultiProgress flush completes before drop.
         let _ = &state.progress;
 
-        let tool = localization::message(tool_key.as_str());
-        let prefix = self.prefs.success_prefix();
-        let message = localization::message(keys::STATUS_COMPLETE).with_arg("tool", tool);
-        drop(writeln!(io::stderr(), "{prefix} {message}"));
+        let line = format_completion_line(self.prefs, tool_key);
+        drop(writeln!(io::stderr(), "{line}"));
     }
 }
 

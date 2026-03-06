@@ -37,7 +37,8 @@ Hard invariants that must hold throughout implementation:
 
 - **No new CLI flags**: Reuse the existing `--no-emoji` mechanism via
   `OutputPrefs`.
-- **No functional regressions**: All existing BDD scenarios must pass.
+- **No functional regressions**: All existing Behaviour-Driven Development
+  (BDD) scenarios must pass.
 - **Localization**: All new prefixes must be defined in Fluent `.ftl` files
   for both `en-US` and `es-ES` locales.
 - **File size limit**: No source file may exceed 400 lines.
