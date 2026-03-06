@@ -161,7 +161,7 @@ fn accessible_reporter_indents_task_progress() {
     let line = strip_isolates(&String::from_utf8_lossy(&output));
     let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
     assert!(
-        line.starts_with("  "),
+        line.starts_with(TASK_INDENT),
         "task line should be indented by two spaces; line was: {line:?}"
     );
     assert!(
