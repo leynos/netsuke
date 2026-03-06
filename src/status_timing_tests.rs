@@ -192,45 +192,42 @@ fn verbose_timing_reporter_finalizes_current_stage_on_complete() {
     assert!(strip_isolates(total_line).contains("Total pipeline time: 15ms"));
 }
 
+#[derive(Debug, Default)]
+struct Counts {
+    stages: usize,
+    tasks: usize,
+    completions: usize,
+}
+
+struct CountingReporter {
+    counts: Arc<Mutex<Counts>>,
+}
+
+impl StatusReporter for CountingReporter {
+    fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {
+        self.counts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .stages += 1;
+    }
+
+    fn report_task_progress(&self, _current: u32, _total: u32, _description: &str) {
+        self.counts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .tasks += 1;
+    }
+
+    fn report_complete(&self, _tool_key: LocalizationKey) {
+        self.counts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .completions += 1;
+    }
+}
+
 #[rstest]
 fn verbose_timing_reporter_suppresses_progress_updates_after_complete() {
-    #[derive(Debug, Default)]
-    struct Counts {
-        stages: usize,
-        tasks: usize,
-        completions: usize,
-    }
-
-    struct CountingReporter {
-        counts: Arc<Mutex<Counts>>,
-    }
-
-    impl StatusReporter for CountingReporter {
-        fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {
-            let mut counts = self
-                .counts
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            counts.stages += 1;
-        }
-
-        fn report_task_progress(&self, _current: u32, _total: u32, _description: &str) {
-            let mut counts = self
-                .counts
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            counts.tasks += 1;
-        }
-
-        fn report_complete(&self, _tool_key: LocalizationKey) {
-            let mut counts = self
-                .counts
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            counts.completions += 1;
-        }
-    }
-
     let counts = Arc::new(Mutex::new(Counts::default()));
     let reporter = VerboseTimingReporter::with_clock(
         Box::new(CountingReporter {
