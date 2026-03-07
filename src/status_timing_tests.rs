@@ -200,6 +200,7 @@ struct Counts {
     completions: usize,
 }
 
+#[derive(Debug)]
 struct CountingReporter {
     counts: Arc<Mutex<Counts>>,
 }
