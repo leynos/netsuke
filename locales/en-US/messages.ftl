@@ -360,6 +360,14 @@ semantic.prefix.success = { $emoji ->
     [yes] ✔ Success:
    *[no] Success:
 }
+semantic.prefix.info = { $emoji ->
+    [yes] ℹ Info:
+   *[no] Info:
+}
+semantic.prefix.timing = { $emoji ->
+    [yes] ⏱ Timing:
+   *[no] Timing:
+}
 
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR

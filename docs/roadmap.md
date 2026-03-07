@@ -273,9 +273,9 @@ library, and CLI ergonomics.
   - [x] Stream Netsuke status messages to stderr.
   - [x] Preserve subprocess output ordering on stdout.
   - [x] Verify with end-to-end tests redirecting each stream.
-- [ ] 3.10.2. Introduce consistent prefixes for log differentiation.
-  - [ ] Use localizable prefixes or indentation rules.
-  - [ ] Support ASCII and Unicode themes.
+- [x] 3.10.2. Introduce consistent prefixes for log differentiation.
+  - [x] Use localizable prefixes or indentation rules.
+  - [x] Support ASCII and Unicode themes.
 - [ ] 3.10.3. Deliver `--diag-json` machine-readable diagnostics mode.
   - [ ] Document schema.
   - [ ] Add snapshot tests to guard compatibility.
