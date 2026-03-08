@@ -13,9 +13,13 @@ No `PLANS.md` file exists in this repository.
 
 Roadmap item `3.11.1` asks for a dedicated `CliConfig` struct derived with
 `OrthoConfig` so Netsuke has one explicit, typed schema for layered CLI
-configuration. Today the repository already has partial layered configuration,
-but it is centered on [`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs),
-where `Cli` currently serves three roles at once:
+configuration. This plan now targets `ortho_config` `0.8.0` and uses the
+repository copy of
+[`docs/ortho-config-users-guide.md`](/home/user/project/docs/ortho-config-users-guide.md),
+ which has been replaced with the upstream `v0.8.0` guide. Today the repository
+already has partial layered configuration, but it is centered on
+[`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs), where `Cli` currently
+serves three roles at once:
 
 1. Clap parser.
 2. OrthoConfig merge target.
@@ -55,15 +59,28 @@ Observable success means:
 
 - Keep existing top-level commands stable: `build`, `clean`, `graph`, and
   `manifest` must continue to parse and dispatch.
+- Upgrade every in-repo `ortho_config` dependency to `0.8.0`, and add or
+  upgrade `ortho_config_macros` to `0.8.0` if the final implementation uses
+  derive-generated selected-subcommand merging.
+- Keep the toolchain at Rust `1.88` or newer. The current repository already
+  uses Rust `1.89.0`, so this is a compatibility floor rather than a required
+  toolchain migration.
 - Do not regress localized Clap help or localized runtime diagnostics.
 - Use `ortho_config` as the primary merge mechanism rather than adding another
   bespoke loader.
+- When derive-generated code touches `figment`, `uncased`, or `xdg`, prefer the
+  `ortho_config::...` re-exports described by the `0.8.0` guide unless the
+  application source genuinely needs those crates directly.
 - Preserve the current configuration discovery behaviour for this milestone.
   Do not expose the visible `--config` / `NETSUKE_CONFIG` interface here; that
   belongs to roadmap item `3.11.3`.
 - Preserve existing user-facing flags where feasible. If a new canonical field
   supersedes an old one, keep a compatibility path unless the user explicitly
   approves a breaking change.
+- If `cli_default_as_absent` is used on any new or refactored field, use typed
+  Clap defaults (`default_value_t` / `default_values_t`) rather than
+  string-based `default_value`, and pass `ArgMatches` into merge flows so
+  explicit CLI overrides remain distinguishable from inferred defaults.
 - No source file may exceed 400 lines. This is a hard constraint, not a style
   preference.
 - All new or changed public types and modules require Rustdoc and module-level
@@ -101,6 +118,12 @@ Observable success means:
   this as a consolidation task and delete superseded merge code as part of the
   same change.
 
+- Risk: the repository currently depends on `ortho_config 0.7.0`, while this
+  plan now targets `0.8.0`. Severity: medium. Likelihood: high. Mitigation:
+  treat the crate upgrade as part of the same branch and apply the documented
+  migration rules up front instead of retrofitting them after the schema
+  refactor lands.
+
 - Risk: roadmap item `3.11.1` reaches into future roadmap items by naming
   output format and theme before `3.10.3` and `3.12.*` are complete. Severity:
   medium. Likelihood: high. Mitigation: introduce typed config fields now, but
@@ -129,6 +152,9 @@ Observable success means:
 
 - The codebase already derives `OrthoConfig` on `Cli`; roadmap `3.11.1` is
   therefore a refactor-and-expansion task, not a greenfield introduction.
+- The repository is already on Rust `1.89.0`, which satisfies the
+  `ortho_config 0.8.0` minimum of Rust `1.88`. The crate version is the real
+  migration step; the compiler floor is not.
 - The current repository already documents configuration discovery in
   [`docs/users-guide.md`](/home/user/project/docs/users-guide.md), and already
   has merge tests in
@@ -171,6 +197,13 @@ Observable success means:
   without reworking config names a second time. Unsupported combinations must
   fail with actionable diagnostics. Date/Author: 2026-03-07 (Codex, plan draft)
 
+- Decision: treat `ortho_config 0.8.0` as the baseline for this work and align
+  the implementation with its migration rules. Rationale: the local guide now
+  reflects `v0.8.0`, and the implementation plan should not be written against
+  `0.7.x` semantics. The repository does not currently alias the dependency
+  name, so `#[ortho_config(crate = "...")]` is not required unless that changes
+  during implementation. Date/Author: 2026-03-08 (Codex, plan revision)
+
 These decisions must be recorded in
 [`docs/netsuke-design.md`](/home/user/project/docs/netsuke-design.md) during
 implementation if they remain unchanged after coding begins.
@@ -186,6 +219,10 @@ The current implementation is spread across the following files:
 
 - [`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs): current `Cli` type,
   Clap parser, OrthoConfig derive, validation parsers, and merge logic.
+- [`Cargo.toml`](/home/user/project/Cargo.toml): currently pins
+  `ortho_config = "0.7.0"` and `rust-version = "1.89.0"`.
+- [`rust-toolchain.toml`](/home/user/project/rust-toolchain.toml): currently
+  pins toolchain `1.89.0`, which already satisfies the `0.8.0` minimum.
 - [`src/main.rs`](/home/user/project/src/main.rs): startup parse/merge flow and
   runtime localization bootstrap.
 - [`src/output_mode.rs`](/home/user/project/src/output_mode.rs): accessible
@@ -214,7 +251,7 @@ The implementation should converge on three layers of types.
 1. A Clap-facing parser model, still responsible for token parsing and
    user-facing command syntax.
 2. A layered configuration model rooted at `CliConfig`, derived with
-   `OrthoConfig`, `Serialize`, and `Deserialize`.
+   `OrthoConfig`, `Serialize`, and `Deserialize`, using `0.8.0` semantics.
 3. A runtime model passed into the runner after configuration and subcommand
    selection have been resolved.
 
@@ -267,14 +304,17 @@ compatibility aliases such as `no_emoji = true`.
 Start by reducing the blast radius in
 [`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs). Move the merge logic and
 the future `CliConfig` definition out of that file first. The goal is to make
-later edits mechanical instead of risky.
+later edits mechanical instead of risky. This stage also establishes the
+`ortho_config 0.8.0` baseline before higher-level schema refactors pile on.
 
 Concrete work in this stage:
 
 1. Extract the current OrthoConfig-driven merge helpers into a dedicated module.
 2. Introduce a parser-only root type if needed (`Cli`, `CliArgs`, or similar),
    while keeping command syntax unchanged.
-3. Keep existing parsing tests green before introducing new schema fields.
+3. Upgrade `ortho_config` to `0.8.0` and confirm the repository still builds
+   against Rust `1.89.0` without toolchain changes.
+4. Keep existing parsing tests green before introducing new schema fields.
 
 Acceptance for Stage A:
 
@@ -301,6 +341,8 @@ Concrete work in this stage:
    `NETSUKE_CONFIG_PATH` and hidden config-path behaviour.
 5. Keep global fields optional where layered precedence requires absence to be
    meaningful.
+6. Where Clap defaults are required, use typed defaults so
+   `cli_default_as_absent` remains valid under `0.8.0`.
 
 Acceptance for Stage B:
 
@@ -326,6 +368,9 @@ Concrete work in this stage:
    fields rather than a loose collection of booleans.
 5. Keep startup locale resolution intact so localized Clap help still works
    before full merge.
+6. If selected-subcommand merge derives are introduced, add
+   `ortho_config_macros 0.8.0` and pass `ArgMatches` where required by
+   `cli_default_as_absent`.
 
 Acceptance for Stage C:
 
@@ -347,6 +392,8 @@ Unit coverage to add with `rstest`:
   `output_format`
 - build-target defaulting through `cmds.build`
 - unsupported but syntactically valid combinations fail clearly when required
+- any `cli_default_as_absent` fields continue to prefer file/env values when
+  the user did not explicitly supply the CLI flag
 
 Behavioural coverage to add with `rstest-bdd` v0.5.0:
 
@@ -432,6 +479,10 @@ make fmt 2>&1 | tee /tmp/netsuke-fmt.log
 
 After `make fmt`, inspect `git status --short` and remove incidental edits in
 unrelated files before finalizing the change.
+
+The local OrthoConfig reference for this task is now the `v0.8.0` guide at
+[`docs/ortho-config-users-guide.md`](/home/user/project/docs/ortho-config-users-guide.md).
+ Do not rely on older `0.7.x` examples when the two guides disagree.
 
 ## Validation and acceptance
 
