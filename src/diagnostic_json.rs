@@ -91,7 +91,7 @@ struct DiagnosticEntry {
     source: Option<DiagnosticSource>,
     primary_span: Option<DiagnosticSpan>,
     labels: Vec<DiagnosticSpan>,
-    related: Vec<DiagnosticEntry>,
+    related: Vec<Self>,
 }
 
 impl DiagnosticEntry {
