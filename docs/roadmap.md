@@ -282,11 +282,11 @@ library, and CLI ergonomics.
 
 ### 3.11. Configuration and preferences
 
-- [ ] 3.11.1. Introduce `CliConfig` struct derived with `OrthoConfig`. See
+- [x] 3.11.1. Introduce `CliConfig` struct derived with `OrthoConfig`. See
   [ortho-config-users-guide.md](ortho-config-users-guide.md).
-  - [ ] Share schema across Clap integration, configuration files, and
+  - [x] Share schema across Clap integration, configuration files, and
     environment variables.
-  - [ ] Cover verbosity, colour policy, locale, spinner mode, output format,
+  - [x] Cover verbosity, colour policy, locale, spinner mode, output format,
     default targets, and theme.
 - [ ] 3.11.2. Discover configuration files in project and user scopes.
   - [ ] Honour env overrides and CLI precedence.

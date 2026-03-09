@@ -2029,34 +2029,52 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The CLI is implemented using clap's derive API in `src/cli/mod.rs`. Netsuke
-applies `Cli::with_default_command` after parsing so invoking `netsuke` with no
-explicit command still triggers a build. Configuration is layered with
-OrthoConfig (defaults, configuration files, environment variables, then CLI
-overrides) while treating clap defaults as absent so file or environment values
-are not masked. Configuration discovery honours `NETSUKE_CONFIG_PATH` and the
-standard OrthoConfig search order; environment variables use the `NETSUKE_`
-prefix with `__` as a nesting separator. CLI help and clap errors are localized
-via Fluent resources; locale resolution is handled in
-`src/locale_resolution.rs` with the precedence `--locale` -> `NETSUKE_LOCALE`
--> configuration `locale` -> system default. System locale strings are
-normalized by stripping encoding suffixes (such as `.UTF-8`), removing variant
-suffixes (such as `@latin`), and replacing underscores with hyphens before
-validation. English plus Spanish catalogues ship in `locales/`; unsupported
-locales fall back to `en-US`. Runtime diagnostics (for example manifest
-parsing, stdlib template errors, and runner failures) use the same Fluent
-localizer so the locale selection is consistent across user-facing output. A
-build-time audit in `build.rs` validates that all referenced Fluent message
-keys exist in the bundled catalogues, ensuring missing strings fail CI before
-release. CLI execution and dispatch live in `src/runner.rs`, keeping `main.rs`
-focused on parsing. Process management, Ninja invocation, argument redaction,
-and the temporary file helpers reside in `src/runner/process.rs`, allowing the
-runner entry point to delegate low-level concerns. The working directory flag
-mirrors Ninja's `-C` option but is resolved internally: Netsuke runs Ninja with
-a configured working directory and resolves relative output paths (for example
-`build --emit` and `manifest`) under the same directory so behaviour matches a
-real directory change. Error scenarios are validated using clap's `ErrorKind`
-enumeration in unit tests and via Cucumber steps for behavioural coverage.
+The CLI is implemented using clap's derive API in `src/cli/mod.rs`, but the
+parser-facing `Cli` type is no longer the merge schema. Layered configuration
+now lives in a dedicated `CliConfig` struct derived with OrthoConfig. This
+separation keeps parsing, configuration discovery, and runtime command
+selection as distinct concerns while preserving the existing command syntax.
+Invoking `netsuke` with no explicit subcommand still resolves to `build`, and
+the `build` command can now take default `emit` and `targets` values from
+`[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*` environment
+variables. Explicit CLI targets or `--emit` values still override those
+defaults.
+
+Configuration is layered in the order defaults -> configuration files ->
+environment variables -> CLI overrides. Discovery honours `NETSUKE_CONFIG_PATH`
+and the standard OrthoConfig search order; environment variables use the
+`NETSUKE_` prefix with `__` as a nesting separator. The schema now explicitly
+covers verbosity, locale, accessible mode, progress, colour policy, spinner
+mode, output format, theme selection, fetch policy, and build defaults. `theme`
+is the canonical presentation setting; the older `no_emoji` field remains as a
+compatibility alias that canonicalizes to the ASCII theme. Conflicting
+combinations such as `theme = "unicode"` together with `no_emoji = true` fail
+during merge. `spinner_mode` likewise validates against the legacy `progress`
+boolean so contradictory inputs are rejected early. `output_format` is typed
+now, but only `human` is accepted until the future JSON diagnostics milestone
+lands.
+
+CLI help and clap errors are localized via Fluent resources; locale resolution
+is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
+`NETSUKE_LOCALE` -> configuration `locale` -> system default. System locale
+strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
+removing variant suffixes (such as `@latin`), and replacing underscores with
+hyphens before validation. English plus Spanish catalogues ship in `locales/`;
+unsupported locales fall back to `en-US`. Runtime diagnostics (for example
+manifest parsing, stdlib template errors, and runner failures) use the same
+Fluent localizer so the locale selection is consistent across user-facing
+output. A build-time audit in `build.rs` validates that all referenced Fluent
+message keys exist in the bundled catalogues, ensuring missing strings fail CI
+before release. CLI execution and dispatch live in `src/runner.rs`, keeping
+`main.rs` focused on parsing. Process management, Ninja invocation, argument
+redaction, and the temporary file helpers reside in `src/runner/process.rs`,
+allowing the runner entry point to delegate low-level concerns. The working
+directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
+runs Ninja with a configured working directory and resolves relative output
+paths (for example `build --emit` and `manifest`) under the same directory so
+behaviour matches a real directory change. Error scenarios are validated using
+clap's `ErrorKind` enumeration in unit tests and via Cucumber steps for
+behavioural coverage.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one

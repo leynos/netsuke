@@ -10,24 +10,24 @@ pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, St
     let value: usize = s.parse().map_err(|_| {
         let mut args = LocalizationArgs::default();
         args.insert("value", s.to_owned().into());
-        super::validation_message(
+        super::parser::validation_message(
             localizer,
             keys::CLI_JOBS_INVALID_NUMBER,
             Some(&args),
             &format!("{s} is not a valid number"),
         )
     })?;
-    if (1..=super::MAX_JOBS).contains(&value) {
+    if (1..=super::parser::MAX_JOBS).contains(&value) {
         Ok(value)
     } else {
         let mut args = LocalizationArgs::default();
         args.insert("min", 1.to_string().into());
-        args.insert("max", super::MAX_JOBS.to_string().into());
-        Err(super::validation_message(
+        args.insert("max", super::parser::MAX_JOBS.to_string().into());
+        Err(super::parser::validation_message(
             localizer,
             keys::CLI_JOBS_OUT_OF_RANGE,
             Some(&args),
-            &format!("jobs must be between 1 and {}", super::MAX_JOBS),
+            &format!("jobs must be between 1 and {}", super::parser::MAX_JOBS),
         ))
     }
 }
@@ -39,7 +39,7 @@ pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, St
 pub(super) fn parse_scheme(localizer: &dyn Localizer, s: &str) -> Result<String, String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
-        return Err(super::validation_message(
+        return Err(super::parser::validation_message(
             localizer,
             keys::CLI_SCHEME_EMPTY,
             None,
@@ -50,7 +50,7 @@ pub(super) fn parse_scheme(localizer: &dyn Localizer, s: &str) -> Result<String,
     if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) {
         let mut args = LocalizationArgs::default();
         args.insert("scheme", s.to_owned().into());
-        return Err(super::validation_message(
+        return Err(super::parser::validation_message(
             localizer,
             keys::CLI_SCHEME_INVALID_START,
             Some(&args),
@@ -60,7 +60,7 @@ pub(super) fn parse_scheme(localizer: &dyn Localizer, s: &str) -> Result<String,
     if !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
         let mut args = LocalizationArgs::default();
         args.insert("scheme", s.to_owned().into());
-        return Err(super::validation_message(
+        return Err(super::parser::validation_message(
             localizer,
             keys::CLI_SCHEME_INVALID,
             Some(&args),
@@ -73,7 +73,7 @@ pub(super) fn parse_scheme(localizer: &dyn Localizer, s: &str) -> Result<String,
 pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String, String> {
     let trimmed = s.trim();
     if trimmed.is_empty() {
-        return Err(super::validation_message(
+        return Err(super::parser::validation_message(
             localizer,
             keys::CLI_LOCALE_EMPTY,
             None,
@@ -85,7 +85,7 @@ pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String,
         .map_err(|_| {
             let mut args = LocalizationArgs::default();
             args.insert("locale", trimmed.to_owned().into());
-            super::validation_message(
+            super::parser::validation_message(
                 localizer,
                 keys::CLI_LOCALE_INVALID,
                 Some(&args),
