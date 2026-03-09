@@ -134,6 +134,7 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
             "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
             "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
+            "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
             _ => None,
         },
         Some("build") => match arg_id {
@@ -195,6 +196,37 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
         }
         if let Some(value) = text.strip_prefix("--locale=") {
             hint = Some(value.to_owned());
+        }
+    }
+    hint
+}
+
+fn parse_bool_hint(value: &str) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+/// Inspect raw arguments and extract the requested `--diag-json` state.
+///
+/// A bare `--diag-json` enables JSON diagnostics. When multiple forms are
+/// present, the last recognised value wins.
+#[must_use]
+pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
+    let mut hint = None;
+    for arg in args {
+        let text = arg.to_string_lossy();
+        if text == "--" {
+            break;
+        }
+        if text == "--diag-json" {
+            hint = Some(true);
+            continue;
+        }
+        if let Some(value) = text.strip_prefix("--diag-json=") {
+            hint = parse_bool_hint(value);
         }
     }
     hint

@@ -33,6 +33,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     defaults_object.insert("jobs".to_owned(), json!(1));
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
     defaults_object.insert("progress".to_owned(), json!(true));
+    defaults_object.insert("diag_json".to_owned(), json!(false));
     composer.push_defaults(defaults);
     composer.push_file(
         json!({
@@ -40,19 +41,22 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
             "jobs": 2,
             "fetch_allow_scheme": ["http"],
             "locale": "en-US",
-            "progress": false
+            "progress": false,
+            "diag_json": true
         }),
         None,
     );
     composer.push_environment(json!({
         "jobs": 3,
         "fetch_allow_scheme": ["ftp"],
-        "progress": true
+        "progress": true,
+        "diag_json": false
     }));
     composer.push_cli(json!({
         "jobs": 4,
         "fetch_allow_scheme": ["git"],
         "progress": false,
+        "diag_json": true,
         "verbose": true
     }));
     let merged = Cli::merge_from_layers(composer.layers())?;
@@ -68,6 +72,10 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     ensure!(
         merged.progress == Some(false),
         "CLI layer should override progress setting",
+    );
+    ensure!(
+        merged.diag_json,
+        "CLI layer should override diag_json setting",
     );
     ensure!(
         merged.locale.as_deref() == Some("en-US"),
@@ -90,6 +98,7 @@ verbose = true
 fetch_default_deny = true
 locale = "es-ES"
 progress = false
+diag_json = true
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
@@ -131,6 +140,10 @@ progress = false
     ensure!(
         merged.progress == Some(false),
         "config progress should apply when CLI and env do not override",
+    );
+    ensure!(
+        merged.diag_json,
+        "config diag_json should apply when CLI and env do not override",
     );
 
     Ok(())

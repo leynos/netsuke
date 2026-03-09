@@ -568,6 +568,17 @@ unsupported locales fall back to English (`en-US`).
 For information on contributing translations, see the
 [Translator Guide](translators-guide.md).
 
+JSON diagnostics follow the same OrthoConfig layering:
+
+- CLI flag: `--diag-json`
+- Environment variable: `NETSUKE_DIAG_JSON=true|false`
+- Configuration file: `diag_json = true|false`
+
+For startup failures that happen before configuration files can be loaded,
+Netsuke honours the CLI flag and environment variable immediately. A
+configuration file cannot request JSON for errors raised while that same file
+is being discovered or parsed.
+
 ### Output streams
 
 Netsuke separates its output into two streams for scriptability:
@@ -596,6 +607,91 @@ Ninja file streams to stdout while status messages remain on stderr:
 ```bash
 # Pipe generated Ninja file for inspection
 netsuke manifest - | grep 'rule '
+```
+
+### JSON diagnostics mode
+
+Use `--diag-json` when a caller needs machine-readable diagnostics on `stderr`
+instead of the human-oriented text renderer.
+
+When JSON diagnostics are enabled:
+
+- Failing commands write exactly one JSON document to `stderr`.
+- Successful commands write nothing to `stderr`.
+- Progress lines, timing summaries, emoji prefixes, and tracing logs are
+  suppressed so `stderr` remains machine-readable.
+- `stdout` behaviour is unchanged. For example, `netsuke --diag-json manifest -`
+  still streams the generated Ninja file to `stdout`.
+
+The current schema version is `1`. The document shape is:
+
+- `schema_version`: Integer schema version for compatibility checks.
+- `generator`: Object containing `name` and `version`.
+- `diagnostics`: Array of diagnostic objects.
+
+Each diagnostic object contains:
+
+- `message`: Localized summary line.
+- `code`: Stable diagnostic code, or `null` when unavailable.
+- `severity`: One of `error`, `warning`, or `advice`.
+- `help`: Localized remediation hint, or `null`.
+- `url`: Optional documentation URL.
+- `causes`: Ordered error-cause chain.
+- `source`: Optional source descriptor currently containing `name`.
+- `primary_span`: The first labelled span, or `null`.
+- `labels`: All labelled spans with `label`, `offset`, `length`, `line`,
+  `column`, `end_line`, `end_column`, and `snippet`.
+- `related`: Nested diagnostics rendered using the same schema.
+
+Example:
+
+```json
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0"
+  },
+  "diagnostics": [
+    {
+      "message": "Manifest parse failed.",
+      "code": "netsuke::manifest::parse",
+      "severity": "error",
+      "help": "YAML does not permit tabs; use spaces for indentation.",
+      "url": null,
+      "causes": [
+        "YAML parse error at line 2, column 2: tabs disallowed within this context",
+        "tabs disallowed within this context (block indentation) at line 2, column 2"
+      ],
+      "source": {
+        "name": "Netsukefile"
+      },
+      "primary_span": {
+        "label": "invalid YAML",
+        "offset": 10,
+        "length": 1,
+        "line": 2,
+        "column": 2,
+        "end_line": 2,
+        "end_column": 2,
+        "snippet": "-"
+      },
+      "labels": [
+        {
+          "label": "invalid YAML",
+          "offset": 10,
+          "length": 1,
+          "line": 2,
+          "column": 2,
+          "end_line": 2,
+          "end_column": 2,
+          "snippet": "-"
+        }
+      ],
+      "related": []
+    }
+  ]
+}
 ```
 
 ### Accessible output mode

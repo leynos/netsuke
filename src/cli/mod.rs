@@ -20,7 +20,6 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub use crate::cli_l10n::locale_hint_from_args;
 use crate::cli_l10n::localize_command;
 use crate::host_pattern::HostPattern;
 use crate::localization::{self, keys};
@@ -139,6 +138,11 @@ pub struct Cli {
     #[arg(long)]
     pub no_emoji: Option<bool>,
 
+    /// Emit machine-readable diagnostics in JSON on stderr.
+    #[arg(long)]
+    #[ortho_config(default = false)]
+    pub diag_json: bool,
+
     /// Force standard progress summaries on or off.
     ///
     /// When omitted, Netsuke enables progress summaries in standard mode.
@@ -183,6 +187,7 @@ impl Default for Cli {
             accessible: None,
             progress: None,
             no_emoji: None,
+            diag_json: false,
             command: None,
         }
         .with_default_command()
@@ -227,6 +232,18 @@ pub enum Commands {
 /// Return the default manifest filename when none is provided.
 fn default_manifest_path() -> PathBuf {
     PathBuf::from("Netsukefile")
+}
+
+/// Inspect raw arguments and extract the requested locale before full parsing.
+#[must_use]
+pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
+    crate::cli_l10n::locale_hint_from_args(args)
+}
+
+/// Inspect raw arguments and extract the requested `--diag-json` state.
+#[must_use]
+pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
+    crate::cli_l10n::diag_json_hint_from_args(args)
 }
 
 /// Parse CLI arguments with localized clap output.

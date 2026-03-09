@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: DONE
 
 ## Purpose / big picture
 
@@ -182,16 +182,20 @@ Hard invariants that must hold throughout implementation:
       Netsuke's documented schema.
 - [x] (2026-03-07 00:00Z) Drafted this ExecPlan in
       [docs/execplans/3-10-3-json-diagnostics-mode.md](/home/user/project/docs/execplans/3-10-3-json-diagnostics-mode.md).
-- [ ] Stage A: add CLI/config plumbing and localized help for
-      `diag_json`.
-- [ ] Stage B: implement a versioned JSON diagnostic document model and
-      serializer.
-- [ ] Stage C: integrate JSON mode into startup, error rendering, and
-      output-channel selection.
-- [ ] Stage D: add `rstest` unit coverage, behavioural coverage, and
-      snapshots.
-- [ ] Stage E: update user/design documentation, mark the roadmap item
-      done, and pass all quality gates.
+- [x] (2026-03-09 00:00Z) Stage A: added `diag_json` CLI/config plumbing,
+      localized help text, and raw startup hint parsing for CLI/env access
+      before full configuration loading.
+- [x] (2026-03-09 00:00Z) Stage B: implemented a Netsuke-owned JSON
+      diagnostic serializer with schema envelope, cause chains, span metadata,
+      and snapshot coverage.
+- [x] (2026-03-09 00:00Z) Stage C: integrated JSON mode into startup
+      failures, config-merge failures, runtime failures, and reporter/tracing
+      suppression so `stderr` remains machine-readable.
+- [x] (2026-03-09 00:00Z) Stage D: added `rstest` unit coverage,
+      behavioural coverage with `rstest-bdd`, integration coverage for stream
+      separation, and schema snapshots.
+- [x] (2026-03-09 00:00Z) Stage E: updated user/design documentation,
+      marked the roadmap item done, and passed all quality gates.
 
 ## Surprises & Discoveries
 
@@ -213,6 +217,17 @@ Hard invariants that must hold throughout implementation:
 - Behaviour tests autodiscover every feature file under
   [tests/features](/home/user/project/tests/features), so a dedicated
   diagnostics feature file can be added without updating a manual test list.
+
+- Wrapped `miette` diagnostics such as
+  `ManifestError::Parse { #[diagnostic_source] ... }` do not expose useful
+  spans if the serializer only inspects the outer diagnostic. The JSON renderer
+  must walk the diagnostic-source chain to recover inner source labels and help
+  text.
+
+- After editing `.feature` files, `cargo test` may continue using stale
+  generated scenarios until
+  [tests/bdd_tests.rs](/home/user/project/tests/bdd_tests.rs) is touched. This
+  remains necessary with `rstest-bdd` v0.5.0.
 
 ## Decision Log
 
@@ -246,10 +261,37 @@ Hard invariants that must hold throughout implementation:
   parsed or validated, and forcing that would require a larger bootstrap
   refactor. Date/Author: 2026-03-07 / Codex
 
+- Decision: span/source/help extraction should fall back through the
+  `diagnostic_source()` chain when the outer diagnostic is only a wrapper.
+  Rationale: Netsuke wraps YAML/data diagnostics inside `ManifestError::Parse`,
+  and users still need precise locations and hints in JSON mode. Date/Author:
+  2026-03-09 / Codex
+
 ## Outcomes & Retrospective
 
-Not started yet. This section must be rewritten during implementation with
-shipped behaviour, validation evidence, and lessons learned.
+Shipped behaviour:
+
+- `--diag-json` is available via CLI, `NETSUKE_DIAG_JSON`, and
+  `diag_json = true|false`.
+- Failure paths emit one versioned JSON document on `stderr`.
+- Successful JSON-mode commands keep `stderr` empty and preserve normal
+  `stdout` artefacts.
+- Manifest parse failures include source name, labelled span metadata, and
+  localized help text.
+
+Validation evidence:
+
+- `make check-fmt`
+- `make lint`
+- `make test`
+- `make markdownlint`
+- `make nixie`
+
+Lessons learned:
+
+- The build script compiles selected CLI modules directly, so new shared CLI
+  helpers must also be referenced from `build.rs` to avoid dead-code warnings
+  under the repository's strict lint configuration.
 
 ## Context and orientation
 

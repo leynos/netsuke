@@ -19,6 +19,7 @@ mod cli;
 #[cfg(unix)]
 mod fs;
 mod ir;
+mod json_diagnostics;
 mod locale_resolution;
 mod manifest;
 mod manifest_command;

@@ -276,9 +276,9 @@ library, and CLI ergonomics.
 - [x] 3.10.2. Introduce consistent prefixes for log differentiation.
   - [x] Use localizable prefixes or indentation rules.
   - [x] Support ASCII and Unicode themes.
-- [ ] 3.10.3. Deliver `--diag-json` machine-readable diagnostics mode.
-  - [ ] Document schema.
-  - [ ] Add snapshot tests to guard compatibility.
+- [x] 3.10.3. Deliver `--diag-json` machine-readable diagnostics mode.
+  - [x] Document schema.
+  - [x] Add snapshot tests to guard compatibility.
 
 ### 3.11. Configuration and preferences
 

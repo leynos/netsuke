@@ -4,7 +4,7 @@ use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 
 use crate::helpers::os_args;
-use netsuke::cli::locale_hint_from_args;
+use netsuke::cli::{diag_json_hint_from_args, locale_hint_from_args};
 use netsuke::cli_localization;
 use std::sync::Arc;
 
@@ -60,6 +60,41 @@ fn locale_hint_from_args_uses_last_locale_flag() -> Result<()> {
         hint.as_deref() == Some("en-US"),
         "expected last --locale to win (\"en-US\"), got: {hint:?}"
     );
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_from_args_accepts_bare_flag() -> Result<()> {
+    let args = os_args(&["netsuke", "--diag-json"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(hint == Some(true), "expected Some(true), got: {hint:?}");
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_from_args_accepts_equals_form() -> Result<()> {
+    let args = os_args(&["netsuke", "--diag-json=false"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(hint == Some(false), "expected Some(false), got: {hint:?}");
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_from_args_ignores_args_after_double_dash() -> Result<()> {
+    let args = os_args(&["netsuke", "--", "--diag-json"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(
+        hint.is_none(),
+        "expected None when --diag-json appears after \"--\", got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_from_args_uses_last_recognized_value() -> Result<()> {
+    let args = os_args(&["netsuke", "--diag-json=false", "--diag-json"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(hint == Some(true), "expected Some(true), got: {hint:?}");
     Ok(())
 }
 
