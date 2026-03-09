@@ -17,6 +17,7 @@ mod accessibility_preferences;
 mod accessible_output;
 mod advanced_usage;
 mod cli;
+mod configuration_preferences;
 mod cli_config;
 mod cli_parsing;
 mod conditional_manifest;

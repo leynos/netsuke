@@ -1,311 +1,245 @@
-//! Typed CLI configuration preferences and compatibility resolution helpers.
+//! Layered CLI configuration schema.
 //!
-//! This module defines the user-facing preference surface that is layered
-//! through `OrthoConfig` across defaults, config files, environment variables,
-//! and CLI flags.
+//! [`CliConfig`] is the single typed schema used for configuration discovery
+//! and merging. It captures global CLI settings plus per-subcommand defaults
+//! under the `cmds` namespace.
 
-use clap::Args;
-use ortho_config::OrthoConfig;
-use serde::de::{self, Deserializer};
+use ortho_config::{OrthoConfig, OrthoError, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
+use std::path::PathBuf;
+use std::sync::Arc;
 
+use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
-/// Structured parse error for CLI configuration enums.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseConfigEnumError {
-    /// The original raw value that failed to parse.
-    pub raw: Box<str>,
-    /// Canonical valid option strings for the enum.
-    pub valid_options: &'static [&'static str],
-}
-
-impl fmt::Display for ParseConfigEnumError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid value '{}'. Valid options: {}",
-            self.raw,
-            self.valid_options.join(", ")
-        )
-    }
-}
-
-impl std::error::Error for ParseConfigEnumError {}
-
-/// Colour output policy for human-readable CLI output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+/// Colour-output policy accepted by layered configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub enum ColourPolicy {
-    /// Honour terminal and environment auto-detection.
+    /// Follow the host environment.
     #[default]
     Auto,
-    /// Force colour-capable behaviour even when `NO_COLOR` is set.
+    /// Force colour output on when available.
     Always,
-    /// Disable colour-capable behaviour and treat output as `NO_COLOR`.
+    /// Force colour output off.
     Never,
 }
 
-impl ColourPolicy {
-    /// Canonical list of valid option strings.
-    pub const VALID_OPTIONS: &'static [&'static str] = &["auto", "always", "never"];
-
-    /// Parse a raw colour policy value.
-    ///
-    /// # Errors
-    ///
-    /// Returns the canonical valid options when parsing fails.
-    pub fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        let trimmed = s.trim().to_ascii_lowercase();
-        match trimmed.as_str() {
-            "auto" => Ok(Self::Auto),
-            "always" => Ok(Self::Always),
-            "never" => Ok(Self::Never),
-            _ => Err(Self::VALID_OPTIONS),
-        }
-    }
-}
-
-impl fmt::Display for ColourPolicy {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Auto => write!(f, "auto"),
-            Self::Always => write!(f, "always"),
-            Self::Never => write!(f, "never"),
-        }
-    }
-}
-
-impl FromStr for ColourPolicy {
-    type Err = ParseConfigEnumError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_raw(s).map_err(|valid_options| ParseConfigEnumError {
-            raw: s.into(),
-            valid_options,
-        })
-    }
-}
-
-impl<'de> Deserialize<'de> for ColourPolicy {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserialize_config_enum(deserializer, "colour policy")
-    }
-}
-
-/// Progress spinner display mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+/// Spinner and progress rendering policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub enum SpinnerMode {
-    /// Emit progress updates.
+    /// Follow Netsuke's default progress behaviour.
     #[default]
+    Auto,
+    /// Force progress summaries on.
     Enabled,
-    /// Suppress progress updates.
+    /// Disable progress summaries.
     Disabled,
 }
 
-impl SpinnerMode {
-    /// Canonical list of valid option strings.
-    pub const VALID_OPTIONS: &'static [&'static str] = &["enabled", "disabled"];
-
-    /// Parse a raw spinner mode value.
-    ///
-    /// # Errors
-    ///
-    /// Returns the canonical valid options when parsing fails.
-    pub fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        let trimmed = s.trim().to_ascii_lowercase();
-        match trimmed.as_str() {
-            "enabled" => Ok(Self::Enabled),
-            "disabled" => Ok(Self::Disabled),
-            _ => Err(Self::VALID_OPTIONS),
-        }
-    }
-}
-
-impl fmt::Display for SpinnerMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Enabled => write!(f, "enabled"),
-            Self::Disabled => write!(f, "disabled"),
-        }
-    }
-}
-
-impl FromStr for SpinnerMode {
-    type Err = ParseConfigEnumError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_raw(s).map_err(|valid_options| ParseConfigEnumError {
-            raw: s.into(),
-            valid_options,
-        })
-    }
-}
-
-impl<'de> Deserialize<'de> for SpinnerMode {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserialize_config_enum(deserializer, "spinner mode")
-    }
-}
-
-/// Diagnostic output format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+/// Top-level diagnostics and output format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub enum OutputFormat {
-    /// Human-readable diagnostics.
+    /// Human-readable terminal output.
     #[default]
     Human,
     /// Machine-readable JSON diagnostics.
     Json,
 }
 
-impl OutputFormat {
-    /// Canonical list of valid option strings.
-    pub const VALID_OPTIONS: &'static [&'static str] = &["human", "json"];
-
-    /// Parse a raw output format value.
-    ///
-    /// # Errors
-    ///
-    /// Returns the canonical valid options when parsing fails.
-    pub fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        let trimmed = s.trim().to_ascii_lowercase();
-        match trimmed.as_str() {
-            "human" => Ok(Self::Human),
-            "json" => Ok(Self::Json),
-            _ => Err(Self::VALID_OPTIONS),
-        }
-    }
-
-    /// Return `true` when JSON diagnostics are enabled.
-    #[must_use]
-    pub const fn is_json(self) -> bool {
-        matches!(self, Self::Json)
-    }
+/// Presentation theme for semantic prefixes and glyph choices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum Theme {
+    /// Follow the host environment.
+    #[default]
+    Auto,
+    /// Prefer the Unicode/emoji presentation.
+    Unicode,
+    /// Prefer ASCII-only output.
+    Ascii,
 }
 
-impl fmt::Display for OutputFormat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Human => write!(f, "human"),
-            Self::Json => write!(f, "json"),
+impl From<Theme> for ThemePreference {
+    fn from(value: Theme) -> Self {
+        match value {
+            Theme::Auto => Self::Auto,
+            Theme::Unicode => Self::Unicode,
+            Theme::Ascii => Self::Ascii,
         }
     }
 }
 
-impl FromStr for OutputFormat {
-    type Err = ParseConfigEnumError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_raw(s).map_err(|valid_options| ParseConfigEnumError {
-            raw: s.into(),
-            valid_options,
-        })
-    }
+/// Layered defaults for the `build` subcommand.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct BuildConfig {
+    /// Optional default path for the emitted Ninja manifest.
+    pub emit: Option<PathBuf>,
+    /// Default targets used when the user does not pass any targets.
+    #[serde(default)]
+    pub targets: Vec<String>,
 }
 
-impl<'de> Deserialize<'de> for OutputFormat {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserialize_config_enum(deserializer, "output format")
-    }
+/// Subcommand-specific layered defaults.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CommandConfigs {
+    /// Configuration that applies only to the `build` subcommand.
+    #[serde(default)]
+    pub build: BuildConfig,
 }
 
-fn deserialize_config_enum<'de, D, T>(deserializer: D, label: &str) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: FromStr,
-    T::Err: fmt::Display,
-{
-    let raw = String::deserialize(deserializer)?;
-    T::from_str(&raw).map_err(|err| de::Error::custom(format!("invalid {label}: {err}")))
-}
-
-/// Preference-oriented configuration extracted from the top-level CLI surface.
-#[derive(Debug, Clone, PartialEq, Eq, Args, Serialize, Deserialize, OrthoConfig, Default)]
+/// Authoritative schema for layered CLI configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, OrthoConfig)]
+#[ortho_config(prefix = "NETSUKE", post_merge_hook)]
 pub struct CliConfig {
+    /// Path to the Netsuke manifest file to use.
+    #[ortho_config(default = default_manifest_path())]
+    pub file: PathBuf,
+
+    /// Set the number of parallel build jobs.
+    pub jobs: Option<usize>,
+
     /// Enable verbose diagnostic logging and completion timing summaries.
-    #[arg(short, long)]
     #[ortho_config(default = false)]
     pub verbose: bool,
 
     /// Locale tag for CLI copy (for example: en-US, es-ES).
-    #[arg(long, value_name = "LOCALE")]
     pub locale: Option<String>,
 
-    /// Force accessible output mode on or off (overrides auto-detection).
-    #[arg(long)]
+    /// Additional URL schemes allowed for the `fetch` helper.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub fetch_allow_scheme: Vec<String>,
+
+    /// Hostnames permitted when default deny is enabled.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub fetch_allow_host: Vec<HostPattern>,
+
+    /// Hostnames that are always blocked.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub fetch_block_host: Vec<HostPattern>,
+
+    /// Deny all hosts by default; only allow the declared allowlist.
+    #[ortho_config(default = false)]
+    pub fetch_default_deny: bool,
+
+    /// Force accessible output mode on or off.
     pub accessible: Option<bool>,
 
-    /// Suppress emoji glyphs in output (overrides auto-detection).
-    #[arg(long)]
+    /// Compatibility alias for requesting the ASCII theme.
     pub no_emoji: Option<bool>,
 
-    /// CLI theme preset (auto, unicode, ascii).
-    #[arg(long, value_name = "THEME")]
-    pub theme: Option<ThemePreference>,
-
-    /// Colour output policy (auto, always, never).
-    #[arg(long, value_name = "POLICY")]
-    pub colour_policy: Option<ColourPolicy>,
-
-    /// Force standard progress summaries on or off.
-    ///
-    /// When omitted, Netsuke enables progress summaries in standard mode.
-    #[arg(long)]
-    pub progress: Option<bool>,
-
-    /// Spinner display mode (enabled, disabled).
-    #[arg(long, value_name = "MODE")]
-    pub spinner_mode: Option<SpinnerMode>,
-
     /// Emit machine-readable diagnostics in JSON on stderr.
-    #[arg(long)]
     #[ortho_config(default = false)]
     pub diag_json: bool,
 
-    /// Diagnostic output format (human, json).
-    #[arg(long, value_name = "FORMAT")]
+    /// Force progress summaries on or off.
+    pub progress: Option<bool>,
+
+    /// Preferred colour policy.
+    #[ortho_config(skip_cli)]
+    pub colour_policy: Option<ColourPolicy>,
+
+    /// Preferred spinner or progress mode.
+    #[ortho_config(skip_cli)]
+    pub spinner_mode: Option<SpinnerMode>,
+
+    /// Preferred diagnostics/output format.
+    #[ortho_config(skip_cli)]
     pub output_format: Option<OutputFormat>,
 
-    /// Default build targets used when none are specified on the CLI.
-    #[arg(long = "default-target", value_name = "TARGET")]
-    #[ortho_config(merge_strategy = "append")]
-    pub default_targets: Vec<String>,
+    /// Preferred terminal theme.
+    #[ortho_config(skip_cli)]
+    pub theme: Option<Theme>,
+
+    /// Per-subcommand defaults.
+    #[ortho_config(skip_cli)]
+    #[serde(default)]
+    pub cmds: CommandConfigs,
 }
 
-impl CliConfig {
-    /// Resolve whether JSON diagnostics should be active after merge.
-    #[must_use]
-    pub const fn resolved_diag_json(&self) -> bool {
-        match self.output_format {
-            Some(output_format) => output_format.is_json(),
-            None => self.diag_json,
-        }
-    }
-
-    /// Resolve whether progress reporting should be active after merge.
-    #[must_use]
-    pub const fn resolved_progress(&self) -> bool {
-        match self.spinner_mode {
-            Some(SpinnerMode::Enabled) => true,
-            Some(SpinnerMode::Disabled) => false,
-            None => match self.progress {
-                Some(progress) => progress,
-                None => true,
-            },
+impl Default for CliConfig {
+    fn default() -> Self {
+        Self {
+            file: default_manifest_path(),
+            jobs: None,
+            verbose: false,
+            locale: None,
+            fetch_allow_scheme: Vec::new(),
+            fetch_allow_host: Vec::new(),
+            fetch_block_host: Vec::new(),
+            fetch_default_deny: false,
+            accessible: None,
+            no_emoji: None,
+            diag_json: false,
+            progress: None,
+            colour_policy: None,
+            spinner_mode: None,
+            output_format: None,
+            theme: None,
+            cmds: CommandConfigs::default(),
         }
     }
 }
 
-#[cfg(test)]
-#[path = "config_tests.rs"]
-mod tests;
+impl PostMergeHook for CliConfig {
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        validate_theme_compatibility(self)?;
+        validate_spinner_mode_compatibility(self)?;
+        validate_output_format_support(self)?;
+        Ok(())
+    }
+}
+
+fn default_manifest_path() -> PathBuf {
+    PathBuf::from("Netsukefile")
+}
+
+fn validate_theme_compatibility(config: &CliConfig) -> OrthoResult<()> {
+    match (config.theme, config.no_emoji) {
+        (Some(Theme::Unicode), Some(true)) => Err(validation_error(
+            "theme",
+            "theme = \"unicode\" conflicts with no_emoji = true; use theme = \"ascii\" instead",
+        )),
+        (Some(Theme::Ascii), Some(false)) => Err(validation_error(
+            "no_emoji",
+            "no_emoji = false conflicts with theme = \"ascii\"; remove the alias or choose theme = \"unicode\"",
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn validate_spinner_mode_compatibility(config: &CliConfig) -> OrthoResult<()> {
+    match (config.spinner_mode, config.progress) {
+        (Some(SpinnerMode::Disabled), Some(true)) => Err(validation_error(
+            "spinner_mode",
+            "spinner_mode = \"disabled\" conflicts with progress = true",
+        )),
+        (Some(SpinnerMode::Enabled), Some(false)) => Err(validation_error(
+            "progress",
+            "progress = false conflicts with spinner_mode = \"enabled\"",
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn validate_output_format_support(config: &CliConfig) -> OrthoResult<()> {
+    if matches!(config.output_format, Some(OutputFormat::Json)) {
+        return Err(validation_error(
+            "output_format",
+            "output_format = \"json\" is not supported yet; use \"human\" for this milestone",
+        ));
+    }
+    Ok(())
+}
+
+fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
+    Arc::new(OrthoError::Validation {
+        key: key.to_owned(),
+        message: message.to_owned(),
+    })
+}

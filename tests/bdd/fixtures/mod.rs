@@ -26,7 +26,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::PathGuard;
-use test_support::env::NinjaEnvGuard;
+use test_support::env::{NinjaEnvGuard, restore_many};
 use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
 
@@ -149,73 +149,21 @@ pub struct TestWorld {
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
-    /// Values to forward to child netsuke processes for scenario-tracked variables.
-    /// Populated at the same time as `env_vars` so `build_netsuke_command` never
-    /// reads the process environment for scenario-controlled vars.
-    pub env_vars_forward: RefCell<HashMap<String, OsString>>,
-    /// Scenario-scoped lock for process-global environment mutations (CWD, env vars).
-    /// Held for the entire scenario duration when acquired via `ensure_env_lock()`.
+    /// Scenario-scoped guard that serialises environment mutations when needed.
     pub env_lock: RefCell<Option<EnvLock>>,
-    /// Original working directory before any chdir operations, captured when `env_lock` is acquired.
-    pub original_cwd: RefCell<Option<PathBuf>>,
 }
 
 impl TestWorld {
-    /// Track an environment variable for later restoration and forward to child processes.
-    ///
-    /// # Parameters
-    /// - `key`: The environment variable name
-    /// - `previous`: The previous value (if any) to restore on drop
-    /// - `new_value`: The new value to forward to child netsuke processes (if `Some`)
-    pub fn track_env_var(
-        &self,
-        key: String,
-        previous: Option<OsString>,
-        new_value: Option<OsString>,
-    ) {
-        self.env_vars
-            .borrow_mut()
-            .entry(key.clone())
-            .or_insert(previous);
-        if let Some(value) = new_value {
-            self.env_vars_forward.borrow_mut().insert(key, value);
-        } else {
-            // When unsetting, remove from forward map to ensure it's not inherited
-            self.env_vars_forward.borrow_mut().remove(&key);
-        }
+    /// Track an environment variable for later restoration.
+    pub fn track_env_var(&self, key: String, previous: Option<OsString>) {
+        self.env_vars.borrow_mut().entry(key).or_insert(previous);
     }
 
-    /// Restore environment variables without acquiring [`EnvLock`].
-    ///
-    /// This variant assumes the caller already holds [`EnvLock`]. Use this in the
-    /// `Drop` path to avoid re-acquiring the lock.
-    ///
-    /// # Safety
-    ///
-    /// Caller must hold [`EnvLock`] for the duration of this call.
-    unsafe fn restore_environment_locked(&self) {
+    /// Restore any environment variables overridden during the scenario.
+    fn restore_environment(&self) {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
-            // SAFETY: Caller guarantees EnvLock is held.
-            unsafe { test_support::env::restore_many_locked(vars) };
-        }
-    }
-
-    /// Ensure the scenario-scoped environment lock is acquired.
-    ///
-    /// This lock serialises process-global mutations like `std::env::set_current_dir`
-    /// and environment variable changes across all parallel test threads. The lock
-    /// is held for the entire scenario duration and automatically released in Drop.
-    ///
-    /// When first acquired, captures the current working directory for later restoration.
-    pub fn ensure_env_lock(&self) {
-        if self.env_lock.borrow().is_none() {
-            // Acquire lock FIRST to ensure we capture CWD in a stable state
-            *self.env_lock.borrow_mut() = Some(EnvLock::acquire());
-            // Now capture CWD while holding the lock
-            if let Ok(cwd) = std::env::current_dir() {
-                *self.original_cwd.borrow_mut() = Some(cwd);
-            }
+            restore_many(vars);
         }
     }
 
@@ -245,21 +193,8 @@ impl Drop for TestWorld {
         self.ninja_env_guard.borrow_mut().take();
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
-
-        // Restore original CWD and environment variables before releasing env_lock.
-        // This must happen WHILE env_lock is still held to maintain serialization.
-        if self.env_lock.borrow().is_some() {
-            if let Some(original_cwd) = self.original_cwd.borrow_mut().take() {
-                // Restore to captured CWD; ignore errors since this is cleanup code in Drop
-                drop(std::env::set_current_dir(original_cwd));
-            }
-            // Restore environment variables while lock is still held
-            // SAFETY: We hold EnvLock via self.env_lock.
-            unsafe { self.restore_environment_locked() };
-        }
-
-        // Release env_lock after all mutations are complete
         self.env_lock.borrow_mut().take();
+        self.restore_environment();
         self.stdlib_text.clear();
     }
 }
@@ -324,70 +259,5 @@ impl<T> RefCellOptionExt<T> for RefCell<Option<T>> {
 
     fn take_value(&self) -> Option<T> {
         self.borrow_mut().take()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ensure_env_lock_acquires_lock_on_first_call() {
-        let world = TestWorld::default();
-        assert!(
-            world.env_lock.borrow().is_none(),
-            "env_lock should be None before ensure_env_lock is called"
-        );
-        world.ensure_env_lock();
-        assert!(
-            world.env_lock.borrow().is_some(),
-            "env_lock should be Some after ensure_env_lock is called"
-        );
-    }
-
-    #[test]
-    fn ensure_env_lock_is_idempotent() {
-        let world = TestWorld::default();
-        world.ensure_env_lock();
-        world.ensure_env_lock();
-        assert!(world.env_lock.borrow().is_some());
-    }
-
-    #[test]
-    fn ensure_env_lock_captures_cwd() {
-        let world = TestWorld::default();
-        assert!(
-            world.original_cwd.borrow().is_none(),
-            "original_cwd should be None before ensure_env_lock is called"
-        );
-        world.ensure_env_lock();
-        assert!(
-            world.original_cwd.borrow().is_some(),
-            "original_cwd should be captured when env_lock is first acquired"
-        );
-        let captured = world.original_cwd.borrow().clone().expect("captured CWD");
-        let actual = std::env::current_dir().expect("current_dir");
-        assert_eq!(
-            captured, actual,
-            "captured CWD should match the actual CWD at the time of lock acquisition"
-        );
-    }
-
-    #[test]
-    fn drop_restores_cwd_after_ensure_env_lock() {
-        let original = std::env::current_dir().expect("current_dir");
-        let temp = tempfile::tempdir().expect("tempdir");
-
-        {
-            let world = TestWorld::default();
-            world.ensure_env_lock();
-            std::env::set_current_dir(temp.path()).expect("chdir");
-        }
-
-        assert_eq!(
-            std::env::current_dir().expect("current_dir"),
-            original,
-            "Drop should restore the CWD captured at ensure_env_lock time"
-        );
     }
 }

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 No `PLANS.md` file exists in this repository.
 
@@ -140,13 +140,16 @@ Observable success means:
 - [x] (2026-03-07) Reviewed roadmap `3.11.1`, the OrthoConfig guide, current
   CLI/config code, and nearby execplans.
 - [x] (2026-03-07) Drafted this ExecPlan.
-- [ ] Approval received to implement.
-- [ ] Stage A: split parser, config schema, and merge responsibilities.
-- [ ] Stage B: introduce typed config groups and compatibility mapping.
-- [ ] Stage C: wire global and subcommand merges through `CliConfig`.
-- [ ] Stage D: add unit and behavioural coverage.
-- [ ] Stage E: update user/design docs, mark roadmap item done, and run all
-  quality gates.
+- [x] (2026-03-09) Continued implementation from the existing branch state.
+- [x] (2026-03-09) Stage A: split parser, config schema, and merge
+  responsibilities.
+- [x] (2026-03-09) Stage B: introduce typed config groups and compatibility
+  mapping.
+- [x] (2026-03-09) Stage C: wire global and subcommand merges through
+  `CliConfig`.
+- [x] (2026-03-09) Stage D: add unit and behavioural coverage.
+- [x] (2026-03-09) Stage E: update user/design docs, mark roadmap item done,
+  and run all quality gates.
 
 ## Surprises & Discoveries
 
@@ -164,6 +167,10 @@ Observable success means:
 - `rstest-bdd` feature-file edits may require touching
   [`tests/bdd_tests.rs`](/home/user/project/tests/bdd_tests.rs) to force Cargo
   to rebuild generated scenarios.
+- The new configuration-preferences BDD coverage initially flaked only in the
+  full suite because `NETSUKE_CONFIG_PATH` is process-global. Holding
+  [`EnvLock`](test_support/src/env_lock.rs) for the whole scenario fixed the
+  race without weakening the coverage.
 
 ## Decision Log
 
@@ -204,14 +211,60 @@ Observable success means:
   name, so `#[ortho_config(crate = "...")]` is not required unless that changes
   during implementation. Date/Author: 2026-03-08 (Codex, plan revision)
 
+- Decision: keep `Cli` as the parser/runtime command carrier while moving all
+  layered schema responsibilities into `CliConfig`. Rationale: this achieved
+  the roadmap separation with a smaller, safer surface-area change while
+  preserving runner tests and command-dispatch call sites. Date/Author:
+  2026-03-09 (Codex, implementation)
+
+- Decision: validate `output_format = "json"` as unsupported for now instead of
+  silently accepting it. Rationale: roadmap item `3.10.3` is still open, so
+  accepting JSON output configuration without delivering the behaviour would be
+  misleading. Date/Author: 2026-03-09 (Codex, implementation)
+
 These decisions must be recorded in
 [`docs/netsuke-design.md`](/home/user/project/docs/netsuke-design.md) during
 implementation if they remain unchanged after coding begins.
 
 ## Outcomes & Retrospective
 
-Pending. This section must be replaced with the actual result, quality-gate
-evidence, and lessons learned once implementation completes.
+Completed on 2026-03-09.
+
+Implemented results:
+
+- Added [`CliConfig`](/home/user/project/src/cli/config.rs) as the
+  authoritative OrthoConfig-derived schema and split the CLI module into
+  parser, config, and merge submodules.
+- Upgraded `ortho_config` to `0.8.0`.
+- Kept `Cli` as the parser/runtime command carrier while rooting configuration
+  merge in `CliConfig`.
+- Added typed config fields for `colour_policy`, `spinner_mode`,
+  `output_format`, and `theme`.
+- Canonicalized `no_emoji = true` to the ASCII theme while rejecting
+  contradictory combinations.
+- Wired `[cmds.build] targets` and `emit` defaults into the runtime build
+  command when the user does not supply explicit CLI values.
+- Added unit coverage in
+  [`tests/cli_tests/merge.rs`](/home/user/project/tests/cli_tests/merge.rs)
+  plus behavioural coverage in
+  [`tests/features/configuration_preferences.feature`](/home/user/project/tests/features/configuration_preferences.feature).
+- Updated the user guide, design document, and roadmap entry for `3.11.1`.
+
+Quality-gate evidence:
+
+- `make check-fmt`
+- `make lint`
+- `make test`
+- `PATH="/root/.bun/bin:$PATH" make markdownlint`
+- `make nixie`
+
+Lessons learned:
+
+- Keeping the parser/runtime type stable while introducing a separate merge
+  schema is a pragmatic migration path when downstream code already consumes
+  the parser type pervasively.
+- BDD coverage that touches process-wide environment variables must hold
+  `EnvLock` for the full scenario, not only for individual mutations.
 
 ## Context and orientation
 
