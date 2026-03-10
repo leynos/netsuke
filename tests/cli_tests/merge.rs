@@ -4,21 +4,46 @@
 //! CLI) and list-value appending.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::{Cli, CliConfig, OutputFormat, SpinnerMode, Theme};
-use netsuke::cli_localization;
+use netsuke::cli::{CliConfig, Theme};
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
 use serde_json::json;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
-use tempfile::tempdir;
-use test_support::{EnvVarGuard, env_lock::EnvLock};
+use test_support::EnvVarGuard;
 
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
     sanitize_value(&CliConfig::default())
+}
+
+fn with_config_file<F, T>(toml_content: &str, cli_args: &[&str], f: F) -> anyhow::Result<T>
+where
+    F: FnOnce(netsuke::cli::Cli) -> anyhow::Result<T>,
+{
+    let _env_lock = test_support::env_lock::EnvLock::acquire();
+    let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    std::fs::write(&config_path, toml_content).context("write netsuke.toml")?;
+    let _config_guard =
+        test_support::EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let localizer = std::sync::Arc::from(netsuke::cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
+        .context("parse CLI args for merge")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge CLI and configuration layers")?;
+    f(merged)
+}
+
+fn merge_defaults_with_file_layer(
+    defaults: serde_json::Value,
+    file_layer: serde_json::Value,
+) -> anyhow::Result<netsuke::cli::CliConfig> {
+    let mut composer = ortho_config::MergeComposer::new();
+    composer.push_defaults(defaults);
+    composer.push_file(file_layer, None);
+    netsuke::cli::CliConfig::merge_from_layers(composer.layers()).map_err(anyhow::Error::from)
 }
 
 #[rstest]
@@ -174,80 +199,58 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 
 #[rstest]
 fn cli_config_build_defaults_apply_when_cli_targets_are_absent() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_dir = tempdir().context("create temporary config directory")?;
-    let config_path = temp_dir.path().join("netsuke.toml");
-    fs::write(
-        &config_path,
+    with_config_file(
         r#"
 [cmds.build]
 targets = ["all", "docs"]
 "#,
+        &["netsuke"],
+        |merged| {
+            let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
+                anyhow::bail!("expected merged command to be build");
+            };
+            ensure!(
+                args.targets == vec![String::from("all"), String::from("docs")],
+                "configured build targets should be used when CLI targets are absent",
+            );
+            Ok(())
+        },
     )
-    .context("write netsuke.toml")?;
-
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for merge")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?;
-
-    let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
-        anyhow::bail!("expected merged command to be build");
-    };
-    ensure!(
-        args.targets == vec![String::from("all"), String::from("docs")],
-        "configured build targets should be used when CLI targets are absent",
-    );
-    Ok(())
 }
 
 #[rstest]
 fn cli_config_explicit_targets_override_configured_build_defaults() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_dir = tempdir().context("create temporary config directory")?;
-    let config_path = temp_dir.path().join("netsuke.toml");
-    fs::write(
-        &config_path,
+    with_config_file(
         r#"
 [cmds.build]
 targets = ["all"]
 "#,
+        &["netsuke", "build", "lint"],
+        |merged| {
+            let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
+                anyhow::bail!("expected merged command to be build");
+            };
+            ensure!(
+                args.targets == vec![String::from("lint")],
+                "explicit CLI targets should override configured defaults",
+            );
+            Ok(())
+        },
     )
-    .context("write netsuke.toml")?;
-
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke", "build", "lint"], &localizer)
-            .context("parse CLI args for merge")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?;
-
-    let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
-        anyhow::bail!("expected merged command to be build");
-    };
-    ensure!(
-        args.targets == vec![String::from("lint")],
-        "explicit CLI targets should override configured defaults",
-    );
-    Ok(())
 }
 
 #[rstest]
 fn cli_config_validates_theme_alias_conflicts(
     default_cli_json: Result<serde_json::Value>,
 ) -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(default_cli_json?);
-    composer.push_file(json!({
-        "theme": "unicode",
-        "no_emoji": true
-    }), None);
-
-    let err = CliConfig::merge_from_layers(composer.layers())
-        .expect_err("conflicting theme and alias should fail");
+    let err = merge_defaults_with_file_layer(
+        default_cli_json?,
+        json!({
+            "theme": "unicode",
+            "no_emoji": true
+        }),
+    )
+    .expect_err("conflicting theme and alias should fail");
     ensure!(
         err.to_string().contains("theme = \"unicode\" conflicts with no_emoji = true"),
         "unexpected error text: {err}",
@@ -259,15 +262,14 @@ fn cli_config_validates_theme_alias_conflicts(
 fn cli_config_validates_spinner_and_progress_conflicts(
     default_cli_json: Result<serde_json::Value>,
 ) -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(default_cli_json?);
-    composer.push_file(json!({
-        "spinner_mode": "disabled",
-        "progress": true
-    }), None);
-
-    let err = CliConfig::merge_from_layers(composer.layers())
-        .expect_err("conflicting spinner and progress settings should fail");
+    let err = merge_defaults_with_file_layer(
+        default_cli_json?,
+        json!({
+            "spinner_mode": "disabled",
+            "progress": true
+        }),
+    )
+    .expect_err("conflicting spinner and progress settings should fail");
     ensure!(
         err.to_string().contains("spinner_mode = \"disabled\" conflicts with progress = true"),
         "unexpected error text: {err}",
@@ -279,14 +281,13 @@ fn cli_config_validates_spinner_and_progress_conflicts(
 fn cli_config_rejects_unsupported_json_output_format(
     default_cli_json: Result<serde_json::Value>,
 ) -> Result<()> {
-    let mut composer = MergeComposer::new();
-    composer.push_defaults(default_cli_json?);
-    composer.push_file(json!({
-        "output_format": "json"
-    }), None);
-
-    let err = CliConfig::merge_from_layers(composer.layers())
-        .expect_err("unsupported output format should fail");
+    let err = merge_defaults_with_file_layer(
+        default_cli_json?,
+        json!({
+            "output_format": "json"
+        }),
+    )
+    .expect_err("unsupported output format should fail");
     ensure!(
         err.to_string().contains("output_format = \"json\" is not supported yet"),
         "unexpected error text: {err}",
@@ -296,25 +297,15 @@ fn cli_config_rejects_unsupported_json_output_format(
 
 #[rstest]
 fn cli_runtime_canonicalizes_ascii_theme_from_no_emoji_alias() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_dir = tempdir().context("create temporary config directory")?;
-    let config_path = temp_dir.path().join("netsuke.toml");
-    fs::write(&config_path, "no_emoji = true\n").context("write netsuke.toml")?;
-
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for merge")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?;
-
-    ensure!(
-        merged.theme == Some(Theme::Ascii),
-        "no_emoji compatibility alias should canonicalize to the ASCII theme",
-    );
-    ensure!(
-        merged.no_emoji == Some(true),
-        "no_emoji alias should remain available in the runtime CLI",
-    );
-    Ok(())
+    with_config_file("no_emoji = true\n", &["netsuke"], |merged| {
+        ensure!(
+            merged.theme == Some(Theme::Ascii),
+            "no_emoji compatibility alias should canonicalize to the ASCII theme",
+        );
+        ensure!(
+            merged.no_emoji == Some(true),
+            "no_emoji alias should remain available in the runtime CLI",
+        );
+        Ok(())
+    })
 }
