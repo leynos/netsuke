@@ -1,6 +1,6 @@
 ---
 source: src/diagnostic_json_tests.rs
-assertion_line: 114
+assertion_line: 151
 expression: rendered
 ---
 {
@@ -23,16 +23,7 @@ expression: rendered
       "source": {
         "name": "Netsukefile"
       },
-      "primary_span": {
-        "label": "invalid YAML",
-        "offset": 10,
-        "length": 1,
-        "line": 2,
-        "column": 2,
-        "end_line": 2,
-        "end_column": 2,
-        "snippet": "-"
-      },
+      "primary_span": null,
       "labels": [
         {
           "label": "invalid YAML",

@@ -5,6 +5,7 @@
 
 use crate::cli;
 use crate::cli::Cli;
+use crate::cli_l10n::parse_bool_hint;
 use ortho_config::LanguageIdentifier;
 use std::ffi::OsString;
 use std::str::FromStr;
@@ -130,8 +131,6 @@ pub fn resolve_startup_locale(
     env: &impl EnvProvider,
     system: &impl SystemLocale,
 ) -> Option<String> {
-    // Keep early-startup hint scanning aligned across locale and diagnostics.
-    let _diag_json_hint = cli::diag_json_hint_from_args(args);
     let cli_hint = cli::locale_hint_from_args(args);
     let env_locale = env.var(NETSUKE_LOCALE_ENV);
     let system_locale = system.system_locale();
@@ -186,12 +185,4 @@ pub fn resolve_startup_diag_json(args: &[OsString], env: &impl EnvProvider) -> b
 pub fn resolve_runtime_locale(merged: &Cli, system: &impl SystemLocale) -> Option<String> {
     let system_locale = system.system_locale();
     select_locale([merged.locale.as_deref(), system_locale.as_deref()])
-}
-
-fn parse_bool_hint(value: &str) -> Option<bool> {
-    match value.to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => Some(true),
-        "0" | "false" | "no" | "off" => Some(false),
-        _ => None,
-    }
 }

@@ -1,4 +1,4 @@
-//! Locale-specific CLI tests.
+//! Locale and diagnostic JSON hint CLI tests.
 
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
@@ -72,10 +72,10 @@ fn diag_json_hint_from_args_accepts_bare_flag() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_hint_from_args_accepts_equals_form() -> Result<()> {
+fn diag_json_hint_from_args_ignores_equals_form() -> Result<()> {
     let args = os_args(&["netsuke", "--diag-json=false"]);
     let hint = diag_json_hint_from_args(&args);
-    ensure!(hint == Some(false), "expected Some(false), got: {hint:?}");
+    ensure!(hint.is_none(), "expected None, got: {hint:?}");
     Ok(())
 }
 
@@ -91,7 +91,7 @@ fn diag_json_hint_from_args_ignores_args_after_double_dash() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_hint_from_args_uses_last_recognized_value() -> Result<()> {
+fn diag_json_hint_from_args_detects_bare_flag_after_ignored_equals_form() -> Result<()> {
     let args = os_args(&["netsuke", "--diag-json=false", "--diag-json"]);
     let hint = diag_json_hint_from_args(&args);
     ensure!(hint == Some(true), "expected Some(true), got: {hint:?}");

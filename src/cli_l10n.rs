@@ -201,7 +201,7 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
     hint
 }
 
-fn parse_bool_hint(value: &str) -> Option<bool> {
+pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
     match value.to_ascii_lowercase().as_str() {
         "1" | "true" | "yes" | "on" => Some(true),
         "0" | "false" | "no" | "off" => Some(false),
@@ -209,25 +209,14 @@ fn parse_bool_hint(value: &str) -> Option<bool> {
     }
 }
 
-/// Inspect raw arguments and extract the requested `--diag-json` state.
+/// Inspect raw arguments and detect whether `--diag-json` was supplied.
 ///
-/// A bare `--diag-json` enables JSON diagnostics. When multiple forms are
-/// present, the last recognised value wins.
+/// A bare `--diag-json` enables JSON diagnostics. The helper mirrors clap's
+/// flag semantics, so `--diag-json=value` is ignored rather than interpreted
+/// as a boolean assignment.
 #[must_use]
 pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
-    let mut hint = None;
-    for arg in args {
-        let text = arg.to_string_lossy();
-        if text == "--" {
-            break;
-        }
-        if text == "--diag-json" {
-            hint = Some(true);
-            continue;
-        }
-        if let Some(value) = text.strip_prefix("--diag-json=") {
-            hint = parse_bool_hint(value);
-        }
-    }
-    hint
+    args.iter()
+        .take_while(|arg| arg.to_string_lossy() != "--")
+        .find_map(|arg| (arg.to_string_lossy() == "--diag-json").then_some(true))
 }

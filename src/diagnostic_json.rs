@@ -7,6 +7,8 @@
 use miette::{Diagnostic, Report, Severity, SourceCode, SourceSpan, SpanContents};
 use serde::Serialize;
 use std::error::Error as StdError;
+use std::io::{self, Write};
+use std::process::ExitCode;
 
 const SCHEMA_VERSION: u32 = 1;
 
@@ -38,6 +40,15 @@ pub fn render_diagnostic_json(diagnostic: &dyn Diagnostic) -> serde_json::Result
 /// Returns an error if the document cannot be serialized to JSON.
 pub fn render_error_json(error: &(dyn StdError + 'static)) -> serde_json::Result<String> {
     serde_json::to_string_pretty(&DiagnosticDocument::from_error(error))
+}
+
+/// Emit a rendered JSON diagnostic document to `stderr`, falling back to a
+/// minimal schema-compatible payload when serialization fails.
+#[must_use]
+pub fn emit_or_fallback(result: serde_json::Result<String>) -> ExitCode {
+    let payload = result.unwrap_or_else(|err| fallback_payload(&err));
+    drop(writeln!(io::stderr(), "{payload}"));
+    ExitCode::FAILURE
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -96,8 +107,7 @@ struct DiagnosticEntry {
 
 impl DiagnosticEntry {
     fn from_diagnostic(diagnostic: &dyn Diagnostic) -> Self {
-        let (source, labels) = extract_source_and_labels(diagnostic);
-        let primary_span = labels.first().cloned();
+        let (source, primary_span, labels) = extract_source_and_labels(diagnostic);
         let related = diagnostic
             .related()
             .map(|items| items.map(Self::from_diagnostic).collect())
@@ -189,32 +199,68 @@ fn collect_error_causes_from_option(mut current: Option<&(dyn StdError + 'static
 
 fn extract_source_and_labels(
     diagnostic: &dyn Diagnostic,
-) -> (Option<DiagnosticSource>, Vec<DiagnosticSpan>) {
+) -> (
+    Option<DiagnosticSource>,
+    Option<DiagnosticSpan>,
+    Vec<DiagnosticSpan>,
+) {
     let Some(labelled_diagnostic) = diagnostic_with_labels(diagnostic) else {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     };
     let Some(source_code) = labelled_diagnostic.source_code() else {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     };
     let Some(labels) = labelled_diagnostic.labels() else {
-        return (None, Vec::new());
+        return (None, None, Vec::new());
     };
 
     let mut source = None;
+    let mut primary_span = None;
     let spans = labels
         .filter_map(|label| {
-            let span = build_span(&label, source_code)?;
             if source.is_none() {
-                source = span
-                    .snippet
-                    .as_ref()
-                    .and_then(|_| source_name_for(&label, source_code))
-                    .map(|name| DiagnosticSource { name });
+                source = source_name_for(&label, source_code).map(|name| DiagnosticSource { name });
+            }
+            let is_primary = label.primary();
+            let span = build_span(&label, source_code)?;
+            if is_primary {
+                primary_span = Some(span.clone());
             }
             Some(span)
         })
         .collect();
-    (source, spans)
+    (source, primary_span, spans)
+}
+
+fn fallback_payload(error: &serde_json::Error) -> String {
+    let document = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "generator": GeneratorInfo::current(),
+        "diagnostics": [{
+            "message": "Failed to serialize diagnostics JSON.",
+            "code": null,
+            "severity": "error",
+            "help": null,
+            "url": null,
+            "causes": [error.to_string()],
+            "source": null,
+            "primary_span": null,
+            "labels": [],
+            "related": [],
+        }],
+    });
+    serde_json::to_string_pretty(&document).unwrap_or_else(|_| {
+        format!(
+            concat!(
+                "{{\"schema_version\":{},",
+                "\"generator\":{{\"name\":\"{}\",\"version\":\"{}\"}},",
+                "\"diagnostics\":[]}}"
+            ),
+            SCHEMA_VERSION,
+            GeneratorInfo::current().name,
+            GeneratorInfo::current().version,
+        )
+    })
 }
 
 fn diagnostic_help(diagnostic: &dyn Diagnostic) -> Option<String> {

@@ -65,25 +65,21 @@ Thresholds that trigger escalation when breached:
 Known uncertainties that might affect the plan:
 
 - Risk: Indicatif progress bars may have implicit stdout writes.
-  Severity: medium
-  Likelihood: low
-  Mitigation: Verify `ProgressDrawTarget::stderr_with_hz()` is consistently used
-  throughout `IndicatifReporter`. The codebase already uses stderr targets.
+  Severity: medium Likelihood: low Mitigation: Verify
+  `ProgressDrawTarget::stderr_with_hz()` is consistently used throughout
+  `IndicatifReporter`. The codebase already uses stderr targets.
 
 - Risk: Timing-sensitive interleaving between status updates and subprocess
-  output may be difficult to test deterministically.
-  Severity: medium
-  Likelihood: medium
-  Mitigation: Use BDD scenarios with controlled fake Ninja executables that emit
-  predictable output patterns. Avoid timing-based assertions.
+  output may be difficult to test deterministically. Severity: medium
+  Likelihood: medium Mitigation: Use BDD scenarios with controlled fake Ninja
+  executables that emit predictable output patterns. Avoid timing-based
+  assertions.
 
 - Risk: The existing subprocess streaming architecture splits stdout/stderr
   handling across threads, which could introduce race conditions if status
-  callbacks write to stdout.
-  Severity: medium
-  Likelihood: low
-  Mitigation: Audit all paths where `StatusReporter` methods write output;
-  confirm they exclusively use stderr.
+  callbacks write to stdout. Severity: medium Likelihood: low Mitigation: Audit
+  all paths where `StatusReporter` methods write output; confirm they
+  exclusively use stderr.
 
 ## Progress
 
@@ -132,9 +128,9 @@ Known uncertainties that might affect the plan:
 
 **Outcome**: SUCCESS
 
-The existing implementation already correctly separates status messages (stderr)
-from subprocess output (stdout). This plan was primarily a verification and
-documentation exercise rather than an implementation task.
+The existing implementation already correctly separates status messages
+(stderr) from subprocess output (stdout). This plan was primarily a
+verification and documentation exercise rather than an implementation task.
 
 **What went well**:
 
@@ -146,8 +142,8 @@ documentation exercise rather than an implementation task.
 **Lessons learned**:
 
 - Always audit the existing implementation before assuming changes are needed.
-  The roadmap item implied implementation work, but the architecture was already
-  correct.
+  The roadmap item implied implementation work, but the architecture was
+  already correct.
 - End-to-end tests that verify stream separation provide valuable regression
   protection even when no code changes are required.
 
@@ -209,17 +205,17 @@ The output architecture spans several modules:
 Based on code analysis, the following table summarizes stream routing for
 reporters and subprocesses:
 
-| Component | Output destination | Notes |
-| --------- | ------------------ | ----- |
-| `AccessibleReporter::report_stage` | stderr | `writeln!(io::stderr(), ...)` |
-| `AccessibleReporter::report_complete` | stderr | `writeln!(io::stderr(), ...)` |
-| `AccessibleReporter::report_task_progress` | stderr | `writeln!(io::stderr(), ...)` |
-| `IndicatifReporter` (progress bars) | stderr | `ProgressDrawTarget::stderr_with_hz(12)` |
-| `IndicatifReporter` (hidden mode fallback) | stderr | `writeln!(io::stderr(), ...)` |
-| `IndicatifReporter::report_complete` | stderr | `writeln!(io::stderr(), ...)` |
-| `VerboseTimingReporter` timing summary | stderr | Via wrapped reporter |
-| Ninja subprocess stdout | stdout | Via `spawn_and_stream_output()` |
-| Ninja subprocess stderr | stderr | Via background thread forwarding |
+| Component                                  | Output destination | Notes                                    |
+| ------------------------------------------ | ------------------ | ---------------------------------------- |
+| `AccessibleReporter::report_stage`         | stderr             | `writeln!(io::stderr(), ...)`            |
+| `AccessibleReporter::report_complete`      | stderr             | `writeln!(io::stderr(), ...)`            |
+| `AccessibleReporter::report_task_progress` | stderr             | `writeln!(io::stderr(), ...)`            |
+| `IndicatifReporter` (progress bars)        | stderr             | `ProgressDrawTarget::stderr_with_hz(12)` |
+| `IndicatifReporter` (hidden mode fallback) | stderr             | `writeln!(io::stderr(), ...)`            |
+| `IndicatifReporter::report_complete`       | stderr             | `writeln!(io::stderr(), ...)`            |
+| `VerboseTimingReporter` timing summary     | stderr             | Via wrapped reporter                     |
+| Ninja subprocess stdout                    | stdout             | Via `spawn_and_stream_output()`          |
+| Ninja subprocess stderr                    | stderr             | Via background thread forwarding         |
 
 ### Existing test coverage
 
@@ -271,15 +267,16 @@ model provides the necessary ordering guarantees.
 
 ### Stage D: End-to-end tests (completed)
 
-**Outcome**: Three BDD scenarios were added to `tests/features/progress_output.feature`
-to verify stream separation:
+**Outcome**: Three BDD scenarios were added to
+`tests/features/progress_output.feature` to verify stream separation:
 
 1. **Subprocess stdout is separate from status messages**: Verifies that stdout
-   markers from the fake Ninja appear only in stdout, while stderr markers appear
-   only in stderr. Uses stable machine markers (`NINJA_STDOUT_MARKER`,
+   markers from the fake Ninja appear only in stdout, while stderr markers
+   appear only in stderr. Uses stable machine markers (`NINJA_STDOUT_MARKER`,
    `NINJA_STDERR_MARKER`) to avoid coupling to localized UI strings.
 
-2. **Status messages do not contaminate stdout in standard mode**: Verifies stream
+2. **Status messages do not contaminate stdout in standard mode**: Verifies
+   stream
    routing in non-accessible mode using the same stable markers.
 
 3. **Build artifacts can be captured via stdout redirection**: Verifies that
@@ -287,18 +284,21 @@ to verify stream separation:
 
 Supporting infrastructure added:
 
-- `FakeNinjaConfig` struct in `tests/bdd/steps/progress_output.rs` for configurable
+- `FakeNinjaConfig` struct in `tests/bdd/steps/progress_output.rs` for
+  configurable
   fixture generation with optional stderr markers.
 - `install_fake_ninja_with_config()` function for flexible fixture setup.
-- Updated `fake_ninja_emits_stdout_output` fixture to emit both stdout and stderr
+- Updated `fake_ninja_emits_stdout_output` fixture to emit both stdout and
+  stderr
   markers for comprehensive stream routing verification.
 
 ### Stage E: Documentation (completed)
 
-**Outcome**: The `docs/users-guide.md` file was updated with an "Output streams"
-section documenting the stream separation behaviour:
+**Outcome**: The `docs/users-guide.md` file was updated with an "Output
+streams" section documenting the stream separation behaviour:
 
-- Explains that status messages go to stderr and subprocess output goes to stdout.
+- Explains that status messages go to stderr and subprocess output goes to
+  stdout.
 - Provides example redirection commands for common use cases.
 - Documents the `--progress false` flag for suppressing status output entirely.
 

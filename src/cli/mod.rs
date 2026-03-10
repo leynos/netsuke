@@ -298,6 +298,47 @@ fn is_empty_value(value: &serde_json::Value) -> bool {
     matches!(value, serde_json::Value::Object(map) if map.is_empty())
 }
 
+fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
+    value
+        .as_object()
+        .and_then(|map| map.get("diag_json"))
+        .and_then(serde_json::Value::as_bool)
+}
+
+/// Resolve the effective diagnostic JSON preference from the raw config layers.
+///
+/// This is used before full config merging so startup and merge-time failures
+/// can still honour `diag_json` values sourced from config files or the
+/// environment.
+#[must_use]
+pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
+    let mut diag_json = Cli::default().diag_json;
+
+    let discovery = config_discovery(cli.directory.as_ref());
+    let file_layers = discovery.compose_layers();
+    for layer in file_layers.value {
+        let layer_value = layer.into_value();
+        if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
+            diag_json = layer_diag_json;
+        }
+    }
+
+    let env_provider = env_provider()
+        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
+        .split("__");
+    if let Ok(value) = Figment::from(env_provider).extract::<serde_json::Value>()
+        && let Some(env_diag_json) = diag_json_from_layer(&value)
+    {
+        diag_json = env_diag_json;
+    }
+
+    if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
+        cli.diag_json
+    } else {
+        diag_json
+    }
+}
+
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<serde_json::Value> {
     let value = sanitize_value(cli)?;
     let mut map = match value {
@@ -329,6 +370,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "accessible",
         "progress",
         "no_emoji",
+        "diag_json",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
             map.remove(field);

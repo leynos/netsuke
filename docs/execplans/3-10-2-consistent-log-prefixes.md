@@ -77,8 +77,8 @@ Hard invariants that must hold throughout implementation:
 ## Surprises & discoveries
 
 - All existing BDD assertions used substring `contains` matching, so adding
-  prefixes to output lines did not break any existing scenarios. Only
-  scenario titles and a few new assertions needed updating.
+  prefixes to output lines did not break any existing scenarios. Only scenario
+  titles and a few new assertions needed updating.
 - The `IndicatifReporter` needed `OutputPrefs` added to its constructor and
   all downstream call sites (runner, tests) to support the success prefix.
 
@@ -100,8 +100,8 @@ Hard invariants that must hold throughout implementation:
 **Outcome**: SUCCESS
 
 All quality gates pass on first attempt. The implementation introduces
-consistent, localizable, emoji-aware prefixes across all three output
-channels without breaking any existing functionality.
+consistent, localizable, emoji-aware prefixes across all three output channels
+without breaking any existing functionality.
 
 **What went well**:
 

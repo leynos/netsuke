@@ -144,10 +144,11 @@ fn log_command_execution(cmd: &Command) {
 fn run_command_and_stream(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
+    suppress_stderr: bool,
 ) -> io::Result<()> {
     log_command_execution(&cmd);
     let child = cmd.spawn()?;
-    let status = spawn_and_stream_output(child, status_observer)?;
+    let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
     check_exit_status(status)
 }
 
@@ -220,7 +221,7 @@ fn run_ninja_build_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_build_command(&mut cmd, request.cli, request.build_file, request.targets)?;
-    run_command_and_stream(cmd, status_observer)
+    run_command_and_stream(cmd, status_observer, request.cli.diag_json)
 }
 
 fn run_ninja_tool_internal(
@@ -229,7 +230,7 @@ fn run_ninja_tool_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_tool_command(&mut cmd, request.cli, request.build_file, request.tool)?;
-    run_command_and_stream(cmd, status_observer)
+    run_command_and_stream(cmd, status_observer, request.cli.diag_json)
 }
 
 /// Invoke `ninja` build and stream parsed task updates from status lines.
@@ -276,6 +277,7 @@ fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_
 fn spawn_and_stream_output(
     mut child: Child,
     status_observer: Option<StatusObserver<'_>>,
+    suppress_stderr: bool,
 ) -> io::Result<ExitStatus> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
@@ -289,8 +291,13 @@ fn spawn_and_stream_output(
     let err_handle = thread::spawn(move || {
         // Avoid a long-lived stderr lock: status observers invoked while
         // draining stdout may emit task updates to stderr, and that path must
-        // not block behind stderr forwarding.
-        forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
+        // not block behind stderr forwarding. In JSON diagnostics mode we still
+        // drain child stderr, but discard it to keep stderr machine-readable.
+        if suppress_stderr {
+            forward_child_output(BufReader::new(stderr), io::sink(), "stderr")
+        } else {
+            forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
+        }
     });
 
     // Intentionally drain stdout on the main thread when `status_observer` is

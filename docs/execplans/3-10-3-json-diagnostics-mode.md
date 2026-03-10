@@ -22,10 +22,9 @@ Observable success means:
 2. A successful command such as `netsuke --diag-json manifest -` keeps
    writing command artefacts to `stdout` and writes nothing to `stderr`.
 3. The JSON schema is documented as a supported interface in
-   [docs/users-guide.md](/home/user/project/docs/users-guide.md), design
-   decisions are recorded in
-   [docs/netsuke-design.md](/home/user/project/docs/netsuke-design.md), and
-   compatibility is guarded by snapshot tests.
+   [docs/users-guide.md](../users-guide.md), design decisions are recorded in
+   [docs/netsuke-design.md](../netsuke-design.md), and compatibility is guarded
+   by snapshot tests.
 4. `make check-fmt`, `make lint`, and `make test` pass after the change.
 
 Illustrative failure output:
@@ -90,8 +89,8 @@ Hard invariants that must hold throughout implementation:
   configuration model through OrthoConfig: defaults < config file < environment
   < CLI.
 - Add a localized help surface for the flag via the existing CLI
-  localization pipeline in
-  [src/cli_l10n.rs](/home/user/project/src/cli_l10n.rs) and both Fluent bundles.
+  localization pipeline in [src/cli_l10n.rs](../../src/cli_l10n.rs) and both
+  Fluent bundles.
 - Preserve current human-readable diagnostics when JSON mode is not
   enabled.
 - When JSON mode is enabled, `stderr` must remain machine-readable. No
@@ -108,13 +107,12 @@ Hard invariants that must hold throughout implementation:
 - Add snapshot coverage for the JSON contract using the existing
   `insta` dependency.
 - Record design decisions in
-  [docs/netsuke-design.md](/home/user/project/docs/netsuke-design.md).
+  [docs/netsuke-design.md](../netsuke-design.md).
 - Update
-  [docs/users-guide.md](/home/user/project/docs/users-guide.md) for the new
-  flag, configuration knobs, stream behaviour, and schema.
+  [docs/users-guide.md](../users-guide.md) for the new flag, configuration
+  knobs, stream behaviour, and schema.
 - Mark roadmap item `3.10.3` done in
-  [docs/roadmap.md](/home/user/project/docs/roadmap.md) only after all quality
-  gates pass.
+  [docs/roadmap.md](../roadmap.md) only after all quality gates pass.
 - Before finishing implementation, run all relevant gates with logged
   output:
   - `make check-fmt`
@@ -138,9 +136,9 @@ Hard invariants that must hold throughout implementation:
   confirmation.
 - File size: if any edited Rust file would exceed 400 lines, split the
   work into focused helper modules before continuing.
-- Test determinism: if JSON snapshots or BDD assertions remain flaky
-  after two attempts, stop and escalate with the specific unstable field or
-  ordering behaviour.
+- Test determinism: if JSON snapshots or behaviour-driven development (BDD)
+  assertions remain flaky after two attempts, stop and escalate with the
+  specific unstable field or ordering behaviour.
 
 ## Risks
 
@@ -166,8 +164,8 @@ Hard invariants that must hold throughout implementation:
   whitespace.
 
 - Risk: `rstest-bdd` feature edits may not rebuild automatically.
-  Mitigation: touch [tests/bdd_tests.rs](/home/user/project/tests/bdd_tests.rs)
-  before the final `make test` run if any `.feature` file changes.
+  Mitigation: touch [tests/bdd_tests.rs](../../tests/bdd_tests.rs) before the
+  final `make test` run if any `.feature` file changes.
 
 ## Progress
 
@@ -181,7 +179,7 @@ Hard invariants that must hold throughout implementation:
       `JSONReportHandler`, but its raw output is not sufficient as
       Netsuke's documented schema.
 - [x] (2026-03-07 00:00Z) Drafted this ExecPlan in
-      [docs/execplans/3-10-3-json-diagnostics-mode.md](/home/user/project/docs/execplans/3-10-3-json-diagnostics-mode.md).
+      [docs/execplans/3-10-3-json-diagnostics-mode.md](3-10-3-json-diagnostics-mode.md).
 - [x] (2026-03-09 00:00Z) Stage A: added `diag_json` CLI/config plumbing,
       localized help text, and raw startup hint parsing for CLI/env access
       before full configuration loading.
@@ -200,9 +198,9 @@ Hard invariants that must hold throughout implementation:
 ## Surprises & Discoveries
 
 - The roadmap's configuration section is partly out of date relative to
-  the codebase: the existing
-  [src/cli/mod.rs](/home/user/project/src/cli/mod.rs) already derives
-  `OrthoConfig` and already participates in file, environment, and CLI merging.
+  the codebase: the existing [src/cli/mod.rs](../../src/cli/mod.rs) already
+  derives `OrthoConfig` and already participates in file, environment, and CLI
+  merging.
 
 - `miette` 7.6.0 includes
   `miette::JSONReportHandler`, but its shape is a flat recursive JSON tree
@@ -211,12 +209,12 @@ Hard invariants that must hold throughout implementation:
   supported wire contract.
 
 - The current hook point for runtime error rendering is centralised in
-  [src/main.rs](/home/user/project/src/main.rs), which keeps the implementation
-  additive if JSON formatting is introduced there.
+  [src/main.rs](../../src/main.rs), which keeps the implementation additive if
+  JSON formatting is introduced there.
 
 - Behaviour tests autodiscover every feature file under
-  [tests/features](/home/user/project/tests/features), so a dedicated
-  diagnostics feature file can be added without updating a manual test list.
+  [tests/features](../../tests/features), so a dedicated diagnostics feature
+  file can be added without updating a manual test list.
 
 - Wrapped `miette` diagnostics such as
   `ManifestError::Parse { #[diagnostic_source] ... }` do not expose useful
@@ -225,9 +223,8 @@ Hard invariants that must hold throughout implementation:
   text.
 
 - After editing `.feature` files, `cargo test` may continue using stale
-  generated scenarios until
-  [tests/bdd_tests.rs](/home/user/project/tests/bdd_tests.rs) is touched. This
-  remains necessary with `rstest-bdd` v0.5.0.
+  generated scenarios until [tests/bdd_tests.rs](../../tests/bdd_tests.rs) is
+  touched. This remains necessary with `rstest-bdd` v0.5.0.
 
 ## Decision Log
 
@@ -297,45 +294,45 @@ Lessons learned:
 
 The current diagnostics path is split across a small number of files:
 
-- [src/main.rs](/home/user/project/src/main.rs) parses CLI arguments,
+- [src/main.rs](../../src/main.rs) parses CLI arguments,
   merges OrthoConfig layers, initializes tracing, calls `runner::run(...)`, and
   renders runtime failures.
-- [src/cli/mod.rs](/home/user/project/src/cli/mod.rs) defines the
+- [src/cli/mod.rs](../../src/cli/mod.rs) defines the
   existing `Cli` struct and already derives `OrthoConfig`.
-- [src/cli_l10n.rs](/home/user/project/src/cli_l10n.rs) maps clap
+- [src/cli_l10n.rs](../../src/cli_l10n.rs) maps clap
   argument identifiers to Fluent help keys.
-- [src/runner/mod.rs](/home/user/project/src/runner/mod.rs) constructs
+- [src/runner/mod.rs](../../src/runner/mod.rs) constructs
   status reporters and executes commands.
-- [src/runner/error.rs](/home/user/project/src/runner/error.rs) contains
+- [src/runner/error.rs](../../src/runner/error.rs) contains
   `RunnerError`, which already implements `miette::Diagnostic`.
-- [src/manifest/diagnostics/mod.rs](/home/user/project/src/manifest/diagnostics/mod.rs)
+- [src/manifest/diagnostics/mod.rs](../../src/manifest/diagnostics/mod.rs)
   and
-  [src/manifest/diagnostics/yaml.rs](/home/user/project/src/manifest/diagnostics/yaml.rs)
-   create `miette` diagnostics for manifest and YAML failures.
+  [src/manifest/diagnostics/yaml.rs](../../src/manifest/diagnostics/yaml.rs)
+  create `miette` diagnostics for manifest and YAML failures.
 
 The current output-channel contract is already strong enough to build on:
 
 - `stdout` carries command artefacts such as `manifest -` output and
-  graph DOT output.
+  Graphviz DOT output.
 - `stderr` carries status lines, completion summaries, and diagnostics.
 
 JSON mode must preserve that separation while making `stderr` machine-readable.
 
 The existing test surfaces that should be extended are:
 
-- [tests/cli_tests/parsing.rs](/home/user/project/tests/cli_tests/parsing.rs)
+- [tests/cli_tests/parsing.rs](../../tests/cli_tests/parsing.rs)
   for flag parsing.
-- [tests/cli_tests/merge.rs](/home/user/project/tests/cli_tests/merge.rs)
+- [tests/cli_tests/merge.rs](../../tests/cli_tests/merge.rs)
   for OrthoConfig layer precedence.
-- [tests/yaml_error_tests.rs](/home/user/project/tests/yaml_error_tests.rs)
+- [tests/yaml_error_tests.rs](../../tests/yaml_error_tests.rs)
   for span and hint-bearing diagnostics.
-- [tests/logging_stderr_tests.rs](/home/user/project/tests/logging_stderr_tests.rs)
+- [tests/logging_stderr_tests.rs](../../tests/logging_stderr_tests.rs)
   for stream placement.
-- [tests/ninja_snapshot_tests.rs](/home/user/project/tests/ninja_snapshot_tests.rs)
+- [tests/ninja_snapshot_tests.rs](../../tests/ninja_snapshot_tests.rs)
   as the local snapshot-testing precedent.
-- [tests/features/missing_manifest.feature](/home/user/project/tests/features/missing_manifest.feature)
+- [tests/features/missing_manifest.feature](../../tests/features/missing_manifest.feature)
   and
-  [tests/features/progress_output.feature](/home/user/project/tests/features/progress_output.feature)
+  [tests/features/progress_output.feature](../../tests/features/progress_output.feature)
    as likely behavioural coverage anchors.
 
 ## Supported JSON schema
@@ -397,7 +394,7 @@ Notes for implementers:
   schema-version bump.
 - Field order should remain the struct declaration order so snapshots and
   human inspection stay readable.
-- `primary_span` is intentionally redundant with `labels[0]`; it makes
+- `primary_span` is populated from the label explicitly marked primary; it makes
   common editor integrations simpler without forcing consumers to infer a
   primary label.
 
@@ -410,16 +407,16 @@ Extend the existing `Cli` struct rather than inventing a new config wrapper.
 Changes:
 
 1. Add `diag_json: bool` to
-   [src/cli/mod.rs](/home/user/project/src/cli/mod.rs) with:
+   [src/cli/mod.rs](../../src/cli/mod.rs) with:
    - `#[arg(long)]`
    - `#[ortho_config(default = false)]`
    - a help string describing machine-readable diagnostics
 2. Update `Default for Cli`.
 3. Wire a new help-key mapping in
-   [src/cli_l10n.rs](/home/user/project/src/cli_l10n.rs).
+   [src/cli_l10n.rs](../../src/cli_l10n.rs).
 4. Add new Fluent keys in
-   [src/localization/keys.rs](/home/user/project/src/localization/keys.rs) and
-   translated strings in both locale bundles.
+   [src/localization/keys.rs](../../src/localization/keys.rs) and translated
+   strings in both locale bundles.
 5. Add raw startup hint resolution for `diag_json` from:
    - raw CLI args
    - `NETSUKE_DIAG_JSON`
@@ -437,8 +434,8 @@ Acceptance for Stage A:
 ### Stage B: Implement a versioned diagnostic JSON model and serializer
 
 Introduce a focused module, for example
-[src/diagnostic_json.rs](/home/user/project/src/diagnostic_json.rs), to own the
-schema and conversion logic.
+[src/diagnostic_json.rs](../../src/diagnostic_json.rs), to own the schema and
+conversion logic.
 
 Changes:
 
@@ -476,7 +473,7 @@ mode.
 
 Changes:
 
-1. In [src/main.rs](/home/user/project/src/main.rs):
+1. In [src/main.rs](../../src/main.rs):
    - resolve an early `diag_json` hint before clap parsing exits
    - intercept clap parse failures when JSON mode was explicitly
      requested
@@ -484,7 +481,7 @@ Changes:
      through CLI or environment hints
    - render runtime failures as JSON when the merged CLI enables it
 2. Suppress `tracing_subscriber` stderr logging when JSON mode is active.
-3. In [src/runner/mod.rs](/home/user/project/src/runner/mod.rs), force
+3. In [src/runner/mod.rs](../../src/runner/mod.rs), force
    `SilentReporter` when JSON mode is active so no status lines or timing
    summaries reach `stderr`.
 4. Ensure success-path subcommand output remains unchanged on `stdout`.
@@ -506,11 +503,11 @@ end-to-end behavioural tests.
 Unit and integration coverage:
 
 1. Extend
-   [tests/cli_tests/parsing.rs](/home/user/project/tests/cli_tests/parsing.rs)
-   for `--diag-json`.
+   [tests/cli_tests/parsing.rs](../../tests/cli_tests/parsing.rs) for
+   `--diag-json`.
 2. Extend
-   [tests/cli_tests/merge.rs](/home/user/project/tests/cli_tests/merge.rs) for
-   defaults, config file, environment, and CLI precedence.
+   [tests/cli_tests/merge.rs](../../tests/cli_tests/merge.rs) for defaults,
+   config file, environment, and CLI precedence.
 3. Add focused `rstest` cases for serializer behaviour:
    - YAML diagnostic with span and help
    - runner missing-manifest diagnostic without spans
@@ -533,8 +530,8 @@ Behavioural coverage:
 2. Add step definitions to parse `stderr` as JSON and assert selected
    fields instead of doing fragile substring-only checks.
 3. Touch
-   [tests/bdd_tests.rs](/home/user/project/tests/bdd_tests.rs) before the final
-   test run if Cargo misses feature-file updates.
+   [tests/bdd_tests.rs](../../tests/bdd_tests.rs) before the final test run if
+   Cargo misses feature-file updates.
 
 Acceptance for Stage D:
 
@@ -551,18 +548,18 @@ stable.
 Changes:
 
 1. Update
-   [docs/users-guide.md](/home/user/project/docs/users-guide.md) with:
+   [docs/users-guide.md](../users-guide.md) with:
    - the `--diag-json` flag
    - `NETSUKE_DIAG_JSON`
    - config file usage (`diag_json = true`)
    - stream semantics in JSON mode
    - the supported schema, with a short example
 2. Update
-   [docs/netsuke-design.md](/home/user/project/docs/netsuke-design.md) with the
-   implementation decision to use a Netsuke-owned versioned JSON document, plus
-   the startup/streaming constraints.
+   [docs/netsuke-design.md](../netsuke-design.md) with the implementation
+   decision to use a Netsuke-owned versioned JSON document, plus the
+   startup/streaming constraints.
 3. Mark `3.10.3` done in
-   [docs/roadmap.md](/home/user/project/docs/roadmap.md).
+   [docs/roadmap.md](../roadmap.md).
 
 Acceptance for Stage E:
 
@@ -622,8 +619,7 @@ The implementation steps above are rerunnable. If a step fails:
 3. If the failure breaches a tolerance, stop and escalate instead of
    widening scope informally.
 4. If the failure is a BDD refresh issue after editing `.feature` files,
-   touch [tests/bdd_tests.rs](/home/user/project/tests/bdd_tests.rs) and rerun
-   `make test`.
+   touch [tests/bdd_tests.rs](../../tests/bdd_tests.rs) and rerun `make test`.
 
 ## Approval gate
 

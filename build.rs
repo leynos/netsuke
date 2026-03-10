@@ -95,6 +95,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
+    const _: fn(&str) -> Option<bool> = cli_l10n::parse_bool_hint;
+    const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_diag_json;
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
