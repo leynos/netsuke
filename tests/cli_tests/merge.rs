@@ -67,10 +67,10 @@ fn merge_defaults_with_file_layer(
 fn assert_merge_rejects(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
-    expect_err_hint: &str,
     expected_msg: &str,
 ) -> anyhow::Result<()> {
-    let err = merge_defaults_with_file_layer(defaults, file_layer).expect_err(expect_err_hint);
+    let err = merge_defaults_with_file_layer(defaults, file_layer)
+        .expect_err("merge should have returned an error");
     ensure!(
         err.to_string().contains(expected_msg),
         "unexpected error text: {err}",
@@ -256,51 +256,24 @@ targets = ["all"]
 }
 
 #[rstest]
-fn cli_config_validates_theme_alias_conflicts(
+#[case(
+    json!({ "theme": "unicode", "no_emoji": true }),
+    "theme = \"unicode\" conflicts with no_emoji = true",
+)]
+#[case(
+    json!({ "spinner_mode": "disabled", "progress": true }),
+    "spinner_mode = \"disabled\" conflicts with progress = true",
+)]
+#[case(
+    json!({ "output_format": "json" }),
+    "output_format = \"json\" is not supported yet",
+)]
+fn cli_config_rejects_conflicting_or_unsupported_settings(
     default_cli_json: Result<serde_json::Value>,
+    #[case] file_layer: serde_json::Value,
+    #[case] expected_msg: &str,
 ) -> Result<()> {
-    assert_merge_rejects(
-        default_cli_json?,
-        json!({
-            "theme": "unicode",
-            "no_emoji": true
-        }),
-        "conflicting theme and alias should fail",
-        "theme = \"unicode\" conflicts with no_emoji = true",
-    )
-}
-
-#[rstest]
-fn cli_config_validates_spinner_and_progress_conflicts(
-    default_cli_json: Result<serde_json::Value>,
-) -> Result<()> {
-    assert_merge_rejects(
-        default_cli_json?,
-        json!({
-            "spinner_mode": "disabled",
-            "progress": true
-        }),
-        "conflicting spinner and progress settings should fail",
-        "spinner_mode = \"disabled\" conflicts with progress = true",
-    )
-}
-
-#[rstest]
-fn cli_config_rejects_unsupported_json_output_format(
-    default_cli_json: Result<serde_json::Value>,
-) -> Result<()> {
-    let err = merge_defaults_with_file_layer(
-        default_cli_json?,
-        json!({
-            "output_format": "json"
-        }),
-    )
-    .expect_err("unsupported output format should fail");
-    ensure!(
-        err.to_string().contains("output_format = \"json\" is not supported yet"),
-        "unexpected error text: {err}",
-    );
-    Ok(())
+    assert_merge_rejects(default_cli_json?, file_layer, expected_msg)
 }
 
 #[rstest]
