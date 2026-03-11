@@ -132,7 +132,7 @@ Hard invariants that must hold throughout implementation:
   stop and escalate with a schema revision proposal.
 - Early-startup behaviour: if configuration-file-sourced `diag_json`
   cannot be honoured for configuration-load failures without a large bootstrap
-  refactor, do not improvize. Document the limitation and escalate for
+  refactor, do not improvise. Document the limitation and escalate for
   confirmation.
 - File size: if any edited Rust file would exceed 400 lines, split the
   work into focused helper modules before continuing.
