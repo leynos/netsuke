@@ -5,13 +5,16 @@
 
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, Theme};
+use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
 use serde_json::json;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
-use test_support::EnvVarGuard;
+use std::sync::Arc;
+use tempfile::tempdir;
+use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
@@ -36,6 +39,21 @@ where
     f(merged)
 }
 
+fn assert_build_targets(
+    toml_content: &str,
+    cli_args: &[&str],
+    expected_targets: &[String],
+    assertion_msg: &str,
+) -> anyhow::Result<()> {
+    with_config_file(toml_content, cli_args, |merged| {
+        let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
+            anyhow::bail!("expected merged command to be build");
+        };
+        ensure!(args.targets == expected_targets, "{}", assertion_msg);
+        Ok(())
+    })
+}
+
 fn merge_defaults_with_file_layer(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
@@ -44,6 +62,20 @@ fn merge_defaults_with_file_layer(
     composer.push_defaults(defaults);
     composer.push_file(file_layer, None);
     netsuke::cli::CliConfig::merge_from_layers(composer.layers()).map_err(anyhow::Error::from)
+}
+
+fn assert_merge_rejects(
+    defaults: serde_json::Value,
+    file_layer: serde_json::Value,
+    expect_err_hint: &str,
+    expected_msg: &str,
+) -> anyhow::Result<()> {
+    let err = merge_defaults_with_file_layer(defaults, file_layer).expect_err(expect_err_hint);
+    ensure!(
+        err.to_string().contains(expected_msg),
+        "unexpected error text: {err}",
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -199,43 +231,27 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 
 #[rstest]
 fn cli_config_build_defaults_apply_when_cli_targets_are_absent() -> Result<()> {
-    with_config_file(
+    assert_build_targets(
         r#"
 [cmds.build]
 targets = ["all", "docs"]
 "#,
         &["netsuke"],
-        |merged| {
-            let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
-                anyhow::bail!("expected merged command to be build");
-            };
-            ensure!(
-                args.targets == vec![String::from("all"), String::from("docs")],
-                "configured build targets should be used when CLI targets are absent",
-            );
-            Ok(())
-        },
+        &[String::from("all"), String::from("docs")],
+        "configured build targets should be used when CLI targets are absent",
     )
 }
 
 #[rstest]
 fn cli_config_explicit_targets_override_configured_build_defaults() -> Result<()> {
-    with_config_file(
+    assert_build_targets(
         r#"
 [cmds.build]
 targets = ["all"]
 "#,
         &["netsuke", "build", "lint"],
-        |merged| {
-            let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
-                anyhow::bail!("expected merged command to be build");
-            };
-            ensure!(
-                args.targets == vec![String::from("lint")],
-                "explicit CLI targets should override configured defaults",
-            );
-            Ok(())
-        },
+        &[String::from("lint")],
+        "explicit CLI targets should override configured defaults",
     )
 }
 
@@ -243,38 +259,30 @@ targets = ["all"]
 fn cli_config_validates_theme_alias_conflicts(
     default_cli_json: Result<serde_json::Value>,
 ) -> Result<()> {
-    let err = merge_defaults_with_file_layer(
+    assert_merge_rejects(
         default_cli_json?,
         json!({
             "theme": "unicode",
             "no_emoji": true
         }),
+        "conflicting theme and alias should fail",
+        "theme = \"unicode\" conflicts with no_emoji = true",
     )
-    .expect_err("conflicting theme and alias should fail");
-    ensure!(
-        err.to_string().contains("theme = \"unicode\" conflicts with no_emoji = true"),
-        "unexpected error text: {err}",
-    );
-    Ok(())
 }
 
 #[rstest]
 fn cli_config_validates_spinner_and_progress_conflicts(
     default_cli_json: Result<serde_json::Value>,
 ) -> Result<()> {
-    let err = merge_defaults_with_file_layer(
+    assert_merge_rejects(
         default_cli_json?,
         json!({
             "spinner_mode": "disabled",
             "progress": true
         }),
+        "conflicting spinner and progress settings should fail",
+        "spinner_mode = \"disabled\" conflicts with progress = true",
     )
-    .expect_err("conflicting spinner and progress settings should fail");
-    ensure!(
-        err.to_string().contains("spinner_mode = \"disabled\" conflicts with progress = true"),
-        "unexpected error text: {err}",
-    );
-    Ok(())
 }
 
 #[rstest]
