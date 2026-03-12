@@ -10,6 +10,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::config::CliConfig;
 use super::parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme};
 use super::{ColourPolicy, OutputFormat, SpinnerMode, Theme};
 pub use crate::cli_l10n::{diag_json_hint_from_args, locale_hint_from_args};
@@ -160,10 +161,16 @@ impl Cli {
     /// Return the effective emoji override for output preference resolution.
     #[must_use]
     pub const fn no_emoji_override(&self) -> Option<bool> {
-        if matches!(self.theme, Some(Theme::Ascii)) || matches!(self.no_emoji, Some(true)) {
-            Some(true)
-        } else {
-            self.no_emoji
+        match self.theme {
+            Some(Theme::Ascii) => Some(true),
+            Some(Theme::Unicode) => Some(false),
+            _ => {
+                if matches!(self.no_emoji, Some(true)) {
+                    Some(true)
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -181,7 +188,7 @@ impl Cli {
 impl Default for Cli {
     fn default() -> Self {
         Self {
-            file: PathBuf::from("Netsukefile"),
+            file: CliConfig::default_manifest_path(),
             directory: None,
             jobs: None,
             verbose: false,

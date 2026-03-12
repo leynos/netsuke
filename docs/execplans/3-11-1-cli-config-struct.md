@@ -14,12 +14,10 @@ No `PLANS.md` file exists in this repository.
 Roadmap item `3.11.1` asks for a dedicated `CliConfig` struct derived with
 `OrthoConfig` so Netsuke has one explicit, typed schema for layered CLI
 configuration. This plan now targets `ortho_config` `0.8.0` and uses the
-repository copy of
-[`docs/ortho-config-users-guide.md`](/home/user/project/docs/ortho-config-users-guide.md),
- which has been replaced with the upstream `v0.8.0` guide. Today the repository
-already has partial layered configuration, but it is centered on
-[`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs), where `Cli` currently
-serves three roles at once:
+repository copy of `docs/ortho-config-users-guide.md`, which has been replaced
+with the upstream `v0.8.0` guide. At planning time the repository already had
+partial layered configuration, but it was centered on `src/cli/mod.rs`, where
+`Cli` served three roles at once:
 
 1. Clap parser.
 2. OrthoConfig merge target.
@@ -50,10 +48,8 @@ Observable success means:
    the same typed fields with documented precedence.
 4. Unit tests (`rstest`) and behavioural tests (`rstest-bdd` v0.5.0) cover
    happy paths, unhappy paths, and precedence edge cases.
-5. [`docs/users-guide.md`](/home/user/project/docs/users-guide.md),
-   [`docs/netsuke-design.md`](/home/user/project/docs/netsuke-design.md), and
-   [`docs/roadmap.md`](/home/user/project/docs/roadmap.md) reflect the final
-   behaviour.
+5. `docs/users-guide.md`, `docs/netsuke-design.md`, and `docs/roadmap.md`
+   reflect the final behaviour.
 
 ## Constraints
 
@@ -107,10 +103,10 @@ Observable success means:
 
 ## Risks
 
-- Risk: [`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs) is already 398
-  lines, so any additive work there will violate the file-size limit. Severity:
-  high. Likelihood: high. Mitigation: split parser definitions, config schema,
-  and merge helpers into separate modules before adding new fields.
+- Risk: `src/cli/mod.rs` was already 398 lines at planning time, so any
+  additive work there would violate the file-size limit. Severity: high.
+  Likelihood: high. Mitigation: split parser definitions, config schema, and
+  merge helpers into separate modules before adding new fields.
 
 - Risk: the repository already has partial OrthoConfig support, manual config
   discovery, and merge tests. A careless refactor could duplicate logic rather
@@ -158,18 +154,16 @@ Observable success means:
 - The repository is already on Rust `1.89.0`, which satisfies the
   `ortho_config 0.8.0` minimum of Rust `1.88`. The crate version is the real
   migration step; the compiler floor is not.
-- The current repository already documents configuration discovery in
-  [`docs/users-guide.md`](/home/user/project/docs/users-guide.md), and already
-  has merge tests in
-  [`tests/cli_tests/merge.rs`](/home/user/project/tests/cli_tests/merge.rs).
-  The implementation must preserve these guarantees while changing the type
-  layout.
-- `rstest-bdd` feature-file edits may require touching
-  [`tests/bdd_tests.rs`](/home/user/project/tests/bdd_tests.rs) to force Cargo
-  to rebuild generated scenarios.
-- The new configuration-preferences BDD coverage initially flaked only in the
-  full suite because `NETSUKE_CONFIG_PATH` is process-global. Holding
-  [`EnvLock`](test_support/src/env_lock.rs) for the whole scenario fixed the
+- The repository already documented configuration discovery in
+  `docs/users-guide.md` and already had merge tests in
+  `tests/cli_tests/merge.rs`. The implementation needed to preserve these
+  guarantees while changing the type layout.
+- `rstest-bdd` feature-file edits may require touching `tests/bdd_tests.rs` to
+  force Cargo to rebuild generated scenarios.
+- The new configuration-preferences behaviour-driven development (BDD)
+  coverage initially flaked only in the full suite because
+  `NETSUKE_CONFIG_PATH` is process-global. Holding
+  `test_support/src/env_lock.rs`'s `EnvLock` for the whole scenario fixed the
   race without weakening the coverage.
 
 ## Decision Log
@@ -222,8 +216,7 @@ Observable success means:
   accepting JSON output configuration without delivering the behaviour would be
   misleading. Date/Author: 2026-03-09 (Codex, implementation)
 
-These decisions must be recorded in
-[`docs/netsuke-design.md`](/home/user/project/docs/netsuke-design.md) during
+These decisions must be recorded in `docs/netsuke-design.md` during
 implementation if they remain unchanged after coding begins.
 
 ## Outcomes & Retrospective
@@ -232,9 +225,9 @@ Completed on 2026-03-09.
 
 Implemented results:
 
-- Added [`CliConfig`](/home/user/project/src/cli/config.rs) as the
-  authoritative OrthoConfig-derived schema and split the CLI module into
-  parser, config, and merge submodules.
+- Added `src/cli/config.rs`'s `CliConfig` as the authoritative
+  OrthoConfig-derived schema and split the CLI module into parser, config, and
+  merge submodules.
 - Upgraded `ortho_config` to `0.8.0`.
 - Kept `Cli` as the parser/runtime command carrier while rooting configuration
   merge in `CliConfig`.
@@ -244,10 +237,8 @@ Implemented results:
   contradictory combinations.
 - Wired `[cmds.build] targets` and `emit` defaults into the runtime build
   command when the user does not supply explicit CLI values.
-- Added unit coverage in
-  [`tests/cli_tests/merge.rs`](/home/user/project/tests/cli_tests/merge.rs)
-  plus behavioural coverage in
-  [`tests/features/configuration_preferences.feature`](/home/user/project/tests/features/configuration_preferences.feature).
+- Added unit coverage in `tests/cli_tests/merge.rs` plus behavioural coverage
+  in `tests/features/configuration_preferences.feature`.
 - Updated the user guide, design document, and roadmap entry for `3.11.1`.
 
 Quality-gate evidence:
@@ -255,7 +246,7 @@ Quality-gate evidence:
 - `make check-fmt`
 - `make lint`
 - `make test`
-- `PATH="/root/.bun/bin:$PATH" make markdownlint`
+- `make markdownlint` (with `markdownlint-cli2` available on `PATH`)
 - `make nixie`
 
 Lessons learned:
@@ -263,33 +254,30 @@ Lessons learned:
 - Keeping the parser/runtime type stable while introducing a separate merge
   schema is a pragmatic migration path when downstream code already consumes
   the parser type pervasively.
-- BDD coverage that touches process-wide environment variables must hold
-  `EnvLock` for the full scenario, not only for individual mutations.
+- Behaviour-driven development (BDD) coverage that touches process-wide
+  environment variables must hold `EnvLock` for the full scenario, not only for
+  individual mutations.
 
 ## Context and orientation
 
-The current implementation is spread across the following files:
+Historical planning context for this change was spread across the following
+files:
 
-- [`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs): current `Cli` type,
-  Clap parser, OrthoConfig derive, validation parsers, and merge logic.
-- [`Cargo.toml`](/home/user/project/Cargo.toml): currently pins
-  `ortho_config = "0.7.0"` and `rust-version = "1.89.0"`.
-- [`rust-toolchain.toml`](/home/user/project/rust-toolchain.toml): currently
-  pins toolchain `1.89.0`, which already satisfies the `0.8.0` minimum.
-- [`src/main.rs`](/home/user/project/src/main.rs): startup parse/merge flow and
-  runtime localization bootstrap.
-- [`src/output_mode.rs`](/home/user/project/src/output_mode.rs): accessible
-  versus standard output mode resolution.
-- [`src/output_prefs.rs`](/home/user/project/src/output_prefs.rs): emoji-aware
-  semantic prefixes and current `no_emoji` handling.
-- [`src/runner/mod.rs`](/home/user/project/src/runner/mod.rs): uses merged CLI
-  state to choose output mode, progress behaviour, and build targets.
-- [`tests/cli_tests/merge.rs`](/home/user/project/tests/cli_tests/merge.rs):
-  current merge precedence coverage.
-- [`tests/cli_tests/parsing.rs`](/home/user/project/tests/cli_tests/parsing.rs)
-  and
-  [`tests/features/cli.feature`](/home/user/project/tests/features/cli.feature):
-   current parse-only coverage.
+- `src/cli/mod.rs`: then contained the `Cli` type, Clap parser, OrthoConfig
+  derive, validation parsers, and merge logic.
+- `Cargo.toml`: then pinned `ortho_config = "0.7.0"` and
+  `rust-version = "1.89.0"`.
+- `rust-toolchain.toml`: then pinned toolchain `1.89.0`, which already
+  satisfied the `0.8.0` minimum.
+- `src/main.rs`: startup parse/merge flow and runtime localization bootstrap.
+- `src/output_mode.rs`: accessible versus standard output mode resolution.
+- `src/output_prefs.rs`: emoji-aware semantic prefixes and then-current
+  `no_emoji` handling.
+- `src/runner/mod.rs`: uses merged CLI state to choose output mode, progress
+  behaviour, and build targets.
+- `tests/cli_tests/merge.rs`: merge precedence coverage.
+- `tests/cli_tests/parsing.rs` and `tests/features/cli.feature`: parse-only
+  coverage.
 
 Two important facts shape this plan:
 
@@ -354,10 +342,9 @@ compatibility aliases such as `no_emoji = true`.
 
 ### Stage A: split responsibilities before adding new fields
 
-Start by reducing the blast radius in
-[`src/cli/mod.rs`](/home/user/project/src/cli/mod.rs). Move the merge logic and
-the future `CliConfig` definition out of that file first. The goal is to make
-later edits mechanical instead of risky. This stage also establishes the
+Start by reducing the blast radius in `src/cli/mod.rs`. Move the merge logic
+and the future `CliConfig` definition out of that file first. The goal is to
+make later edits mechanical instead of risky. This stage also establishes the
 `ortho_config 0.8.0` baseline before higher-level schema refactors pile on.
 
 Concrete work in this stage:
@@ -416,7 +403,7 @@ Concrete work in this stage:
    `[cmds.build] targets = [...]` becomes the default target list when the user
    does not pass targets explicitly.
 3. Convert the merged config plus parsed command into the runtime shape
-   consumed by [`src/runner/mod.rs`](/home/user/project/src/runner/mod.rs).
+   consumed by `src/runner/mod.rs`.
 4. Update output-mode and output-preference resolution to consume the new typed
    fields rather than a loose collection of booleans.
 5. Keep startup locale resolution intact so localized Clap help still works
@@ -456,9 +443,9 @@ Behavioural coverage to add with `rstest-bdd` v0.5.0:
 - compatibility alias (`no_emoji`) still produces ASCII-themed output
 
 Prefer a dedicated feature file such as
-[`tests/features/configuration_preferences.feature`](/home/user/project/tests/features/configuration_preferences.feature)
- plus matching step definitions, rather than overloading the existing
-CLI-parsing feature with merge semantics.
+`tests/features/configuration_preferences.feature` plus matching step
+definitions, rather than overloading the existing CLI-parsing feature with
+merge semantics.
 
 ### Stage E: document the final contract and close the roadmap item
 
@@ -467,16 +454,14 @@ change.
 
 Documentation work:
 
-1. Update [`docs/users-guide.md`](/home/user/project/docs/users-guide.md) with
-   the new config schema, precedence rules, accepted values, and example TOML.
-2. Update [`docs/netsuke-design.md`](/home/user/project/docs/netsuke-design.md)
-   to record:
+1. Update `docs/users-guide.md` with the new config schema, precedence rules,
+   accepted values, and example TOML.
+2. Update `docs/netsuke-design.md` to record:
    - separation of parser and config schema
    - subcommand config for default build targets
    - canonical theme handling and `no_emoji` compatibility
    - which output-format values are supported in this milestone
-3. Mark roadmap item `3.11.1` as done in
-   [`docs/roadmap.md`](/home/user/project/docs/roadmap.md).
+3. Mark roadmap item `3.11.1` as done in `docs/roadmap.md`.
 
 Acceptance for Stage E:
 
@@ -488,7 +473,7 @@ Acceptance for Stage E:
 
 ## Concrete steps
 
-Run all commands from `/home/user/project`.
+Run all commands from the repository root.
 
 Before editing feature files, remember the existing `rstest-bdd` gotcha:
 
@@ -517,7 +502,7 @@ Because docs will change, also run:
 
 ```sh
 set -o pipefail
-PATH="/root/.bun/bin:$PATH" make markdownlint 2>&1 | tee /tmp/netsuke-markdownlint.log
+make markdownlint 2>&1 | tee /tmp/netsuke-markdownlint.log
 ```
 
 ```sh
@@ -534,8 +519,8 @@ After `make fmt`, inspect `git status --short` and remove incidental edits in
 unrelated files before finalizing the change.
 
 The local OrthoConfig reference for this task is now the `v0.8.0` guide at
-[`docs/ortho-config-users-guide.md`](/home/user/project/docs/ortho-config-users-guide.md).
- Do not rely on older `0.7.x` examples when the two guides disagree.
+`docs/ortho-config-users-guide.md`. Do not rely on older `0.7.x` examples when
+the two guides disagree.
 
 ## Validation and acceptance
 
@@ -551,9 +536,8 @@ The feature is complete only when all of the following are true:
 5. Unit tests and behavioural tests cover both precedence and failure cases.
 6. `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
    `make nixie` succeed.
-7. [`docs/users-guide.md`](/home/user/project/docs/users-guide.md),
-   [`docs/netsuke-design.md`](/home/user/project/docs/netsuke-design.md), and
-   [`docs/roadmap.md`](/home/user/project/docs/roadmap.md) are updated.
+7. `docs/users-guide.md`, `docs/netsuke-design.md`, and `docs/roadmap.md` are
+   updated.
 
 ## Idempotence and recovery
 

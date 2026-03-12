@@ -60,19 +60,27 @@ fn assert_build_targets(
 
 #[derive(Debug)]
 enum ExpectedValidationError {
-    ThemeAliasConflict,
-    SpinnerProgressConflict,
+    ThemeUnicodeAliasConflict,
+    ThemeAsciiAliasConflict,
+    SpinnerDisabledConflict,
+    SpinnerEnabledConflict,
     UnsupportedOutputFormat,
 }
 
 impl ExpectedValidationError {
     fn expected_fragment(&self) -> &'static str {
         match self {
-            Self::ThemeAliasConflict => {
+            Self::ThemeUnicodeAliasConflict => {
                 "theme = \"unicode\" conflicts with no_emoji = true"
             }
-            Self::SpinnerProgressConflict => {
+            Self::ThemeAsciiAliasConflict => {
+                "no_emoji = false conflicts with theme = \"ascii\""
+            }
+            Self::SpinnerDisabledConflict => {
                 "spinner_mode = \"disabled\" conflicts with progress = true"
+            }
+            Self::SpinnerEnabledConflict => {
+                "progress = false conflicts with spinner_mode = \"enabled\""
             }
             Self::UnsupportedOutputFormat => {
                 "output_format = \"json\" is not supported yet"
@@ -283,11 +291,19 @@ targets = ["all"]
 #[rstest]
 #[case(
     json!({ "theme": "unicode", "no_emoji": true }),
-    ExpectedValidationError::ThemeAliasConflict,
+    ExpectedValidationError::ThemeUnicodeAliasConflict,
+)]
+#[case(
+    json!({ "theme": "ascii", "no_emoji": false }),
+    ExpectedValidationError::ThemeAsciiAliasConflict,
 )]
 #[case(
     json!({ "spinner_mode": "disabled", "progress": true }),
-    ExpectedValidationError::SpinnerProgressConflict,
+    ExpectedValidationError::SpinnerDisabledConflict,
+)]
+#[case(
+    json!({ "spinner_mode": "enabled", "progress": false }),
+    ExpectedValidationError::SpinnerEnabledConflict,
 )]
 #[case(
     json!({ "output_format": "json" }),

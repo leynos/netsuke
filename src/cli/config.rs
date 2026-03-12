@@ -4,11 +4,11 @@
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
 
-use ortho_config::{OrthoConfig, OrthoError, OrthoResult, PostMergeContext, PostMergeHook};
+use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Arc;
 
+use super::validation_error;
 use crate::host_pattern::HostPattern;
 
 /// Colour-output policy accepted by layered configuration.
@@ -175,6 +175,12 @@ impl Default for CliConfig {
     }
 }
 
+impl CliConfig {
+    pub(super) fn default_manifest_path() -> PathBuf {
+        default_manifest_path()
+    }
+}
+
 impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         validate_theme_compatibility(self)?;
@@ -224,11 +230,4 @@ fn validate_output_format_support(config: &CliConfig) -> OrthoResult<()> {
         ));
     }
     Ok(())
-}
-
-fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
-    Arc::new(OrthoError::Validation {
-        key: key.to_owned(),
-        message: message.to_owned(),
-    })
 }

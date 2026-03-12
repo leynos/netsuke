@@ -16,6 +16,7 @@ use test_support::display_error_chain;
 use test_support::env_lock::EnvLock;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
+const LOCALE_ENV_VAR: &str = "NETSUKE_LOCALE";
 
 fn workspace_path(world: &TestWorld) -> Result<PathBuf> {
     let temp = world.temp_dir.borrow();
@@ -68,6 +69,20 @@ fn config_sets_build_targets(world: &TestWorld, target: &str) -> Result<()> {
 #[given("the Netsuke config file sets locale to {locale:string}")]
 fn config_sets_locale(world: &TestWorld, locale: &str) -> Result<()> {
     write_config(world, &format!("locale = \"{locale}\"\n"))
+}
+
+#[given("the NETSUKE_LOCALE environment variable is {locale:string}")]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
+fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()> {
+    ensure_env_lock(world);
+    let previous = std::env::var_os(LOCALE_ENV_VAR);
+    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
+    unsafe { std::env::set_var(LOCALE_ENV_VAR, OsStr::new(locale)) };
+    world.track_env_var(LOCALE_ENV_VAR.to_owned(), previous);
+    Ok(())
 }
 
 #[given("the Netsuke config file sets output format to {format:string}")]

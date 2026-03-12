@@ -1205,9 +1205,10 @@ Enum fields list their possible values in the OPTIONS description.
 ### Generating PowerShell help
 
 `cargo-orthohelp` can generate PowerShell external help in Microsoft Assistance
-Markup Language (MAML) alongside a wrapper module so `Get-Help {BinName} -Full`
-surfaces the same configuration metadata as the man page generator. Use the
-`ps` format to emit the module layout under `powershell/<ModuleName>`:
+Markup Language (MAML) alongside a wrapper module, so
+`Get-Help {BinName} -Full` surfaces the same configuration metadata as the man
+page generator. Use the `ps` format to emit the module layout under
+`powershell/<ModuleName>`:
 
 ```bash
 cargo orthohelp --format ps --out-dir target/orthohelp --locale en-US

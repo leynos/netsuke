@@ -564,6 +564,10 @@ top-level configuration keys:
 - `jobs = 8`
 - `verbose = true|false`
 - `locale = "en-US"`
+- `fetch_allow_scheme = ["https"]`
+- `fetch_allow_host = ["example.com"]`
+- `fetch_block_host = ["blocked.example.com"]`
+- `fetch_default_deny = true|false`
 - `accessible = true|false`
 - `progress = true|false`
 - `theme = "auto"|"unicode"|"ascii"`
