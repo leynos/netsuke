@@ -164,46 +164,36 @@ fn diag_json_success_keeps_stdout_artifact_and_stderr_empty() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn diag_json_help_uses_normal_clap_output() -> Result<()> {
+/// Asserts that `--diag-json <flag>` produces human-readable stdout and an
+/// empty stderr (i.e. Clap's built-in handlers are not affected by JSON mode).
+fn assert_diag_json_passthrough(flag: &str, ctx: &str, stdout_marker: &str) -> Result<()> {
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .arg("--diag-json")
-        .arg("--help")
+        .arg(flag)
         .output()
-        .context("run netsuke --diag-json --help")?;
+        .with_context(|| format!("run netsuke --diag-json {flag}"))?;
 
-    ensure!(output.status.success(), "help should exit successfully");
+    ensure!(output.status.success(), "{ctx} should exit successfully");
     let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
     ensure!(
-        stdout.contains("Usage:"),
-        "help output should remain human-readable"
+        stdout.contains(stdout_marker),
+        "{ctx} output should remain human-readable"
     );
     ensure!(
         output.stderr.is_empty(),
-        "help should not emit diagnostics JSON"
+        "{ctx} should not emit diagnostics JSON"
     );
     Ok(())
 }
 
 #[test]
-fn diag_json_version_uses_normal_clap_output() -> Result<()> {
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .arg("--diag-json")
-        .arg("--version")
-        .output()
-        .context("run netsuke --diag-json --version")?;
+fn diag_json_help_uses_normal_clap_output() -> Result<()> {
+    assert_diag_json_passthrough("--help", "help", "Usage:")
+}
 
-    ensure!(output.status.success(), "version should exit successfully");
-    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
-    ensure!(
-        stdout.contains("netsuke"),
-        "version output should remain human-readable"
-    );
-    ensure!(
-        output.stderr.is_empty(),
-        "version should not emit diagnostics JSON"
-    );
-    Ok(())
+#[test]
+fn diag_json_version_uses_normal_clap_output() -> Result<()> {
+    assert_diag_json_passthrough("--version", "version", "netsuke")
 }
 
 #[test]
