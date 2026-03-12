@@ -621,7 +621,9 @@ The implementation steps above are rerunnable. If a step fails:
 4. If the failure is a BDD refresh issue after editing `.feature` files,
    touch [tests/bdd_tests.rs](../../tests/bdd_tests.rs) and rerun `make test`.
 
-## Approval gate
+## Approval status
 
-This document is the draft phase only. Do not begin implementation until the
-user explicitly approves this ExecPlan or asks for revisions.
+This ExecPlan has already been approved and implemented. It now serves as the
+execution record for roadmap item `3.10.3`, and future follow-up work should
+use the completed `Progress` and `Outcomes & Retrospective` sections as the
+source of truth.

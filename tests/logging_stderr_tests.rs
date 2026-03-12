@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result, ensure};
 use predicates::prelude::*;
+use rstest::rstest;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -186,14 +187,15 @@ fn assert_diag_json_passthrough(flag: &str, ctx: &str, stdout_marker: &str) -> R
     Ok(())
 }
 
-#[test]
-fn diag_json_help_uses_normal_clap_output() -> Result<()> {
-    assert_diag_json_passthrough("--help", "help", "Usage:")
-}
-
-#[test]
-fn diag_json_version_uses_normal_clap_output() -> Result<()> {
-    assert_diag_json_passthrough("--version", "version", "netsuke")
+#[rstest]
+#[case("--help", "help", "Usage:")]
+#[case("--version", "version", "netsuke")]
+fn diag_json_passthrough_uses_normal_clap_output(
+    #[case] flag: &str,
+    #[case] ctx: &str,
+    #[case] stdout_marker: &str,
+) -> Result<()> {
+    assert_diag_json_passthrough(flag, ctx, stdout_marker)
 }
 
 #[test]
