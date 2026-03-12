@@ -43,15 +43,42 @@ fn assert_build_targets(
     toml_content: &str,
     cli_args: &[&str],
     expected_targets: &[String],
-    assertion_msg: &str,
 ) -> anyhow::Result<()> {
     with_config_file(toml_content, cli_args, |merged| {
         let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
             anyhow::bail!("expected merged command to be build");
         };
-        ensure!(args.targets == expected_targets, "{}", assertion_msg);
+        ensure!(
+            args.targets == expected_targets,
+            "build targets mismatch: got {:?}, expected {:?}",
+            args.targets,
+            expected_targets,
+        );
         Ok(())
     })
+}
+
+#[derive(Debug)]
+enum ExpectedValidationError {
+    ThemeAliasConflict,
+    SpinnerProgressConflict,
+    UnsupportedOutputFormat,
+}
+
+impl ExpectedValidationError {
+    fn expected_fragment(&self) -> &'static str {
+        match self {
+            Self::ThemeAliasConflict => {
+                "theme = \"unicode\" conflicts with no_emoji = true"
+            }
+            Self::SpinnerProgressConflict => {
+                "spinner_mode = \"disabled\" conflicts with progress = true"
+            }
+            Self::UnsupportedOutputFormat => {
+                "output_format = \"json\" is not supported yet"
+            }
+        }
+    }
 }
 
 fn merge_defaults_with_file_layer(
@@ -67,12 +94,12 @@ fn merge_defaults_with_file_layer(
 fn assert_merge_rejects(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
-    expected_msg: &str,
+    expected_error: ExpectedValidationError,
 ) -> anyhow::Result<()> {
     let err = merge_defaults_with_file_layer(defaults, file_layer)
         .expect_err("merge should have returned an error");
     ensure!(
-        err.to_string().contains(expected_msg),
+        err.to_string().contains(expected_error.expected_fragment()),
         "unexpected error text: {err}",
     );
     Ok(())
@@ -238,7 +265,6 @@ targets = ["all", "docs"]
 "#,
         &["netsuke"],
         &[String::from("all"), String::from("docs")],
-        "configured build targets should be used when CLI targets are absent",
     )
 }
 
@@ -251,29 +277,28 @@ targets = ["all"]
 "#,
         &["netsuke", "build", "lint"],
         &[String::from("lint")],
-        "explicit CLI targets should override configured defaults",
     )
 }
 
 #[rstest]
 #[case(
     json!({ "theme": "unicode", "no_emoji": true }),
-    "theme = \"unicode\" conflicts with no_emoji = true",
+    ExpectedValidationError::ThemeAliasConflict,
 )]
 #[case(
     json!({ "spinner_mode": "disabled", "progress": true }),
-    "spinner_mode = \"disabled\" conflicts with progress = true",
+    ExpectedValidationError::SpinnerProgressConflict,
 )]
 #[case(
     json!({ "output_format": "json" }),
-    "output_format = \"json\" is not supported yet",
+    ExpectedValidationError::UnsupportedOutputFormat,
 )]
 fn cli_config_rejects_conflicting_or_unsupported_settings(
     default_cli_json: Result<serde_json::Value>,
     #[case] file_layer: serde_json::Value,
-    #[case] expected_msg: &str,
+    #[case] expected_error: ExpectedValidationError,
 ) -> Result<()> {
-    assert_merge_rejects(default_cli_json?, file_layer, expected_msg)
+    assert_merge_rejects(default_cli_json?, file_layer, expected_error)
 }
 
 #[rstest]
