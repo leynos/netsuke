@@ -5,16 +5,14 @@ use clap::parser::ValueSource;
 use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::uncased::Uncased;
-use ortho_config::{
-    ConfigDiscovery, MergeComposer, OrthoError, OrthoMergeExt, OrthoResult, sanitize_value,
-};
+use ortho_config::{ConfigDiscovery, MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use super::config::{BuildConfig, CliConfig, Theme};
 use super::parser::{BuildArgs, Cli, Commands};
+use super::validation_error;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
 const ENV_PREFIX: &str = "NETSUKE_";
 
@@ -246,11 +244,4 @@ const fn canonical_theme(theme: Option<Theme>, no_emoji: Option<bool>) -> Option
         (None, Some(true)) => Some(Theme::Ascii),
         _ => None,
     }
-}
-
-fn validation_error(key: &str, message: &str) -> Arc<OrthoError> {
-    Arc::new(OrthoError::Validation {
-        key: key.to_owned(),
-        message: message.to_owned(),
-    })
 }

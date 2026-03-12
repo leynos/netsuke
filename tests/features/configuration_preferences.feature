@@ -10,6 +10,7 @@ Feature: Configuration preferences
   Scenario: CLI locale and verbose flags override configuration and environment
     Given an empty workspace
     And the Netsuke config file sets locale to "es-ES"
+    And the NETSUKE_LOCALE environment variable is "fr-FR"
     When the CLI is parsed and merged with "--locale en-US --verbose"
     Then parsing succeeds
     And the merged locale is "en-US"

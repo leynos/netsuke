@@ -93,10 +93,9 @@ if let Some(figment) = discovery.load_first()? {
 # }
 ```
 
-The repository ships `config/overrides.toml`, which extends
-`config/baseline.toml` to set `is_excited = true`, provide a `Layered hello`
-preamble, and swap the greet punctuation for `!!!`. Behavioural tests and demo
-scripts assert the uppercase output to guard this layering.
+After parsing the relevant subcommand struct, call `load_and_merge()?` on that
+value (for example, `pr_args.load_and_merge()?`) to obtain the merged
+configuration for that subcommand.
 
 ### Declarative merging
 
@@ -1204,9 +1203,10 @@ Enum fields list their possible values in the OPTIONS description.
 ### Generating PowerShell help
 
 `cargo-orthohelp` can generate PowerShell external help in Microsoft Assistance
-Markup Language (MAML) alongside a wrapper module so `Get-Help {BinName} -Full`
-surfaces the same configuration metadata as the man page generator. Use the
-`ps` format to emit the module layout under `powershell/<ModuleName>`:
+Markup Language (MAML) alongside a wrapper module, so
+`Get-Help {BinName} -Full` surfaces the same configuration metadata as the man
+page generator. Use the `ps` format to emit the module layout under
+`powershell/<ModuleName>`:
 
 ```bash
 cargo-orthohelp --format ps --out-dir target/orthohelp --locale en-US
