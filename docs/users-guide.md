@@ -610,7 +610,7 @@ the user explicitly sets `progress = true`, which is treated as a conflict.
 Likewise, `spinner_mode = "enabled"` conflicts with `progress = false`.
 
 `output_format = "json"` is intentionally rejected for now. Roadmap item
-`3.10.3` will add JSON diagnostics; until then the only supported value is
+`3.10.3` will add JSON diagnostics; until then, the only supported value is
 `"human"`.
 
 `colour_policy` is accepted and layered today so users can standardize their
