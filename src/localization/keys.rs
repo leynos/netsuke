@@ -23,6 +23,7 @@ define_keys! {
     CLI_FLAG_FETCH_DEFAULT_DENY_HELP => "cli.flag.fetch_default_deny.help",
     CLI_FLAG_ACCESSIBLE_HELP => "cli.flag.accessible.help",
     CLI_FLAG_PROGRESS_HELP => "cli.flag.progress.help",
+    CLI_FLAG_DIAG_JSON_HELP => "cli.flag.diag_json.help",
     CLI_SUBCOMMAND_BUILD_ABOUT => "cli.subcommand.build.about",
     CLI_SUBCOMMAND_BUILD_LONG_ABOUT => "cli.subcommand.build.long_about",
     CLI_SUBCOMMAND_CLEAN_ABOUT => "cli.subcommand.clean.about",

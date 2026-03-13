@@ -20,7 +20,6 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub use crate::cli_l10n::locale_hint_from_args;
 use crate::cli_l10n::localize_command;
 use crate::host_pattern::HostPattern;
 use crate::localization::{self, keys};
@@ -139,6 +138,11 @@ pub struct Cli {
     #[arg(long)]
     pub no_emoji: Option<bool>,
 
+    /// Emit machine-readable diagnostics in JSON on stderr.
+    #[arg(long)]
+    #[ortho_config(default = false)]
+    pub diag_json: bool,
+
     /// Force standard progress summaries on or off.
     ///
     /// When omitted, Netsuke enables progress summaries in standard mode.
@@ -183,6 +187,7 @@ impl Default for Cli {
             accessible: None,
             progress: None,
             no_emoji: None,
+            diag_json: false,
             command: None,
         }
         .with_default_command()
@@ -227,6 +232,18 @@ pub enum Commands {
 /// Return the default manifest filename when none is provided.
 fn default_manifest_path() -> PathBuf {
     PathBuf::from("Netsukefile")
+}
+
+/// Inspect raw arguments and extract the requested locale before full parsing.
+#[must_use]
+pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
+    crate::cli_l10n::locale_hint_from_args(args)
+}
+
+/// Inspect raw arguments and extract the requested `--diag-json` state.
+#[must_use]
+pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
+    crate::cli_l10n::diag_json_hint_from_args(args)
 }
 
 /// Parse CLI arguments with localized clap output.
@@ -281,6 +298,47 @@ fn is_empty_value(value: &serde_json::Value) -> bool {
     matches!(value, serde_json::Value::Object(map) if map.is_empty())
 }
 
+fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
+    value
+        .as_object()
+        .and_then(|map| map.get("diag_json"))
+        .and_then(serde_json::Value::as_bool)
+}
+
+/// Resolve the effective diagnostic JSON preference from the raw config layers.
+///
+/// This is used before full config merging so startup and merge-time failures
+/// can still honour `diag_json` values sourced from config files or the
+/// environment.
+#[must_use]
+pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
+    let mut diag_json = Cli::default().diag_json;
+
+    let discovery = config_discovery(cli.directory.as_ref());
+    let file_layers = discovery.compose_layers();
+    for layer in file_layers.value {
+        let layer_value = layer.into_value();
+        if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
+            diag_json = layer_diag_json;
+        }
+    }
+
+    let env_provider = env_provider()
+        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
+        .split("__");
+    if let Ok(value) = Figment::from(env_provider).extract::<serde_json::Value>()
+        && let Some(env_diag_json) = diag_json_from_layer(&value)
+    {
+        diag_json = env_diag_json;
+    }
+
+    if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
+        cli.diag_json
+    } else {
+        diag_json
+    }
+}
+
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<serde_json::Value> {
     let value = sanitize_value(cli)?;
     let mut map = match value {
@@ -312,6 +370,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "accessible",
         "progress",
         "no_emoji",
+        "diag_json",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
             map.remove(field);

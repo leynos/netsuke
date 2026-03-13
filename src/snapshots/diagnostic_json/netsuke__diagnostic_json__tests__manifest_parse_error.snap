@@ -1,0 +1,42 @@
+---
+source: src/diagnostic_json_tests.rs
+assertion_line: 151
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0"
+  },
+  "diagnostics": [
+    {
+      "message": "Manifest parse failed.",
+      "code": "netsuke::manifest::parse",
+      "severity": "error",
+      "help": "YAML does not permit tabs; use spaces for indentation.",
+      "url": null,
+      "causes": [
+        "YAML parse error at line ⁨2⁩, column ⁨2⁩: ⁨tabs disallowed within this context (block indentation) at line 2, column 2⁩",
+        "tabs disallowed within this context (block indentation) at line 2, column 2"
+      ],
+      "source": {
+        "name": "Netsukefile"
+      },
+      "primary_span": null,
+      "labels": [
+        {
+          "label": "invalid YAML",
+          "offset": 10,
+          "length": 1,
+          "line": 2,
+          "column": 2,
+          "end_line": 2,
+          "end_column": 2,
+          "snippet": "-"
+        }
+      ],
+      "related": []
+    }
+  ]
+}

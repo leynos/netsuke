@@ -16,6 +16,7 @@ cli.flag.fetch_block_host.help = Hostnames that are always blocked, even when al
 cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the declared allowlist.
 cli.flag.accessible.help = Force accessible output mode on or off.
 cli.flag.progress.help = Force standard stage and task progress summaries on or off.
+cli.flag.diag_json.help = Emit machine-readable diagnostics as JSON on stderr.
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).

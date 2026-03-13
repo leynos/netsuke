@@ -15,6 +15,7 @@ struct CliCase {
     jobs: Option<usize>,
     verbose: bool,
     locale: Option<&'static str>,
+    diag_json: bool,
     allow_scheme: Vec<String>,
     allow_host: Vec<&'static str>,
     block_host: Vec<&'static str>,
@@ -32,6 +33,7 @@ impl Default for CliCase {
             jobs: None,
             verbose: false,
             locale: None,
+            diag_json: false,
             allow_scheme: Vec::new(),
             allow_host: Vec::new(),
             block_host: Vec::new(),
@@ -71,6 +73,11 @@ impl Default for CliCase {
 #[case(CliCase {
     argv: vec!["netsuke", "--locale", "es-ES"],
     locale: Some("es-ES"),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--diag-json"],
+    diag_json: true,
     ..CliCase::default()
 })]
 #[case(CliCase {
@@ -129,6 +136,10 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
     ensure!(
         cli.locale.as_deref() == case.locale,
         "locale should match input",
+    );
+    ensure!(
+        cli.diag_json == case.diag_json,
+        "diag_json flag should match input",
     );
     ensure!(
         cli.fetch_allow_scheme == case.allow_scheme,

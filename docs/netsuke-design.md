@@ -1885,9 +1885,28 @@ enrichment:
    the user with a rich, layered explanation of the failure, from the general
    to the specific.
 
-For automation use cases, Netsuke will support a `--diag-json` flag. When
-enabled, the entire error chain is serialised to JSON, allowing editors and CI
-tools to annotate failures inline.
+For automation use cases, Netsuke supports a `--diag-json` flag layered through
+OrthoConfig as `--diag-json`, `NETSUKE_DIAG_JSON`, and `diag_json = true`. When
+enabled, Netsuke emits a Netsuke-owned JSON document on `stderr` instead of
+relying on upstream formatter output directly. The current schema is versioned
+with `schema_version = 1` and an envelope of:
+
+- `generator`: `name` and `version`
+- `diagnostics`: an array of entries containing `message`, `code`, `severity`,
+  `help`, `url`, `causes`, `source`, `primary_span`, `labels`, and `related`
+
+Design decisions for this mode:
+
+- Netsuke owns the schema rather than exposing `miette`'s raw JSON formatter,
+  so compatibility can be documented and guarded by snapshot tests.
+- JSON mode reserves `stderr` for one machine-readable document only. Progress
+  updates, verbose timing summaries, emoji prefixes, and tracing logs are
+  suppressed while the mode is active.
+- `stdout` semantics do not change. Commands such as `manifest -` and `graph`
+  keep streaming their normal artefacts to `stdout`.
+- Early startup failures honour only the CLI flag and environment variable.
+  Configuration files cannot request JSON for errors raised while those same
+  files are still being located or parsed.
 
 ### 7.4 Table: Transforming Errors into User-Friendly Messages
 

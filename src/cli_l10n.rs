@@ -134,6 +134,7 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
             "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
             "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
+            "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
             _ => None,
         },
         Some("build") => match arg_id {
@@ -198,4 +199,24 @@ pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
         }
     }
     hint
+}
+
+pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+/// Inspect raw arguments and detect whether `--diag-json` was supplied.
+///
+/// A bare `--diag-json` enables JSON diagnostics. The helper mirrors clap's
+/// flag semantics, so `--diag-json=value` is ignored rather than interpreted
+/// as a boolean assignment.
+#[must_use]
+pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
+    args.iter()
+        .take_while(|arg| arg.to_string_lossy() != "--")
+        .find_map(|arg| (arg.to_string_lossy() == "--diag-json").then_some(true))
 }

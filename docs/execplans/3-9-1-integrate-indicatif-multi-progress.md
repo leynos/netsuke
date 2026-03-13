@@ -117,8 +117,8 @@ Observable success:
 - Standard mode currently uses `SilentReporter`; no `indicatif` dependency is
   present.
 - No project-memory Model Context Protocol (MCP) resources were
-  available in this environment during planning, so repository docs were
-  used as the authoritative source.
+  available in this environment during planning, so repository docs were used
+  as the authoritative source.
 - The runtime `manifest` command path needed an explicit completion call after
   synthesis; otherwise an in-progress stage was finalized as failed in the new
   reporter drop path.

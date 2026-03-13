@@ -16,6 +16,7 @@ cli.flag.fetch_block_host.help = Nombres de host siempre bloqueados, incluso cua
 cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo permitir la lista de permitidos.
 cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desactivado).
 cli.flag.progress.help = Forzar los resúmenes de progreso estándar de etapas y tareas (activados o desactivados).
+cli.flag.diag_json.help = Emitir diagnósticos legibles por máquinas como JSON en stderr.
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
