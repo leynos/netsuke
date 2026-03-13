@@ -205,7 +205,7 @@ Hard invariants that must hold throughout implementation:
 - `miette` 7.6.0 includes
   `miette::JSONReportHandler`, but its shape is a flat recursive JSON tree
   without a Netsuke-owned envelope, schema version, or expanded line/column
-  fields. That makes it useful as implementation reference, but not as the
+  fields. That makes it useful as an implementation reference, but not as the
   supported wire contract.
 
 - The current hook point for runtime error rendering is centralized in
