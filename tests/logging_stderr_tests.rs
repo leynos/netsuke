@@ -5,11 +5,11 @@
 
 use anyhow::{Context, Result, ensure};
 use predicates::prelude::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 use test_support::env::{SystemEnv, override_ninja_env};
 
 #[cfg(unix)]
@@ -28,6 +28,15 @@ fn make_script_executable(path: &Path) -> Result<()> {
 #[cfg(not(unix))]
 fn make_script_executable(_path: &Path) -> Result<()> {
     Ok(())
+}
+
+#[fixture]
+fn temp_with_minimal_manifest() -> Result<TempDir> {
+    let temp = tempdir().context("create temp dir")?;
+    let manifest_path = temp.path().join("Netsukefile");
+    fs::copy("tests/data/minimal.yml", &manifest_path)
+        .with_context(|| format!("copy manifest to {}", manifest_path.display()))?;
+    Ok(temp)
 }
 
 fn write_fake_ninja_script(
@@ -136,12 +145,11 @@ fn diag_json_failures_emit_single_json_document_on_stderr() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn diag_json_success_keeps_stdout_artifact_and_stderr_empty() -> Result<()> {
-    let temp = tempdir().context("create temp dir")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &manifest_path)
-        .with_context(|| format!("copy manifest to {}", manifest_path.display()))?;
+#[rstest]
+fn diag_json_success_keeps_stdout_artifact_and_stderr_empty(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
@@ -232,12 +240,11 @@ fn config_driven_diag_json_formats_merge_failures_as_json() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn diag_json_success_discards_child_stderr() -> Result<()> {
-    let temp = tempdir().context("create temp dir")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &manifest_path)
-        .with_context(|| format!("copy manifest to {}", manifest_path.display()))?;
+#[rstest]
+fn diag_json_success_discards_child_stderr(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
 
     let ninja_temp = tempdir().context("create fake ninja dir")?;
     let ninja_path = if cfg!(windows) {

@@ -8,7 +8,9 @@ use miette::{Diagnostic, Report, Severity, SourceCode, SourceSpan, SpanContents}
 use serde::Serialize;
 use std::error::Error as StdError;
 use std::io::{self, Write};
+use std::iter::Peekable;
 use std::process::ExitCode;
+use std::str::Chars;
 
 const SCHEMA_VERSION: u32 = 1;
 
@@ -344,13 +346,17 @@ fn byte_index_for_column(text: &str, column: usize) -> Option<usize> {
     )
 }
 
+fn should_skip_crlf(current: char, chars: &mut Peekable<Chars<'_>>) -> bool {
+    current == '\r' && chars.peek().is_some_and(|next| *next == '\n')
+}
+
 fn end_position(start_line: usize, start_column: usize, text: &str) -> (u32, u32) {
     let mut line = start_line;
     let mut column = start_column;
     let mut chars = text.chars().peekable();
 
     while let Some(ch) = chars.next() {
-        if ch == '\r' && chars.peek().is_some_and(|next| *next == '\n') {
+        if should_skip_crlf(ch, &mut chars) {
             continue;
         }
         if ch == '\n' {

@@ -208,7 +208,7 @@ Hard invariants that must hold throughout implementation:
   fields. That makes it useful as implementation reference, but not as the
   supported wire contract.
 
-- The current hook point for runtime error rendering is centralised in
+- The current hook point for runtime error rendering is centralized in
   [src/main.rs](../../src/main.rs), which keeps the implementation additive if
   JSON formatting is introduced there.
 
