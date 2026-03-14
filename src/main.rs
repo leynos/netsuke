@@ -60,7 +60,7 @@ fn run_with_args(
     };
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.diag_json);
     configure_runtime(&merged_cli, system_locale, runtime_mode);
-    let prefs = output_prefs::resolve(merged_cli.no_emoji);
+    let prefs = output_prefs::resolve(merged_cli.no_emoji_override());
     match runner::run(&merged_cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => handle_runner_error(err, prefs, runtime_mode),

@@ -16,6 +16,7 @@
 mod accessibility_preferences;
 mod accessible_output;
 mod cli;
+mod configuration_preferences;
 #[cfg(unix)]
 mod fs;
 mod ir;

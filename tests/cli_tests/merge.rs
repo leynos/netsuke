@@ -4,7 +4,7 @@
 //! CLI) and list-value appending.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::Cli;
+use netsuke::cli::{CliConfig, Theme};
 use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
@@ -18,7 +18,101 @@ use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
-    sanitize_value(&Cli::default())
+    sanitize_value(&CliConfig::default())
+}
+
+fn with_config_file<F, T>(toml_content: &str, cli_args: &[&str], f: F) -> anyhow::Result<T>
+where
+    F: FnOnce(netsuke::cli::Cli) -> anyhow::Result<T>,
+{
+    let _env_lock = test_support::env_lock::EnvLock::acquire();
+    let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    std::fs::write(&config_path, toml_content).context("write netsuke.toml")?;
+    let _config_guard =
+        test_support::EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let localizer = std::sync::Arc::from(netsuke::cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
+        .context("parse CLI args for merge")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge CLI and configuration layers")?;
+    f(merged)
+}
+
+fn assert_build_targets(
+    toml_content: &str,
+    cli_args: &[&str],
+    expected_targets: &[String],
+) -> anyhow::Result<()> {
+    with_config_file(toml_content, cli_args, |merged| {
+        let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
+            anyhow::bail!("expected merged command to be build");
+        };
+        ensure!(
+            args.targets == expected_targets,
+            "build targets mismatch: got {:?}, expected {:?}",
+            args.targets,
+            expected_targets,
+        );
+        Ok(())
+    })
+}
+
+#[derive(Debug)]
+enum ExpectedValidationError {
+    ThemeUnicodeAliasConflict,
+    ThemeAsciiAliasConflict,
+    SpinnerDisabledConflict,
+    SpinnerEnabledConflict,
+    UnsupportedOutputFormat,
+}
+
+impl ExpectedValidationError {
+    fn expected_fragment(&self) -> &'static str {
+        match self {
+            Self::ThemeUnicodeAliasConflict => {
+                "theme = \"unicode\" conflicts with no_emoji = true"
+            }
+            Self::ThemeAsciiAliasConflict => {
+                "no_emoji = false conflicts with theme = \"ascii\""
+            }
+            Self::SpinnerDisabledConflict => {
+                "spinner_mode = \"disabled\" conflicts with progress = true"
+            }
+            Self::SpinnerEnabledConflict => {
+                "progress = false conflicts with spinner_mode = \"enabled\""
+            }
+            Self::UnsupportedOutputFormat => {
+                "output_format = \"json\" is not supported yet"
+            }
+        }
+    }
+}
+
+fn merge_defaults_with_file_layer(
+    defaults: serde_json::Value,
+    file_layer: serde_json::Value,
+) -> anyhow::Result<netsuke::cli::CliConfig> {
+    let mut composer = ortho_config::MergeComposer::new();
+    composer.push_defaults(defaults);
+    composer.push_file(file_layer, None);
+    netsuke::cli::CliConfig::merge_from_layers(composer.layers()).map_err(anyhow::Error::from)
+}
+
+fn assert_merge_rejects(
+    defaults: serde_json::Value,
+    file_layer: serde_json::Value,
+    expected_error: ExpectedValidationError,
+) -> anyhow::Result<()> {
+    let err = match merge_defaults_with_file_layer(defaults, file_layer) {
+        Ok(value) => anyhow::bail!("merge should have failed, got {value:#?}"),
+        Err(err) => err,
+    };
+    ensure!(
+        err.to_string().contains(expected_error.expected_fragment()),
+        "unexpected error text: {err}",
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -59,7 +153,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         "diag_json": true,
         "verbose": true
     }));
-    let merged = Cli::merge_from_layers(composer.layers())?;
+    let merged = CliConfig::merge_from_layers(composer.layers())?;
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "file layer should override defaults",
@@ -164,10 +258,78 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
     composer.push_environment(json!({ "locale": "es-ES" }));
     composer.push_cli(json!({ "locale": "en-US" }));
 
-    let merged = Cli::merge_from_layers(composer.layers())?;
+    let merged = CliConfig::merge_from_layers(composer.layers())?;
     ensure!(
         merged.locale.as_deref() == Some("en-US"),
         "CLI locale should override env and file layers",
     );
     Ok(())
+}
+
+#[rstest]
+fn cli_config_build_defaults_apply_when_cli_targets_are_absent() -> Result<()> {
+    assert_build_targets(
+        r#"
+[cmds.build]
+targets = ["all", "docs"]
+"#,
+        &["netsuke"],
+        &[String::from("all"), String::from("docs")],
+    )
+}
+
+#[rstest]
+fn cli_config_explicit_targets_override_configured_build_defaults() -> Result<()> {
+    assert_build_targets(
+        r#"
+[cmds.build]
+targets = ["all"]
+"#,
+        &["netsuke", "build", "lint"],
+        &[String::from("lint")],
+    )
+}
+
+#[rstest]
+#[case(
+    json!({ "theme": "unicode", "no_emoji": true }),
+    ExpectedValidationError::ThemeUnicodeAliasConflict,
+)]
+#[case(
+    json!({ "theme": "ascii", "no_emoji": false }),
+    ExpectedValidationError::ThemeAsciiAliasConflict,
+)]
+#[case(
+    json!({ "spinner_mode": "disabled", "progress": true }),
+    ExpectedValidationError::SpinnerDisabledConflict,
+)]
+#[case(
+    json!({ "spinner_mode": "enabled", "progress": false }),
+    ExpectedValidationError::SpinnerEnabledConflict,
+)]
+#[case(
+    json!({ "output_format": "json" }),
+    ExpectedValidationError::UnsupportedOutputFormat,
+)]
+fn cli_config_rejects_conflicting_or_unsupported_settings(
+    default_cli_json: Result<serde_json::Value>,
+    #[case] file_layer: serde_json::Value,
+    #[case] expected_error: ExpectedValidationError,
+) -> Result<()> {
+    assert_merge_rejects(default_cli_json?, file_layer, expected_error)
+}
+
+#[rstest]
+fn cli_runtime_canonicalizes_ascii_theme_from_no_emoji_alias() -> Result<()> {
+    with_config_file("no_emoji = true\n", &["netsuke"], |merged| {
+        ensure!(
+            merged.theme == Some(Theme::Ascii),
+            "no_emoji compatibility alias should canonicalize to the ASCII theme",
+        );
+        ensure!(
+            merged.no_emoji == Some(true),
+            "no_emoji alias should remain available in the runtime CLI",
+        );
+        Ok(())
+    })
 }

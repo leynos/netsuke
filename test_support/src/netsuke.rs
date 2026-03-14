@@ -53,10 +53,15 @@ pub struct NetsukeRun {
 /// Returns an error when `netsuke` cannot be located or the process cannot be
 /// spawned.
 pub fn run_netsuke_in(current_dir: &Path, args: &[&str]) -> Result<NetsukeRun> {
+    let isolated_config_home = current_dir.join(".config");
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
     let output = cmd
         .current_dir(current_dir)
         .env("PATH", "")
+        .env_remove("NETSUKE_CONFIG_PATH")
+        .env_remove("NETSUKE_OUTPUT_FORMAT")
+        .env("HOME", current_dir)
+        .env("XDG_CONFIG_HOME", &isolated_config_home)
         .args(args)
         .output()
         .context("run netsuke command")?;

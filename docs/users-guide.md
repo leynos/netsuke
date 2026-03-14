@@ -557,6 +557,66 @@ Environment variables use the `NETSUKE_` prefix (for example,
 `NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
 configuration.
 
+The layered schema is rooted in `CliConfig`. Netsuke currently accepts these
+top-level configuration keys:
+
+- `file = "Netsukefile"`
+- `jobs = 8`
+- `verbose = true|false`
+- `locale = "en-US"`
+- `fetch_allow_scheme = ["https"]`
+- `fetch_allow_host = ["example.com"]`
+- `fetch_block_host = ["blocked.example.com"]`
+- `fetch_default_deny = true|false`
+- `accessible = true|false`
+- `progress = true|false`
+- `theme = "auto"|"unicode"|"ascii"`
+- `no_emoji = true|false`
+- `spinner_mode = "auto"|"enabled"|"disabled"`
+- `colour_policy = "auto"|"always"|"never"`
+- `output_format = "human"`
+
+Build-only defaults live under `[cmds.build]`:
+
+- `emit = "out.ninja"`
+- `targets = ["hello"]`
+
+Example:
+
+```toml
+verbose = true
+locale = "es-ES"
+colour_policy = "auto"
+spinner_mode = "auto"
+output_format = "human"
+theme = "ascii"
+progress = true
+accessible = false
+
+[cmds.build]
+targets = ["hello"]
+```
+
+`[cmds.build].targets` is used only when the user does not pass explicit build
+targets on the command line. Explicit CLI targets always win.
+
+`theme` is the canonical presentation setting. `no_emoji = true` remains as a
+compatibility alias and resolves to the ASCII theme. Conflicting settings such
+as `theme = "unicode"` with `no_emoji = true` are rejected during configuration
+merge.
+
+`spinner_mode = "disabled"` is equivalent to disabling progress output unless
+the user explicitly sets `progress = true`, which is treated as a conflict.
+Likewise, `spinner_mode = "enabled"` conflicts with `progress = false`.
+
+`output_format = "json"` is intentionally rejected for now. Roadmap item
+`3.10.3` will add JSON diagnostics; until then, the only supported value is
+`"human"`.
+
+`colour_policy` is accepted and layered today, so users can standardize their
+preferred setting, but Netsuke does not yet emit coloured terminal output, so
+this value currently has no visible effect.
+
 Use `--locale <LOCALE>`, `NETSUKE_LOCALE`, or a `locale = "..."` entry in a
 configuration file to select localized CLI copy and error messages. Locale
 precedence is: command-line flag, environment variable, configuration file,

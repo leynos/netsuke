@@ -92,6 +92,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Exercise CLI localization, config merge, and host pattern symbols so the
     // shared modules remain linked when the build script is compiled without
     // tests.
+    const _: usize = std::mem::size_of::<cli::BuildArgs>();
+    const _: usize = std::mem::size_of::<cli::CliConfig>();
+    const _: usize = std::mem::size_of::<cli::Commands>();
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
@@ -100,11 +103,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
+    const _: fn(&cli::Cli) -> Option<bool> = cli::Cli::no_emoji_override;
+    const _: fn(&cli::Cli) -> bool = cli::Cli::progress_enabled;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
 
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/config.rs");
+    println!("cargo:rerun-if-changed=src/cli/merge.rs");
+    println!("cargo:rerun-if-changed=src/cli/parser.rs");
     println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_NAME");

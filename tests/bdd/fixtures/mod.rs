@@ -27,6 +27,7 @@ use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::PathGuard;
 use test_support::env::{NinjaEnvGuard, restore_many};
+use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
 
 /// Combined test world for all BDD scenarios.
@@ -148,6 +149,8 @@ pub struct TestWorld {
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
+    /// Scenario-scoped guard that serialises environment mutations when needed.
+    pub env_lock: RefCell<Option<EnvLock>>,
 }
 
 impl TestWorld {
@@ -190,6 +193,7 @@ impl Drop for TestWorld {
         self.ninja_env_guard.borrow_mut().take();
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
+        self.env_lock.borrow_mut().take();
         self.restore_environment();
         self.stdlib_text.clear();
     }
