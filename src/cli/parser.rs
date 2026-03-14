@@ -65,7 +65,12 @@ pub(super) fn validation_message(
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
     /// Path to the Netsuke manifest file to use.
-    #[arg(short, long, value_name = "FILE", default_value = "Netsukefile")]
+    #[arg(
+        short,
+        long,
+        value_name = "FILE",
+        default_value_os_t = CliConfig::default_manifest_path()
+    )]
     pub file: PathBuf,
 
     /// Run as if started in this directory.
@@ -302,5 +307,6 @@ fn configure_validation_parsers(
     });
     command
 }
+
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;

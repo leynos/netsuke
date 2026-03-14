@@ -104,8 +104,10 @@ fn assert_merge_rejects(
     file_layer: serde_json::Value,
     expected_error: ExpectedValidationError,
 ) -> anyhow::Result<()> {
-    let err = merge_defaults_with_file_layer(defaults, file_layer)
-        .expect_err("merge should have returned an error");
+    let err = match merge_defaults_with_file_layer(defaults, file_layer) {
+        Ok(value) => anyhow::bail!("merge should have failed, got {value:#?}"),
+        Err(err) => err,
+    };
     ensure!(
         err.to_string().contains(expected_error.expected_fragment()),
         "unexpected error text: {err}",

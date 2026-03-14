@@ -400,6 +400,7 @@ The cleaner model is:
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
+
 ### 2.5 Generated Targets and Actions with `foreach`
 
 Large sets of similar outputs or setup actions can clutter a manifest when
@@ -2392,35 +2393,53 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The CLI is implemented using clap's derive API in `src/cli/mod.rs`. Netsuke
-applies `Cli::with_default_command` after parsing so invoking `netsuke` with no
-explicit command still triggers a build. Configuration is layered with
-OrthoConfig (defaults, configuration files, environment variables, then CLI
-overrides) while treating clap defaults as absent so file or environment values
-are not masked. Explicit config selection is resolved before discovery with
-precedence `--config` > `NETSUKE_CONFIG` > legacy `NETSUKE_CONFIG_PATH`;
-`-C/--directory` only affects project-root discovery. Environment variables use
-the `NETSUKE_` prefix with `__` as a nesting separator. CLI help and clap
-errors are localized via Fluent resources; locale resolution is handled in
-`src/locale_resolution.rs` with the precedence `--locale` -> `NETSUKE_LOCALE`
--> configuration `locale` -> system default. System locale strings are
-normalized by stripping encoding suffixes (such as `.UTF-8`), removing variant
-suffixes (such as `@latin`), and replacing underscores with hyphens before
-validation. English plus Spanish catalogues ship in `locales/`; unsupported
-locales fall back to `en-US`. Runtime diagnostics (for example manifest
-parsing, stdlib template errors, and runner failures) use the same Fluent
-localizer so the locale selection is consistent across user-facing output. A
-build-time audit in `build.rs` validates that all referenced Fluent message
-keys exist in the bundled catalogues, ensuring missing strings fail CI before
-release. CLI execution and dispatch live in `src/runner.rs`, keeping `main.rs`
-focused on parsing. Process management, Ninja invocation, argument redaction,
-and the temporary file helpers reside in `src/runner/process.rs`, allowing the
-runner entry point to delegate low-level concerns. The working directory flag
-mirrors Ninja's `-C` option but is resolved internally: Netsuke runs Ninja with
-a configured working directory and resolves relative output paths (for example
-`build --emit` and `manifest`) under the same directory so behaviour matches a
-real directory change. Error scenarios are validated using clap's `ErrorKind`
-enumeration in unit tests and via Cucumber steps for behavioural coverage.
+The parser-facing `Cli` type is now defined in `src/cli/parser.rs`, while
+layered configuration lives in a dedicated `CliConfig` struct derived with
+OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
+re-exports that public CLI surface. This separation keeps parsing,
+configuration discovery, and runtime command selection as distinct concerns
+while preserving the existing command syntax.
+Invoking `netsuke` with no explicit subcommand still resolves to `build`, and
+the `build` command can now take default `emit` and `targets` values from
+`[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*` environment
+variables. Explicit CLI targets or `--emit` values still override those
+defaults.
+
+Configuration is layered in the order defaults -> configuration files ->
+environment variables -> CLI overrides. Discovery honours `NETSUKE_CONFIG_PATH`
+and the standard OrthoConfig search order; environment variables use the
+`NETSUKE_` prefix with `__` as a nesting separator. The schema now explicitly
+covers verbosity, locale, accessible mode, progress, colour policy, spinner
+mode, output format, theme selection, fetch policy, and build defaults. `theme`
+is the canonical presentation setting; the older `no_emoji` field remains as a
+compatibility alias that canonicalizes to the ASCII theme. Conflicting
+combinations such as `theme = "unicode"` together with `no_emoji = true` fail
+during merge. `spinner_mode` likewise validates against the legacy `progress`
+boolean so contradictory inputs are rejected early. `output_format` is typed
+now, but only `human` is accepted until the future JSON diagnostics milestone
+lands.
+
+CLI help and clap errors are localized via Fluent resources; locale resolution
+is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
+`NETSUKE_LOCALE` -> configuration `locale` -> system default. System locale
+strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
+removing variant suffixes (such as `@latin`), and replacing underscores with
+hyphens before validation. English plus Spanish catalogues ship in `locales/`;
+unsupported locales fall back to `en-US`. Runtime diagnostics (for example
+manifest parsing, stdlib template errors, and runner failures) use the same
+Fluent localizer so the locale selection is consistent across user-facing
+output. A build-time audit in `build.rs` validates that all referenced Fluent
+message keys exist in the bundled catalogues, ensuring missing strings fail CI
+before release. CLI execution and dispatch live in `src/runner.rs`, keeping
+`main.rs` focused on parsing. Process management, Ninja invocation, argument
+redaction, and the temporary file helpers reside in `src/runner/process.rs`,
+allowing the runner entry point to delegate low-level concerns. The working
+directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
+runs Ninja with a configured working directory and resolves relative output
+paths (for example `build --emit` and `manifest`) under the same directory so
+behaviour matches a real directory change. Error scenarios are validated using
+clap's `ErrorKind` enumeration in unit tests and via Cucumber steps for
+behavioural coverage.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
@@ -2447,15 +2466,6 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
-The preference schema is now modelled explicitly in `src/cli/config.rs` as a
-shared `CliConfig` view with typed enums for `colour_policy`, `spinner_mode`,
-and `output_format`. The concrete `Cli` parser remains the OrthoConfig merge
-root for backward compatibility, but it exposes the extracted `CliConfig`
-surface so Clap parsing, configuration files, environment variables, and
-runtime resolution all reuse the same field vocabulary. `spinner_mode`
-supersedes the legacy `progress` boolean when both are present, and
-`output_format` likewise supersedes `diag_json`.
-
 Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
 resolves one theme through OrthoConfig layers (`--theme`, `NETSUKE_THEME`,
 config file, then mode defaults) and hands the resulting symbol and spacing
@@ -2466,12 +2476,12 @@ and gives later roadmap items a stable snapshot surface for validating ASCII
 and Unicode renderings without duplicating formatting rules. Colour policy is
 resolved alongside theme and output-mode detection so `--colour-policy never`
 behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
-auto-detection. Build dispatch also consults OrthoConfig `default_targets`
-before falling back to manifest `defaults`, letting operators set user- or
-workspace-level build defaults without editing the manifest itself. Accessible
-reporter output, timing summaries, and the semantic prefix surface are guarded
-by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
-fail with reviewable diffs instead of drifting silently.
+auto-detection. Build dispatch also consults OrthoConfig `[cmds.build]`
+defaults before falling back to manifest `defaults`, letting operators set
+user- or workspace-level build defaults without editing the manifest itself.
+Accessible reporter output, timing summaries, and the semantic prefix surface
+are guarded by `insta` snapshots so spacing, prefix alignment, and wrapping
+regressions fail with reviewable diffs instead of drifting silently.
 
 The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
 tests in `tests/features/advanced_usage.feature`. Netsuke treats those
