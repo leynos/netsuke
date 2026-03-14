@@ -13,8 +13,8 @@ use std::sync::Arc;
 use super::config::CliConfig;
 use super::parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme};
 use super::{ColourPolicy, OutputFormat, SpinnerMode, Theme};
-pub use crate::cli_l10n::{diag_json_hint_from_args, locale_hint_from_args};
 use crate::cli_l10n::localize_command;
+pub use crate::cli_l10n::{diag_json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
 
 #[derive(Clone)]
