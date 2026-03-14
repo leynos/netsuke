@@ -613,7 +613,7 @@ Likewise, `spinner_mode = "enabled"` conflicts with `progress = false`.
 `3.10.3` will add JSON diagnostics; until then, the only supported value is
 `"human"`.
 
-`colour_policy` is accepted and layered today so users can standardize their
+`colour_policy` is accepted and layered today, so users can standardize their
 preferred setting, but Netsuke does not yet emit coloured terminal output, so
 this value currently has no visible effect.
 

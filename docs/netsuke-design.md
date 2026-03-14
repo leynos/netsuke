@@ -2029,11 +2029,12 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The CLI is implemented using clap's derive API in `src/cli/mod.rs`, but the
-parser-facing `Cli` type is no longer the merge schema. Layered configuration
-now lives in a dedicated `CliConfig` struct derived with OrthoConfig. This
-separation keeps parsing, configuration discovery, and runtime command
-selection as distinct concerns while preserving the existing command syntax.
+The parser-facing `Cli` type is now defined in `src/cli/parser.rs`, while
+layered configuration lives in a dedicated `CliConfig` struct derived with
+OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
+re-exports that public CLI surface. This separation keeps parsing,
+configuration discovery, and runtime command selection as distinct concerns
+while preserving the existing command syntax.
 Invoking `netsuke` with no explicit subcommand still resolves to `build`, and
 the `build` command can now take default `emit` and `targets` values from
 `[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*` environment
