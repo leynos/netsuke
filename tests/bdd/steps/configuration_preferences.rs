@@ -12,6 +12,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use test_support::EnvVarGuard;
 use test_support::display_error_chain;
 use test_support::env_lock::EnvLock;
 
@@ -37,9 +38,9 @@ fn write_config(world: &TestWorld, contents: &str) -> Result<()> {
     let workspace = workspace_path(world)?;
     let path = workspace.join("netsuke.toml");
     fs::write(&path, contents).with_context(|| format!("write {}", path.display()))?;
-    let previous = std::env::var_os(CONFIG_ENV_VAR);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var(CONFIG_ENV_VAR, OsStr::new(path.as_os_str())) };
+    let guard = EnvVarGuard::set(CONFIG_ENV_VAR, path.as_os_str());
+    let previous = guard.original();
     world.track_env_var(CONFIG_ENV_VAR.to_owned(), previous);
     Ok(())
 }
@@ -78,9 +79,9 @@ fn config_sets_locale(world: &TestWorld, locale: &str) -> Result<()> {
 )]
 fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()> {
     ensure_env_lock(world);
-    let previous = std::env::var_os(LOCALE_ENV_VAR);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var(LOCALE_ENV_VAR, OsStr::new(locale)) };
+    let guard = EnvVarGuard::set(LOCALE_ENV_VAR, OsStr::new(locale));
+    let previous = guard.original();
     world.track_env_var(LOCALE_ENV_VAR.to_owned(), previous);
     Ok(())
 }

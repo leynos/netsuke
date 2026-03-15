@@ -2034,12 +2034,11 @@ layered configuration lives in a dedicated `CliConfig` struct derived with
 OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
 re-exports that public CLI surface. This separation keeps parsing,
 configuration discovery, and runtime command selection as distinct concerns
-while preserving the existing command syntax.
-Invoking `netsuke` with no explicit subcommand still resolves to `build`, and
-the `build` command can now take default `emit` and `targets` values from
-`[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*` environment
-variables. Explicit CLI targets or `--emit` values still override those
-defaults.
+while preserving the existing command syntax. Invoking `netsuke` with no
+explicit subcommand still resolves to `build`, and the `build` command can now
+take default `emit` and `targets` values from `[cmds.build]` in configuration
+files or `NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets
+or `--emit` values still override those defaults.
 
 Configuration is layered in the order defaults -> configuration files ->
 environment variables -> CLI overrides. Discovery honours `NETSUKE_CONFIG_PATH`
