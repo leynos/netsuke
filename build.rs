@@ -88,7 +88,7 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
     Ok(destination)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+const fn verify_public_api_symbols() {
     // Exercise CLI localization, config merge, and host pattern symbols so the
     // shared modules remain linked when the build script is compiled without
     // tests.
@@ -107,8 +107,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&cli::Cli) -> bool = cli::Cli::progress_enabled;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
+}
 
-    // Regenerate the manual page when the CLI or metadata changes.
+fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/mod.rs");
     println!("cargo:rerun-if-changed=src/cli/config.rs");
     println!("cargo:rerun-if-changed=src/cli/merge.rs");
@@ -125,13 +126,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
     println!("cargo:rerun-if-changed=locales/en-US/messages.ftl");
     println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
+}
 
-    build_l10n_audit::audit_localization_keys()?;
-
-    // Packagers expect man pages under target/generated-man/<target>/<profile>.
-    let out_dir = out_dir_for_target_profile();
-
-    // The top-level page documents the entire command interface.
+fn generate_man_page(out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let cmd = cli::Cli::command();
     let name = cmd
         .get_bin_name()
@@ -149,7 +146,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let version = env::var("CARGO_PKG_VERSION").map_err(
         |_| "CARGO_PKG_VERSION must be set by Cargo; cannot render manual page without it.",
     )?;
-
     let man = Man::new(cmd)
         .section("1")
         .source(format!("{cargo_bin} {version}"))
@@ -157,7 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut buf = Vec::new();
     man.render(&mut buf)?;
     let page_name = format!("{cargo_bin}.1");
-    write_man_page(&buf, &out_dir, &page_name)?;
+    write_man_page(&buf, out_dir, &page_name)?;
     if let Some(extra_dir) = env::var_os("OUT_DIR") {
         let extra_dir_path = PathBuf::from(extra_dir);
         if let Err(err) = write_man_page(&buf, &extra_dir_path, &page_name) {
@@ -167,6 +163,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
-
     Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    verify_public_api_symbols();
+    emit_rerun_directives();
+    build_l10n_audit::audit_localization_keys()?;
+    let out_dir = out_dir_for_target_profile();
+    generate_man_page(&out_dir)
 }

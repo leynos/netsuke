@@ -131,20 +131,20 @@ pub struct Cli {
     #[arg(long)]
     pub progress: Option<bool>,
 
-    /// Resolved colour policy from layered configuration.
-    #[arg(skip)]
+    /// Override colour policy for terminal output.
+    #[arg(long, value_name = "POLICY")]
     pub colour_policy: Option<ColourPolicy>,
 
-    /// Resolved spinner mode from layered configuration.
-    #[arg(skip)]
+    /// Override spinner animation mode.
+    #[arg(long, value_name = "MODE")]
     pub spinner_mode: Option<SpinnerMode>,
 
-    /// Resolved output format from layered configuration.
-    #[arg(skip)]
+    /// Override output format style.
+    #[arg(long, value_name = "FORMAT")]
     pub output_format: Option<OutputFormat>,
 
-    /// Resolved presentation theme from layered configuration.
-    #[arg(skip)]
+    /// Override presentation theme.
+    #[arg(long, value_name = "THEME")]
     pub theme: Option<Theme>,
 
     /// Optional subcommand to execute; defaults to `build` when omitted.

@@ -155,6 +155,10 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     maybe_insert_explicit(matches, "progress", &cli.progress, &mut root)?;
     maybe_insert_explicit(matches, "no_emoji", &cli.no_emoji, &mut root)?;
     maybe_insert_explicit(matches, "diag_json", &cli.diag_json, &mut root)?;
+    maybe_insert_explicit(matches, "colour_policy", &cli.colour_policy, &mut root)?;
+    maybe_insert_explicit(matches, "spinner_mode", &cli.spinner_mode, &mut root)?;
+    maybe_insert_explicit(matches, "output_format", &cli.output_format, &mut root)?;
+    maybe_insert_explicit(matches, "theme", &cli.theme, &mut root)?;
 
     if let Some(Commands::Build(args)) = cli.command.as_ref()
         && let Some(build_matches) = matches.subcommand_matches("build")
