@@ -34,6 +34,12 @@ mod host_pattern;
 #[path = "src/localization/mod.rs"]
 mod localization;
 
+#[path = "src/output_mode.rs"]
+mod output_mode;
+
+#[path = "src/theme.rs"]
+mod theme;
+
 mod build_l10n_audit;
 
 use host_pattern::{HostPattern, HostPatternError};

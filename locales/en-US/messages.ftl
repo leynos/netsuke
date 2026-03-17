@@ -17,6 +17,7 @@ cli.flag.fetch_default_deny.help = Deny all hosts by default; only allow the dec
 cli.flag.accessible.help = Force accessible output mode on or off.
 cli.flag.progress.help = Force standard stage and task progress summaries on or off.
 cli.flag.diag_json.help = Emit machine-readable diagnostics as JSON on stderr.
+cli.flag.theme.help = CLI theme preset (auto, unicode, ascii).
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).
@@ -43,6 +44,7 @@ cli.validation.scheme.invalid_start = Scheme '{ $scheme }' must start with an AS
 cli.validation.scheme.invalid = Invalid scheme '{ $scheme }'.
 cli.validation.locale.empty = Locale must not be empty.
 cli.validation.locale.invalid = Invalid locale '{ $locale }'.
+cli.validation.theme.invalid = Invalid theme '{ $theme }'. Valid options: auto, unicode, ascii.
 cli.validation.config.expected_object = Expected parsed CLI values to serialize to an object, got { $value }.
 
 # Clap error messages.

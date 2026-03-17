@@ -9,12 +9,18 @@
 use std::env;
 
 use crate::localization::{self, LocalizedMessage, keys};
+use crate::output_mode::OutputMode;
+use crate::theme::{self, ThemePreference};
 
 /// Resolved output formatting preferences.
 ///
 /// These preferences control whether emoji glyphs appear in output and
 /// provide semantic prefix formatting for status, error, and success
 /// messages.
+///
+/// This is now a compatibility facade over the theme system introduced in
+/// roadmap 3.12.1. The `emoji` field is preserved for backward compatibility,
+/// but prefix rendering delegates to the resolved theme tokens.
 ///
 /// # Examples
 ///
@@ -100,6 +106,58 @@ impl OutputPrefs {
     #[must_use]
     pub fn timing_prefix(self) -> LocalizedMessage {
         localization::message(keys::SEMANTIC_PREFIX_TIMING).with_arg("emoji", self.emoji_arg())
+    }
+}
+
+/// Resolve output preferences from theme, output mode, and legacy settings.
+///
+/// This is the primary resolution function introduced in roadmap 3.12.1.
+/// It delegates to the theme system while preserving backward compatibility
+/// with the legacy `no_emoji` preference.
+///
+/// Precedence (highest to lowest):
+/// 1. Explicit theme preference (if not `Auto`)
+/// 2. Legacy `no_emoji = true`
+/// 3. `NETSUKE_NO_EMOJI` environment variable
+/// 4. Output mode (Accessible uses ASCII, Standard uses Unicode)
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::output_prefs::resolve_from_theme;
+/// use netsuke::theme::ThemePreference;
+/// use netsuke::output_mode::OutputMode;
+///
+/// let prefs = resolve_from_theme(
+///     Some(ThemePreference::Ascii),
+///     None,
+///     OutputMode::Standard
+/// );
+/// assert!(!prefs.emoji_allowed());
+/// ```
+#[must_use]
+pub fn resolve_from_theme(
+    theme: Option<ThemePreference>,
+    no_emoji: Option<bool>,
+    mode: OutputMode,
+) -> OutputPrefs {
+    resolve_from_theme_with(theme, no_emoji, mode, |key| env::var(key).ok())
+}
+
+/// Testable variant of `resolve_from_theme` with custom environment lookup.
+#[must_use]
+pub fn resolve_from_theme_with<F>(
+    theme: Option<ThemePreference>,
+    no_emoji: Option<bool>,
+    mode: OutputMode,
+    read_env: F,
+) -> OutputPrefs
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let resolved_theme = theme::resolve_theme(theme, no_emoji, mode, read_env);
+    OutputPrefs {
+        emoji: resolved_theme.tokens.symbols.success != "+",
     }
 }
 

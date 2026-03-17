@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
+use crate::theme::ThemePreference;
 
 pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
@@ -104,4 +105,26 @@ pub(super) fn parse_host_pattern(
     s: &str,
 ) -> Result<HostPattern, String> {
     HostPattern::parse(s).map_err(|err| err.to_string())
+}
+
+/// Parse a theme preference supplied via CLI flags or config files.
+///
+/// Accepts `auto`, `unicode`, or `ascii` (case-insensitive).
+pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePreference, String> {
+    let trimmed = s.trim().to_ascii_lowercase();
+    match trimmed.as_str() {
+        "auto" => Ok(ThemePreference::Auto),
+        "unicode" => Ok(ThemePreference::Unicode),
+        "ascii" => Ok(ThemePreference::Ascii),
+        _ => {
+            let mut args = LocalizationArgs::default();
+            args.insert("theme", s.to_owned().into());
+            Err(super::validation_message(
+                localizer,
+                keys::CLI_THEME_INVALID,
+                Some(&args),
+                &format!("invalid theme '{s}'. Valid options: auto, unicode, ascii"),
+            ))
+        }
+    }
 }

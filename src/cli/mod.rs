@@ -23,9 +23,10 @@ use std::sync::Arc;
 use crate::cli_l10n::localize_command;
 use crate::host_pattern::HostPattern;
 use crate::localization::{self, keys};
+use crate::theme::ThemePreference;
 mod parsing;
 
-use parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme};
+use parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme, parse_theme};
 
 /// Maximum number of jobs accepted by the CLI.
 const MAX_JOBS: usize = 64;
@@ -138,6 +139,10 @@ pub struct Cli {
     #[arg(long)]
     pub no_emoji: Option<bool>,
 
+    /// CLI theme preset (auto, unicode, ascii).
+    #[arg(long, value_name = "THEME")]
+    pub theme: Option<ThemePreference>,
+
     /// Emit machine-readable diagnostics in JSON on stderr.
     #[arg(long)]
     #[ortho_config(default = false)]
@@ -187,6 +192,7 @@ impl Default for Cli {
             accessible: None,
             progress: None,
             no_emoji: None,
+            theme: None,
             diag_json: false,
             command: None,
         }
@@ -370,6 +376,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "accessible",
         "progress",
         "no_emoji",
+        "theme",
         "diag_json",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
@@ -388,6 +395,7 @@ fn configure_validation_parsers(
     let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
     let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
     let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
+    let theme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_theme);
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))
@@ -403,6 +411,9 @@ fn configure_validation_parsers(
     });
     command = command.mut_arg("fetch_block_host", |arg| {
         arg.value_parser(ValueParser::new(host_parser))
+    });
+    command = command.mut_arg("theme", |arg| {
+        arg.value_parser(ValueParser::new(theme_parser))
     });
     command
 }
