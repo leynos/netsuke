@@ -191,10 +191,13 @@ Observable success means:
 Status: Partially complete (2026-03-17)
 
 Implementation achieved:
-- Complete theme module with `ThemePreference` enum, token types (`DesignTokens`,
+
+- Complete theme module with `ThemePreference` enum, token types
+  (`DesignTokens`,
   `SymbolTokens`, `SpacingTokens`, `ColourTokens`), and theme resolution
   pipeline
-- CLI integration: `--theme` flag with OrthoConfig merging, localized validation,
+- CLI integration: `--theme` flag with OrthoConfig merging, localized
+  validation,
   and precedence handling
 - OutputPrefs compatibility facade delegates to theme system
 - 12 passing unit tests for theme resolution precedence
@@ -202,6 +205,7 @@ Implementation achieved:
   work
 
 Remaining work (deferred to follow-up):
+
 - Reporter integration: Update `src/status.rs` and `src/status_timing.rs` to
   use spacing tokens instead of hard-coded `TASK_INDENT` literals
 - BDD coverage: Add `rstest-bdd` scenarios for end-to-end theme selection and

@@ -239,6 +239,10 @@ where
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "rstest parameterized tests need multiple parameters"
+)]
 mod tests {
     use super::*;
     use rstest::rstest;
