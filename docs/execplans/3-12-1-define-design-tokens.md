@@ -9,13 +9,14 @@ Status: DRAFT
 
 ## Purpose / big picture
 
-Netsuke already has the beginnings of a visual language for CLI output:
-`src/output_prefs.rs` decides whether emoji are allowed, while `src/status.rs`,
-`src/status_timing.rs`, and `src/main.rs` each format prefixes and spacing
-locally. That is enough for roadmap items 3.8 through 3.10, but it is not yet a
-theme system. There is no single source of truth for symbols, spacing, or
-future colour treatment, which makes the upcoming theme snapshot and
-terminal-rendering work in roadmap items 3.12.2 and 3.12.3 fragile.
+Netsuke already has the beginnings of a visual language for command-line
+interface (CLI) output: `src/output_prefs.rs` decides whether emoji are
+allowed, while `src/status.rs`, `src/status_timing.rs`, and `src/main.rs` each
+format prefixes and spacing locally. That is enough for roadmap items 3.8
+through 3.10, but it is not yet a theme system. There is no single source of
+truth for symbols, spacing, or future colour treatment, which makes the
+upcoming theme snapshot and terminal-rendering work in roadmap items 3.12.2 and
+3.12.3 fragile.
 
 This change introduces a tokenized theme layer for CLI output. After the work
 is complete, Netsuke will resolve a theme through the existing OrthoConfig
@@ -34,8 +35,8 @@ Observable success means:
 3. ASCII and Unicode modes produce the same status structure and wrapping
    rules, with only symbol glyphs differing.
 4. `make check-fmt`, `make lint`, and `make test` pass with new `rstest` unit
-   coverage and `rstest-bdd` behavioural scenarios for happy paths, unhappy
-   paths, and precedence edge cases.
+   coverage and `rstest-bdd` behaviour-driven development (BDD) scenarios for
+   happy paths, unhappy paths, and precedence edge cases.
 
 ## Constraints
 
@@ -161,7 +162,7 @@ Observable success means:
   (replacing TASK_INDENT literals with spacing tokens in status.rs,
   status_timing.rs) requires touching multiple reporter files and extensive
   testing. Evidence: Current implementation successfully adds CLI theme
-  preference, theme resolution pipeline, and OutputPrefs facade, but full
+  preference, theme resolution pipeline, and OutputPrefs façade, but full
   reporter refactoring needs dedicated focus. Impact: Stages C and D are
   partially complete with infrastructure in place. Follow-up work needed to
   complete reporter integration and add comprehensive BDD coverage.
@@ -197,7 +198,7 @@ Implementation achieved:
   resolution pipeline
 - CLI integration: `--theme` flag with OrthoConfig merging, localized
   validation, and precedence handling
-- OutputPrefs compatibility facade delegates to theme system
+- OutputPrefs compatibility façade delegates to theme system
 - 12 passing unit tests for theme resolution precedence
 - Backward compatibility preserved: existing `no_emoji` preference continues to
   work
@@ -453,7 +454,7 @@ Required documentation changes:
 - `docs/roadmap.md`: mark 3.12.1 done.
 
 Final validation must include the project gates requested in the task, plus
-documentation QA:
+documentation quality assurance (QA):
 
 - `make check-fmt`
 - `make lint`

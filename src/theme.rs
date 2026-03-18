@@ -1,7 +1,7 @@
-//! Design token resolution for CLI theme presentation.
+//! Design token resolution for command-line interface (CLI) theme presentation.
 //!
 //! This module defines the theme system that controls symbols, spacing, and
-//! semantic colors in CLI output. Themes are resolved from layered
+//! semantic colours in CLI output. Themes are resolved from layered
 //! configuration (CLI > environment > config > defaults) using the `OrthoConfig`
 //! model.
 
@@ -27,6 +27,31 @@ pub enum ThemePreference {
     Ascii,
 }
 
+impl ThemePreference {
+    /// Canonical list of valid theme option strings.
+    pub const VALID_OPTIONS: &'static [&'static str] = &["auto", "unicode", "ascii"];
+
+    /// Shared parsing logic for theme strings.
+    ///
+    /// Returns `Ok(ThemePreference)` on success, or `Err(Self::VALID_OPTIONS)`
+    /// on failure so callers can construct localised error messages using the
+    /// same canonical list of valid options.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(Self::VALID_OPTIONS)` if the input string does not match
+    /// any valid theme option (case-insensitive).
+    pub fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
+        let trimmed = s.trim().to_ascii_lowercase();
+        match trimmed.as_str() {
+            "auto" => Ok(Self::Auto),
+            "unicode" => Ok(Self::Unicode),
+            "ascii" => Ok(Self::Ascii),
+            _ => Err(Self::VALID_OPTIONS),
+        }
+    }
+}
+
 impl fmt::Display for ThemePreference {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -41,38 +66,31 @@ impl FromStr for ThemePreference {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let trimmed = s.trim().to_ascii_lowercase();
-        match trimmed.as_str() {
-            "auto" => Ok(Self::Auto),
-            "unicode" => Ok(Self::Unicode),
-            "ascii" => Ok(Self::Ascii),
-            _ => Err(format!(
-                "invalid theme '{s}'. Valid options: auto, unicode, ascii"
-            )),
-        }
+        Self::parse_raw(s)
+            .map_err(|valid| format!("invalid theme '{s}'. Valid options: {}", valid.join(", ")))
     }
 }
 
-/// Semantic color tokens for CLI output.
+/// Semantic colour tokens for CLI output.
 ///
 /// These tokens represent semantic intent (error, success, etc.) rather than
-/// concrete ANSI color codes. A future milestone may map these to actual
+/// concrete ANSI colour codes. A future milestone may map these to actual
 /// terminal styling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColourTokens {
-    /// Color token for error messages and failed operations.
+    /// Colour token for error messages and failed operations.
     pub error: SemanticColour,
-    /// Color token for warning messages.
+    /// Colour token for warning messages.
     pub warning: SemanticColour,
-    /// Color token for successful operations.
+    /// Colour token for successful operations.
     pub success: SemanticColour,
-    /// Color token for informational messages.
+    /// Colour token for informational messages.
     pub info: SemanticColour,
-    /// Color token for timing summaries.
+    /// Colour token for timing summaries.
     pub timing: SemanticColour,
 }
 
-/// Semantic color identifiers.
+/// Semantic colour identifiers.
 ///
 /// Roadmap item 3.12.1 defines these as data; a later milestone will map them
 /// to concrete ANSI styling.
@@ -121,12 +139,14 @@ pub struct SpacingTokens {
 /// Complete design token set for a resolved theme.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DesignTokens {
-    /// Semantic color tokens.
+    /// Semantic colour tokens.
     pub colours: ColourTokens,
     /// Symbol tokens for status indicators.
     pub symbols: SymbolTokens,
     /// Spacing tokens for layout consistency.
     pub spacing: SpacingTokens,
+    /// Whether Unicode symbols (emoji) are allowed in this theme.
+    pub emoji_allowed: bool,
 }
 
 /// Resolved theme including all design tokens.
@@ -160,7 +180,7 @@ const SPACING: SpacingTokens = SpacingTokens {
     timing_indent: "  ",
 };
 
-/// Standard semantic colors (placeholder for future styling).
+/// Standard semantic colours (placeholder for future styling).
 const COLOURS: ColourTokens = ColourTokens {
     error: SemanticColour::Error,
     warning: SemanticColour::Warning,
@@ -169,13 +189,55 @@ const COLOURS: ColourTokens = ColourTokens {
     timing: SemanticColour::Timing,
 };
 
+/// Environment signals that may force ASCII symbols.
+#[derive(Debug, Clone, Copy)]
+struct EnvSignals {
+    no_emoji: bool,
+    no_color: bool,
+}
+
+/// Determine whether Unicode symbols should be used based on theme configuration.
+///
+/// This helper encapsulates the precedence logic for symbol selection:
+/// 1. Explicit `theme` preference (if not `Auto`) takes highest precedence
+/// 2. Legacy `no_emoji = true` forces ASCII
+/// 3. `NETSUKE_NO_EMOJI` environment variable forces ASCII
+/// 4. `NO_COLOR` environment variable forces ASCII
+/// 5. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
+const fn should_use_unicode(
+    theme: Option<ThemePreference>,
+    no_emoji: Option<bool>,
+    env: EnvSignals,
+    mode: OutputMode,
+) -> bool {
+    match theme {
+        Some(ThemePreference::Unicode) => true,
+        Some(ThemePreference::Ascii) => false,
+        Some(ThemePreference::Auto) | None => {
+            // Legacy no_emoji=true forces ASCII
+            if let Some(true) = no_emoji {
+                return false;
+            }
+            if env.no_emoji {
+                return false;
+            }
+            if env.no_color {
+                return false;
+            }
+            // Default: Unicode for Standard mode, ASCII for Accessible
+            !mode.is_accessible()
+        }
+    }
+}
+
 /// Resolve a theme from configuration, environment, and output mode.
 ///
 /// Precedence order:
 /// 1. Explicit `theme` preference (if not `Auto`)
 /// 2. Legacy `no_emoji = true` forces ASCII
 /// 3. `NETSUKE_NO_EMOJI` environment variable forces ASCII
-/// 4. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
+/// 4. `NO_COLOR` environment variable forces ASCII
+/// 5. Output mode: `Accessible` uses ASCII, `Standard` uses Unicode
 ///
 /// # Examples
 ///
@@ -201,22 +263,11 @@ pub fn resolve_theme<F>(
 where
     F: Fn(&str) -> Option<String>,
 {
-    // Explicit theme preference (non-Auto) takes highest precedence.
-    let use_unicode = match theme {
-        Some(ThemePreference::Unicode) => true,
-        Some(ThemePreference::Ascii) => false,
-        Some(ThemePreference::Auto) | None => {
-            // Legacy no_emoji=true forces ASCII
-            if let Some(true) = no_emoji {
-                false
-            } else if read_env("NETSUKE_NO_EMOJI").is_some() {
-                false
-            } else {
-                // Default: Unicode for Standard mode, ASCII for Accessible
-                !mode.is_accessible()
-            }
-        }
+    let env = EnvSignals {
+        no_emoji: read_env("NETSUKE_NO_EMOJI").is_some(),
+        no_color: read_env("NO_COLOR").is_some(),
     };
+    let use_unicode = should_use_unicode(theme, no_emoji, env, mode);
 
     let symbols = if use_unicode {
         UNICODE_SYMBOLS
@@ -229,6 +280,7 @@ where
             colours: COLOURS,
             symbols,
             spacing: SPACING,
+            emoji_allowed: use_unicode,
         },
     }
 }
@@ -242,9 +294,13 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
-    fn fake_env(netsuke_no_emoji: Option<&str>) -> impl Fn(&str) -> Option<String> + '_ {
+    fn fake_env<'a>(
+        netsuke_no_emoji: Option<&'a str>,
+        no_color: Option<&'a str>,
+    ) -> impl Fn(&str) -> Option<String> + 'a {
         move |key| match key {
             "NETSUKE_NO_EMOJI" => netsuke_no_emoji.map(String::from),
+            "NO_COLOR" => no_color.map(String::from),
             _ => None,
         }
     }
@@ -254,12 +310,14 @@ mod tests {
         Some(ThemePreference::Unicode),
         Some(true),
         Some("1"),
+        Some("1"),
         OutputMode::Accessible,
         true
     )]
     #[case::explicit_ascii_overrides_all(
         Some(ThemePreference::Ascii),
         Some(false),
+        None,
         None,
         OutputMode::Standard,
         false
@@ -268,29 +326,56 @@ mod tests {
         Some(ThemePreference::Auto),
         Some(true),
         None,
+        None,
         OutputMode::Standard,
         false
     )]
-    #[case::auto_defers_to_env(
+    #[case::auto_defers_to_netsuke_no_emoji_env(
         Some(ThemePreference::Auto),
+        None,
+        Some("1"),
+        None,
+        OutputMode::Standard,
+        false
+    )]
+    #[case::auto_defers_to_no_color_env(
+        Some(ThemePreference::Auto),
+        None,
         None,
         Some("1"),
         OutputMode::Standard,
         false
     )]
-    #[case::none_defers_to_no_emoji_true(None, Some(true), None, OutputMode::Standard, false)]
-    #[case::none_defers_to_env(None, None, Some("1"), OutputMode::Standard, false)]
-    #[case::accessible_mode_uses_ascii(None, None, None, OutputMode::Accessible, false)]
-    #[case::standard_mode_uses_unicode(None, None, None, OutputMode::Standard, true)]
-    #[case::no_emoji_false_defers_to_mode(None, Some(false), None, OutputMode::Standard, true)]
+    #[case::none_defers_to_no_emoji_true(None, Some(true), None, None, OutputMode::Standard, false)]
+    #[case::none_defers_to_netsuke_no_emoji_env(
+        None,
+        None,
+        Some("1"),
+        None,
+        OutputMode::Standard,
+        false
+    )]
+    #[case::none_defers_to_no_color_env(None, None, None, Some("1"), OutputMode::Standard, false)]
+    #[case::accessible_mode_uses_ascii(None, None, None, None, OutputMode::Accessible, false)]
+    #[case::standard_mode_uses_unicode(None, None, None, None, OutputMode::Standard, true)]
+    #[case::no_emoji_false_defers_to_mode(
+        None,
+        Some(false),
+        None,
+        None,
+        OutputMode::Standard,
+        true
+    )]
     fn theme_resolution_precedence(
         #[case] theme: Option<ThemePreference>,
         #[case] no_emoji: Option<bool>,
         #[case] env_no_emoji: Option<&str>,
+        #[case] env_no_color: Option<&str>,
         #[case] mode: OutputMode,
         #[case] expect_unicode: bool,
     ) {
-        let resolved = resolve_theme(theme, no_emoji, mode, fake_env(env_no_emoji));
+        let resolved = resolve_theme(theme, no_emoji, mode, fake_env(env_no_emoji, env_no_color));
+        assert_eq!(resolved.tokens.emoji_allowed, expect_unicode);
         if expect_unicode {
             assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);
             assert_eq!(resolved.tokens.symbols.error, UNICODE_SYMBOLS.error);

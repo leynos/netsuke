@@ -157,7 +157,7 @@ where
 {
     let resolved_theme = theme::resolve_theme(theme, no_emoji, mode, read_env);
     OutputPrefs {
-        emoji: resolved_theme.tokens.symbols.success != "+",
+        emoji: resolved_theme.tokens.emoji_allowed,
     }
 }
 
