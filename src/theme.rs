@@ -14,11 +14,12 @@ use serde::{Deserialize, Serialize};
 /// User-facing theme preference for CLI presentation.
 ///
 /// Determines whether output uses Unicode symbols or ASCII-safe alternatives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemePreference {
     /// Automatically detect the appropriate theme based on output mode and
     /// environment signals.
+    #[default]
     Auto,
     /// Use Unicode symbols (✔, ✖, ⚠, ℹ, ⏱) for status indicators.
     Unicode,
@@ -33,12 +34,6 @@ impl fmt::Display for ThemePreference {
             Self::Unicode => write!(f, "unicode"),
             Self::Ascii => write!(f, "ascii"),
         }
-    }
-}
-
-impl Default for ThemePreference {
-    fn default() -> Self {
-        Self::Auto
     }
 }
 

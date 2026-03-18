@@ -193,12 +193,10 @@ Status: Partially complete (2026-03-17)
 Implementation achieved:
 
 - Complete theme module with `ThemePreference` enum, token types
-  (`DesignTokens`,
-  `SymbolTokens`, `SpacingTokens`, `ColourTokens`), and theme resolution
-  pipeline
+  (`DesignTokens`, `SymbolTokens`, `SpacingTokens`, `ColourTokens`), and theme
+  resolution pipeline
 - CLI integration: `--theme` flag with OrthoConfig merging, localized
-  validation,
-  and precedence handling
+  validation, and precedence handling
 - OutputPrefs compatibility facade delegates to theme system
 - 12 passing unit tests for theme resolution precedence
 - Backward compatibility preserved: existing `no_emoji` preference continues to
