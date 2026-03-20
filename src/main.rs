@@ -6,7 +6,7 @@ use clap::ArgMatches;
 use clap::error::ErrorKind;
 use miette::Report;
 use netsuke::{
-    cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest,
+    cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
     output_prefs, runner,
 };
 use ortho_config::Localizer;
@@ -60,7 +60,9 @@ fn run_with_args(
     };
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.diag_json);
     configure_runtime(&merged_cli, system_locale, runtime_mode);
-    let prefs = output_prefs::resolve(merged_cli.no_emoji);
+    let output_mode = output_mode::resolve(merged_cli.accessible);
+    let prefs =
+        output_prefs::resolve_from_theme(merged_cli.theme, merged_cli.no_emoji, output_mode);
     match runner::run(&merged_cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => handle_runner_error(err, prefs, runtime_mode),

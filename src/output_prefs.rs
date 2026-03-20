@@ -9,12 +9,18 @@
 use std::env;
 
 use crate::localization::{self, LocalizedMessage, keys};
+use crate::output_mode::OutputMode;
+use crate::theme::{self, ThemePreference};
 
 /// Resolved output formatting preferences.
 ///
 /// These preferences control whether emoji glyphs appear in output and
 /// provide semantic prefix formatting for status, error, and success
 /// messages.
+///
+/// This is now a compatibility facade over the theme system introduced in
+/// roadmap 3.12.1. The `emoji` field is preserved for backward compatibility,
+/// but prefix rendering delegates to the resolved theme tokens.
 ///
 /// # Examples
 ///
@@ -100,6 +106,61 @@ impl OutputPrefs {
     #[must_use]
     pub fn timing_prefix(self) -> LocalizedMessage {
         localization::message(keys::SEMANTIC_PREFIX_TIMING).with_arg("emoji", self.emoji_arg())
+    }
+}
+
+/// Resolve output preferences from theme, output mode, and legacy settings.
+///
+/// This is the primary resolution function introduced in roadmap 3.12.1.
+/// It delegates to [`resolve_from_theme_with`] and ultimately to
+/// [`theme::resolve_theme`] while preserving backward compatibility with the
+/// legacy `no_emoji` preference. That shared resolution path also honours the
+/// `NO_COLOR` environment variable.
+///
+/// Precedence (highest to lowest):
+/// 1. Explicit theme preference (if not `Auto`)
+/// 2. Legacy `no_emoji = true`
+/// 3. `NETSUKE_NO_EMOJI` environment variable
+/// 4. `NO_COLOR` environment variable
+/// 5. Output mode (Accessible uses ASCII, Standard uses Unicode)
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::output_prefs::resolve_from_theme;
+/// use netsuke::theme::ThemePreference;
+/// use netsuke::output_mode::OutputMode;
+///
+/// let prefs = resolve_from_theme(
+///     Some(ThemePreference::Ascii),
+///     None,
+///     OutputMode::Standard
+/// );
+/// assert!(!prefs.emoji_allowed());
+/// ```
+#[must_use]
+pub fn resolve_from_theme(
+    theme: Option<ThemePreference>,
+    no_emoji: Option<bool>,
+    mode: OutputMode,
+) -> OutputPrefs {
+    resolve_from_theme_with(theme, no_emoji, mode, |key| env::var(key).ok())
+}
+
+/// Testable variant of `resolve_from_theme` with custom environment lookup.
+#[must_use]
+pub fn resolve_from_theme_with<F>(
+    theme: Option<ThemePreference>,
+    no_emoji: Option<bool>,
+    mode: OutputMode,
+    read_env: F,
+) -> OutputPrefs
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let resolved_theme = theme::resolve_theme(theme, no_emoji, mode, read_env);
+    OutputPrefs {
+        emoji: resolved_theme.tokens.emoji_allowed,
     }
 }
 
@@ -189,6 +250,16 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
+    #[derive(Debug)]
+    struct ThemeResolutionCase<'a> {
+        theme: Option<ThemePreference>,
+        no_emoji: Option<bool>,
+        mode: OutputMode,
+        no_color: Option<&'a str>,
+        no_emoji_env: Option<&'a str>,
+        expected_emoji: bool,
+    }
+
     /// Build an environment lookup from optional `NO_COLOR` and
     /// `NETSUKE_NO_EMOJI` values.
     fn fake_env<'a>(
@@ -236,6 +307,53 @@ mod tests {
     fn emoji_allowed_returns_false_when_suppressed() {
         let prefs = resolve_with(Some(true), |_| None);
         assert!(!prefs.emoji_allowed());
+    }
+
+    #[rstest]
+    #[case::unicode_theme_overrides_no_emoji_env(ThemeResolutionCase {
+        theme: Some(ThemePreference::Unicode),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: Some("1"),
+        expected_emoji: true,
+    })]
+    #[case::ascii_theme_stays_ascii_without_env(ThemeResolutionCase {
+        theme: Some(ThemePreference::Ascii),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: None,
+        expected_emoji: false,
+    })]
+    #[case::auto_theme_no_color_forces_ascii(ThemeResolutionCase {
+        theme: Some(ThemePreference::Auto),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: Some("1"),
+        no_emoji_env: None,
+        expected_emoji: false,
+    })]
+    #[case::auto_theme_standard_without_env_uses_unicode(ThemeResolutionCase {
+        theme: Some(ThemePreference::Auto),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: None,
+        expected_emoji: true,
+    })]
+    #[case::auto_theme_legacy_no_emoji_stays_ascii(ThemeResolutionCase {
+        theme: Some(ThemePreference::Auto),
+        no_emoji: Some(true),
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: None,
+        expected_emoji: false,
+    })]
+    fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCase<'_>) {
+        let env = fake_env(case.no_color, case.no_emoji_env);
+        let prefs = resolve_from_theme_with(case.theme, case.no_emoji, case.mode, env);
+        assert_eq!(prefs.emoji_allowed(), case.expected_emoji);
     }
 
     #[rstest]

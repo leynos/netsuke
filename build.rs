@@ -34,6 +34,12 @@ mod host_pattern;
 #[path = "src/localization/mod.rs"]
 mod localization;
 
+#[path = "src/output_mode.rs"]
+mod output_mode;
+
+#[path = "src/theme.rs"]
+mod theme;
+
 mod build_l10n_audit;
 
 use host_pattern::{HostPattern, HostPatternError};
@@ -42,6 +48,13 @@ type LocalizedParseFn = fn(
     Vec<OsString>,
     &Arc<dyn ortho_config::Localizer>,
 ) -> Result<(cli::Cli, ArgMatches), clap::Error>;
+
+type ResolveThemeFn = fn(
+    Option<theme::ThemePreference>,
+    Option<bool>,
+    output_mode::OutputMode,
+    fn(&str) -> Option<String>,
+) -> theme::ResolvedTheme;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -102,6 +115,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
+    const _: fn(Option<bool>) -> output_mode::OutputMode = output_mode::resolve;
+    const _: ResolveThemeFn = theme::resolve_theme;
 
     // Regenerate the manual page when the CLI or metadata changes.
     println!("cargo:rerun-if-changed=src/cli/mod.rs");

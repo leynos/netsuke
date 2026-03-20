@@ -276,8 +276,7 @@ model provides the necessary ordering guarantees.
    `NINJA_STDERR_MARKER`) to avoid coupling to localized UI strings.
 
 2. **Status messages do not contaminate stdout in standard mode**: Verifies
-   stream
-   routing in non-accessible mode using the same stable markers.
+   stream routing in non-accessible mode using the same stable markers.
 
 3. **Build artifacts can be captured via stdout redirection**: Verifies that
    `netsuke manifest -` output goes to stdout without status contamination.
@@ -285,12 +284,10 @@ model provides the necessary ordering guarantees.
 Supporting infrastructure added:
 
 - `FakeNinjaConfig` struct in `tests/bdd/steps/progress_output.rs` for
-  configurable
-  fixture generation with optional stderr markers.
+  configurable fixture generation with optional stderr markers.
 - `install_fake_ninja_with_config()` function for flexible fixture setup.
 - Updated `fake_ninja_emits_stdout_output` fixture to emit both stdout and
-  stderr
-  markers for comprehensive stream routing verification.
+  stderr markers for comprehensive stream routing verification.
 
 ### Stage E: Documentation (completed)
 

@@ -22,3 +22,4 @@ pub mod output_prefs;
 pub mod runner;
 pub mod status;
 pub mod stdlib;
+pub mod theme;

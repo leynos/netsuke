@@ -134,6 +134,7 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
             "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
             "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
+            "theme" => Some(keys::CLI_FLAG_THEME_HELP),
             "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
             _ => None,
         },

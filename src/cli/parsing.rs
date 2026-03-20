@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
+use crate::theme::ThemePreference;
 
 pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
@@ -104,4 +105,67 @@ pub(super) fn parse_host_pattern(
     s: &str,
 ) -> Result<HostPattern, String> {
     HostPattern::parse(s).map_err(|err| err.to_string())
+}
+
+/// Parse a theme preference supplied via CLI flags or config files.
+///
+/// Accepts `auto`, `unicode`, or `ascii` (case-insensitive).
+pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePreference, String> {
+    ThemePreference::parse_raw(s).map_err(|_valid_options| {
+        let mut args = LocalizationArgs::default();
+        args.insert("theme", s.to_owned().into());
+        super::validation_message(
+            localizer,
+            keys::CLI_THEME_INVALID,
+            Some(&args),
+            &format!("invalid theme '{s}'"),
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    /// Mock localizer for testing `parse_theme` error messages.
+    struct MockLocalizer;
+
+    impl Localizer for MockLocalizer {
+        fn lookup(&self, _key: &str, _args: Option<&LocalizationArgs>) -> Option<String> {
+            Some(String::from("mock localized message"))
+        }
+    }
+
+    #[rstest]
+    #[case::auto("auto", ThemePreference::Auto)]
+    #[case::unicode("unicode", ThemePreference::Unicode)]
+    #[case::ascii("ascii", ThemePreference::Ascii)]
+    #[case::auto_uppercase("AUTO", ThemePreference::Auto)]
+    #[case::unicode_mixed("Unicode", ThemePreference::Unicode)]
+    #[case::ascii_with_whitespace("  ascii  ", ThemePreference::Ascii)]
+    fn parse_theme_valid_inputs(#[case] input: &str, #[case] expected: ThemePreference) {
+        let localizer = MockLocalizer;
+        let result = parse_theme(&localizer, input);
+        match result {
+            Ok(theme) => assert_eq!(theme, expected),
+            Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
+        }
+    }
+
+    #[rstest]
+    #[case::invalid_word("invalid")]
+    #[case::empty("")]
+    #[case::number("123")]
+    #[case::close_typo("unicod")]
+    fn parse_theme_invalid_inputs(#[case] input: &str) {
+        let localizer = MockLocalizer;
+        let result = parse_theme(&localizer, input);
+        match result {
+            Err(error_msg) => {
+                assert!(!error_msg.is_empty(), "Error message should not be empty");
+            }
+            Ok(theme) => panic!("Expected Err for input '{input}', got Ok({theme:?})"),
+        }
+    }
 }

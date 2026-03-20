@@ -17,6 +17,7 @@ cli.flag.fetch_default_deny.help = Denegar todos los hosts por defecto; solo per
 cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desactivado).
 cli.flag.progress.help = Forzar los resúmenes de progreso estándar de etapas y tareas (activados o desactivados).
 cli.flag.diag_json.help = Emitir diagnósticos legibles por máquinas como JSON en stderr.
+cli.flag.theme.help = Tema predefinido de CLI (auto, unicode, ascii).
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
@@ -43,6 +44,7 @@ cli.validation.scheme.invalid_start = El esquema '{ $scheme }' debe comenzar con
 cli.validation.scheme.invalid = Esquema no válido '{ $scheme }'.
 cli.validation.locale.empty = La configuración regional no debe estar vacía.
 cli.validation.locale.invalid = Configuración regional no válida '{ $locale }'.
+cli.validation.theme.invalid = Tema no válido '{ $theme }'. Opciones válidas: auto, unicode, ascii.
 cli.validation.config.expected_object = Se esperaba que los valores de la CLI se serializaran como un objeto, se obtuvo { $value }.
 
 # Mensajes de error de Clap.

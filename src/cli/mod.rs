@@ -3,18 +3,9 @@
 //! This module defines the [`Cli`] structure and its subcommands.
 //! It mirrors the design described in `docs/netsuke-design.md`.
 
-use clap::builder::{TypedValueParser, ValueParser};
-use clap::error::ErrorKind;
-use clap::parser::ValueSource;
 use clap::{ArgMatches, Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ortho_config::declarative::LayerComposition;
-use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::localize_clap_error_with_command;
-use ortho_config::uncased::Uncased;
-use ortho_config::{
-    ConfigDiscovery, LocalizationArgs, Localizer, MergeComposer, OrthoConfig, OrthoMergeExt,
-    OrthoResult, sanitize_value,
-};
+use ortho_config::{LocalizationArgs, Localizer, OrthoConfig};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -22,49 +13,19 @@ use std::sync::Arc;
 
 use crate::cli_l10n::localize_command;
 use crate::host_pattern::HostPattern;
-use crate::localization::{self, keys};
+use crate::theme::ThemePreference;
+mod config_merge;
 mod parsing;
+mod validation;
 
-use parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme};
+use config_merge::default_manifest_path;
+pub use config_merge::{merge_with_config, resolve_merged_diag_json};
+use validation::configure_validation_parsers;
 
 /// Maximum number of jobs accepted by the CLI.
 const MAX_JOBS: usize = 64;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
 const ENV_PREFIX: &str = "NETSUKE_";
-
-#[derive(Clone)]
-struct LocalizedValueParser<F> {
-    localizer: Arc<dyn Localizer>,
-    parser: F,
-}
-
-impl<F> LocalizedValueParser<F> {
-    fn new(localizer: Arc<dyn Localizer>, parser: F) -> Self {
-        Self { localizer, parser }
-    }
-}
-
-impl<F, T> TypedValueParser for LocalizedValueParser<F>
-where
-    F: Fn(&dyn Localizer, &str) -> Result<T, String> + Clone + Send + Sync + 'static,
-    T: Send + Sync + Clone + 'static,
-{
-    type Value = T;
-
-    fn parse_ref(
-        &self,
-        cmd: &clap::Command,
-        _arg: Option<&clap::Arg>,
-        value: &std::ffi::OsStr,
-    ) -> Result<Self::Value, clap::Error> {
-        let mut command = cmd.clone();
-        let Some(raw_value) = value.to_str() else {
-            return Err(command.error(ErrorKind::InvalidUtf8, "invalid UTF-8"));
-        };
-        (self.parser)(self.localizer.as_ref(), raw_value)
-            .map_err(|err| command.error(ErrorKind::ValueValidation, err))
-    }
-}
 
 fn validation_message(
     localizer: &dyn Localizer,
@@ -138,6 +99,10 @@ pub struct Cli {
     #[arg(long)]
     pub no_emoji: Option<bool>,
 
+    /// CLI theme preset (auto, unicode, ascii).
+    #[arg(long, value_name = "THEME")]
+    pub theme: Option<ThemePreference>,
+
     /// Emit machine-readable diagnostics in JSON on stderr.
     #[arg(long)]
     #[ortho_config(default = false)]
@@ -187,6 +152,7 @@ impl Default for Cli {
             accessible: None,
             progress: None,
             no_emoji: None,
+            theme: None,
             diag_json: false,
             command: None,
         }
@@ -227,11 +193,6 @@ pub enum Commands {
         #[arg(value_name = "FILE")]
         file: PathBuf,
     },
-}
-
-/// Return the default manifest filename when none is provided.
-fn default_manifest_path() -> PathBuf {
-    PathBuf::from("Netsukefile")
 }
 
 /// Inspect raw arguments and extract the requested locale before full parsing.
@@ -275,183 +236,4 @@ where
         localize_clap_error_with_command(with_cmd, localizer.as_ref(), Some(&command))
     })?;
     Ok((cli, matches_for_merge))
-}
-
-/// Return the prefixed environment provider for CLI configuration.
-fn env_provider() -> Env {
-    Env::prefixed(ENV_PREFIX)
-}
-
-/// Build configuration discovery rooted in the optional working directory.
-fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
-    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
-    if let Some(dir) = directory {
-        builder = builder.clear_project_roots().add_project_root(dir);
-    }
-    builder.build()
-}
-
-/// Return `true` when no CLI overrides were supplied.
-///
-/// The merge pipeline treats an empty JSON object as "no overrides".
-fn is_empty_value(value: &serde_json::Value) -> bool {
-    matches!(value, serde_json::Value::Object(map) if map.is_empty())
-}
-
-fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
-    value
-        .as_object()
-        .and_then(|map| map.get("diag_json"))
-        .and_then(serde_json::Value::as_bool)
-}
-
-/// Resolve the effective diagnostic JSON preference from the raw config layers.
-///
-/// This is used before full config merging so startup and merge-time failures
-/// can still honour `diag_json` values sourced from config files or the
-/// environment.
-#[must_use]
-pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
-    let mut diag_json = Cli::default().diag_json;
-
-    let discovery = config_discovery(cli.directory.as_ref());
-    let file_layers = discovery.compose_layers();
-    for layer in file_layers.value {
-        let layer_value = layer.into_value();
-        if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
-            diag_json = layer_diag_json;
-        }
-    }
-
-    let env_provider = env_provider()
-        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
-        .split("__");
-    if let Ok(value) = Figment::from(env_provider).extract::<serde_json::Value>()
-        && let Some(env_diag_json) = diag_json_from_layer(&value)
-    {
-        diag_json = env_diag_json;
-    }
-
-    if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
-        cli.diag_json
-    } else {
-        diag_json
-    }
-}
-
-fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<serde_json::Value> {
-    let value = sanitize_value(cli)?;
-    let mut map = match value {
-        serde_json::Value::Object(map) => map,
-        other => {
-            let mut args = LocalizationArgs::default();
-            args.insert("value", format!("{other:?}").into());
-            let localizer = localization::localizer();
-            return Err(Arc::new(ortho_config::OrthoError::Validation {
-                key: String::from("cli"),
-                message: validation_message(
-                    localizer.as_ref(),
-                    keys::CLI_CONFIG_EXPECTED_OBJECT,
-                    Some(&args),
-                    &format!("expected parsed CLI values to serialize to an object, got {other:?}"),
-                ),
-            }));
-        }
-    };
-
-    map.remove("command");
-    for field in [
-        "file",
-        "verbose",
-        "fetch_default_deny",
-        "fetch_allow_scheme",
-        "fetch_allow_host",
-        "fetch_block_host",
-        "accessible",
-        "progress",
-        "no_emoji",
-        "diag_json",
-    ] {
-        if matches.value_source(field) != Some(ValueSource::CommandLine) {
-            map.remove(field);
-        }
-    }
-
-    Ok(serde_json::Value::Object(map))
-}
-
-fn configure_validation_parsers(
-    mut command: clap::Command,
-    localizer: &Arc<dyn Localizer>,
-) -> clap::Command {
-    let jobs_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_jobs);
-    let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
-    let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
-    let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
-
-    command = command.mut_arg("jobs", |arg| {
-        arg.value_parser(ValueParser::new(jobs_parser))
-    });
-    command = command.mut_arg("locale", |arg| {
-        arg.value_parser(ValueParser::new(locale_parser))
-    });
-    command = command.mut_arg("fetch_allow_scheme", |arg| {
-        arg.value_parser(ValueParser::new(scheme_parser.clone()))
-    });
-    command = command.mut_arg("fetch_allow_host", |arg| {
-        arg.value_parser(ValueParser::new(host_parser.clone()))
-    });
-    command = command.mut_arg("fetch_block_host", |arg| {
-        arg.value_parser(ValueParser::new(host_parser))
-    });
-    command
-}
-
-/// Merge configuration layers over the parsed CLI values.
-///
-/// # Errors
-///
-/// Returns an [`ortho_config::OrthoError`] if layer composition or merging
-/// fails.
-pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
-    let command = cli.command.clone();
-    let mut errors = Vec::new();
-    let mut composer = MergeComposer::with_capacity(4);
-
-    match sanitize_value(&Cli::default()) {
-        Ok(value) => composer.push_defaults(value),
-        Err(err) => errors.push(err),
-    }
-
-    let discovery = config_discovery(cli.directory.as_ref());
-    let mut file_layers = discovery.compose_layers();
-    errors.append(&mut file_layers.required_errors);
-    if file_layers.value.is_empty() {
-        errors.append(&mut file_layers.optional_errors);
-    }
-    for layer in file_layers.value {
-        composer.push_layer(layer);
-    }
-
-    let env_provider = env_provider()
-        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
-        .split("__");
-    match Figment::from(env_provider)
-        .extract::<serde_json::Value>()
-        .into_ortho_merge()
-    {
-        Ok(value) => composer.push_environment(value),
-        Err(err) => errors.push(err),
-    }
-
-    match cli_overrides_from_matches(cli, matches) {
-        Ok(value) if !is_empty_value(&value) => composer.push_cli(value),
-        Ok(_) => {}
-        Err(err) => errors.push(err),
-    }
-
-    let composition = LayerComposition::new(composer.layers(), errors);
-    let mut merged = composition.into_merge_result(Cli::merge_from_layers)?;
-    merged.command = command;
-    Ok(merged)
 }
