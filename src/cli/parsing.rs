@@ -126,7 +126,6 @@ pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePre
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::ThemePreference;
     use rstest::rstest;
 
     /// Mock localizer for testing `parse_theme` error messages.

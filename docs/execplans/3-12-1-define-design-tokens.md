@@ -409,9 +409,7 @@ Validation gate for Stage C:
 - no reporter file exceeds the 400-line limit,
 - `make check-fmt` and `make lint` pass.
 
-### Stage D: Add behavioural coverage for happy paths, unhappy paths, and
-
-consistency
+### Stage D: Add behavioural coverage for happy paths, unhappy paths, and consistency
 
 Extend or add `rstest-bdd` features to cover end-to-end behaviour.
 
@@ -578,7 +576,7 @@ Useful evidence to keep while implementing:
 
 - a short before/after transcript showing ASCII versus Unicode completion
   output,
-- the failing and then passing unit test for theme resolution precedence,
+- the failing, and then passing, unit test for theme resolution precedence,
 - the passing BDD scenario output proving invalid theme rejection and
   ASCII-only rendering,
 - the final `git diff --stat` confirming the change stayed within scope.

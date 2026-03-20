@@ -247,6 +247,16 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
+    #[derive(Debug)]
+    struct ThemeResolutionCase<'a> {
+        theme: Option<ThemePreference>,
+        no_emoji: Option<bool>,
+        mode: OutputMode,
+        no_color: Option<&'a str>,
+        no_emoji_env: Option<&'a str>,
+        expected_emoji: bool,
+    }
+
     /// Build an environment lookup from optional `NO_COLOR` and
     /// `NETSUKE_NO_EMOJI` values.
     fn fake_env<'a>(
@@ -294,6 +304,53 @@ mod tests {
     fn emoji_allowed_returns_false_when_suppressed() {
         let prefs = resolve_with(Some(true), |_| None);
         assert!(!prefs.emoji_allowed());
+    }
+
+    #[rstest]
+    #[case::unicode_theme_overrides_no_emoji_env(ThemeResolutionCase {
+        theme: Some(ThemePreference::Unicode),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: Some("1"),
+        expected_emoji: true,
+    })]
+    #[case::ascii_theme_stays_ascii_without_env(ThemeResolutionCase {
+        theme: Some(ThemePreference::Ascii),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: None,
+        expected_emoji: false,
+    })]
+    #[case::auto_theme_no_color_forces_ascii(ThemeResolutionCase {
+        theme: Some(ThemePreference::Auto),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: Some("1"),
+        no_emoji_env: None,
+        expected_emoji: false,
+    })]
+    #[case::auto_theme_standard_without_env_uses_unicode(ThemeResolutionCase {
+        theme: Some(ThemePreference::Auto),
+        no_emoji: None,
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: None,
+        expected_emoji: true,
+    })]
+    #[case::auto_theme_legacy_no_emoji_stays_ascii(ThemeResolutionCase {
+        theme: Some(ThemePreference::Auto),
+        no_emoji: Some(true),
+        mode: OutputMode::Standard,
+        no_color: None,
+        no_emoji_env: None,
+        expected_emoji: false,
+    })]
+    fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCase<'_>) {
+        let env = fake_env(case.no_color, case.no_emoji_env);
+        let prefs = resolve_from_theme_with(case.theme, case.no_emoji, case.mode, env);
+        assert_eq!(prefs.emoji_allowed(), case.expected_emoji);
     }
 
     #[rstest]
