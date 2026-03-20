@@ -112,14 +112,17 @@ impl OutputPrefs {
 /// Resolve output preferences from theme, output mode, and legacy settings.
 ///
 /// This is the primary resolution function introduced in roadmap 3.12.1.
-/// It delegates to the theme system while preserving backward compatibility
-/// with the legacy `no_emoji` preference.
+/// It delegates to [`resolve_from_theme_with`] and ultimately to
+/// [`theme::resolve_theme`] while preserving backward compatibility with the
+/// legacy `no_emoji` preference. That shared resolution path also honours the
+/// `NO_COLOR` environment variable.
 ///
 /// Precedence (highest to lowest):
 /// 1. Explicit theme preference (if not `Auto`)
 /// 2. Legacy `no_emoji = true`
 /// 3. `NETSUKE_NO_EMOJI` environment variable
-/// 4. Output mode (Accessible uses ASCII, Standard uses Unicode)
+/// 4. `NO_COLOR` environment variable
+/// 5. Output mode (Accessible uses ASCII, Standard uses Unicode)
 ///
 /// # Examples
 ///

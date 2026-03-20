@@ -4,12 +4,12 @@ use super::*;
 use rstest::rstest;
 
 fn fake_env<'a>(
-    netsuke_no_emoji: Option<&'a str>,
     no_color: Option<&'a str>,
+    netsuke_no_emoji: Option<&'a str>,
 ) -> impl Fn(&str) -> Option<String> + 'a {
     move |key| match key {
-        "NETSUKE_NO_EMOJI" => netsuke_no_emoji.map(String::from),
         "NO_COLOR" => no_color.map(String::from),
+        "NETSUKE_NO_EMOJI" => netsuke_no_emoji.map(String::from),
         _ => None,
     }
 }
@@ -76,7 +76,7 @@ fn theme_resolution_precedence(
     #[case] mode: OutputMode,
     #[case] expect_unicode: bool,
 ) {
-    let resolved = resolve_theme(theme, no_emoji, mode, fake_env(env_no_emoji, env_no_color));
+    let resolved = resolve_theme(theme, no_emoji, mode, fake_env(env_no_color, env_no_emoji));
     assert_eq!(resolved.tokens.emoji_allowed, expect_unicode);
     if expect_unicode {
         assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);

@@ -173,19 +173,19 @@ Observable success means:
   compatibility façade during this roadmap item rather than performing a
   flag-day rename. Rationale: reporters, tests, and `main.rs` already depend on
   `OutputPrefs`; moving them all at once would add churn without improving the
-  behavioural outcome for 3.12.1. Date/Author: 2026-03-13 / Codex
+  behavioural outcome for 3.12.1. Date/Author: 2026-03-13 / Codex.
 
 - Decision: add an explicit user-facing `theme` preference while preserving
   `no_emoji` as a legacy override that maps onto the token resolver. Rationale:
   roadmap 3.12.1 calls for a CLI theme system, but existing users already rely
   on `no_emoji`. The safest path is to support both, with a clear precedence
-  order and updated documentation. Date/Author: 2026-03-13 / Codex
+  order and updated documentation. Date/Author: 2026-03-13 / Codex.
 
 - Decision: keep 3.12.1 focused on semantic tokens and preset themes rather
   than arbitrary user-defined palettes. Rationale: the roadmap item is about
   defining and wiring tokens, not designing a fully customizable styling
   language. Preset token sets are enough to unblock 3.12.2 snapshots and 3.12.3
-  terminal validation. Date/Author: 2026-03-13 / Codex
+  terminal validation. Date/Author: 2026-03-13 / Codex.
 
 ## Outcomes & retrospective
 
