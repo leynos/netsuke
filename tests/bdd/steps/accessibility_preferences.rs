@@ -6,6 +6,7 @@
 //! stored in [`TestWorld`] rather than mutating the real process environment.
 
 use crate::bdd::fixtures::TestWorld;
+use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use crate::bdd::types::EnvVarValue;
 use anyhow::{Result, ensure};
 use netsuke::output_prefs;
@@ -159,8 +160,10 @@ fn prefix_contains(world: &TestWorld, expected: EnvVarValue) -> Result<()> {
         .get()
         .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
     let expected_str = expected.as_str();
+    let normalized_rendered = normalize_fluent_isolates(&rendered);
+    let normalized_expected = normalize_fluent_isolates(expected_str);
     ensure!(
-        rendered.contains(expected_str),
+        normalized_rendered.contains(&normalized_expected),
         "expected prefix to contain '{expected_str}', got '{rendered}'"
     );
     Ok(())
@@ -172,8 +175,9 @@ fn prefix_is_ascii(world: &TestWorld) -> Result<()> {
         .rendered_prefix
         .get()
         .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
+    let normalized_rendered = normalize_fluent_isolates(&rendered);
     ensure!(
-        rendered.is_ascii(),
+        normalized_rendered.is_ascii(),
         "expected ASCII-only prefix, got '{rendered}'"
     );
     Ok(())
@@ -185,8 +189,9 @@ fn prefix_has_non_ascii(world: &TestWorld) -> Result<()> {
         .rendered_prefix
         .get()
         .ok_or_else(|| anyhow::anyhow!("prefix has not been rendered"))?;
+    let normalized_rendered = normalize_fluent_isolates(&rendered);
     ensure!(
-        !rendered.is_ascii(),
+        !normalized_rendered.is_ascii(),
         "expected non-ASCII (emoji) characters in prefix, got '{rendered}'"
     );
     Ok(())

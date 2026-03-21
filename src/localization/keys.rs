@@ -306,6 +306,7 @@ define_keys! {
     CLI_FLAG_NO_EMOJI_HELP => "cli.flag.no_emoji.help",
     CLI_FLAG_THEME_HELP => "cli.flag.theme.help",
     CLI_THEME_INVALID => "cli.validation.theme.invalid",
+    SEMANTIC_PREFIX_RENDERED => "semantic.prefix.rendered",
     SEMANTIC_PREFIX_ERROR => "semantic.prefix.error",
     SEMANTIC_PREFIX_WARNING => "semantic.prefix.warning",
     SEMANTIC_PREFIX_SUCCESS => "semantic.prefix.success",

@@ -1,16 +1,16 @@
 //! Output preference resolution for emoji and semantic prefix formatting.
 //!
 //! This module determines whether Netsuke should include emoji glyphs in its
-//! output and provides localized semantic prefix helpers (`Error:`,
-//! `Warning:`, `Success:`) that adapt to the resolved preference. Preferences
-//! are auto-detected from the `NO_COLOR` and `NETSUKE_NO_EMOJI` environment
-//! variables, or forced via explicit configuration.
+//! output and provides localized semantic prefix helpers that adapt to the
+//! resolved theme tokens. Preferences are auto-detected from the `NO_COLOR`
+//! and `NETSUKE_NO_EMOJI` environment variables, or forced via explicit
+//! configuration.
 
 use std::env;
 
 use crate::localization::{self, LocalizedMessage, keys};
 use crate::output_mode::OutputMode;
-use crate::theme::{self, ThemePreference};
+use crate::theme::{self, ResolvedTheme, ThemePreference};
 
 /// Resolved output formatting preferences.
 ///
@@ -19,8 +19,8 @@ use crate::theme::{self, ThemePreference};
 /// messages.
 ///
 /// This is now a compatibility facade over the theme system introduced in
-/// roadmap 3.12.1. The `emoji` field is preserved for backward compatibility,
-/// but prefix rendering delegates to the resolved theme tokens.
+/// roadmap 3.12.1. Callers still ask for output preferences, while the
+/// implementation delegates prefix and spacing decisions to the resolved theme.
 ///
 /// # Examples
 ///
@@ -32,25 +32,44 @@ use crate::theme::{self, ThemePreference};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OutputPrefs {
-    /// Whether emoji glyphs are permitted in output.
-    emoji: bool,
+    resolved_theme: ResolvedTheme,
 }
 
 impl OutputPrefs {
+    #[must_use]
+    const fn from_theme(resolved_theme: ResolvedTheme) -> Self {
+        Self { resolved_theme }
+    }
+
     /// Return `true` when emoji glyphs are permitted.
     #[must_use]
     pub const fn emoji_allowed(self) -> bool {
-        self.emoji
+        self.resolved_theme.tokens.emoji_allowed
     }
 
-    /// Fluent argument value for the `$emoji` select expression.
-    const fn emoji_arg(self) -> &'static str {
-        if self.emoji { "yes" } else { "no" }
+    /// Return the task-progress indentation string for the active theme.
+    #[must_use]
+    pub const fn task_indent(self) -> &'static str {
+        self.resolved_theme.tokens.spacing.task_indent
+    }
+
+    /// Return the timing-summary indentation string for the active theme.
+    #[must_use]
+    pub const fn timing_indent(self) -> &'static str {
+        self.resolved_theme.tokens.spacing.timing_indent
+    }
+
+    fn render_prefix(symbol: &'static str, label_key: &'static str) -> LocalizedMessage {
+        let label = localization::message(label_key).to_string();
+        localization::message(keys::SEMANTIC_PREFIX_RENDERED)
+            .with_arg("symbol", symbol)
+            .with_arg("label", label)
     }
 
     /// Render the localized error prefix for the current preferences.
     ///
-    /// Returns `"✖ Error:"` when emoji is allowed, `"Error:"` otherwise.
+    /// Returns `"✖ Error:"` for the Unicode theme and `"X Error:"` for the
+    /// ASCII theme.
     ///
     /// # Examples
     ///
@@ -63,20 +82,28 @@ impl OutputPrefs {
     /// ```
     #[must_use]
     pub fn error_prefix(self) -> LocalizedMessage {
-        localization::message(keys::SEMANTIC_PREFIX_ERROR).with_arg("emoji", self.emoji_arg())
+        Self::render_prefix(
+            self.resolved_theme.tokens.symbols.error,
+            keys::SEMANTIC_PREFIX_ERROR,
+        )
     }
 
     /// Render the localized warning prefix for the current preferences.
     ///
-    /// Returns `"⚠ Warning:"` when emoji is allowed, `"Warning:"` otherwise.
+    /// Returns `"⚠ Warning:"` for the Unicode theme and `"! Warning:"` for
+    /// the ASCII theme.
     #[must_use]
     pub fn warning_prefix(self) -> LocalizedMessage {
-        localization::message(keys::SEMANTIC_PREFIX_WARNING).with_arg("emoji", self.emoji_arg())
+        Self::render_prefix(
+            self.resolved_theme.tokens.symbols.warning,
+            keys::SEMANTIC_PREFIX_WARNING,
+        )
     }
 
     /// Render the localized success prefix for the current preferences.
     ///
-    /// Returns `"✔ Success:"` when emoji is allowed, `"Success:"` otherwise.
+    /// Returns `"✔ Success:"` for the Unicode theme and `"+ Success:"` for
+    /// the ASCII theme.
     ///
     /// # Examples
     ///
@@ -89,23 +116,34 @@ impl OutputPrefs {
     /// ```
     #[must_use]
     pub fn success_prefix(self) -> LocalizedMessage {
-        localization::message(keys::SEMANTIC_PREFIX_SUCCESS).with_arg("emoji", self.emoji_arg())
+        Self::render_prefix(
+            self.resolved_theme.tokens.symbols.success,
+            keys::SEMANTIC_PREFIX_SUCCESS,
+        )
     }
 
     /// Render the localized informational prefix for the current preferences.
     ///
-    /// Returns `"ℹ Info:"` when emoji is allowed, `"Info:"` otherwise.
+    /// Returns `"ℹ Info:"` for the Unicode theme and `"i Info:"` for the
+    /// ASCII theme.
     #[must_use]
     pub fn info_prefix(self) -> LocalizedMessage {
-        localization::message(keys::SEMANTIC_PREFIX_INFO).with_arg("emoji", self.emoji_arg())
+        Self::render_prefix(
+            self.resolved_theme.tokens.symbols.info,
+            keys::SEMANTIC_PREFIX_INFO,
+        )
     }
 
     /// Render the localized timing prefix for the current preferences.
     ///
-    /// Returns `"⏱ Timing:"` when emoji is allowed, `"Timing:"` otherwise.
+    /// Returns `"⏱ Timing:"` for the Unicode theme and `"T Timing:"` for the
+    /// ASCII theme.
     #[must_use]
     pub fn timing_prefix(self) -> LocalizedMessage {
-        localization::message(keys::SEMANTIC_PREFIX_TIMING).with_arg("emoji", self.emoji_arg())
+        Self::render_prefix(
+            self.resolved_theme.tokens.symbols.timing,
+            keys::SEMANTIC_PREFIX_TIMING,
+        )
     }
 }
 
@@ -159,9 +197,7 @@ where
     F: Fn(&str) -> Option<String>,
 {
     let resolved_theme = theme::resolve_theme(theme, no_emoji, mode, read_env);
-    OutputPrefs {
-        emoji: resolved_theme.tokens.emoji_allowed,
-    }
+    OutputPrefs::from_theme(resolved_theme)
 }
 
 /// Resolve output preferences from explicit configuration and environment.
@@ -227,162 +263,10 @@ pub fn resolve_with<F>(no_emoji: Option<bool>, read_env: F) -> OutputPrefs
 where
     F: Fn(&str) -> Option<String>,
 {
-    // Explicit CLI override: only `Some(true)` forces emoji off.
-    // `Some(false)` deliberately falls through — it does not re-enable
-    // emoji when an environment variable is present.
-    if let Some(true) = no_emoji {
-        return OutputPrefs { emoji: false };
-    }
-
-    if read_env("NO_COLOR").is_some() {
-        return OutputPrefs { emoji: false };
-    }
-
-    if read_env("NETSUKE_NO_EMOJI").is_some() {
-        return OutputPrefs { emoji: false };
-    }
-
-    OutputPrefs { emoji: true }
+    let resolved_theme = theme::resolve_theme(None, no_emoji, OutputMode::Standard, read_env);
+    OutputPrefs::from_theme(resolved_theme)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    #[derive(Debug)]
-    struct ThemeResolutionCase<'a> {
-        theme: Option<ThemePreference>,
-        no_emoji: Option<bool>,
-        mode: OutputMode,
-        no_color: Option<&'a str>,
-        no_emoji_env: Option<&'a str>,
-        expected_emoji: bool,
-    }
-
-    /// Build an environment lookup from optional `NO_COLOR` and
-    /// `NETSUKE_NO_EMOJI` values.
-    fn fake_env<'a>(
-        no_color: Option<&'a str>,
-        no_emoji_env: Option<&'a str>,
-    ) -> impl Fn(&str) -> Option<String> + 'a {
-        move |key| match key {
-            "NO_COLOR" => no_color.map(String::from),
-            "NETSUKE_NO_EMOJI" => no_emoji_env.map(String::from),
-            _ => None,
-        }
-    }
-
-    #[rstest]
-    #[case::explicit_no_emoji_forces_off(Some(true), None, None, false)]
-    #[case::false_defers_to_no_color(Some(false), Some("1"), None, false)]
-    #[case::false_defers_to_netsuke_no_emoji(Some(false), None, Some("1"), false)]
-    #[case::no_color_disables_emoji(None, Some("1"), None, false)]
-    #[case::no_color_empty_disables_emoji(None, Some(""), None, false)]
-    #[case::netsuke_no_emoji_disables(None, None, Some("1"), false)]
-    #[case::netsuke_no_emoji_empty_disables(None, None, Some(""), false)]
-    #[case::netsuke_no_emoji_false_string_disables(None, None, Some("false"), false)]
-    #[case::netsuke_no_emoji_zero_string_disables(None, None, Some("0"), false)]
-    #[case::false_defers_to_netsuke_no_emoji_false_string(Some(false), None, Some("false"), false)]
-    #[case::default_allows_emoji(None, None, None, true)]
-    #[case::no_color_takes_precedence_over_missing_netsuke(None, Some("1"), None, false)]
-    #[case::both_env_vars_disable(None, Some("1"), Some("1"), false)]
-    fn resolve_output_prefs(
-        #[case] no_emoji: Option<bool>,
-        #[case] no_color: Option<&str>,
-        #[case] no_emoji_env: Option<&str>,
-        #[case] expected_emoji: bool,
-    ) {
-        let env = fake_env(no_color, no_emoji_env);
-        assert_eq!(resolve_with(no_emoji, env).emoji_allowed(), expected_emoji);
-    }
-
-    #[test]
-    fn emoji_allowed_returns_true_when_permitted() {
-        let prefs = resolve_with(Some(false), |_| None);
-        assert!(prefs.emoji_allowed());
-    }
-
-    #[test]
-    fn emoji_allowed_returns_false_when_suppressed() {
-        let prefs = resolve_with(Some(true), |_| None);
-        assert!(!prefs.emoji_allowed());
-    }
-
-    #[rstest]
-    #[case::unicode_theme_overrides_no_emoji_env(ThemeResolutionCase {
-        theme: Some(ThemePreference::Unicode),
-        no_emoji: None,
-        mode: OutputMode::Standard,
-        no_color: None,
-        no_emoji_env: Some("1"),
-        expected_emoji: true,
-    })]
-    #[case::ascii_theme_stays_ascii_without_env(ThemeResolutionCase {
-        theme: Some(ThemePreference::Ascii),
-        no_emoji: None,
-        mode: OutputMode::Standard,
-        no_color: None,
-        no_emoji_env: None,
-        expected_emoji: false,
-    })]
-    #[case::auto_theme_no_color_forces_ascii(ThemeResolutionCase {
-        theme: Some(ThemePreference::Auto),
-        no_emoji: None,
-        mode: OutputMode::Standard,
-        no_color: Some("1"),
-        no_emoji_env: None,
-        expected_emoji: false,
-    })]
-    #[case::auto_theme_standard_without_env_uses_unicode(ThemeResolutionCase {
-        theme: Some(ThemePreference::Auto),
-        no_emoji: None,
-        mode: OutputMode::Standard,
-        no_color: None,
-        no_emoji_env: None,
-        expected_emoji: true,
-    })]
-    #[case::auto_theme_legacy_no_emoji_stays_ascii(ThemeResolutionCase {
-        theme: Some(ThemePreference::Auto),
-        no_emoji: Some(true),
-        mode: OutputMode::Standard,
-        no_color: None,
-        no_emoji_env: None,
-        expected_emoji: false,
-    })]
-    fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCase<'_>) {
-        let env = fake_env(case.no_color, case.no_emoji_env);
-        let prefs = resolve_from_theme_with(case.theme, case.no_emoji, case.mode, env);
-        assert_eq!(prefs.emoji_allowed(), case.expected_emoji);
-    }
-
-    #[rstest]
-    #[case::error_with_emoji(true, OutputPrefs::error_prefix, "Error:")]
-    #[case::error_without_emoji(false, OutputPrefs::error_prefix, "Error:")]
-    #[case::success_with_emoji(true, OutputPrefs::success_prefix, "Success:")]
-    #[case::success_without_emoji(false, OutputPrefs::success_prefix, "Success:")]
-    #[case::warning_with_emoji(true, OutputPrefs::warning_prefix, "Warning:")]
-    #[case::warning_without_emoji(false, OutputPrefs::warning_prefix, "Warning:")]
-    #[case::info_with_emoji(true, OutputPrefs::info_prefix, "Info:")]
-    #[case::info_without_emoji(false, OutputPrefs::info_prefix, "Info:")]
-    #[case::timing_with_emoji(true, OutputPrefs::timing_prefix, "Timing:")]
-    #[case::timing_without_emoji(false, OutputPrefs::timing_prefix, "Timing:")]
-    fn prefix_rendering(
-        #[case] emoji: bool,
-        #[case] prefix_fn: fn(OutputPrefs) -> LocalizedMessage,
-        #[case] expected_text: &str,
-    ) {
-        let prefs = OutputPrefs { emoji };
-        let rendered = prefix_fn(prefs).to_string();
-        assert!(
-            rendered.contains(expected_text),
-            "expected '{expected_text}' in '{rendered}'"
-        );
-        if !emoji {
-            assert!(
-                rendered.is_ascii(),
-                "expected ASCII-only prefix, got '{rendered}'"
-            );
-        }
-    }
-}
+#[path = "output_prefs_tests.rs"]
+mod tests;

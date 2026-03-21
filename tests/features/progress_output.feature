@@ -41,6 +41,27 @@ Feature: Progress output
     And stderr should contain "- Stage 1/6:"
     And stderr should contain "Total pipeline time:"
 
+  Scenario: Standard mode honours explicit ASCII theme prefixes
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--theme ascii --accessible false --progress true manifest -"
+    Then the command should succeed
+    And stderr should contain "+ Success:"
+    And stderr should not contain "✔ Success:"
+
+  Scenario: Accessible mode honours explicit Unicode theme prefixes
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--theme unicode --accessible true --progress true manifest -"
+    Then the command should succeed
+    And stderr should contain "ℹ Info:"
+    And stderr should contain "✔ Success:"
+
+  Scenario: Verbose mode honours explicit ASCII timing prefixes
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--theme ascii --accessible false --progress true --verbose manifest -"
+    Then the command should succeed
+    And stderr should contain "T Timing:"
+    And stderr should not contain "⏱ Timing:"
+
   Scenario: Stage summaries localize to Spanish with success prefix
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible false --locale es-ES --progress true manifest -"

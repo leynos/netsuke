@@ -301,9 +301,9 @@ library, and CLI ergonomics.
 
 ### 3.12. Visual design validation
 
-- [ ] 3.12.1. Define design tokens for colours, symbols, and spacing.
-  - [ ] Route reporter prefixes and spacing through resolved theme tokens.
-  - [ ] Add end-to-end theme coverage and documentation for ASCII/Unicode
+- [x] 3.12.1. Define design tokens for colours, symbols, and spacing.
+  - [x] Route reporter prefixes and spacing through resolved theme tokens.
+  - [x] Add end-to-end theme coverage and documentation for ASCII/Unicode
         consistency.
 - [ ] 3.12.2. Snapshot progress and status output for themes.
   - [ ] Cover unicode and ascii themes.

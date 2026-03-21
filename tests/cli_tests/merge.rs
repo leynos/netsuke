@@ -1,11 +1,12 @@
 //! Configuration merge tests.
 //!
-//! These tests validate OrthoConfig layer precedence (defaults, file, env,
+//! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
 
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
 use netsuke::cli_localization;
+use netsuke::theme::ThemePreference;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
 use serde_json::json;
@@ -18,7 +19,7 @@ use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
-    sanitize_value(&Cli::default())
+    Ok(sanitize_value(&Cli::default())?)
 }
 
 #[rstest]
@@ -34,6 +35,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
     defaults_object.insert("progress".to_owned(), json!(true));
     defaults_object.insert("diag_json".to_owned(), json!(false));
+    defaults_object.insert("theme".to_owned(), json!("auto"));
     composer.push_defaults(defaults);
     composer.push_file(
         json!({
@@ -42,7 +44,8 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
             "fetch_allow_scheme": ["http"],
             "locale": "en-US",
             "progress": false,
-            "diag_json": true
+            "diag_json": true,
+            "theme": "ascii"
         }),
         None,
     );
@@ -50,13 +53,15 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         "jobs": 3,
         "fetch_allow_scheme": ["ftp"],
         "progress": true,
-        "diag_json": false
+        "diag_json": false,
+        "theme": "unicode"
     }));
     composer.push_cli(json!({
         "jobs": 4,
         "fetch_allow_scheme": ["git"],
         "progress": false,
         "diag_json": true,
+        "theme": "ascii",
         "verbose": true
     }));
     let merged = Cli::merge_from_layers(composer.layers())?;
@@ -81,6 +86,10 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         merged.locale.as_deref() == Some("en-US"),
         "file layer should populate locale when CLI does not override",
     );
+    ensure!(
+        merged.theme == Some(ThemePreference::Ascii),
+        "CLI layer should override theme selection",
+    );
     ensure!(merged.verbose, "CLI layer should set verbose");
     Ok(())
 }
@@ -99,11 +108,13 @@ fetch_default_deny = true
 locale = "es-ES"
 progress = false
 diag_json = true
+theme = "ascii"
 "#;
     fs::write(&config_path, config).context("write netsuke.toml")?;
 
     let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
+    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
@@ -146,10 +157,39 @@ diag_json = true
         "config progress should apply when CLI and env do not override",
     );
     ensure!(
+        merged.theme == Some(ThemePreference::Unicode),
+        "environment theme should override config when CLI has no value",
+    );
+    ensure!(
         merged.diag_json,
         "config diag_json should apply when CLI and env do not override",
     );
 
+    Ok(())
+}
+
+#[rstest]
+fn cli_merge_with_config_prefers_cli_theme_over_env_and_file() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    fs::write(&config_path, "theme = \"ascii\"\n").context("write netsuke.toml")?;
+
+    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(["netsuke", "--theme", "ascii"], &localizer)
+            .context("parse CLI args for theme override merge")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge theme across CLI, env, and config layers")?
+        .with_default_command();
+
+    ensure!(
+        merged.theme == Some(ThemePreference::Ascii),
+        "CLI theme should override env and config layers",
+    );
     Ok(())
 }
 

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -129,13 +129,19 @@ Observable success means:
       resolved tokens. Added `resolve_from_theme()` and
       `resolve_from_theme_with()` functions to `output_prefs` module that
       delegate to theme system. Updated `main.rs` to resolve `OutputMode` and
-      pass it to theme resolution. Theme infrastructure is complete and
-      functional. Full reporter integration (using spacing tokens in status.rs
-      and status_timing.rs) deferred to follow-up work.
-- [ ] Stage D: Add behavioural coverage for theme selection and consistency.
-      Deferred pending full reporter integration.
-- [ ] Stage E: Update documentation, mark the roadmap item done, and run the
-      full quality gates.
+      pass it to theme resolution. Completed reporter integration by routing
+      semantic prefixes through resolved theme symbols and replacing hard-coded
+      task/timing indentation with spacing token accessors in `status.rs` and
+      `status_timing.rs`.
+- [x] (2026-03-21 00:00Z) Stage D: Add behavioural coverage for theme
+      selection and consistency. Activated the dormant `tests/cli_tests/`
+      harness, added theme parsing and merge-precedence tests, and added BDD
+      scenarios covering explicit ASCII and Unicode themes plus invalid
+      `--theme` input.
+- [x] (2026-03-21 00:00Z) Stage E: Update documentation, mark the roadmap item
+      done, and run the full quality gates. Updated the user guide and design
+      record, corrected the execplan command-list Markdown structure, and
+      prepared the roadmap entry for completion once the full gates pass.
 
 ## Surprises & discoveries
 
@@ -146,11 +152,12 @@ Observable success means:
   use OrthoConfig immediately, but the plan must avoid baking reporter code
   directly into the current `Cli` type.
 
-- Observation: there is no current theme abstraction; `OutputPrefs` only tracks
-  whether emoji are allowed, while `TASK_INDENT` and several prefixes are still
-  hard-coded in the reporters. Evidence: `src/output_prefs.rs`,
-  `src/status.rs`, `src/status_timing.rs`, and `src/main.rs`. Impact: 3.12.1
-  must create the abstraction before 3.12.2 can snapshot it.
+- Observation: theme-token rollout was simplest when `OutputPrefs` became the
+  compatibility wrapper around the resolved theme rather than introducing a new
+  reporter-facing type. Evidence: `src/output_prefs.rs`, `src/status.rs`, and
+  `src/status_timing.rs`. Impact: existing reporter constructors and most call
+  sites stayed stable while tokens became authoritative for prefixes and
+  spacing.
 
 - Observation: strict clippy/lint behaviour has already required `build.rs`
   anchors for shared CLI helpers. Evidence: `build.rs` contains `const _`
@@ -158,14 +165,11 @@ Observable success means:
   `cli_l10n::parse_bool_hint`, and related helpers. Impact: new theme parsing
   helpers must follow the same pattern.
 
-- (2026-03-17) Observation: Implementing full reporter token integration
-  (replacing TASK_INDENT literals with spacing tokens in status.rs,
-  status_timing.rs) requires touching multiple reporter files and extensive
-  testing. Evidence: Current implementation successfully adds CLI theme
-  preference, theme resolution pipeline, and OutputPrefs façade, but full
-  reporter refactoring needs dedicated focus. Impact: Stages C and D are
-  partially complete with infrastructure in place. Follow-up work needed to
-  complete reporter integration and add comprehensive BDD coverage.
+- Observation: the repository already contained a dormant `tests/cli_tests/`
+  module tree that was not an active Cargo integration target. Evidence:
+  `tests/cli_tests/mod.rs` existed without a matching `tests/cli_tests.rs`
+  harness. Impact: the roadmap item needed a small harness file plus stale-test
+  fixes before the new theme merge tests could participate in `cargo test`.
 
 ## Decision log
 
@@ -187,9 +191,15 @@ Observable success means:
   language. Preset token sets are enough to unblock 3.12.2 snapshots and 3.12.3
   terminal validation. Date/Author: 2026-03-13 / Codex.
 
+- Decision: render semantic prefixes from theme symbols plus localized text
+  labels instead of keeping symbol selection inside Fluent select expressions.
+  Rationale: the roadmap item requires design tokens to become the single
+  source of truth for glyph choice, while translation should still own the text
+  labels (`Error:`, `Advertencia:`, and so on). Date/Author: 2026-03-21 / Codex.
+
 ## Outcomes & retrospective
 
-Status: Partially complete (2026-03-17)
+Status: Complete (2026-03-21)
 
 Implementation achieved:
 
@@ -198,24 +208,22 @@ Implementation achieved:
   resolution pipeline
 - CLI integration: `--theme` flag with OrthoConfig merging, localized
   validation, and precedence handling
-- OutputPrefs compatibility façade delegates to theme system
-- 12 passing unit tests for theme resolution precedence
+- OutputPrefs compatibility façade now carries resolved theme tokens and
+  renders semantic prefixes from token glyphs plus localized labels
+- Reporter integration: `src/status.rs` and `src/status_timing.rs` now use
+  theme-backed spacing accessors instead of hard-coded indentation literals
+- Active unit/integration coverage for theme parsing, precedence, and rendered
+  output, including a reactivated `tests/cli_tests.rs` harness
+- BDD coverage for explicit ASCII and Unicode theme rendering, verbose ASCII
+  timing output, and invalid `--theme` validation
 - Backward compatibility preserved: existing `no_emoji` preference continues to
   work
 
-Remaining work (deferred to follow-up):
-
-- Reporter integration: Update `src/status.rs` and `src/status_timing.rs` to
-  use spacing tokens instead of hard-coded `TASK_INDENT` literals
-- BDD coverage: Add `rstest-bdd` scenarios for end-to-end theme selection and
-  ASCII/Unicode consistency
-- Documentation: Update `docs/users-guide.md` with theme selection guidance
-- Mark roadmap 3.12.1 done after completion
-
-The implementation successfully adds the user-visible theme selection story
-through OrthoConfig and centralizes token definitions. The infrastructure is
-complete and functional. Full reporter integration requires focused work on
-status rendering modules and comprehensive BDD test coverage.
+The implementation now satisfies the roadmap item end to end: theme selection
+flows through OrthoConfig, semantic prefixes and spacing come from one resolved
+token set, ASCII and Unicode output stay structurally aligned, and the docs and
+tests reflect the resulting behaviour. Roadmap item 3.12.1 can be marked done
+once the final full gate run completes successfully.
 
 ## Context and orientation
 
@@ -226,13 +234,13 @@ The current CLI output flow is spread across several modules:
 - `src/cli_l10n.rs` maps clap arguments and subcommands to Fluent help keys.
 - `src/output_mode.rs` resolves whether output is `Accessible` or `Standard`
   from `accessible`, `NO_COLOR`, and `TERM`.
-- `src/output_prefs.rs` resolves whether emoji are allowed from `no_emoji`,
-  `NO_COLOR`, and `NETSUKE_NO_EMOJI`, then renders semantic prefixes such as
-  `Error:`, `Info:`, `Success:`, and `Timing:`.
+- `src/output_prefs.rs` resolves the theme-backed output preferences and now
+  exposes semantic prefixes plus spacing accessors through a compatibility
+  façade.
 - `src/status.rs` renders pipeline stages, task progress, and completion
-  messages. It still embeds spacing decisions locally via `TASK_INDENT`.
-- `src/status_timing.rs` renders verbose timing summaries and currently applies
-  its own prefix and indentation rules.
+  messages using `OutputPrefs` for semantic prefixes and task indentation.
+- `src/status_timing.rs` renders verbose timing summaries using the same
+  `OutputPrefs` façade for timing prefixes and indentation.
 - `src/main.rs` renders top-level errors using `OutputPrefs`.
 - `src/runner/mod.rs` resolves `OutputMode` and `OutputPrefs`, then constructs
   the reporter stack.
@@ -472,46 +480,42 @@ All commands below run from the repository root:
 cd /home/user/project
 ```
 
-<!-- markdownlint-disable MD029 -->
-
 1. Establish the current baseline and locate the relevant code.
 
-```sh
-rg -n "theme|OutputPrefs|no_emoji|accessible|progress" src tests docs
-```
+   ```sh
+   rg -n "theme|OutputPrefs|no_emoji|accessible|progress" src tests docs
+   ```
 
 2. Implement the theme module and CLI/config wiring.
 
-```sh
-cargo test --workspace theme -- --nocapture
-```
+   ```sh
+   cargo test --workspace theme -- --nocapture
+   ```
 
 Expected shape after Stage B:
 
-```plaintext
-running N tests
-test ...theme... ok
-test ...cli... ok
-```
+   ```plaintext
+   running N tests
+   test ...theme... ok
+   test ...cli... ok
+   ```
 
 1. Refresh BDD-generated scenario code if feature text changes.
 
-```sh
-touch tests/bdd_tests.rs
-```
+   ```sh
+   touch tests/bdd_tests.rs
+   ```
 
 2. Run the full validation gates with logged output.
 
-```sh
-set -o pipefail && make check-fmt 2>&1 | tee /tmp/netsuke-3-12-1-check-fmt.log
-set -o pipefail && make lint 2>&1 | tee /tmp/netsuke-3-12-1-lint.log
-set -o pipefail && make test 2>&1 | tee /tmp/netsuke-3-12-1-test.log
-set -o pipefail && make fmt 2>&1 | tee /tmp/netsuke-3-12-1-fmt.log
-set -o pipefail && PATH="/root/.bun/bin:$PATH" make markdownlint 2>&1 | tee /tmp/netsuke-3-12-1-markdownlint.log
-set -o pipefail && make nixie 2>&1 | tee /tmp/netsuke-3-12-1-nixie.log
-```
-
-<!-- markdownlint-enable MD029 -->
+   ```sh
+   set -o pipefail && make check-fmt 2>&1 | tee /tmp/netsuke-3-12-1-check-fmt.log
+   set -o pipefail && make lint 2>&1 | tee /tmp/netsuke-3-12-1-lint.log
+   set -o pipefail && make test 2>&1 | tee /tmp/netsuke-3-12-1-test.log
+   set -o pipefail && make fmt 2>&1 | tee /tmp/netsuke-3-12-1-fmt.log
+   set -o pipefail && PATH="/root/.bun/bin:$PATH" make markdownlint 2>&1 | tee /tmp/netsuke-3-12-1-markdownlint.log
+   set -o pipefail && make nixie 2>&1 | tee /tmp/netsuke-3-12-1-nixie.log
+   ```
 
 Expected final signal:
 

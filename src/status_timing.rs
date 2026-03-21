@@ -1,6 +1,6 @@
 //! Verbose timing summary support for status reporting.
 
-use super::{LocalizationKey, StageNumber, StatusReporter, TASK_INDENT};
+use super::{LocalizationKey, StageNumber, StatusReporter};
 use crate::localization::{self, keys};
 use crate::output_prefs::OutputPrefs;
 use std::io::{self, Write};
@@ -173,7 +173,7 @@ fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<S
             .with_arg("label", &label)
             .with_arg("duration", format_duration(entry.elapsed))
             .to_string();
-        lines.push(format!("{TASK_INDENT}{line}"));
+        lines.push(format!("{}{line}", prefs.timing_indent()));
     }
 
     let total = entries.iter().fold(Duration::ZERO, |acc, entry| {
@@ -182,7 +182,7 @@ fn render_summary_lines(prefs: OutputPrefs, entries: &[CompletedStage]) -> Vec<S
     let total_line = localization::message(keys::STATUS_TIMING_TOTAL_LINE)
         .with_arg("duration", format_duration(total))
         .to_string();
-    lines.push(format!("{TASK_INDENT}{total_line}"));
+    lines.push(format!("{}{total_line}", prefs.timing_indent()));
 
     lines
 }
