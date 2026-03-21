@@ -472,13 +472,15 @@ All commands below run from the repository root:
 cd /home/user/project
 ```
 
+<!-- markdownlint-disable MD029 -->
+
 1. Establish the current baseline and locate the relevant code.
 
 ```sh
 rg -n "theme|OutputPrefs|no_emoji|accessible|progress" src tests docs
 ```
 
-1. Implement the theme module and CLI/config wiring.
+2. Implement the theme module and CLI/config wiring.
 
 ```sh
 cargo test --workspace theme -- --nocapture
@@ -498,7 +500,7 @@ test ...cli... ok
 touch tests/bdd_tests.rs
 ```
 
-1. Run the full validation gates with logged output.
+2. Run the full validation gates with logged output.
 
 ```sh
 set -o pipefail && make check-fmt 2>&1 | tee /tmp/netsuke-3-12-1-check-fmt.log
@@ -508,6 +510,8 @@ set -o pipefail && make fmt 2>&1 | tee /tmp/netsuke-3-12-1-fmt.log
 set -o pipefail && PATH="/root/.bun/bin:$PATH" make markdownlint 2>&1 | tee /tmp/netsuke-3-12-1-markdownlint.log
 set -o pipefail && make nixie 2>&1 | tee /tmp/netsuke-3-12-1-nixie.log
 ```
+
+<!-- markdownlint-enable MD029 -->
 
 Expected final signal:
 
