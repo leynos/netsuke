@@ -1,10 +1,10 @@
-//! Output preference resolution for emoji and semantic prefix formatting.
+//! Output preference resolution for theme-backed CLI formatting.
 //!
-//! This module determines whether Netsuke should include emoji glyphs in its
-//! output and provides localized semantic prefix helpers that adapt to the
-//! resolved theme tokens. Preferences are auto-detected from the `NO_COLOR`
-//! and `NETSUKE_NO_EMOJI` environment variables, or forced via explicit
-//! configuration.
+//! This module resolves a full CLI theme, including `NETSUKE_THEME`, and
+//! exposes localized semantic prefix helpers plus spacing-token helpers such
+//! as [`OutputPrefs::task_indent`] and [`OutputPrefs::timing_indent`].
+//! Preferences are auto-detected from `NO_COLOR`, `NETSUKE_NO_EMOJI`, and
+//! `NETSUKE_THEME`, or forced through explicit CLI/configuration values.
 
 use std::env;
 

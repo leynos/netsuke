@@ -3,7 +3,10 @@
 use super::*;
 use crate::cli_localization;
 use crate::localization::{self, LocalizerGuard};
+use anyhow::{Result, ensure};
 use rstest::{fixture, rstest};
+use std::error::Error;
+use std::fmt;
 use std::sync::{Arc, MutexGuard};
 use test_support::localizer::localizer_test_lock;
 
@@ -56,14 +59,14 @@ fn resolve_output_prefs(
 }
 
 #[fixture]
-fn en_us_localizer() -> EnUsLocalizerFixture {
-    let lock = localizer_test_lock().expect("localizer test lock should be available");
+fn en_us_localizer() -> Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError> {
+    let lock = localizer_test_lock()?;
     let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
     let guard = localization::set_localizer_for_tests(localizer);
-    EnUsLocalizerFixture {
+    Ok(EnUsLocalizerFixture {
         _lock: lock,
         _guard: guard,
-    }
+    })
 }
 
 #[rstest]
@@ -145,14 +148,18 @@ fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCa
 )]
 #[case::ascii_timing(Some(ThemePreference::Ascii), OutputPrefs::timing_prefix, "T Timing:")]
 fn prefix_rendering_uses_theme_symbols(
-    en_us_localizer: EnUsLocalizerFixture,
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
     #[case] theme: Option<ThemePreference>,
     #[case] prefix_fn: fn(OutputPrefs) -> String,
     #[case] expected: &str,
-) {
-    let _ = en_us_localizer;
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = resolve_from_theme_with(theme, None, OutputMode::Standard, |_| None);
-    assert_eq!(prefix_fn(prefs), expected);
+    ensure!(
+        prefix_fn(prefs) == expected,
+        "prefix output should match the pinned en-US expectation"
+    );
+    Ok(())
 }
 
 #[rstest]
@@ -166,4 +173,20 @@ fn spacing_accessors_follow_resolved_theme(#[case] mode: OutputMode) {
 struct EnUsLocalizerFixture {
     _lock: MutexGuard<'static, ()>,
     _guard: LocalizerGuard,
+}
+#[derive(Debug)]
+struct EnUsLocalizerFixtureError(String);
+
+impl fmt::Display for EnUsLocalizerFixtureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Error for EnUsLocalizerFixtureError {}
+
+impl From<std::sync::PoisonError<MutexGuard<'static, ()>>> for EnUsLocalizerFixtureError {
+    fn from(err: std::sync::PoisonError<MutexGuard<'static, ()>>) -> Self {
+        Self(err.to_string())
+    }
 }
