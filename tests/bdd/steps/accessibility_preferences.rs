@@ -113,17 +113,17 @@ fn render_prefix_with(
 
 #[when("the error prefix is rendered")]
 fn render_error_prefix(world: &TestWorld) -> Result<()> {
-    render_prefix_with(world, |prefs| prefs.error_prefix().to_string())
+    render_prefix_with(world, |prefs| prefs.error_prefix())
 }
 
 #[when("the warning prefix is rendered")]
 fn render_warning_prefix(world: &TestWorld) -> Result<()> {
-    render_prefix_with(world, |prefs| prefs.warning_prefix().to_string())
+    render_prefix_with(world, |prefs| prefs.warning_prefix())
 }
 
 #[when("the success prefix is rendered")]
 fn render_success_prefix(world: &TestWorld) -> Result<()> {
-    render_prefix_with(world, |prefs| prefs.success_prefix().to_string())
+    render_prefix_with(world, |prefs| prefs.success_prefix())
 }
 
 // ---------------------------------------------------------------------------

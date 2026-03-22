@@ -134,7 +134,7 @@ fn accessible_reporter_formats_stage_with_info_prefix() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
-    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix().to_string());
+    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix());
     assert!(
         line.starts_with(&info_prefix),
         "stage line should start with info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
@@ -156,7 +156,7 @@ fn accessible_reporter_indents_task_progress() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
-    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix().to_string());
+    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix());
     assert!(
         line.starts_with(prefs.task_indent()),
         "task line should be indented by the resolved task token; line was: {line:?}"
@@ -174,7 +174,7 @@ fn completion_line_includes_success_prefix() {
         prefs,
         LocalizationKey::new(keys::STATUS_TOOL_MANIFEST),
     ));
-    let success_prefix = normalize_fluent_isolates(&prefs.success_prefix().to_string());
+    let success_prefix = normalize_fluent_isolates(&prefs.success_prefix());
     assert!(
         line.starts_with(&success_prefix),
         "completion line should start with success prefix; line was: {line:?}, prefix was: {success_prefix:?}"
