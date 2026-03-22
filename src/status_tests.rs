@@ -3,16 +3,10 @@
 use super::*;
 use crate::output_prefs;
 use rstest::{fixture, rstest};
+use test_support::fluent::normalize_fluent_isolates;
 
 fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
-}
-
-fn strip_isolates(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
-        .collect()
 }
 
 fn stage6_message(reporter: &IndicatifReporter) -> String {
@@ -89,7 +83,7 @@ fn task_progress_update_formats_expected_text(
     #[case] expected: &str,
 ) {
     let rendered = task_progress_update(current, total, description);
-    assert_eq!(strip_isolates(&rendered), expected);
+    assert_eq!(normalize_fluent_isolates(&rendered), expected);
 }
 
 #[rstest]
@@ -98,7 +92,7 @@ fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
 ) {
     force_text_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&force_text_reporter);
-    assert!(!strip_isolates(&stage6_message).contains("Task 1/2"));
+    assert!(!normalize_fluent_isolates(&stage6_message).contains("Task 1/2"));
 }
 
 #[rstest]
@@ -119,7 +113,10 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
         .with_arg("label", stage_line)
         .with_arg("task_progress", &task)
         .to_string();
-    assert_eq!(strip_isolates(&stage6_message), strip_isolates(&expected));
+    assert_eq!(
+        normalize_fluent_isolates(&stage6_message),
+        normalize_fluent_isolates(&expected)
+    );
 }
 
 #[rstest]
@@ -136,8 +133,8 @@ fn accessible_reporter_formats_stage_with_info_prefix() {
         .writer
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let line = strip_isolates(&String::from_utf8_lossy(&output));
-    let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
+    let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix().to_string());
     assert!(
         line.starts_with(&info_prefix),
         "stage line should start with info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
@@ -158,11 +155,11 @@ fn accessible_reporter_indents_task_progress() {
         .writer
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let line = strip_isolates(&String::from_utf8_lossy(&output));
-    let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
+    let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix().to_string());
     assert!(
         line.starts_with(prefs.task_indent()),
-        "task line should be indented by two spaces; line was: {line:?}"
+        "task line should be indented by the resolved task token; line was: {line:?}"
     );
     assert!(
         !line.trim_start().starts_with(&info_prefix),
@@ -173,11 +170,11 @@ fn accessible_reporter_indents_task_progress() {
 #[rstest]
 fn completion_line_includes_success_prefix() {
     let prefs = test_prefs();
-    let line = strip_isolates(&format_completion_line(
+    let line = normalize_fluent_isolates(&format_completion_line(
         prefs,
         LocalizationKey::new(keys::STATUS_TOOL_MANIFEST),
     ));
-    let success_prefix = strip_isolates(&prefs.success_prefix().to_string());
+    let success_prefix = normalize_fluent_isolates(&prefs.success_prefix().to_string());
     assert!(
         line.starts_with(&success_prefix),
         "completion line should start with success prefix; line was: {line:?}, prefix was: {success_prefix:?}"

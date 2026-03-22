@@ -351,7 +351,6 @@ status.tool.manifest = Manifest
 cli.flag.no_emoji.help = Suppress emoji glyphs in output.
 
 # Semantic prefixes for accessible output.
-semantic.prefix.rendered = { $symbol } { $label }
 semantic.prefix.error = Error:
 semantic.prefix.warning = Warning:
 semantic.prefix.success = Success:

@@ -2083,10 +2083,10 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
-Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
+Theme resolution for CLI output is centralised in `src/theme.rs`. Netsuke
 resolves one theme through OrthoConfig layers (`--theme`, `NETSUKE_THEME`,
 config file, then mode defaults) and hands the resulting symbol and spacing
-tokens to reporters through the `OutputPrefs` compatibility facade. This keeps
+tokens to reporters through the `OutputPrefs` compatibility façade. This keeps
 reporter code focused on status semantics rather than glyph choice, preserves
 `no_emoji` as a legacy ASCII-forcing alias when no explicit theme is supplied,
 and gives later roadmap items a stable snapshot surface for validating ASCII

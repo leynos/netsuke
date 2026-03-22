@@ -61,9 +61,7 @@ impl OutputPrefs {
 
     fn render_prefix(symbol: &'static str, label_key: &'static str) -> LocalizedMessage {
         let label = localization::message(label_key).to_string();
-        localization::message(keys::SEMANTIC_PREFIX_RENDERED)
-            .with_arg("symbol", symbol)
-            .with_arg("label", label)
+        LocalizedMessage::literal(format!("{symbol} {label}"))
     }
 
     /// Render the localized error prefix for the current preferences.

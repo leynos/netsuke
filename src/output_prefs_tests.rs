@@ -26,13 +26,6 @@ fn fake_env<'a>(
     }
 }
 
-fn strip_isolates(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
-        .collect()
-}
-
 #[rstest]
 #[case::explicit_no_emoji_forces_ascii(Some(true), None, None, false)]
 #[case::false_defers_to_no_color(Some(false), Some("1"), None, false)]
@@ -153,7 +146,7 @@ fn prefix_rendering_uses_theme_symbols(
     #[case] expected: &str,
 ) {
     let prefs = resolve_from_theme_with(theme, None, OutputMode::Standard, |_| None);
-    assert_eq!(strip_isolates(&prefix_fn(prefs).to_string()), expected);
+    assert_eq!(prefix_fn(prefs).to_string(), expected);
 }
 
 #[rstest]

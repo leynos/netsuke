@@ -492,7 +492,7 @@ cd /home/user/project
    cargo test --workspace theme -- --nocapture
    ```
 
-Expected shape after Stage B:
+   Expected shape after Stage B:
 
    ```plaintext
    running N tests
@@ -500,13 +500,13 @@ Expected shape after Stage B:
    test ...cli... ok
    ```
 
-1. Refresh BDD-generated scenario code if feature text changes.
+3. Refresh BDD-generated scenario code if feature text changes.
 
    ```sh
    touch tests/bdd_tests.rs
    ```
 
-2. Run the full validation gates with logged output.
+4. Run the full validation gates with logged output.
 
    ```sh
    set -o pipefail && make check-fmt 2>&1 | tee /tmp/netsuke-3-12-1-check-fmt.log
@@ -517,22 +517,22 @@ Expected shape after Stage B:
    set -o pipefail && make nixie 2>&1 | tee /tmp/netsuke-3-12-1-nixie.log
    ```
 
-Expected final signal:
+   Expected final signal:
 
-```plaintext
-make check-fmt   # exits 0
-make lint        # exits 0
-make test        # exits 0
-make markdownlint # exits 0
-make nixie       # exits 0
-```
+   ```plaintext
+   make check-fmt   # exits 0
+   make lint        # exits 0
+   make test        # exits 0
+   make markdownlint # exits 0
+   make nixie       # exits 0
+   ```
 
-1. Inspect scope before finalizing.
+5. Inspect scope before finalizing.
 
-```sh
-git status --short
-git diff --stat
-```
+   ```sh
+   git status --short
+   git diff --stat
+   ```
 
 Only the intended source, test, and documentation files for 3.12.1 should
 remain modified.

@@ -351,7 +351,6 @@ status.tool.manifest = Manifiesto
 cli.flag.no_emoji.help = Suprimir glifos emoji en la salida.
 
 # Prefijos semánticos para salida accesible.
-semantic.prefix.rendered = { $symbol } { $label }
 semantic.prefix.error = Error:
 semantic.prefix.warning = Advertencia:
 semantic.prefix.success = Éxito:

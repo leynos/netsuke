@@ -5,14 +5,8 @@ use netsuke::cli::Cli;
 use netsuke::host_pattern::HostPattern;
 use netsuke::stdlib::NetworkPolicyViolation;
 use rstest::rstest;
+use test_support::fluent::normalize_fluent_isolates;
 use url::Url;
-
-fn strip_isolates(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
-        .collect()
-}
 
 #[rstest]
 fn cli_network_policy_defaults_to_https() -> Result<()> {
@@ -80,7 +74,8 @@ fn cli_network_policy_blocklist_overrides_allowlist() -> Result<()> {
         NetworkPolicyViolation::HostBlocked { host, .. } => {
             ensure!(host == "example.com", "unexpected host {host}");
             ensure!(
-                strip_isolates(&err_text).contains("Host 'example.com' is blocked by policy."),
+                normalize_fluent_isolates(&err_text)
+                    .contains("Host 'example.com' is blocked by policy."),
                 "unexpected error text: {err_text}",
             );
         }

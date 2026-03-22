@@ -796,7 +796,7 @@ the flag both defer to environment variable detection. `NETSUKE_NO_EMOJI` uses
 presence-based semantics, so setting it to any value (including `"false"` or
 `"0"`) still selects the ASCII theme unless an explicit `theme` overrides it.
 
-In all output modes, Netsuke uses semantic text prefixes so meaning is never
+In all output modes, Netsuke uses semantic text prefixes, so meaning is never
 conveyed solely by colour. The active theme swaps only the glyph set:
 
 - Unicode theme: `✖ Error:`, `⚠ Warning:`, `✔ Success:`, `ℹ Info:`,

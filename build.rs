@@ -113,6 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
+    const _: fn(String) -> localization::LocalizedMessage = localization::LocalizedMessage::literal;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
     const _: fn(Option<bool>) -> output_mode::OutputMode = output_mode::resolve;

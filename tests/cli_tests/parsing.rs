@@ -75,6 +75,11 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 #[case(CliCase {
+    argv: vec!["netsuke", "--theme", "auto"],
+    theme: Some(ThemePreference::Auto),
+    ..CliCase::default()
+})]
+#[case(CliCase {
     argv: vec!["netsuke", "--theme", "ascii"],
     theme: Some(ThemePreference::Ascii),
     ..CliCase::default()

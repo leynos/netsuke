@@ -68,7 +68,8 @@ const _: fn(Arc<dyn Localizer>) -> LocalizerGuard = set_localizer_for_tests;
 /// Render a Fluent message key with optional arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedMessage {
-    key: &'static str,
+    key: Option<&'static str>,
+    text: Option<String>,
     args: Vec<(&'static str, String)>,
 }
 
@@ -77,18 +78,39 @@ impl LocalizedMessage {
     #[must_use]
     pub const fn new(key: &'static str) -> Self {
         Self {
-            key,
+            key: Some(key),
+            text: None,
+            args: Vec::new(),
+        }
+    }
+
+    /// Create a pre-rendered localized message literal.
+    #[must_use]
+    pub fn literal(text: impl Into<String>) -> Self {
+        Self {
+            key: None,
+            text: Some(text.into()),
             args: Vec::new(),
         }
     }
 
     /// Attach a named argument to the Fluent lookup.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called on a literal message created with
+    /// [`LocalizedMessage::literal`], because literal messages do not support
+    /// deferred Fluent argument interpolation.
     #[must_use]
     #[expect(
         clippy::needless_pass_by_value,
         reason = "Accepting owned values keeps call sites ergonomic for temporaries."
     )]
     pub fn with_arg(mut self, name: &'static str, value: impl ToString) -> Self {
+        assert!(
+            self.text.is_none(),
+            "cannot attach Fluent arguments to literal localized messages"
+        );
         self.args.push((name, value.to_string()));
         self
     }
@@ -107,9 +129,16 @@ impl LocalizedMessage {
 
 impl fmt::Display for LocalizedMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(text) = &self.text {
+            return f.write_str(text);
+        }
+
         let localizer = localizer();
         let args = self.args_map();
-        let message = localizer.message(self.key, args.as_ref(), self.key);
+        let Some(key) = self.key else {
+            return Err(fmt::Error);
+        };
+        let message = localizer.message(key, args.as_ref(), key);
         f.write_str(&message)
     }
 }
