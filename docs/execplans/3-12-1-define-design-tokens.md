@@ -141,7 +141,7 @@ Observable success means:
 - [x] (2026-03-21 00:00Z) Stage E: Update documentation, mark the roadmap item
       done, and run the full quality gates. Updated the user guide and design
       record, corrected the execplan command-list Markdown structure, and
-      prepared the roadmap entry for completion once the full gates pass.
+      completed the roadmap entry after the full gates passed.
 
 ## Surprises & discoveries
 
@@ -222,8 +222,8 @@ Implementation achieved:
 The implementation now satisfies the roadmap item end to end: theme selection
 flows through OrthoConfig, semantic prefixes and spacing come from one resolved
 token set, ASCII and Unicode output stay structurally aligned, and the docs and
-tests reflect the resulting behaviour. Roadmap item 3.12.1 can be marked done
-once the final full gate run completes successfully.
+tests reflect the resulting behaviour. Roadmap item 3.12.1 is complete and its
+full quality gates have passed.
 
 ## Context and orientation
 

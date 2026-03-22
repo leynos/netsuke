@@ -8,7 +8,7 @@
 
 use std::env;
 
-use crate::localization::{self, LocalizedMessage, keys};
+use crate::localization::{self, keys};
 use crate::output_mode::OutputMode;
 use crate::theme::{self, ResolvedTheme, ThemePreference};
 
@@ -59,15 +59,17 @@ impl OutputPrefs {
         self.resolved_theme.tokens.spacing.timing_indent
     }
 
-    fn render_prefix(symbol: &'static str, label_key: &'static str) -> LocalizedMessage {
+    fn render_prefix(symbol: &'static str, label_key: &'static str) -> String {
         let label = localization::message(label_key).to_string();
-        LocalizedMessage::literal(format!("{symbol} {label}"))
+        format!("{symbol} {label}")
     }
 
     /// Render the localized error prefix for the current preferences.
     ///
-    /// Returns `"✖ Error:"` for the Unicode theme and `"X Error:"` for the
-    /// ASCII theme.
+    /// The output depends on the active locale installed via
+    /// [`crate::localization::set_localizer`]. For the default en-US localizer,
+    /// this returns `"✖ Error:"` for the Unicode theme and `"X Error:"` for
+    /// the ASCII theme.
     ///
     /// # Examples
     ///
@@ -79,7 +81,7 @@ impl OutputPrefs {
     /// assert!(prefix.contains("Error:"));
     /// ```
     #[must_use]
-    pub fn error_prefix(self) -> LocalizedMessage {
+    pub fn error_prefix(self) -> String {
         Self::render_prefix(
             self.resolved_theme.tokens.symbols.error,
             keys::SEMANTIC_PREFIX_ERROR,
@@ -88,10 +90,12 @@ impl OutputPrefs {
 
     /// Render the localized warning prefix for the current preferences.
     ///
-    /// Returns `"⚠ Warning:"` for the Unicode theme and `"! Warning:"` for
-    /// the ASCII theme.
+    /// The output depends on the active locale installed via
+    /// [`crate::localization::set_localizer`]. For the default en-US localizer,
+    /// this returns `"⚠ Warning:"` for the Unicode theme and `"! Warning:"`
+    /// for the ASCII theme.
     #[must_use]
-    pub fn warning_prefix(self) -> LocalizedMessage {
+    pub fn warning_prefix(self) -> String {
         Self::render_prefix(
             self.resolved_theme.tokens.symbols.warning,
             keys::SEMANTIC_PREFIX_WARNING,
@@ -100,8 +104,10 @@ impl OutputPrefs {
 
     /// Render the localized success prefix for the current preferences.
     ///
-    /// Returns `"✔ Success:"` for the Unicode theme and `"+ Success:"` for
-    /// the ASCII theme.
+    /// The output depends on the active locale installed via
+    /// [`crate::localization::set_localizer`]. For the default en-US localizer,
+    /// this returns `"✔ Success:"` for the Unicode theme and `"+ Success:"`
+    /// for the ASCII theme.
     ///
     /// # Examples
     ///
@@ -113,7 +119,7 @@ impl OutputPrefs {
     /// assert!(prefix.contains("Success:"));
     /// ```
     #[must_use]
-    pub fn success_prefix(self) -> LocalizedMessage {
+    pub fn success_prefix(self) -> String {
         Self::render_prefix(
             self.resolved_theme.tokens.symbols.success,
             keys::SEMANTIC_PREFIX_SUCCESS,
@@ -122,10 +128,12 @@ impl OutputPrefs {
 
     /// Render the localized informational prefix for the current preferences.
     ///
-    /// Returns `"ℹ Info:"` for the Unicode theme and `"i Info:"` for the
+    /// The output depends on the active locale installed via
+    /// [`crate::localization::set_localizer`]. For the default en-US localizer,
+    /// this returns `"ℹ Info:"` for the Unicode theme and `"i Info:"` for the
     /// ASCII theme.
     #[must_use]
-    pub fn info_prefix(self) -> LocalizedMessage {
+    pub fn info_prefix(self) -> String {
         Self::render_prefix(
             self.resolved_theme.tokens.symbols.info,
             keys::SEMANTIC_PREFIX_INFO,
@@ -134,10 +142,12 @@ impl OutputPrefs {
 
     /// Render the localized timing prefix for the current preferences.
     ///
-    /// Returns `"⏱ Timing:"` for the Unicode theme and `"T Timing:"` for the
-    /// ASCII theme.
+    /// The output depends on the active locale installed via
+    /// [`crate::localization::set_localizer`]. For the default en-US localizer,
+    /// this returns `"⏱ Timing:"` for the Unicode theme and `"T Timing:"` for
+    /// the ASCII theme.
     #[must_use]
-    pub fn timing_prefix(self) -> LocalizedMessage {
+    pub fn timing_prefix(self) -> String {
         Self::render_prefix(
             self.resolved_theme.tokens.symbols.timing,
             keys::SEMANTIC_PREFIX_TIMING,

@@ -1,7 +1,11 @@
 //! Tests for output preference resolution and token-backed prefix rendering.
 
 use super::*;
-use rstest::rstest;
+use crate::cli_localization;
+use crate::localization::{self, LocalizerGuard};
+use rstest::{fixture, rstest};
+use std::sync::{Arc, MutexGuard};
+use test_support::localizer::localizer_test_lock;
 
 #[derive(Debug)]
 struct ThemeResolutionCase<'a> {
@@ -30,6 +34,7 @@ fn fake_env<'a>(
 #[case::explicit_no_emoji_forces_ascii(Some(true), None, None, false)]
 #[case::false_defers_to_no_color(Some(false), Some("1"), None, false)]
 #[case::false_defers_to_netsuke_no_emoji(Some(false), None, Some("1"), false)]
+#[case::explicit_false_allows_unicode(Some(false), None, None, true)]
 #[case::no_color_disables_emoji(None, Some("1"), None, false)]
 #[case::no_color_empty_disables_emoji(None, Some(""), None, false)]
 #[case::netsuke_no_emoji_disables(None, None, Some("1"), false)]
@@ -50,16 +55,15 @@ fn resolve_output_prefs(
     assert_eq!(resolve_with(no_emoji, env).emoji_allowed(), expected_emoji);
 }
 
-#[test]
-fn emoji_allowed_returns_true_when_permitted() {
-    let prefs = resolve_with(Some(false), |_| None);
-    assert!(prefs.emoji_allowed());
-}
-
-#[test]
-fn emoji_allowed_returns_false_when_suppressed() {
-    let prefs = resolve_with(Some(true), |_| None);
-    assert!(!prefs.emoji_allowed());
+#[fixture]
+fn en_us_localizer() -> EnUsLocalizerFixture {
+    let lock = localizer_test_lock().expect("localizer test lock should be available");
+    let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
+    let guard = localization::set_localizer_for_tests(localizer);
+    EnUsLocalizerFixture {
+        _lock: lock,
+        _guard: guard,
+    }
 }
 
 #[rstest]
@@ -141,12 +145,14 @@ fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCa
 )]
 #[case::ascii_timing(Some(ThemePreference::Ascii), OutputPrefs::timing_prefix, "T Timing:")]
 fn prefix_rendering_uses_theme_symbols(
+    en_us_localizer: EnUsLocalizerFixture,
     #[case] theme: Option<ThemePreference>,
-    #[case] prefix_fn: fn(OutputPrefs) -> LocalizedMessage,
+    #[case] prefix_fn: fn(OutputPrefs) -> String,
     #[case] expected: &str,
 ) {
+    let _ = en_us_localizer;
     let prefs = resolve_from_theme_with(theme, None, OutputMode::Standard, |_| None);
-    assert_eq!(prefix_fn(prefs).to_string(), expected);
+    assert_eq!(prefix_fn(prefs), expected);
 }
 
 #[rstest]
@@ -156,4 +162,8 @@ fn spacing_accessors_follow_resolved_theme(#[case] mode: OutputMode) {
     let prefs = resolve_from_theme_with(Some(ThemePreference::Auto), Some(true), mode, |_| None);
     assert_eq!(prefs.task_indent(), "  ");
     assert_eq!(prefs.timing_indent(), "  ");
+}
+struct EnUsLocalizerFixture {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
 }
