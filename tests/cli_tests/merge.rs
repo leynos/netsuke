@@ -22,21 +22,18 @@ fn default_cli_json() -> Result<serde_json::Value> {
     Ok(sanitize_value(&Cli::default())?)
 }
 
-#[rstest]
-fn cli_merge_layers_respects_precedence_and_appends_lists(
-    default_cli_json: Result<serde_json::Value>,
-) -> Result<()> {
+fn build_precedence_and_append_composer(defaults: serde_json::Value) -> MergeComposer {
     let mut composer = MergeComposer::new();
-    let mut defaults = default_cli_json?;
-    let defaults_object = defaults
-        .as_object_mut()
-        .context("defaults should be an object")?;
+    let mut seeded_defaults = defaults;
+    let Some(defaults_object) = seeded_defaults.as_object_mut() else {
+        panic!("defaults should be an object");
+    };
     defaults_object.insert("jobs".to_owned(), json!(1));
     defaults_object.insert("fetch_allow_scheme".to_owned(), json!(["https"]));
     defaults_object.insert("progress".to_owned(), json!(true));
     defaults_object.insert("diag_json".to_owned(), json!(false));
     defaults_object.insert("theme".to_owned(), json!("auto"));
-    composer.push_defaults(defaults);
+    composer.push_defaults(seeded_defaults);
     composer.push_file(
         json!({
             "file": "Configfile",
@@ -64,7 +61,10 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
         "theme": "ascii",
         "verbose": true
     }));
-    let merged = Cli::merge_from_layers(composer.layers())?;
+    composer
+}
+
+fn assert_precedence_and_append_invariants(merged: &Cli) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "file layer should override defaults",
@@ -92,6 +92,15 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     );
     ensure!(merged.verbose, "CLI layer should set verbose");
     Ok(())
+}
+
+#[rstest]
+fn cli_merge_layers_respects_precedence_and_appends_lists(
+    default_cli_json: Result<serde_json::Value>,
+) -> Result<()> {
+    let composer = build_precedence_and_append_composer(default_cli_json?);
+    let merged = Cli::merge_from_layers(composer.layers())?;
+    assert_precedence_and_append_invariants(&merged)
 }
 
 #[rstest]
