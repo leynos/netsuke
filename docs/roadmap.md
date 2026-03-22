@@ -327,3 +327,103 @@ library, and CLI ergonomics.
 configurable CLI that delivers real-time feedback, machine-readable
 diagnostics, and the onboarding experience defined in the Netsuke CLI design
 document.
+
+## 4. Formal verification and property testing
+
+Objective: To add bounded formal verification and generated testing where the
+repository's semantic risk is highest, while keeping the existing build, lint,
+and test workflow intact. See
+[formal-verification-methods-in-netsuke.md](formal-verification-methods-in-netsuke.md).
+
+### 4.1. Verification tooling and gating
+
+- [ ] 4.1.1. Add Kani tooling and local smoke targets. See
+  [formal-verification-methods-in-netsuke.md §Repository integration plan](formal-verification-methods-in-netsuke.md#repository-integration-plan).
+  - [ ] Pin the supported Kani version under `tools/kani/`.
+  - [ ] Add `scripts/install-kani.sh`.
+  - [ ] Add `make kani`, `make kani-full`, and `make formal-pr`.
+- [ ] 4.1.2. Add a dedicated `kani-smoke` continuous integration (CI) job.
+  Requires 4.1.1. See
+  [formal-verification-methods-in-netsuke.md §Continuous integration (CI)](formal-verification-methods-in-netsuke.md#continuous-integration-ci).
+  - [ ] Keep the existing `build-test` job unchanged.
+  - [ ] Run only the bounded smoke harness set on pull requests.
+  - [ ] Cache Kani tool downloads separately from ordinary Cargo artefacts.
+- [ ] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
+  [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel)
+   and
+  [formal-verification-methods-in-netsuke.md §Stateright remains deferred](formal-verification-methods-in-netsuke.md#stateright-remains-deferred).
+  - [ ] Document Verus as optional and proof-kernel-only.
+  - [ ] Document Stateright as deferred until Netsuke gains a stateful
+    concurrent subsystem.
+
+### 4.2. Intermediate Representation verification
+
+- [ ] 4.2.1. Add Kani harnesses for manifest-to-IR safety checks. Requires
+  4.1.1. See
+  [formal-verification-methods-in-netsuke.md §Kani for the IR core](formal-verification-methods-in-netsuke.md#kani-for-the-ir-core).
+  - [ ] Prove duplicate-output rejection on bounded manifests.
+  - [ ] Prove empty-rule, multiple-rule, and missing-rule error selection.
+  - [ ] Prove self-edge and small bounded multi-node cycle rejection.
+  - [ ] Prove missing dependencies do not create false cycles.
+- [ ] 4.2.2. Add Kani harnesses for cycle canonicalization. Requires 4.2.1.
+  See
+  [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel).
+  - [ ] Prove preserved length and closed-cycle output.
+  - [ ] Prove the interior node multiset is preserved.
+  - [ ] Prove the selected start node is stable under the current ordering
+    rule.
+- [ ] 4.2.3. Add Kani harnesses for command interpolation. Requires 4.1.1. See
+  [formal-verification-methods-in-netsuke.md §Kani for command interpolation](formal-verification-methods-in-netsuke.md#kani-for-command-interpolation).
+  - [ ] Prove `$in` and `$out` rewrite only at valid token boundaries.
+  - [ ] Prove backtick-delimited regions are preserved.
+  - [ ] Prove unmatched backticks are rejected.
+  - [ ] Prove successful results satisfy the current `shlex` guard.
+
+### 4.3. Determinism and manifest property testing
+
+- [ ] 4.3.1. Add Proptest coverage for deterministic Ninja emission. Requires
+  4.1.1. See the
+  [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
+  - [ ] Prove Ninja output is stable across equivalent insertion orders.
+  - [ ] Prove `default` target ordering is stable.
+  - [ ] Prove `path_key` is invariant for equivalent output sets.
+- [ ] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
+  4.1.1. See the
+  [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
+  - [ ] Prove `foreach` preserves non-control fields.
+  - [ ] Prove `when` is removed after evaluation.
+  - [ ] Prove `item` and `index` are injected correctly for each expansion.
+  - [ ] Prove static targets still honour `when`.
+- [ ] 4.3.3. Add Proptest coverage for render stability. Requires 4.3.2. See
+  the
+  [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
+  - [ ] Prove rendering is idempotent after Jinja syntax is exhausted.
+  - [ ] Prove variable rendering uses the intended snapshot semantics.
+
+### 4.4. Contract documentation and optional proof kernels
+
+- [ ] 4.4.1. Document the command placeholder contract. Requires 4.2.3. See
+  [formal-verification-methods-in-netsuke.md §Command placeholder contract](formal-verification-methods-in-netsuke.md#command-placeholder-contract).
+  - [ ] State the supported placeholders explicitly.
+  - [ ] State the current backtick-handling boundary explicitly.
+  - [ ] State whether `shlex::split` is part of the semantic acceptance
+    contract.
+- [ ] 4.4.2. Document which dependency kinds participate in cycle detection.
+  Requires 4.2.1. See
+  [formal-verification-methods-in-netsuke.md §Cycle-participation contract](formal-verification-methods-in-netsuke.md#cycle-participation-contract).
+  - [ ] Decide whether order-only dependencies participate.
+  - [ ] Decide whether implicit outputs participate.
+  - [ ] Align implementation, tests, and documentation with the chosen rule.
+- [ ] 4.4.3. Evaluate a minimal Verus proof kernel for cycle canonicalization.
+  Requires 4.2.2 and 4.1.3. See
+  [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel).
+  - [ ] Keep the proof outside Cargo.
+  - [ ] Use proof-specific model types rather than production `HashMap`
+    structures.
+  - [ ] Accept the proof only if it remains narrower and cheaper than the Kani
+    equivalent.
+
+**Success criterion:** Netsuke ships bounded Kani smoke checks for the IR core,
+generated property tests for deterministic emission and manifest semantics, and
+documented verification contracts that keep optional Verus work narrow and
+defer Stateright until the architecture justifies model checking.
