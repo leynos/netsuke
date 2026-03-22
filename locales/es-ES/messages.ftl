@@ -351,26 +351,11 @@ status.tool.manifest = Manifiesto
 cli.flag.no_emoji.help = Suprimir glifos emoji en la salida.
 
 # Prefijos semánticos para salida accesible.
-semantic.prefix.error = { $emoji ->
-    [yes] ✖ Error:
-   *[no] Error:
-}
-semantic.prefix.warning = { $emoji ->
-    [yes] ⚠ Advertencia:
-   *[no] Advertencia:
-}
-semantic.prefix.success = { $emoji ->
-    [yes] ✔ Éxito:
-   *[no] Éxito:
-}
-semantic.prefix.info = { $emoji ->
-    [yes] ℹ Info:
-   *[no] Info:
-}
-semantic.prefix.timing = { $emoji ->
-    [yes] ⏱ Tiempos:
-   *[no] Tiempos:
-}
+semantic.prefix.error = Error:
+semantic.prefix.warning = Advertencia:
+semantic.prefix.success = Éxito:
+semantic.prefix.info = Info:
+semantic.prefix.timing = Tiempos:
 
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent
