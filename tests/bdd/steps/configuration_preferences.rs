@@ -4,7 +4,8 @@ use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use netsuke::cli::{Cli, ColourPolicy, Commands, SpinnerMode, Theme};
+use clap::ValueEnum as _;
+use netsuke::cli::{Cli, ColourPolicy, Commands, OutputFormat, SpinnerMode, Theme};
 use netsuke::cli_localization;
 use netsuke::output_prefs;
 use rstest_bdd_macros::{given, then, when};
@@ -61,6 +62,93 @@ fn merge_cli(world: &TestWorld, args: &str) {
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 
+/// Convert a clap `ValueEnum` to its canonical name string.
+///
+/// # Panics
+///
+/// Panics if the enum variant does not have a possible value (which should
+/// never happen for well-formed `ValueEnum` implementations).
+fn enum_name<T: clap::ValueEnum>(value: &T) -> String {
+    value
+        .to_possible_value()
+        .unwrap_or_else(|| panic!("all ValueEnum variants must have a possible value"))
+        .get_name()
+        .to_owned()
+}
+
+/// Write a theme value to the config file.
+fn write_theme_config(world: &TestWorld, theme: Theme) -> Result<()> {
+    write_config(world, &format!("theme = \"{}\"\n", enum_name(&theme)))
+}
+
+/// Write a colour policy value to the config file.
+fn write_colour_policy_config(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
+    write_config(
+        world,
+        &format!("colour_policy = \"{}\"\n", enum_name(&policy)),
+    )
+}
+
+/// Write a spinner mode value to the config file.
+fn write_spinner_mode_config(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
+    write_config(world, &format!("spinner_mode = \"{}\"\n", enum_name(&mode)))
+}
+
+/// Write an output format value to the config file.
+fn write_output_format_config(world: &TestWorld, format: OutputFormat) -> Result<()> {
+    write_config(
+        world,
+        &format!("output_format = \"{}\"\n", enum_name(&format)),
+    )
+}
+
+/// Set the `NETSUKE_THEME` environment variable.
+fn set_env_theme(world: &TestWorld, theme: Theme) {
+    ensure_env_lock(world);
+    let previous = std::env::var_os("NETSUKE_THEME");
+    let value = enum_name(&theme);
+    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
+    unsafe { std::env::set_var("NETSUKE_THEME", OsStr::new(&value)) };
+    world.track_env_var("NETSUKE_THEME".to_owned(), previous);
+}
+
+/// Set the `NETSUKE_COLOUR_POLICY` environment variable.
+fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) {
+    ensure_env_lock(world);
+    let previous = std::env::var_os("NETSUKE_COLOUR_POLICY");
+    let value = enum_name(&policy);
+    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
+    unsafe { std::env::set_var("NETSUKE_COLOUR_POLICY", OsStr::new(&value)) };
+    world.track_env_var("NETSUKE_COLOUR_POLICY".to_owned(), previous);
+}
+
+/// Set the `NETSUKE_SPINNER_MODE` environment variable.
+fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) {
+    ensure_env_lock(world);
+    let previous = std::env::var_os("NETSUKE_SPINNER_MODE");
+    let value = enum_name(&mode);
+    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
+    unsafe { std::env::set_var("NETSUKE_SPINNER_MODE", OsStr::new(&value)) };
+    world.track_env_var("NETSUKE_SPINNER_MODE".to_owned(), previous);
+}
+
+/// Assert a merged CLI field value matches the expected value.
+fn assert_merged_field<T, F>(world: &TestWorld, extract: F, expected: T, label: &str) -> Result<()>
+where
+    T: Copy + PartialEq + std::fmt::Debug,
+    F: FnOnce(&Cli) -> Option<T>,
+{
+    let value = world
+        .cli
+        .with_ref(|cli| extract(cli))
+        .context("expected merged CLI to be available")?;
+    ensure!(
+        value == Some(expected),
+        "expected merged {label} to be {expected:?}, got {value:?}",
+    );
+    Ok(())
+}
+
 #[given("the Netsuke config file sets build targets to {target:string}")]
 fn config_sets_build_targets(world: &TestWorld, target: &str) -> Result<()> {
     write_config(world, &format!("[cmds.build]\ntargets = [\"{target}\"]\n"))
@@ -87,7 +175,9 @@ fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()
 
 #[given("the Netsuke config file sets output format to {format:string}")]
 fn config_sets_output_format(world: &TestWorld, format: &str) -> Result<()> {
-    write_config(world, &format!("output_format = \"{format}\"\n"))
+    let typed = OutputFormat::from_str(format, true)
+        .map_err(|err| anyhow!("invalid output format '{format}': {err}"))?;
+    write_output_format_config(world, typed)
 }
 
 #[given("the Netsuke config file sets no_emoji to true")]
@@ -97,58 +187,46 @@ fn config_sets_no_emoji(world: &TestWorld) -> Result<()> {
 
 #[given("the Netsuke config file sets theme to {theme:string}")]
 fn config_sets_theme(world: &TestWorld, theme: &str) -> Result<()> {
-    write_config(world, &format!("theme = \"{theme}\"\n"))
+    let typed =
+        Theme::from_str(theme, true).map_err(|err| anyhow!("invalid theme '{theme}': {err}"))?;
+    write_theme_config(world, typed)
 }
 
 #[given("the Netsuke config file sets colour policy to {policy:string}")]
 fn config_sets_colour_policy(world: &TestWorld, policy: &str) -> Result<()> {
-    write_config(world, &format!("colour_policy = \"{policy}\"\n"))
+    let typed = ColourPolicy::from_str(policy, true)
+        .map_err(|err| anyhow!("invalid colour policy '{policy}': {err}"))?;
+    write_colour_policy_config(world, typed)
 }
 
 #[given("the Netsuke config file sets spinner mode to {mode:string}")]
 fn config_sets_spinner_mode(world: &TestWorld, mode: &str) -> Result<()> {
-    write_config(world, &format!("spinner_mode = \"{mode}\"\n"))
+    let typed = SpinnerMode::from_str(mode, true)
+        .map_err(|err| anyhow!("invalid spinner mode '{mode}': {err}"))?;
+    write_spinner_mode_config(world, typed)
 }
 
 #[given("the NETSUKE_THEME environment variable is {theme:string}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 fn set_environment_theme_override(world: &TestWorld, theme: &str) -> Result<()> {
-    ensure_env_lock(world);
-    let previous = std::env::var_os("NETSUKE_THEME");
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var("NETSUKE_THEME", OsStr::new(theme)) };
-    world.track_env_var("NETSUKE_THEME".to_owned(), previous);
+    let typed =
+        Theme::from_str(theme, true).map_err(|err| anyhow!("invalid theme '{theme}': {err}"))?;
+    set_env_theme(world, typed);
     Ok(())
 }
 
 #[given("the NETSUKE_COLOUR_POLICY environment variable is {policy:string}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 fn set_environment_colour_policy_override(world: &TestWorld, policy: &str) -> Result<()> {
-    ensure_env_lock(world);
-    let previous = std::env::var_os("NETSUKE_COLOUR_POLICY");
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var("NETSUKE_COLOUR_POLICY", OsStr::new(policy)) };
-    world.track_env_var("NETSUKE_COLOUR_POLICY".to_owned(), previous);
+    let typed = ColourPolicy::from_str(policy, true)
+        .map_err(|err| anyhow!("invalid colour policy '{policy}': {err}"))?;
+    set_env_colour_policy(world, typed);
     Ok(())
 }
 
 #[given("the NETSUKE_SPINNER_MODE environment variable is {mode:string}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 fn set_environment_spinner_mode_override(world: &TestWorld, mode: &str) -> Result<()> {
-    ensure_env_lock(world);
-    let previous = std::env::var_os("NETSUKE_SPINNER_MODE");
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var("NETSUKE_SPINNER_MODE", OsStr::new(mode)) };
-    world.track_env_var("NETSUKE_SPINNER_MODE".to_owned(), previous);
+    let typed = SpinnerMode::from_str(mode, true)
+        .map_err(|err| anyhow!("invalid spinner mode '{mode}': {err}"))?;
+    set_env_spinner_mode(world, typed);
     Ok(())
 }
 
@@ -215,15 +293,7 @@ fn merged_verbose_enabled(world: &TestWorld) -> Result<()> {
 
 #[then("the merged theme is ascii")]
 fn merged_theme_is_ascii(world: &TestWorld) -> Result<()> {
-    let theme = world
-        .cli
-        .with_ref(|cli| cli.theme)
-        .context("expected merged CLI to be available")?;
-    ensure!(
-        theme == Some(Theme::Ascii),
-        "expected merged theme to be ASCII, got {theme:?}",
-    );
-    Ok(())
+    assert_merged_field(world, |cli| cli.theme, Theme::Ascii, "theme")
 }
 
 #[then("the merge error should contain {fragment:string}")]
@@ -241,39 +311,25 @@ fn merge_error_contains(world: &TestWorld, fragment: &str) -> Result<()> {
 
 #[then("the merged theme is unicode")]
 fn merged_theme_is_unicode(world: &TestWorld) -> Result<()> {
-    let theme = world
-        .cli
-        .with_ref(|cli| cli.theme)
-        .context("expected merged CLI to be available")?;
-    ensure!(
-        theme == Some(Theme::Unicode),
-        "expected merged theme to be Unicode, got {theme:?}",
-    );
-    Ok(())
+    assert_merged_field(world, |cli| cli.theme, Theme::Unicode, "theme")
 }
 
 #[then("the merged colour policy is always")]
 fn merged_colour_policy_is_always(world: &TestWorld) -> Result<()> {
-    let policy = world
-        .cli
-        .with_ref(|cli| cli.colour_policy)
-        .context("expected merged CLI to be available")?;
-    ensure!(
-        policy == Some(ColourPolicy::Always),
-        "expected merged colour policy to be Always, got {policy:?}",
-    );
-    Ok(())
+    assert_merged_field(
+        world,
+        |cli| cli.colour_policy,
+        ColourPolicy::Always,
+        "colour policy",
+    )
 }
 
 #[then("the merged spinner mode is enabled")]
 fn merged_spinner_mode_is_enabled(world: &TestWorld) -> Result<()> {
-    let mode = world
-        .cli
-        .with_ref(|cli| cli.spinner_mode)
-        .context("expected merged CLI to be available")?;
-    ensure!(
-        mode == Some(SpinnerMode::Enabled),
-        "expected merged spinner mode to be Enabled, got {mode:?}",
-    );
-    Ok(())
+    assert_merged_field(
+        world,
+        |cli| cli.spinner_mode,
+        SpinnerMode::Enabled,
+        "spinner mode",
+    )
 }
