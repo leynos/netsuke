@@ -1,9 +1,16 @@
 //! Tests for status stage modelling and index conversions.
 
 use super::*;
+use crate::cli_localization;
+use crate::localization::{self, LocalizerGuard};
 use crate::output_prefs;
+use anyhow::{Result, ensure};
 use rstest::{fixture, rstest};
+use std::error::Error;
+use std::fmt;
+use std::sync::{Arc, MutexGuard};
 use test_support::fluent::normalize_fluent_isolates;
+use test_support::localizer::localizer_test_lock;
 
 fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
@@ -19,6 +26,39 @@ fn stage6_message(reporter: &IndicatifReporter) -> String {
         .get(STAGE6_INDEX)
         .expect("stage 6 progress bar should exist")
         .message()
+}
+
+struct EnUsLocalizerFixture {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
+}
+
+#[derive(Debug)]
+struct EnUsLocalizerFixtureError(String);
+
+impl fmt::Display for EnUsLocalizerFixtureError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl Error for EnUsLocalizerFixtureError {}
+
+impl From<std::sync::PoisonError<MutexGuard<'static, ()>>> for EnUsLocalizerFixtureError {
+    fn from(err: std::sync::PoisonError<MutexGuard<'static, ()>>) -> Self {
+        Self(err.to_string())
+    }
+}
+
+#[fixture]
+fn en_us_localizer() -> Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError> {
+    let lock = localizer_test_lock()?;
+    let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
+    let guard = localization::set_localizer_for_tests(localizer);
+    Ok(EnUsLocalizerFixture {
+        _lock: lock,
+        _guard: guard,
+    })
 }
 
 #[fixture]
@@ -77,22 +117,34 @@ fn localization_key_from_static_str() {
 #[case(1, 2, "cc -c src/main.c", "Task 1/2: cc -c src/main.c")]
 #[case(2, 2, "", "Task 2/2")]
 fn task_progress_update_formats_expected_text(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
     #[case] current: u32,
     #[case] total: u32,
     #[case] description: &str,
     #[case] expected: &str,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let rendered = task_progress_update(current, total, description);
-    assert_eq!(normalize_fluent_isolates(&rendered), expected);
+    ensure!(
+        normalize_fluent_isolates(&rendered) == expected,
+        "task progress text should match the pinned en-US expectation"
+    );
+    Ok(())
 }
 
 #[rstest]
 fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
     force_text_reporter: IndicatifReporter,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     force_text_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&force_text_reporter);
-    assert!(!normalize_fluent_isolates(&stage6_message).contains("Task 1/2"));
+    ensure!(
+        !normalize_fluent_isolates(&stage6_message).contains("Task 1/2"),
+        "stage 6 should not include task progress before the stage is running"
+    );
+    Ok(())
 }
 
 #[rstest]

@@ -356,6 +356,7 @@ semantic.prefix.warning = Advertencia:
 semantic.prefix.success = Éxito:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Tiempos:
+semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Ejemplos de formas plurales para traductores.
 # Estos mensajes demuestran la sintaxis de expresiones select de Fluent

@@ -356,6 +356,7 @@ semantic.prefix.warning = Warning:
 semantic.prefix.success = Success:
 semantic.prefix.info = Info:
 semantic.prefix.timing = Timing:
+semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR
