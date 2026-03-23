@@ -4,6 +4,7 @@
 //! and merging. It captures global CLI settings plus per-subcommand defaults
 //! under the `cmds` namespace.
 
+use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -13,7 +14,7 @@ use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
 /// Colour-output policy accepted by layered configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ColourPolicy {
     /// Follow the host environment.
@@ -26,7 +27,7 @@ pub enum ColourPolicy {
 }
 
 /// Spinner and progress rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum SpinnerMode {
     /// Follow Netsuke's default progress behaviour.
@@ -39,7 +40,7 @@ pub enum SpinnerMode {
 }
 
 /// Top-level diagnostics and output format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum OutputFormat {
     /// Human-readable terminal output.
@@ -50,7 +51,7 @@ pub enum OutputFormat {
 }
 
 /// Presentation theme for semantic prefixes and glyph choices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum Theme {
     /// Follow the host environment.
