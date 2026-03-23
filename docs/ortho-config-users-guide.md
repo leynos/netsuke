@@ -141,7 +141,7 @@ CLI layers. This validates every precedence permutation without copy-pasting
 setup.
 
 Every derived configuration also exposes `compose_layers()` and
-`compose_layers_from_iter(..)`. These helpers discover configuration files,
+`compose_layers_from_iter(...)`. These helpers discover configuration files,
 serialize environment variables, and capture CLI input as a `LayerComposition`,
 keeping discovery separate from merging. The returned composition includes both
 the ordered layers and any collected errors, letting callers push additional
@@ -273,7 +273,7 @@ Add `ortho_config` as a dependency in `Cargo.toml` along with `serde`:
 
 ```toml
 [dependencies]
-ortho_config = "0.7.0"            # replace with the latest version
+ortho_config = "0.8.0"            # replace with the latest version
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }    # required for CLI support
 ```
@@ -284,7 +284,7 @@ corresponding cargo features:
 
 ```toml
 [dependencies]
-ortho_config = { version = "0.7.0", features = ["json5", "yaml"] }
+ortho_config = { version = "0.8.0", features = ["json5", "yaml"] }
 # Enabling these features expands file formats; precedence stays: defaults < file < env < CLI.
 ```
 
@@ -300,6 +300,62 @@ Redox targets), and the optional parsers (`figment_json5`, `json5`,
 `serde_saphyr`, `toml`) via `ortho_config::` paths. The `serde_json` re-export
 is enabled by default because the crate relies on it internally; disable
 default features only when explicitly opting back into `serde_json`.
+
+### Dependency architecture for derive macro users
+
+The `#[derive(OrthoConfig)]` macro emits fully qualified paths rooted at
+`ortho_config`. For example, generated code references
+`ortho_config::figment::Figment` and `ortho_config::uncased::Uncased` rather
+than `figment::...` or `uncased::...`. Those paths resolve because
+`ortho_config` re-exports these crates.
+
+For screen readers: The following diagram shows that generated code references
+re-exported crates through `ortho_config`, so consumer crates can rely on the
+runtime crate dependency.
+
+```mermaid
+flowchart TD
+    A[Consumer crate] -->|depends on| B[ortho_config]
+    C[derive OrthoConfig] -->|generates| D[ortho_config::figment::...]
+    C -->|generates| E[ortho_config::uncased::...]
+    B -->|re-exports| F[figment]
+    B -->|re-exports| G[uncased]
+    B -->|re-exports on Unix/Redox| H[xdg]
+```
+
+_Figure 1: Derive output resolves parser crates through `ortho_config`._
+
+In the common case, `Cargo.toml` does not need direct `figment`, `uncased`, or
+`xdg` dependencies:
+
+```toml
+[dependencies]
+ortho_config = "0.8.0"
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+```
+
+### Troubleshooting dependency errors
+
+- If source code imports `figment`, `uncased`, or `xdg` directly, either switch
+  imports to `ortho_config::figment` / `ortho_config::uncased` /
+  `ortho_config::xdg`, or keep explicit dependencies for that direct usage.
+- If derive output fails with unresolved `ortho_config::...` paths, ensure the
+  dependency key is named `ortho_config` in `Cargo.toml` or use the
+  `#[ortho_config(crate = "...")]` attribute to specify the alias.
+- **Dependency aliasing** is supported via the `crate` attribute. When
+  renaming the dependency in `Cargo.toml` (for example,
+  `my_cfg = { package = "ortho_config", ... }`), add
+  `#[ortho_config(crate = "my_cfg")]` to the struct so generated code
+  references the correct crate path.
+- If dependency resolution reports conflicts, inspect duplicates with
+  `cargo tree -d` and prefer the versions selected through `ortho_config`
+  unless direct usage requires something else.
+
+### FAQ: should `figment`, `uncased`, or `xdg` be direct dependencies?
+
+No for derive-generated code. Yes, only when application code directly imports
+those crates without going through the `ortho_config::` re-exports.
 
 YAML parsing is handled by the pure-Rust `serde-saphyr` crate. It adheres to
 the YAML 1.2 specification, so unquoted scalars such as `yes`, `on`, and `off`
@@ -378,13 +434,13 @@ environment variables like `APP_PORT` and file names such as `.app.toml`.
 
 Field attributes modify how a field is sourced or merged:
 
-| Attribute                   | Behaviour                                                                                                                                                                     |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                     |
-| `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                             |
-| `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                |
-| `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields. |
-| `cli_default_as_absent`     | Treats clap's `default_value_t` as absent during subcommand merging. File and environment values take precedence over clap defaults, while explicit CLI overrides still win.  |
+| Attribute                   | Behaviour                                                                                                                                                                                       |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `default = expr`            | Supplies a default value when no source provides one. The expression can be a literal or a function path.                                                                                       |
+| `cli_long = "name"`         | Overrides the automatically generated long CLI flag (kebab-case).                                                                                                                               |
+| `cli_short = 'c'`           | Adds a single-letter short flag for the field.                                                                                                                                                  |
+| `merge_strategy = "append"` | For `Vec<T>` fields, specifies that values from different sources should be concatenated. This is currently the only supported strategy and is the default for vector fields.                   |
+| `cli_default_as_absent`     | Treats typed clap defaults (`default_value_t`, `default_values_t`) as absent during configuration merging. File and environment values take precedence, while explicit CLI overrides still win. |
 
 Unrecognized keys are ignored by the derive macro for forwards compatibility.
 Unknown keys will therefore silently do nothing. Developers who require
@@ -872,21 +928,32 @@ when the user does not explicitly provide a value on the command line, the
 field is excluded from the CLI layer so that file and environment values take
 precedence.
 
-Add the attribute alongside the matching `default` attribute:
+Add `cli_default_as_absent` and define the default in clap. The derive macro
+now infers the struct default from clap's default metadata, so the default only
+needs to be declared once:
 
 ```rust
 #[derive(Parser, Deserialize, Serialize, OrthoConfig)]
 #[ortho_config(prefix = "APP_")]
 struct GreetArgs {
     #[arg(long, default_value_t = String::from("!"))]
-    #[ortho_config(default = String::from("!"), cli_default_as_absent)]
+    #[ortho_config(cli_default_as_absent)]
     punctuation: String,
 }
 ```
 
+`default_value_t` and `default_values_t` are supported for inferred defaults.
+`default_value` inference is intentionally unsupported for now; use
+`default_value_t` or add an explicit `#[ortho_config(default = ...)]` to avoid
+string-parser mismatches. Parser-faithful `default_value` inference is planned
+as a day-2 follow-up.
+
+If `#[ortho_config(default = ...)]` is still provided, that explicit value
+remains available for generated defaults/documentation metadata.
+
 **Precedence with the attribute (lowest to highest):**
 
-1. Struct default (`#[ortho_config(default = ...)]`)
+1. Struct default (`#[ortho_config(default = ...)]` or inferred from clap)
 2. Configuration file
 3. Environment variable
 4. Explicit CLI override (e.g. `--punctuation "?"`)
@@ -1048,6 +1115,134 @@ fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error>
 }
 ```
 
+## Documentation metadata (OrthoConfigDocs)
+
+The derive macro now emits an `OrthoConfigDocs` implementation alongside the
+runtime loader. This lets tooling such as `cargo-orthohelp` serialize a stable,
+clap-agnostic intermediate representation (IR) for man pages and PowerShell
+help.
+
+```rust
+use ortho_config::docs::OrthoConfigDocs;
+
+#[derive(serde::Deserialize, serde::Serialize, ortho_config::OrthoConfig)]
+#[ortho_config(prefix = "APP")]
+struct AppConfig {
+    #[ortho_config(default = 8080)]
+    port: u16,
+}
+
+let ir = AppConfig::get_doc_metadata();
+let json = ortho_config::serde_json::to_string_pretty(&ir)?;
+println!("{json}");
+```
+
+When IDs are not supplied, the macro generates deterministic defaults such as
+`{app}.about` for the CLI overview and `{app}.fields.{field}.help` for field
+descriptions. Field-level metadata can be refined with `help_id`,
+`long_help_id`, `value(type = "...")`, `deprecated(note_id = "...")`,
+`env(name = "...")`, and `file(key_path = "...")`. These documentation
+attributes affect only the emitted IR; they do not change runtime naming or
+loading behaviour.
+
+### Generating IR with cargo-orthohelp
+
+`cargo-orthohelp` compiles a tiny bridge binary that calls
+`OrthoConfigDocs::get_doc_metadata()`, resolves Fluent messages per locale, and
+writes localized IR JSON into the chosen output directory. Add metadata to the
+package `Cargo.toml` so the tool knows which config type to load:
+
+```toml
+[package.metadata.ortho_config]
+root_type = "hello_world::cli::HelloWorldCli"
+locales = ["en-US", "ja"]
+```
+
+Run the tool from the project root:
+
+```bash
+cargo orthohelp --out-dir target/orthohelp --locale en-US
+```
+
+`--cache` reuses any previously generated IR cached under
+`target/orthohelp/<hash>/ir.json`, while `--no-build` skips the bridge build
+and fails if the cache is missing. The generated per-locale JSON lives under
+`<out>/ir/<locale>.json` and is ready for downstream generators.
+
+### Generating man pages
+
+`cargo-orthohelp` can generate roff-formatted man pages from the localized IR.
+Use `--format man` to produce `man/man<N>/<name>.<N>` files suitable for
+installation via `make install` or packaging:
+
+```bash
+cargo orthohelp --format man --out-dir target/man --locale en-US
+```
+
+The generator produces standard man page sections in the canonical order:
+
+1. **NAME** – binary name and one-line description
+2. **SYNOPSIS** – usage pattern with flags
+3. **DESCRIPTION** – expanded about text
+4. **OPTIONS** – CLI flags with types, defaults, and possible values
+5. **ENVIRONMENT** – environment variables mapped to fields
+6. **FILES** – configuration file paths and discovery locations
+7. **PRECEDENCE** – source priority order (defaults → file → env → CLI)
+8. **EXAMPLES** – usage examples from the IR
+9. **SEE ALSO** – related commands and documentation links
+10. **EXIT STATUS** – standard exit codes
+
+Additional options:
+
+- `--man-section <N>` – man page section number (default: 1)
+- `--man-date <DATE>` – override the date shown in the footer
+- `--man-split-subcommands` – generate separate man pages for each subcommand
+
+Text is automatically escaped for roff: backslashes are doubled, and leading
+dashes, periods, and single quotes are escaped to prevent macro interpretation.
+Enum fields list their possible values in the OPTIONS description.
+
+### Generating PowerShell help
+
+`cargo-orthohelp` can generate PowerShell external help in Microsoft Assistance
+Markup Language (MAML) alongside a wrapper module so `Get-Help {BinName} -Full`
+surfaces the same configuration metadata as the man page generator. Use the
+`ps` format to emit the module layout under `powershell/<ModuleName>`:
+
+```bash
+cargo orthohelp --format ps --out-dir target/orthohelp --locale en-US
+```
+
+The generator produces:
+
+- `powershell/<ModuleName>/<ModuleName>.psm1` – wrapper module.
+- `powershell/<ModuleName>/<ModuleName>.psd1` – module manifest.
+- `powershell/<ModuleName>/<culture>/<ModuleName>-help.xml` – MAML help.
+- `powershell/<ModuleName>/<culture>/about_<ModuleName>.help.txt` – about topic.
+
+`en-US` help is always generated. If only other locales are rendered, the
+generator copies the first locale into `en-US` unless fallback generation is
+disabled with `--ensure-en-us false`.
+
+PowerShell options:
+
+- `--ps-module-name <NAME>` – override the module name (defaults to the binary
+  name).
+- `--ps-split-subcommands <BOOL>` – emit wrapper functions for subcommands.
+- `--ps-include-common-parameters <BOOL>` – include CommonParameters in MAML.
+- `--ps-help-info-uri <URI>` – set `HelpInfoUri` for Update-Help payloads.
+- `--ensure-en-us <BOOL>` – control the `en-US` fallback behaviour.
+
+To set defaults in `Cargo.toml`, use the Windows metadata table:
+
+```toml
+[package.metadata.ortho_config.windows]
+module_name = "MyModule"
+include_common_parameters = true
+split_subcommands_into_functions = false
+help_info_uri = "https://example.com/help/MyModule"
+```
+
 ## Additional notes
 
 - **Vector merging** – For `Vec<T>` fields the default merge strategy is
@@ -1069,10 +1264,10 @@ fn interop(r: ortho_config::OrthoResult<MyCfg>) -> Result<MyCfg, figment::Error>
   while still requiring the CLI to provide a value when defaults are absent;
   see the `vk` example above.
 
-- **Changing naming conventions** – Currently, only the default
-  snake/hyphenated (underscores → hyphens)/upper snake mappings are supported.
-  Future versions may introduce attributes such as `file_key` or `env` to
-  customize names further.
+- **Changing naming conventions** – Runtime naming continues to use the
+  default snake/hyphenated (underscores → hyphens)/upper snake mappings. For
+  documentation output, use `env(name = "...")` and `file(key_path = "...")` to
+  override IR metadata without altering runtime behaviour.
 
 - **Testing** – Because the CLI and environment variables are merged at
   runtime, integration tests should set environment variables and construct CLI
