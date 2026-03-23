@@ -32,3 +32,69 @@ Feature: Configuration preferences
     Then parsing succeeds
     And the merged theme is ascii
     And the prefix contains no non-ASCII characters
+
+  Scenario: CLI theme flag overrides configuration file
+    Given an empty workspace
+    And the Netsuke config file sets theme to "unicode"
+    When the CLI is parsed and merged with "--theme ascii"
+    Then parsing succeeds
+    And the merged theme is ascii
+
+  Scenario: CLI theme flag overrides environment variable
+    Given an empty workspace
+    And the NETSUKE_THEME environment variable is "unicode"
+    When the CLI is parsed and merged with "--theme ascii"
+    Then parsing succeeds
+    And the merged theme is ascii
+
+  Scenario: CLI theme flag has highest precedence over env and config
+    Given an empty workspace
+    And the Netsuke config file sets theme to "unicode"
+    And the NETSUKE_THEME environment variable is "auto"
+    When the CLI is parsed and merged with "--theme ascii"
+    Then parsing succeeds
+    And the merged theme is ascii
+
+  Scenario: CLI colour policy flag overrides configuration file
+    Given an empty workspace
+    And the Netsuke config file sets colour policy to "never"
+    When the CLI is parsed and merged with "--colour-policy always"
+    Then parsing succeeds
+    And the merged colour policy is always
+
+  Scenario: CLI colour policy flag overrides environment variable
+    Given an empty workspace
+    And the NETSUKE_COLOUR_POLICY environment variable is "never"
+    When the CLI is parsed and merged with "--colour-policy always"
+    Then parsing succeeds
+    And the merged colour policy is always
+
+  Scenario: CLI spinner mode flag overrides configuration file
+    Given an empty workspace
+    And the Netsuke config file sets spinner mode to "disabled"
+    When the CLI is parsed and merged with "--spinner-mode enabled"
+    Then parsing succeeds
+    And the merged spinner mode is enabled
+
+  Scenario: CLI spinner mode flag overrides environment variable
+    Given an empty workspace
+    And the NETSUKE_SPINNER_MODE environment variable is "disabled"
+    When the CLI is parsed and merged with "--spinner-mode enabled"
+    Then parsing succeeds
+    And the merged spinner mode is enabled
+
+  Scenario: Environment variable overrides configuration for theme
+    Given an empty workspace
+    And the Netsuke config file sets theme to "ascii"
+    And the NETSUKE_THEME environment variable is "unicode"
+    When the CLI is parsed and merged with ""
+    Then parsing succeeds
+    And the merged theme is unicode
+
+  Scenario: Environment variable overrides configuration for colour policy
+    Given an empty workspace
+    And the Netsuke config file sets colour policy to "auto"
+    And the NETSUKE_COLOUR_POLICY environment variable is "always"
+    When the CLI is parsed and merged with ""
+    Then parsing succeeds
+    And the merged colour policy is always
