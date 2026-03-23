@@ -1,13 +1,16 @@
 //! Tests for status stage modelling and index conversions.
 
+// FIXME: Remove this module-level allow once rstest supports #[expect] in macro
+// expansions or we refactor tests to avoid >4 parameters.
+// Tracking: https://github.com/leynos/netsuke/issues/TBD
+//
 // rstest macro generates code that triggers `too_many_arguments` lint, but the
 // `#[expect]` attribute cannot suppress lints from macro expansions. Since this
 // lint is expected and cannot be suppressed at the function level, we must use
-// `#[allow]` at the module level.
+// `#[allow]` at the module level as a last resort.
 #![allow(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::too_many_arguments
+    clippy::too_many_arguments,
+    reason = "rstest macro expansion generates >4 params; #[expect] doesn't work in macros"
 )]
 
 use super::*;
@@ -16,8 +19,6 @@ use crate::localization::{self, LocalizerGuard};
 use crate::output_prefs;
 use anyhow::{Result, ensure};
 use rstest::{fixture, rstest};
-use std::error::Error;
-use std::fmt;
 use std::sync::{Arc, MutexGuard};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::localizer::localizer_test_lock;
@@ -43,26 +44,10 @@ struct EnUsLocalizerFixture {
     _guard: LocalizerGuard,
 }
 
-#[derive(Debug)]
-struct EnUsLocalizerFixtureError(String);
-
-impl fmt::Display for EnUsLocalizerFixtureError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Error for EnUsLocalizerFixtureError {}
-
-impl From<std::sync::PoisonError<MutexGuard<'static, ()>>> for EnUsLocalizerFixtureError {
-    fn from(err: std::sync::PoisonError<MutexGuard<'static, ()>>) -> Self {
-        Self(err.to_string())
-    }
-}
-
 #[fixture]
-fn en_us_localizer() -> Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError> {
-    let lock = localizer_test_lock()?;
+fn en_us_localizer() -> Result<EnUsLocalizerFixture> {
+    let lock = localizer_test_lock()
+        .map_err(|err| anyhow::anyhow!("failed to acquire localizer test lock: {err}"))?;
     let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
     let guard = localization::set_localizer_for_tests(localizer);
     Ok(EnUsLocalizerFixture {
@@ -127,7 +112,7 @@ fn localization_key_from_static_str() {
 #[case(1, 2, "cc -c src/main.c", "Task 1/2: cc -c src/main.c")]
 #[case(2, 2, "", "Task 2/2")]
 fn task_progress_update_formats_expected_text(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     #[case] current: u32,
     #[case] total: u32,
     #[case] description: &str,
@@ -144,7 +129,7 @@ fn task_progress_update_formats_expected_text(
 
 #[rstest]
 fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     force_text_reporter: IndicatifReporter,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
@@ -159,7 +144,7 @@ fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
 
 #[rstest]
 fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     running_stage6_reporter: IndicatifReporter,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
@@ -186,7 +171,7 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
 
 #[rstest]
 fn accessible_reporter_formats_stage_with_info_prefix(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
     let prefs = test_prefs();
@@ -216,7 +201,7 @@ fn accessible_reporter_formats_stage_with_info_prefix(
 
 #[rstest]
 fn accessible_reporter_indents_task_progress(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
     let prefs = test_prefs();
@@ -242,7 +227,7 @@ fn accessible_reporter_indents_task_progress(
 
 #[rstest]
 fn completion_line_includes_success_prefix(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
     let prefs = test_prefs();
