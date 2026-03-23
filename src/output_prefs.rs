@@ -80,7 +80,7 @@ impl OutputPrefs {
     /// use netsuke::output_prefs::resolve_with;
     ///
     /// let prefs = resolve_with(Some(true), |_| None);
-    /// let prefix = prefs.error_prefix().to_string();
+    /// let prefix = prefs.error_prefix();
     /// assert!(prefix.contains("Error:"));
     /// ```
     #[must_use]
@@ -118,7 +118,7 @@ impl OutputPrefs {
     /// use netsuke::output_prefs::resolve_with;
     ///
     /// let prefs = resolve_with(Some(true), |_| None);
-    /// let prefix = prefs.success_prefix().to_string();
+    /// let prefix = prefs.success_prefix();
     /// assert!(prefix.contains("Success:"));
     /// ```
     #[must_use]
