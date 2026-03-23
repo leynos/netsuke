@@ -5,6 +5,7 @@ use netsuke::cli::Cli;
 use netsuke::host_pattern::HostPattern;
 use netsuke::stdlib::NetworkPolicyViolation;
 use rstest::rstest;
+use test_support::fluent::normalize_fluent_isolates;
 use url::Url;
 
 #[rstest]
@@ -21,7 +22,7 @@ fn cli_network_policy_defaults_to_https() -> Result<()> {
         .evaluate(&http)
         .expect_err("HTTP should be rejected by default");
     match err {
-        NetworkPolicyViolation::SchemeNotAllowed { scheme } => {
+        NetworkPolicyViolation::SchemeNotAllowed { scheme, .. } => {
             ensure!(scheme == "http", "unexpected scheme {scheme}");
         }
         other => bail!("expected scheme violation, got {other:?}"),
@@ -48,7 +49,7 @@ fn cli_network_policy_default_deny_blocks_unknown_hosts() -> Result<()> {
         .evaluate(&denied)
         .expect_err("default deny should block other hosts");
     match err {
-        NetworkPolicyViolation::HostNotAllowlisted { host } => {
+        NetworkPolicyViolation::HostNotAllowlisted { host, .. } => {
             ensure!(host == "unauthorised.test", "unexpected host {host}");
         }
         other => bail!("expected allowlist violation, got {other:?}"),
@@ -70,10 +71,11 @@ fn cli_network_policy_blocklist_overrides_allowlist() -> Result<()> {
         .expect_err("blocklist should override allowlist");
     let err_text = err.to_string();
     match err {
-        NetworkPolicyViolation::HostBlocked { host } => {
+        NetworkPolicyViolation::HostBlocked { host, .. } => {
             ensure!(host == "example.com", "unexpected host {host}");
             ensure!(
-                err_text == "host 'example.com' is blocked",
+                normalize_fluent_isolates(&err_text)
+                    .contains("Host 'example.com' is blocked by policy."),
                 "unexpected error text: {err_text}",
             );
         }

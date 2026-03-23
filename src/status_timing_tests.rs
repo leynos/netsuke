@@ -6,17 +6,11 @@ use rstest::{fixture, rstest};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use test_support::fluent::normalize_fluent_isolates;
 
 #[fixture]
 fn test_prefs() -> OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
-}
-
-fn strip_isolates(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
-        .collect()
 }
 
 #[derive(Debug)]
@@ -89,21 +83,24 @@ fn timing_recorder_renders_happy_path_summary(test_prefs: OutputPrefs) {
     let [header, stage1, stage2, stage3, total_line] = lines.as_slice() else {
         panic!("expected 5 timing summary lines");
     };
-    assert!(strip_isolates(header).contains("Timing:"));
-    assert!(strip_isolates(header).contains("Stage timing summary:"));
+    assert!(normalize_fluent_isolates(header).contains("Timing:"));
+    assert!(normalize_fluent_isolates(header).contains("Stage timing summary:"));
     assert_eq!(
-        strip_isolates(stage1),
+        normalize_fluent_isolates(stage1),
         "  - Stage 1/6: Reading manifest file: 12ms"
     );
     assert_eq!(
-        strip_isolates(stage2),
+        normalize_fluent_isolates(stage2),
         "  - Stage 2/6: Parsing YAML document: 4ms"
     );
     assert_eq!(
-        strip_isolates(stage3),
+        normalize_fluent_isolates(stage3),
         "  - Stage 3/6: Expanding template directives: 7ms"
     );
-    assert_eq!(strip_isolates(total_line), "  Total pipeline time: 23ms");
+    assert_eq!(
+        normalize_fluent_isolates(total_line),
+        "  Total pipeline time: 23ms"
+    );
 }
 
 #[rstest]
@@ -186,11 +183,11 @@ fn verbose_timing_reporter_finalizes_current_stage_on_complete(test_prefs: Outpu
     let [header, stage_line, total_line] = lines.as_slice() else {
         panic!("expected 3 timing summary lines");
     };
-    assert!(strip_isolates(header).contains("Timing:"));
-    assert!(strip_isolates(header).contains("Stage timing summary:"));
-    assert!(strip_isolates(stage_line).contains("Stage 1/6: Reading manifest file"));
-    assert!(strip_isolates(stage_line).ends_with(": 15ms"));
-    assert!(strip_isolates(total_line).contains("Total pipeline time: 15ms"));
+    assert!(normalize_fluent_isolates(header).contains("Timing:"));
+    assert!(normalize_fluent_isolates(header).contains("Stage timing summary:"));
+    assert!(normalize_fluent_isolates(stage_line).contains("Stage 1/6: Reading manifest file"));
+    assert!(normalize_fluent_isolates(stage_line).ends_with(": 15ms"));
+    assert!(normalize_fluent_isolates(total_line).contains("Total pipeline time: 15ms"));
 }
 
 #[derive(Debug, Default)]

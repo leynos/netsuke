@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 
-use crate::helpers::os_args;
+use crate::cli_tests::helpers::os_args;
 use netsuke::cli::{diag_json_hint_from_args, locale_hint_from_args};
 use netsuke::cli_localization;
 use std::sync::Arc;

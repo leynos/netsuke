@@ -111,7 +111,7 @@ pub enum SemanticColour {
 /// Symbol tokens for status indicators.
 ///
 /// These tokens control which glyphs appear in prefixes and progress output.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SymbolTokens {
     /// Symbol for error messages (✖ or X).
     pub error: &'static str,
@@ -128,7 +128,7 @@ pub struct SymbolTokens {
 /// Spacing tokens for indentation and layout.
 ///
 /// These tokens centralize spacing decisions so reporters stay consistent.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpacingTokens {
     /// Indentation for task progress under stage headers (currently 2 spaces).
     pub task_indent: &'static str,
@@ -137,7 +137,7 @@ pub struct SpacingTokens {
 }
 
 /// Complete design token set for a resolved theme.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DesignTokens {
     /// Semantic colour tokens.
     pub colours: ColourTokens,
@@ -150,7 +150,7 @@ pub struct DesignTokens {
 }
 
 /// Resolved theme including all design tokens.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResolvedTheme {
     /// The complete token set for this theme.
     pub tokens: DesignTokens,

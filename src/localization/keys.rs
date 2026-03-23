@@ -311,6 +311,7 @@ define_keys! {
     SEMANTIC_PREFIX_SUCCESS => "semantic.prefix.success",
     SEMANTIC_PREFIX_INFO => "semantic.prefix.info",
     SEMANTIC_PREFIX_TIMING => "semantic.prefix.timing",
+    SEMANTIC_PREFIX_RENDERED => "semantic.prefix.rendered",
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }

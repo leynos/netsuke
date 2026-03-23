@@ -5,6 +5,7 @@
 //! Steps store results in [`TestWorld`] for downstream assertions.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
 use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
@@ -228,8 +229,10 @@ fn verify_cli_policy_rejects(
     let Err(err) = policy.evaluate(&parsed) else {
         bail!("expected CLI policy to reject {}", url);
     };
+    let normalized_error = normalize_fluent_isolates(&err.to_string());
+    let normalized_message = normalize_fluent_isolates(message.as_str());
     ensure!(
-        err.to_string().contains(message.as_str()),
+        normalized_error.contains(&normalized_message),
         "expected error to mention '{}', got '{err}'",
         message,
     );
@@ -257,8 +260,10 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
         .cli_error
         .get()
         .context("no error was returned by CLI parsing")?;
+    let normalized_error = normalize_fluent_isolates(&error);
+    let normalized_fragment = normalize_fluent_isolates(fragment.as_str());
     ensure!(
-        error.contains(fragment.as_str()),
+        normalized_error.contains(&normalized_fragment),
         "Error message '{error}' does not contain expected '{}'",
         fragment
     );

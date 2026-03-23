@@ -87,6 +87,16 @@ Feature: CLI parsing
     Then an error should be returned
     And the error message should contain "notanumber"
 
+  Scenario: Invalid theme value fails validation
+    When the CLI is parsed with invalid arguments "--theme neon"
+    Then an error should be returned
+    And the error message should contain "Invalid theme 'neon'"
+
+  Scenario: Invalid theme value is localised in Spanish
+    When the CLI is parsed with invalid arguments "--locale es-ES --theme neon"
+    Then an error should be returned
+    And the error message should contain "Tema no válido 'neon'"
+
   Scenario: Blocklist overrides allowlist for network policy flags
     When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"
     Then parsing succeeds

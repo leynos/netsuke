@@ -1,18 +1,30 @@
 //! Tests for status stage modelling and index conversions.
 
+// FIXME: Remove this module-level allow once rstest supports #[expect] in macro
+// expansions or we refactor tests to avoid >4 parameters.
+// Tracking: https://github.com/leynos/netsuke/issues/TBD
+//
+// rstest macro generates code that triggers `too_many_arguments` lint, but the
+// `#[expect]` attribute cannot suppress lints from macro expansions. Since this
+// lint is expected and cannot be suppressed at the function level, we must use
+// `#[allow]` at the module level as a last resort.
+#![allow(
+    clippy::too_many_arguments,
+    reason = "rstest macro expansion generates >4 params; #[expect] doesn't work in macros"
+)]
+
 use super::*;
+use crate::cli_localization;
+use crate::localization::{self, LocalizerGuard};
 use crate::output_prefs;
+use anyhow::{Result, ensure};
 use rstest::{fixture, rstest};
+use std::sync::{Arc, MutexGuard};
+use test_support::fluent::normalize_fluent_isolates;
+use test_support::localizer::localizer_test_lock;
 
 fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
-}
-
-fn strip_isolates(value: &str) -> String {
-    value
-        .chars()
-        .filter(|ch| !matches!(ch, '\u{2068}' | '\u{2069}'))
-        .collect()
 }
 
 fn stage6_message(reporter: &IndicatifReporter) -> String {
@@ -25,6 +37,23 @@ fn stage6_message(reporter: &IndicatifReporter) -> String {
         .get(STAGE6_INDEX)
         .expect("stage 6 progress bar should exist")
         .message()
+}
+
+struct EnUsLocalizerFixture {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
+}
+
+#[fixture]
+fn en_us_localizer() -> Result<EnUsLocalizerFixture> {
+    let lock = localizer_test_lock()
+        .map_err(|err| anyhow::anyhow!("failed to acquire localizer test lock: {err}"))?;
+    let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
+    let guard = localization::set_localizer_for_tests(localizer);
+    Ok(EnUsLocalizerFixture {
+        _lock: lock,
+        _guard: guard,
+    })
 }
 
 #[fixture]
@@ -83,28 +112,42 @@ fn localization_key_from_static_str() {
 #[case(1, 2, "cc -c src/main.c", "Task 1/2: cc -c src/main.c")]
 #[case(2, 2, "", "Task 2/2")]
 fn task_progress_update_formats_expected_text(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     #[case] current: u32,
     #[case] total: u32,
     #[case] description: &str,
     #[case] expected: &str,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let rendered = task_progress_update(current, total, description);
-    assert_eq!(strip_isolates(&rendered), expected);
+    ensure!(
+        normalize_fluent_isolates(&rendered) == expected,
+        "task progress text should match the pinned en-US expectation"
+    );
+    Ok(())
 }
 
 #[rstest]
 fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     force_text_reporter: IndicatifReporter,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     force_text_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&force_text_reporter);
-    assert!(!strip_isolates(&stage6_message).contains("Task 1/2"));
+    ensure!(
+        !normalize_fluent_isolates(&stage6_message).contains("Task 1/2"),
+        "stage 6 should not include task progress before the stage is running"
+    );
+    Ok(())
 }
 
 #[rstest]
 fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     running_stage6_reporter: IndicatifReporter,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     running_stage6_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&running_stage6_reporter);
     let task = task_progress_update(1, 2, "cc -c src/a.c");
@@ -119,11 +162,18 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
         .with_arg("label", stage_line)
         .with_arg("task_progress", &task)
         .to_string();
-    assert_eq!(strip_isolates(&stage6_message), strip_isolates(&expected));
+    ensure!(
+        normalize_fluent_isolates(&stage6_message) == normalize_fluent_isolates(&expected),
+        "stage 6 message should match expected format"
+    );
+    Ok(())
 }
 
 #[rstest]
-fn accessible_reporter_formats_stage_with_info_prefix() {
+fn accessible_reporter_formats_stage_with_info_prefix(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = test_prefs();
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
     reporter.report_stage(
@@ -136,20 +186,24 @@ fn accessible_reporter_formats_stage_with_info_prefix() {
         .writer
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let line = strip_isolates(&String::from_utf8_lossy(&output));
-    let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
-    assert!(
+    let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix());
+    ensure!(
         line.starts_with(&info_prefix),
         "stage line should start with info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
     );
-    assert!(
+    ensure!(
         line.contains("Stage 1/6: Reading manifest file"),
         "stage line should contain the stage label; line was: {line:?}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn accessible_reporter_indents_task_progress() {
+fn accessible_reporter_indents_task_progress(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = test_prefs();
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
     reporter.report_task_progress(1, 2, "cc -c src/main.c");
@@ -158,28 +212,33 @@ fn accessible_reporter_indents_task_progress() {
         .writer
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let line = strip_isolates(&String::from_utf8_lossy(&output));
-    let info_prefix = strip_isolates(&prefs.info_prefix().to_string());
-    assert!(
-        line.starts_with(TASK_INDENT),
-        "task line should be indented by two spaces; line was: {line:?}"
+    let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+    let info_prefix = normalize_fluent_isolates(&prefs.info_prefix());
+    ensure!(
+        line.starts_with(prefs.task_indent()),
+        "task line should be indented by the resolved task token; line was: {line:?}"
     );
-    assert!(
+    ensure!(
         !line.trim_start().starts_with(&info_prefix),
         "task line should not include info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn completion_line_includes_success_prefix() {
+fn completion_line_includes_success_prefix(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = test_prefs();
-    let line = strip_isolates(&format_completion_line(
+    let line = normalize_fluent_isolates(&format_completion_line(
         prefs,
         LocalizationKey::new(keys::STATUS_TOOL_MANIFEST),
     ));
-    let success_prefix = strip_isolates(&prefs.success_prefix().to_string());
-    assert!(
+    let success_prefix = normalize_fluent_isolates(&prefs.success_prefix());
+    ensure!(
         line.starts_with(&success_prefix),
         "completion line should start with success prefix; line was: {line:?}, prefix was: {success_prefix:?}"
     );
+    Ok(())
 }

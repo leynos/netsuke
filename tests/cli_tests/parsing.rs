@@ -1,12 +1,14 @@
 //! CLI parsing coverage.
 
 use anyhow::{Context, Result, ensure};
-use clap::Parser;
 use clap::error::ErrorKind;
-use netsuke::cli::{BuildArgs, Cli, Commands};
+use netsuke::cli::{BuildArgs, Commands};
+use netsuke::cli_localization;
 use netsuke::host_pattern::HostPattern;
+use netsuke::theme::ThemePreference;
 use rstest::rstest;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 struct CliCase {
     argv: Vec<&'static str>,
@@ -21,6 +23,7 @@ struct CliCase {
     block_host: Vec<&'static str>,
     default_deny: bool,
     progress: Option<bool>,
+    theme: Option<ThemePreference>,
     expected_cmd: Commands,
 }
 
@@ -39,6 +42,7 @@ impl Default for CliCase {
             block_host: Vec::new(),
             default_deny: false,
             progress: None,
+            theme: None,
             expected_cmd: Commands::Build(BuildArgs {
                 emit: None,
                 targets: Vec::new(),
@@ -68,6 +72,21 @@ impl Default for CliCase {
 #[case(CliCase {
     argv: vec!["netsuke", "--progress", "false"],
     progress: Some(false),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--theme", "auto"],
+    theme: Some(ThemePreference::Auto),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--theme", "ascii"],
+    theme: Some(ThemePreference::Ascii),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--theme", "unicode"],
+    theme: Some(ThemePreference::Unicode),
     ..CliCase::default()
 })]
 #[case(CliCase {
@@ -120,9 +139,10 @@ impl Default for CliCase {
     ..CliCase::default()
 })]
 fn parse_cli(#[case] case: CliCase) -> Result<()> {
-    let cli = Cli::try_parse_from(case.argv.clone())
-        .context("parse CLI arguments")?
-        .with_default_command();
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (parsed_cli, _) = netsuke::cli::parse_with_localizer_from(case.argv.clone(), &localizer)
+        .context("parse CLI arguments")?;
+    let cli = parsed_cli.with_default_command();
     ensure!(cli.file == case.file, "parsed file should match input");
     ensure!(
         cli.directory == case.directory,
@@ -177,6 +197,7 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         cli.progress == case.progress,
         "progress flag should match input",
     );
+    ensure!(cli.theme == case.theme, "theme flag should match input");
     let command = cli.command.context("command should be set")?;
     ensure!(
         command == case.expected_cmd,
@@ -197,8 +218,10 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
 #[case(vec!["netsuke", "--file", "alt.yml", "-C"], ErrorKind::InvalidValue)]
 #[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]
 #[case(vec!["netsuke", "--locale", "nope"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--theme", "neon"], ErrorKind::ValueValidation)]
 fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) -> Result<()> {
-    let err = Cli::try_parse_from(argv)
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let err = netsuke::cli::parse_with_localizer_from(argv, &localizer)
         .err()
         .context("parser should reject invalid arguments")?;
     ensure!(

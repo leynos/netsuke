@@ -56,7 +56,6 @@ use pipeline::PIPELINE_STAGE_TOTAL;
 pub use pipeline::{PipelineStage, report_pipeline_stage};
 pub use timing::VerboseTimingReporter;
 
-const TASK_INDENT: &str = "  ";
 fn stage_label(current: StageNumber, total: StageNumber, description: &str) -> String {
     localization::message(keys::STATUS_STAGE_LABEL)
         .with_arg("current", current.get().to_string())
@@ -167,7 +166,7 @@ impl<W: Write + Send> StatusReporter for AccessibleReporter<W> {
             .writer
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        drop(writeln!(w, "{TASK_INDENT}{message}"));
+        drop(writeln!(w, "{}{message}", self.prefs.task_indent()));
     }
 }
 

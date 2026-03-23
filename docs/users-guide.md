@@ -763,17 +763,29 @@ When progress is disabled, Netsuke suppresses stage and task progress output in
 both standard and accessible modes. If verbose mode is enabled at the same
 time, only the completion timing summary remains visible on successful runs.
 
-### Emoji and accessibility preferences
+### Theme and accessibility preferences
 
-Netsuke supports suppressing emoji glyphs in output for users who prefer
-ASCII-only output or use environments where emoji are not rendered correctly.
+Netsuke resolves a CLI theme through the same layered configuration model as
+its other user-facing preferences:
 
-Emoji are automatically suppressed when:
+- CLI flag: `--theme auto|unicode|ascii`
+- Environment variable: `NETSUKE_THEME=auto|unicode|ascii`
+- Configuration file: `theme = "auto" | "unicode" | "ascii"`
 
-- `NO_COLOR` is set (any value)
-- `NETSUKE_NO_EMOJI` is set (any value)
+Theme precedence is:
 
-Emoji suppression can be forced on explicitly:
+1. Explicit `theme`
+2. Legacy `no_emoji = true`
+3. `NETSUKE_NO_EMOJI` present
+4. `NO_COLOR` present
+5. Output mode default (`unicode` for standard output, `ascii` for
+   accessible output)
+
+`auto` keeps the mode-sensitive default. `unicode` forces Unicode symbols even
+in accessible mode, while `ascii` forces ASCII-safe symbols everywhere.
+
+Netsuke still supports the legacy no-emoji compatibility flag for users who
+already rely on it:
 
 - CLI flag: `--no-emoji true`
 - Environment variable: `NETSUKE_NO_EMOJI` (any value, including empty)
@@ -781,13 +793,16 @@ Emoji suppression can be forced on explicitly:
 
 Only `--no-emoji true` acts as a hard override; `--no-emoji false` and omitting
 the flag both defer to environment variable detection. `NETSUKE_NO_EMOJI` uses
-presence-based semantics — setting it to any value (including `"false"` or
-`"0"`) suppresses emoji.
+presence-based semantics, so setting it to any value (including `"false"` or
+`"0"`) still selects the ASCII theme unless an explicit `theme` overrides it.
 
-In all output modes, Netsuke uses semantic text prefixes (`Error:`, `Warning:`,
-and `Success:`) so that meaning is never conveyed solely by colour or symbol.
-When emoji is permitted, these prefixes include a leading glyph for quick
-visual scanning.
+In all output modes, Netsuke uses semantic text prefixes, so meaning is never
+conveyed solely by colour. The active theme swaps only the glyph set:
+
+- Unicode theme: `✖ Error:`, `⚠ Warning:`, `✔ Success:`, `ℹ Info:`,
+  `⏱ Timing:`
+- ASCII theme: `X Error:`, `! Warning:`, `+ Success:`, `i Info:`,
+  `T Timing:`
 
 ### Exit Codes
 

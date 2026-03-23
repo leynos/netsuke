@@ -351,26 +351,12 @@ status.tool.manifest = Manifest
 cli.flag.no_emoji.help = Suppress emoji glyphs in output.
 
 # Semantic prefixes for accessible output.
-semantic.prefix.error = { $emoji ->
-    [yes] ✖ Error:
-   *[no] Error:
-}
-semantic.prefix.warning = { $emoji ->
-    [yes] ⚠ Warning:
-   *[no] Warning:
-}
-semantic.prefix.success = { $emoji ->
-    [yes] ✔ Success:
-   *[no] Success:
-}
-semantic.prefix.info = { $emoji ->
-    [yes] ℹ Info:
-   *[no] Info:
-}
-semantic.prefix.timing = { $emoji ->
-    [yes] ⏱ Timing:
-   *[no] Timing:
-}
+semantic.prefix.error = Error:
+semantic.prefix.warning = Warning:
+semantic.prefix.success = Success:
+semantic.prefix.info = Info:
+semantic.prefix.timing = Timing:
+semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR
