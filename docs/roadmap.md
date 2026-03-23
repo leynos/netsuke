@@ -361,9 +361,11 @@ and test workflow intact. See
 - [ ] 4.2.1. Add Kani harnesses for manifest-to-IR safety checks. Requires
   4.1.1. See
   [formal-verification-methods-in-netsuke.md §Kani for the IR core](formal-verification-methods-in-netsuke.md#kani-for-the-ir-core).
-  - [ ] Prove duplicate-output rejection on bounded manifests.
+  - [ ] Prove duplicate-output rejection on bounded manifests (up to 10 nodes,
+    depth limit 20 edges).
   - [ ] Prove empty-rule, multiple-rule, and missing-rule error selection.
-  - [ ] Prove self-edge and small bounded multi-node cycle rejection.
+  - [ ] Prove self-edge and small bounded multi-node cycle rejection (same
+    limits).
   - [ ] Prove missing dependencies do not create false cycles.
 - [ ] 4.2.2. Add Kani harnesses for cycle canonicalization. Requires 4.2.1.
   See
@@ -374,7 +376,8 @@ and test workflow intact. See
     rule.
 - [ ] 4.2.3. Add Kani harnesses for command interpolation. Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Kani for command interpolation](formal-verification-methods-in-netsuke.md#kani-for-command-interpolation).
-  - [ ] Prove `$in` and `$out` rewrite only at valid token boundaries.
+  - [ ] Prove `$in` and `$out` rewrite only at valid token boundaries (bounded
+    to 256-character commands with at most 8 placeholders).
   - [ ] Prove backtick-delimited regions are preserved.
   - [ ] Prove unmatched backticks are rejected.
   - [ ] Prove successful results satisfy the current `shlex` guard.
@@ -384,7 +387,8 @@ and test workflow intact. See
 - [ ] 4.3.1. Add Proptest coverage for deterministic Ninja emission. Requires
   4.1.1. See the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
-  - [ ] Prove Ninja output is stable across equivalent insertion orders.
+  - [ ] Prove Ninja output is stable across equivalent insertion orders
+    (generated graphs bounded to 50 actions and 100 edges).
   - [ ] Prove `default` target ordering is stable.
   - [ ] Prove `path_key` is invariant for equivalent output sets.
 - [ ] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
@@ -402,17 +406,21 @@ and test workflow intact. See
 
 ### 4.4. Contract documentation and optional proof kernels
 
-- [ ] 4.4.1. Document the command placeholder contract. Requires 4.2.3. See
+- [ ] 4.4.1. Document the command placeholder contract in the README. Requires
+  4.2.3. See
   [formal-verification-methods-in-netsuke.md §Command placeholder contract](formal-verification-methods-in-netsuke.md#command-placeholder-contract).
+  - [ ] Add a "Security and command interpolation" section to the README.
   - [ ] State the supported placeholders explicitly.
   - [ ] State the current backtick-handling boundary explicitly.
   - [ ] State whether `shlex::split` is part of the semantic acceptance
     contract.
-- [ ] 4.4.2. Document which dependency kinds participate in cycle detection.
-  Requires 4.2.1. See
+- [ ] 4.4.2. Document which dependency kinds participate in cycle detection in
+  the user guide. Requires 4.2.1. See
   [formal-verification-methods-in-netsuke.md §Cycle-participation contract](formal-verification-methods-in-netsuke.md#cycle-participation-contract).
   - [ ] Decide whether order-only dependencies participate.
   - [ ] Decide whether implicit outputs participate.
+  - [ ] Document the chosen rule in the user guide's dependency and build-graph
+    semantics chapter.
   - [ ] Align implementation, tests, and documentation with the chosen rule.
 - [ ] 4.4.3. Evaluate a minimal Verus proof kernel for cycle canonicalization.
   Requires 4.2.2 and 4.1.3. See

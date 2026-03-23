@@ -49,9 +49,9 @@ The first Kani harnesses should cover these properties:
 - Duplicate outputs always fail with `DuplicateOutput`.
 - Empty rules, multiple rules, and missing named rules return the correct
   `IrGenError` variant.
-- Self-edges and bounded multi-node cycles always fail with
-  `CircularDependency`.
-- Acyclic bounded graphs are never rejected as cyclic.
+- Self-edges and bounded multi-node cycles (up to 10 nodes with depth limit
+  of 20 edges) always fail with `CircularDependency`.
+- Acyclic bounded graphs (same size limits) are never rejected as cyclic.
 - Missing dependencies are recorded without creating false cycles.
 
 `src/ir/cycle.rs` is the strongest narrow proof candidate in the current
@@ -66,7 +66,8 @@ load-bearing, and security-sensitive. `interpolate_command` replaces `$in` and
 `$out`, avoids rewriting inside backticks, and rejects commands when backticks
 are unmatched or the interpolated result fails the current `shlex` guard.[^8]
 
-The initial Kani properties should assert that:
+The initial Kani properties should assert that (bounded to command strings up
+to 256 characters with at most 8 placeholder occurrences):
 
 - Only whole-word `$in` and `$out` placeholders are rewritten.
 - Identifier-containing strings such as `$input` or `$output` are not
@@ -83,7 +84,8 @@ shape, and the implementation sorts actions, edges, and default targets when
 rendering the Ninja file.[^4][^6] That makes generated testing a natural fit
 for determinism checks.
 
-The first Proptest coverage should focus on:
+The first Proptest coverage should focus on (generated graphs bounded to 50
+actions and 100 edges):
 
 - stable Ninja output across `HashMap` insertion orders,
 - stable `default` target ordering,
@@ -145,10 +147,10 @@ The preferred first layout is intentionally lightweight:
 │   └── run-verus.sh
 ├── tools/
 │   ├── kani/
-│   │   └── VERSION
+│   │   └── VERSION        # Update when new stable releases ship
 │   └── verus/
-│       ├── VERSION
-│       └── SHA256SUMS
+│       ├── VERSION        # Update when new stable releases ship
+│       └── SHA256SUMS     # Update alongside VERSION
 ├── verus/
 │   ├── netsuke_proofs.rs
 │   └── cycle_canonicalization.rs
@@ -163,6 +165,28 @@ The preferred first layout is intentionally lightweight:
 This layout keeps Kani harnesses close to the internal helpers they exercise,
 which avoids widening the public API solely for proofs. Verus can remain
 outside Cargo until it proves its value.
+
+#### Tool version pinning and updates
+
+The `tools/*/VERSION` files define the exact tool versions used in local
+development and continuous integration. These pins serve several purposes:
+
+- They ensure reproducible verification results across developer machines.
+- They prevent silent drift between local proofs and the CI verification
+  environment.
+- They allow deliberate testing of tool updates in isolation before promotion.
+
+**Update policy:**
+
+- Update `VERSION` files when new stable releases of Kani or Verus ship, after
+  verifying that all existing harnesses and proofs remain valid under the new
+  version.
+- Update `SHA256SUMS` alongside `VERSION` to match the published release
+  artefacts.
+- Document any version-specific workarounds or compatibility notes in commit
+  messages when updating tool pins.
+- If CI and local development ever use different tool versions, treat that as a
+  bug requiring immediate correction.
 
 ### Makefile and local workflow
 
@@ -200,7 +224,9 @@ Three contracts should be documented before proofs become gating checks.
 
 The interpolation layer currently supports `$in` and `$out`, enforces
 identifier-style token boundaries, and suppresses substitution inside
-backticks.[^8] The project documentation should state whether:
+backticks.[^8] This contract should be documented in the README under a new
+"Security and command interpolation" section, as it is a user-facing guarantee
+that affects manifest authoring. The project documentation should state whether:
 
 - those are the only supported placeholders,
 - backtick suppression is the full contract or a temporary subset of shell
@@ -212,8 +238,10 @@ backticks.[^8] The project documentation should state whether:
 
 `BuildEdge` records explicit inputs, explicit outputs, implicit outputs, and
 order-only dependencies, but the current cycle detector walks `edge.inputs`
-only.[^5][^7] Before proofs are written, the intended scope of cycle detection
-should be recorded explicitly:
+only.[^5][^7] This contract should be documented in the user guide under the
+dependency and build-graph semantics chapter, as it defines the behaviour users
+observe when circular dependencies are detected. Before proofs are written, the
+intended scope of cycle detection should be recorded explicitly:
 
 - explicit inputs only,
 - explicit inputs plus order-only dependencies, or
@@ -221,11 +249,14 @@ should be recorded explicitly:
 
 ### Determinism contract
 
-The README promises a reproducible, fully static dependency graph, and the
-generator already sorts its output to support deterministic emission.[^4][^6]
-The formal-verification work should therefore define whether byte-for-byte
-stable Ninja output and stable action identifiers are public guarantees or
-current implementation details.
+The README (line 17) promises "a reproducible, fully static dependency graph",
+and the generator already sorts its output to support deterministic
+emission.[^4][^6] This is already a user-facing guarantee in the README, and
+the formal-verification work should strengthen that existing contract by
+defining whether byte-for-byte stable Ninja output and stable action
+identifiers are public guarantees or current implementation details. Any
+expanded contract should be documented in the README immediately following the
+existing reproducibility statement.
 
 ## Recommended delivery order
 
