@@ -1,5 +1,15 @@
 //! Tests for status stage modelling and index conversions.
 
+// rstest macro generates code that triggers `too_many_arguments` lint, but the
+// `#[expect]` attribute cannot suppress lints from macro expansions. Since this
+// lint is expected and cannot be suppressed at the function level, we must use
+// `#[allow]` at the module level.
+#![allow(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::too_many_arguments
+)]
+
 use super::*;
 use crate::cli_localization;
 use crate::localization::{self, LocalizerGuard};
@@ -149,8 +159,10 @@ fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
 
 #[rstest]
 fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
     running_stage6_reporter: IndicatifReporter,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     running_stage6_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&running_stage6_reporter);
     let task = task_progress_update(1, 2, "cc -c src/a.c");
@@ -165,14 +177,18 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
         .with_arg("label", stage_line)
         .with_arg("task_progress", &task)
         .to_string();
-    assert_eq!(
-        normalize_fluent_isolates(&stage6_message),
-        normalize_fluent_isolates(&expected)
+    ensure!(
+        normalize_fluent_isolates(&stage6_message) == normalize_fluent_isolates(&expected),
+        "stage 6 message should match expected format"
     );
+    Ok(())
 }
 
 #[rstest]
-fn accessible_reporter_formats_stage_with_info_prefix() {
+fn accessible_reporter_formats_stage_with_info_prefix(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = test_prefs();
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
     reporter.report_stage(
@@ -187,18 +203,22 @@ fn accessible_reporter_formats_stage_with_info_prefix() {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
     let info_prefix = normalize_fluent_isolates(&prefs.info_prefix());
-    assert!(
+    ensure!(
         line.starts_with(&info_prefix),
         "stage line should start with info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
     );
-    assert!(
+    ensure!(
         line.contains("Stage 1/6: Reading manifest file"),
         "stage line should contain the stage label; line was: {line:?}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn accessible_reporter_indents_task_progress() {
+fn accessible_reporter_indents_task_progress(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = test_prefs();
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
     reporter.report_task_progress(1, 2, "cc -c src/main.c");
@@ -209,26 +229,31 @@ fn accessible_reporter_indents_task_progress() {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let line = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
     let info_prefix = normalize_fluent_isolates(&prefs.info_prefix());
-    assert!(
+    ensure!(
         line.starts_with(prefs.task_indent()),
         "task line should be indented by the resolved task token; line was: {line:?}"
     );
-    assert!(
+    ensure!(
         !line.trim_start().starts_with(&info_prefix),
         "task line should not include info prefix; line was: {line:?}, prefix was: {info_prefix:?}"
     );
+    Ok(())
 }
 
 #[rstest]
-fn completion_line_includes_success_prefix() {
+fn completion_line_includes_success_prefix(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let prefs = test_prefs();
     let line = normalize_fluent_isolates(&format_completion_line(
         prefs,
         LocalizationKey::new(keys::STATUS_TOOL_MANIFEST),
     ));
     let success_prefix = normalize_fluent_isolates(&prefs.success_prefix());
-    assert!(
+    ensure!(
         line.starts_with(&success_prefix),
         "completion line should start with success prefix; line was: {line:?}, prefix was: {success_prefix:?}"
     );
+    Ok(())
 }
