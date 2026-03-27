@@ -1,0 +1,11 @@
+---
+source: src/status_tests.rs
+expression: rendered
+---
+i Info: Stage 1/6: Reading manifest file
+i Info: Stage 2/6: Parsing YAML document
+i Info: Stage 3/6: Expanding template directives
+i Info: Stage 4/6: Deserializing and rendering manifest values
+i Info: Stage 5/6: Building and validating dependency graph
+i Info: Stage 6/6: Synthesizing Ninja build plan
++ Success: Manifest complete.

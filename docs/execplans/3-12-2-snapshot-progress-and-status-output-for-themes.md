@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -120,18 +120,23 @@ than hunting through substring assertions.
 
 ## Progress
 
-- [ ] Researched existing test infrastructure, reporter API surfaces, and
+- [x] Researched existing test infrastructure, reporter API surfaces, and
       insta usage patterns.
-- [ ] Drafted this ExecPlan.
-- [ ] Stage A: Add insta snapshot tests for AccessibleReporter output.
-- [ ] Stage B: Add insta snapshot tests for timing summary rendering.
-- [ ] Stage C: Add insta snapshot tests for prefix and spacing accessors.
-- [ ] Stage D: Add BDD scenarios for full-output snapshot verification.
-- [ ] Stage E: Documentation, roadmap update, and final validation.
+- [x] Drafted this ExecPlan.
+- [x] Stage A: Add insta snapshot tests for AccessibleReporter output.
+- [x] Stage B: Add insta snapshot tests for timing summary rendering.
+- [x] Stage C: Add insta snapshot tests for prefix and spacing accessors.
+- [x] Stage D: Add BDD scenarios for full-output snapshot verification.
+- [x] Stage E: Documentation, roadmap update, and final validation.
 
 ## Surprises & discoveries
 
-(None yet.)
+- `rstest-bdd` passed quoted literal arguments (for example `"Info:"`) through
+  to the new alignment step verbatim, so the step needed to trim surrounding
+  quotes before comparing normalized stderr lines.
+- The `leta` language-server background `cargo check` held the shared target
+  directory lock during targeted test runs. Killing that background check was
+  necessary before the repo-local cargo test slices could proceed.
 
 ## Decision log
 
@@ -167,9 +172,33 @@ than hunting through substring assertions.
   producing separate, reviewable snapshot files for each theme. The pattern is
   established in `src/output_prefs_tests.rs`. Date/Author: 2026-03-23 / Codex.
 
+- Decision: normalize quoted literal arguments inside the new
+  `progress_output` BDD alignment step by trimming surrounding `"` characters
+  before comparison. Rationale: rstest-bdd passed the quoted fragments from the
+  feature file to the step function verbatim, and the assertion should match
+  the human-visible content rather than the Gherkin quoting syntax.
+  Date/Author: 2026-03-27 / Codex.
+
 ## Outcomes & retrospective
 
-(To be completed.)
+- Added snapshot coverage for:
+  - `AccessibleReporter` stage/completion output in Unicode and ASCII themes.
+  - `AccessibleReporter` task-progress output in Unicode and ASCII themes.
+  - `render_summary_lines()` timing summaries in Unicode and ASCII themes.
+  - `OutputPrefs` semantic prefixes and spacing accessors in Unicode and ASCII
+    themes.
+- Added two `progress_output.feature` scenarios plus a reusable alignment step
+  asserting that matching stderr lines begin with the expected theme prefix.
+- Updated the user guide, design document, and roadmap to record the new
+  regression guard coverage.
+- Focused validation passed for:
+  - `cargo test --lib status::tests`
+  - `cargo test --lib status::timing::tests`
+  - `cargo test --lib output_prefs::tests`
+  - `cargo test --test bdd_tests progress_output`
+- Final repository-wide validation (`make check-fmt`, `make lint`,
+  `make test`, `make fmt`, `make markdownlint`, `make nixie`) completed
+  successfully after implementation.
 
 ## Context and orientation
 

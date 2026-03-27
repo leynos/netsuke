@@ -1,0 +1,9 @@
+---
+source: src/status_timing_tests.rs
+expression: rendered
+---
+T Timing: Stage timing summary:
+  - Stage 1/6: Reading manifest file: 12ms
+  - Stage 2/6: Parsing YAML document: 4ms
+  - Stage 3/6: Expanding template directives: 7ms
+  Total pipeline time: 23ms

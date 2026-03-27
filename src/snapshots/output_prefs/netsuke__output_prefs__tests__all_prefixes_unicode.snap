@@ -1,0 +1,11 @@
+---
+source: src/output_prefs_tests.rs
+expression: rendered
+---
+error_prefix:   ✖ Error:
+warning_prefix: ⚠ Warning:
+success_prefix: ✔ Success:
+info_prefix:    ℹ Info:
+timing_prefix:  ⏱ Timing:
+task_indent:    "  "
+timing_indent:  "  "

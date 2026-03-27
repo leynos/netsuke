@@ -2090,7 +2090,10 @@ tokens to reporters through the `OutputPrefs` compatibility façade. This keeps
 reporter code focused on status semantics rather than glyph choice, preserves
 `no_emoji` as a legacy ASCII-forcing alias when no explicit theme is supplied,
 and gives later roadmap items a stable snapshot surface for validating ASCII
-and Unicode renderings without duplicating formatting rules.
+and Unicode renderings without duplicating formatting rules. Accessible
+reporter output, timing summaries, and the semantic prefix surface are guarded
+by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
+fail with reviewable diffs instead of drifting silently.
 
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.

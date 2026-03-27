@@ -305,9 +305,9 @@ library, and CLI ergonomics.
   - [x] Route reporter prefixes and spacing through resolved theme tokens.
   - [x] Add end-to-end theme coverage and documentation for ASCII/Unicode
         consistency.
-- [ ] 3.12.2. Snapshot progress and status output for themes.
-  - [ ] Cover unicode and ascii themes.
-  - [ ] Guard alignment and wrapping against regressions.
+- [x] 3.12.2. Snapshot progress and status output for themes.
+  - [x] Cover unicode and ascii themes.
+  - [x] Guard alignment and wrapping against regressions.
 - [ ] 3.12.3. Test output renderings across common terminals.
   - [ ] Test Windows Console, PowerShell, and xterm-compatible shells.
   - [ ] Document any conditional handling.

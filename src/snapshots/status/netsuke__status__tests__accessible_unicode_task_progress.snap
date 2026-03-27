@@ -1,0 +1,6 @@
+---
+source: src/status_tests.rs
+expression: rendered
+---
+  Task 1/2: cc -c src/a.c
+  Task 2/2: cc -c src/b.c

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::output_prefs;
+use insta::{Settings, assert_snapshot};
 use rstest::{fixture, rstest};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -11,6 +12,24 @@ use test_support::fluent::normalize_fluent_isolates;
 #[fixture]
 fn test_prefs() -> OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
+}
+
+fn snapshot_settings() -> Settings {
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/snapshots/status_timing"
+    ));
+    settings
+}
+
+fn theme_prefs(theme: crate::theme::ThemePreference) -> OutputPrefs {
+    output_prefs::resolve_from_theme_with(
+        Some(theme),
+        None,
+        crate::output_mode::OutputMode::Standard,
+        |_| None,
+    )
 }
 
 #[derive(Debug)]
@@ -264,4 +283,48 @@ fn verbose_timing_reporter_suppresses_progress_updates_after_complete(test_prefs
         final_counts.completions, 1,
         "completion should still be delegated"
     );
+}
+
+#[rstest]
+#[case::unicode(crate::theme::ThemePreference::Unicode, "timing_summary_unicode")]
+#[case::ascii(crate::theme::ThemePreference::Ascii, "timing_summary_ascii")]
+fn timing_summary_snapshot(
+    #[case] theme: crate::theme::ThemePreference,
+    #[case] snapshot_name: &str,
+) {
+    let total = StageNumber::new_unchecked(6);
+    let mut state = TimingState::default();
+    state.start_stage(
+        Duration::from_millis(0),
+        StageMarker {
+            current: StageNumber::new_unchecked(1),
+            total,
+        },
+        "Reading manifest file",
+    );
+    state.start_stage(
+        Duration::from_millis(12),
+        StageMarker {
+            current: StageNumber::new_unchecked(2),
+            total,
+        },
+        "Parsing YAML document",
+    );
+    state.start_stage(
+        Duration::from_millis(16),
+        StageMarker {
+            current: StageNumber::new_unchecked(3),
+            total,
+        },
+        "Expanding template directives",
+    );
+    state.finish(Duration::from_millis(23));
+
+    let rendered = normalize_fluent_isolates(
+        &render_summary_lines(theme_prefs(theme), state.completed_stages()).join("\n"),
+    );
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!(snapshot_name, rendered);
+    });
 }

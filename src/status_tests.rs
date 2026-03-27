@@ -18,6 +18,7 @@ use crate::cli_localization;
 use crate::localization::{self, LocalizerGuard};
 use crate::output_prefs;
 use anyhow::{Result, ensure};
+use insta::{Settings, assert_snapshot};
 use rstest::{fixture, rstest};
 use std::sync::{Arc, MutexGuard};
 use test_support::fluent::normalize_fluent_isolates;
@@ -25,6 +26,21 @@ use test_support::localizer::localizer_test_lock;
 
 fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
+}
+
+fn snapshot_settings() -> Settings {
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(env!("CARGO_MANIFEST_DIR"), "/src/snapshots/status"));
+    settings
+}
+
+fn theme_prefs(theme: crate::theme::ThemePreference) -> crate::output_prefs::OutputPrefs {
+    output_prefs::resolve_from_theme_with(
+        Some(theme),
+        None,
+        crate::output_mode::OutputMode::Standard,
+        |_| None,
+    )
 }
 
 fn stage6_message(reporter: &IndicatifReporter) -> String {
@@ -240,5 +256,72 @@ fn completion_line_includes_success_prefix(
         line.starts_with(&success_prefix),
         "completion line should start with success prefix; line was: {line:?}, prefix was: {success_prefix:?}"
     );
+    Ok(())
+}
+
+#[rstest]
+#[case::unicode(
+    crate::theme::ThemePreference::Unicode,
+    "accessible_unicode_stage_and_completion"
+)]
+#[case::ascii(
+    crate::theme::ThemePreference::Ascii,
+    "accessible_ascii_stage_and_completion"
+)]
+fn accessible_reporter_stage_and_completion_snapshot(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
+    #[case] theme: crate::theme::ThemePreference,
+    #[case] snapshot_name: &str,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
+    let prefs = theme_prefs(theme);
+    let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
+
+    for stage in PipelineStage::ALL {
+        reporter.report_stage(
+            stage.index(),
+            PIPELINE_STAGE_TOTAL,
+            &stage.description(None),
+        );
+    }
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+
+    let output = reporter
+        .writer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!(snapshot_name, rendered);
+    });
+    Ok(())
+}
+
+#[rstest]
+#[case::unicode(
+    crate::theme::ThemePreference::Unicode,
+    "accessible_unicode_task_progress"
+)]
+#[case::ascii(crate::theme::ThemePreference::Ascii, "accessible_ascii_task_progress")]
+fn accessible_reporter_task_progress_snapshot(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
+    #[case] theme: crate::theme::ThemePreference,
+    #[case] snapshot_name: &str,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
+    let reporter = AccessibleReporter::with_writer(theme_prefs(theme), Vec::new());
+    reporter.report_task_progress(1, 2, "cc -c src/a.c");
+    reporter.report_task_progress(2, 2, "cc -c src/b.c");
+
+    let output = reporter
+        .writer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!(snapshot_name, rendered);
+    });
     Ok(())
 }
