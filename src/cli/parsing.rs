@@ -3,6 +3,7 @@
 use ortho_config::{LanguageIdentifier, LocalizationArgs, Localizer};
 use std::str::FromStr;
 
+use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
 use crate::theme::ThemePreference;
@@ -123,9 +124,61 @@ pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePre
     })
 }
 
+/// Parse a colour policy supplied via CLI flags or config files.
+pub(super) fn parse_colour_policy(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<ColourPolicy, String> {
+    ColourPolicy::parse_raw(s).map_err(|_valid_options| {
+        let mut args = LocalizationArgs::default();
+        args.insert("value", s.to_owned().into());
+        super::validation_message(
+            localizer,
+            keys::CLI_COLOUR_POLICY_INVALID,
+            Some(&args),
+            &format!("invalid colour policy '{s}'"),
+        )
+    })
+}
+
+/// Parse a spinner mode supplied via CLI flags or config files.
+pub(super) fn parse_spinner_mode(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<SpinnerMode, String> {
+    SpinnerMode::parse_raw(s).map_err(|_valid_options| {
+        let mut args = LocalizationArgs::default();
+        args.insert("value", s.to_owned().into());
+        super::validation_message(
+            localizer,
+            keys::CLI_SPINNER_MODE_INVALID,
+            Some(&args),
+            &format!("invalid spinner mode '{s}'"),
+        )
+    })
+}
+
+/// Parse an output format supplied via CLI flags or config files.
+pub(super) fn parse_output_format(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<OutputFormat, String> {
+    OutputFormat::parse_raw(s).map_err(|_valid_options| {
+        let mut args = LocalizationArgs::default();
+        args.insert("value", s.to_owned().into());
+        super::validation_message(
+            localizer,
+            keys::CLI_OUTPUT_FORMAT_INVALID,
+            Some(&args),
+            &format!("invalid output format '{s}'"),
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
     use rstest::rstest;
 
     /// Mock localizer for testing `parse_theme` error messages.
@@ -167,5 +220,66 @@ mod tests {
             }
             Ok(theme) => panic!("Expected Err for input '{input}', got Ok({theme:?})"),
         }
+    }
+
+    #[rstest]
+    #[case::auto("auto", ColourPolicy::Auto)]
+    #[case::always("ALWAYS", ColourPolicy::Always)]
+    #[case::never(" never ", ColourPolicy::Never)]
+    fn parse_colour_policy_valid_inputs(#[case] input: &str, #[case] expected: ColourPolicy) {
+        let localizer = MockLocalizer;
+        let result = parse_colour_policy(&localizer, input);
+        match result {
+            Ok(policy) => assert_eq!(policy, expected),
+            Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
+        }
+    }
+
+    #[rstest]
+    #[case::invalid("loud")]
+    #[case::empty("")]
+    fn parse_colour_policy_invalid_inputs(#[case] input: &str) {
+        let localizer = MockLocalizer;
+        assert!(parse_colour_policy(&localizer, input).is_err());
+    }
+
+    #[rstest]
+    #[case::enabled("enabled", SpinnerMode::Enabled)]
+    #[case::disabled("DISABLED", SpinnerMode::Disabled)]
+    fn parse_spinner_mode_valid_inputs(#[case] input: &str, #[case] expected: SpinnerMode) {
+        let localizer = MockLocalizer;
+        let result = parse_spinner_mode(&localizer, input);
+        match result {
+            Ok(mode) => assert_eq!(mode, expected),
+            Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
+        }
+    }
+
+    #[rstest]
+    #[case::invalid("paused")]
+    #[case::empty("")]
+    fn parse_spinner_mode_invalid_inputs(#[case] input: &str) {
+        let localizer = MockLocalizer;
+        assert!(parse_spinner_mode(&localizer, input).is_err());
+    }
+
+    #[rstest]
+    #[case::human("human", OutputFormat::Human)]
+    #[case::json("JSON", OutputFormat::Json)]
+    fn parse_output_format_valid_inputs(#[case] input: &str, #[case] expected: OutputFormat) {
+        let localizer = MockLocalizer;
+        let result = parse_output_format(&localizer, input);
+        match result {
+            Ok(format) => assert_eq!(format, expected),
+            Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
+        }
+    }
+
+    #[rstest]
+    #[case::invalid("tap")]
+    #[case::empty("")]
+    fn parse_output_format_invalid_inputs(#[case] input: &str) {
+        let localizer = MockLocalizer;
+        assert!(parse_output_format(&localizer, input).is_err());
     }
 }

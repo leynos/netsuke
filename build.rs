@@ -51,10 +51,15 @@ type LocalizedParseFn = fn(
 
 type ResolveThemeFn = fn(
     Option<theme::ThemePreference>,
-    Option<bool>,
-    output_mode::OutputMode,
+    theme::ThemeContext,
     fn(&str) -> Option<String>,
 ) -> theme::ResolvedTheme;
+
+type ThemeContextCtor = fn(
+    Option<bool>,
+    Option<cli::config::ColourPolicy>,
+    output_mode::OutputMode,
+) -> theme::ThemeContext;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -113,9 +118,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
+    const _: fn(&cli::Cli) -> cli::config::CliConfig = cli::Cli::config;
+    const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_diag_json;
+    const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_progress;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
-    const _: fn(Option<bool>) -> output_mode::OutputMode = output_mode::resolve;
+    const _: fn(Option<bool>, Option<cli::config::ColourPolicy>) -> output_mode::OutputMode =
+        output_mode::resolve;
+    const _: fn(&cli::config::CliConfig) -> bool = cli::config::CliConfig::resolved_diag_json;
+    const _: fn(&cli::config::CliConfig) -> bool = cli::config::CliConfig::resolved_progress;
+    const _: ThemeContextCtor = theme::ThemeContext::new;
     const _: ResolveThemeFn = theme::resolve_theme;
 
     // Regenerate the manual page when the CLI or metadata changes.

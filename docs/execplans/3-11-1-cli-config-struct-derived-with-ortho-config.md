@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IMPLEMENTED
 
 ## Purpose / big picture
 
@@ -127,21 +127,31 @@ overridden by `NETSUKE_COLOUR_POLICY=auto`, and further overridden by
 
 ## Progress
 
-- [ ] (pending) Stage A: Upgrade `ortho_config` to v0.8.0 and verify
+- [x] (completed) Stage A: Upgrade `ortho_config` to v0.8.0 and verify
       existing tests pass.
-- [ ] (pending) Stage B: Define new configuration types (`ColourPolicy`,
+- [x] (completed) Stage B: Define new configuration types (`ColourPolicy`,
       `SpinnerMode`, `OutputFormat`) and add them to `Cli`.
-- [ ] (pending) Stage C: Extract `CliConfig` struct, wire OrthoConfig
-      merging, and update `config_merge.rs`.
-- [ ] (pending) Stage D: Add localization keys and Fluent translations.
-- [ ] (pending) Stage E: Add unit tests with `rstest`.
-- [ ] (pending) Stage F: Add BDD scenarios with `rstest-bdd` v0.5.0.
-- [ ] (pending) Stage G: Update documentation, design record, roadmap, and
+- [x] (completed) Stage C: Introduce `CliConfig`, wire runtime resolution, and
+      update `config_merge.rs`.
+- [x] (completed) Stage D: Add localization keys and Fluent translations.
+- [x] (completed) Stage E: Add unit tests with `rstest`.
+- [x] (completed) Stage F: Add BDD scenarios with `rstest-bdd` v0.5.0.
+- [x] (completed) Stage G: Update documentation, design record, roadmap, and
       run final validation.
 
 ## Surprises & discoveries
 
-(None yet — this section will be updated during implementation.)
+- `clap` + `OrthoConfig` + `serde(flatten)` on a nested `CliConfig` field did
+  not compose cleanly in this codebase: clap attempted to parse the entire
+  nested struct as a value instead of flattening it. The implementation kept
+  `Cli` as the merge root and parser surface, then exposed a shared `CliConfig`
+  view via `Cli::config()` and `From<&Cli> for CliConfig`.
+- The new typed aliases (`spinner_mode`, `output_format`) needed early
+  resolution before full merge completion so startup JSON diagnostics could
+  still honour `output_format = "json"` from files and environment variables.
+- `default_targets` runtime behaviour was easiest to validate in
+  `tests/runner_tests.rs` with a purpose-built fake Ninja script that records
+  argv, rather than by snapshotting generated Ninja manifests.
 
 ## Decision log
 
@@ -184,9 +194,23 @@ overridden by `NETSUKE_COLOUR_POLICY=auto`, and further overridden by
   CLI-specified targets, matching the existing vector-append merge semantics.
   Date/Author: 2026-03-23 / ExecPlan.
 
+- Decision: retain `Cli` as the concrete clap/OrthoConfig merge root and
+  expose `CliConfig` as a typed extracted view instead of a flattened runtime
+  field. Rationale: the attempted flattened-field extraction conflicted with
+  clap derive behaviour in this repository, while the extracted-view approach
+  still centralizes typed preference logic and preserves all existing CLI/file/
+  environment names. Date/Author: 2026-03-27 / Codex.
+
 ## Outcomes & retrospective
 
-(To be completed after implementation.)
+- Upgraded to `ortho_config 0.8.0`.
+- Added typed configuration enums and flags for `colour_policy`,
+  `spinner_mode`, `output_format`, and repeatable `default_targets`.
+- Added runtime alias resolution so `spinner_mode` supersedes `progress`,
+  `output_format` supersedes `diag_json`, and `colour_policy` participates in
+  `NO_COLOR`-driven mode/theme behaviour.
+- Added unit, integration, and BDD coverage for parsing, merge precedence,
+  default-target dispatch, and localized validation failures.
 
 ## Context and orientation
 

@@ -8,6 +8,7 @@
 use std::fmt;
 use std::str::FromStr;
 
+use crate::cli::config::ColourPolicy;
 use crate::output_mode::OutputMode;
 use serde::{Deserialize, Serialize};
 
@@ -156,6 +157,33 @@ pub struct ResolvedTheme {
     pub tokens: DesignTokens,
 }
 
+/// Runtime inputs that influence theme resolution beyond the explicit theme.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThemeContext {
+    /// Legacy no-emoji override.
+    pub no_emoji: Option<bool>,
+    /// Colour policy override for `NO_COLOR` handling.
+    pub colour_policy: Option<ColourPolicy>,
+    /// Resolved output mode.
+    pub mode: OutputMode,
+}
+
+impl ThemeContext {
+    /// Create a new theme-resolution context.
+    #[must_use]
+    pub const fn new(
+        no_emoji: Option<bool>,
+        colour_policy: Option<ColourPolicy>,
+        mode: OutputMode,
+    ) -> Self {
+        Self {
+            no_emoji,
+            colour_policy,
+            mode,
+        }
+    }
+}
+
 /// Unicode symbol tokens.
 const UNICODE_SYMBOLS: SymbolTokens = SymbolTokens {
     error: "✖",
@@ -194,6 +222,17 @@ const COLOURS: ColourTokens = ColourTokens {
 struct EnvSignals {
     no_emoji: bool,
     no_color: bool,
+}
+
+fn read_no_color_with_policy<F>(colour_policy: Option<ColourPolicy>, read_env: &F) -> bool
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match colour_policy {
+        Some(ColourPolicy::Always) => false,
+        Some(ColourPolicy::Never) => true,
+        Some(ColourPolicy::Auto) | None => read_env("NO_COLOR").is_some(),
+    }
 }
 
 /// Determine whether Unicode symbols should be used based on theme configuration.
@@ -242,13 +281,12 @@ const fn should_use_unicode(
 /// # Examples
 ///
 /// ```
-/// use netsuke::theme::{ThemePreference, resolve_theme};
+/// use netsuke::theme::{ThemeContext, ThemePreference, resolve_theme};
 /// use netsuke::output_mode::OutputMode;
 ///
 /// let theme = resolve_theme(
 ///     Some(ThemePreference::Ascii),
-///     None,
-///     OutputMode::Standard,
+///     ThemeContext::new(None, None, OutputMode::Standard),
 ///     |_| None
 /// );
 /// assert_eq!(theme.tokens.symbols.success, "+");
@@ -256,8 +294,7 @@ const fn should_use_unicode(
 #[must_use]
 pub fn resolve_theme<F>(
     theme: Option<ThemePreference>,
-    no_emoji: Option<bool>,
-    mode: OutputMode,
+    context: ThemeContext,
     read_env: F,
 ) -> ResolvedTheme
 where
@@ -265,9 +302,9 @@ where
 {
     let env = EnvSignals {
         no_emoji: read_env("NETSUKE_NO_EMOJI").is_some(),
-        no_color: read_env("NO_COLOR").is_some(),
+        no_color: read_no_color_with_policy(context.colour_policy, &read_env),
     };
-    let use_unicode = should_use_unicode(theme, no_emoji, env, mode);
+    let use_unicode = should_use_unicode(theme, context.no_emoji, env, context.mode);
 
     let symbols = if use_unicode {
         UNICODE_SYMBOLS

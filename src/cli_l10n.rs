@@ -135,7 +135,11 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
             "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
             "theme" => Some(keys::CLI_FLAG_THEME_HELP),
+            "colour_policy" => Some(keys::CLI_FLAG_COLOUR_POLICY_HELP),
+            "spinner_mode" => Some(keys::CLI_FLAG_SPINNER_MODE_HELP),
             "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
+            "output_format" => Some(keys::CLI_FLAG_OUTPUT_FORMAT_HELP),
+            "default_targets" => Some(keys::CLI_FLAG_DEFAULT_TARGETS_HELP),
             _ => None,
         },
         Some("build") => match arg_id {

@@ -58,7 +58,7 @@ fn set_simulated_no_color(world: &TestWorld, value: EnvVarValue) -> Result<()> {
 )]
 #[when("the output mode is resolved with no explicit setting")]
 fn resolve_no_explicit(world: &TestWorld) -> Result<()> {
-    let mode = output_mode::resolve_with(None, simulated_env(world));
+    let mode = output_mode::resolve_with(None, None, simulated_env(world));
     world.output_mode.set(mode);
     Ok(())
 }
@@ -69,7 +69,7 @@ fn resolve_no_explicit(world: &TestWorld) -> Result<()> {
 )]
 #[when("the output mode is resolved with accessible set to true")]
 fn resolve_accessible_true(world: &TestWorld) -> Result<()> {
-    let mode = output_mode::resolve_with(Some(true), simulated_env(world));
+    let mode = output_mode::resolve_with(Some(true), None, simulated_env(world));
     world.output_mode.set(mode);
     Ok(())
 }
@@ -80,7 +80,7 @@ fn resolve_accessible_true(world: &TestWorld) -> Result<()> {
 )]
 #[when("the output mode is resolved with accessible set to false")]
 fn resolve_accessible_false(world: &TestWorld) -> Result<()> {
-    let mode = output_mode::resolve_with(Some(false), simulated_env(world));
+    let mode = output_mode::resolve_with(Some(false), None, simulated_env(world));
     world.output_mode.set(mode);
     Ok(())
 }

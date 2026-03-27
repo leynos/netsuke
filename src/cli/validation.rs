@@ -6,7 +6,10 @@ use clap::builder::{TypedValueParser, ValueParser};
 use clap::error::ErrorKind;
 use ortho_config::Localizer;
 
-use super::parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme, parse_theme};
+use super::parsing::{
+    parse_colour_policy, parse_host_pattern, parse_jobs, parse_locale, parse_output_format,
+    parse_scheme, parse_spinner_mode, parse_theme,
+};
 
 /// A value parser that delegates to a localised parsing function.
 #[derive(Clone)]
@@ -53,6 +56,11 @@ pub(super) fn configure_validation_parsers(
     let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
     let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
     let theme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_theme);
+    let colour_policy_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), parse_colour_policy);
+    let spinner_mode_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_spinner_mode);
+    let output_format_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), parse_output_format);
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))
@@ -71,6 +79,15 @@ pub(super) fn configure_validation_parsers(
     });
     command = command.mut_arg("theme", |arg| {
         arg.value_parser(ValueParser::new(theme_parser))
+    });
+    command = command.mut_arg("colour_policy", |arg| {
+        arg.value_parser(ValueParser::new(colour_policy_parser))
+    });
+    command = command.mut_arg("spinner_mode", |arg| {
+        arg.value_parser(ValueParser::new(spinner_mode_parser))
+    });
+    command = command.mut_arg("output_format", |arg| {
+        arg.value_parser(ValueParser::new(output_format_parser))
     });
     command
 }

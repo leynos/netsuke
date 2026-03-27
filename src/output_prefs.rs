@@ -10,7 +10,7 @@ use std::env;
 
 use crate::localization::{self, keys};
 use crate::output_mode::OutputMode;
-use crate::theme::{self, ResolvedTheme, ThemePreference};
+use crate::theme::{self, ResolvedTheme, ThemeContext, ThemePreference};
 
 /// Resolved output formatting preferences.
 ///
@@ -182,32 +182,26 @@ impl OutputPrefs {
 ///
 /// let prefs = resolve_from_theme(
 ///     Some(ThemePreference::Ascii),
-///     None,
-///     OutputMode::Standard
+///     ThemeContext::new(None, None, OutputMode::Standard)
 /// );
 /// assert!(!prefs.emoji_allowed());
 /// ```
 #[must_use]
-pub fn resolve_from_theme(
-    theme: Option<ThemePreference>,
-    no_emoji: Option<bool>,
-    mode: OutputMode,
-) -> OutputPrefs {
-    resolve_from_theme_with(theme, no_emoji, mode, |key| env::var(key).ok())
+pub fn resolve_from_theme(theme: Option<ThemePreference>, context: ThemeContext) -> OutputPrefs {
+    resolve_from_theme_with(theme, context, |key| env::var(key).ok())
 }
 
 /// Testable variant of `resolve_from_theme` with custom environment lookup.
 #[must_use]
 pub fn resolve_from_theme_with<F>(
     theme: Option<ThemePreference>,
-    no_emoji: Option<bool>,
-    mode: OutputMode,
+    context: ThemeContext,
     read_env: F,
 ) -> OutputPrefs
 where
     F: Fn(&str) -> Option<String>,
 {
-    let resolved_theme = theme::resolve_theme(theme, no_emoji, mode, read_env);
+    let resolved_theme = theme::resolve_theme(theme, context, read_env);
     OutputPrefs::from_theme(resolved_theme)
 }
 
@@ -274,7 +268,11 @@ pub fn resolve_with<F>(no_emoji: Option<bool>, read_env: F) -> OutputPrefs
 where
     F: Fn(&str) -> Option<String>,
 {
-    let resolved_theme = theme::resolve_theme(None, no_emoji, OutputMode::Standard, read_env);
+    let resolved_theme = theme::resolve_theme(
+        None,
+        ThemeContext::new(no_emoji, None, OutputMode::Standard),
+        read_env,
+    );
     OutputPrefs::from_theme(resolved_theme)
 }
 
