@@ -3,60 +3,56 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use anyhow::{Context, Result, ensure};
+use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
 use rstest_bdd_macros::then;
 
 fn normalised_csv(items: &[String]) -> String {
     items.join(", ")
 }
 
-#[then("the colour policy is {expected:string}")]
-fn colour_policy_is(world: &TestWorld, expected: String) -> Result<()> {
+fn assert_optional_cli_field<T>(
+    world: &TestWorld,
+    field_name: &str,
+    expected: T,
+    extract: impl FnOnce(&netsuke::cli::Cli) -> Option<T>,
+) -> Result<()>
+where
+    T: std::fmt::Display + PartialEq + Copy,
+{
     let actual = world
         .cli
-        .with_ref(|cli| cli.colour_policy.map(|value| value.to_string()))
+        .with_ref(extract)
         .flatten()
-        .context("CLI colour policy should be present")?;
+        .context(format!("CLI {field_name} should be present"))?;
     ensure!(
         actual == expected,
-        "expected colour policy {expected}, got {actual}"
+        "expected {field_name} {expected}, got {actual}"
     );
     Ok(())
+}
+
+#[then("the colour policy is {expected:string}")]
+fn colour_policy_is(world: &TestWorld, expected: ColourPolicy) -> Result<()> {
+    assert_optional_cli_field(world, "colour policy", expected, |cli| cli.colour_policy)
 }
 
 #[then("the spinner mode is {expected:string}")]
-fn spinner_mode_is(world: &TestWorld, expected: String) -> Result<()> {
-    let actual = world
-        .cli
-        .with_ref(|cli| cli.spinner_mode.map(|value| value.to_string()))
-        .flatten()
-        .context("CLI spinner mode should be present")?;
-    ensure!(
-        actual == expected,
-        "expected spinner mode {expected}, got {actual}"
-    );
-    Ok(())
+fn spinner_mode_is(world: &TestWorld, expected: SpinnerMode) -> Result<()> {
+    assert_optional_cli_field(world, "spinner mode", expected, |cli| cli.spinner_mode)
 }
 
 #[then("the output format is {expected:string}")]
-fn output_format_is(world: &TestWorld, expected: String) -> Result<()> {
-    let actual = world
-        .cli
-        .with_ref(|cli| cli.output_format.map(|value| value.to_string()))
-        .flatten()
-        .context("CLI output format should be present")?;
-    ensure!(
-        actual == expected,
-        "expected output format {expected}, got {actual}"
-    );
-    Ok(())
+fn output_format_is(world: &TestWorld, expected: OutputFormat) -> Result<()> {
+    assert_optional_cli_field(world, "output format", expected, |cli| cli.output_format)
 }
 
 #[then("the default targets are {expected:string}")]
 fn default_targets_are(world: &TestWorld, expected: String) -> Result<()> {
     let actual = world
         .cli
-        .with_ref(|cli| normalised_csv(&cli.default_targets))
-        .context("CLI should be present")?;
+        .with_ref(|cli| Some(normalised_csv(&cli.default_targets)))
+        .flatten()
+        .context("CLI default targets should be present")?;
     ensure!(
         actual == expected,
         "expected default targets {expected}, got {actual}"

@@ -60,7 +60,7 @@ impl SystemLocale for SysLocale {
 ///
 /// assert_eq!(normalize_locale_tag("en_US.UTF-8"), Some("en-US".to_string()));
 /// assert_eq!(normalize_locale_tag("es-ES"), Some("es-ES".to_string()));
-/// assert_eq!(normalize_locale_tag("invalid"), None);
+/// assert_eq!(normalize_locale_tag("en-@latin"), None);
 /// ```
 #[must_use]
 pub fn normalize_locale_tag(raw: &str) -> Option<String> {

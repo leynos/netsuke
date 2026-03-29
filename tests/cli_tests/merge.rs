@@ -144,45 +144,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     assert_precedence_and_append_invariants(&merged)
 }
 
-#[rstest]
-fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_dir = tempdir().context("create temporary config directory")?;
-    let config_path = temp_dir.path().join("netsuke.toml");
-    let config = r#"
-file = "Configfile"
-jobs = 2
-fetch_allow_scheme = ["https"]
-verbose = true
-fetch_default_deny = true
-locale = "es-ES"
-progress = false
-diag_json = true
-theme = "ascii"
-colour_policy = "never"
-spinner_mode = "disabled"
-output_format = "json"
-default_targets = ["hello"]
-"#;
-    fs::write(&config_path, config).context("write netsuke.toml")?;
-
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
-    let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
-    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
-    let _colour_policy_guard = EnvVarGuard::set("NETSUKE_COLOUR_POLICY", OsStr::new("always"));
-    let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for merge")?;
-    ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
-        "pre-merge diagnostic mode should honour config diag_json",
-    );
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?
-        .with_default_command();
-
+fn assert_config_skips_empty_cli_layer_invariants(merged: &Cli) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "config file should override the default manifest path",
@@ -239,8 +201,48 @@ default_targets = ["hello"]
         !merged.resolved_progress(),
         "config spinner_mode should resolve to disabled progress",
     );
-
     Ok(())
+}
+
+#[rstest]
+fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    let config = r#"
+file = "Configfile"
+jobs = 2
+fetch_allow_scheme = ["https"]
+verbose = true
+fetch_default_deny = true
+locale = "es-ES"
+progress = false
+diag_json = true
+theme = "ascii"
+colour_policy = "never"
+spinner_mode = "disabled"
+output_format = "json"
+default_targets = ["hello"]
+"#;
+    fs::write(&config_path, config).context("write netsuke.toml")?;
+
+    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
+    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
+    let _colour_policy_guard = EnvVarGuard::set("NETSUKE_COLOUR_POLICY", OsStr::new("always"));
+    let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI args for merge")?;
+    ensure!(
+        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
+        "pre-merge diagnostic mode should honour config diag_json",
+    );
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge CLI and configuration layers")?
+        .with_default_command();
+    assert_config_skips_empty_cli_layer_invariants(&merged)
 }
 
 #[rstest]

@@ -12,6 +12,28 @@ use std::str::FromStr;
 
 use crate::theme::ThemePreference;
 
+/// Structured parse error for CLI configuration enums.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseConfigEnumError {
+    /// The original raw value that failed to parse.
+    pub raw: Box<str>,
+    /// Canonical valid option strings for the enum.
+    pub valid_options: &'static [&'static str],
+}
+
+impl fmt::Display for ParseConfigEnumError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid value '{}'. Valid options: {}",
+            self.raw,
+            self.valid_options.join(", ")
+        )
+    }
+}
+
+impl std::error::Error for ParseConfigEnumError {}
+
 /// Colour output policy for human-readable CLI output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -56,11 +78,13 @@ impl fmt::Display for ColourPolicy {
 }
 
 impl FromStr for ColourPolicy {
-    type Err = String;
+    type Err = ParseConfigEnumError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_raw(s)
-            .map_err(|valid| format!("invalid value '{s}'. Valid options: {}", valid.join(", ")))
+        Self::parse_raw(s).map_err(|valid_options| ParseConfigEnumError {
+            raw: s.into(),
+            valid_options,
+        })
     }
 }
 
@@ -104,11 +128,13 @@ impl fmt::Display for SpinnerMode {
 }
 
 impl FromStr for SpinnerMode {
-    type Err = String;
+    type Err = ParseConfigEnumError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_raw(s)
-            .map_err(|valid| format!("invalid value '{s}'. Valid options: {}", valid.join(", ")))
+        Self::parse_raw(s).map_err(|valid_options| ParseConfigEnumError {
+            raw: s.into(),
+            valid_options,
+        })
     }
 }
 
@@ -158,11 +184,13 @@ impl fmt::Display for OutputFormat {
 }
 
 impl FromStr for OutputFormat {
-    type Err = String;
+    type Err = ParseConfigEnumError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_raw(s)
-            .map_err(|valid| format!("invalid value '{s}'. Valid options: {}", valid.join(", ")))
+        Self::parse_raw(s).map_err(|valid_options| ParseConfigEnumError {
+            raw: s.into(),
+            valid_options,
+        })
     }
 }
 
@@ -251,58 +279,53 @@ mod tests {
     #[rstest]
     #[case::colour_auto(
         ColourPolicy::parse_raw("auto").map(|value| value.to_string()),
-        String::from("auto")
+        "auto"
     )]
     #[case::colour_always(
         ColourPolicy::parse_raw("always").map(|value| value.to_string()),
-        String::from("always")
+        "always"
     )]
     #[case::spinner_enabled(
         SpinnerMode::parse_raw("enabled").map(|value| value.to_string()),
-        String::from("enabled")
+        "enabled"
     )]
     #[case::spinner_disabled(
         SpinnerMode::parse_raw("disabled").map(|value| value.to_string()),
-        String::from("disabled")
+        "disabled"
     )]
     #[case::output_human(
         OutputFormat::parse_raw("human").map(|value| value.to_string()),
-        String::from("human")
+        "human"
     )]
     #[case::output_json(
         OutputFormat::parse_raw("json").map(|value| value.to_string()),
-        String::from("json")
+        "json"
     )]
     fn config_enums_round_trip(
         #[case] parsed: Result<String, &'static [&'static str]>,
-        #[case] expected: String,
+        #[case] expected: &'static str,
     ) {
         assert_eq!(parsed.expect("enum value should parse"), expected);
     }
 
     #[rstest]
     #[case::colour(
-        "loud",
         ColourPolicy::from_str("loud").expect_err("invalid colour policy should fail"),
-        "auto, always, never"
+        &["auto", "always", "never"]
     )]
     #[case::spinner(
-        "paused",
         SpinnerMode::from_str("paused").expect_err("invalid spinner mode should fail"),
-        "enabled, disabled"
+        &["enabled", "disabled"]
     )]
     #[case::output(
-        "tap",
         OutputFormat::from_str("tap").expect_err("invalid output format should fail"),
-        "human, json"
+        &["human", "json"]
     )]
     fn config_enums_reject_invalid_values(
-        #[case] raw: &str,
-        #[case] error: String,
-        #[case] options: &str,
+        #[case] error: ParseConfigEnumError,
+        #[case] expected_options: &'static [&'static str],
     ) {
-        assert!(error.contains(raw));
-        assert!(error.contains(options));
+        assert_eq!(error.valid_options, expected_options);
     }
 
     #[test]

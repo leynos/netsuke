@@ -178,6 +178,7 @@ impl OutputPrefs {
 /// ```
 /// use netsuke::output_prefs::resolve_from_theme;
 /// use netsuke::theme::ThemePreference;
+/// use netsuke::theme::ThemeContext;
 /// use netsuke::output_mode::OutputMode;
 ///
 /// let prefs = resolve_from_theme(
@@ -224,12 +225,12 @@ where
 /// # Examples
 ///
 /// ```
-/// use netsuke::output_prefs::{OutputPrefs, resolve};
+/// use netsuke::output_prefs::{OutputPrefs, resolve_with};
 ///
 /// // Explicit true forces emoji off.
-/// assert!(!resolve(Some(true)).emoji_allowed());
+/// assert!(!resolve_with(Some(true), |_| None).emoji_allowed());
 /// // Some(false) falls through to environment / default.
-/// assert!(resolve(Some(false)).emoji_allowed());
+/// assert!(resolve_with(Some(false), |_| None).emoji_allowed());
 /// ```
 #[must_use]
 pub fn resolve(no_emoji: Option<bool>) -> OutputPrefs {

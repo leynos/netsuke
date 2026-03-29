@@ -106,10 +106,9 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
     Ok(destination)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Exercise CLI localization, config merge, and host pattern symbols so the
-    // shared modules remain linked when the build script is compiled without
-    // tests.
+/// Anchors all shared-module symbols so they remain linked when the build script is compiled
+/// without tests.
+const fn assert_symbols_linked() {
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
@@ -129,8 +128,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const _: fn(&cli::config::CliConfig) -> bool = cli::config::CliConfig::resolved_progress;
     const _: ThemeContextCtor = theme::ThemeContext::new;
     const _: ResolveThemeFn = theme::resolve_theme;
+}
 
-    // Regenerate the manual page when the CLI or metadata changes.
+/// Emits Cargo rerun directives for all inputs that affect the build output.
+fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/mod.rs");
     println!("cargo:rerun-if-changed=src/cli/parsing.rs");
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
@@ -144,7 +145,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
     println!("cargo:rerun-if-changed=locales/en-US/messages.ftl");
     println!("cargo:rerun-if-changed=locales/es-ES/messages.ftl");
+}
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    assert_symbols_linked();
+    emit_rerun_directives();
     build_l10n_audit::audit_localization_keys()?;
 
     // Packagers expect man pages under target/generated-man/<target>/<profile>.
