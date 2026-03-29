@@ -240,6 +240,55 @@ fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn run_build_uses_cli_default_targets_when_no_targets_are_requested() -> Result<()> {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let ninja_dir = tempfile::tempdir().context("create fake ninja directory")?;
+    let args_log = ninja_dir.path().join("ninja-args.log");
+    let ninja_path = ninja_dir.path().join("ninja");
+    fs::write(
+        &ninja_path,
+        format!(
+            "#!/bin/sh\nprintf '%s\n' \"$@\" > \"{}\"\nexit 0\n",
+            args_log.display()
+        ),
+    )
+    .with_context(|| format!("write fake ninja script {}", ninja_path.display()))?;
+    let mut permissions = fs::metadata(&ninja_path)
+        .with_context(|| format!("read fake ninja metadata {}", ninja_path.display()))?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&ninja_path, permissions)
+        .with_context(|| format!("chmod fake ninja {}", ninja_path.display()))?;
+
+    let env = SystemEnv::new();
+    let _guard = override_ninja_env(&env, ninja_path.as_path());
+    let (temp, manifest_path) = create_test_manifest()?;
+    let cli = Cli {
+        file: manifest_path,
+        directory: Some(temp.path().to_path_buf()),
+        default_targets: vec![String::from("hello")],
+        command: Some(Commands::Build(BuildArgs {
+            emit: None,
+            targets: Vec::new(),
+        })),
+        ..Cli::default()
+    };
+
+    run(&cli, output_prefs::resolve(None)).context("run build with cli default targets")?;
+
+    let logged_args = fs::read_to_string(&args_log)
+        .with_context(|| format!("read fake ninja args log {}", args_log.display()))?;
+    ensure!(
+        logged_args.lines().any(|line| line == "hello"),
+        "expected fake ninja invocation to include default target 'hello', got: {logged_args}"
+    );
+    Ok(())
+}
+
 #[test]
 fn run_manifest_subcommand_writes_file() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;

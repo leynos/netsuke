@@ -18,6 +18,10 @@ cli.flag.accessible.help = Force accessible output mode on or off.
 cli.flag.progress.help = Force standard stage and task progress summaries on or off.
 cli.flag.diag_json.help = Emit machine-readable diagnostics as JSON on stderr.
 cli.flag.theme.help = CLI theme preset (auto, unicode, ascii).
+cli.flag.colour_policy.help = Colour output policy (auto, always, never).
+cli.flag.spinner_mode.help = Progress spinner display mode (enabled, disabled).
+cli.flag.output_format.help = Diagnostic output format (human, json).
+cli.flag.default_targets.help = Default build targets when none are specified.
 
 # Subcommand descriptions.
 cli.subcommand.build.about = Build targets defined in the manifest (default).
@@ -45,6 +49,9 @@ cli.validation.scheme.invalid = Invalid scheme '{ $scheme }'.
 cli.validation.locale.empty = Locale must not be empty.
 cli.validation.locale.invalid = Invalid locale '{ $locale }'.
 cli.validation.theme.invalid = Invalid theme '{ $theme }'. Valid options: auto, unicode, ascii.
+cli.validation.colour_policy.invalid = Invalid colour policy '{ $value }'. Valid options: auto, always, never.
+cli.validation.spinner_mode.invalid = Invalid spinner mode '{ $value }'. Valid options: enabled, disabled.
+cli.validation.output_format.invalid = Invalid output format '{ $value }'. Valid options: human, json.
 cli.validation.config.expected_object = Expected parsed CLI values to serialize to an object, got { $value }.
 
 # Clap error messages.

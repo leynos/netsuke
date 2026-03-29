@@ -11,9 +11,10 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::cli::config::{CliConfig, ColourPolicy, OutputFormat, SpinnerMode};
 use crate::cli_l10n::localize_command;
 use crate::host_pattern::HostPattern;
-use crate::theme::ThemePreference;
+pub mod config;
 mod config_merge;
 mod parsing;
 mod validation;
@@ -58,15 +59,6 @@ pub struct Cli {
     #[arg(short, long, value_name = "N")]
     pub jobs: Option<usize>,
 
-    /// Enable verbose diagnostic logging and completion timing summaries.
-    #[arg(short, long)]
-    #[ortho_config(default = false)]
-    pub verbose: bool,
-
-    /// Locale tag for CLI copy (for example: en-US, es-ES).
-    #[arg(long, value_name = "LOCALE")]
-    pub locale: Option<String>,
-
     /// Additional URL schemes allowed for the `fetch` helper.
     #[arg(long = "fetch-allow-scheme", value_name = "SCHEME")]
     #[ortho_config(merge_strategy = "append")]
@@ -91,6 +83,15 @@ pub struct Cli {
     #[ortho_config(default = false)]
     pub fetch_default_deny: bool,
 
+    /// Enable verbose diagnostic logging and completion timing summaries.
+    #[arg(short, long)]
+    #[ortho_config(default = false)]
+    pub verbose: bool,
+
+    /// Locale tag for CLI copy (for example: en-US, es-ES).
+    #[arg(long, value_name = "LOCALE")]
+    pub locale: Option<String>,
+
     /// Force accessible output mode on or off (overrides auto-detection).
     #[arg(long)]
     pub accessible: Option<bool>,
@@ -101,18 +102,35 @@ pub struct Cli {
 
     /// CLI theme preset (auto, unicode, ascii).
     #[arg(long, value_name = "THEME")]
-    pub theme: Option<ThemePreference>,
+    pub theme: Option<crate::theme::ThemePreference>,
 
-    /// Emit machine-readable diagnostics in JSON on stderr.
-    #[arg(long)]
-    #[ortho_config(default = false)]
-    pub diag_json: bool,
+    /// Colour output policy (auto, always, never).
+    #[arg(long, value_name = "POLICY")]
+    pub colour_policy: Option<ColourPolicy>,
 
     /// Force standard progress summaries on or off.
     ///
     /// When omitted, Netsuke enables progress summaries in standard mode.
     #[arg(long)]
     pub progress: Option<bool>,
+
+    /// Spinner display mode (enabled, disabled).
+    #[arg(long, value_name = "MODE")]
+    pub spinner_mode: Option<SpinnerMode>,
+
+    /// Emit machine-readable diagnostics in JSON on stderr.
+    #[arg(long)]
+    #[ortho_config(default = false)]
+    pub diag_json: bool,
+
+    /// Diagnostic output format (human, json).
+    #[arg(long, value_name = "FORMAT")]
+    pub output_format: Option<OutputFormat>,
+
+    /// Default build targets used when none are specified on the CLI.
+    #[arg(long = "default-target", value_name = "TARGET")]
+    #[ortho_config(merge_strategy = "append")]
+    pub default_targets: Vec<String>,
 
     /// Optional subcommand to execute; defaults to `build` when omitted.
     ///
@@ -150,13 +168,55 @@ impl Default for Cli {
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
             accessible: None,
-            progress: None,
             no_emoji: None,
             theme: None,
+            colour_policy: None,
+            progress: None,
+            spinner_mode: None,
             diag_json: false,
+            output_format: None,
+            default_targets: Vec::new(),
             command: None,
         }
         .with_default_command()
+    }
+}
+
+impl From<&Cli> for CliConfig {
+    fn from(cli: &Cli) -> Self {
+        Self {
+            verbose: cli.verbose,
+            locale: cli.locale.clone(),
+            accessible: cli.accessible,
+            no_emoji: cli.no_emoji,
+            theme: cli.theme,
+            colour_policy: cli.colour_policy,
+            progress: cli.progress,
+            spinner_mode: cli.spinner_mode,
+            diag_json: cli.diag_json,
+            output_format: cli.output_format,
+            default_targets: cli.default_targets.clone(),
+        }
+    }
+}
+
+impl Cli {
+    /// Return the extracted preference-oriented configuration view.
+    #[must_use]
+    pub fn config(&self) -> CliConfig {
+        CliConfig::from(self)
+    }
+
+    /// Resolve whether JSON diagnostics should be active after merge.
+    #[must_use]
+    pub fn resolved_diag_json(&self) -> bool {
+        self.config().resolved_diag_json()
+    }
+
+    /// Resolve whether progress reporting should be active after merge.
+    #[must_use]
+    pub fn resolved_progress(&self) -> bool {
+        self.config().resolved_progress()
     }
 }
 

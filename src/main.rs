@@ -7,7 +7,7 @@ use clap::error::ErrorKind;
 use miette::Report;
 use netsuke::{
     cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
-    output_prefs, runner,
+    output_prefs, runner, theme::ThemeContext,
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
@@ -58,11 +58,13 @@ fn run_with_args(
         Ok(merged) => merged,
         Err(code) => return code,
     };
-    let runtime_mode = DiagMode::from_json_enabled(merged_cli.diag_json);
+    let runtime_mode = DiagMode::from_json_enabled(merged_cli.resolved_diag_json());
     configure_runtime(&merged_cli, system_locale, runtime_mode);
-    let output_mode = output_mode::resolve(merged_cli.accessible);
-    let prefs =
-        output_prefs::resolve_from_theme(merged_cli.theme, merged_cli.no_emoji, output_mode);
+    let output_mode = output_mode::resolve(merged_cli.accessible, merged_cli.colour_policy);
+    let prefs = output_prefs::resolve_from_theme(
+        merged_cli.theme,
+        ThemeContext::new(merged_cli.no_emoji, merged_cli.colour_policy, output_mode),
+    );
     match runner::run(&merged_cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => handle_runner_error(err, prefs, runtime_mode),
@@ -141,6 +143,16 @@ fn configure_runtime(
     let runtime_locale = locale_resolution::resolve_runtime_locale(merged_cli, system_locale);
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
+
+    if matches!(
+        merged_cli.colour_policy,
+        Some(cli::config::ColourPolicy::Never)
+    ) {
+        // Align downstream human-facing libraries with the configured policy.
+        unsafe {
+            std::env::set_var("NO_COLOR", "1");
+        }
+    }
 
     if !mode.is_json() {
         let max_level = if merged_cli.verbose {

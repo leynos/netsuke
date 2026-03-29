@@ -574,6 +574,21 @@ JSON diagnostics follow the same OrthoConfig layering:
 - Environment variable: `NETSUKE_DIAG_JSON=true|false`
 - Configuration file: `diag_json = true|false`
 
+The newer typed preference aliases use the same precedence chain:
+
+- `--colour-policy auto|always|never`
+- `NETSUKE_COLOUR_POLICY=auto|always|never`
+- `colour_policy = "auto" | "always" | "never"`
+- `--spinner-mode enabled|disabled`
+- `NETSUKE_SPINNER_MODE=enabled|disabled`
+- `spinner_mode = "enabled" | "disabled"`
+- `--output-format human|json`
+- `NETSUKE_OUTPUT_FORMAT=human|json`
+- `output_format = "human" | "json"`
+- `--default-target <TARGET>` (repeatable)
+- `NETSUKE_DEFAULT_TARGETS__0=<TARGET>` style environment entries
+- `default_targets = ["lint", "test"]`
+
 For startup failures that happen before configuration files can be loaded,
 Netsuke honours the CLI flag and environment variable immediately. A
 configuration file cannot request JSON for errors raised while that same file
@@ -758,10 +773,15 @@ Progress output can be controlled via OrthoConfig layering:
 - CLI flag: `--progress true` or `--progress false`
 - Environment variable: `NETSUKE_PROGRESS=true|false`
 - Configuration file: `progress = true|false`
+- Typed alias: `--spinner-mode enabled|disabled`,
+  `NETSUKE_SPINNER_MODE=enabled|disabled`, or
+  `spinner_mode = "enabled" | "disabled"`
 
 When progress is disabled, Netsuke suppresses stage and task progress output in
 both standard and accessible modes. If verbose mode is enabled at the same
 time, only the completion timing summary remains visible on successful runs.
+When both the legacy and typed forms are present, `spinner_mode` takes
+precedence.
 
 ### Theme and accessibility preferences
 
@@ -784,6 +804,17 @@ Theme precedence is:
 `auto` keeps the mode-sensitive default. `unicode` forces Unicode symbols even
 in accessible mode, while `ascii` forces ASCII-safe symbols everywhere.
 
+Colour policy is configured separately from theme selection:
+
+- CLI flag: `--colour-policy auto|always|never`
+- Environment variable: `NETSUKE_COLOUR_POLICY=auto|always|never`
+- Configuration file: `colour_policy = "auto" | "always" | "never"`
+
+`auto` preserves the current `NO_COLOR`-aware behaviour. `always` ignores
+`NO_COLOR` when deciding between standard and accessible presentation. `never`
+forces `NO_COLOR` behaviour internally, which also makes `auto` theme
+resolution choose ASCII-safe symbols.
+
 Netsuke still supports the legacy no-emoji compatibility flag for users who
 already rely on it:
 
@@ -803,6 +834,21 @@ conveyed solely by colour. The active theme swaps only the glyph set:
   `⏱ Timing:`
 - ASCII theme: `X Error:`, `! Warning:`, `+ Success:`, `i Info:`,
   `T Timing:`
+
+### Default targets from configuration
+
+The manifest's `defaults:` list remains the final fallback when a build command
+does not name targets explicitly. Netsuke now supports a higher-precedence CLI
+configuration layer for that same decision:
+
+- CLI flag: `--default-target <TARGET>` (repeatable)
+- Environment variable: indexed `NETSUKE_DEFAULT_TARGETS__N`
+- Configuration file: `default_targets = ["hello", "test"]`
+
+Configured `default_targets` are appended across defaults, files, environment
+variables, and CLI flags. When `netsuke` or `netsuke build` is invoked without
+explicit positional targets, Netsuke uses `default_targets` first and falls
+back to the manifest's `defaults:` list only when the configured list is empty.
 
 These theme-specific stage, task, completion, and timing renderings are also
 guarded by snapshot regression tests so alignment and prefix stability stay
