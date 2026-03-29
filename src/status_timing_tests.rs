@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::output_prefs;
-use insta::{Settings, assert_snapshot};
+use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
+use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -12,24 +13,6 @@ use test_support::fluent::normalize_fluent_isolates;
 #[fixture]
 fn test_prefs() -> OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
-}
-
-fn snapshot_settings() -> Settings {
-    let mut settings = Settings::new();
-    settings.set_snapshot_path(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/snapshots/status_timing"
-    ));
-    settings
-}
-
-fn theme_prefs(theme: crate::theme::ThemePreference) -> OutputPrefs {
-    output_prefs::resolve_from_theme_with(
-        Some(theme),
-        None,
-        crate::output_mode::OutputMode::Standard,
-        |_| None,
-    )
 }
 
 #[derive(Debug)]
@@ -324,7 +307,7 @@ fn timing_summary_snapshot(
         &render_summary_lines(theme_prefs(theme), state.completed_stages()).join("\n"),
     );
 
-    snapshot_settings().bind(|| {
+    snapshot_settings("status_timing").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
 }

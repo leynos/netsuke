@@ -152,13 +152,13 @@ fn stderr_lines_containing_pattern_should_start_with_prefix(
 
     ensure!(
         !matching_lines.is_empty(),
-        "expected stderr to contain at least one line matching '{pattern}'"
+        "no normalized stderr lines contained pattern '{normalized_pattern}'"
     );
 
     for line in matching_lines {
         ensure!(
             line.starts_with(&normalized_prefix),
-            "expected line '{line}' to start with '{prefix}'"
+            "expected normalized stderr line '{line}' to start with '{normalized_prefix}'"
         );
     }
 

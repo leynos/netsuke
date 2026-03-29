@@ -17,8 +17,9 @@ use super::*;
 use crate::cli_localization;
 use crate::localization::{self, LocalizerGuard};
 use crate::output_prefs;
+use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
 use anyhow::{Result, ensure};
-use insta::{Settings, assert_snapshot};
+use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use std::sync::{Arc, MutexGuard};
 use test_support::fluent::normalize_fluent_isolates;
@@ -26,21 +27,6 @@ use test_support::localizer::localizer_test_lock;
 
 fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
-}
-
-fn snapshot_settings() -> Settings {
-    let mut settings = Settings::new();
-    settings.set_snapshot_path(concat!(env!("CARGO_MANIFEST_DIR"), "/src/snapshots/status"));
-    settings
-}
-
-fn theme_prefs(theme: crate::theme::ThemePreference) -> crate::output_prefs::OutputPrefs {
-    output_prefs::resolve_from_theme_with(
-        Some(theme),
-        None,
-        crate::output_mode::OutputMode::Standard,
-        |_| None,
-    )
 }
 
 fn stage6_message(reporter: &IndicatifReporter) -> String {
@@ -292,7 +278,7 @@ fn accessible_reporter_stage_and_completion_snapshot(
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
 
-    snapshot_settings().bind(|| {
+    snapshot_settings("status").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
     Ok(())
@@ -320,7 +306,7 @@ fn accessible_reporter_task_progress_snapshot(
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let rendered = normalize_fluent_isolates(&String::from_utf8_lossy(&output));
 
-    snapshot_settings().bind(|| {
+    snapshot_settings("status").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
     Ok(())

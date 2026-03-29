@@ -20,6 +20,8 @@ pub mod ninja_gen;
 pub mod output_mode;
 pub mod output_prefs;
 pub mod runner;
+#[cfg(test)]
+mod snapshot_test_support;
 pub mod status;
 pub mod stdlib;
 pub mod theme;

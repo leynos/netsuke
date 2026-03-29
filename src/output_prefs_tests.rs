@@ -3,8 +3,9 @@
 use super::*;
 use crate::cli_localization;
 use crate::localization::{self, LocalizerGuard};
+use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
 use anyhow::{Result, ensure};
-use insta::{Settings, assert_snapshot};
+use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use std::error::Error;
 use std::fmt;
@@ -33,15 +34,6 @@ fn fake_env<'a>(
         "NETSUKE_NO_EMOJI" => no_emoji_env.map(String::from),
         _ => None,
     }
-}
-
-fn snapshot_settings() -> Settings {
-    let mut settings = Settings::new();
-    settings.set_snapshot_path(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/snapshots/output_prefs"
-    ));
-    settings
 }
 
 #[rstest]
@@ -211,7 +203,7 @@ fn prefix_and_spacing_snapshot(
     #[case] snapshot_name: &str,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
-    let prefs = resolve_from_theme_with(Some(theme), None, OutputMode::Standard, |_| None);
+    let prefs = theme_prefs(theme);
     let rendered = normalize_fluent_isolates(&format!(
         concat!(
             "error_prefix:   {}\n",
@@ -231,7 +223,7 @@ fn prefix_and_spacing_snapshot(
         prefs.timing_indent(),
     ));
 
-    snapshot_settings().bind(|| {
+    snapshot_settings("output_prefs").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
     Ok(())
