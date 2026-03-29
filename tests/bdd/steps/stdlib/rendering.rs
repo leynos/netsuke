@@ -2,11 +2,12 @@
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{ContextKey, ContextValue, TemplateContent};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib::{self, NetworkPolicy, StdlibConfig};
 use rstest_bdd_macros::when;
+use test_support::{localizer_test_lock, set_en_localizer};
 
 use super::types::TemplatePath;
 use super::workspace::{ensure_workspace, resolve_template_path};
@@ -32,11 +33,24 @@ fn extract_render_config(world: &TestWorld) -> RenderConfig {
     }
 }
 
+fn ensure_stdlib_localizer(world: &TestWorld) -> Result<()> {
+    if world.localization_guard.is_some() {
+        return Ok(());
+    }
+
+    let lock = localizer_test_lock().map_err(|_| anyhow!("acquire localizer test lock"))?;
+    let guard = set_en_localizer();
+    world.localization_lock.set_value(lock);
+    world.localization_guard.set_value(guard);
+    Ok(())
+}
+
 pub(crate) fn render_template_with_context(
     world: &TestWorld,
     template: &TemplateContent,
     ctx: Value,
 ) -> Result<()> {
+    ensure_stdlib_localizer(world)?;
     let root = ensure_workspace(world)?;
     let mut env = Environment::new();
     let workspace = Dir::open_ambient_dir(&root, ambient_authority())
