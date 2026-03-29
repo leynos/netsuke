@@ -57,9 +57,11 @@ than hunting through substring assertions.
   `test_support::fluent::normalize_fluent_isolates` helper. This ensures
   snapshots contain only human-visible characters and remain stable across
   Fluent versions.
-- All snapshot names must be descriptive and stable. Use the pattern
-  `<reporter>_<theme>_<scenario>` (e.g.,
-  `accessible_unicode_stage_announcement`).
+- All snapshot names must be descriptive and stable. Use `insta`'s canonical
+  `<crate>__<module_path>__<test_name>` naming convention (e.g.,
+  `netsuke__status__tests__accessible_unicode_stage_and_completion`). When a
+  test needs per-theme variants, pass a theme-specific `snapshot_name` string
+  to `assert_snapshot!` so the final file still follows that convention.
 - Use en-US locale for all snapshot tests. Locale-dependent rendering is
   already validated by existing BDD scenarios; snapshot tests should pin a
   single locale to keep snapshots deterministic.
@@ -324,9 +326,10 @@ src/
       netsuke__output_prefs__tests__all_prefixes_ascii.snap
 ```
 
-The exact snapshot names will follow `insta`'s automatic naming convention
-(`<crate>__<module_path>__<test_name>`) but can be overridden with explicit
-first arguments to `assert_snapshot!` for clarity.
+The exact snapshot names will follow `insta`'s canonical naming convention
+(`<crate>__<module_path>__<test_name>`). Parameterized tests may pass explicit
+first arguments to `assert_snapshot!`, but those names should still expand to
+this same convention for consistency with the rest of the snapshot tree.
 
 ## Plan of work
 
@@ -532,11 +535,7 @@ documentation quality assurance:
 
 ## Concrete steps
 
-All commands below run from the repository root:
-
-```sh
-cd /home/user/project
-```
+All commands below run from the repository root.
 
 1. Verify the current baseline passes all gates before making changes.
 

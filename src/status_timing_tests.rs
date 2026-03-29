@@ -1,18 +1,39 @@
 //! Tests for verbose timing summary support.
 
 use super::*;
+use crate::cli_localization;
+use crate::localization::{self, LocalizerGuard};
 use crate::output_prefs;
 use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
+use anyhow::Result;
 use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use std::collections::VecDeque;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, MutexGuard};
 use test_support::fluent::normalize_fluent_isolates;
+use test_support::localizer::localizer_test_lock;
 
 #[fixture]
 fn test_prefs() -> OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
+}
+
+struct EnUsLocalizerFixture {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
+}
+
+#[fixture]
+fn en_us_localizer() -> Result<EnUsLocalizerFixture> {
+    let lock = localizer_test_lock()
+        .map_err(|err| anyhow::anyhow!("failed to acquire localizer test lock: {err}"))?;
+    let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
+    let guard = localization::set_localizer_for_tests(localizer);
+    Ok(EnUsLocalizerFixture {
+        _lock: lock,
+        _guard: guard,
+    })
 }
 
 #[derive(Debug)]
@@ -272,9 +293,11 @@ fn verbose_timing_reporter_suppresses_progress_updates_after_complete(test_prefs
 #[case::unicode(crate::theme::ThemePreference::Unicode, "timing_summary_unicode")]
 #[case::ascii(crate::theme::ThemePreference::Ascii, "timing_summary_ascii")]
 fn timing_summary_snapshot(
+    en_us_localizer: Result<EnUsLocalizerFixture>,
     #[case] theme: crate::theme::ThemePreference,
     #[case] snapshot_name: &str,
-) {
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
     let total = StageNumber::new_unchecked(6);
     let mut state = TimingState::default();
     state.start_stage(
@@ -310,4 +333,6 @@ fn timing_summary_snapshot(
     snapshot_settings("status_timing").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
+
+    Ok(())
 }
