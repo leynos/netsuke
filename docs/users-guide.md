@@ -804,6 +804,10 @@ conveyed solely by colour. The active theme swaps only the glyph set:
 - ASCII theme: `X Error:`, `! Warning:`, `+ Success:`, `i Info:`,
   `T Timing:`
 
+These theme-specific stage, task, completion, and timing renderings are also
+guarded by snapshot regression tests so alignment and prefix stability stay
+pinned for both Unicode and ASCII output.
+
 ### Exit Codes
 
 - `0`: Success.

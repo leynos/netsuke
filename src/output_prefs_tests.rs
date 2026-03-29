@@ -3,11 +3,14 @@
 use super::*;
 use crate::cli_localization;
 use crate::localization::{self, LocalizerGuard};
+use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
 use anyhow::{Result, ensure};
+use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use std::error::Error;
 use std::fmt;
 use std::sync::{Arc, MutexGuard};
+use test_support::fluent::normalize_fluent_isolates;
 use test_support::localizer::localizer_test_lock;
 
 #[derive(Debug)]
@@ -189,4 +192,39 @@ impl From<std::sync::PoisonError<MutexGuard<'static, ()>>> for EnUsLocalizerFixt
     fn from(err: std::sync::PoisonError<MutexGuard<'static, ()>>) -> Self {
         Self(err.to_string())
     }
+}
+
+#[rstest]
+#[case::unicode(crate::theme::ThemePreference::Unicode, "all_prefixes_unicode")]
+#[case::ascii(crate::theme::ThemePreference::Ascii, "all_prefixes_ascii")]
+fn prefix_and_spacing_snapshot(
+    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    #[case] theme: crate::theme::ThemePreference,
+    #[case] snapshot_name: &str,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
+    let prefs = theme_prefs(theme);
+    let rendered = normalize_fluent_isolates(&format!(
+        concat!(
+            "error_prefix:   {}\n",
+            "warning_prefix: {}\n",
+            "success_prefix: {}\n",
+            "info_prefix:    {}\n",
+            "timing_prefix:  {}\n",
+            "task_indent:    {:?}\n",
+            "timing_indent:  {:?}"
+        ),
+        prefs.error_prefix(),
+        prefs.warning_prefix(),
+        prefs.success_prefix(),
+        prefs.info_prefix(),
+        prefs.timing_prefix(),
+        prefs.task_indent(),
+        prefs.timing_indent(),
+    ));
+
+    snapshot_settings("output_prefs").bind(|| {
+        assert_snapshot!(snapshot_name, rendered);
+    });
+    Ok(())
 }

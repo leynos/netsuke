@@ -62,6 +62,28 @@ Feature: Progress output
     And stderr should contain "T Timing:"
     And stderr should not contain "⏱ Timing:"
 
+  Scenario: ASCII theme progress output is stable
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--theme ascii --accessible true --progress true manifest -"
+    Then the command should succeed
+    And stderr should contain "+ Success:"
+    And stderr should contain "i Info:"
+    And stderr should contain "Stage 1/6"
+    And stderr should contain "Stage 6/6"
+    And stderr lines containing "Info:" should all start with "i Info:"
+    And stderr lines containing "Success:" should all start with "+ Success:"
+
+  Scenario: Unicode theme progress output is stable
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--theme unicode --accessible true --progress true manifest -"
+    Then the command should succeed
+    And stderr should contain "✔ Success:"
+    And stderr should contain "ℹ Info:"
+    And stderr should contain "Stage 1/6"
+    And stderr should contain "Stage 6/6"
+    And stderr lines containing "Info:" should all start with "ℹ Info:"
+    And stderr lines containing "Success:" should all start with "✔ Success:"
+
   Scenario: Stage summaries localize to Spanish with success prefix
     Given a minimal Netsuke workspace
     When netsuke is run with arguments "--accessible false --locale es-ES --progress true manifest -"

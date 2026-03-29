@@ -1,7 +1,8 @@
 //! Step definitions for progress-output scenarios that require fake Ninja output.
 
 use crate::bdd::fixtures::TestWorld;
-use anyhow::{Context, Result};
+use crate::bdd::helpers::assertions::normalize_fluent_isolates;
+use anyhow::{Context, Result, ensure};
 use std::fs;
 use std::path::{Path, PathBuf};
 use test_support::env::{SystemEnv, override_ninja_env};
@@ -129,4 +130,37 @@ fn fake_ninja_emits_stdout_output(world: &TestWorld) -> Result<()> {
             stderr_marker: Some("NINJA_STDERR_MARKER"),
         },
     )
+}
+
+#[rstest_bdd_macros::then("stderr lines containing {pattern} should all start with {prefix}")]
+fn stderr_lines_containing_pattern_should_start_with_prefix(
+    world: &TestWorld,
+    pattern: &str,
+    prefix: &str,
+) -> Result<()> {
+    let stderr = world
+        .command_stderr
+        .get()
+        .context("no stderr captured for progress output assertion")?;
+    let normalized_stderr = normalize_fluent_isolates(&stderr);
+    let normalized_pattern = normalize_fluent_isolates(pattern.trim_matches('"'));
+    let normalized_prefix = normalize_fluent_isolates(prefix.trim_matches('"'));
+    let matching_lines = normalized_stderr
+        .lines()
+        .filter(|line| line.contains(&normalized_pattern))
+        .collect::<Vec<_>>();
+
+    ensure!(
+        !matching_lines.is_empty(),
+        "no normalized stderr lines contained pattern '{normalized_pattern}'"
+    );
+
+    for line in matching_lines {
+        ensure!(
+            line.starts_with(&normalized_prefix),
+            "expected normalized stderr line '{line}' to start with '{normalized_prefix}'"
+        );
+    }
+
+    Ok(())
 }
