@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use crate::output_mode::OutputMode;
 use crate::output_prefs::{OutputPrefs, resolve_from_theme_with};
-use crate::theme::ThemePreference;
+use crate::theme::{ThemeContext, ThemePreference};
 
 /// Build snapshot settings rooted at `src/snapshots/<subdir>`.
 pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
@@ -24,5 +24,9 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
 
 /// Resolve explicit-theme preferences for deterministic snapshot tests.
 pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
-    resolve_from_theme_with(Some(theme), None, OutputMode::Standard, |_| None)
+    resolve_from_theme_with(
+        Some(theme),
+        ThemeContext::new(None, None, OutputMode::Standard),
+        |_| None,
+    )
 }
