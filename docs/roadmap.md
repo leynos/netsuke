@@ -314,9 +314,9 @@ library, and CLI ergonomics.
 
 ### 3.13. User journey support
 
-- [ ] 3.13.1. Add smoke tests for novice flows.
-  - [ ] Test first run success, missing manifest, and help output.
-  - [ ] Confirm UX matches documented journey.
+- [x] 3.13.1. Add smoke tests for novice flows.
+  - [x] Test first run success, missing manifest, and help output.
+  - [x] Confirm UX matches documented journey.
 - [ ] 3.13.2. Extend user documentation with advanced usage chapter.
   - [ ] Cover `clean`, `graph`, `manifest`, configuration layering, and JSON
     diagnostics.

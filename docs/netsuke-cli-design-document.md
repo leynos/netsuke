@@ -40,14 +40,13 @@ built by default – a convenient behaviour called out in the core design. If th
 user runs `netsuke` in a directory without a manifest, the CLI should
 **gracefully handle the missing file**. For example, it might print:
 
-> **Error:** No `Netsukefile` found in the current directory.
+> **Error:** Manifest `Netsukefile` not found in the current directory.
+>
+> help: Ensure the manifest exists or pass `--file` with the correct path.
 
-*Hint:* Run `netsuke --help` to see how to specify or create a manifest.
-
-This message is clear about what went wrong (“No Netsukefile found”) and
-immediately points the user toward a next step (using `--help`). Such friendly
-error handling aligns with Netsuke’s philosophy that error messages should
-guide the user constructively.
+This message is clear about what went wrong, and it immediately points the user
+toward the next corrective action. Such friendly error handling aligns with
+Netsuke’s philosophy that error messages should guide the user constructively.
 
 From the very first run, Netsuke aims to be welcoming. The **help output**
 (invoked via `netsuke --help` or `netsuke help`) will be **concise and
@@ -68,6 +67,13 @@ the current directory (configurable via a `-f/--file` flag which defaults to
 default or an auto-detected number of jobs. Each default is chosen to “do the
 right thing” in the typical case so that novices aren’t forced to supply a lot
 of flags.
+
+This newcomer contract is protected by smoke tests that exercise the real
+binary across the three novice entry points: bare `netsuke` in a valid
+workspace, bare `netsuke` in an empty workspace, and both `netsuke --help` and
+`netsuke help`. The smoke suite keeps the documented quick-start journey tied
+to the actual clap/OrthoConfig/localization path instead of a bespoke test-only
+renderer.
 
 Finally, the tone of CLI output should be **approachable and human-friendly**.
 Where possible, avoid overly terse or technical language in user-facing

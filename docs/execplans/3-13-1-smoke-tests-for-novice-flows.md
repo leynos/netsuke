@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -117,14 +117,22 @@ the journey described in `docs/users-guide.md` and
       `tests/features/progress_output.feature`, `tests/assert_cmd_tests.rs`,
       and `tests/runner_tests.rs`.
 - [x] 2026-03-29: Drafted this ExecPlan.
-- [ ] Stage A: Lock the documented novice journey and resolve any wording
-      mismatches between runtime output and documentation.
-- [ ] Stage B: Add `rstest` smoke tests for first-run success, missing
-      manifest, and help entry points.
-- [ ] Stage C: Add `rstest-bdd` novice-flow scenarios using the real binary.
-- [ ] Stage D: Update design and user documentation, then mark the roadmap item
-      complete.
-- [ ] Stage E: Run formatting, lint, test, and Markdown validation gates.
+- [x] 2026-03-30: Stage A completed. Captured live output for empty-workspace
+      failure, `--help`, `help`, and first-run success with fake Ninja-backed
+      command execution; aligned the documented missing-manifest wording with
+      the runtime contract.
+- [x] 2026-03-30: Stage B completed via `tests/novice_flow_smoke_tests.rs`
+      covering first run, missing manifest guidance, both help entry points,
+      and localized Spanish help.
+- [x] 2026-03-30: Stage C completed via
+      `tests/features/novice_flows.feature`, reusing the existing BDD
+      workspace and fake-Ninja plumbing.
+- [x] 2026-03-30: Stage D completed by updating
+      `docs/users-guide.md`, `docs/netsuke-cli-design-document.md`, and
+      `docs/roadmap.md`.
+- [x] 2026-03-30: Stage E completed. Ran `make fmt`, `make check-fmt`,
+      `make lint`, `make test`, `make markdownlint`, and `make nixie`, all
+      with logged output.
 
 ## Surprises & Discoveries
 
@@ -143,6 +151,12 @@ the journey described in `docs/users-guide.md` and
 - It also already enables strict compile-time validation for
   `rstest-bdd-macros`, so this task can follow the current BDD guidance
   directly without a migration step.
+- The live missing-manifest contract has moved on from the older
+  “No `Netsukefile` found … / Hint: Run `netsuke --help` …” copy still present
+  in the docs. The runtime now renders
+  `Manifest 'Netsukefile' not found in the current directory.` plus
+  `help: Ensure the manifest exists or pass \`--file\` with the correct path.`
+  The documentation and smoke suite should pin that newer wording.
 
 ## Decision Log
 
@@ -173,15 +187,30 @@ the journey described in `docs/users-guide.md` and
   support. The tests must therefore exercise the same help/localization path
   that end users hit. Date/Author: 2026-03-29 / Codex.
 
+- Decision: treat the current runtime missing-manifest message as
+  authoritative and update the docs to match it. The smoke suite now pins
+  `Manifest 'Netsukefile' not found in the current directory.` together with
+  `Ensure the manifest exists or pass \`--file\` with the correct path.`
+  Rationale: the current message is more specific than the older docs copy and
+  reflects the localized diagnostic/help split users actually see. Date/Author:
+  2026-03-30 / Codex.
+
 ## Outcomes & Retrospective
 
-Not started yet. This section must be replaced during implementation with:
-
-- what was implemented,
-- which files changed,
-- what behavioural evidence was collected,
-- what documentation and roadmap updates were made, and
-- any follow-up work deliberately deferred.
+- Implemented a dedicated `rstest` smoke target in
+  `tests/novice_flow_smoke_tests.rs` and a matching behavioural feature in
+  `tests/features/novice_flows.feature`.
+- Collected behavioural evidence with focused runs of
+  `cargo test --test novice_flow_smoke_tests` and
+  `cargo test --test bdd_tests novice_flows`; both passed with the new
+  assertions.
+- Updated the user guide and CLI design document to match the live
+  missing-manifest wording, and recorded the decision to keep novice-flow UX
+  protected by smoke coverage through the real binary/help stack.
+- Marked roadmap item 3.13.1 complete once the implementation and targeted
+  evidence were in place.
+- Validation completed with the full repository gates plus the documentation
+  checks required for Markdown changes.
 
 ## Context and orientation
 

@@ -61,9 +61,8 @@ netsuke build target_name another_target # Builds specific targets
 If no `Netsukefile` is found, Netsuke will provide a helpful error message:
 
 ```text
-Error: No `Netsukefile` found in the current directory.
-
-Hint: Run `netsuke --help` to see how to specify or create a manifest.
+Error: Manifest 'Netsukefile' not found in the current directory.
+help: Ensure the manifest exists or pass `--file` with the correct path.
 ```
 
 A different manifest path can be specified using the `-f` or `--file` option:
