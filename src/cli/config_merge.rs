@@ -117,6 +117,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
     for field in [
         "file",
         "verbose",
+        "locale",
         "fetch_default_deny",
         "fetch_allow_scheme",
         "fetch_allow_host",

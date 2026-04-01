@@ -6,6 +6,7 @@
 
 use clap::Args;
 use ortho_config::OrthoConfig;
+use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -35,8 +36,7 @@ impl fmt::Display for ParseConfigEnumError {
 impl std::error::Error for ParseConfigEnumError {}
 
 /// Colour output policy for human-readable CLI output.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 pub enum ColourPolicy {
     /// Honour terminal and environment auto-detection.
     #[default]
@@ -88,9 +88,17 @@ impl FromStr for ColourPolicy {
     }
 }
 
+impl<'de> Deserialize<'de> for ColourPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_config_enum(deserializer, "colour policy")
+    }
+}
+
 /// Progress spinner display mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 pub enum SpinnerMode {
     /// Emit progress updates.
     #[default]
@@ -138,9 +146,17 @@ impl FromStr for SpinnerMode {
     }
 }
 
+impl<'de> Deserialize<'de> for SpinnerMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_config_enum(deserializer, "spinner mode")
+    }
+}
+
 /// Diagnostic output format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 pub enum OutputFormat {
     /// Human-readable diagnostics.
     #[default]
@@ -192,6 +208,25 @@ impl FromStr for OutputFormat {
             valid_options,
         })
     }
+}
+
+impl<'de> Deserialize<'de> for OutputFormat {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize_config_enum(deserializer, "output format")
+    }
+}
+
+fn deserialize_config_enum<'de, D, T>(deserializer: D, label: &str) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: FromStr,
+    T::Err: fmt::Display,
+{
+    let raw = String::deserialize(deserializer)?;
+    T::from_str(&raw).map_err(|err| de::Error::custom(format!("invalid {label}: {err}")))
 }
 
 /// Preference-oriented configuration extracted from the top-level CLI surface.
@@ -275,6 +310,7 @@ impl CliConfig {
 mod tests {
     use super::*;
     use rstest::rstest;
+    use serde_json::json;
 
     #[rstest]
     #[case::colour_auto(
@@ -340,5 +376,44 @@ mod tests {
 
         assert!(config.resolved_progress());
         assert!(config.resolved_diag_json());
+    }
+
+    #[test]
+    fn colour_policy_deserialize_matches_cli_parsing() {
+        for (raw, expected) in [
+            (json!("Always"), ColourPolicy::Always),
+            (json!("ALWAYS"), ColourPolicy::Always),
+            (json!(" always "), ColourPolicy::Always),
+        ] {
+            let parsed: ColourPolicy =
+                serde_json::from_value(raw).expect("colour policy should deserialize");
+            assert_eq!(parsed, expected);
+        }
+    }
+
+    #[test]
+    fn spinner_mode_deserialize_matches_cli_parsing() {
+        for (raw, expected) in [
+            (json!("Enabled"), SpinnerMode::Enabled),
+            (json!("DISABLED"), SpinnerMode::Disabled),
+            (json!(" disabled "), SpinnerMode::Disabled),
+        ] {
+            let parsed: SpinnerMode =
+                serde_json::from_value(raw).expect("spinner mode should deserialize");
+            assert_eq!(parsed, expected);
+        }
+    }
+
+    #[test]
+    fn output_format_deserialize_matches_cli_parsing() {
+        for (raw, expected) in [
+            (json!("Human"), OutputFormat::Human),
+            (json!("JSON"), OutputFormat::Json),
+            (json!(" json "), OutputFormat::Json),
+        ] {
+            let parsed: OutputFormat =
+                serde_json::from_value(raw).expect("output format should deserialize");
+            assert_eq!(parsed, expected);
+        }
     }
 }

@@ -44,6 +44,12 @@ fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
 }
 
 #[cfg(unix)]
+/// Test fixture that installs a temporary fake `ninja` environment.
+///
+/// `_ninja_dir` owns the temporary directory containing the generated fake
+/// `ninja` binary and log file, `_guard` restores the overridden ninja
+/// environment on drop, and `args_log` points to the recorded invocation
+/// arguments emitted by the fake binary.
 struct FakeNinjaFixture {
     _ninja_dir: tempfile::TempDir,
     _guard: NinjaEnvGuard,
@@ -52,6 +58,8 @@ struct FakeNinjaFixture {
 
 #[cfg(unix)]
 #[fixture]
+/// Creates a [`FakeNinjaFixture`] used to simulate ninja behaviour for tests,
+/// returning a temporary environment and the recorded invocation log path.
 fn fake_ninja_fixture() -> Result<FakeNinjaFixture> {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;

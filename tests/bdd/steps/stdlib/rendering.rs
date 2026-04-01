@@ -2,7 +2,7 @@
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{ContextKey, ContextValue, TemplateContent};
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, context, value::Value};
 use netsuke::stdlib::{self, NetworkPolicy, StdlibConfig};
@@ -39,7 +39,11 @@ fn ensure_stdlib_localizer(world: &TestWorld) -> Result<()> {
     }
 
     let lock = world.localization_lock.take_value().map_or_else(
-        || localizer_test_lock().map_err(|_| anyhow!("acquire localizer test lock")),
+        || {
+            localizer_test_lock()
+                .map_err(|err| anyhow::Error::msg(err.to_string()))
+                .context("acquire localizer test lock")
+        },
         Ok,
     )?;
     let guard = set_en_localizer();

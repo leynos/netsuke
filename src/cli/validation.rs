@@ -33,6 +33,13 @@ impl<T> LocalizedValueParser<T> {
     }
 }
 
+fn host_pattern_parser(
+    _: &LocalizedParser<'_>,
+    raw: &str,
+) -> Result<crate::host_pattern::HostPattern, String> {
+    parse_host_pattern(raw)
+}
+
 impl<T> TypedValueParser for LocalizedValueParser<T>
 where
     T: Send + Sync + Clone + 'static,
@@ -72,10 +79,7 @@ pub(super) fn configure_validation_parsers(
         Arc::clone(localizer),
         |parser: &LocalizedParser<'_>, raw| parser.parse_scheme(raw),
     );
-    let host_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), |_: &LocalizedParser<'_>, raw| {
-            parse_host_pattern(raw)
-        });
+    let host_parser = LocalizedValueParser::new(Arc::clone(localizer), host_pattern_parser);
     let theme_parser = LocalizedValueParser::new(
         Arc::clone(localizer),
         |parser: &LocalizedParser<'_>, raw| parser.parse_theme(raw),
