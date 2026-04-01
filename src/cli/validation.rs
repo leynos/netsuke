@@ -6,78 +6,31 @@ use clap::builder::{TypedValueParser, ValueParser};
 use clap::error::ErrorKind;
 use ortho_config::Localizer;
 
-use super::parsing::{LocalizedParser, RawCliValue};
-use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
-use crate::host_pattern::HostPattern;
-use crate::theme::ThemePreference;
+use super::parsing::{LocalizedParser, parse_host_pattern};
+
+type ParserFn<T> =
+    dyn for<'a, 'b> Fn(&LocalizedParser<'a>, &'b str) -> Result<T, String> + Send + Sync;
 
 /// A value parser that delegates to a localised parsing function.
 #[derive(Clone)]
 pub(super) struct LocalizedValueParser<T> {
     localizer: Arc<dyn Localizer>,
-    parser: fn(&LocalizedParser<'_>, RawCliValue<'_>) -> Result<T, String>,
+    parser: Arc<ParserFn<T>>,
 }
 
 impl<T> LocalizedValueParser<T> {
-    fn new(
-        localizer: Arc<dyn Localizer>,
-        parser: fn(&LocalizedParser<'_>, RawCliValue<'_>) -> Result<T, String>,
-    ) -> Self {
-        Self { localizer, parser }
+    fn new<F>(localizer: Arc<dyn Localizer>, parser: F) -> Self
+    where
+        F: for<'a, 'b> Fn(&LocalizedParser<'a>, &'b str) -> Result<T, String>
+            + Send
+            + Sync
+            + 'static,
+    {
+        Self {
+            localizer,
+            parser: Arc::new(parser),
+        }
     }
-}
-
-fn parse_jobs_value(parser: &LocalizedParser<'_>, raw: RawCliValue<'_>) -> Result<usize, String> {
-    parser.parse_jobs(raw)
-}
-
-fn parse_locale_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<String, String> {
-    parser.parse_locale(raw)
-}
-
-fn parse_scheme_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<String, String> {
-    parser.parse_scheme(raw)
-}
-
-fn parse_host_pattern_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<HostPattern, String> {
-    parser.parse_host_pattern(raw)
-}
-
-fn parse_theme_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<ThemePreference, String> {
-    parser.parse_theme(raw)
-}
-
-fn parse_colour_policy_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<ColourPolicy, String> {
-    parser.parse_colour_policy(raw)
-}
-
-fn parse_spinner_mode_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<SpinnerMode, String> {
-    parser.parse_spinner_mode(raw)
-}
-
-fn parse_output_format_value(
-    parser: &LocalizedParser<'_>,
-    raw: RawCliValue<'_>,
-) -> Result<OutputFormat, String> {
-    parser.parse_output_format(raw)
 }
 
 impl<T> TypedValueParser for LocalizedValueParser<T>
@@ -97,7 +50,7 @@ where
             return Err(command.error(ErrorKind::InvalidUtf8, "invalid UTF-8"));
         };
         let parser = LocalizedParser::new(self.localizer.as_ref());
-        (self.parser)(&parser, RawCliValue(raw_value))
+        (self.parser)(&parser, raw_value)
             .map_err(|err| command.error(ErrorKind::ValueValidation, err))
     }
 }
@@ -107,17 +60,38 @@ pub(super) fn configure_validation_parsers(
     mut command: clap::Command,
     localizer: &Arc<dyn Localizer>,
 ) -> clap::Command {
-    let jobs_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_jobs_value);
-    let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale_value);
-    let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme_value);
-    let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern_value);
-    let theme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_theme_value);
-    let colour_policy_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_colour_policy_value);
-    let spinner_mode_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_spinner_mode_value);
-    let output_format_parser =
-        LocalizedValueParser::new(Arc::clone(localizer), parse_output_format_value);
+    let jobs_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_jobs(raw),
+    );
+    let locale_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_locale(raw),
+    );
+    let scheme_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_scheme(raw),
+    );
+    let host_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), |_: &LocalizedParser<'_>, raw| {
+            parse_host_pattern(raw)
+        });
+    let theme_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_theme(raw),
+    );
+    let colour_policy_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_colour_policy(raw),
+    );
+    let spinner_mode_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_spinner_mode(raw),
+    );
+    let output_format_parser = LocalizedValueParser::new(
+        Arc::clone(localizer),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_output_format(raw),
+    );
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))

@@ -184,6 +184,8 @@ impl Default for Cli {
 
 impl From<&Cli> for CliConfig {
     fn from(cli: &Cli) -> Self {
+        // Keep this projection in lock-step with the duplicated preference
+        // fields declared on `Cli` and `CliConfig`.
         Self {
             verbose: cli.verbose,
             locale: cli.locale.clone(),
@@ -296,4 +298,44 @@ where
         localize_clap_error_with_command(with_cmd, localizer.as_ref(), Some(&command))
     })?;
     Ok((cli, matches_for_merge))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::ThemePreference;
+
+    #[test]
+    fn config_projection_preserves_shared_preferences() {
+        let cli = Cli {
+            verbose: true,
+            locale: Some(String::from("en-US")),
+            accessible: Some(true),
+            no_emoji: Some(false),
+            theme: Some(ThemePreference::Ascii),
+            colour_policy: Some(ColourPolicy::Always),
+            progress: Some(false),
+            spinner_mode: Some(SpinnerMode::Disabled),
+            diag_json: true,
+            output_format: Some(OutputFormat::Json),
+            default_targets: vec![String::from("build"), String::from("test")],
+            ..Cli::default()
+        };
+
+        let expected = CliConfig {
+            verbose: true,
+            locale: Some(String::from("en-US")),
+            accessible: Some(true),
+            no_emoji: Some(false),
+            theme: Some(ThemePreference::Ascii),
+            colour_policy: Some(ColourPolicy::Always),
+            progress: Some(false),
+            spinner_mode: Some(SpinnerMode::Disabled),
+            diag_json: true,
+            output_format: Some(OutputFormat::Json),
+            default_targets: vec![String::from("build"), String::from("test")],
+        };
+
+        assert_eq!(cli.config(), expected);
+    }
 }

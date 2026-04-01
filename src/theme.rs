@@ -9,7 +9,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::cli::config::ColourPolicy;
-use crate::output_mode::OutputMode;
+use crate::output_mode::{OutputMode, no_color_active_with};
 use serde::{Deserialize, Serialize};
 
 /// User-facing theme preference for CLI presentation.
@@ -224,17 +224,6 @@ struct EnvSignals {
     no_color: bool,
 }
 
-fn read_no_color_with_policy<F>(colour_policy: Option<ColourPolicy>, read_env: &F) -> bool
-where
-    F: Fn(&str) -> Option<String>,
-{
-    match colour_policy {
-        Some(ColourPolicy::Always) => false,
-        Some(ColourPolicy::Never) => true,
-        Some(ColourPolicy::Auto) | None => read_env("NO_COLOR").is_some(),
-    }
-}
-
 /// Determine whether Unicode symbols should be used based on theme configuration.
 ///
 /// This helper encapsulates the precedence logic for symbol selection:
@@ -302,7 +291,7 @@ where
 {
     let env = EnvSignals {
         no_emoji: read_env("NETSUKE_NO_EMOJI").is_some(),
-        no_color: read_no_color_with_policy(context.colour_policy, &read_env),
+        no_color: no_color_active_with(context.colour_policy, &read_env),
     };
     let use_unicode = should_use_unicode(theme, context.no_emoji, env, context.mode);
 

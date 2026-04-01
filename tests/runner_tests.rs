@@ -43,6 +43,46 @@ fn ninja_in_env() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
     Ok((ninja_dir, ninja_path, guard))
 }
 
+#[cfg(unix)]
+struct FakeNinjaFixture {
+    _ninja_dir: tempfile::TempDir,
+    _guard: NinjaEnvGuard,
+    args_log: PathBuf,
+}
+
+#[cfg(unix)]
+#[fixture]
+fn fake_ninja_fixture() -> Result<FakeNinjaFixture> {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let ninja_dir = tempfile::tempdir().context("create fake ninja directory")?;
+    let args_log = ninja_dir.path().join("ninja-args.log");
+    let ninja_path = ninja_dir.path().join("ninja");
+    fs::write(
+        &ninja_path,
+        format!(
+            "#!/bin/sh\nprintf '%s\n' \"$@\" > \"{}\"\nexit 0\n",
+            args_log.display()
+        ),
+    )
+    .with_context(|| format!("write fake ninja script {}", ninja_path.display()))?;
+    let mut permissions = fs::metadata(&ninja_path)
+        .with_context(|| format!("read fake ninja metadata {}", ninja_path.display()))?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&ninja_path, permissions)
+        .with_context(|| format!("chmod fake ninja {}", ninja_path.display()))?;
+
+    let env = SystemEnv::new();
+    let guard = override_ninja_env(&env, ninja_path.as_path());
+    Ok(FakeNinjaFixture {
+        _ninja_dir: ninja_dir,
+        _guard: guard,
+        args_log,
+    })
+}
+
 /// Shared setup for tests that rely on `NINJA_ENV`.
 ///
 /// Returns the fake ninja directory, temp project directory, constructed CLI,
@@ -241,31 +281,13 @@ fn run_build_with_emit_creates_parent_dirs() -> Result<()> {
 }
 
 #[cfg(unix)]
-#[test]
-fn run_build_uses_cli_default_targets_when_no_targets_are_requested() -> Result<()> {
+#[rstest]
+fn run_build_uses_cli_default_targets_when_no_targets_are_requested(
+    fake_ninja_fixture: Result<FakeNinjaFixture>,
+) -> Result<()> {
     use std::fs;
-    use std::os::unix::fs::PermissionsExt;
 
-    let ninja_dir = tempfile::tempdir().context("create fake ninja directory")?;
-    let args_log = ninja_dir.path().join("ninja-args.log");
-    let ninja_path = ninja_dir.path().join("ninja");
-    fs::write(
-        &ninja_path,
-        format!(
-            "#!/bin/sh\nprintf '%s\n' \"$@\" > \"{}\"\nexit 0\n",
-            args_log.display()
-        ),
-    )
-    .with_context(|| format!("write fake ninja script {}", ninja_path.display()))?;
-    let mut permissions = fs::metadata(&ninja_path)
-        .with_context(|| format!("read fake ninja metadata {}", ninja_path.display()))?
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(&ninja_path, permissions)
-        .with_context(|| format!("chmod fake ninja {}", ninja_path.display()))?;
-
-    let env = SystemEnv::new();
-    let _guard = override_ninja_env(&env, ninja_path.as_path());
+    let fixture = fake_ninja_fixture?;
     let (temp, manifest_path) = create_test_manifest()?;
     let cli = Cli {
         file: manifest_path,
@@ -280,8 +302,8 @@ fn run_build_uses_cli_default_targets_when_no_targets_are_requested() -> Result<
 
     run(&cli, output_prefs::resolve(None)).context("run build with cli default targets")?;
 
-    let logged_args = fs::read_to_string(&args_log)
-        .with_context(|| format!("read fake ninja args log {}", args_log.display()))?;
+    let logged_args = fs::read_to_string(&fixture.args_log)
+        .with_context(|| format!("read fake ninja args log {}", fixture.args_log.display()))?;
     ensure!(
         logged_args.lines().any(|line| line == "hello"),
         "expected fake ninja invocation to include default target 'hello', got: {logged_args}"

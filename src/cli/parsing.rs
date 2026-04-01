@@ -8,10 +8,6 @@ use crate::host_pattern::HostPattern;
 use crate::localization::keys;
 use crate::theme::ThemePreference;
 
-/// A raw, unparsed CLI argument value.
-#[derive(Clone, Copy)]
-pub(super) struct RawCliValue<'a>(pub &'a str);
-
 /// A localizer-bound parser for CLI values requiring localized validation.
 pub(super) struct LocalizedParser<'a> {
     localizer: &'a dyn Localizer,
@@ -23,8 +19,7 @@ impl<'a> LocalizedParser<'a> {
         Self { localizer }
     }
 
-    pub(super) fn parse_jobs(&self, raw: RawCliValue<'_>) -> Result<usize, String> {
-        let s = raw.0;
+    pub(super) fn parse_jobs(&self, s: &str) -> Result<usize, String> {
         let value: usize = s.parse().map_err(|_| {
             let mut args = LocalizationArgs::default();
             args.insert("value", s.to_owned().into());
@@ -54,8 +49,7 @@ impl<'a> LocalizedParser<'a> {
     ///
     /// Schemes must begin with an ASCII letter and may contain ASCII letters,
     /// digits, `+`, `-`, or `.` characters. The result is returned in lowercase.
-    pub(super) fn parse_scheme(&self, raw: RawCliValue<'_>) -> Result<String, String> {
-        let s = raw.0;
+    pub(super) fn parse_scheme(&self, s: &str) -> Result<String, String> {
         let trimmed = s.trim();
         if trimmed.is_empty() {
             return Err(super::validation_message(
@@ -89,8 +83,7 @@ impl<'a> LocalizedParser<'a> {
         Ok(trimmed.to_ascii_lowercase())
     }
 
-    pub(super) fn parse_locale(&self, raw: RawCliValue<'_>) -> Result<String, String> {
-        let s = raw.0;
+    pub(super) fn parse_locale(&self, s: &str) -> Result<String, String> {
         let trimmed = s.trim();
         if trimmed.is_empty() {
             return Err(super::validation_message(
@@ -114,16 +107,6 @@ impl<'a> LocalizedParser<'a> {
             })
     }
 
-    /// Parse a host pattern supplied via CLI flags.
-    ///
-    /// The returned [`HostPattern`] retains both the wildcard flag and the
-    /// normalised host body so downstream configuration can reuse the parsed
-    /// structure without reparsing strings.
-    pub(super) fn parse_host_pattern(&self, raw: RawCliValue<'_>) -> Result<HostPattern, String> {
-        let _ = self.localizer;
-        HostPattern::parse(raw.0).map_err(|err| err.to_string())
-    }
-
     fn parse_enum<T, E>(
         localizer: &dyn Localizer,
         s: &str,
@@ -145,8 +128,7 @@ impl<'a> LocalizedParser<'a> {
     /// Parse a theme preference supplied via CLI flags or config files.
     ///
     /// Accepts `auto`, `unicode`, or `ascii` (case-insensitive).
-    pub(super) fn parse_theme(&self, raw: RawCliValue<'_>) -> Result<ThemePreference, String> {
-        let s = raw.0;
+    pub(super) fn parse_theme(&self, s: &str) -> Result<ThemePreference, String> {
         Self::parse_enum(
             self.localizer,
             s,
@@ -159,54 +141,67 @@ impl<'a> LocalizedParser<'a> {
         )
     }
 
-    fn parse_config_enum<T: ParseRaw>(
+    fn parse_config_enum<T>(
         &self,
-        raw: RawCliValue<'_>,
-        l10n_key: &'static str,
-        fallback: &str,
+        s: &str,
+        spec: &ParseConfigEnumSpec<'_, T>,
     ) -> Result<T, String> {
-        let s = raw.0;
         Self::parse_enum(
             self.localizer,
             s,
-            T::parse_raw,
+            spec.parse,
             ParseEnumErrorSpec {
                 arg_name: "value",
-                l10n_key,
-                fallback,
+                l10n_key: spec.l10n_key,
+                fallback: spec.fallback,
             },
         )
     }
 
     /// Parse a colour policy supplied via CLI flags or config files.
-    pub(super) fn parse_colour_policy(&self, raw: RawCliValue<'_>) -> Result<ColourPolicy, String> {
-        let s = raw.0;
+    pub(super) fn parse_colour_policy(&self, s: &str) -> Result<ColourPolicy, String> {
         self.parse_config_enum(
-            raw,
-            keys::CLI_COLOUR_POLICY_INVALID,
-            &format!("invalid colour policy '{s}'"),
+            s,
+            &ParseConfigEnumSpec {
+                l10n_key: keys::CLI_COLOUR_POLICY_INVALID,
+                fallback: &format!("invalid colour policy '{s}'"),
+                parse: ColourPolicy::parse_raw,
+            },
         )
     }
 
     /// Parse a spinner mode supplied via CLI flags or config files.
-    pub(super) fn parse_spinner_mode(&self, raw: RawCliValue<'_>) -> Result<SpinnerMode, String> {
-        let s = raw.0;
+    pub(super) fn parse_spinner_mode(&self, s: &str) -> Result<SpinnerMode, String> {
         self.parse_config_enum(
-            raw,
-            keys::CLI_SPINNER_MODE_INVALID,
-            &format!("invalid spinner mode '{s}'"),
+            s,
+            &ParseConfigEnumSpec {
+                l10n_key: keys::CLI_SPINNER_MODE_INVALID,
+                fallback: &format!("invalid spinner mode '{s}'"),
+                parse: SpinnerMode::parse_raw,
+            },
         )
     }
 
     /// Parse an output format supplied via CLI flags or config files.
-    pub(super) fn parse_output_format(&self, raw: RawCliValue<'_>) -> Result<OutputFormat, String> {
-        let s = raw.0;
+    pub(super) fn parse_output_format(&self, s: &str) -> Result<OutputFormat, String> {
         self.parse_config_enum(
-            raw,
-            keys::CLI_OUTPUT_FORMAT_INVALID,
-            &format!("invalid output format '{s}'"),
+            s,
+            &ParseConfigEnumSpec {
+                l10n_key: keys::CLI_OUTPUT_FORMAT_INVALID,
+                fallback: &format!("invalid output format '{s}'"),
+                parse: OutputFormat::parse_raw,
+            },
         )
     }
+}
+
+/// Parse a host pattern supplied via CLI flags.
+///
+/// The returned [`HostPattern`] retains both the wildcard flag and the
+/// normalised host body so downstream configuration can reuse the parsed
+/// structure without reparsing strings.
+pub(super) fn parse_host_pattern(s: &str) -> Result<HostPattern, String> {
+    HostPattern::parse(s).map_err(|err| err.to_string())
 }
 
 #[derive(Clone, Copy)]
@@ -216,26 +211,11 @@ struct ParseEnumErrorSpec<'a> {
     fallback: &'a str,
 }
 
-trait ParseRaw: Sized {
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]>;
-}
-
-impl ParseRaw for ColourPolicy {
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        Self::parse_raw(s)
-    }
-}
-
-impl ParseRaw for SpinnerMode {
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        Self::parse_raw(s)
-    }
-}
-
-impl ParseRaw for OutputFormat {
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        Self::parse_raw(s)
-    }
+#[derive(Clone, Copy)]
+struct ParseConfigEnumSpec<'a, T> {
+    l10n_key: &'static str,
+    fallback: &'a str,
+    parse: fn(&str) -> Result<T, &'static [&'static str]>,
 }
 
 #[cfg(test)]
@@ -263,7 +243,7 @@ mod tests {
     fn parse_theme_valid_inputs(#[case] input: &str, #[case] expected: ThemePreference) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_theme(RawCliValue(input));
+        let result = parser.parse_theme(input);
         match result {
             Ok(theme) => assert_eq!(theme, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -278,7 +258,7 @@ mod tests {
     fn parse_theme_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_theme(RawCliValue(input));
+        let result = parser.parse_theme(input);
         match result {
             Err(error_msg) => {
                 assert!(!error_msg.is_empty(), "Error message should not be empty");
@@ -294,7 +274,7 @@ mod tests {
     fn parse_colour_policy_valid_inputs(#[case] input: &str, #[case] expected: ColourPolicy) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_colour_policy(RawCliValue(input));
+        let result = parser.parse_colour_policy(input);
         match result {
             Ok(policy) => assert_eq!(policy, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -307,7 +287,7 @@ mod tests {
     fn parse_colour_policy_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        assert!(parser.parse_colour_policy(RawCliValue(input)).is_err());
+        assert!(parser.parse_colour_policy(input).is_err());
     }
 
     #[rstest]
@@ -316,7 +296,7 @@ mod tests {
     fn parse_spinner_mode_valid_inputs(#[case] input: &str, #[case] expected: SpinnerMode) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_spinner_mode(RawCliValue(input));
+        let result = parser.parse_spinner_mode(input);
         match result {
             Ok(mode) => assert_eq!(mode, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -329,7 +309,7 @@ mod tests {
     fn parse_spinner_mode_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        assert!(parser.parse_spinner_mode(RawCliValue(input)).is_err());
+        assert!(parser.parse_spinner_mode(input).is_err());
     }
 
     #[rstest]
@@ -338,7 +318,7 @@ mod tests {
     fn parse_output_format_valid_inputs(#[case] input: &str, #[case] expected: OutputFormat) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_output_format(RawCliValue(input));
+        let result = parser.parse_output_format(input);
         match result {
             Ok(format) => assert_eq!(format, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -351,6 +331,6 @@ mod tests {
     fn parse_output_format_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        assert!(parser.parse_output_format(RawCliValue(input)).is_err());
+        assert!(parser.parse_output_format(input).is_err());
     }
 }

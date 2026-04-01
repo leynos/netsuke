@@ -24,14 +24,14 @@ Feature: CLI config flags
   Scenario: Invalid colour policy value fails validation
     When the CLI is parsed with invalid arguments "--colour-policy loud"
     Then an error should be returned
-    And the error message should contain "Invalid colour policy 'loud'"
+    And the localized error contains "Invalid colour policy 'loud'"
 
   Scenario: Invalid spinner mode value fails validation
     When the CLI is parsed with invalid arguments "--spinner-mode paused"
     Then an error should be returned
-    And the error message should contain "Invalid spinner mode 'paused'"
+    And the localized error contains "Invalid spinner mode 'paused'"
 
   Scenario: Invalid output format value fails validation
     When the CLI is parsed with invalid arguments "--output-format tap"
     Then an error should be returned
-    And the error message should contain "Invalid output format 'tap'"
+    And the localized error contains "Invalid output format 'tap'"

@@ -195,7 +195,7 @@ impl FromStr for OutputFormat {
 }
 
 /// Preference-oriented configuration extracted from the top-level CLI surface.
-#[derive(Debug, Clone, Args, Serialize, Deserialize, OrthoConfig, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Args, Serialize, Deserialize, OrthoConfig, Default)]
 pub struct CliConfig {
     /// Enable verbose diagnostic logging and completion timing summaries.
     #[arg(short, long)]

@@ -110,6 +110,30 @@ fn spacing_tokens_are_identical_across_themes() {
 }
 
 #[test]
+fn colour_policy_always_ignores_no_color_for_theme_resolution() {
+    let resolved = resolve_theme(
+        None,
+        ThemeContext::new(None, Some(ColourPolicy::Always), OutputMode::Standard),
+        fake_env(Some("1"), None),
+    );
+
+    assert!(resolved.tokens.emoji_allowed);
+    assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);
+}
+
+#[test]
+fn colour_policy_never_forces_ascii_for_theme_resolution() {
+    let resolved = resolve_theme(
+        None,
+        ThemeContext::new(None, Some(ColourPolicy::Never), OutputMode::Standard),
+        fake_env(None, None),
+    );
+
+    assert!(!resolved.tokens.emoji_allowed);
+    assert_eq!(resolved.tokens.symbols.success, ASCII_SYMBOLS.success);
+}
+
+#[test]
 fn unicode_symbols_contain_non_ascii() {
     assert!(!UNICODE_SYMBOLS.success.is_ascii());
     assert!(!UNICODE_SYMBOLS.error.is_ascii());

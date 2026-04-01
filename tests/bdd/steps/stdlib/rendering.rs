@@ -38,7 +38,10 @@ fn ensure_stdlib_localizer(world: &TestWorld) -> Result<()> {
         return Ok(());
     }
 
-    let lock = localizer_test_lock().map_err(|_| anyhow!("acquire localizer test lock"))?;
+    let lock = world.localization_lock.take_value().map_or_else(
+        || localizer_test_lock().map_err(|_| anyhow!("acquire localizer test lock")),
+        Ok,
+    )?;
     let guard = set_en_localizer();
     world.localization_lock.set_value(lock);
     world.localization_guard.set_value(guard);
