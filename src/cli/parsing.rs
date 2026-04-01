@@ -8,6 +8,40 @@ use crate::host_pattern::HostPattern;
 use crate::localization::keys;
 use crate::theme::ThemePreference;
 
+pub(super) trait CliConfigEnum: Sized {
+    const L10N_KEY: &'static str;
+    const LABEL: &'static str;
+
+    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]>;
+}
+
+impl CliConfigEnum for ColourPolicy {
+    const L10N_KEY: &'static str = keys::CLI_COLOUR_POLICY_INVALID;
+    const LABEL: &'static str = "colour policy";
+
+    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
+        Self::parse_raw(s)
+    }
+}
+
+impl CliConfigEnum for SpinnerMode {
+    const L10N_KEY: &'static str = keys::CLI_SPINNER_MODE_INVALID;
+    const LABEL: &'static str = "spinner mode";
+
+    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
+        Self::parse_raw(s)
+    }
+}
+
+impl CliConfigEnum for OutputFormat {
+    const L10N_KEY: &'static str = keys::CLI_OUTPUT_FORMAT_INVALID;
+    const LABEL: &'static str = "output format";
+
+    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
+        Self::parse_raw(s)
+    }
+}
+
 /// A localizer-bound parser for CLI values requiring localized validation.
 pub(super) struct LocalizedParser<'a> {
     localizer: &'a dyn Localizer,
@@ -141,57 +175,17 @@ impl<'a> LocalizedParser<'a> {
         )
     }
 
-    fn parse_config_enum<T>(
-        &self,
-        s: &str,
-        spec: &ParseConfigEnumSpec<'_, T>,
-    ) -> Result<T, String> {
-        Self::parse_enum(
-            self.localizer,
-            s,
-            spec.parse,
-            ParseEnumErrorSpec {
-                arg_name: "value",
-                l10n_key: spec.l10n_key,
-                fallback: spec.fallback,
-            },
-        )
-    }
-
-    /// Parse a colour policy supplied via CLI flags or config files.
-    pub(super) fn parse_colour_policy(&self, s: &str) -> Result<ColourPolicy, String> {
-        self.parse_config_enum(
-            s,
-            &ParseConfigEnumSpec {
-                l10n_key: keys::CLI_COLOUR_POLICY_INVALID,
-                fallback: &format!("invalid colour policy '{s}'"),
-                parse: ColourPolicy::parse_raw,
-            },
-        )
-    }
-
-    /// Parse a spinner mode supplied via CLI flags or config files.
-    pub(super) fn parse_spinner_mode(&self, s: &str) -> Result<SpinnerMode, String> {
-        self.parse_config_enum(
-            s,
-            &ParseConfigEnumSpec {
-                l10n_key: keys::CLI_SPINNER_MODE_INVALID,
-                fallback: &format!("invalid spinner mode '{s}'"),
-                parse: SpinnerMode::parse_raw,
-            },
-        )
-    }
-
-    /// Parse an output format supplied via CLI flags or config files.
-    pub(super) fn parse_output_format(&self, s: &str) -> Result<OutputFormat, String> {
-        self.parse_config_enum(
-            s,
-            &ParseConfigEnumSpec {
-                l10n_key: keys::CLI_OUTPUT_FORMAT_INVALID,
-                fallback: &format!("invalid output format '{s}'"),
-                parse: OutputFormat::parse_raw,
-            },
-        )
+    pub(super) fn parse_cli_config_enum<T: CliConfigEnum>(&self, s: &str) -> Result<T, String> {
+        T::parse_raw(s).map_err(|_| {
+            let mut args = LocalizationArgs::default();
+            args.insert("value", s.to_owned().into());
+            super::validation_message(
+                self.localizer,
+                T::L10N_KEY,
+                Some(&args),
+                &format!("invalid {} '{s}'", T::LABEL),
+            )
+        })
     }
 }
 
@@ -209,13 +203,6 @@ struct ParseEnumErrorSpec<'a> {
     arg_name: &'static str,
     l10n_key: &'static str,
     fallback: &'a str,
-}
-
-#[derive(Clone, Copy)]
-struct ParseConfigEnumSpec<'a, T> {
-    l10n_key: &'static str,
-    fallback: &'a str,
-    parse: fn(&str) -> Result<T, &'static [&'static str]>,
 }
 
 #[cfg(test)]
@@ -274,7 +261,7 @@ mod tests {
     fn parse_colour_policy_valid_inputs(#[case] input: &str, #[case] expected: ColourPolicy) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_colour_policy(input);
+        let result = parser.parse_cli_config_enum::<ColourPolicy>(input);
         match result {
             Ok(policy) => assert_eq!(policy, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -287,7 +274,7 @@ mod tests {
     fn parse_colour_policy_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        assert!(parser.parse_colour_policy(input).is_err());
+        assert!(parser.parse_cli_config_enum::<ColourPolicy>(input).is_err());
     }
 
     #[rstest]
@@ -296,7 +283,7 @@ mod tests {
     fn parse_spinner_mode_valid_inputs(#[case] input: &str, #[case] expected: SpinnerMode) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_spinner_mode(input);
+        let result = parser.parse_cli_config_enum::<SpinnerMode>(input);
         match result {
             Ok(mode) => assert_eq!(mode, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -309,7 +296,7 @@ mod tests {
     fn parse_spinner_mode_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        assert!(parser.parse_spinner_mode(input).is_err());
+        assert!(parser.parse_cli_config_enum::<SpinnerMode>(input).is_err());
     }
 
     #[rstest]
@@ -318,7 +305,7 @@ mod tests {
     fn parse_output_format_valid_inputs(#[case] input: &str, #[case] expected: OutputFormat) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        let result = parser.parse_output_format(input);
+        let result = parser.parse_cli_config_enum::<OutputFormat>(input);
         match result {
             Ok(format) => assert_eq!(format, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -331,6 +318,6 @@ mod tests {
     fn parse_output_format_invalid_inputs(#[case] input: &str) {
         let localizer = MockLocalizer;
         let parser = LocalizedParser::new(&localizer);
-        assert!(parser.parse_output_format(input).is_err());
+        assert!(parser.parse_cli_config_enum::<OutputFormat>(input).is_err());
     }
 }

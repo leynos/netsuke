@@ -6,6 +6,8 @@ use clap::builder::{TypedValueParser, ValueParser};
 use clap::error::ErrorKind;
 use ortho_config::Localizer;
 
+use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
+
 use super::parsing::{LocalizedParser, parse_host_pattern};
 
 type ParserFn<T> =
@@ -86,15 +88,15 @@ pub(super) fn configure_validation_parsers(
     );
     let colour_policy_parser = LocalizedValueParser::new(
         Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_colour_policy(raw),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_cli_config_enum::<ColourPolicy>(raw),
     );
     let spinner_mode_parser = LocalizedValueParser::new(
         Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_spinner_mode(raw),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_cli_config_enum::<SpinnerMode>(raw),
     );
     let output_format_parser = LocalizedValueParser::new(
         Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_output_format(raw),
+        |parser: &LocalizedParser<'_>, raw| parser.parse_cli_config_enum::<OutputFormat>(raw),
     );
 
     command = command.mut_arg("jobs", |arg| {
