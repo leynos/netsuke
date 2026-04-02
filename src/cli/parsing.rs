@@ -11,35 +11,25 @@ use crate::theme::ThemePreference;
 pub(super) trait CliConfigEnum: Sized {
     const L10N_KEY: &'static str;
     const LABEL: &'static str;
-
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]>;
+    const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]>;
 }
 
 impl CliConfigEnum for ColourPolicy {
     const L10N_KEY: &'static str = keys::CLI_COLOUR_POLICY_INVALID;
     const LABEL: &'static str = "colour policy";
-
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        Self::parse_raw(s)
-    }
+    const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]> = Self::parse_raw;
 }
 
 impl CliConfigEnum for SpinnerMode {
     const L10N_KEY: &'static str = keys::CLI_SPINNER_MODE_INVALID;
     const LABEL: &'static str = "spinner mode";
-
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        Self::parse_raw(s)
-    }
+    const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]> = Self::parse_raw;
 }
 
 impl CliConfigEnum for OutputFormat {
     const L10N_KEY: &'static str = keys::CLI_OUTPUT_FORMAT_INVALID;
     const LABEL: &'static str = "output format";
-
-    fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
-        Self::parse_raw(s)
-    }
+    const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]> = Self::parse_raw;
 }
 
 /// A localizer-bound parser for CLI values requiring localized validation.
@@ -176,7 +166,7 @@ impl<'a> LocalizedParser<'a> {
     }
 
     pub(super) fn parse_cli_config_enum<T: CliConfigEnum>(&self, s: &str) -> Result<T, String> {
-        T::parse_raw(s).map_err(|_| {
+        (T::PARSE_RAW)(s).map_err(|_| {
             let mut args = LocalizationArgs::default();
             args.insert("value", s.to_owned().into());
             super::validation_message(
