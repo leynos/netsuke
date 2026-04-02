@@ -2083,6 +2083,15 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
+The preference schema is now modelled explicitly in `src/cli/config.rs` as a
+shared `CliConfig` view with typed enums for `colour_policy`, `spinner_mode`,
+and `output_format`. The concrete `Cli` parser remains the OrthoConfig merge
+root for backward compatibility, but it exposes the extracted `CliConfig`
+surface so Clap parsing, configuration files, environment variables, and
+runtime resolution all reuse the same field vocabulary. `spinner_mode`
+supersedes the legacy `progress` boolean when both are present, and
+`output_format` likewise supersedes `diag_json`.
+
 Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
 resolves one theme through OrthoConfig layers (`--theme`, `NETSUKE_THEME`,
 config file, then mode defaults) and hands the resulting symbol and spacing
@@ -2090,10 +2099,15 @@ tokens to reporters through the `OutputPrefs` compatibility façade. This keeps
 reporter code focused on status semantics rather than glyph choice, preserves
 `no_emoji` as a legacy ASCII-forcing alias when no explicit theme is supplied,
 and gives later roadmap items a stable snapshot surface for validating ASCII
-and Unicode renderings without duplicating formatting rules. Accessible
-reporter output, timing summaries, and the semantic prefix surface are guarded
-by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
-fail with reviewable diffs instead of drifting silently.
+and Unicode renderings without duplicating formatting rules. Colour policy is
+resolved alongside theme and output-mode detection so `--colour-policy never`
+behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
+auto-detection. Build dispatch also consults OrthoConfig `default_targets`
+before falling back to manifest `defaults`, letting operators set user- or
+workspace-level build defaults without editing the manifest itself.
+Accessible reporter output, timing summaries, and the semantic prefix surface
+are guarded by `insta` snapshots so spacing, prefix alignment, and wrapping
+regressions fail with reviewable diffs instead of drifting silently.
 
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.

@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
+use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
 use netsuke::cli_localization;
 use netsuke::theme::ThemePreference;
 use ortho_config::{MergeComposer, sanitize_value};
@@ -33,6 +34,10 @@ fn build_precedence_and_append_composer(defaults: serde_json::Value) -> MergeCom
     defaults_object.insert("progress".to_owned(), json!(true));
     defaults_object.insert("diag_json".to_owned(), json!(false));
     defaults_object.insert("theme".to_owned(), json!("auto"));
+    defaults_object.insert("colour_policy".to_owned(), json!("auto"));
+    defaults_object.insert("spinner_mode".to_owned(), json!("enabled"));
+    defaults_object.insert("output_format".to_owned(), json!("human"));
+    defaults_object.insert("default_targets".to_owned(), json!(["fmt"]));
     composer.push_defaults(seeded_defaults);
     composer.push_file(
         json!({
@@ -42,7 +47,11 @@ fn build_precedence_and_append_composer(defaults: serde_json::Value) -> MergeCom
             "locale": "en-US",
             "progress": false,
             "diag_json": true,
-            "theme": "ascii"
+            "theme": "ascii",
+            "colour_policy": "never",
+            "spinner_mode": "disabled",
+            "output_format": "json",
+            "default_targets": ["lint"]
         }),
         None,
     );
@@ -51,7 +60,11 @@ fn build_precedence_and_append_composer(defaults: serde_json::Value) -> MergeCom
         "fetch_allow_scheme": ["ftp"],
         "progress": true,
         "diag_json": false,
-        "theme": "unicode"
+        "theme": "unicode",
+        "colour_policy": "always",
+        "spinner_mode": "enabled",
+        "output_format": "human",
+        "default_targets": ["test"]
     }));
     composer.push_cli(json!({
         "jobs": 4,
@@ -59,6 +72,10 @@ fn build_precedence_and_append_composer(defaults: serde_json::Value) -> MergeCom
         "progress": false,
         "diag_json": true,
         "theme": "ascii",
+        "colour_policy": "never",
+        "spinner_mode": "disabled",
+        "output_format": "json",
+        "default_targets": ["build"],
         "verbose": true
     }));
     composer
@@ -90,6 +107,30 @@ fn assert_precedence_and_append_invariants(merged: &Cli) -> Result<()> {
         merged.theme == Some(ThemePreference::Ascii),
         "CLI layer should override theme selection",
     );
+    ensure!(
+        merged.colour_policy == Some(ColourPolicy::Never),
+        "CLI layer should override colour_policy",
+    );
+    ensure!(
+        merged.spinner_mode == Some(SpinnerMode::Disabled),
+        "CLI layer should override spinner_mode",
+    );
+    ensure!(
+        merged.output_format == Some(OutputFormat::Json),
+        "CLI layer should override output_format",
+    );
+    ensure!(
+        merged.default_targets == vec!["fmt", "lint", "test", "build"],
+        "default_targets should append in layer order",
+    );
+    ensure!(
+        merged.resolved_diag_json(),
+        "output_format=json should resolve to diagnostic JSON",
+    );
+    ensure!(
+        !merged.resolved_progress(),
+        "spinner_mode=disabled should resolve to no progress",
+    );
     ensure!(merged.verbose, "CLI layer should set verbose");
     Ok(())
 }
@@ -103,40 +144,7 @@ fn cli_merge_layers_respects_precedence_and_appends_lists(
     assert_precedence_and_append_invariants(&merged)
 }
 
-#[rstest]
-fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_dir = tempdir().context("create temporary config directory")?;
-    let config_path = temp_dir.path().join("netsuke.toml");
-    let config = r#"
-file = "Configfile"
-jobs = 2
-fetch_allow_scheme = ["https"]
-verbose = true
-fetch_default_deny = true
-locale = "es-ES"
-progress = false
-diag_json = true
-theme = "ascii"
-"#;
-    fs::write(&config_path, config).context("write netsuke.toml")?;
-
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
-    let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
-    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
-    let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for merge")?;
-    ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
-        "pre-merge diagnostic mode should honour config diag_json",
-    );
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge CLI and configuration layers")?
-        .with_default_command();
-
+fn assert_config_skips_empty_cli_layer_invariants(merged: &Cli) -> Result<()> {
     ensure!(
         merged.file.as_path() == Path::new("Configfile"),
         "config file should override the default manifest path",
@@ -170,11 +178,71 @@ theme = "ascii"
         "environment theme should override config when CLI has no value",
     );
     ensure!(
-        merged.diag_json,
-        "config diag_json should apply when CLI and env do not override",
+        merged.colour_policy == Some(ColourPolicy::Always),
+        "environment colour_policy should override config",
     );
-
+    ensure!(
+        merged.spinner_mode == Some(SpinnerMode::Disabled),
+        "config spinner_mode should apply when env does not override",
+    );
+    ensure!(
+        merged.output_format == Some(OutputFormat::Json),
+        "config output_format should apply when env does not override",
+    );
+    ensure!(
+        merged.default_targets == vec![String::from("hello")],
+        "config default_targets should be retained",
+    );
+    ensure!(
+        merged.resolved_diag_json(),
+        "config output_format should resolve to JSON diagnostics",
+    );
+    ensure!(
+        !merged.resolved_progress(),
+        "config spinner_mode should resolve to disabled progress",
+    );
     Ok(())
+}
+
+#[rstest]
+fn cli_merge_with_config_respects_precedence_and_skips_empty_cli_layer() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    let config = r#"
+file = "Configfile"
+jobs = 2
+fetch_allow_scheme = ["https"]
+verbose = true
+fetch_default_deny = true
+locale = "es-ES"
+progress = false
+diag_json = true
+theme = "ascii"
+colour_policy = "never"
+spinner_mode = "disabled"
+output_format = "json"
+default_targets = ["hello"]
+"#;
+    fs::write(&config_path, config).context("write netsuke.toml")?;
+
+    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+    let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("4"));
+    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
+    let _colour_policy_guard = EnvVarGuard::set("NETSUKE_COLOUR_POLICY", OsStr::new("always"));
+    let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI args for merge")?;
+    ensure!(
+        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
+        "pre-merge diagnostic mode should honour config diag_json",
+    );
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge CLI and configuration layers")?
+        .with_default_command();
+    assert_config_skips_empty_cli_layer_invariants(&merged)
 }
 
 #[rstest]

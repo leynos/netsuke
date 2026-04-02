@@ -73,15 +73,13 @@ pub enum ManifestLoadStage {
 ///
 /// # Examples
 ///
-/// The [`EnvLock`](test_support::env_lock::EnvLock) guard serialises access to
-/// the process environment so tests do not interfere with each other.
-///
 /// ```rust,ignore
-/// use test_support::env_lock::EnvLock;
-/// let _guard = EnvLock::acquire();
-/// std::env::set_var("FOO", "bar");
+/// use std::ffi::OsStr;
+/// use test_support::env::VarGuard;
+///
+/// let _guard = VarGuard::set("FOO", OsStr::new("bar"));
 /// assert_eq!(env("FOO").unwrap(), "bar");
-/// std::env::remove_var("FOO");
+/// // guard restores prior value on drop
 /// ```
 fn env_var(name: &str) -> std::result::Result<String, Error> {
     match std::env::var(name) {

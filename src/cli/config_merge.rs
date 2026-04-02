@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use crate::localization::{self, keys};
 
+use super::config::OutputFormat;
 use super::{CONFIG_ENV_VAR, Cli, ENV_PREFIX, validation_message};
 
 /// Return the default manifest filename when none is provided.
@@ -45,10 +46,15 @@ fn is_empty_value(value: &serde_json::Value) -> bool {
 }
 
 fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
-    value
-        .as_object()
-        .and_then(|map| map.get("diag_json"))
-        .and_then(serde_json::Value::as_bool)
+    let map = value.as_object()?;
+    if let Some(output_format) = map
+        .get("output_format")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|format| OutputFormat::parse_raw(format).ok())
+    {
+        return Some(output_format.is_json());
+    }
+    map.get("diag_json").and_then(serde_json::Value::as_bool)
 }
 
 /// Resolve the effective diagnostic JSON preference from the raw config layers.
@@ -78,7 +84,9 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
         diag_json = env_diag_json;
     }
 
-    if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
+    if matches.value_source("output_format") == Some(ValueSource::CommandLine) {
+        cli.resolved_diag_json()
+    } else if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
         cli.diag_json
     } else {
         diag_json
@@ -109,6 +117,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
     for field in [
         "file",
         "verbose",
+        "locale",
         "fetch_default_deny",
         "fetch_allow_scheme",
         "fetch_allow_host",
@@ -117,7 +126,11 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
         "progress",
         "no_emoji",
         "theme",
+        "colour_policy",
+        "spinner_mode",
         "diag_json",
+        "output_format",
+        "default_targets",
     ] {
         if matches.value_source(field) != Some(ValueSource::CommandLine) {
             map.remove(field);

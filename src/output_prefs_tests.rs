@@ -115,7 +115,11 @@ fn en_us_localizer() -> Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError> 
 })]
 fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCase<'_>) {
     let env = fake_env(case.no_color, case.no_emoji_env);
-    let prefs = resolve_from_theme_with(case.theme, case.no_emoji, case.mode, env);
+    let prefs = resolve_from_theme_with(
+        case.theme,
+        ThemeContext::new(case.no_emoji, None, case.mode),
+        env,
+    );
     assert_eq!(prefs.emoji_allowed(), case.expected_emoji);
 }
 
@@ -157,7 +161,11 @@ fn prefix_rendering_uses_theme_symbols(
     #[case] expected: &str,
 ) -> Result<()> {
     let _localizer = en_us_localizer?;
-    let prefs = resolve_from_theme_with(theme, None, OutputMode::Standard, |_| None);
+    let prefs = resolve_from_theme_with(
+        theme,
+        ThemeContext::new(None, None, OutputMode::Standard),
+        |_| None,
+    );
     ensure!(
         prefix_fn(prefs) == expected,
         "prefix output should match the pinned en-US expectation"
@@ -169,7 +177,11 @@ fn prefix_rendering_uses_theme_symbols(
 #[case::accessible_auto(OutputMode::Accessible)]
 #[case::standard_ascii(OutputMode::Standard)]
 fn spacing_accessors_follow_resolved_theme(#[case] mode: OutputMode) {
-    let prefs = resolve_from_theme_with(Some(ThemePreference::Auto), Some(true), mode, |_| None);
+    let prefs = resolve_from_theme_with(
+        Some(ThemePreference::Auto),
+        ThemeContext::new(Some(true), None, mode),
+        |_| None,
+    );
     assert_eq!(prefs.task_indent(), "  ");
     assert_eq!(prefs.timing_indent(), "  ");
 }

@@ -18,6 +18,10 @@ cli.flag.accessible.help = Forzar el modo de salida accesible (activado o desact
 cli.flag.progress.help = Forzar los resúmenes de progreso estándar de etapas y tareas (activados o desactivados).
 cli.flag.diag_json.help = Emitir diagnósticos legibles por máquinas como JSON en stderr.
 cli.flag.theme.help = Tema predefinido de CLI (auto, unicode, ascii).
+cli.flag.colour_policy.help = Política de color de salida (auto, always, never).
+cli.flag.spinner_mode.help = Modo de visualización del spinner de progreso (enabled, disabled).
+cli.flag.output_format.help = Formato de salida de diagnósticos (human, json).
+cli.flag.default_targets.help = Objetivos de compilación predeterminados cuando no se especifica ninguno.
 
 # Descripciones de subcomandos.
 cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (predeterminado).
@@ -45,6 +49,9 @@ cli.validation.scheme.invalid = Esquema no válido '{ $scheme }'.
 cli.validation.locale.empty = La configuración regional no debe estar vacía.
 cli.validation.locale.invalid = Configuración regional no válida '{ $locale }'.
 cli.validation.theme.invalid = Tema no válido '{ $theme }'. Opciones válidas: auto, unicode, ascii.
+cli.validation.colour_policy.invalid = Política de color no válida '{ $value }'. Opciones válidas: auto, always, never.
+cli.validation.spinner_mode.invalid = Modo de spinner no válido '{ $value }'. Opciones válidas: enabled, disabled.
+cli.validation.output_format.invalid = Formato de salida no válido '{ $value }'. Opciones válidas: human, json.
 cli.validation.config.expected_object = Se esperaba que los valores de la CLI se serializaran como un objeto, se obtuvo { $value }.
 
 # Mensajes de error de Clap.

@@ -6,7 +6,7 @@ use ninja_env::NINJA_ENV;
 use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::PathBuf;
-use test_support::{env::override_ninja_env, env_lock::EnvLock};
+use test_support::env::{override_ninja_env, remove_var, set_var};
 
 #[fixture]
 fn ninja_tmp() -> PathBuf {
@@ -63,16 +63,11 @@ fn override_ninja_env_unset_removes_variable(ninja_tmp: PathBuf) -> Result<()> {
         "NINJA_ENV should be cleared after guard drop"
     );
 
-    // Restore original global state for isolation
-    {
-        let _lock = EnvLock::acquire();
-        if let Some(val) = before {
-            // EnvLock serialises mutations while restoring.
-            unsafe { std::env::set_var(NINJA_ENV, val) };
-        } else {
-            // EnvLock serialises mutations while restoring.
-            unsafe { std::env::remove_var(NINJA_ENV) };
-        }
+    // Restore original global state for isolation.
+    if let Some(val) = before {
+        set_var(NINJA_ENV, &val);
+    } else {
+        remove_var(NINJA_ENV);
     }
     Ok(())
 }

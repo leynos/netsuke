@@ -5,10 +5,8 @@ use anyhow::{Context, Result, ensure};
 use mockable::Env;
 use rstest::rstest;
 use serial_test::serial;
-use test_support::{
-    env::{SystemEnv, mocked_path_env, prepend_dir_to_path},
-    env_lock::EnvLock,
-};
+use std::ffi::OsStr;
+use test_support::env::{SystemEnv, VarGuard, mocked_path_env, prepend_dir_to_path};
 
 #[rstest]
 #[serial]
@@ -40,11 +38,7 @@ fn prepend_dir_to_path_sets_and_restores() -> Result<()> {
 #[rstest]
 #[serial]
 fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
-    let original = std::env::var_os("PATH");
-    {
-        let _lock = EnvLock::acquire();
-        unsafe { std::env::set_var("PATH", "") };
-    }
+    let _path_guard = VarGuard::set("PATH", OsStr::new(""));
     let env = SystemEnv::new();
     let dir = tempfile::tempdir().context("create temp dir")?;
     let guard = prepend_dir_to_path(&env, dir.path())?;
@@ -62,25 +56,13 @@ fn prepend_dir_to_path_handles_empty_path() -> Result<()> {
         std::env::var_os("PATH") == Some(std::ffi::OsString::new()),
         "expected PATH to reset to empty after guard drop"
     );
-    {
-        let _lock = EnvLock::acquire();
-        if let Some(path) = original {
-            unsafe { std::env::set_var("PATH", path) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
-        }
-    }
     Ok(())
 }
 
 #[rstest]
 #[serial]
 fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
-    let original = std::env::var_os("PATH");
-    {
-        let _lock = EnvLock::acquire();
-        unsafe { std::env::remove_var("PATH") };
-    }
+    let _path_guard = VarGuard::unset("PATH");
     let env = SystemEnv::new();
     let dir = tempfile::tempdir().context("create temp dir")?;
     let guard = prepend_dir_to_path(&env, dir.path())?;
@@ -97,13 +79,5 @@ fn prepend_dir_to_path_handles_missing_path() -> Result<()> {
         std::env::var_os("PATH").is_none(),
         "expected PATH to be removed after guard drop"
     );
-    {
-        let _lock = EnvLock::acquire();
-        if let Some(path) = original {
-            unsafe { std::env::set_var("PATH", path) };
-        } else {
-            unsafe { std::env::remove_var("PATH") };
-        }
-    }
     Ok(())
 }

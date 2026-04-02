@@ -221,7 +221,7 @@ fn run_ninja_build_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_build_command(&mut cmd, request.cli, request.build_file, request.targets)?;
-    run_command_and_stream(cmd, status_observer, request.cli.diag_json)
+    run_command_and_stream(cmd, status_observer, request.cli.resolved_diag_json())
 }
 
 fn run_ninja_tool_internal(
@@ -230,7 +230,7 @@ fn run_ninja_tool_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_tool_command(&mut cmd, request.cli, request.build_file, request.tool)?;
-    run_command_and_stream(cmd, status_observer, request.cli.diag_json)
+    run_command_and_stream(cmd, status_observer, request.cli.resolved_diag_json())
 }
 
 /// Invoke `ninja` build and stream parsed task updates from status lines.

@@ -7,13 +7,16 @@
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
+/// use std::ffi::OsStr;
 /// use ninja_env::NINJA_ENV;
-/// std::env::set_var(NINJA_ENV, "/usr/bin/ninja");
+/// use test_support::env::VarGuard;
+///
+/// let _guard = VarGuard::set(NINJA_ENV, OsStr::new("/usr/bin/ninja"));
 /// assert_eq!(
 ///     std::env::var(NINJA_ENV).expect("NINJA_ENV should be set"),
 ///     "/usr/bin/ninja",
 /// );
-/// std::env::remove_var(NINJA_ENV);
+/// // guard restores prior value on drop
 /// ```
 pub const NINJA_ENV: &str = "NETSUKE_NINJA";

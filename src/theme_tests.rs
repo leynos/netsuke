@@ -76,7 +76,11 @@ fn theme_resolution_precedence(
     #[case] mode: OutputMode,
     #[case] expect_unicode: bool,
 ) {
-    let resolved = resolve_theme(theme, no_emoji, mode, fake_env(env_no_color, env_no_emoji));
+    let resolved = resolve_theme(
+        theme,
+        ThemeContext::new(no_emoji, None, mode),
+        fake_env(env_no_color, env_no_emoji),
+    );
     assert_eq!(resolved.tokens.emoji_allowed, expect_unicode);
     if expect_unicode {
         assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);
@@ -91,20 +95,42 @@ fn theme_resolution_precedence(
 fn spacing_tokens_are_identical_across_themes() {
     let unicode_theme = resolve_theme(
         Some(ThemePreference::Unicode),
-        None,
-        OutputMode::Standard,
+        ThemeContext::new(None, None, OutputMode::Standard),
         |_| None,
     );
     let ascii_theme = resolve_theme(
         Some(ThemePreference::Ascii),
-        None,
-        OutputMode::Standard,
+        ThemeContext::new(None, None, OutputMode::Standard),
         |_| None,
     );
     assert_eq!(
         unicode_theme.tokens.spacing, ascii_theme.tokens.spacing,
         "spacing must be identical between Unicode and ASCII themes"
     );
+}
+
+#[test]
+fn colour_policy_always_ignores_no_color_for_theme_resolution() {
+    let resolved = resolve_theme(
+        None,
+        ThemeContext::new(None, Some(ColourPolicy::Always), OutputMode::Standard),
+        fake_env(Some("1"), None),
+    );
+
+    assert!(resolved.tokens.emoji_allowed);
+    assert_eq!(resolved.tokens.symbols.success, UNICODE_SYMBOLS.success);
+}
+
+#[test]
+fn colour_policy_never_forces_ascii_for_theme_resolution() {
+    let resolved = resolve_theme(
+        None,
+        ThemeContext::new(None, Some(ColourPolicy::Never), OutputMode::Standard),
+        fake_env(None, None),
+    );
+
+    assert!(!resolved.tokens.emoji_allowed);
+    assert_eq!(resolved.tokens.symbols.success, ASCII_SYMBOLS.success);
 }
 
 #[test]

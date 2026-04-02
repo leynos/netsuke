@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use clap::error::ErrorKind;
+use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
 use netsuke::cli::{BuildArgs, Commands};
 use netsuke::cli_localization;
 use netsuke::host_pattern::HostPattern;
@@ -24,6 +25,10 @@ struct CliCase {
     default_deny: bool,
     progress: Option<bool>,
     theme: Option<ThemePreference>,
+    colour_policy: Option<ColourPolicy>,
+    spinner_mode: Option<SpinnerMode>,
+    output_format: Option<OutputFormat>,
+    default_targets: Vec<String>,
     expected_cmd: Commands,
 }
 
@@ -43,6 +48,10 @@ impl Default for CliCase {
             default_deny: false,
             progress: None,
             theme: None,
+            colour_policy: None,
+            spinner_mode: None,
+            output_format: None,
+            default_targets: Vec::new(),
             expected_cmd: Commands::Build(BuildArgs {
                 emit: None,
                 targets: Vec::new(),
@@ -87,6 +96,26 @@ impl Default for CliCase {
 #[case(CliCase {
     argv: vec!["netsuke", "--theme", "unicode"],
     theme: Some(ThemePreference::Unicode),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--colour-policy", "always"],
+    colour_policy: Some(ColourPolicy::Always),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--spinner-mode", "disabled"],
+    spinner_mode: Some(SpinnerMode::Disabled),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--output-format", "json"],
+    output_format: Some(OutputFormat::Json),
+    ..CliCase::default()
+})]
+#[case(CliCase {
+    argv: vec!["netsuke", "--default-target", "lint", "--default-target", "test"],
+    default_targets: vec![String::from("lint"), String::from("test")],
     ..CliCase::default()
 })]
 #[case(CliCase {
@@ -198,6 +227,22 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         "progress flag should match input",
     );
     ensure!(cli.theme == case.theme, "theme flag should match input");
+    ensure!(
+        cli.colour_policy == case.colour_policy,
+        "colour_policy flag should match input",
+    );
+    ensure!(
+        cli.spinner_mode == case.spinner_mode,
+        "spinner_mode flag should match input",
+    );
+    ensure!(
+        cli.output_format == case.output_format,
+        "output_format flag should match input",
+    );
+    ensure!(
+        cli.default_targets == case.default_targets,
+        "default-target flags should match input",
+    );
     let command = cli.command.context("command should be set")?;
     ensure!(
         command == case.expected_cmd,
@@ -219,6 +264,9 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
 #[case(vec!["netsuke", "manifest"], ErrorKind::MissingRequiredArgument)]
 #[case(vec!["netsuke", "--locale", "nope"], ErrorKind::ValueValidation)]
 #[case(vec!["netsuke", "--theme", "neon"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--colour-policy", "loud"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--spinner-mode", "paused"], ErrorKind::ValueValidation)]
+#[case(vec!["netsuke", "--output-format", "tap"], ErrorKind::ValueValidation)]
 fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let err = netsuke::cli::parse_with_localizer_from(argv, &localizer)

@@ -13,7 +13,10 @@ use test_support::{
     fake_ninja,
 };
 
+#[path = "runner_cases/default_targets.rs"]
+mod default_targets;
 mod fixtures;
+
 use fixtures::create_test_manifest;
 
 /// Fixture: provide a fake `ninja` binary with a configurable exit code.
