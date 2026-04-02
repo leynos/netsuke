@@ -19,6 +19,8 @@ pub(super) trait CliConfigEnum: Sized {
     const L10N_KEY: &'static str;
     /// Human-readable label used in the fallback error message.
     const LABEL: &'static str;
+    /// Fluent argument name used for the invalid raw value.
+    const ARG_NAME: &'static str = "value";
     /// Parser for raw user input.
     ///
     /// Implementors should trim and normalize input the same way their CLI and
@@ -42,6 +44,13 @@ impl CliConfigEnum for SpinnerMode {
 impl CliConfigEnum for OutputFormat {
     const L10N_KEY: &'static str = keys::CLI_OUTPUT_FORMAT_INVALID;
     const LABEL: &'static str = "output format";
+    const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]> = Self::parse_raw;
+}
+
+impl CliConfigEnum for ThemePreference {
+    const L10N_KEY: &'static str = keys::CLI_THEME_INVALID;
+    const LABEL: &'static str = "theme";
+    const ARG_NAME: &'static str = "theme";
     const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]> = Self::parse_raw;
 }
 
@@ -155,40 +164,6 @@ impl<'a> LocalizedParser<'a> {
             })
     }
 
-    fn parse_enum<T, E>(
-        localizer: &dyn Localizer,
-        s: &str,
-        parse: impl FnOnce(&str) -> Result<T, E>,
-        error_spec: ParseEnumErrorSpec<'_>,
-    ) -> Result<T, String> {
-        parse(s).map_err(|_| {
-            let mut args = LocalizationArgs::default();
-            args.insert(error_spec.arg_name, s.to_owned().into());
-            super::validation_message(
-                localizer,
-                error_spec.l10n_key,
-                Some(&args),
-                error_spec.fallback,
-            )
-        })
-    }
-
-    /// Parse a theme preference supplied via CLI flags or config files.
-    ///
-    /// Accepts `auto`, `unicode`, or `ascii` (case-insensitive).
-    pub(super) fn parse_theme(&self, s: &str) -> Result<ThemePreference, String> {
-        Self::parse_enum(
-            self.localizer,
-            s,
-            ThemePreference::parse_raw,
-            ParseEnumErrorSpec {
-                arg_name: "theme",
-                l10n_key: keys::CLI_THEME_INVALID,
-                fallback: &format!("invalid theme '{s}'"),
-            },
-        )
-    }
-
     /// Parse a config-backed CLI enum using its shared localization contract.
     ///
     /// The parser delegates to [`CliConfigEnum::PARSE_RAW`]. Successful parses
@@ -197,7 +172,7 @@ impl<'a> LocalizedParser<'a> {
     pub(super) fn parse_cli_config_enum<T: CliConfigEnum>(&self, s: &str) -> Result<T, String> {
         (T::PARSE_RAW)(s).map_err(|_| {
             let mut args = LocalizationArgs::default();
-            args.insert("value", s.to_owned().into());
+            args.insert(T::ARG_NAME, s.to_owned().into());
             super::validation_message(
                 self.localizer,
                 T::L10N_KEY,
@@ -215,13 +190,6 @@ impl<'a> LocalizedParser<'a> {
 /// structure without reparsing strings.
 pub(super) fn parse_host_pattern(s: &str) -> Result<HostPattern, String> {
     HostPattern::parse(s).map_err(|err| err.to_string())
-}
-
-#[derive(Clone, Copy)]
-struct ParseEnumErrorSpec<'a> {
-    arg_name: &'static str,
-    l10n_key: &'static str,
-    fallback: &'a str,
 }
 
 #[cfg(test)]
@@ -278,7 +246,7 @@ mod tests {
         #[case] input: &str,
         #[case] expected: ThemePreference,
     ) {
-        let result = parser.parse_theme(input);
+        let result = parser.parse_cli_config_enum::<ThemePreference>(input);
         match result {
             Ok(theme) => assert_eq!(theme, expected),
             Err(e) => panic!("Expected Ok({expected:?}), got Err: {e}"),
@@ -291,7 +259,7 @@ mod tests {
     #[case::number("123")]
     #[case::close_typo("unicod")]
     fn parse_theme_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
-        let result = parser.parse_theme(input);
+        let result = parser.parse_cli_config_enum::<ThemePreference>(input);
         match result {
             Err(error_msg) => {
                 assert!(!error_msg.is_empty(), "Error message should not be empty");

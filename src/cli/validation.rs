@@ -7,6 +7,7 @@ use clap::error::ErrorKind;
 use ortho_config::Localizer;
 
 use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
+use crate::theme::ThemePreference;
 
 use super::parsing::{LocalizedParser, parse_host_pattern};
 
@@ -87,7 +88,7 @@ pub(super) fn configure_validation_parsers(
     });
     let host_parser = make_localized_parser(localizer, host_pattern_parser);
     let theme_parser = make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
-        parser.parse_theme(raw)
+        parser.parse_cli_config_enum::<ThemePreference>(raw)
     });
     let colour_policy_parser =
         make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
