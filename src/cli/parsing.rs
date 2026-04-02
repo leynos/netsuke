@@ -8,9 +8,22 @@ use crate::host_pattern::HostPattern;
 use crate::localization::keys;
 use crate::theme::ThemePreference;
 
+/// Trait implemented by config-backed CLI enums that share localized parsing.
+///
+/// Implementors provide the Fluent key used for localized validation errors,
+/// a short human-readable label used in fallback messages, and a parser
+/// function pointer that accepts raw user input and returns either the parsed
+/// enum or the valid option list for error reporting.
 pub(super) trait CliConfigEnum: Sized {
+    /// Fluent key used when localized validation fails.
     const L10N_KEY: &'static str;
+    /// Human-readable label used in the fallback error message.
     const LABEL: &'static str;
+    /// Parser for raw user input.
+    ///
+    /// Implementors should trim and normalize input the same way their CLI and
+    /// config-file parsing paths do, returning `Err(valid_options)` when the
+    /// value cannot be parsed.
     const PARSE_RAW: fn(&str) -> Result<Self, &'static [&'static str]>;
 }
 
@@ -43,8 +56,14 @@ impl<'a> LocalizedParser<'a> {
         Self { localizer }
     }
 
+    /// Parse the `--jobs` CLI value into a bounded worker-count.
+    ///
+    /// Leading and trailing whitespace is ignored. Returns a localized `String`
+    /// error when the value is not a valid integer or falls outside
+    /// `1..=MAX_JOBS`.
     pub(super) fn parse_jobs(&self, s: &str) -> Result<usize, String> {
-        let value: usize = s.parse().map_err(|_| {
+        let trimmed = s.trim();
+        let value: usize = trimmed.parse().map_err(|_| {
             let mut args = LocalizationArgs::default();
             args.insert("value", s.to_owned().into());
             super::validation_message(
@@ -107,6 +126,11 @@ impl<'a> LocalizedParser<'a> {
         Ok(trimmed.to_ascii_lowercase())
     }
 
+    /// Parse a locale identifier supplied via CLI flags.
+    ///
+    /// Surrounding whitespace is ignored. On success this returns the
+    /// canonicalized locale string emitted by `LanguageIdentifier`; on failure
+    /// it returns a localized `String` describing the invalid input.
     pub(super) fn parse_locale(&self, s: &str) -> Result<String, String> {
         let trimmed = s.trim();
         if trimmed.is_empty() {
@@ -165,6 +189,11 @@ impl<'a> LocalizedParser<'a> {
         )
     }
 
+    /// Parse a config-backed CLI enum using its shared localization contract.
+    ///
+    /// The parser delegates to [`CliConfigEnum::PARSE_RAW`]. Successful parses
+    /// return the concrete enum value. Failures return a localized `String`
+    /// built from [`CliConfigEnum::L10N_KEY`] and the raw user input.
     pub(super) fn parse_cli_config_enum<T: CliConfigEnum>(&self, s: &str) -> Result<T, String> {
         (T::PARSE_RAW)(s).map_err(|_| {
             let mut args = LocalizationArgs::default();
@@ -200,13 +229,20 @@ mod tests {
     use super::*;
     use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
     use rstest::{fixture, rstest};
+    use std::fmt::Write as _;
 
     /// Mock localizer for testing localized parser error messages.
     struct MockLocalizer;
 
     impl Localizer for MockLocalizer {
-        fn lookup(&self, _key: &str, _args: Option<&LocalizationArgs>) -> Option<String> {
-            Some(String::from("mock localized message"))
+        fn lookup(&self, key: &str, lookup_args: Option<&LocalizationArgs>) -> Option<String> {
+            let mut rendered = String::from(key);
+            if let Some(args) = lookup_args {
+                rendered.push_str(": ");
+                write!(&mut rendered, "{args:?}")
+                    .expect("writing debug args into a String should succeed");
+            }
+            Some(rendered)
         }
     }
 
@@ -214,6 +250,20 @@ mod tests {
     fn parser() -> LocalizedParser<'static> {
         static LOCALIZER: MockLocalizer = MockLocalizer;
         LocalizedParser::new(&LOCALIZER)
+    }
+
+    #[rstest]
+    #[case::trimmed(" 4 ", 4)]
+    fn parse_jobs_valid_inputs(
+        parser: LocalizedParser<'static>,
+        #[case] input: &str,
+        #[case] expected: usize,
+    ) {
+        let result = parser.parse_jobs(input);
+        match result {
+            Ok(jobs) => assert_eq!(jobs, expected),
+            Err(e) => panic!("Expected Ok({expected}), got Err: {e}"),
+        }
     }
 
     #[rstest]
@@ -270,7 +320,15 @@ mod tests {
     #[case::invalid("loud")]
     #[case::empty("")]
     fn parse_colour_policy_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
-        assert!(parser.parse_cli_config_enum::<ColourPolicy>(input).is_err());
+        let result = parser.parse_cli_config_enum::<ColourPolicy>(input);
+        match result {
+            Err(error_msg) => assert!(
+                error_msg.starts_with(keys::CLI_COLOUR_POLICY_INVALID),
+                "expected error to start with {:?}, got {error_msg:?}",
+                keys::CLI_COLOUR_POLICY_INVALID,
+            ),
+            Ok(policy) => panic!("Expected Err for input '{input}', got Ok({policy:?})"),
+        }
     }
 
     #[rstest]
@@ -292,7 +350,15 @@ mod tests {
     #[case::invalid("paused")]
     #[case::empty("")]
     fn parse_spinner_mode_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
-        assert!(parser.parse_cli_config_enum::<SpinnerMode>(input).is_err());
+        let result = parser.parse_cli_config_enum::<SpinnerMode>(input);
+        match result {
+            Err(error_msg) => assert!(
+                error_msg.starts_with(keys::CLI_SPINNER_MODE_INVALID),
+                "expected error to start with {:?}, got {error_msg:?}",
+                keys::CLI_SPINNER_MODE_INVALID,
+            ),
+            Ok(mode) => panic!("Expected Err for input '{input}', got Ok({mode:?})"),
+        }
     }
 
     #[rstest]
@@ -314,6 +380,14 @@ mod tests {
     #[case::invalid("tap")]
     #[case::empty("")]
     fn parse_output_format_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
-        assert!(parser.parse_cli_config_enum::<OutputFormat>(input).is_err());
+        let result = parser.parse_cli_config_enum::<OutputFormat>(input);
+        match result {
+            Err(error_msg) => assert!(
+                error_msg.starts_with(keys::CLI_OUTPUT_FORMAT_INVALID),
+                "expected error to start with {:?}, got {error_msg:?}",
+                keys::CLI_OUTPUT_FORMAT_INVALID,
+            ),
+            Ok(format) => panic!("Expected Err for input '{input}', got Ok({format:?})"),
+        }
     }
 }
