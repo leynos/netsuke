@@ -35,6 +35,13 @@ impl<T> LocalizedValueParser<T> {
     }
 }
 
+fn make_localized_parser<F, T>(localizer: &Arc<dyn Localizer>, parser: F) -> LocalizedValueParser<T>
+where
+    F: for<'a, 'b> Fn(&LocalizedParser<'a>, &'b str) -> Result<T, String> + Send + Sync + 'static,
+{
+    LocalizedValueParser::new(Arc::clone(localizer), parser)
+}
+
 fn host_pattern_parser(
     _: &LocalizedParser<'_>,
     raw: &str,
@@ -69,35 +76,31 @@ pub(super) fn configure_validation_parsers(
     mut command: clap::Command,
     localizer: &Arc<dyn Localizer>,
 ) -> clap::Command {
-    let jobs_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_jobs(raw),
-    );
-    let locale_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_locale(raw),
-    );
-    let scheme_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_scheme(raw),
-    );
-    let host_parser = LocalizedValueParser::new(Arc::clone(localizer), host_pattern_parser);
-    let theme_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_theme(raw),
-    );
-    let colour_policy_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_cli_config_enum::<ColourPolicy>(raw),
-    );
-    let spinner_mode_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_cli_config_enum::<SpinnerMode>(raw),
-    );
-    let output_format_parser = LocalizedValueParser::new(
-        Arc::clone(localizer),
-        |parser: &LocalizedParser<'_>, raw| parser.parse_cli_config_enum::<OutputFormat>(raw),
-    );
+    let jobs_parser = make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+        parser.parse_jobs(raw)
+    });
+    let locale_parser = make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+        parser.parse_locale(raw)
+    });
+    let scheme_parser = make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+        parser.parse_scheme(raw)
+    });
+    let host_parser = make_localized_parser(localizer, host_pattern_parser);
+    let theme_parser = make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+        parser.parse_theme(raw)
+    });
+    let colour_policy_parser =
+        make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+            parser.parse_cli_config_enum::<ColourPolicy>(raw)
+        });
+    let spinner_mode_parser =
+        make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+            parser.parse_cli_config_enum::<SpinnerMode>(raw)
+        });
+    let output_format_parser =
+        make_localized_parser(localizer, |parser: &LocalizedParser<'_>, raw| {
+            parser.parse_cli_config_enum::<OutputFormat>(raw)
+        });
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))

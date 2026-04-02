@@ -209,7 +209,7 @@ struct ParseEnumErrorSpec<'a> {
 mod tests {
     use super::*;
     use crate::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
-    use rstest::rstest;
+    use rstest::{fixture, rstest};
 
     /// Mock localizer for testing localized parser error messages.
     struct MockLocalizer;
@@ -220,6 +220,12 @@ mod tests {
         }
     }
 
+    #[fixture]
+    fn parser() -> LocalizedParser<'static> {
+        static LOCALIZER: MockLocalizer = MockLocalizer;
+        LocalizedParser::new(&LOCALIZER)
+    }
+
     #[rstest]
     #[case::auto("auto", ThemePreference::Auto)]
     #[case::unicode("unicode", ThemePreference::Unicode)]
@@ -227,9 +233,11 @@ mod tests {
     #[case::auto_uppercase("AUTO", ThemePreference::Auto)]
     #[case::unicode_mixed("Unicode", ThemePreference::Unicode)]
     #[case::ascii_with_whitespace("  ascii  ", ThemePreference::Ascii)]
-    fn parse_theme_valid_inputs(#[case] input: &str, #[case] expected: ThemePreference) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_theme_valid_inputs(
+        parser: LocalizedParser<'static>,
+        #[case] input: &str,
+        #[case] expected: ThemePreference,
+    ) {
         let result = parser.parse_theme(input);
         match result {
             Ok(theme) => assert_eq!(theme, expected),
@@ -242,9 +250,7 @@ mod tests {
     #[case::empty("")]
     #[case::number("123")]
     #[case::close_typo("unicod")]
-    fn parse_theme_invalid_inputs(#[case] input: &str) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_theme_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
         let result = parser.parse_theme(input);
         match result {
             Err(error_msg) => {
@@ -258,9 +264,11 @@ mod tests {
     #[case::auto("auto", ColourPolicy::Auto)]
     #[case::always("ALWAYS", ColourPolicy::Always)]
     #[case::never(" never ", ColourPolicy::Never)]
-    fn parse_colour_policy_valid_inputs(#[case] input: &str, #[case] expected: ColourPolicy) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_colour_policy_valid_inputs(
+        parser: LocalizedParser<'static>,
+        #[case] input: &str,
+        #[case] expected: ColourPolicy,
+    ) {
         let result = parser.parse_cli_config_enum::<ColourPolicy>(input);
         match result {
             Ok(policy) => assert_eq!(policy, expected),
@@ -271,18 +279,18 @@ mod tests {
     #[rstest]
     #[case::invalid("loud")]
     #[case::empty("")]
-    fn parse_colour_policy_invalid_inputs(#[case] input: &str) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_colour_policy_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
         assert!(parser.parse_cli_config_enum::<ColourPolicy>(input).is_err());
     }
 
     #[rstest]
     #[case::enabled("enabled", SpinnerMode::Enabled)]
     #[case::disabled("DISABLED", SpinnerMode::Disabled)]
-    fn parse_spinner_mode_valid_inputs(#[case] input: &str, #[case] expected: SpinnerMode) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_spinner_mode_valid_inputs(
+        parser: LocalizedParser<'static>,
+        #[case] input: &str,
+        #[case] expected: SpinnerMode,
+    ) {
         let result = parser.parse_cli_config_enum::<SpinnerMode>(input);
         match result {
             Ok(mode) => assert_eq!(mode, expected),
@@ -293,18 +301,18 @@ mod tests {
     #[rstest]
     #[case::invalid("paused")]
     #[case::empty("")]
-    fn parse_spinner_mode_invalid_inputs(#[case] input: &str) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_spinner_mode_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
         assert!(parser.parse_cli_config_enum::<SpinnerMode>(input).is_err());
     }
 
     #[rstest]
     #[case::human("human", OutputFormat::Human)]
     #[case::json("JSON", OutputFormat::Json)]
-    fn parse_output_format_valid_inputs(#[case] input: &str, #[case] expected: OutputFormat) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_output_format_valid_inputs(
+        parser: LocalizedParser<'static>,
+        #[case] input: &str,
+        #[case] expected: OutputFormat,
+    ) {
         let result = parser.parse_cli_config_enum::<OutputFormat>(input);
         match result {
             Ok(format) => assert_eq!(format, expected),
@@ -315,9 +323,7 @@ mod tests {
     #[rstest]
     #[case::invalid("tap")]
     #[case::empty("")]
-    fn parse_output_format_invalid_inputs(#[case] input: &str) {
-        let localizer = MockLocalizer;
-        let parser = LocalizedParser::new(&localizer);
+    fn parse_output_format_invalid_inputs(parser: LocalizedParser<'static>, #[case] input: &str) {
         assert!(parser.parse_cli_config_enum::<OutputFormat>(input).is_err());
     }
 }
