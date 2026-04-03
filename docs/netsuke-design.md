@@ -2143,6 +2143,77 @@ variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces
 Netsuke to execute the specified binary while preserving the default when the
 variable is unset or invalid.
 
+### 8.4.1 Configuration File Discovery
+
+Netsuke configuration discovery is implemented through OrthoConfig's
+`ConfigDiscovery` builder in `src/cli/config_merge.rs`. The `config_discovery()`
+helper constructs a discovery instance rooted at application name `"netsuke"`,
+honours the `NETSUKE_CONFIG_PATH` environment variable as an explicit override,
+and adjusts project-root discovery when the `-C/--directory` flag is supplied.
+
+**Discovery search order** (first match wins):
+
+1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable, if set.
+   This allows users to point to any arbitrary configuration file path,
+   bypassing automatic discovery entirely.
+
+2. **Project scope**: Configuration files in the current working directory (or
+   the directory specified via `-C/--directory`):
+   - `.netsuke.toml` (dotfile in project root)
+   - Additional formats when features are enabled: `.netsuke.json`,
+     `.netsuke.json5`, `.netsuke.yaml`, `.netsuke.yml`
+
+3. **User scope**: Configuration files in platform-specific user configuration
+   directories:
+   - **Unix-like systems**:
+     - `$XDG_CONFIG_HOME/netsuke/config.toml` (typically
+       `~/.config/netsuke/config.toml`)
+     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (defaults to
+       `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
+     - Fallback: `$HOME/.config/netsuke/config.toml`
+     - User home dotfile: `$HOME/.netsuke.toml`
+   - **Windows**:
+     - `%APPDATA%\netsuke\config.toml`
+     - `%LOCALAPPDATA%\netsuke\config.toml`
+
+**Scope precedence**: When both project-scope and user-scope configuration
+files exist, OrthoConfig's default discovery order gives **project scope higher
+precedence** than user scope. This matches user expectations: project-local
+configuration should override user-global defaults. The `-C/--directory` flag
+anchors project-scope discovery to the specified directory while leaving
+user-scope lookup unchanged, ensuring user-global configuration remains
+available even when operating on a project in a different directory.
+
+**Layer merge precedence** (lowest to highest):
+
+1. Application defaults (hardcoded in `Cli::default()`)
+2. Discovered configuration file (project or user scope, as above)
+3. Environment variables (prefixed with `NETSUKE_`, e.g., `NETSUKE_JOBS=4`)
+4. Command-line arguments (e.g., `--jobs 8`)
+
+This layered merge model ensures that explicit user intent (CLI flags) always
+wins, environment-based automation (CI/CD scripts) can override configuration
+files, and configuration files provide persistent defaults without requiring
+manual flag repetition.
+
+**Implementation notes**:
+
+- The `config_discovery()` function uses OrthoConfig's builder API without
+  further customization beyond the application name and environment variable
+  override, relying on OrthoConfig's platform-specific defaults for standard
+  directory resolution.
+- The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
+  the full layer composition: it calls `config_discovery()` to obtain file
+  layers, merges them with defaults, adds environment variables via Figment,
+  and finally applies CLI overrides extracted from `ArgMatches`.
+- Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
+  YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
+  features are enabled.
+- The current implementation uses `NETSUKE_CONFIG_PATH` for the override
+  environment variable. Roadmap item 3.11.3 plans to expose a visible
+  `--config` CLI flag and rename the environment variable to `NETSUKE_CONFIG`
+  for improved user ergonomics.
+
 ### 8.5 Manual Pages
 
 The CLI definition doubles as the source for user documentation. A build script
