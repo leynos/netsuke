@@ -192,6 +192,12 @@ impl Drop for TestWorld {
         self.localization_lock.borrow_mut().take();
         self.restore_environment();
         self.stdlib_text.clear();
+
+        // If temp_dir is set, we may have changed into it. Restore cwd before dropping temp_dir.
+        if self.temp_dir.borrow().is_some() {
+            // Change to a safe directory (project root or /tmp) before temp_dir is dropped
+            let _ = std::env::set_current_dir("/tmp");
+        }
     }
 }
 

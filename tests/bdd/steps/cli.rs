@@ -30,12 +30,28 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let system = StubSystemLocale {
         locale: world.locale_system.get(),
     };
-    let tokens = build_tokens(args.as_str());
+
+    // If there's a temp_dir set, prepend -C <temp_dir> to use it for config discovery
+    let mut tokens = build_tokens(args.as_str());
+    if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
+        let temp_path = temp_dir.path().as_os_str().to_owned();
+        // Insert -C and the path after "netsuke" (first token)
+        if !tokens.is_empty() {
+            tokens.insert(1, "-C".into());
+            tokens.insert(2, temp_path);
+        }
+    }
+
     let locale = locale_resolution::resolve_startup_locale(&tokens, &env, &system);
     let localizer = Arc::from(cli_localization::build_localizer(locale.as_deref()));
     let outcome = netsuke::cli::parse_with_localizer_from(tokens, &localizer)
-        .map(|(cli, _matches)| normalize_cli(cli))
-        .map_err(|e| e.to_string());
+        .map_err(|e| e.to_string())
+        .and_then(|(parsed_cli, matches)| {
+            // Apply config file discovery and merge
+            netsuke::cli::merge_with_config(&parsed_cli, &matches)
+                .map(normalize_cli)
+                .map_err(|e| e.to_string())
+        });
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 
@@ -283,6 +299,16 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 #[when("the CLI is parsed with invalid arguments {args:string}")]
 fn parse_cli(world: &TestWorld, args: CliArgs) -> Result<()> {
     apply_cli(world, &args);
+    Ok(())
+}
+
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
+#[when("the CLI is parsed with no additional arguments")]
+fn parse_cli_no_args(world: &TestWorld) -> Result<()> {
+    apply_cli(world, &CliArgs::from(""));
     Ok(())
 }
 

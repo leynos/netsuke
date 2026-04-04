@@ -41,7 +41,6 @@ jobs = {jobs}
         .with_context(|| format!("failed to write {file_name}"))?;
 
     // Change to temp directory so config is discovered
-    std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
 
     Ok(())
 }
@@ -65,7 +64,6 @@ theme = "{theme}"
     fs::write(&config_path, config_content)
         .with_context(|| format!("failed to write {file_name}"))?;
 
-    std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
 
     Ok(())
 }
@@ -97,7 +95,6 @@ output_format = "{format}"
     fs::write(&config_path, config_content)
         .with_context(|| format!("failed to write {file_name}"))?;
 
-    std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
 
     Ok(())
 }
@@ -136,7 +133,6 @@ default_targets = {targets_toml}
     fs::write(&config_path, config_content)
         .with_context(|| format!("failed to write {file_name}"))?;
 
-    std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
 
     Ok(())
 }
