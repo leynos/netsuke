@@ -1,7 +1,9 @@
 //! Step definitions for configuration discovery scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::types::{EnvVarKey, EnvVarValue, FileName, NamesList};
 use anyhow::{Context, Result, ensure};
+use netsuke::cli::config::OutputFormat;
 use netsuke::theme::ThemePreference;
 use rstest_bdd_macros::{given, then};
 use std::fs;
@@ -18,8 +20,8 @@ fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
 #[given("a project config file {file_name:string} with theme {theme:string} and jobs {jobs}")]
 fn project_config_with_theme_and_jobs(
     world: &TestWorld,
-    file_name: String,
-    theme: String,
+    file_name: FileName,
+    theme: ThemePreference,
     jobs: u32,
 ) -> Result<()> {
     let temp_dir = world
@@ -30,7 +32,7 @@ fn project_config_with_theme_and_jobs(
         .path()
         .to_path_buf();
 
-    let config_path = temp_dir.join(&file_name);
+    let config_path = temp_dir.join(file_name.as_str());
     let config_content = format!(
         r#"
 theme = "{theme}"
@@ -46,36 +48,10 @@ jobs = {jobs}
 }
 
 #[given("a project config file {file_name:string} with theme {theme:string}")]
-fn project_config_with_theme(world: &TestWorld, file_name: String, theme: String) -> Result<()> {
-    let temp_dir = world
-        .temp_dir
-        .borrow()
-        .as_ref()
-        .context("temp_dir should be set")?
-        .path()
-        .to_path_buf();
-
-    let config_path = temp_dir.join(&file_name);
-    let config_content = format!(
-        r#"
-theme = "{theme}"
-"#
-    );
-    fs::write(&config_path, config_content)
-        .with_context(|| format!("failed to write {file_name}"))?;
-
-
-    Ok(())
-}
-
-#[given(
-    "a project config file {file_name:string} with theme {theme:string} and output format {format:string}"
-)]
-fn project_config_with_theme_and_format(
+fn project_config_with_theme(
     world: &TestWorld,
-    file_name: String,
-    theme: String,
-    format: String,
+    file_name: FileName,
+    theme: ThemePreference,
 ) -> Result<()> {
     let temp_dir = world
         .temp_dir
@@ -85,7 +61,36 @@ fn project_config_with_theme_and_format(
         .path()
         .to_path_buf();
 
-    let config_path = temp_dir.join(&file_name);
+    let config_path = temp_dir.join(file_name.as_str());
+    let config_content = format!(
+        r#"
+theme = "{theme}"
+"#
+    );
+    fs::write(&config_path, config_content)
+        .with_context(|| format!("failed to write {file_name}"))?;
+
+    Ok(())
+}
+
+#[given(
+    "a project config file {file_name:string} with theme {theme:string} and output format {format:string}"
+)]
+fn project_config_with_theme_and_format(
+    world: &TestWorld,
+    file_name: FileName,
+    theme: ThemePreference,
+    format: OutputFormat,
+) -> Result<()> {
+    let temp_dir = world
+        .temp_dir
+        .borrow()
+        .as_ref()
+        .context("temp_dir should be set")?
+        .path()
+        .to_path_buf();
+
+    let config_path = temp_dir.join(file_name.as_str());
     let config_content = format!(
         r#"
 theme = "{theme}"
@@ -95,15 +100,14 @@ output_format = "{format}"
     fs::write(&config_path, config_content)
         .with_context(|| format!("failed to write {file_name}"))?;
 
-
     Ok(())
 }
 
 #[given("a project config file {file_name:string} with default targets {targets:string}")]
 fn project_config_with_default_targets(
     world: &TestWorld,
-    file_name: String,
-    targets: String,
+    file_name: FileName,
+    targets: NamesList,
 ) -> Result<()> {
     let temp_dir = world
         .temp_dir
@@ -114,17 +118,16 @@ fn project_config_with_default_targets(
         .to_path_buf();
 
     // Parse comma-separated targets into TOML array format
-    let targets_vec: Vec<&str> = targets.split(',').map(str::trim).collect();
     let targets_toml = format!(
         "[{}]",
-        targets_vec
+        targets
             .iter()
             .map(|t| format!("\"{t}\""))
             .collect::<Vec<_>>()
             .join(", ")
     );
 
-    let config_path = temp_dir.join(&file_name);
+    let config_path = temp_dir.join(file_name.as_str());
     let config_content = format!(
         r"
 default_targets = {targets_toml}
@@ -133,12 +136,15 @@ default_targets = {targets_toml}
     fs::write(&config_path, config_content)
         .with_context(|| format!("failed to write {file_name}"))?;
 
-
     Ok(())
 }
 
 #[given("a custom config file {file_name:string} with theme {theme:string}")]
-fn custom_config_with_theme(world: &TestWorld, file_name: String, theme: String) -> Result<()> {
+fn custom_config_with_theme(
+    world: &TestWorld,
+    file_name: FileName,
+    theme: ThemePreference,
+) -> Result<()> {
     let temp_dir = world
         .temp_dir
         .borrow()
@@ -147,7 +153,7 @@ fn custom_config_with_theme(world: &TestWorld, file_name: String, theme: String)
         .path()
         .to_path_buf();
 
-    let config_path = temp_dir.join(&file_name);
+    let config_path = temp_dir.join(file_name.as_str());
     let config_content = format!(
         r#"
 theme = "{theme}"
@@ -164,27 +170,31 @@ theme = "{theme}"
     reason = "BDD step functions must return Result<()>"
 )]
 #[given("the environment variable {var_name:string} is set to {value:string}")]
-fn env_var_is_set(world: &TestWorld, var_name: String, value: String) -> Result<()> {
+fn env_var_is_set(world: &TestWorld, var_name: EnvVarKey, value: EnvVarValue) -> Result<()> {
     // Store the guard so it lives for the scenario
     let _lock = EnvLock::acquire();
-    let original = std::env::var_os(&var_name);
+    let original = std::env::var_os(var_name.as_str());
 
     // SAFETY: EnvLock serialises mutations
     unsafe {
-        std::env::set_var(&var_name, &value);
+        std::env::set_var(var_name.as_str(), value.as_str());
     }
 
     // Track for cleanup
     world
         .env_vars
         .borrow_mut()
-        .insert(var_name.clone(), original);
+        .insert(var_name.into_string(), original);
 
     Ok(())
 }
 
 #[given("the environment variable {var_name:string} points to {file_name:string}")]
-fn env_var_points_to_file(world: &TestWorld, var_name: String, file_name: String) -> Result<()> {
+fn env_var_points_to_file(
+    world: &TestWorld,
+    var_name: EnvVarKey,
+    file_name: FileName,
+) -> Result<()> {
     let temp_dir = world
         .temp_dir
         .borrow()
@@ -193,33 +203,26 @@ fn env_var_points_to_file(world: &TestWorld, var_name: String, file_name: String
         .path()
         .to_path_buf();
 
-    let file_path = temp_dir.join(&file_name);
+    let file_path = temp_dir.join(file_name.as_str());
 
     let _lock = EnvLock::acquire();
-    let original = std::env::var_os(&var_name);
+    let original = std::env::var_os(var_name.as_str());
 
     // SAFETY: EnvLock serialises mutations
     unsafe {
-        std::env::set_var(&var_name, file_path.as_os_str());
+        std::env::set_var(var_name.as_str(), file_path.as_os_str());
     }
 
     world
         .env_vars
         .borrow_mut()
-        .insert(var_name.clone(), original);
+        .insert(var_name.into_string(), original);
 
     Ok(())
 }
 
 #[then("the theme preference is {expected:string}")]
-fn theme_preference_is(world: &TestWorld, expected: String) -> Result<()> {
-    let expected_theme = match expected.as_str() {
-        "unicode" => ThemePreference::Unicode,
-        "ascii" => ThemePreference::Ascii,
-        "auto" => ThemePreference::Auto,
-        _ => anyhow::bail!("unknown theme preference: {expected}"),
-    };
-
+fn theme_preference_is(world: &TestWorld, expected: ThemePreference) -> Result<()> {
     let actual = world
         .cli
         .with_ref(|cli| cli.theme)
@@ -227,8 +230,8 @@ fn theme_preference_is(world: &TestWorld, expected: String) -> Result<()> {
         .context("CLI theme should be present")?;
 
     ensure!(
-        actual == expected_theme,
-        "expected theme {expected}, got {actual:?}"
+        actual == expected,
+        "expected theme {expected:?}, got {actual:?}"
     );
     Ok(())
 }
