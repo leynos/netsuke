@@ -17,13 +17,10 @@ fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-#[given("a project config file {file_name:string} with theme {theme:string} and jobs {jobs}")]
-fn project_config_with_theme_and_jobs(
-    world: &TestWorld,
-    file_name: FileName,
-    theme: ThemePreference,
-    jobs: u32,
-) -> Result<()> {
+/// Write `content` to `file_name` inside `world`'s temp directory.
+/// Set `chdir` to `true` for project-scope configs so discovery works
+/// without an explicit path override.
+fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: bool) -> Result<()> {
     let temp_dir = world
         .temp_dir
         .borrow()
@@ -32,19 +29,30 @@ fn project_config_with_theme_and_jobs(
         .path()
         .to_path_buf();
 
-    let config_path = temp_dir.join(file_name.as_str());
-    let config_content = format!(
+    let config_path = temp_dir.join(file_name);
+    fs::write(&config_path, content).with_context(|| format!("failed to write {file_name}"))?;
+
+    if chdir {
+        std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
+    }
+
+    Ok(())
+}
+
+#[given("a project config file {file_name:string} with theme {theme:string} and jobs {jobs}")]
+fn project_config_with_theme_and_jobs(
+    world: &TestWorld,
+    file_name: FileName,
+    theme: ThemePreference,
+    jobs: u32,
+) -> Result<()> {
+    let content = format!(
         r#"
 theme = "{theme}"
 jobs = {jobs}
 "#
     );
-    fs::write(&config_path, config_content)
-        .with_context(|| format!("failed to write {file_name}"))?;
-
-    // Change to temp directory so config is discovered
-
-    Ok(())
+    write_config_file(world, file_name.as_str(), &content, true)
 }
 
 #[given("a project config file {file_name:string} with theme {theme:string}")]
@@ -53,24 +61,12 @@ fn project_config_with_theme(
     file_name: FileName,
     theme: ThemePreference,
 ) -> Result<()> {
-    let temp_dir = world
-        .temp_dir
-        .borrow()
-        .as_ref()
-        .context("temp_dir should be set")?
-        .path()
-        .to_path_buf();
-
-    let config_path = temp_dir.join(file_name.as_str());
-    let config_content = format!(
+    let content = format!(
         r#"
 theme = "{theme}"
 "#
     );
-    fs::write(&config_path, config_content)
-        .with_context(|| format!("failed to write {file_name}"))?;
-
-    Ok(())
+    write_config_file(world, file_name.as_str(), &content, true)
 }
 
 #[given(
@@ -82,25 +78,13 @@ fn project_config_with_theme_and_format(
     theme: ThemePreference,
     format: OutputFormat,
 ) -> Result<()> {
-    let temp_dir = world
-        .temp_dir
-        .borrow()
-        .as_ref()
-        .context("temp_dir should be set")?
-        .path()
-        .to_path_buf();
-
-    let config_path = temp_dir.join(file_name.as_str());
-    let config_content = format!(
+    let content = format!(
         r#"
 theme = "{theme}"
 output_format = "{format}"
 "#
     );
-    fs::write(&config_path, config_content)
-        .with_context(|| format!("failed to write {file_name}"))?;
-
-    Ok(())
+    write_config_file(world, file_name.as_str(), &content, true)
 }
 
 #[given("a project config file {file_name:string} with default targets {targets:string}")]
@@ -109,14 +93,6 @@ fn project_config_with_default_targets(
     file_name: FileName,
     targets: NamesList,
 ) -> Result<()> {
-    let temp_dir = world
-        .temp_dir
-        .borrow()
-        .as_ref()
-        .context("temp_dir should be set")?
-        .path()
-        .to_path_buf();
-
     // Parse comma-separated targets into TOML array format
     let targets_toml = format!(
         "[{}]",
@@ -127,16 +103,12 @@ fn project_config_with_default_targets(
             .join(", ")
     );
 
-    let config_path = temp_dir.join(file_name.as_str());
-    let config_content = format!(
+    let content = format!(
         r"
 default_targets = {targets_toml}
 "
     );
-    fs::write(&config_path, config_content)
-        .with_context(|| format!("failed to write {file_name}"))?;
-
-    Ok(())
+    write_config_file(world, file_name.as_str(), &content, true)
 }
 
 #[given("a custom config file {file_name:string} with theme {theme:string}")]
@@ -145,24 +117,12 @@ fn custom_config_with_theme(
     file_name: FileName,
     theme: ThemePreference,
 ) -> Result<()> {
-    let temp_dir = world
-        .temp_dir
-        .borrow()
-        .as_ref()
-        .context("temp_dir should be set")?
-        .path()
-        .to_path_buf();
-
-    let config_path = temp_dir.join(file_name.as_str());
-    let config_content = format!(
+    let content = format!(
         r#"
 theme = "{theme}"
 "#
     );
-    fs::write(&config_path, config_content)
-        .with_context(|| format!("failed to write {file_name}"))?;
-
-    Ok(())
+    write_config_file(world, file_name.as_str(), &content, false)
 }
 
 #[expect(
