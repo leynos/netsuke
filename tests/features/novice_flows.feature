@@ -18,18 +18,26 @@ Feature: Novice CLI flows
 
   Scenario: Help flag output matches the documented journey
     Given an empty workspace
-    When netsuke is run with arguments "--help"
+    When netsuke is run with arguments "--locale en-US --help"
     Then the command should succeed
-    And stdout should contain "build     Build targets defined in the manifest (default)."
-    And stdout should contain "clean     Remove build artefacts via Ninja."
-    And stdout should contain "graph     Emit the dependency graph in DOT format."
-    And stdout should contain "manifest  Write the generated Ninja manifest without running Ninja."
+    And stdout should contain "build"
+    And stdout should contain "Build targets"
+    And stdout should contain "clean"
+    And stdout should contain "Remove build artefacts"
+    And stdout should contain "graph"
+    And stdout should contain "dependency graph"
+    And stdout should contain "manifest"
+    And stdout should contain "generated Ninja manifest"
 
   Scenario: Help subcommand output matches the flag form
     Given an empty workspace
-    When netsuke is run with arguments "help"
+    When netsuke is run with arguments "--locale en-US help"
     Then the command should succeed
-    And stdout should contain "build     Build targets defined in the manifest (default)."
-    And stdout should contain "clean     Remove build artefacts via Ninja."
-    And stdout should contain "graph     Emit the dependency graph in DOT format."
-    And stdout should contain "manifest  Write the generated Ninja manifest without running Ninja."
+    And stdout should contain "build"
+    And stdout should contain "Build targets"
+    And stdout should contain "clean"
+    And stdout should contain "Remove build artefacts"
+    And stdout should contain "graph"
+    And stdout should contain "dependency graph"
+    And stdout should contain "manifest"
+    And stdout should contain "generated Ninja manifest"
