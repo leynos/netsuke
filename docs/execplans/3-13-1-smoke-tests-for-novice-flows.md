@@ -24,7 +24,7 @@ configuration/help stack:
 1. Running `netsuke` with no arguments in a valid workspace succeeds as a first
    run.
 2. Running `netsuke` in an empty workspace fails with the documented guided
-   message and help hint.
+   message and `--file` remediation hint.
 3. Running `netsuke --help` and `netsuke help` produces newcomer-friendly help
    output through the localized clap/OrthoConfig path.
 
@@ -328,7 +328,7 @@ The suite should include:
 2. `missing_manifest_error_matches_documented_guidance`
    - Run bare `netsuke` in an empty workspace.
    - Assert failure.
-   - Assert the final documented error and help-hint fragments.
+   - Assert the final documented error and `--file` remediation hint fragments.
 3. `help_entry_points_are_novice_friendly`
    - Parameterize with `rstest` over `["--help"]` and `["help"]`.
    - Assert success.
@@ -370,7 +370,7 @@ Use three core scenarios:
    - When netsuke is run without arguments
    - Then the command should fail
    - And stderr should contain the final documented error fragment
-   - And stderr should contain the `--help` hint
+   - And stderr should contain the `--file` remediation hint
 3. `Help output matches the documented journey`
    - When netsuke is run with arguments `"--help"`
    - Then the command should succeed
