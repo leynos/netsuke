@@ -116,20 +116,72 @@ worked examples, and see the same results. A developer can run
 
 ## Progress
 
-- [ ] Stage A: Audit existing coverage and plan chapter structure.
-- [ ] Stage B: Write the Advanced Usage chapter in `docs/users-guide.md`.
-- [ ] Stage C: Add BDD behavioural scenarios.
+- [x] Stage A: Audit existing coverage and plan chapter structure.
+- [x] Stage B: Write the Advanced Usage chapter in `docs/users-guide.md`.
+- [x] Stage C: Add BDD behavioural scenarios.
 - [ ] Stage D: Add focused `rstest` integration tests for edge cases.
 - [ ] Stage E: Update design docs and roadmap.
 - [ ] Stage F: Validation and evidence.
 
 ## Surprises & discoveries
 
-(None yet.)
+**Stage A (Audit):**
+
+- Current user guide has 11 numbered sections (Introduction through Security
+  Considerations). The new Advanced Usage chapter will be Section 12 as planned.
+- Existing BDD step infrastructure is extensive. Key reusable steps identified:
+  - `Given a minimal Netsuke workspace` (manifest_command.rs)
+  - `Given an empty workspace` (manifest_command.rs)
+  - `Given a fake ninja executable that emits task status lines`
+    (progress_output.rs)
+  - `When netsuke is run with arguments "..."` (manifest_command.rs)
+  - `When netsuke is run without arguments` (manifest_command.rs)
+  - `Then the command should succeed/fail` (manifest_command.rs)
+  - `And stdout/stderr should contain "..."` (manifest_command.rs)
+  - `And stdout/stderr should be empty` (manifest_command.rs)
+  - `And stderr should be valid diagnostics json` (json_diagnostics.rs)
+  - `And the file "..." should exist/not exist` (manifest_command.rs)
+- New steps needed for configuration and graph testing:
+  - Step for creating `.netsuke.toml` with specific key-value pairs
+  - Step for setting environment variables for the netsuke invocation
+  - Step for checking DOT graph output markers
+- Feature files reviewed: `novice_flows.feature` and
+  `manifest_subcommand.feature` provide good models for the new feature file.
+
+**Stage B (User Guide Chapter):**
+
+- Section 12 "Advanced Usage" added to user guide successfully with 5
+  subsections covering clean, graph, manifest, configuration layering, and JSON
+  diagnostics.
+- All markdown formatting and linting checks pass.
+
+**Stage C (BDD Scenarios):**
+
+- Created 3 BDD scenarios in `tests/features/advanced_usage.feature` covering:
+  1. Manifest subcommand streaming to stdout
+  2. JSON diagnostics on error
+  3. JSON diagnostics with manifest subcommand
+- Created `tests/bdd/steps/advanced_usage.rs` with new step definitions for:
+  - Creating config files with key-value pairs
+  - Setting environment variables for invocations
+  - Checking stderr omission of fragments
+- Modified `tests/bdd/steps/manifest_command.rs` to support environment
+  variables from TestWorld and preserve NINJA_ENV.
+- Configuration layering scenarios with build command deferred to rstest
+  integration tests due to complexity of coordinating fake ninja with
+  environment variable propagation in BDD context.
+- All 3 BDD scenarios pass.
 
 ## Decision log
 
-(None yet.)
+**Decision 1 (Stage A):** Chapter will be Section 12 "Advanced Usage" with
+subsections 12.1 (clean), 12.2 (graph), 12.3 (manifest), 12.4 (configuration
+layering), and 12.5 (JSON diagnostics). This follows the original plan outline.
+
+**Decision 2 (Stage A):** The BDD scenarios will reuse the extensive existing
+step library. A new `tests/bdd/steps/advanced_usage.rs` module will be added
+only for the genuinely missing steps (config file creation, environment
+variable setting, and DOT graph output checking).
 
 ## Outcomes & retrospective
 
@@ -367,8 +419,8 @@ paths not reached by the BDD scenarios:
 2. **Graph with invalid manifest**: Run `netsuke graph` with a syntactically
    invalid manifest. Assert failure with an actionable error message.
 3. **Manifest to non-existent directory**: Run
-   `netsuke manifest /no/such/dir/out.ninja`.
-   Assert failure with a path-related error.
+   `netsuke manifest /no/such/dir/out.ninja`. Assert failure with a
+   path-related error.
 4. **Config layering precedence**: Use `NETSUKE_CONFIG_PATH` to point to a
    temp config file, set an environment variable, and pass a CLI flag. Assert
    that CLI wins over environment, which wins over file.

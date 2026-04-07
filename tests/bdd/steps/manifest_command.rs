@@ -11,7 +11,6 @@ use rstest_bdd_macros::{given, then, when};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use test_support::netsuke::run_netsuke_in;
 
 /// Type of output stream for assertions.
 #[derive(Copy, Clone)]
@@ -92,11 +91,17 @@ struct RunResult {
 
 fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result<RunResult> {
     let args = ["manifest", output.as_str()];
-    let run = run_netsuke_in(temp_path, &args)?;
+    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    let result = cmd
+        .current_dir(temp_path)
+        .env("PATH", "")
+        .args(&args)
+        .output()
+        .context("run netsuke manifest command")?;
     Ok(RunResult {
-        stdout: run.stdout,
-        stderr: run.stderr,
-        success: run.success,
+        stdout: String::from_utf8_lossy(&result.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
+        success: result.status.success(),
     })
 }
 
@@ -114,16 +119,48 @@ fn store_run_result(world: &TestWorld, result: RunResult) {
     }
 }
 
+/// Locate the netsuke executable using assert_cmd's binary locator.
+fn netsuke_executable() -> Result<PathBuf> {
+    let exe = assert_cmd::cargo::cargo_bin!("netsuke");
+    ensure!(exe.is_file(), "netsuke binary not found at {}", exe.display());
+    Ok(exe.to_path_buf())
+}
+
 /// Run netsuke with the given arguments and store the result.
 fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
     let temp_path = get_temp_path(world)?;
-    let run = run_netsuke_in(&temp_path, args)?;
+
+    // Build command with environment variables from TestWorld
+    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    cmd.current_dir(&temp_path)
+        .env("PATH", "")
+        .args(args);
+
+    // Preserve NINJA_ENV if it's set (used by fake ninja scenarios)
+    if let Ok(ninja_env) = std::env::var("NINJA_ENV") {
+        cmd.env("NINJA_ENV", ninja_env);
+    }
+
+    // Apply environment variables from TestWorld
+    let env_vars = world.env_vars.borrow();
+    for (key, value) in env_vars.iter() {
+        if let Some(val) = value {
+            cmd.env(key, val);
+        } else {
+            cmd.env_remove(key);
+        }
+    }
+
+    let output = cmd
+        .output()
+        .context("run netsuke command")?;
+
     store_run_result(
         world,
         RunResult {
-            stdout: run.stdout,
-            stderr: run.stderr,
-            success: run.success,
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            success: output.status.success(),
         },
     );
     Ok(())
