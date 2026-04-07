@@ -137,7 +137,10 @@ fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
 fn minimal_workspace(world: &TestWorld) -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for manifest workspace")?;
     let netsukefile = temp.path().join("Netsukefile");
-    fs::copy("tests/data/minimal.yml", &netsukefile)
+    // Use absolute path to avoid issues when CWD is changed by parallel tests
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let minimal_yml_path = std::path::Path::new(manifest_dir).join("tests/data/minimal.yml");
+    fs::copy(&minimal_yml_path, &netsukefile)
         .with_context(|| format!("copy manifest to {}", netsukefile.display()))?;
     *world.temp_dir.borrow_mut() = Some(temp);
     world.run_status.clear();

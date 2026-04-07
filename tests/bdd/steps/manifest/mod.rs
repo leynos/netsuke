@@ -16,9 +16,7 @@ use crate::bdd::types::{
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::{ast::StringOrList, manifest};
 use rstest_bdd_macros::{given, then, when};
-use std::ffi::OsStr;
 use test_support::display_error_chain;
-use test_support::env::{remove_var, set_var};
 
 // ---------------------------------------------------------------------------
 // Helper functions (shared with targets.rs)
@@ -63,7 +61,19 @@ pub(super) fn get_string_from_string_or_list(
 }
 
 fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
-    let outcome = manifest::from_path(path.as_str()).map_err(|e| display_error_chain(e.as_ref()));
+    // Convert relative test data paths to absolute to avoid issues when CWD is changed by parallel tests
+    let manifest_path = if std::path::Path::new(path.as_str()).is_relative()
+        && path.as_str().starts_with("tests/")
+    {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        std::path::Path::new(manifest_dir)
+            .join(path.as_str())
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        path.as_str().to_owned()
+    };
+    let outcome = manifest::from_path(&manifest_path).map_err(|e| display_error_chain(e.as_ref()));
     store_parse_outcome(&world.manifest, &world.manifest_error, outcome);
 }
 
@@ -140,9 +150,15 @@ fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
         !key.as_str().is_empty(),
         "environment variable name must not be empty"
     );
+    // Acquire scenario-scoped lock before process-global env mutation
+    world.ensure_env_lock();
     let expanded = expand_env(value.as_str());
-    let previous = set_var(key.as_str(), OsStr::new(&expanded));
-    world.track_env_var(key.into_string(), previous);
+    let original = std::env::var_os(key.as_str());
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+    unsafe {
+        std::env::set_var(key.as_str(), &expanded);
+    }
+    world.track_env_var(key.into_string(), original);
     Ok(())
 }
 
@@ -157,8 +173,14 @@ fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
         !key.as_str().is_empty(),
         "environment variable name must not be empty"
     );
-    let previous = remove_var(key.as_str());
-    world.track_env_var(key.into_string(), previous);
+    // Acquire scenario-scoped lock before process-global env mutation
+    world.ensure_env_lock();
+    let original = std::env::var_os(key.as_str());
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+    unsafe {
+        std::env::remove_var(key.as_str());
+    }
+    world.track_env_var(key.into_string(), original);
     Ok(())
 }
 

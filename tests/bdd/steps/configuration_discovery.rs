@@ -8,7 +8,6 @@ use netsuke::theme::ThemePreference;
 use rstest_bdd_macros::{given, then};
 use std::fs;
 use tempfile::tempdir;
-use test_support::env_lock::EnvLock;
 
 #[given("a temporary workspace")]
 fn a_temporary_workspace(world: &TestWorld) -> Result<()> {
@@ -33,6 +32,8 @@ fn write_config_file(world: &TestWorld, file_name: &str, content: &str, chdir: b
     fs::write(&config_path, content).with_context(|| format!("failed to write {file_name}"))?;
 
     if chdir {
+        // Acquire scenario-scoped lock before process-global CWD mutation
+        world.ensure_env_lock();
         std::env::set_current_dir(&temp_dir).context("failed to change to temp directory")?;
     }
 
@@ -131,11 +132,12 @@ theme = "{theme}"
 )]
 #[given("the environment variable {var_name:string} is set to {value:string}")]
 fn env_var_is_set(world: &TestWorld, var_name: EnvVarKey, value: EnvVarValue) -> Result<()> {
-    // Store the guard so it lives for the scenario
-    let _lock = EnvLock::acquire();
+    // Acquire scenario-scoped lock before process-global env mutation
+    world.ensure_env_lock();
+
     let original = std::env::var_os(var_name.as_str());
 
-    // SAFETY: EnvLock serialises mutations
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
     unsafe {
         std::env::set_var(var_name.as_str(), value.as_str());
     }
@@ -165,10 +167,12 @@ fn env_var_points_to_file(
 
     let file_path = temp_dir.join(file_name.as_str());
 
-    let _lock = EnvLock::acquire();
+    // Acquire scenario-scoped lock before process-global env mutation
+    world.ensure_env_lock();
+
     let original = std::env::var_os(var_name.as_str());
 
-    // SAFETY: EnvLock serialises mutations
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
     unsafe {
         std::env::set_var(var_name.as_str(), file_path.as_os_str());
     }

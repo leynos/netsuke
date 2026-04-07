@@ -27,6 +27,7 @@ use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::PathGuard;
 use test_support::env::{NinjaEnvGuard, restore_many};
+use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
 
 /// Combined test world for all BDD scenarios.
@@ -148,6 +149,11 @@ pub struct TestWorld {
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
+    /// Scenario-scoped lock for process-global environment mutations (CWD, env vars).
+    /// Held for the entire scenario duration when acquired via `ensure_env_lock()`.
+    pub env_lock: RefCell<Option<EnvLock>>,
+    /// Original working directory before any chdir operations, captured when `env_lock` is acquired.
+    pub original_cwd: RefCell<Option<PathBuf>>,
 }
 
 impl TestWorld {
@@ -161,6 +167,24 @@ impl TestWorld {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
             restore_many(vars);
+        }
+    }
+
+    /// Ensure the scenario-scoped environment lock is acquired.
+    ///
+    /// This lock serializes process-global mutations like `std::env::set_current_dir`
+    /// and environment variable changes across all parallel test threads. The lock
+    /// is held for the entire scenario duration and automatically released in Drop.
+    ///
+    /// When first acquired, captures the current working directory for later restoration.
+    pub fn ensure_env_lock(&self) {
+        if self.env_lock.borrow().is_none() {
+            // Acquire lock FIRST to ensure we capture CWD in a stable state
+            *self.env_lock.borrow_mut() = Some(EnvLock::acquire());
+            // Now capture CWD while holding the lock
+            if let Ok(cwd) = std::env::current_dir() {
+                *self.original_cwd.borrow_mut() = Some(cwd);
+            }
         }
     }
 
@@ -190,15 +214,20 @@ impl Drop for TestWorld {
         self.ninja_env_guard.borrow_mut().take();
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
+
+        // Restore original CWD before dropping temp_dir and releasing env_lock.
+        // This must happen WHILE env_lock is still held to maintain serialization.
+        if self.env_lock.borrow().is_some()
+            && let Some(original_cwd) = self.original_cwd.borrow_mut().take()
+        {
+            // Restore to captured CWD; ignore errors since this is cleanup code in Drop
+            _ = std::env::set_current_dir(original_cwd);
+        }
+
+        // Release env_lock before restoring environment variables
+        self.env_lock.borrow_mut().take();
         self.restore_environment();
         self.stdlib_text.clear();
-
-        // If temp_dir is set, we may have changed into it. Restore cwd before dropping temp_dir.
-        if self.temp_dir.borrow().is_some() {
-            // Change to a safe directory (project root or /tmp) before temp_dir is dropped
-            // Ignore errors since this is cleanup code in Drop
-            _ = std::env::set_current_dir("/tmp");
-        }
     }
 }
 

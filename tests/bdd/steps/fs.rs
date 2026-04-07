@@ -7,7 +7,6 @@ use cap_std::{ambient_authority, fs::FileTypeExt as CapFileTypeExt, fs_utf8::Dir
 use rstest_bdd_macros::given;
 use rustix::fs::{Dev, FileType as RxFileType, Mode, mknodat};
 use std::os::unix::fs::FileTypeExt;
-use test_support::env::set_var;
 
 // ---------------------------------------------------------------------------
 // Helper functions
@@ -103,6 +102,9 @@ fn setup_environment_variables(
     root: &Utf8PathBuf,
     device_paths: &(Utf8PathBuf, Utf8PathBuf),
 ) {
+    // Acquire scenario-scoped lock before process-global env mutations
+    world.ensure_env_lock();
+
     let (block_path, char_path) = device_paths;
     let entries = [
         ("DIR_PATH", root.join("dir")),
@@ -114,11 +116,19 @@ fn setup_environment_variables(
         ("DEVICE_PATH", char_path.clone()),
     ];
     for (key, path) in entries {
-        let previous = set_var(key, path.as_std_path().as_os_str());
-        world.track_env_var(key.to_owned(), previous);
+        let original = std::env::var_os(key);
+        // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+        unsafe {
+            std::env::set_var(key, path.as_std_path().as_os_str());
+        }
+        world.track_env_var(key.to_owned(), original);
     }
-    let previous = set_var("WORKSPACE", root.as_std_path().as_os_str());
-    world.track_env_var("WORKSPACE".into(), previous);
+    let original = std::env::var_os("WORKSPACE");
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+    unsafe {
+        std::env::set_var("WORKSPACE", root.as_std_path().as_os_str());
+    }
+    world.track_env_var("WORKSPACE".into(), original);
 }
 
 fn verify_missing_fixtures(handle: &Dir, root: &Utf8PathBuf) -> Result<()> {
