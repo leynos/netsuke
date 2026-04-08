@@ -1,4 +1,8 @@
 Feature: CLI config flags
+
+  Background:
+    Given an isolated CLI environment
+
   Scenario: Colour policy flag is parsed
     When the CLI is parsed with "--colour-policy always"
     Then parsing succeeds

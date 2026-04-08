@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETED
 
 ## Purpose / big picture
 
@@ -198,8 +198,9 @@ documented, integration tests were added, and all validation gates pass.
 2. **Project scope**: `.netsuke.toml` in current working directory (or directory
    specified via `-C/--directory`)
 3. **User scope**: Platform-specific user configuration directories:
-   - Unix-like: `$XDG_CONFIG_HOME/netsuke/config.toml`,
-     `$XDG_CONFIG_DIRS/netsuke/config.toml`, `$HOME/.config/netsuke/config.toml`,
+   - Unix-like: `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG Base Directory
+     config home), `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base Directory
+     config directories), `$HOME/.config/netsuke/config.toml`,
      `$HOME/.netsuke.toml`
    - Windows: `%APPDATA%\netsuke\config.toml`,
      `%LOCALAPPDATA%\netsuke\config.toml`
@@ -229,13 +230,13 @@ implementation was verified as correct and needed no adjustment.
    - `list_fields_append_across_discovered_config_env_and_cli`
 
 2. **BDD scenarios** (`tests/features/configuration_discovery.feature` and
-   `tests/bdd/steps/configuration_discovery.rs`, scaffolded):
+   `tests/bdd/steps/configuration_discovery.rs`, COMPLETED):
    - Feature file with 5 scenarios covering discovery and precedence
    - Step definitions for config file creation and environment setup
-   - **Status**: Scaffolded but not fully integrated with existing CLI parsing
-     steps. The BDD tests currently fail because they need additional "when"
-     step implementations to trigger config merging. This is documented for
-     future completion in a follow-up milestone.
+   - All BDD scenarios now pass with full CLI parsing and config merging
+     integration
+   - Added `isolated_cli_environment` Given step to prevent host configuration
+     interference in parser-focused tests
 
 ### Platform-specific constraints
 
@@ -245,17 +246,17 @@ directories and $HOME overrides for reproducibility.
 
 ### Validation results
 
-- `make check-fmt`: **PASS** (after running `cargo fmt`)
-- `make lint`: **PASS** (clippy warnings resolved)
-- `cargo test --test cli_tests`: **PASS** (all 54 tests pass, including 8 new
-  config discovery tests)
-- `cargo test --test bdd_tests`: **PARTIAL** (143 tests pass; 59 pre-existing
-  failures unrelated to this work; 4 new BDD scenarios fail pending integration
-  work)
+- `make check-fmt`: **PASS**
+- `make lint`: **PASS** (all Clippy warnings resolved)
+- `cargo test --test cli_tests`: **PASS** (all 54 tests pass, including 8 config
+  discovery tests)
+- `cargo test --test bdd_tests`: **PASS** (all 202 BDD scenarios pass, including
+  5 new configuration discovery scenarios)
+- `make test`: **PASS** (all 377 unit tests, 202 BDD scenarios, and 54
+  integration tests pass)
 
-The BDD test failures are expected and documented. The scaffolding is in place
-for future completion. All integration tests for the discovery functionality
-pass, which validates that the discovery mechanism works correctly.
+All tests pass. Configuration discovery is fully implemented, tested, and
+documented.
 
 ### Documentation updates
 

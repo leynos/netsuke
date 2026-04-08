@@ -2104,10 +2104,10 @@ resolved alongside theme and output-mode detection so `--colour-policy never`
 behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
 auto-detection. Build dispatch also consults OrthoConfig `default_targets`
 before falling back to manifest `defaults`, letting operators set user- or
-workspace-level build defaults without editing the manifest itself.
-Accessible reporter output, timing summaries, and the semantic prefix surface
-are guarded by `insta` snapshots so spacing, prefix alignment, and wrapping
-regressions fail with reviewable diffs instead of drifting silently.
+workspace-level build defaults without editing the manifest itself. Accessible
+reporter output, timing summaries, and the semantic prefix surface are guarded
+by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
+fail with reviewable diffs instead of drifting silently.
 
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.
@@ -2145,12 +2145,13 @@ variable is unset or invalid.
 
 ### 8.4.1 Configuration File Discovery
 
-**Figure: Configuration Discovery and Merge Flow** — This diagram illustrates how
-Netsuke discovers and merges configuration from multiple sources. The flow begins
-with CLI parsing, checks for project and user configuration files, and applies
-layered merging with increasing precedence: defaults < discovered config files <
-environment variables < CLI flags. The final merged configuration determines
-runtime behaviour. Accessible text description follows below.
+**Figure: Configuration Discovery and Merge Flow** — This diagram illustrates
+how Netsuke discovers and merges configuration from multiple sources. The flow
+begins with CLI parsing, checks for project and user configuration files, and
+applies layered merging with increasing precedence: defaults < discovered
+config files < environment variables < CLI flags. The final merged
+configuration determines runtime behaviour. Accessible text description follows
+below.
 
 ```mermaid
 flowchart LR
@@ -2176,12 +2177,20 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented through OrthoConfig's
-`ConfigDiscovery` builder in `src/cli/config_merge.rs`. The `config_discovery()`
-helper constructs a discovery instance rooted at application name `"netsuke"`,
-honours the `NETSUKE_CONFIG_PATH` environment variable as an explicit override,
-and adjusts project-root discovery when the `-C/--directory` flag is supplied.
+`ConfigDiscovery` builder in `src/cli/config_merge.rs`. The
+`config_discovery()` helper constructs a discovery instance rooted at
+application name `"netsuke"`, honours the `NETSUKE_CONFIG_PATH` environment
+variable as an explicit override, and adjusts project-root discovery when the
+`-C/--directory` flag is supplied.
 
-**Discovery search order** (first match wins):
+#### Discovery scopes and layered merging
+
+Configuration discovery searches multiple scopes and composes all discovered
+files into layers using OrthoConfig's `compose_layers()`. The layers are then
+merged in order (project-scope files, user-scope files, system-scope files),
+with values from later layers in the composition taking precedence when keys
+overlap. After file layers are merged, environment variables and CLI arguments
+override the merged result, ensuring explicit user intent always wins.
 
 1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable, if set.
    This allows users to point to any arbitrary configuration file path,
@@ -2196,10 +2205,11 @@ and adjusts project-root discovery when the `-C/--directory` flag is supplied.
 3. **User scope**: Configuration files in platform-specific user configuration
    directories:
    - **Unix-like systems**:
-     - `$XDG_CONFIG_HOME/netsuke/config.toml` (typically
-       `~/.config/netsuke/config.toml`)
-     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (defaults to
-       `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
+     - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG Base Directory config home,
+       typically `~/.config/netsuke/config.toml`)
+     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base
+       Directory config directories, defaults to `/etc/xdg/netsuke/config.toml`
+       when `XDG_CONFIG_DIRS` is unset)
      - Fallback: `$HOME/.config/netsuke/config.toml`
      - User home dotfile: `$HOME/.netsuke.toml`
    - **Windows**:

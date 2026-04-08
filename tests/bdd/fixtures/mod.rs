@@ -221,7 +221,7 @@ impl Drop for TestWorld {
             && let Some(original_cwd) = self.original_cwd.borrow_mut().take()
         {
             // Restore to captured CWD; ignore errors since this is cleanup code in Drop
-            _ = std::env::set_current_dir(original_cwd);
+            drop(std::env::set_current_dir(original_cwd));
         }
 
         // Release env_lock before restoring environment variables

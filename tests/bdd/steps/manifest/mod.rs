@@ -9,6 +9,7 @@ mod helpers;
 mod targets;
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::env_mutation::mutate_env_var as shared_mutate_env_var;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::types::{
     EnvVarKey, EnvVarValue, ErrorPattern, ManifestPath, RuleName, VersionString,
@@ -72,7 +73,7 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         // glob patterns (e.g. `tests/data/glob_files/*.txt`) resolve correctly.
         world.ensure_env_lock();
         // Ignore errors: the lock ensures no other test is racing CWD changes
-        _ = std::env::set_current_dir(manifest_dir);
+        drop(std::env::set_current_dir(manifest_dir));
         std::path::Path::new(manifest_dir)
             .join(path.as_str())
             .to_string_lossy()
@@ -141,28 +142,9 @@ fn expand_env(raw: &str) -> String {
     out
 }
 
-/// Validate `key`, acquire the env lock, capture the original value,
-/// perform the mutation, and register the key for cleanup.
-///
-/// `new_value`:
-/// - `Some(s)` – set the variable to `s`.
-/// - `None`    – remove the variable.
+/// Wrapper around the shared `mutate_env_var` helper for backward compatibility.
 fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
-    world.ensure_env_lock();
-    let original = std::env::var_os(key.as_str());
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        match new_value {
-            Some(val) => std::env::set_var(key.as_str(), val),
-            None => std::env::remove_var(key.as_str()),
-        }
-    }
-    world.track_env_var(key.into_string(), original);
-    Ok(())
+    shared_mutate_env_var(world, key, new_value)
 }
 
 // ---------------------------------------------------------------------------

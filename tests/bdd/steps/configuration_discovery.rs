@@ -1,6 +1,7 @@
 //! Step definitions for configuration discovery scenarios.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::types::{EnvVarKey, EnvVarValue, FileName, NamesList};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
@@ -132,29 +133,9 @@ fn custom_config_with_theme(
     )
 }
 
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "BDD step functions must return Result<()>"
-)]
 #[given("the environment variable {var_name:string} is set to {value:string}")]
 fn env_var_is_set(world: &TestWorld, var_name: EnvVarKey, value: EnvVarValue) -> Result<()> {
-    // Acquire scenario-scoped lock before process-global env mutation
-    world.ensure_env_lock();
-
-    let original = std::env::var_os(var_name.as_str());
-
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        std::env::set_var(var_name.as_str(), value.as_str());
-    }
-
-    // Track for cleanup
-    world
-        .env_vars
-        .borrow_mut()
-        .insert(var_name.into_string(), original);
-
-    Ok(())
+    mutate_env_var(world, var_name, Some(value.as_str()))
 }
 
 #[given("the environment variable {var_name:string} points to {file_name:string}")]
@@ -172,23 +153,11 @@ fn env_var_points_to_file(
         .to_path_buf();
 
     let file_path = temp_dir.join(file_name.as_str());
+    let file_path_str = file_path
+        .to_str()
+        .context("file path must be valid UTF-8")?;
 
-    // Acquire scenario-scoped lock before process-global env mutation
-    world.ensure_env_lock();
-
-    let original = std::env::var_os(var_name.as_str());
-
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        std::env::set_var(var_name.as_str(), file_path.as_os_str());
-    }
-
-    world
-        .env_vars
-        .borrow_mut()
-        .insert(var_name.into_string(), original);
-
-    Ok(())
+    mutate_env_var(world, var_name, Some(file_path_str))
 }
 
 /// Reads an optional field from the resolved CLI struct stored in `world`.

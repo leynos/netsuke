@@ -6,9 +6,12 @@
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
+use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
-use crate::bdd::types::{CliArgs, ErrorFragment, JobCount, PathString, TargetName, UrlString};
+use crate::bdd::types::{
+    CliArgs, EnvVarKey, ErrorFragment, JobCount, PathString, TargetName, UrlString,
+};
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::cli_localization;
@@ -16,6 +19,7 @@ use netsuke::locale_resolution;
 use rstest_bdd_macros::{given, then, when};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tempfile::tempdir;
 use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 
 // ---------------------------------------------------------------------------
@@ -23,6 +27,18 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 // ---------------------------------------------------------------------------
 
 /// Apply CLI parsing, storing result or error in world state.
+///
+/// This function always runs `merge_with_config`, which performs automatic
+/// configuration discovery and environment variable merging. To ensure tests
+/// remain hermetic and isolated from the host environment, callers should:
+///
+/// 1. Set `NETSUKE_CONFIG_PATH` to an empty/nonexistent path to disable config
+///    file discovery, or ensure a `temp_dir` is set to anchor discovery to a
+///    controlled location.
+/// 2. Clear or set all `NETSUKE_*` environment variables to known values.
+///
+/// Tests that do not explicitly set up configuration or environment variables
+/// may be affected by ambient host configuration.
 fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let env = StubEnv {
         locale: world.locale_env.get(),
@@ -32,10 +48,14 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
     };
 
     // If there's a temp_dir set and the args don't already contain an
-    // explicit -C flag, prepend -C <temp_dir> for config discovery.
+    // explicit -C or --directory flag, prepend -C <temp_dir> for config discovery.
     let mut tokens = build_tokens(args.as_str());
     if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
-        let has_directory_flag = tokens.iter().any(|t| t == "-C");
+        let has_directory_flag = tokens.iter().any(|t| {
+            t.to_str().is_some_and(|s| {
+                s == "-C" || s.starts_with("-C") || s == "--directory" || s.starts_with("--directory=")
+            })
+        });
         if !has_directory_flag && !tokens.is_empty() {
             let temp_path = temp_dir.path().as_os_str().to_owned();
             tokens.insert(1, "-C".into());
@@ -290,6 +310,44 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 // ---------------------------------------------------------------------------
 // Given/When steps
 // ---------------------------------------------------------------------------
+
+/// Set up an isolated environment for generic CLI parsing tests.
+///
+/// This step ensures that CLI parsing tests are not affected by ambient host
+/// configuration files or environment variables by:
+/// 1. Creating a temporary directory and anchoring config discovery to it.
+/// 2. Clearing all `NETSUKE_*` environment variables that could interfere.
+///
+/// Use this step for tests in `cli.feature` and `cli_config.feature` that
+/// focus on parsing behaviour rather than configuration discovery.
+#[given("an isolated CLI environment")]
+fn isolated_cli_environment(world: &TestWorld) -> Result<()> {
+    // Create a temporary directory to anchor config discovery
+    let temp = tempdir().context("create temporary directory for CLI isolation")?;
+    *world.temp_dir.borrow_mut() = Some(temp);
+
+    // Clear all NETSUKE_* environment variables to prevent interference
+    let netsuke_vars = [
+        "NETSUKE_CONFIG_PATH",
+        "NETSUKE_THEME",
+        "NETSUKE_LOCALE",
+        "NETSUKE_JOBS",
+        "NETSUKE_COLOUR_POLICY",
+        "NETSUKE_SPINNER_MODE",
+        "NETSUKE_OUTPUT_FORMAT",
+        "NETSUKE_DEFAULT_TARGETS",
+        "NETSUKE_FETCH_ALLOW_SCHEME",
+        "NETSUKE_FETCH_ALLOW_HOST",
+        "NETSUKE_FETCH_BLOCK_SCHEME",
+        "NETSUKE_FETCH_BLOCK_HOST",
+    ];
+
+    for var in &netsuke_vars {
+        mutate_env_var(world, EnvVarKey::from(*var), None)?;
+    }
+
+    Ok(())
+}
 
 #[expect(
     clippy::unnecessary_wraps,

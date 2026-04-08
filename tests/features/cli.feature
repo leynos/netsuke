@@ -1,5 +1,8 @@
 Feature: CLI parsing
 
+  Background:
+    Given an isolated CLI environment
+
   Scenario: Build is the default command
     When the CLI is parsed with ""
     Then parsing succeeds
