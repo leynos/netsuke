@@ -4,7 +4,7 @@
 //! user scopes, environment variable precedence, and CLI flag overrides.
 
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
+use netsuke::cli::config::{ColourPolicy, OutputFormat};
 use netsuke::cli_localization;
 use netsuke::theme::ThemePreference;
 use rstest::rstest;
@@ -14,9 +14,30 @@ use std::sync::Arc;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
+/// RAII guard that restores the process working directory on drop.
+///
+/// Acquire this *after* `EnvLock` so the drop order (CWD restored first,
+/// lock released second) mirrors the acquire order.
+struct CwdGuard(std::path::PathBuf);
+
+impl CwdGuard {
+    fn acquire() -> anyhow::Result<Self> {
+        Ok(Self(
+            std::env::current_dir().context("capture current working directory")?,
+        ))
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        drop(std::env::set_current_dir(&self.0));
+    }
+}
+
 #[rstest]
 fn project_scope_config_discovered_automatically() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_dir = tempdir().context("create temporary project directory")?;
     let project_config = temp_dir.path().join(".netsuke.toml");
 
@@ -62,9 +83,11 @@ jobs = 8
     Ok(())
 }
 
+#[cfg(unix)]
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
 
@@ -113,51 +136,127 @@ jobs = 4
     Ok(())
 }
 
+#[cfg(windows)]
+#[rstest]
+fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let temp_appdata = tempdir().context("create temporary APPDATA directory")?;
+
+    // Create netsuke subdirectory in fake APPDATA
+    let netsuke_config_dir = temp_appdata.path().join("netsuke");
+    fs::create_dir_all(&netsuke_config_dir).context("create netsuke config directory")?;
+
+    // Write user-scope config in fake APPDATA
+    let user_config = netsuke_config_dir.join("config.toml");
+    fs::write(
+        &user_config,
+        r#"
+theme = "ascii"
+colour_policy = "never"
+jobs = 4
+"#,
+    )
+    .context("write user config.toml in APPDATA")?;
+
+    // Set APPDATA to fake directory (Windows)
+    let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
+    // Clear other env vars
+    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
+
+    // Change to empty project directory
+    std::env::set_current_dir(&temp_project).context("change to project directory")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI for user config discovery")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge with user config")?
+        .with_default_command();
+
+    ensure!(
+        merged.theme == Some(ThemePreference::Ascii),
+        "user config theme should be discovered when no project config exists"
+    );
+    ensure!(
+        merged.colour_policy == Some(ColourPolicy::Never),
+        "user config colour_policy should be discovered"
+    );
+    ensure!(
+        merged.jobs == Some(4),
+        "user config jobs should be discovered"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
-    // This test verifies that when in a project directory with a .netsuke.toml,
-    // that config is used. The actual precedence mechanism (project scope wins
-    // over user scope) is verified by OrthoConfig's own tests. Our integration
-    // test simply confirms the project config is discovered and applied.
     let _env_lock = EnvLock::acquire();
-    let temp_project = tempdir().context("create temporary project directory")?;
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
-    // Write project-scope config
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let temp_home = tempdir().context("create temporary home directory")?;
+
+    // User config: sets theme and a user-only field (colour_policy).
+    // Use XDG-style path ($XDG_CONFIG_HOME/netsuke/config.toml) to avoid deduplication
+    // with project dotfile (.netsuke.toml in CWD)
+    let user_config_dir = temp_home.path().join(".config/netsuke");
+    fs::create_dir_all(&user_config_dir).context("create user config directory")?;
+    let user_config = user_config_dir.join("config.toml");
+    fs::write(
+        &user_config,
+        r#"
+theme = "ascii"
+colour_policy = "never"
+"#,
+    )
+    .context("write user config.toml")?;
+
+    // Project config: overrides theme; does NOT set colour_policy.
     let project_config = temp_project.path().join(".netsuke.toml");
     fs::write(
         &project_config,
         r#"
 theme = "unicode"
 jobs = 8
-spinner_mode = "enabled"
 "#,
     )
     .context("write project .netsuke.toml")?;
 
+    let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
+    let _xdg_guard = EnvVarGuard::set(
+        "XDG_CONFIG_HOME",
+        temp_home.path().join(".config").as_os_str(),
+    );
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI with project config")?;
+        .context("parse CLI for precedence test")?;
     let merged = netsuke::cli::merge_with_config(&cli, &matches)
         .context("merge configs")?
         .with_default_command();
 
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
-        "project config theme should be discovered and applied"
+        "project config theme should override user config theme"
     );
     ensure!(
         merged.jobs == Some(8),
-        "project config jobs should be discovered"
+        "project config jobs should be applied"
     );
     ensure!(
-        merged.spinner_mode == Some(SpinnerMode::Enabled),
-        "project config spinner_mode should be applied"
+        merged.colour_policy == Some(ColourPolicy::Never),
+        "user-only field should still be merged when project config does not override it"
     );
     Ok(())
 }
@@ -165,6 +264,7 @@ spinner_mode = "enabled"
 #[rstest]
 fn environment_variables_override_discovered_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
     // Write project-scope config
@@ -211,6 +311,7 @@ output_format = "human"
 #[rstest]
 fn cli_flags_override_environment_and_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
     // Write project-scope config
@@ -275,6 +376,7 @@ output_format = "human"
 #[rstest]
 fn directory_flag_anchors_project_discovery_to_specified_dir() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_outer = tempdir().context("create outer directory")?;
     let temp_project = temp_outer.path().join("project");
     fs::create_dir(&temp_project).context("create project subdirectory")?;
@@ -318,6 +420,7 @@ jobs = 6
 #[rstest]
 fn config_path_env_var_bypasses_automatic_discovery() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create project directory")?;
     let temp_custom = tempdir().context("create custom config directory")?;
 
@@ -374,6 +477,7 @@ colour_policy = "always"
 #[rstest]
 fn list_fields_append_across_discovered_config_env_and_cli() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create project directory")?;
 
     // Write project config with default_targets

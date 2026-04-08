@@ -53,7 +53,10 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
     if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
         let has_directory_flag = tokens.iter().any(|t| {
             t.to_str().is_some_and(|s| {
-                s == "-C" || s.starts_with("-C") || s == "--directory" || s.starts_with("--directory=")
+                s == "-C"
+                    || s.starts_with("-C")
+                    || s == "--directory"
+                    || s.starts_with("--directory=")
             })
         });
         if !has_directory_flag && !tokens.is_empty() {
