@@ -95,7 +95,7 @@ fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result
     let result = cmd
         .current_dir(temp_path)
         .env("PATH", "")
-        .args(&args)
+        .args(args)
         .output()
         .context("run netsuke manifest command")?;
     Ok(RunResult {
@@ -119,10 +119,14 @@ fn store_run_result(world: &TestWorld, result: RunResult) {
     }
 }
 
-/// Locate the netsuke executable using assert_cmd's binary locator.
+/// Locate the netsuke executable using `assert_cmd`'s binary locator.
 fn netsuke_executable() -> Result<PathBuf> {
     let exe = assert_cmd::cargo::cargo_bin!("netsuke");
-    ensure!(exe.is_file(), "netsuke binary not found at {}", exe.display());
+    ensure!(
+        exe.is_file(),
+        "netsuke binary not found at {}",
+        exe.display()
+    );
     Ok(exe.to_path_buf())
 }
 
@@ -132,9 +136,7 @@ fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
 
     // Build command with environment variables from TestWorld
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
-    cmd.current_dir(&temp_path)
-        .env("PATH", "")
-        .args(args);
+    cmd.current_dir(&temp_path).env("PATH", "").args(args);
 
     // Preserve NINJA_ENV if it's set (used by fake ninja scenarios)
     if let Ok(ninja_env) = std::env::var("NINJA_ENV") {
@@ -151,9 +153,7 @@ fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
         }
     }
 
-    let output = cmd
-        .output()
-        .context("run netsuke command")?;
+    let output = cmd.output().context("run netsuke command")?;
 
     store_run_result(
         world,
