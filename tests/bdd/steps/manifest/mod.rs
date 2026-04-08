@@ -134,6 +134,30 @@ fn expand_env(raw: &str) -> String {
     out
 }
 
+/// Validate `key`, acquire the env lock, capture the original value,
+/// perform the mutation, and register the key for cleanup.
+///
+/// `new_value`:
+/// - `Some(s)` – set the variable to `s`.
+/// - `None`    – remove the variable.
+fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
+    ensure!(
+        !key.as_str().is_empty(),
+        "environment variable name must not be empty"
+    );
+    world.ensure_env_lock();
+    let original = std::env::var_os(key.as_str());
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+    unsafe {
+        match new_value {
+            Some(val) => std::env::set_var(key.as_str(), val),
+            None => std::env::remove_var(key.as_str()),
+        }
+    }
+    world.track_env_var(key.into_string(), original);
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
@@ -144,44 +168,14 @@ fn expand_env(raw: &str) -> String {
 )]
 #[given("the environment variable {key:string} is set to {value:string}")]
 fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
-    let key = EnvVarKey::new(key);
     let value = EnvVarValue::new(value);
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
-    // Acquire scenario-scoped lock before process-global env mutation
-    world.ensure_env_lock();
     let expanded = expand_env(value.as_str());
-    let original = std::env::var_os(key.as_str());
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        std::env::set_var(key.as_str(), &expanded);
-    }
-    world.track_env_var(key.into_string(), original);
-    Ok(())
+    mutate_env_var(world, EnvVarKey::new(key), Some(&expanded))
 }
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[given("the environment variable {key:string} is unset")]
 fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
-    let key = EnvVarKey::new(key);
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
-    // Acquire scenario-scoped lock before process-global env mutation
-    world.ensure_env_lock();
-    let original = std::env::var_os(key.as_str());
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
-    unsafe {
-        std::env::remove_var(key.as_str());
-    }
-    world.track_env_var(key.into_string(), original);
-    Ok(())
+    mutate_env_var(world, EnvVarKey::new(key), None)
 }
 
 #[expect(

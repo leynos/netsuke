@@ -3,6 +3,7 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::types::{EnvVarKey, EnvVarValue, FileName, NamesList};
 use anyhow::{Context, Result, ensure};
+use netsuke::cli::Cli;
 use netsuke::cli::config::OutputFormat;
 use netsuke::theme::ThemePreference;
 use rstest_bdd_macros::{given, then};
@@ -56,18 +57,23 @@ jobs = {jobs}
     write_config_file(world, file_name.as_str(), &content, true)
 }
 
+/// Returns the TOML snippet for a config file that sets only `theme`.
+fn theme_config_content(theme: ThemePreference) -> String {
+    format!("\ntheme = \"{theme}\"\n")
+}
+
 #[given("a project config file {file_name:string} with theme {theme:string}")]
 fn project_config_with_theme(
     world: &TestWorld,
     file_name: FileName,
     theme: ThemePreference,
 ) -> Result<()> {
-    let content = format!(
-        r#"
-theme = "{theme}"
-"#
-    );
-    write_config_file(world, file_name.as_str(), &content, true)
+    write_config_file(
+        world,
+        file_name.as_str(),
+        &theme_config_content(theme),
+        true,
+    )
 }
 
 #[given(
@@ -118,12 +124,12 @@ fn custom_config_with_theme(
     file_name: FileName,
     theme: ThemePreference,
 ) -> Result<()> {
-    let content = format!(
-        r#"
-theme = "{theme}"
-"#
-    );
-    write_config_file(world, file_name.as_str(), &content, false)
+    write_config_file(
+        world,
+        file_name.as_str(),
+        &theme_config_content(theme),
+        false,
+    )
 }
 
 #[expect(
@@ -185,14 +191,23 @@ fn env_var_points_to_file(
     Ok(())
 }
 
+/// Reads an optional field from the resolved CLI struct stored in `world`.
+///
+/// Returns an error if the field is absent.
+fn read_cli_option<T, F>(world: &TestWorld, field_name: &str, extract: F) -> Result<T>
+where
+    F: FnOnce(&Cli) -> Option<T>,
+{
+    world
+        .cli
+        .with_ref(|cli| extract(cli))
+        .flatten()
+        .with_context(|| format!("CLI {field_name} should be present"))
+}
+
 #[then("the theme preference is {expected:string}")]
 fn theme_preference_is(world: &TestWorld, expected: ThemePreference) -> Result<()> {
-    let actual = world
-        .cli
-        .with_ref(|cli| cli.theme)
-        .flatten()
-        .context("CLI theme should be present")?;
-
+    let actual = read_cli_option(world, "theme", |cli| cli.theme)?;
     ensure!(
         actual == expected,
         "expected theme {expected:?}, got {actual:?}"
@@ -202,12 +217,7 @@ fn theme_preference_is(world: &TestWorld, expected: ThemePreference) -> Result<(
 
 #[then("the jobs setting is {expected}")]
 fn jobs_setting_is(world: &TestWorld, expected: u32) -> Result<()> {
-    let actual = world
-        .cli
-        .with_ref(|cli| cli.jobs)
-        .flatten()
-        .context("CLI jobs should be present")?;
-
+    let actual = read_cli_option(world, "jobs", |cli| cli.jobs)?;
     ensure!(
         u32::try_from(actual)? == expected,
         "expected jobs {expected}, got {actual}"
