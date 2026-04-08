@@ -61,11 +61,18 @@ pub(super) fn get_string_from_string_or_list(
 }
 
 fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
-    // Convert relative test data paths to absolute to avoid issues when CWD is changed by parallel tests
+    // Convert relative test data paths to absolute to avoid issues when CWD is
+    // changed by parallel tests.  Also lock CWD to the project root so that
+    // glob patterns inside the manifest resolve correctly.
     let manifest_path = if std::path::Path::new(path.as_str()).is_relative()
         && path.as_str().starts_with("tests/")
     {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        // Hold the env lock and set CWD to the project root so that relative
+        // glob patterns (e.g. `tests/data/glob_files/*.txt`) resolve correctly.
+        world.ensure_env_lock();
+        // Ignore errors: the lock ensures no other test is racing CWD changes
+        _ = std::env::set_current_dir(manifest_dir);
         std::path::Path::new(manifest_dir)
             .join(path.as_str())
             .to_string_lossy()

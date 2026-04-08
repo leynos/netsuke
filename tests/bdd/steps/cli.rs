@@ -31,12 +31,13 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
         locale: world.locale_system.get(),
     };
 
-    // If there's a temp_dir set, prepend -C <temp_dir> to use it for config discovery
+    // If there's a temp_dir set and the args don't already contain an
+    // explicit -C flag, prepend -C <temp_dir> for config discovery.
     let mut tokens = build_tokens(args.as_str());
     if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
-        let temp_path = temp_dir.path().as_os_str().to_owned();
-        // Insert -C and the path after "netsuke" (first token)
-        if !tokens.is_empty() {
+        let has_directory_flag = tokens.iter().any(|t| t == "-C");
+        if !has_directory_flag && !tokens.is_empty() {
+            let temp_path = temp_dir.path().as_os_str().to_owned();
             tokens.insert(1, "-C".into());
             tokens.insert(2, temp_path);
         }
