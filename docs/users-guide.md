@@ -981,7 +981,7 @@ internal database. It delegates directly to `ninja -t clean`:
 netsuke clean
 ```
 
-This removes all output files declared in target `outs:` and action `outs:`
+This removes all output files declared in target `name:` and action `name:`
 fields that Ninja has built. Files marked as `phony` targets are not removed
 (since they have no physical output).
 
@@ -1018,8 +1018,8 @@ dot -Tpng build.dot -o build.png
 This produces a visual diagram showing:
 
 - Nodes for each target and action.
-- Edges showing explicit dependencies (`ins:`, `needs:`).
-- Order-only dependencies (`after:`).
+- Edges showing explicit dependencies (`ins:`, `deps:`).
+- Order-only dependencies (`order_only_deps:`).
 
 **Interpreting the output:**
 
@@ -1077,8 +1077,8 @@ then invokes Ninja on it:
 netsuke build --emit build.ninja
 ```
 
-Use `manifest` when you want the Ninja file *without* running the build, and
-`--emit` when you want both the file and the build execution.
+Use `manifest` to obtain the Ninja file *without* running the build, and
+`--emit` to obtain both the file and the build execution.
 
 ### 12.4 Configuration layering
 
@@ -1092,13 +1092,13 @@ Netsuke uses a four-tier configuration precedence model provided by the
    `NETSUKE_VERBOSE`).
 4. **CLI flags:** Command-line arguments (e.g., `--verbose`).
 
-Each layer overrides the previous one. This allows you to set stable defaults
-in a configuration file and override them per-invocation with environment
+Each layer overrides the previous one. This allows setting stable defaults
+in a configuration file and overriding them per-invocation with environment
 variables or flags.
 
 **Configuration file discovery:**
 
-Netsuke searches for configuration files in the following order:
+Netsuke searches for configuration files in the following locations:
 
 1. Path specified by `NETSUKE_CONFIG_PATH` environment variable.
 2. `.netsuke.toml` in the current working directory (project scope).
@@ -1106,9 +1106,10 @@ Netsuke searches for configuration files in the following order:
 4. Platform-specific user configuration directories (`$XDG_CONFIG_HOME/netsuke`
    on Unix, `%APPDATA%\netsuke` on Windows).
 
-The first file found is used. Project-scoped configuration (current directory)
-takes precedence over user-scoped configuration (home directory or XDG
-locations).
+All discovered configuration files are layered together, with settings from
+earlier locations (lower numbers) taking precedence over later ones. This means
+project-scoped configuration overrides user-scoped configuration for any
+settings they both define.
 
 **Configuration file format:**
 
@@ -1118,7 +1119,7 @@ Configuration files are TOML. Supported keys match the CLI option names:
 # .netsuke.toml
 verbose = true
 colour_policy = "always"
-spinner_mode = "always"
+spinner_mode = "enabled"
 theme = "unicode"
 default_targets = ["hello", "test"]
 ```
@@ -1130,7 +1131,7 @@ names to screaming snake case:
 
 - `--verbose` → `NETSUKE_VERBOSE=true`
 - `--colour-policy` → `NETSUKE_COLOUR_POLICY=always`
-- `--spinner-mode` → `NETSUKE_SPINNER_MODE=never`
+- `--spinner-mode` → `NETSUKE_SPINNER_MODE=disabled`
 
 For nested fields or indexed lists, use double underscore separators:
 
@@ -1147,7 +1148,7 @@ verbose = true
 colour_policy = "auto"
 ```
 
-You can override `colour_policy` for a single invocation:
+To override `colour_policy` for a single invocation:
 
 ```sh
 NETSUKE_COLOUR_POLICY=never netsuke build
@@ -1188,16 +1189,22 @@ NETSUKE_OUTPUT_FORMAT=json netsuke build
 
 **JSON diagnostics on error:**
 
-When a command fails, stderr contains a JSON object with structured error
+When a command fails, stderr contains a JSON envelope with structured error
 information:
 
 ```json
 {
-  "type": "diagnostic",
-  "severity": "error",
-  "code": "E_MANIFEST_NOT_FOUND",
-  "message": "Manifest 'Netsukefile' not found in the current directory.",
-  "help": "Ensure the manifest exists or pass `--file` with the correct path."
+  "schema_version": "1.0.0",
+  "generator": "netsuke",
+  "diagnostics": [
+    {
+      "type": "diagnostic",
+      "severity": "error",
+      "code": "E_MANIFEST_NOT_FOUND",
+      "message": "Manifest 'Netsukefile' not found in the current directory.",
+      "help": "Ensure the manifest exists or pass `--file` with the correct path."
+    }
+  ]
 }
 ```
 

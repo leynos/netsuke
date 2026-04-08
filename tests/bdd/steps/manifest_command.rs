@@ -130,28 +130,45 @@ fn netsuke_executable() -> Result<PathBuf> {
     Ok(exe.to_path_buf())
 }
 
-/// Run netsuke with the given arguments and store the result.
-fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
+/// Build a netsuke command with a sanitized environment.
+///
+/// This helper constructs an `assert_cmd::Command` configured with:
+/// - The resolved netsuke executable path
+/// - Current directory set to the test workspace
+/// - Cleared inherited environment to ensure test isolation
+/// - Only scenario-specific env vars (from BDD steps) are preserved
+/// - Controlled `PATH` variable
+///
+/// Returns the configured command ready for execution.
+fn build_netsuke_command(world: &TestWorld, args: &[&str]) -> Result<assert_cmd::Command> {
     let temp_path = get_temp_path(world)?;
 
-    // Build command with environment variables from TestWorld
-    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
-    cmd.current_dir(&temp_path).env("PATH", "").args(args);
-
-    // Preserve NINJA_ENV if it's set (used by fake ninja scenarios)
-    if let Ok(ninja_env) = std::env::var("NINJA_ENV") {
-        cmd.env("NINJA_ENV", ninja_env);
-    }
-
-    // Apply environment variables from TestWorld
+    // Capture environment variables set during the scenario before clearing
     let env_vars = world.env_vars.borrow();
-    for (key, value) in env_vars.iter() {
-        if let Some(val) = value {
-            cmd.env(key, val);
-        } else {
-            cmd.env_remove(key);
-        }
+    let scenario_env: Vec<(String, String)> = env_vars
+        .keys()
+        .filter_map(|key| std::env::var(key).ok().map(|val| (key.clone(), val)))
+        .collect();
+    drop(env_vars);
+
+    // Build command with sanitized environment
+    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    cmd.current_dir(&temp_path)
+        .env_clear()
+        .env("PATH", "")
+        .args(args);
+
+    // Re-apply scenario-specific environment variables
+    for (key, value) in scenario_env {
+        cmd.env(key, value);
     }
+
+    Ok(cmd)
+}
+
+/// Run netsuke with the given arguments and store the result.
+fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
+    let mut cmd = build_netsuke_command(world, args)?;
 
     let output = cmd.output().context("run netsuke command")?;
 
@@ -453,4 +470,88 @@ fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
         .context("workspace_path must be set by empty_workspace_at_path step")?;
     let dir_arg = workspace_path.to_string_lossy().to_string();
     run_netsuke_and_store(world, &["-C", &dir_arg])
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests for environment-handling behaviour
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    fn env_value<'a>(cmd: &'a assert_cmd::Command, key: &str) -> Option<&'a OsStr> {
+        cmd.get_envs()
+            .find(|(k, _)| *k == OsStr::new(key))
+            .and_then(|(_, v)| v)
+    }
+
+    #[test]
+    fn world_env_vars_with_value_are_applied() {
+        let world = TestWorld::default();
+        // Set up temp directory for test
+        let temp = tempfile::tempdir().expect("create temp dir");
+        *world.temp_dir.borrow_mut() = Some(temp);
+
+        // Simulate a BDD step setting an env var:
+        // 1. Set the var in the process
+        // 2. Track it in world.env_vars for restoration
+        unsafe {
+            std::env::set_var("NETSUKE_TEST_FLAG", "enabled");
+        }
+        world.track_env_var("NETSUKE_TEST_FLAG".to_owned(), None);
+
+        let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
+
+        let val =
+            env_value(&cmd, "NETSUKE_TEST_FLAG").expect("NETSUKE_TEST_FLAG should be present");
+        assert_eq!(val, OsStr::new("enabled"));
+    }
+
+    #[test]
+    fn host_env_vars_are_not_inherited() {
+        let world = TestWorld::default();
+        // Set up temp directory for test
+        let temp = tempfile::tempdir().expect("create temp dir");
+        *world.temp_dir.borrow_mut() = Some(temp);
+
+        // Set a host env var that should NOT be inherited (not tracked in world.env_vars)
+        unsafe {
+            std::env::set_var("NETSUKE_HOST_VAR", "should-not-inherit");
+        }
+
+        let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
+
+        // Command should NOT contain the host env var because env_clear() was called
+        let val = env_value(&cmd, "NETSUKE_HOST_VAR");
+        assert!(
+            val.is_none(),
+            "NETSUKE_HOST_VAR should not be inherited from host environment"
+        );
+    }
+
+    #[test]
+    fn path_is_cleared_and_netsuke_executable_is_used() {
+        let world = TestWorld::default();
+        // Set up temp directory for test
+        let temp = tempfile::tempdir().expect("create temp dir");
+        *world.temp_dir.borrow_mut() = Some(temp);
+
+        // Simulate a different netsuke early in PATH that must not be used
+        unsafe {
+            std::env::set_var("PATH", "/fake/bin");
+        }
+
+        let cmd = build_netsuke_command(&world, &["--version"]).expect("build command");
+
+        // PATH should be explicitly set to empty in the command environment
+        let path_val =
+            env_value(&cmd, "PATH").expect("PATH should be explicitly set on the command");
+        assert_eq!(path_val, OsStr::new(""));
+
+        // Command should be configured to run the resolved netsuke_executable(), not a PATH lookup
+        let exe = netsuke_executable().expect("netsuke_executable");
+        assert_eq!(cmd.get_program(), exe.as_os_str());
+    }
 }
