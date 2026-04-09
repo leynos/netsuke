@@ -202,11 +202,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let temp_home = tempdir().context("create temporary home directory")?;
 
     // User config: sets theme and a user-only field (colour_policy).
-    // Use XDG-style path ($XDG_CONFIG_HOME/netsuke/config.toml) to avoid deduplication
-    // with project dotfile (.netsuke.toml in CWD)
-    let user_config_dir = temp_home.path().join(".config/netsuke");
-    fs::create_dir_all(&user_config_dir).context("create user config directory")?;
-    let user_config = user_config_dir.join("config.toml");
+    let user_config = temp_home.path().join(".netsuke.toml");
     fs::write(
         &user_config,
         r#"
@@ -214,7 +210,7 @@ theme = "ascii"
 colour_policy = "never"
 "#,
     )
-    .context("write user config.toml")?;
+    .context("write user .netsuke.toml")?;
 
     // Project config: overrides theme; does NOT set colour_policy.
     let project_config = temp_project.path().join(".netsuke.toml");
@@ -228,14 +224,11 @@ jobs = 8
     .context("write project .netsuke.toml")?;
 
     let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
-    let _xdg_guard = EnvVarGuard::set(
-        "XDG_CONFIG_HOME",
-        temp_home.path().join(".config").as_os_str(),
-    );
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
+    let _xdg_guard = EnvVarGuard::remove("XDG_CONFIG_HOME");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
