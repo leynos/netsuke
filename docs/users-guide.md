@@ -981,12 +981,15 @@ internal database. It delegates directly to `ninja -t clean`:
 netsuke clean
 ```
 
-This removes all output files declared in target `name:` and action `name:`
-fields that Ninja has built. Files marked as `phony` targets are not removed
-(since they have no physical output).
+This removes all output files declared in target `name:` fields that Ninja has
+built. Only file-producing targets (those with output files declared in their
+`name:` fields) are removed. Entries under the `actions` section are implicitly
+phony (treated as `{ phony: true, always: false }` by default) and are therefore
+ignored by `clean` since their names are not considered build artifacts.
 
-**Interaction with phony targets:** If a target is declared as `phony: true`,
-Ninja does not track it as a file, so `clean` ignores it.
+**Interaction with phony targets:** If a target outside the `actions` section
+is declared as `phony: true`, Ninja does not track it as a file, so `clean`
+ignores it as well.
 
 **Example workflow:**
 
@@ -1018,7 +1021,7 @@ dot -Tpng build.dot -o build.png
 This produces a visual diagram showing:
 
 - Nodes for each target and action.
-- Edges showing explicit dependencies (`ins:`, `deps:`).
+- Edges showing explicit dependencies (`sources:`, `deps:`).
 - Order-only dependencies (`order_only_deps:`).
 
 **Interpreting the output:**
@@ -1194,11 +1197,13 @@ information:
 
 ```json
 {
-  "schema_version": "1.0.0",
-  "generator": "netsuke",
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0"
+  },
   "diagnostics": [
     {
-      "type": "diagnostic",
       "severity": "error",
       "code": "E_MANIFEST_NOT_FOUND",
       "message": "Manifest 'Netsukefile' not found in the current directory.",
@@ -1228,7 +1233,7 @@ report structured failures:
 ```sh
 netsuke --diag-json build 2>diagnostics.json
 if [ $? -ne 0 ]; then
-  jq '.code, .message' diagnostics.json
+  jq '.schema_version, .generator.name, .generator.version, .diagnostics[0].code, .diagnostics[0].message' diagnostics.json
 fi
 ```
 

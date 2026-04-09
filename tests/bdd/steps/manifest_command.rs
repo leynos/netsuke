@@ -89,15 +89,10 @@ struct RunResult {
     success: bool,
 }
 
-fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result<RunResult> {
+fn run_manifest_command(world: &TestWorld, output: &ManifestOutputPath) -> Result<RunResult> {
     let args = ["manifest", output.as_str()];
-    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
-    let result = cmd
-        .current_dir(temp_path)
-        .env("PATH", "")
-        .args(args)
-        .output()
-        .context("run netsuke manifest command")?;
+    let mut cmd = build_netsuke_command(world, &args)?;
+    let result = cmd.output().context("run netsuke manifest command")?;
     Ok(RunResult {
         stdout: String::from_utf8_lossy(&result.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
@@ -216,8 +211,7 @@ fn directory_named_exists(world: &TestWorld, name: DirectoryName) -> Result<()> 
 
 #[when("the netsuke manifest subcommand is run with {output:string}")]
 fn run_manifest_subcommand(world: &TestWorld, output: ManifestOutputPath) -> Result<()> {
-    let temp_path = get_temp_path(world)?;
-    let result = run_manifest_command(&temp_path, &output)?;
+    let result = run_manifest_command(world, &output)?;
     store_run_result(world, result);
     Ok(())
 }
@@ -480,6 +474,7 @@ fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
 mod tests {
     use super::*;
     use std::ffi::OsStr;
+    use test_support::env::VarGuard;
 
     fn env_value<'a>(cmd: &'a assert_cmd::Command, key: &str) -> Option<&'a OsStr> {
         cmd.get_envs()
@@ -494,12 +489,8 @@ mod tests {
         let temp = tempfile::tempdir().expect("create temp dir");
         *world.temp_dir.borrow_mut() = Some(temp);
 
-        // Simulate a BDD step setting an env var:
-        // 1. Set the var in the process
-        // 2. Track it in world.env_vars for restoration
-        unsafe {
-            std::env::set_var("NETSUKE_TEST_FLAG", "enabled");
-        }
+        // Simulate a BDD step setting an env var using VarGuard for proper locking and restoration
+        let _guard = VarGuard::set("NETSUKE_TEST_FLAG", OsStr::new("enabled"));
         world.track_env_var("NETSUKE_TEST_FLAG".to_owned(), None);
 
         let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
@@ -517,9 +508,7 @@ mod tests {
         *world.temp_dir.borrow_mut() = Some(temp);
 
         // Set a host env var that should NOT be inherited (not tracked in world.env_vars)
-        unsafe {
-            std::env::set_var("NETSUKE_HOST_VAR", "should-not-inherit");
-        }
+        let _guard = VarGuard::set("NETSUKE_HOST_VAR", OsStr::new("should-not-inherit"));
 
         let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
 
@@ -539,9 +528,7 @@ mod tests {
         *world.temp_dir.borrow_mut() = Some(temp);
 
         // Simulate a different netsuke early in PATH that must not be used
-        unsafe {
-            std::env::set_var("PATH", "/fake/bin");
-        }
+        let _guard = VarGuard::set("PATH", OsStr::new("/fake/bin"));
 
         let cmd = build_netsuke_command(&world, &["--version"]).expect("build command");
 
