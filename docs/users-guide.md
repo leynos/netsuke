@@ -964,7 +964,7 @@ Use the `-v` flag for more detailed error context or internal logging.
 Always review `Netsukefile` manifests, especially those from untrusted sources,
 before building.
 
-## 12\. Advanced Usage
+## 12\. Advanced usage
 
 This chapter covers features aimed at users who have mastered the basics and
 want to integrate Netsuke into more sophisticated workflows. These include
@@ -984,8 +984,9 @@ netsuke clean
 This removes all output files declared in target `name:` fields that Ninja has
 built. Only file-producing targets (those with output files declared in their
 `name:` fields) are removed. Entries under the `actions` section are implicitly
-phony (treated as `{ phony: true, always: false }` by default) and are therefore
-ignored by `clean` since their names are not considered build artifacts.
+phony (treated as `{ phony: true, always: false }` by default) and are
+therefore ignored by `clean` since their names are not considered build
+artefacts.
 
 **Interaction with phony targets:** If a target outside the `actions` section
 is declared as `phony: true`, Ninja does not track it as a file, so `clean`
@@ -1095,24 +1096,24 @@ Netsuke uses a four-tier configuration precedence model provided by the
    `NETSUKE_VERBOSE`).
 4. **CLI flags:** Command-line arguments (e.g., `--verbose`).
 
-Each layer overrides the previous one. This allows setting stable defaults
-in a configuration file and overriding them per-invocation with environment
+Each layer overrides the previous one. This allows setting stable defaults in a
+configuration file and overriding them per-invocation with environment
 variables or flags.
 
 **Configuration file discovery:**
 
-Netsuke searches for configuration files in the following locations:
+Netsuke searches for `.netsuke.toml` configuration files in this order:
 
-1. Path specified by `NETSUKE_CONFIG_PATH` environment variable.
+1. `NETSUKE_CONFIG_PATH` environment variable (explicit path; bypasses all
+   other discovery).
 2. `.netsuke.toml` in the current working directory (project scope).
 3. `.netsuke.toml` in the user's home directory (user scope).
-4. Platform-specific user configuration directories (`$XDG_CONFIG_HOME/netsuke`
-   on Unix, `%APPDATA%\netsuke` on Windows).
+4. Platform-specific user configuration directory
+   (`$XDG_CONFIG_HOME/netsuke` on Unix, `%APPDATA%\netsuke` on Windows).
 
-All discovered configuration files are layered together, with settings from
-earlier locations (lower numbers) taking precedence over later ones. This means
-project-scoped configuration overrides user-scoped configuration for any
-settings they both define.
+Earlier entries in this list take precedence over later entries: project-scoped
+configuration overrides user-scoped configuration, and setting
+`NETSUKE_CONFIG_PATH` overrides all automatic discovery.
 
 **Configuration file format:**
 
@@ -1143,7 +1144,7 @@ For nested fields or indexed lists, use double underscore separators:
 
 **Example layering workflow:**
 
-Suppose you have a project configuration file:
+Given a project configuration file:
 
 ```toml
 # .netsuke.toml (project scope)
@@ -1151,13 +1152,13 @@ verbose = true
 colour_policy = "auto"
 ```
 
-To override `colour_policy` for a single invocation:
+Override `colour_policy` for a single invocation using an environment variable:
 
 ```sh
 NETSUKE_COLOUR_POLICY=never netsuke build
 ```
 
-Or override both settings via CLI flags:
+Override both settings for a single invocation using CLI flags:
 
 ```sh
 netsuke build --colour-policy always --verbose=false

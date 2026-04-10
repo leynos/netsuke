@@ -19,3 +19,10 @@ Feature: Advanced usage workflows
     Then the command should succeed
     And stdout should contain "rule "
     And stderr should be empty
+
+  Scenario: Manifest subcommand writes to file
+    Given a minimal Netsuke workspace
+    And a directory named "output" exists
+    When the netsuke manifest subcommand is run with "output/build.ninja"
+    Then the command should succeed
+    And the file "output/build.ninja" should exist

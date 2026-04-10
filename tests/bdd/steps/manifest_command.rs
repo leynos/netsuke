@@ -125,7 +125,7 @@ fn netsuke_executable() -> Result<PathBuf> {
     Ok(exe.to_path_buf())
 }
 
-/// Build a netsuke command with a sanitized environment.
+/// Build a netsuke command with a sanitised environment.
 ///
 /// This helper constructs an `assert_cmd::Command` configured with:
 /// - The resolved netsuke executable path
@@ -146,12 +146,22 @@ fn build_netsuke_command(world: &TestWorld, args: &[&str]) -> Result<assert_cmd:
         .collect();
     drop(env_vars);
 
-    // Build command with sanitized environment
+    // Build command with sanitised environment
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
-    cmd.current_dir(&temp_path)
-        .env_clear()
-        .env("PATH", "")
-        .args(args);
+    cmd.current_dir(&temp_path).env_clear().args(args);
+
+    // Forward the real host PATH so netsuke can exec ninja and other subprocesses.
+    // netsuke itself is invoked via the fully-resolved path from netsuke_executable(),
+    // so PATH is not required to locate it.
+    if let Ok(host_path) = std::env::var("PATH") {
+        cmd.env("PATH", host_path);
+    }
+
+    // Forward NETSUKE_NINJA so BDD scenarios that install a fake ninja
+    // executable (via override_ninja_env) can locate it after env_clear().
+    if let Ok(ninja) = std::env::var(ninja_env::NINJA_ENV) {
+        cmd.env(ninja_env::NINJA_ENV, ninja);
+    }
 
     // Re-apply scenario-specific environment variables
     for (key, value) in scenario_env {
@@ -521,23 +531,23 @@ mod tests {
     }
 
     #[test]
-    fn path_is_cleared_and_netsuke_executable_is_used() {
+    fn host_path_is_forwarded_and_netsuke_executable_is_used() {
         let world = TestWorld::default();
-        // Set up temp directory for test
         let temp = tempfile::tempdir().expect("create temp dir");
         *world.temp_dir.borrow_mut() = Some(temp);
 
-        // Simulate a different netsuke early in PATH that must not be used
+        // Simulate a different netsuke early in PATH
         let _guard = VarGuard::set("PATH", OsStr::new("/fake/bin"));
 
         let cmd = build_netsuke_command(&world, &["--version"]).expect("build command");
 
-        // PATH should be explicitly set to empty in the command environment
+        // PATH in the command should match what was in the environment when
+        // build_netsuke_command was called, forwarded explicitly after env_clear().
         let path_val =
-            env_value(&cmd, "PATH").expect("PATH should be explicitly set on the command");
-        assert_eq!(path_val, OsStr::new(""));
+            env_value(&cmd, "PATH").expect("PATH should be explicitly forwarded to the command");
+        assert_eq!(path_val, OsStr::new("/fake/bin"));
 
-        // Command should be configured to run the resolved netsuke_executable(), not a PATH lookup
+        // Command should use the resolved netsuke_executable(), not rely on PATH lookup.
         let exe = netsuke_executable().expect("netsuke_executable");
         assert_eq!(cmd.get_program(), exe.as_os_str());
     }
