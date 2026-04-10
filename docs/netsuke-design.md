@@ -2207,8 +2207,8 @@ override the merged result, ensuring explicit user intent always wins.
 3. **User scope**: Configuration files in user-specific directories:
    - **Unix-like systems**:
      - `$HOME/.netsuke.toml` (user home dotfile)
-     - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG Base Directory config home,
-       typically `~/.config/netsuke/config.toml`)
+     - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
+       Directory config home, typically `~/.config/netsuke/config.toml`)
      - Fallback: `$HOME/.config/netsuke/config.toml`
    - **Windows**:
      - `%APPDATA%\netsuke\config.toml`

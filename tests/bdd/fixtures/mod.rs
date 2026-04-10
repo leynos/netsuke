@@ -176,7 +176,7 @@ impl TestWorld {
 
     /// Ensure the scenario-scoped environment lock is acquired.
     ///
-    /// This lock serializes process-global mutations like `std::env::set_current_dir`
+    /// This lock serialises process-global mutations like `std::env::set_current_dir`
     /// and environment variable changes across all parallel test threads. The lock
     /// is held for the entire scenario duration and automatically released in Drop.
     ///

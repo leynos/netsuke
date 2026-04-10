@@ -550,7 +550,7 @@ command-line flags.
 #### Configuration file discovery
 
 Configuration files are discovered using OrthoConfig. When
-`NETSUKE_CONFIG_PATH` is set it points to a single file and bypasses all
+`NETSUKE_CONFIG_PATH` is set, it points to a single file and bypasses all
 automatic discovery. Otherwise, Netsuke searches for configuration in three
 scopes:
 
@@ -558,8 +558,8 @@ scopes:
   (or the directory specified by `-C` / `--directory`).
 - **User scope** — user-specific locations:
   - `$HOME/.netsuke.toml`
-  - `$XDG_CONFIG_HOME/netsuke/config.toml` (Unix; defaults to
-    `$HOME/.config`)
+  - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group); Unix;
+    defaults to `$HOME/.config`)
   - `%APPDATA%\netsuke\config.toml` (Windows)
   - `%LOCALAPPDATA%\netsuke\config.toml` (Windows)
   - `$HOME/.config/netsuke/config.toml` (Unix fallback)
