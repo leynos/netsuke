@@ -72,8 +72,15 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         // Hold the env lock and set CWD to the project root so that relative
         // glob patterns (e.g. `tests/data/glob_files/*.txt`) resolve correctly.
         world.ensure_env_lock();
-        // Ignore errors: the lock ensures no other test is racing CWD changes
-        drop(std::env::set_current_dir(manifest_dir));
+        // EnvLock is held; safe to mutate CWD for this scenario.
+        if let Err(e) = std::env::set_current_dir(manifest_dir) {
+            store_parse_outcome(
+                &world.manifest,
+                &world.manifest_error,
+                Err(format!("failed to set CWD to {manifest_dir}: {e}")),
+            );
+            return;
+        }
         std::path::Path::new(manifest_dir)
             .join(path.as_str())
             .to_string_lossy()

@@ -83,6 +83,29 @@ jobs = 8
     Ok(())
 }
 
+/// User-scope config content shared by the Unix and Windows test variants.
+const USER_CONFIG_CONTENT: &str = r#"
+theme = "ascii"
+colour_policy = "never"
+jobs = 4
+"#;
+
+fn assert_user_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
+    ensure!(
+        merged.theme == Some(ThemePreference::Ascii),
+        "user config theme should be discovered when no project config exists"
+    );
+    ensure!(
+        merged.colour_policy == Some(ColourPolicy::Never),
+        "user config colour_policy should be discovered"
+    );
+    ensure!(
+        merged.jobs == Some(4),
+        "user config jobs should be discovered"
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
@@ -92,16 +115,8 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let temp_home = tempdir().context("create temporary home directory")?;
 
     // Write user-scope config in fake home
-    let user_config = temp_home.path().join(".netsuke.toml");
-    fs::write(
-        &user_config,
-        r#"
-theme = "ascii"
-colour_policy = "never"
-jobs = 4
-"#,
-    )
-    .context("write user .netsuke.toml")?;
+    fs::write(temp_home.path().join(".netsuke.toml"), USER_CONFIG_CONTENT)
+        .context("write user .netsuke.toml")?;
 
     // Set HOME to fake home (Unix-like systems)
     let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
@@ -121,19 +136,7 @@ jobs = 4
         .context("merge with user config")?
         .with_default_command();
 
-    ensure!(
-        merged.theme == Some(ThemePreference::Ascii),
-        "user config theme should be discovered when no project config exists"
-    );
-    ensure!(
-        merged.colour_policy == Some(ColourPolicy::Never),
-        "user config colour_policy should be discovered"
-    );
-    ensure!(
-        merged.jobs == Some(4),
-        "user config jobs should be discovered"
-    );
-    Ok(())
+    assert_user_config_applied(&merged)
 }
 
 #[cfg(windows)]
@@ -149,16 +152,8 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     fs::create_dir_all(&netsuke_config_dir).context("create netsuke config directory")?;
 
     // Write user-scope config in fake APPDATA
-    let user_config = netsuke_config_dir.join("config.toml");
-    fs::write(
-        &user_config,
-        r#"
-theme = "ascii"
-colour_policy = "never"
-jobs = 4
-"#,
-    )
-    .context("write user config.toml in APPDATA")?;
+    fs::write(netsuke_config_dir.join("config.toml"), USER_CONFIG_CONTENT)
+        .context("write user config.toml in APPDATA")?;
 
     // Set APPDATA to fake directory (Windows)
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
@@ -178,19 +173,7 @@ jobs = 4
         .context("merge with user config")?
         .with_default_command();
 
-    ensure!(
-        merged.theme == Some(ThemePreference::Ascii),
-        "user config theme should be discovered when no project config exists"
-    );
-    ensure!(
-        merged.colour_policy == Some(ColourPolicy::Never),
-        "user config colour_policy should be discovered"
-    );
-    ensure!(
-        merged.jobs == Some(4),
-        "user config jobs should be discovered"
-    );
-    Ok(())
+    assert_user_config_applied(&merged)
 }
 
 #[rstest]
@@ -367,7 +350,9 @@ output_format = "human"
 }
 
 #[rstest]
-fn directory_flag_anchors_project_discovery_to_specified_dir() -> Result<()> {
+#[case("-C")]
+#[case("--directory")]
+fn directory_flag_anchors_project_discovery_to_specified_dir(#[case] flag: &str) -> Result<()> {
     let _env_lock = EnvLock::acquire();
     let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_outer = tempdir().context("create outer directory")?;
@@ -385,7 +370,7 @@ jobs = 6
     )
     .context("write project .netsuke.toml in subdirectory")?;
 
-    // Stay in outer directory but use -C to point to project
+    // Stay in outer directory but use directory flag to point to project
     std::env::set_current_dir(&temp_outer).context("change to outer directory")?;
 
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
@@ -393,19 +378,19 @@ jobs = 6
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke", "-C", "project"], &localizer)
-            .context("parse CLI with -C directory flag")?;
+        netsuke::cli::parse_with_localizer_from(["netsuke", flag, "project"], &localizer)
+            .context("parse CLI with directory flag")?;
     let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge with -C discovery")?
+        .context("merge with directory flag discovery")?
         .with_default_command();
 
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
-        "-C flag should anchor project config discovery to specified directory"
+        "directory flag should anchor project config discovery to specified directory"
     );
     ensure!(
         merged.jobs == Some(6),
-        "config values from -C directory should be applied"
+        "config values from directory flag should be applied"
     );
     Ok(())
 }
