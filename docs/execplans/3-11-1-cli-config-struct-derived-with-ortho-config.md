@@ -117,14 +117,10 @@ overridden by `NETSUKE_COLOUR_POLICY=auto`, and further overridden by
   flaky if `EnvLock` is not held for the entire scenario lifetime. Severity:
   high Likelihood: medium Mitigation: use
   `tests/bdd/helpers/env_mutation::mutate_env_var()` for mutating environment
-  variables instead of raw `std::env::set_var` calls.
-  `TestWorld::ensure_env_lock()` must be called to acquire the environment lock
-  before mutations. Cleanup happens automatically via the `TestWorld` drop
-  path, which restores all mutated variables. When a scenario requires
-  restoring multiple variables, collect the original values and restore them
-  using `TestWorld::restore_many()` if available. Prefer the `mutate_env_var()`
-  helper over direct `std::env::set_var` calls to ensure `EnvLock` is always
-  respected and cleanup is properly tracked.
+  variables instead of raw `std::env::set_var` calls. `mutate_env_var()`
+  acquires the scenario `EnvLock` internally, so no explicit lock call is
+  required. Cleanup happens automatically via the `TestWorld` drop path, which
+  restores all mutated variables.
 
 - Risk: `build.rs` symbol anchoring may be missed for new shared helpers,
   causing `make lint` failures. Severity: medium Likelihood: high Mitigation:

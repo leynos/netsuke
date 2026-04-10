@@ -166,10 +166,14 @@ impl TestWorld {
     ///
     /// This variant assumes the caller already holds [`EnvLock`]. Use this in the
     /// `Drop` path to avoid re-acquiring the lock.
-    fn restore_environment_locked(&self) {
+    ///
+    /// # Safety
+    ///
+    /// Caller must hold [`EnvLock`] for the duration of this call.
+    unsafe fn restore_environment_locked(&self) {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
-            // SAFETY: Caller (Drop impl) holds EnvLock.
+            // SAFETY: Caller guarantees EnvLock is held.
             unsafe { test_support::env::restore_many_locked(vars) };
         }
     }
@@ -227,7 +231,8 @@ impl Drop for TestWorld {
                 drop(std::env::set_current_dir(original_cwd));
             }
             // Restore environment variables while lock is still held
-            self.restore_environment_locked();
+            // SAFETY: We hold EnvLock via self.env_lock.
+            unsafe { self.restore_environment_locked() };
         }
 
         // Release env_lock after all mutations are complete

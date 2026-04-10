@@ -180,6 +180,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     assert_user_config_applied(&merged)
 }
 
+#[cfg(unix)]
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
@@ -210,13 +211,77 @@ jobs = 8
     )
     .context("write project .netsuke.toml")?;
 
+    let temp_xdg_home = tempdir().context("create temporary XDG config home")?;
     let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
+    let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
+    let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
-    let _xdg_guard = EnvVarGuard::remove("XDG_CONFIG_HOME");
-    let _appdata_guard = EnvVarGuard::remove("APPDATA");
+
+    std::env::set_current_dir(&temp_project).context("change to project directory")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI for precedence test")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge configs")?
+        .with_default_command();
+
+    ensure!(
+        merged.theme == Some(ThemePreference::Unicode),
+        "project config theme should override user config theme"
+    );
+    ensure!(
+        merged.jobs == Some(8),
+        "project config jobs should be applied"
+    );
+    ensure!(
+        merged.colour_policy == Some(ColourPolicy::Never),
+        "user-only field should still be merged when project config does not override it"
+    );
+    Ok(())
+}
+
+#[cfg(windows)]
+#[rstest]
+fn project_config_takes_precedence_over_user_config() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+
+    let temp_project = tempdir().context("create temporary project directory")?;
+    let temp_appdata = tempdir().context("create temporary APPDATA directory")?;
+
+    // Create sandboxed Windows user-scope config at %APPDATA%\netsuke\config.toml
+    let netsuke_config_dir = temp_appdata.path().join("netsuke");
+    fs::create_dir_all(&netsuke_config_dir).context("create netsuke config directory")?;
+    fs::write(
+        netsuke_config_dir.join("config.toml"),
+        r#"
+theme = "ascii"
+colour_policy = "never"
+"#,
+    )
+    .context("write user config.toml in APPDATA")?;
+
+    // Project config: overrides theme; does NOT set colour_policy.
+    let project_config = temp_project.path().join(".netsuke.toml");
+    fs::write(
+        &project_config,
+        r#"
+theme = "unicode"
+jobs = 8
+"#,
+    )
+    .context("write project .netsuke.toml")?;
+
+    let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
+    let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
+    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
