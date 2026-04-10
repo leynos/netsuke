@@ -320,6 +320,8 @@ output_format = "human"
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("12"));
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
+    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
@@ -436,6 +438,9 @@ jobs = 6
 
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
+    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
@@ -488,6 +493,9 @@ colour_policy = "always"
 
     let _config_path_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", custom_config.as_os_str());
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
+    let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
+    let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
@@ -555,29 +563,35 @@ fetch_allow_scheme = ["https"]
 
     // Verify layer order for default_targets: config ["fmt", "lint"] -> env ["test"] -> CLI ["build"]
     ensure!(
-        merged.default_targets.starts_with(&["fmt".to_string(), "lint".to_string()]),
+        merged
+            .default_targets
+            .starts_with(&["fmt".to_owned(), "lint".to_owned()]),
         "default_targets should start with config layer entries [\"fmt\", \"lint\"]"
     );
     ensure!(
-        merged.default_targets.len() >= 3 && merged.default_targets[2] == "test",
+        merged.default_targets.len() >= 3
+            && merged.default_targets.get(2) == Some(&"test".to_owned()),
         "default_targets should have env layer entry \"test\" after config entries"
     );
     ensure!(
-        merged.default_targets.len() >= 4 && merged.default_targets[3] == "build",
+        merged.default_targets.len() >= 4
+            && merged.default_targets.get(3) == Some(&"build".to_owned()),
         "default_targets should have CLI layer entry \"build\" after env entry"
     );
 
     // Verify layer order for fetch_allow_scheme: config ["https"] -> env ["http"] -> CLI ["ftp"]
     ensure!(
-        merged.fetch_allow_scheme.starts_with(&["https".to_string()]),
+        merged.fetch_allow_scheme.starts_with(&["https".to_owned()]),
         "fetch_allow_scheme should start with config layer entry [\"https\"]"
     );
     ensure!(
-        merged.fetch_allow_scheme.len() >= 2 && merged.fetch_allow_scheme[1] == "http",
+        merged.fetch_allow_scheme.len() >= 2
+            && merged.fetch_allow_scheme.get(1) == Some(&"http".to_owned()),
         "fetch_allow_scheme should have env layer entry \"http\" after config entry"
     );
     ensure!(
-        merged.fetch_allow_scheme.len() >= 3 && merged.fetch_allow_scheme[2] == "ftp",
+        merged.fetch_allow_scheme.len() >= 3
+            && merged.fetch_allow_scheme.get(2) == Some(&"ftp".to_owned()),
         "fetch_allow_scheme should have CLI layer entry \"ftp\" after env entry"
     );
 
