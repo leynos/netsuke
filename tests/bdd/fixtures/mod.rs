@@ -169,7 +169,8 @@ impl TestWorld {
     fn restore_environment_locked(&self) {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
-            test_support::env::restore_many_locked(vars);
+            // SAFETY: Caller (Drop impl) holds EnvLock.
+            unsafe { test_support::env::restore_many_locked(vars) };
         }
     }
 

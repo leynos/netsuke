@@ -551,24 +551,26 @@ command-line flags.
 
 Configuration files are discovered using OrthoConfig. When
 `NETSUKE_CONFIG_PATH` is set it points to a single file and bypasses all
-automatic discovery. Otherwise, Netsuke searches for configuration in two
+automatic discovery. Otherwise, Netsuke searches for configuration in three
 scopes:
 
 - **Project scope** — `.netsuke.toml` in the current working directory
   (or the directory specified by `-C` / `--directory`).
-- **User scope** — platform-specific locations searched in the following
-  order:
+- **User scope** — user-specific locations:
   - `$HOME/.netsuke.toml`
   - `$XDG_CONFIG_HOME/netsuke/config.toml` (Unix; defaults to
     `$HOME/.config`)
-  - Each entry in `$XDG_CONFIG_DIRS` (Unix; falls back to `/etc/xdg`)
   - `%APPDATA%\netsuke\config.toml` (Windows)
   - `%LOCALAPPDATA%\netsuke\config.toml` (Windows)
   - `$HOME/.config/netsuke/config.toml` (Unix fallback)
+- **System scope** — system-wide locations:
+  - Each entry in `$XDG_CONFIG_DIRS/netsuke/config.toml` (Unix; falls back
+    to `/etc/xdg/netsuke/config.toml`)
 
-Project-scope configuration takes precedence over user-scope configuration: any
-field set in the project file overrides the same field from a user file, while
-fields set only in the user file are still applied.
+Configuration precedence follows **project > user > system**: any field set in
+the project file overrides the same field from user or system files, user-scope
+settings override system-scope, and fields set only in lower-precedence files
+are still applied.
 
 #### Directory flag and project anchoring
 

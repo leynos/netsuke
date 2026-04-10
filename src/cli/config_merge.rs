@@ -55,21 +55,29 @@ fn project_scope_file_str(directory: Option<&Path>) -> Option<String> {
 /// Load the project-scope config file directly, bypassing discovery.
 ///
 /// Returns layers from the project `.netsuke.toml` (including any `extends`
-/// chain) if the file exists, or an empty vec otherwise.
-fn project_scope_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>> {
+/// chain) if the file exists, or an empty vec if the file does not exist.
+///
+/// # Errors
+///
+/// Returns an error if the config file exists but cannot be parsed or if an
+/// `extends` chain is malformed.
+fn project_scope_layers(
+    directory: Option<&Path>,
+) -> Result<Vec<MergeLayer<'static>>, Arc<ortho_config::OrthoError>> {
     let root = directory
         .map(PathBuf::from)
         .or_else(|| std::env::current_dir().ok());
     let Some(project_file) = root.map(|d| d.join(".netsuke.toml")) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
     match load_config_file_as_chain(&project_file) {
-        Ok(Some(chain)) => chain
+        Ok(Some(chain)) => Ok(chain
             .values
             .into_iter()
             .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
-            .collect(),
-        _ => Vec::new(),
+            .collect()),
+        Ok(None) => Ok(Vec::new()),
+        Err(e) => Err(e),
     }
 }
 
@@ -95,7 +103,13 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 /// Collect config-file layers in precedence order for diagnostic-JSON resolution.
 ///
 /// Mirrors the two-pass logic of [`push_file_layers`] without a `MergeComposer`.
-fn collect_diag_file_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>> {
+///
+/// # Errors
+///
+/// Returns an error if project-scope config file loading fails.
+fn collect_diag_file_layers(
+    directory: Option<&Path>,
+) -> Result<Vec<MergeLayer<'static>>, Arc<ortho_config::OrthoError>> {
     let discovery = config_discovery(directory);
     let file_layers = discovery.compose_layers().value;
     let project_file = project_scope_file_str(directory);
@@ -105,12 +119,12 @@ fn collect_diag_file_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>
     });
     let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
     if first_pass_found_project || has_explicit_config {
-        file_layers
+        Ok(file_layers)
     } else {
-        file_layers
+        Ok(file_layers
             .into_iter()
-            .chain(project_scope_layers(directory))
-            .collect()
+            .chain(project_scope_layers(directory)?)
+            .collect())
     }
 }
 
@@ -135,10 +149,12 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
     let mut diag_json = Cli::default().diag_json;
 
-    for layer in collect_diag_file_layers(cli.directory.as_deref()) {
-        let layer_value = layer.into_value();
-        if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
-            diag_json = layer_diag_json;
+    if let Ok(layers) = collect_diag_file_layers(cli.directory.as_deref()) {
+        for layer in layers {
+            let layer_value = layer.into_value();
+            if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
+                diag_json = layer_diag_json;
+            }
         }
     }
 
@@ -183,8 +199,13 @@ fn push_file_layers(
 
     let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
     if !first_pass_found_project && !has_explicit_config {
-        for layer in project_scope_layers(directory) {
-            composer.push_layer(layer);
+        match project_scope_layers(directory) {
+            Ok(layers) => {
+                for layer in layers {
+                    composer.push_layer(layer);
+                }
+            }
+            Err(err) => errors.push(err),
         }
     }
 }

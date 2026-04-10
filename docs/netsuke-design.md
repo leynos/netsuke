@@ -2204,27 +2204,31 @@ override the merged result, ensuring explicit user intent always wins.
    - Additional formats when features are enabled: `.netsuke.json`,
      `.netsuke.json5`, `.netsuke.yaml`, `.netsuke.yml`
 
-3. **User scope**: Configuration files in platform-specific user configuration
-   directories:
+3. **User scope**: Configuration files in user-specific directories:
    - **Unix-like systems**:
+     - `$HOME/.netsuke.toml` (user home dotfile)
      - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG Base Directory config home,
        typically `~/.config/netsuke/config.toml`)
-     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base
-       Directory config directories, defaults to `/etc/xdg/netsuke/config.toml`
-       when `XDG_CONFIG_DIRS` is unset)
      - Fallback: `$HOME/.config/netsuke/config.toml`
-     - User home dotfile: `$HOME/.netsuke.toml`
    - **Windows**:
      - `%APPDATA%\netsuke\config.toml`
      - `%LOCALAPPDATA%\netsuke\config.toml`
 
-**Scope precedence**: When both project-scope and user-scope configuration
-files exist, OrthoConfig's default discovery order gives **project scope higher
-precedence** than user scope. This matches user expectations: project-local
-configuration should override user-global defaults. The `-C/--directory` flag
-anchors project-scope discovery to the specified directory while leaving
-user-scope lookup unchanged, ensuring user-global configuration remains
-available even when operating on a project in a different directory.
+4. **System scope**: System-wide configuration directories:
+   - **Unix-like systems**:
+     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base
+       Directory system config directories, defaults to
+       `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
+
+**Scope precedence**: When configuration files exist in multiple scopes,
+OrthoConfig's discovery order gives **project scope highest precedence**, then
+user scope, then system scope (project > user > system). This matches user
+expectations: project-local configuration should override user-global defaults,
+which in turn override system-wide settings. The `-C/--directory` flag anchors
+project-scope discovery to the specified directory while leaving user-scope and
+system-scope lookup unchanged, ensuring user-global and system-wide
+configuration remain available even when operating on a project in a different
+directory.
 
 **Layer merge precedence** (lowest to highest):
 

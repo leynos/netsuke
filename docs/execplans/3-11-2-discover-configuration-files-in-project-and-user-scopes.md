@@ -123,8 +123,7 @@ The implementation must finish by marking roadmap item 3.11.2 done only after
 - [x] 2026-04-03 Stage C: add `rstest` integration coverage for project scope,
       user scope, environment overrides, and CLI precedence.
 - [x] 2026-04-03 Stage D: add `rstest-bdd` behavioural coverage proving the
-      user-observable outcomes of discovered config layers (scaffolding complete;
-      full integration pending).
+      user-observable outcomes of discovered config layers.
 - [x] 2026-04-03 Stage E: update design and user documentation, then mark the
       roadmap item done.
 - [x] 2026-04-03 Stage F: run formatting, lint, test, and Markdown validation
@@ -267,8 +266,9 @@ documented.
    - Marked roadmap item 3.11.2 and its sub-items as complete
    - Referenced integration test file location for future maintainers
 3. **User guide** (`docs/users-guide.md`):
-   - Existing discovery documentation (lines 550-554) already covered the
-     essential details; no changes required
+   - Added configuration file discovery section (lines 550-585) documenting
+     project-scope, user-scope, platform-specific locations, precedence rules,
+     and the `-C`/`--directory` flag behavior
 
 ### Lessons learned
 
@@ -468,8 +468,10 @@ Recommended shape:
 3. Reuse `TestWorld` for:
 
    - temporary workspace creation;
-   - tracking fake home/XDG env vars;
-   - restoring process-wide environment on drop.
+   - tracking environment variable mutations via
+     `tests/bdd/helpers/env_mutation::mutate_env_var()` (which acquires
+     `EnvLock` internally);
+   - automatic environment restoration on drop (no manual restore needed).
 
 Suggested scenarios:
 

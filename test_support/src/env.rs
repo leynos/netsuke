@@ -105,7 +105,8 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
         return;
     }
     let _lock = EnvLock::acquire();
-    restore_many_locked(vars);
+    // SAFETY: We hold EnvLock via _lock.
+    unsafe { restore_many_locked(vars) };
 }
 
 /// Restore multiple environment variables without acquiring EnvLock.
@@ -117,7 +118,7 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
 /// # Safety
 ///
 /// Caller must hold [`EnvLock`] for the duration of this call.
-pub fn restore_many_locked(vars: HashMap<String, Option<OsString>>) {
+pub unsafe fn restore_many_locked(vars: HashMap<String, Option<OsString>>) {
     for (key, val) in vars {
         if let Some(v) = val {
             // SAFETY: Caller guarantees EnvLock is held.
