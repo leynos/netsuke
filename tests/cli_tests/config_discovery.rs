@@ -129,6 +129,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _colour_policy_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
     // Change to empty project directory
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
@@ -165,6 +166,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
+    let _colour_policy_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
 
     // Change to empty project directory
