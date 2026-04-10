@@ -1,4 +1,4 @@
-Feature: Advanced usage workflows
+Feature: Manifest subcommand and JSON diagnostics
 
   Scenario: Manifest subcommand streams to stdout
     Given a minimal Netsuke workspace

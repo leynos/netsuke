@@ -1161,7 +1161,7 @@ NETSUKE_COLOUR_POLICY=never netsuke build
 Override both settings for a single invocation using CLI flags:
 
 ```sh
-netsuke build --colour-policy always --verbose=false
+netsuke build --colour-policy always
 ```
 
 **Precedence verification:**

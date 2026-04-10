@@ -153,13 +153,13 @@ fn build_netsuke_command(world: &TestWorld, args: &[&str]) -> Result<assert_cmd:
     // Forward the real host PATH so netsuke can exec ninja and other subprocesses.
     // netsuke itself is invoked via the fully-resolved path from netsuke_executable(),
     // so PATH is not required to locate it.
-    if let Ok(host_path) = std::env::var("PATH") {
+    if let Some(host_path) = std::env::var_os("PATH") {
         cmd.env("PATH", host_path);
     }
 
     // Forward NETSUKE_NINJA so BDD scenarios that install a fake ninja
     // executable (via override_ninja_env) can locate it after env_clear().
-    if let Ok(ninja) = std::env::var(ninja_env::NINJA_ENV) {
+    if let Some(ninja) = std::env::var_os(ninja_env::NINJA_ENV) {
         cmd.env(ninja_env::NINJA_ENV, ninja);
     }
 
@@ -483,6 +483,7 @@ fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::fixture;
     use std::ffi::OsStr;
     use test_support::env::VarGuard;
 
@@ -492,12 +493,17 @@ mod tests {
             .and_then(|(_, v)| v)
     }
 
-    #[test]
-    fn world_env_vars_with_value_are_applied() {
+    #[fixture]
+    fn prepared_world() -> TestWorld {
         let world = TestWorld::default();
-        // Set up temp directory for test
         let temp = tempfile::tempdir().expect("create temp dir");
         *world.temp_dir.borrow_mut() = Some(temp);
+        world
+    }
+
+    #[rstest::rstest]
+    fn world_env_vars_with_value_are_applied(prepared_world: TestWorld) {
+        let world = prepared_world;
 
         // Simulate a BDD step setting an env var using VarGuard for proper locking and restoration
         let _guard = VarGuard::set("NETSUKE_TEST_FLAG", OsStr::new("enabled"));
@@ -510,12 +516,9 @@ mod tests {
         assert_eq!(val, OsStr::new("enabled"));
     }
 
-    #[test]
-    fn host_env_vars_are_not_inherited() {
-        let world = TestWorld::default();
-        // Set up temp directory for test
-        let temp = tempfile::tempdir().expect("create temp dir");
-        *world.temp_dir.borrow_mut() = Some(temp);
+    #[rstest::rstest]
+    fn host_env_vars_are_not_inherited(prepared_world: TestWorld) {
+        let world = prepared_world;
 
         // Set a host env var that should NOT be inherited (not tracked in world.env_vars)
         let _guard = VarGuard::set("NETSUKE_HOST_VAR", OsStr::new("should-not-inherit"));
@@ -530,11 +533,9 @@ mod tests {
         );
     }
 
-    #[test]
-    fn host_path_is_forwarded_and_netsuke_executable_is_used() {
-        let world = TestWorld::default();
-        let temp = tempfile::tempdir().expect("create temp dir");
-        *world.temp_dir.borrow_mut() = Some(temp);
+    #[rstest::rstest]
+    fn host_path_is_forwarded_and_netsuke_executable_is_used(prepared_world: TestWorld) {
+        let world = prepared_world;
 
         // Simulate a different netsuke early in PATH
         let _guard = VarGuard::set("PATH", OsStr::new("/fake/bin"));
