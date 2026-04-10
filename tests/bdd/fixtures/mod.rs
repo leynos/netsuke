@@ -26,7 +26,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::PathGuard;
-use test_support::env::{NinjaEnvGuard, restore_many};
+use test_support::env::NinjaEnvGuard;
 use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
 
@@ -162,11 +162,14 @@ impl TestWorld {
         self.env_vars.borrow_mut().entry(key).or_insert(previous);
     }
 
-    /// Restore any environment variables overridden during the scenario.
-    fn restore_environment(&self) {
+    /// Restore environment variables without acquiring [`EnvLock`].
+    ///
+    /// This variant assumes the caller already holds [`EnvLock`]. Use this in the
+    /// `Drop` path to avoid re-acquiring the lock.
+    fn restore_environment_locked(&self) {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
-            restore_many(vars);
+            test_support::env::restore_many_locked(vars);
         }
     }
 
@@ -215,18 +218,19 @@ impl Drop for TestWorld {
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
 
-        // Restore original CWD before dropping temp_dir and releasing env_lock.
+        // Restore original CWD and environment variables before releasing env_lock.
         // This must happen WHILE env_lock is still held to maintain serialization.
-        if self.env_lock.borrow().is_some()
-            && let Some(original_cwd) = self.original_cwd.borrow_mut().take()
-        {
-            // Restore to captured CWD; ignore errors since this is cleanup code in Drop
-            drop(std::env::set_current_dir(original_cwd));
+        if self.env_lock.borrow().is_some() {
+            if let Some(original_cwd) = self.original_cwd.borrow_mut().take() {
+                // Restore to captured CWD; ignore errors since this is cleanup code in Drop
+                drop(std::env::set_current_dir(original_cwd));
+            }
+            // Restore environment variables while lock is still held
+            self.restore_environment_locked();
         }
 
-        // Release env_lock before restoring environment variables
+        // Release env_lock after all mutations are complete
         self.env_lock.borrow_mut().take();
-        self.restore_environment();
         self.stdlib_text.clear();
     }
 }

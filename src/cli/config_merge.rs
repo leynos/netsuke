@@ -9,8 +9,10 @@ use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::uncased::Uncased;
 use ortho_config::{
-    ConfigDiscovery, LocalizationArgs, MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value,
+    ConfigDiscovery, LocalizationArgs, MergeComposer, MergeLayer, OrthoMergeExt, OrthoResult,
+    load_config_file_as_chain, sanitize_value,
 };
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -29,13 +31,46 @@ fn env_provider() -> Env {
     Env::prefixed(ENV_PREFIX)
 }
 
-/// Build configuration discovery rooted in the optional working directory.
+/// Build the single-pass discovery used when `NETSUKE_CONFIG_PATH` is set.
+///
+/// When the env var is present `compose_layers` will find it first and return
+/// immediately, so project-vs-user ordering is irrelevant.
 fn config_discovery(directory: Option<&Path>) -> ConfigDiscovery {
     let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
     if let Some(dir) = directory {
         builder = builder.clear_project_roots().add_project_root(dir);
     }
     builder.build()
+}
+
+/// Return the expected project-scope config file path as a string, if
+/// resolvable.
+fn project_scope_file_str(directory: Option<&Path>) -> Option<String> {
+    let root = directory
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())?;
+    root.join(".netsuke.toml").to_str().map(String::from)
+}
+
+/// Load the project-scope config file directly, bypassing discovery.
+///
+/// Returns layers from the project `.netsuke.toml` (including any `extends`
+/// chain) if the file exists, or an empty vec otherwise.
+fn project_scope_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>> {
+    let root = directory
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok());
+    let Some(project_file) = root.map(|d| d.join(".netsuke.toml")) else {
+        return Vec::new();
+    };
+    match load_config_file_as_chain(&project_file) {
+        Ok(Some(chain)) => chain
+            .values
+            .into_iter()
+            .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Return `true` when no CLI overrides were supplied.
@@ -67,8 +102,19 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
     let mut diag_json = Cli::default().diag_json;
 
     let discovery = config_discovery(cli.directory.as_deref());
-    let file_layers = discovery.compose_layers();
-    for layer in file_layers.value {
+    let file_layers = discovery.compose_layers().value;
+    let project_file = project_scope_file_str(cli.directory.as_deref());
+    let first_pass_found_project = file_layers.iter().any(|l| {
+        l.path()
+            .is_some_and(|p| project_file.as_deref() == Some(p.as_str()))
+    });
+    let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
+    let extra_layers = if first_pass_found_project || has_explicit_config {
+        Vec::new()
+    } else {
+        project_scope_layers(cli.directory.as_deref())
+    };
+    for layer in file_layers.into_iter().chain(extra_layers) {
         let layer_value = layer.into_value();
         if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
             diag_json = layer_diag_json;
@@ -156,14 +202,40 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
         Err(err) => errors.push(err),
     }
 
+    // OrthoConfig's compose_layers() returns the first file it finds.
+    // The standard candidate order is: env var, XDG, Windows, HOME, then
+    // project root — so user-scope config is found first when both exist.
+    //
+    // To implement "project scope > user scope" precedence we run a second
+    // project-only pass when the first pass did not already find the
+    // project-scope file.
     let discovery = config_discovery(cli.directory.as_deref());
     let mut file_layers = discovery.compose_layers();
     errors.append(&mut file_layers.required_errors);
     if file_layers.value.is_empty() {
         errors.append(&mut file_layers.optional_errors);
     }
+
+    let project_file = project_scope_file_str(cli.directory.as_deref());
+    let first_pass_found_project = file_layers.value.iter().any(|l| {
+        l.path()
+            .is_some_and(|p| project_file.as_deref() == Some(p.as_str()))
+    });
+
     for layer in file_layers.value {
         composer.push_layer(layer);
+    }
+
+    // Second pass: load the project-scope file directly and push it last
+    // so it wins in the last-wins merge, but only when:
+    //  - the first pass did not already find the project file, AND
+    //  - NETSUKE_CONFIG_PATH is not set (an explicit path bypasses all
+    //    automatic discovery, including the project-scope overlay).
+    let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
+    if !first_pass_found_project && !has_explicit_config {
+        for layer in project_scope_layers(cli.directory.as_deref()) {
+            composer.push_layer(layer);
+        }
     }
 
     let env_provider = env_provider()

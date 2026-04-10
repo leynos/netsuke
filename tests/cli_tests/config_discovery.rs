@@ -120,11 +120,15 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
 
     // Set HOME to fake home (Unix-like systems)
     let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
+    // Sandbox XDG paths so system-wide configs cannot leak into the test
+    let xdg_config_home = temp_home.path().join(".config");
+    fs::create_dir_all(&xdg_config_home).context("create sandboxed XDG_CONFIG_HOME")?;
+    let _xdg_config_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config_home.as_os_str());
+    let _xdg_config_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     // Clear other env vars
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
-    let _xdg_config_home_guard = EnvVarGuard::remove("XDG_CONFIG_HOME");
 
     // Change to empty project directory
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
@@ -212,6 +216,7 @@ jobs = 8
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
     let _xdg_guard = EnvVarGuard::remove("XDG_CONFIG_HOME");
+    let _appdata_guard = EnvVarGuard::remove("APPDATA");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 

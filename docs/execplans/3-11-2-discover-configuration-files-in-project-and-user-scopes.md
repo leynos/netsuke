@@ -45,7 +45,7 @@ The implementation must finish by marking roadmap item 3.11.2 done only after
   3.11.1 already settled that `CliConfig` is an extracted typed view, not the
   primary derive surface.
 - Do not rename the config override surface in this milestone. The current code
-  uses `NETSUKE_CONFIG_PATH`, and OrthoConfig also recognises hidden
+  uses `NETSUKE_CONFIG_PATH`, and OrthoConfig also recognizes hidden
   `--config-path` / `CONFIG_PATH` defaults. Roadmap item 3.11.3 is the
   milestone for exposing `--config <path>` and `NETSUKE_CONFIG`.
 - Preserve the standard precedence ladder: defaults < config files <
@@ -549,7 +549,7 @@ Expected evidence:
 - `docs/roadmap.md` showing 3.11.2 checked off;
 - all gates passing.
 
-## Approval gate
+## Completion acknowledgement
 
-This document is the draft phase only. Do not start implementation until the
-user explicitly approves the plan or requests changes to it.
+This plan has been completed as indicated by the "Status: COMPLETED" header.
+All stages have been implemented, tested, and integrated into the codebase.

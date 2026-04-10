@@ -158,20 +158,15 @@ fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) ->
 // Given steps
 // ---------------------------------------------------------------------------
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[given("the environment variable {key:string} is set to {value:string}")]
-fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
-    let value = EnvVarValue::new(value);
+fn set_env_var_step(world: &TestWorld, key: EnvVarKey, value: EnvVarValue) -> Result<()> {
     let expanded = expand_env(value.as_str());
-    mutate_env_var(world, EnvVarKey::new(key), Some(&expanded))
+    mutate_env_var(world, key, Some(&expanded))
 }
 
 #[given("the environment variable {key:string} is unset")]
-fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
-    mutate_env_var(world, EnvVarKey::new(key), None)
+fn unset_env_var_step(world: &TestWorld, key: EnvVarKey) -> Result<()> {
+    mutate_env_var(world, key, None)
 }
 
 #[expect(

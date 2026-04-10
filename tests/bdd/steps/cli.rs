@@ -51,14 +51,15 @@ fn apply_cli(world: &TestWorld, args: &CliArgs) {
     // explicit -C or --directory flag, prepend -C <temp_dir> for config discovery.
     let mut tokens = build_tokens(args.as_str());
     if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
-        let has_directory_flag = tokens.iter().any(|t| {
+        let is_directory_flag = |t: &std::ffi::OsString| {
             t.to_str().is_some_and(|s| {
                 s == "-C"
                     || s.starts_with("-C")
                     || s == "--directory"
                     || s.starts_with("--directory=")
             })
-        });
+        };
+        let has_directory_flag = tokens.iter().any(is_directory_flag);
         if !has_directory_flag && !tokens.is_empty() {
             let temp_path = temp_dir.path().as_os_str().to_owned();
             tokens.insert(1, "-C".into());
@@ -319,7 +320,8 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 /// This step ensures that CLI parsing tests are not affected by ambient host
 /// configuration files or environment variables by:
 /// 1. Creating a temporary directory and anchoring config discovery to it.
-/// 2. Clearing all `NETSUKE_*` environment variables that could interfere.
+/// 2. Sandboxing user-scope config paths (`HOME`, `XDG_CONFIG_HOME`, `APPDATA`).
+/// 3. Clearing all `NETSUKE_*` environment variables that could interfere.
 ///
 /// Use this step for tests in `cli.feature` and `cli_config.feature` that
 /// focus on parsing behaviour rather than configuration discovery.
@@ -327,6 +329,20 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 fn isolated_cli_environment(world: &TestWorld) -> Result<()> {
     // Create a temporary directory to anchor config discovery
     let temp = tempdir().context("create temporary directory for CLI isolation")?;
+    let temp_path_str = temp
+        .path()
+        .to_str()
+        .context("temp directory path contains invalid UTF-8")?;
+
+    // Sandbox user-scope config discovery paths to the temp directory
+    mutate_env_var(world, EnvVarKey::from("HOME"), Some(temp_path_str))?;
+    mutate_env_var(
+        world,
+        EnvVarKey::from("XDG_CONFIG_HOME"),
+        Some(temp_path_str),
+    )?;
+    mutate_env_var(world, EnvVarKey::from("APPDATA"), Some(temp_path_str))?;
+
     *world.temp_dir.borrow_mut() = Some(temp);
 
     // Clear all NETSUKE_* environment variables to prevent interference

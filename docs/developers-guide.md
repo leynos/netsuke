@@ -99,6 +99,80 @@ These points are strategy rules, not optional style guidance.
    represent distinct domain concepts.
 5. Run `cargo test --test bdd_tests` and then the full quality gates.
 
+## Test isolation utilities
+
+Environment variable mutations and working-directory changes are process-global
+side-effects that can cause data races when tests run in parallel. The
+`test_support` crate and test fixtures provide RAII-based utilities to
+serialize and safely restore these mutations.
+
+### `EnvLock`
+
+`test_support::env_lock::EnvLock` is a global mutex that serializes all
+process-global mutations (environment variables, current working directory)
+across concurrent test threads. Acquire it at the start of any test that
+mutates the environment:
+
+```rust
+use test_support::env_lock::EnvLock;
+
+let _env_lock = EnvLock::acquire();
+```
+
+The lock is released when the guard is dropped. In BDD scenarios,
+`TestWorld::ensure_env_lock()` acquires it once per scenario and holds it for
+the scenario lifetime.
+
+### `EnvVarGuard`
+
+`test_support::EnvVarGuard` is a lightweight RAII guard for setting or removing
+a single environment variable and restoring it on drop:
+
+```rust
+use test_support::EnvVarGuard;
+
+let _guard = EnvVarGuard::set("HOME", temp.path().as_os_str());
+let _guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+```
+
+For BDD steps that need to track mutations through `TestWorld`, use
+`mutate_env_var` from `tests/bdd/helpers/env_mutation.rs` instead.
+
+### `CwdGuard`
+
+Tests that call `std::env::set_current_dir` must restore the original working
+directory after the test. `CwdGuard` (defined locally in
+`tests/cli_tests/config_discovery.rs`) captures the current directory on
+construction and restores it on drop:
+
+```rust
+struct CwdGuard(std::path::PathBuf);
+
+impl CwdGuard {
+    fn acquire() -> anyhow::Result<Self> {
+        Ok(Self(std::env::current_dir()?))
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        drop(std::env::set_current_dir(&self.0));
+    }
+}
+```
+
+Acquire `CwdGuard` *after* `EnvLock` so the drop order (CWD restored first,
+lock released second) mirrors the acquire order.
+
+### Ordering rules
+
+1. Acquire `EnvLock` first.
+2. Acquire `CwdGuard` second.
+3. Create `EnvVarGuard`s for all variables that need sandboxing.
+4. Perform the test.
+5. Guards drop in reverse declaration order — CWD and environment
+   variables are restored while the lock is still held, preventing races.
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the

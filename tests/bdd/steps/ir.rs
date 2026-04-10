@@ -143,7 +143,13 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
     let resolved = if std::path::Path::new(path).is_relative() && path.starts_with("tests/") {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         world.ensure_env_lock();
-        drop(std::env::set_current_dir(manifest_dir));
+        if let Err(e) = std::env::set_current_dir(manifest_dir) {
+            let outcome = Err(format!(
+                "failed to set current directory to {manifest_dir} for path {path}: {e}"
+            ));
+            store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
+            return;
+        }
         std::path::Path::new(manifest_dir)
             .join(path)
             .to_string_lossy()

@@ -2186,10 +2186,12 @@ variable as an explicit override, and adjusts project-root discovery when the
 #### Discovery scopes and layered merging
 
 Configuration discovery searches multiple scopes and composes all discovered
-files into layers using OrthoConfig's `compose_layers()`. The layers are then
-merged in order (project-scope files, user-scope files, system-scope files),
-with values from later layers in the composition taking precedence when keys
-overlap. After file layers are merged, environment variables and CLI arguments
+files into layers using OrthoConfig's `compose_layers()`. OrthoConfig discovers
+files in precedence order: system-scope (lowest precedence), user-scope, then
+project-scope (highest precedence). When multiple config files exist,
+`compose_layers()` loads them in this order so values from later layers
+override earlier ones—meaning project-scope has highest precedence among file
+layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
 1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable, if set.
