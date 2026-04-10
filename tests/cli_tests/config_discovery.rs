@@ -182,6 +182,34 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     assert_user_config_applied(&merged)
 }
 
+/// Project config TOML used by both Unix and Windows precedence test variants.
+const PRECEDENCE_PROJECT_CONFIG_CONTENT: &str = r#"
+theme = "unicode"
+jobs = 8
+"#;
+
+/// User config TOML used by both Unix and Windows precedence test variants.
+const PRECEDENCE_USER_CONFIG_CONTENT: &str = r#"
+theme = "ascii"
+colour_policy = "never"
+"#;
+
+fn assert_project_precedence_applied(merged: &netsuke::cli::Cli) -> Result<()> {
+    ensure!(
+        merged.theme == Some(ThemePreference::Unicode),
+        "project config theme should override user config theme"
+    );
+    ensure!(
+        merged.jobs == Some(8),
+        "project config jobs should be applied"
+    );
+    ensure!(
+        merged.colour_policy == Some(ColourPolicy::Never),
+        "user-only field should still be merged when project config does not override it"
+    );
+    Ok(())
+}
+
 #[cfg(unix)]
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
@@ -192,24 +220,16 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let temp_home = tempdir().context("create temporary home directory")?;
 
     // User config: sets theme and a user-only field (colour_policy).
-    let user_config = temp_home.path().join(".netsuke.toml");
     fs::write(
-        &user_config,
-        r#"
-theme = "ascii"
-colour_policy = "never"
-"#,
+        temp_home.path().join(".netsuke.toml"),
+        PRECEDENCE_USER_CONFIG_CONTENT,
     )
     .context("write user .netsuke.toml")?;
 
     // Project config: overrides theme; does NOT set colour_policy.
-    let project_config = temp_project.path().join(".netsuke.toml");
     fs::write(
-        &project_config,
-        r#"
-theme = "unicode"
-jobs = 8
-"#,
+        temp_project.path().join(".netsuke.toml"),
+        PRECEDENCE_PROJECT_CONFIG_CONTENT,
     )
     .context("write project .netsuke.toml")?;
 
@@ -231,19 +251,7 @@ jobs = 8
         .context("merge configs")?
         .with_default_command();
 
-    ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "project config theme should override user config theme"
-    );
-    ensure!(
-        merged.jobs == Some(8),
-        "project config jobs should be applied"
-    );
-    ensure!(
-        merged.colour_policy == Some(ColourPolicy::Never),
-        "user-only field should still be merged when project config does not override it"
-    );
-    Ok(())
+    assert_project_precedence_applied(&merged)
 }
 
 #[cfg(windows)]
@@ -260,21 +268,14 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     fs::create_dir_all(&netsuke_config_dir).context("create netsuke config directory")?;
     fs::write(
         netsuke_config_dir.join("config.toml"),
-        r#"
-theme = "ascii"
-colour_policy = "never"
-"#,
+        PRECEDENCE_USER_CONFIG_CONTENT,
     )
     .context("write user config.toml in APPDATA")?;
 
     // Project config: overrides theme; does NOT set colour_policy.
-    let project_config = temp_project.path().join(".netsuke.toml");
     fs::write(
-        &project_config,
-        r#"
-theme = "unicode"
-jobs = 8
-"#,
+        temp_project.path().join(".netsuke.toml"),
+        PRECEDENCE_PROJECT_CONFIG_CONTENT,
     )
     .context("write project .netsuke.toml")?;
 
@@ -294,19 +295,7 @@ jobs = 8
         .context("merge configs")?
         .with_default_command();
 
-    ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "project config theme should override user config theme"
-    );
-    ensure!(
-        merged.jobs == Some(8),
-        "project config jobs should be applied"
-    );
-    ensure!(
-        merged.colour_policy == Some(ColourPolicy::Never),
-        "user-only field should still be merged when project config does not override it"
-    );
-    Ok(())
+    assert_project_precedence_applied(&merged)
 }
 
 #[rstest]
