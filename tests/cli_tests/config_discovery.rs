@@ -531,7 +531,7 @@ fetch_allow_scheme = ["https"]
     .context("write project .netsuke.toml with lists")?;
 
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    // Use comma-separated values for list fields in environment variables
+    // Set single-value environment variables for list fields
     let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));
     let _scheme_guard = EnvVarGuard::set("NETSUKE_FETCH_ALLOW_SCHEME", OsStr::new("http"));
 
@@ -553,6 +553,35 @@ fetch_allow_scheme = ["https"]
         .context("merge with list appending")?
         .with_default_command();
 
+    // Verify layer order for default_targets: config ["fmt", "lint"] -> env ["test"] -> CLI ["build"]
+    ensure!(
+        merged.default_targets.starts_with(&["fmt".to_string(), "lint".to_string()]),
+        "default_targets should start with config layer entries [\"fmt\", \"lint\"]"
+    );
+    ensure!(
+        merged.default_targets.len() >= 3 && merged.default_targets[2] == "test",
+        "default_targets should have env layer entry \"test\" after config entries"
+    );
+    ensure!(
+        merged.default_targets.len() >= 4 && merged.default_targets[3] == "build",
+        "default_targets should have CLI layer entry \"build\" after env entry"
+    );
+
+    // Verify layer order for fetch_allow_scheme: config ["https"] -> env ["http"] -> CLI ["ftp"]
+    ensure!(
+        merged.fetch_allow_scheme.starts_with(&["https".to_string()]),
+        "fetch_allow_scheme should start with config layer entry [\"https\"]"
+    );
+    ensure!(
+        merged.fetch_allow_scheme.len() >= 2 && merged.fetch_allow_scheme[1] == "http",
+        "fetch_allow_scheme should have env layer entry \"http\" after config entry"
+    );
+    ensure!(
+        merged.fetch_allow_scheme.len() >= 3 && merged.fetch_allow_scheme[2] == "ftp",
+        "fetch_allow_scheme should have CLI layer entry \"ftp\" after env entry"
+    );
+
+    // Final full-vector equality checks
     ensure!(
         merged.default_targets == vec!["fmt", "lint", "test", "build"],
         "default_targets should append across config, env, and CLI layers"
