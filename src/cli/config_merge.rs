@@ -104,9 +104,10 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 ///
 /// Mirrors the two-pass logic of [`push_file_layers`] without a `MergeComposer`.
 ///
-/// # Errors
-///
-/// Returns an error if project-scope config file loading fails.
+/// If project-scope layer loading fails, this function falls back to the first-pass
+/// layers (global and user configs) rather than propagating an error. An explicit
+/// `NETSUKE_CONFIG_PATH` environment variable override will also cause the function
+/// to return early with the first-pass layers only.
 fn collect_diag_file_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>> {
     let discovery = config_discovery(directory);
     let file_layers = discovery.compose_layers().value;

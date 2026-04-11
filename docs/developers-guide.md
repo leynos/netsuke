@@ -230,6 +230,8 @@ scenarios. Its fields are organized by domain:
 
 ### Scenario state groups
 
+State fields organized by concern to facilitate scenario authoring and maintenance.
+
 | Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                                  |
 | :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
 | CLI state          | `cli`, `cli_error`                                                                                                                                                                                                                       | Parsed CLI configuration and parse error capture.                        |
@@ -293,6 +295,8 @@ The final merge order is:
 ### Private helpers
 
 ### Configuration merge helper functions
+
+Private helper functions for config discovery and diagnostic-JSON resolution.
 
 | Function                     | Purpose                                                              |
 | :--------------------------- | :------------------------------------------------------------------- |

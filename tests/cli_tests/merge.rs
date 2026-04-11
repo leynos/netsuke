@@ -18,6 +18,26 @@ use std::sync::Arc;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
+/// RAII guard that restores the process working directory on drop.
+///
+/// Acquire this *after* `EnvLock` so the drop order (CWD restored first,
+/// lock released second) mirrors the acquire order.
+struct CwdGuard(std::path::PathBuf);
+
+impl CwdGuard {
+    fn acquire() -> anyhow::Result<Self> {
+        Ok(Self(
+            std::env::current_dir().context("capture current working directory")?,
+        ))
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        drop(std::env::set_current_dir(&self.0));
+    }
+}
+
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
     Ok(sanitize_value(&Cli::default())?)
@@ -293,6 +313,7 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 #[rstest]
 fn resolve_merged_diag_json_handles_malformed_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
