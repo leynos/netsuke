@@ -107,9 +107,7 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 /// # Errors
 ///
 /// Returns an error if project-scope config file loading fails.
-fn collect_diag_file_layers(
-    directory: Option<&Path>,
-) -> Result<Vec<MergeLayer<'static>>, Arc<ortho_config::OrthoError>> {
+fn collect_diag_file_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>> {
     let discovery = config_discovery(directory);
     let file_layers = discovery.compose_layers().value;
     let project_file = project_scope_file_str(directory);
@@ -119,12 +117,12 @@ fn collect_diag_file_layers(
     });
     let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
     if first_pass_found_project || has_explicit_config {
-        Ok(file_layers)
+        file_layers
     } else {
-        Ok(file_layers
-            .into_iter()
-            .chain(project_scope_layers(directory)?)
-            .collect())
+        match project_scope_layers(directory) {
+            Ok(project_layers) => file_layers.into_iter().chain(project_layers).collect(),
+            Err(_) => file_layers,
+        }
     }
 }
 
@@ -149,12 +147,11 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
     let mut diag_json = Cli::default().diag_json;
 
-    if let Ok(layers) = collect_diag_file_layers(cli.directory.as_deref()) {
-        for layer in layers {
-            let layer_value = layer.into_value();
-            if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
-                diag_json = layer_diag_json;
-            }
+    let layers = collect_diag_file_layers(cli.directory.as_deref());
+    for layer in layers {
+        let layer_value = layer.into_value();
+        if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
+            diag_json = layer_diag_json;
         }
     }
 

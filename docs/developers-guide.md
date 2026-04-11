@@ -226,7 +226,9 @@ Do **not** call `std::env::set_var` directly in BDD steps — use
 ## `TestWorld` field groups
 
 `TestWorld` (`tests/bdd/fixtures/mod.rs`) is the shared fixture for all BDD
-scenarios. Its fields are organised by domain:
+scenarios. Its fields are organized by domain:
+
+### Scenario state groups
 
 | Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                                  |
 | :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
@@ -236,7 +238,7 @@ scenarios. Its fields are organised by domain:
 | Ninja state        | `ninja_content`, `ninja_error`                                                                                                                                                                                                           | Generated Ninja file content and errors.                                 |
 | Process state      | `run_status`, `run_error`, `command_stdout`, `command_stderr`, `temp_dir`, `workspace_path`, `path_guard`, `ninja_env_guard`                                                                                                             | Process execution results, temporary directories, and path/ninja guards. |
 | Stdlib state       | `stdlib_root`, `stdlib_output`, `stdlib_error`, `stdlib_state`, `stdlib_command`, `stdlib_policy`, `stdlib_path_override`, `stdlib_fetch_max_bytes`, `stdlib_command_max_output_bytes`, `stdlib_command_stream_max_bytes`, `stdlib_text` | Stdlib rendering, network policy, and size constraints.                  |
-| Localisation state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localiser overrides and resolution state.                 |
+| Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.                 |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.                            |
 | Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.                          |
 | Environment state  | `env_vars`, `env_lock`, `original_cwd`                                                                                                                                                                                                   | Environment variable snapshots, scenario-scoped lock, and CWD capture.   |
@@ -259,8 +261,9 @@ config-layer plumbing separate from the public CLI surface in `cli::mod`.
 ### Two-pass file discovery
 
 OrthoConfig's `ConfigDiscovery::compose_layers()` returns only the **first**
-matching config file it finds. Because user-scope locations (XDG, HOME) are
-checked before the project root, a user config can shadow a project config.
+matching config file it finds. Because user-scope locations (XDG (X Desktop
+Group), HOME) are checked before the project root, a user config can shadow a
+project config.
 
 To enforce **project scope > user scope** precedence, `merge_with_config` uses
 a two-pass approach:
@@ -281,13 +284,15 @@ resolution (before full merging).
 
 The final merge order is:
 
-1. **Defaults** — `Cli::default()` serialised as a base layer.
+1. **Defaults** — `Cli::default()` serialized as a base layer.
 2. **File layers** — discovered config files in the two-pass order above.
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
 
 ### Private helpers
+
+### Configuration merge helper functions
 
 | Function                     | Purpose                                                              |
 | :--------------------------- | :------------------------------------------------------------------- |
