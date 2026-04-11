@@ -360,6 +360,53 @@ Versioning and compatibility rules:
   present because the same layer object also participates in full config
   merging.
 
+## BDD command helpers and environment handling
+
+The BDD step module `tests/bdd/steps/manifest_command.rs` provides three
+helpers that launch the netsuke binary in a controlled environment:
+
+- **`netsuke_executable()`** — locates the compiled netsuke binary using
+  `assert_cmd::cargo::cargo_bin!("netsuke")`. Returns the resolved `PathBuf` or
+  an error if the binary is not found.
+- **`build_netsuke_command(world, args)`** — constructs an
+  `assert_cmd::Command` with a sanitized environment. The helper:
+  1. Captures scenario-specific environment variables (keys tracked in
+     `world.env_vars`, current values from the host process) before clearing.
+  2. Calls `env_clear()` to strip the inherited environment for test
+     isolation.
+  3. Explicitly forwards `PATH` (via `std::env::var_os`) so netsuke can
+     locate ninja and other subprocesses.
+  4. Explicitly forwards `NETSUKE_NINJA` (the `ninja_env::NINJA_ENV`
+     constant) so fake-ninja overrides survive `env_clear()`.
+  5. Re-applies scenario-specific environment variables captured in step 1.
+- **`run_netsuke_and_store(world, args)`** — calls `build_netsuke_command`,
+  runs the command, and stores stdout, stderr, and exit status in the
+  `TestWorld` fixture for subsequent `Then` step assertions.
+
+### Environment contract
+
+After `env_clear()`, only these variables are present in the spawned command:
+
+| Variable        | Source                  | Purpose                          |
+| --------------- | ----------------------- | -------------------------------- |
+| `PATH`          | Host `std::env::var_os` | Locate ninja and subprocesses    |
+| `NETSUKE_NINJA` | Host `std::env::var_os` | Override ninja path in scenarios |
+| Scenario env    | `world.env_vars` keys   | BDD-step-configured overrides    |
+
+The `world.env_vars` map is a **restoration snapshot**: keys are variables set
+during the scenario, and values are their *previous* values (for restoration
+when the scenario ends). To obtain the *current* value for a tracked variable,
+call `std::env::var` / `std::env::var_os` on the key.
+
+### Integration test helper
+
+`test_support::netsuke::run_netsuke_in(current_dir, args)` provides a simpler
+interface for integration tests outside the BDD framework. It sets `PATH` to an
+empty string (relying on the resolved binary path) but does **not** call
+`env_clear()`, so other environment variables (including `NETSUKE_NINJA` set
+via `override_ninja_env`) are inherited normally.
+
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the

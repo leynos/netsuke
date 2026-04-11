@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: PARTIALLY COMPLETED (Stages D–F descoped)
+Status: PARTIALLY COMPLETED (Stages E–F descoped)
 
 ## Purpose / big picture
 
@@ -119,8 +119,9 @@ worked examples, and see the same results. A developer can run
 - [x] Stage A: Audit existing coverage and plan chapter structure.
 - [x] Stage B: Write the Advanced Usage chapter in `docs/users-guide.md`.
 - [x] Stage C: Add BDD behavioural scenarios (limited scope).
-- [~] Stage D: Descoped (integration tests not required for basic chapter).
-- [~] Stage E: Descoped (design docs unchanged, roadmap will be updated separately).
+- [x] Stage D: Integration tests added in `tests/advanced_usage_tests.rs`.
+- [~] Stage E: Descoped (design docs unchanged, roadmap will be updated
+  separately).
 - [~] Stage F: Descoped (validation covered by existing BDD and linting).
 
 ## Surprises & discoveries
