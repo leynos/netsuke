@@ -142,8 +142,8 @@ For BDD steps that need to track mutations through `TestWorld`, use
 
 Tests that call `std::env::set_current_dir` must restore the original working
 directory after the test. `CwdGuard` (defined locally in
-`tests/cli_tests/config_discovery.rs`) captures the current directory on
-construction and restores it on drop:
+`tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`) captures
+the current directory on construction and restores it on drop:
 
 ```rust
 struct CwdGuard(std::path::PathBuf);
@@ -291,8 +291,6 @@ The final merge order is:
 3. **Environment** — `NETSUKE_*` environment variables via the Figment Env
    provider.
 4. **CLI flags** — values explicitly passed on the command line.
-
-### Private helpers
 
 ### Configuration merge helper functions
 
