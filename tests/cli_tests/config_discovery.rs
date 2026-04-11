@@ -521,46 +521,9 @@ colour_policy = "always"
     Ok(())
 }
 
-#[rstest]
-fn list_fields_append_across_discovered_config_env_and_cli() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
-    let temp_project = tempdir().context("create project directory")?;
-
-    // Write project config with default_targets
-    let project_config = temp_project.path().join(".netsuke.toml");
-    fs::write(
-        &project_config,
-        r#"
-default_targets = ["fmt", "lint"]
-fetch_allow_scheme = ["https"]
-"#,
-    )
-    .context("write project .netsuke.toml with lists")?;
-
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    // Set single-value environment variables for list fields
-    let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));
-    let _scheme_guard = EnvVarGuard::set("NETSUKE_FETCH_ALLOW_SCHEME", OsStr::new("http"));
-
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
-        [
-            "netsuke",
-            "--default-target",
-            "build",
-            "--fetch-allow-scheme",
-            "ftp",
-        ],
-        &localizer,
-    )
-    .context("parse CLI with list overrides")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge with list appending")?
-        .with_default_command();
-
+/// Assert that `default_targets` and `fetch_allow_scheme` have been appended
+/// in config → env → CLI order by the merge pipeline.
+fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
     // Verify layer order for default_targets: config ["fmt", "lint"] -> env ["test"] -> CLI ["build"]
     ensure!(
         merged
@@ -605,4 +568,47 @@ fetch_allow_scheme = ["https"]
         "fetch_allow_scheme should append across layers"
     );
     Ok(())
+}
+
+#[rstest]
+fn list_fields_append_across_discovered_config_env_and_cli() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let temp_project = tempdir().context("create project directory")?;
+
+    // Write project config with default_targets
+    let project_config = temp_project.path().join(".netsuke.toml");
+    fs::write(
+        &project_config,
+        r#"
+default_targets = ["fmt", "lint"]
+fetch_allow_scheme = ["https"]
+"#,
+    )
+    .context("write project .netsuke.toml with lists")?;
+
+    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    // Set single-value environment variables for list fields
+    let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));
+    let _scheme_guard = EnvVarGuard::set("NETSUKE_FETCH_ALLOW_SCHEME", OsStr::new("http"));
+
+    std::env::set_current_dir(&temp_project).context("change to project directory")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+        [
+            "netsuke",
+            "--default-target",
+            "build",
+            "--fetch-allow-scheme",
+            "ftp",
+        ],
+        &localizer,
+    )
+    .context("parse CLI with list overrides")?;
+    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge with list appending")?
+        .with_default_command();
+
+    assert_list_fields_appended(&merged)
 }
