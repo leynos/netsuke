@@ -297,3 +297,7 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
     merged.command = command;
     Ok(merged)
 }
+
+#[cfg(test)]
+#[path = "config_merge_tests.rs"]
+mod tests;
