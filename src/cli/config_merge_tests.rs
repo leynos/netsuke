@@ -1,8 +1,10 @@
 //! Unit tests for private helpers in `config_merge`.
 
 use super::*;
+use clap::CommandFactory;
 use rstest::rstest;
 use serde_json::json;
+use tempfile::tempdir;
 
 // ---------------------------------------------------------------------------
 // is_empty_value
@@ -84,5 +86,160 @@ fn diag_json_from_layer_ignores_invalid_output_format() {
         diag_json_from_layer(&layer),
         Some(true),
         "invalid output_format should fall through to diag_json"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// project_scope_file_str
+// ---------------------------------------------------------------------------
+
+#[test]
+fn project_scope_file_str_returns_path_even_when_file_does_not_exist() {
+    let dir = tempdir().expect("tempdir");
+    // No .netsuke.toml written — still returns the expected path
+    let result = project_scope_file_str(Some(dir.path()));
+    assert!(result.is_some(), "should return a path even if file does not exist");
+    let path = result.expect("should have a path");
+    assert!(
+        path.ends_with(".netsuke.toml"),
+        "returned path should end with .netsuke.toml"
+    );
+}
+
+#[test]
+fn project_scope_file_str_returns_path_when_config_file_exists() {
+    let dir = tempdir().expect("tempdir");
+    let config = dir.path().join(".netsuke.toml");
+    std::fs::write(&config, "").expect("write");
+    let result = project_scope_file_str(Some(dir.path()));
+    assert!(result.is_some(), "should return a path when file exists");
+    let path = result.expect("should have a path");
+    assert!(
+        path.ends_with(".netsuke.toml"),
+        "returned path should end with .netsuke.toml"
+    );
+}
+
+#[test]
+fn project_scope_file_str_uses_cwd_when_directory_is_none() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    // When directory is None the helper falls back to cwd
+    let dir = tempdir().expect("tempdir");
+    let original = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(&dir).expect("chdir");
+    let result = project_scope_file_str(None);
+    std::env::set_current_dir(original).expect("restore cwd");
+    assert!(result.is_some(), "should return path based on cwd");
+    let path = result.expect("should have a path");
+    assert!(
+        path.ends_with(".netsuke.toml"),
+        "returned path should end with .netsuke.toml"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// project_scope_layers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn project_scope_layers_returns_empty_when_no_file_present() {
+    let dir = tempdir().expect("tempdir");
+    let layers = project_scope_layers(Some(dir.path())).expect("should succeed");
+    assert!(
+        layers.is_empty(),
+        "no layers expected when no config file is present"
+    );
+}
+
+#[test]
+fn project_scope_layers_returns_one_layer_when_file_present() {
+    let dir = tempdir().expect("tempdir");
+    std::fs::write(dir.path().join(".netsuke.toml"), r#"theme = "ascii""#).expect("write config");
+    let layers = project_scope_layers(Some(dir.path())).expect("should succeed");
+    assert_eq!(layers.len(), 1, "exactly one layer expected");
+}
+
+// ---------------------------------------------------------------------------
+// collect_diag_file_layers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn collect_diag_file_layers_returns_empty_when_no_files_and_no_env_override() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let dir = tempdir().expect("tempdir");
+    // Ensure no explicit override is active
+    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    let layers = collect_diag_file_layers(Some(dir.path()));
+    assert!(layers.is_empty());
+}
+
+#[test]
+fn collect_diag_file_layers_includes_project_layer_when_file_present() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let dir = tempdir().expect("tempdir");
+    std::fs::write(dir.path().join(".netsuke.toml"), r"diag_json = true").expect("write config");
+    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    let layers = collect_diag_file_layers(Some(dir.path()));
+    assert!(
+        !layers.is_empty(),
+        "should include the project config layer"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// diag_json_from_matches
+// ---------------------------------------------------------------------------
+
+#[test]
+fn diag_json_from_matches_returns_discovered_when_no_cli_flag_set() {
+    let app = Cli::command();
+    let matches = app.get_matches_from(["netsuke"]);
+    let cli = Cli::default();
+    assert!(
+        diag_json_from_matches(&cli, &matches, true),
+        "should return the discovered value (true) when no CLI flag is set"
+    );
+    assert!(
+        !diag_json_from_matches(&cli, &matches, false),
+        "should return the discovered value (false) when no CLI flag is set"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// push_file_layers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn push_file_layers_does_not_panic_with_empty_directory() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let dir = tempdir().expect("tempdir");
+    let mut composer = MergeComposer::with_capacity(1);
+    let mut errors = Vec::new();
+    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    push_file_layers(&mut composer, &mut errors, Some(dir.path()));
+    assert!(
+        errors.is_empty(),
+        "no required errors expected for empty dir"
+    );
+}
+
+#[test]
+fn push_file_layers_pushes_project_layer_when_config_file_present() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let dir = tempdir().expect("tempdir");
+    std::fs::write(dir.path().join(".netsuke.toml"), r#"theme = "unicode""#).expect("write config");
+    let mut composer = MergeComposer::with_capacity(1);
+    let mut errors = Vec::new();
+    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    push_file_layers(&mut composer, &mut errors, Some(dir.path()));
+    assert_eq!(
+        composer.layers().len(),
+        1,
+        "one layer should have been pushed"
     );
 }
