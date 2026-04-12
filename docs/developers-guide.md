@@ -343,8 +343,8 @@ Versioning and compatibility rules:
 - `output_format` is the preferred field. Valid `"json"` resolves to
   `diag_json = true`; valid `"human"` resolves to `diag_json = false`.
 - If `output_format` is present but invalid, resolution falls back to
-  `diag_json` when it is a boolean.
-- Non-object values, or objects that contain neither recognised field, produce
+  `diag_json` when it is a boolean value.
+- Non-object values, or objects that contain neither recognized field, produce
   no `diag_json` decision.
 - `cli_overrides_from_matches` must continue to emit a JSON object, even when
   no CLI override is present.
