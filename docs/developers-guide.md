@@ -231,7 +231,8 @@ scenarios. Its fields are organized by domain:
 
 ### Scenario state groups
 
-State fields organized by concern to facilitate scenario authoring and maintenance.
+State fields organized by concern to facilitate scenario authoring and
+maintenance.
 
 | Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                                  |
 | :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |

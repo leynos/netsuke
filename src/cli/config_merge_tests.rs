@@ -2,7 +2,7 @@
 
 use super::*;
 use clap::CommandFactory;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde_json::json;
 use tempfile::tempdir;
 use test_support::EnvVarGuard;
@@ -172,34 +172,72 @@ fn project_scope_layers_returns_one_layer_when_file_present() {
 // collect_diag_file_layers
 // ---------------------------------------------------------------------------
 
-#[test]
-fn collect_diag_file_layers_returns_empty_when_no_files_and_no_env_override() {
+/// Fixture that sets up isolated config environment for testing config discovery.
+///
+/// Returns (`EnvLock`, `project_dir`, `fake_home`, `env_guards`) where `env_guards`
+/// isolate `HOME` and platform-specific config paths (`XDG_CONFIG_HOME` on Unix,
+/// `APPDATA`/`LOCALAPPDATA` on Windows) and remove `CONFIG_ENV_VAR`.
+#[cfg(test)]
+#[fixture]
+fn isolated_config_env() -> (
+    test_support::env_lock::EnvLock,
+    tempfile::TempDir,
+    tempfile::TempDir,
+    Vec<EnvVarGuard>,
+) {
     use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
+    let lock = EnvLock::acquire();
     let dir = tempdir().expect("tempdir");
     let fake_home = tempdir().expect("fake home tempdir");
-    // Isolate user config discovery by pointing HOME to empty tempdir
-    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
-    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    let layers = collect_diag_file_layers(Some(dir.path()));
-    assert!(layers.is_empty());
+
+    #[cfg(unix)]
+    let guards = vec![
+        EnvVarGuard::set("HOME", fake_home.path().as_os_str()),
+        EnvVarGuard::set("XDG_CONFIG_HOME", fake_home.path().as_os_str()),
+        EnvVarGuard::remove(CONFIG_ENV_VAR),
+    ];
+
+    #[cfg(windows)]
+    let guards = vec![
+        EnvVarGuard::set("HOME", fake_home.path().as_os_str()),
+        EnvVarGuard::set("APPDATA", fake_home.path().as_os_str()),
+        EnvVarGuard::set("LOCALAPPDATA", fake_home.path().as_os_str()),
+        EnvVarGuard::remove(CONFIG_ENV_VAR),
+    ];
+
+    (lock, dir, fake_home, guards)
 }
 
-#[test]
-fn collect_diag_file_layers_includes_project_layer_when_file_present() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let dir = tempdir().expect("tempdir");
-    let fake_home = tempdir().expect("fake home tempdir");
-    std::fs::write(dir.path().join(".netsuke.toml"), r"diag_json = true").expect("write config");
-    // Isolate user config discovery by pointing HOME to empty tempdir
-    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
-    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
+#[rstest]
+#[case::no_file(false, true)]
+#[case::file_present(true, false)]
+fn collect_diag_file_layers_handles_project_file_presence(
+    isolated_config_env: (
+        test_support::env_lock::EnvLock,
+        tempfile::TempDir,
+        tempfile::TempDir,
+        Vec<EnvVarGuard>,
+    ),
+    #[case] create_file: bool,
+    #[case] expect_empty: bool,
+) {
+    let (_lock, dir, _fake_home, _guards) = isolated_config_env;
+
+    if create_file {
+        std::fs::write(dir.path().join(".netsuke.toml"), r"diag_json = true")
+            .expect("write config");
+    }
+
     let layers = collect_diag_file_layers(Some(dir.path()));
-    assert!(
-        !layers.is_empty(),
-        "should include the project config layer"
-    );
+
+    if expect_empty {
+        assert!(layers.is_empty(), "expected no layers when file absent");
+    } else {
+        assert!(
+            !layers.is_empty(),
+            "should include the project config layer when file present"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -225,40 +263,40 @@ fn diag_json_from_matches_returns_discovered_when_no_cli_flag_set() {
 // push_file_layers
 // ---------------------------------------------------------------------------
 
-#[test]
-fn push_file_layers_does_not_panic_with_empty_directory() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let dir = tempdir().expect("tempdir");
-    let fake_home = tempdir().expect("fake home tempdir");
-    let mut composer = MergeComposer::with_capacity(1);
-    let mut errors = Vec::new();
-    // Isolate user config discovery by pointing HOME to empty tempdir
-    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
-    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    push_file_layers(&mut composer, &mut errors, Some(dir.path()));
-    assert!(
-        errors.is_empty(),
-        "no required errors expected for empty dir"
-    );
-}
+#[rstest]
+#[case::no_file(false, 0)]
+#[case::file_present(true, 1)]
+fn push_file_layers_handles_project_config_file(
+    isolated_config_env: (
+        test_support::env_lock::EnvLock,
+        tempfile::TempDir,
+        tempfile::TempDir,
+        Vec<EnvVarGuard>,
+    ),
+    #[case] create_file: bool,
+    #[case] expected_layer_count: usize,
+) {
+    let (_lock, dir, _fake_home, _guards) = isolated_config_env;
 
-#[test]
-fn push_file_layers_pushes_project_layer_when_config_file_present() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let dir = tempdir().expect("tempdir");
-    let fake_home = tempdir().expect("fake home tempdir");
-    std::fs::write(dir.path().join(".netsuke.toml"), r#"theme = "unicode""#).expect("write config");
+    if create_file {
+        std::fs::write(dir.path().join(".netsuke.toml"), r#"theme = "unicode""#)
+            .expect("write config");
+    }
+
     let mut composer = MergeComposer::with_capacity(1);
     let mut errors = Vec::new();
-    // Isolate user config discovery by pointing HOME to empty tempdir
-    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
-    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     push_file_layers(&mut composer, &mut errors, Some(dir.path()));
-    assert_eq!(
-        composer.layers().len(),
-        1,
-        "one layer should have been pushed"
-    );
+
+    if create_file {
+        assert_eq!(
+            composer.layers().len(),
+            expected_layer_count,
+            "one layer should have been pushed when file present"
+        );
+    } else {
+        assert!(
+            errors.is_empty(),
+            "no required errors expected for empty dir"
+        );
+    }
 }

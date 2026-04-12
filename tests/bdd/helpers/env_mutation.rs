@@ -24,11 +24,19 @@ use anyhow::{Result, ensure};
 ///
 /// # Errors
 ///
-/// Returns an error if the environment variable name is empty.
+/// Returns an error if the environment variable name is empty, contains '=', or contains '\0'.
 pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
     ensure!(
         !key.as_str().is_empty(),
         "environment variable name must not be empty"
+    );
+    ensure!(
+        !key.as_str().contains('='),
+        "environment variable name must not contain '='"
+    );
+    ensure!(
+        !key.as_str().contains('\0'),
+        "environment variable name must not contain null bytes"
     );
     world.ensure_env_lock();
     let original = std::env::var_os(key.as_str());
@@ -48,40 +56,65 @@ mod tests {
     use super::*;
     use crate::bdd::fixtures::TestWorld;
     use crate::bdd::types::EnvVarKey;
+    use rstest::{fixture, rstest};
 
-    #[test]
-    fn mutate_env_var_returns_error_for_empty_key() {
-        let world = TestWorld::default();
-        let result = mutate_env_var(&world, EnvVarKey::new(""), Some("value"));
-        assert!(result.is_err(), "empty key should be rejected");
+    #[fixture]
+    fn test_world() -> TestWorld {
+        TestWorld::default()
     }
 
-    #[test]
-    fn mutate_env_var_sets_and_tracks_variable() {
-        let world = TestWorld::default();
-        let key = "NETSUKE_TEST_MUTATE_ENV_VAR_SET";
-        // Ensure the variable is absent before the test
-        mutate_env_var(&world, EnvVarKey::new(key), None)
-            .expect("precondition cleanup should succeed");
-        mutate_env_var(&world, EnvVarKey::new(key), Some("sentinel")).expect("set should succeed");
-        assert_eq!(
-            std::env::var(key).ok().as_deref(),
-            Some("sentinel"),
-            "variable should be set"
-        );
-        // Cleanup
-        mutate_env_var(&world, EnvVarKey::new(key), None).expect("cleanup should succeed");
+    struct MutationTestCase {
+        key: &'static str,
+        new_value: Option<&'static str>,
+        expect_error: bool,
+        expect_present: bool,
     }
 
-    #[test]
-    fn mutate_env_var_removes_variable_when_new_value_is_none() {
-        let world = TestWorld::default();
-        let key = "NETSUKE_TEST_MUTATE_ENV_VAR_REMOVE";
-        mutate_env_var(&world, EnvVarKey::new(key), Some("present")).expect("seed should succeed");
-        mutate_env_var(&world, EnvVarKey::new(key), None).expect("remove should succeed");
-        assert!(
-            std::env::var(key).is_err(),
-            "variable should have been removed"
-        );
+    #[rstest]
+    #[case::empty_key(MutationTestCase { key: "", new_value: None, expect_error: true, expect_present: false })]
+    #[case::key_with_equals(MutationTestCase { key: "KEY=VALUE", new_value: Some("test"), expect_error: true, expect_present: false })]
+    #[case::key_with_null(MutationTestCase { key: "KEY\0NULL", new_value: Some("test"), expect_error: true, expect_present: false })]
+    #[case::set_new_var(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_SET", new_value: Some("sentinel"), expect_error: false, expect_present: true })]
+    #[case::remove_existing_var(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_REMOVE", new_value: None, expect_error: false, expect_present: false })]
+    fn mutate_env_var_handles_various_operations(test_world: TestWorld, #[case] tc: MutationTestCase) {
+        // For the set case, ensure variable is absent first
+        if tc.key == "NETSUKE_TEST_MUTATE_ENV_VAR_SET" {
+            mutate_env_var(&test_world, EnvVarKey::new(tc.key), None)
+                .expect("precondition cleanup should succeed");
+        }
+
+        // For the remove case, seed the variable first
+        if tc.key == "NETSUKE_TEST_MUTATE_ENV_VAR_REMOVE" {
+            mutate_env_var(&test_world, EnvVarKey::new(tc.key), Some("present"))
+                .expect("seed should succeed");
+        }
+
+        // Perform the operation under test
+        let result = mutate_env_var(&test_world, EnvVarKey::new(tc.key), tc.new_value);
+
+        if tc.expect_error {
+            assert!(
+                result.is_err(),
+                "invalid key should be rejected (empty, contains '=', or contains null byte)"
+            );
+        } else {
+            assert!(result.is_ok(), "operation should succeed");
+
+            if tc.expect_present {
+                assert_eq!(
+                    std::env::var(tc.key).ok().as_deref(),
+                    tc.new_value,
+                    "variable should be set to expected value"
+                );
+                // Cleanup
+                mutate_env_var(&test_world, EnvVarKey::new(tc.key), None)
+                    .expect("cleanup should succeed");
+            } else if !tc.key.is_empty() {
+                assert!(
+                    std::env::var(tc.key).is_err(),
+                    "variable should have been removed"
+                );
+            }
+        }
     }
 }
