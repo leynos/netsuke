@@ -158,8 +158,9 @@ let _cwd_guard = CwdGuard::acquire()?;
 std::env::set_current_dir(temp.path())?;
 ```
 
-Acquire `CwdGuard` *after* `EnvLock` so the drop order (CWD restored first,
-lock released second) mirrors the acquire order.
+Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse
+declaration order: `CwdGuard` restores the CWD first, and `EnvLock` releases
+second.
 
 ### `restore_many` and `restore_many_locked`
 
@@ -230,6 +231,8 @@ scenarios. Its fields are organized by domain:
 State fields organized by concern to facilitate scenario authoring and
 maintenance.
 
+Table: Scenario state groups and fields
+
 | Group              | Fields                                                                                                                                                                                                                                   | Purpose                                                                  |
 | :----------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- |
 | CLI state          | `cli`, `cli_error`                                                                                                                                                                                                                       | Parsed CLI configuration and parse error capture.                        |
@@ -261,9 +264,9 @@ config-layer plumbing separate from the public CLI surface in `cli::mod`.
 ### Two-pass file discovery
 
 OrthoConfig's `ConfigDiscovery::compose_layers()` returns only the **first**
-matching config file it finds. Because user-scope locations (XDG (X Desktop
-Group), HOME) are checked before the project root, a user config can shadow a
-project config.
+matching config file it finds. Because user-scope locations (XDG Base
+Directory, HOME) are checked before the project root, a user config can shadow
+a project config.
 
 To enforce **project scope > user scope** precedence, `merge_with_config` uses
 a two-pass approach:
@@ -293,6 +296,8 @@ The final merge order is:
 ### Configuration merge helper functions
 
 Private helper functions for config discovery and diagnostic-JSON resolution.
+
+Table: Configuration merge helper functions
 
 | Function                     | Purpose                                                              |
 | :--------------------------- | :------------------------------------------------------------------- |
