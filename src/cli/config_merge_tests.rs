@@ -264,39 +264,29 @@ fn diag_json_from_matches_returns_discovered_when_no_cli_flag_set() {
 // ---------------------------------------------------------------------------
 
 #[rstest]
-#[case::no_file(false, 0)]
-#[case::file_present(true, 1)]
-fn push_file_layers_handles_project_config_file(
-    isolated_config_env: (
-        test_support::env_lock::EnvLock,
-        tempfile::TempDir,
-        tempfile::TempDir,
-        Vec<EnvVarGuard>,
-    ),
-    #[case] create_file: bool,
-    #[case] expected_layer_count: usize,
+#[case::empty_directory(false, 0)]
+#[case::config_file_present(true, 1)]
+fn push_file_layers_pushes_expected_layer_count(
+    #[case] write_config: bool,
+    #[case] expected_layers: usize,
 ) {
-    let (_lock, dir, _fake_home, _guards) = isolated_config_env;
-
-    if create_file {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let dir = tempdir().expect("tempdir");
+    let fake_home = tempdir().expect("fake home tempdir");
+    if write_config {
         std::fs::write(dir.path().join(".netsuke.toml"), r#"theme = "unicode""#)
             .expect("write config");
     }
-
     let mut composer = MergeComposer::with_capacity(1);
     let mut errors = Vec::new();
+    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
+    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     push_file_layers(&mut composer, &mut errors, Some(dir.path()));
-
-    if create_file {
-        assert_eq!(
-            composer.layers().len(),
-            expected_layer_count,
-            "one layer should have been pushed when file present"
-        );
-    } else {
-        assert!(
-            errors.is_empty(),
-            "no required errors expected for empty dir"
-        );
-    }
+    assert!(errors.is_empty(), "no required errors expected");
+    assert_eq!(
+        composer.layers().len(),
+        expected_layers,
+        "unexpected number of layers pushed"
+    );
 }

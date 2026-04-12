@@ -76,7 +76,10 @@ mod tests {
     #[case::key_with_null(MutationTestCase { key: "KEY\0NULL", new_value: Some("test"), expect_error: true, expect_present: false })]
     #[case::set_new_var(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_SET", new_value: Some("sentinel"), expect_error: false, expect_present: true })]
     #[case::remove_existing_var(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_REMOVE", new_value: None, expect_error: false, expect_present: false })]
-    fn mutate_env_var_handles_various_operations(test_world: TestWorld, #[case] tc: MutationTestCase) {
+    fn mutate_env_var_handles_various_operations(
+        test_world: TestWorld,
+        #[case] tc: MutationTestCase,
+    ) {
         // For the set case, ensure variable is absent first
         if tc.key == "NETSUKE_TEST_MUTATE_ENV_VAR_SET" {
             mutate_env_var(&test_world, EnvVarKey::new(tc.key), None)
