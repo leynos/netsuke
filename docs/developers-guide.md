@@ -130,8 +130,10 @@ the scenario lifetime.
 a single environment variable and restoring it on drop:
 
 ```rust
+use test_support::env_lock::EnvLock;
 use test_support::EnvVarGuard;
 
+let _env_lock = EnvLock::acquire();
 let _guard = EnvVarGuard::set("HOME", temp.path().as_os_str());
 let _guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 ```
@@ -148,19 +150,12 @@ used in `src/cli/config_merge_tests.rs`; local copies also remain in
 captures the current directory on construction and restores it on drop:
 
 ```rust
-struct CwdGuard(std::path::PathBuf);
+use test_support::CwdGuard;
+use test_support::env_lock::EnvLock;
 
-impl CwdGuard {
-    fn acquire() -> anyhow::Result<Self> {
-        Ok(Self(std::env::current_dir()?))
-    }
-}
-
-impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        drop(std::env::set_current_dir(&self.0));
-    }
-}
+let _env_lock = EnvLock::acquire();
+let _cwd_guard = CwdGuard::acquire()?;
+std::env::set_current_dir(temp.path())?;
 ```
 
 Acquire `CwdGuard` *after* `EnvLock` so the drop order (CWD restored first,
