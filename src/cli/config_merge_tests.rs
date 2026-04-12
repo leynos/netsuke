@@ -5,6 +5,22 @@ use clap::CommandFactory;
 use rstest::rstest;
 use serde_json::json;
 use tempfile::tempdir;
+use test_support::EnvVarGuard;
+
+/// RAII guard that restores the process working directory on drop.
+struct CwdGuard(std::path::PathBuf);
+
+impl CwdGuard {
+    fn new() -> anyhow::Result<Self> {
+        Ok(Self(std::env::current_dir()?))
+    }
+}
+
+impl Drop for CwdGuard {
+    fn drop(&mut self) {
+        drop(std::env::set_current_dir(&self.0));
+    }
+}
 
 // ---------------------------------------------------------------------------
 // is_empty_value
@@ -93,26 +109,16 @@ fn diag_json_from_layer_ignores_invalid_output_format() {
 // project_scope_file_str
 // ---------------------------------------------------------------------------
 
-#[test]
-fn project_scope_file_str_returns_path_even_when_file_does_not_exist() {
+#[rstest]
+#[case(false)]
+#[case(true)]
+fn project_scope_file_str_returns_path_regardless_of_file_existence(#[case] config_exists: bool) {
     let dir = tempdir().expect("tempdir");
-    // No .netsuke.toml written — still returns the expected path
+    if config_exists {
+        std::fs::write(dir.path().join(".netsuke.toml"), "").expect("write");
+    }
     let result = project_scope_file_str(Some(dir.path()));
-    assert!(result.is_some(), "should return a path even if file does not exist");
-    let path = result.expect("should have a path");
-    assert!(
-        path.ends_with(".netsuke.toml"),
-        "returned path should end with .netsuke.toml"
-    );
-}
-
-#[test]
-fn project_scope_file_str_returns_path_when_config_file_exists() {
-    let dir = tempdir().expect("tempdir");
-    let config = dir.path().join(".netsuke.toml");
-    std::fs::write(&config, "").expect("write");
-    let result = project_scope_file_str(Some(dir.path()));
-    assert!(result.is_some(), "should return a path when file exists");
+    assert!(result.is_some(), "should return a path");
     let path = result.expect("should have a path");
     assert!(
         path.ends_with(".netsuke.toml"),
@@ -124,12 +130,11 @@ fn project_scope_file_str_returns_path_when_config_file_exists() {
 fn project_scope_file_str_uses_cwd_when_directory_is_none() {
     use test_support::env_lock::EnvLock;
     let _lock = EnvLock::acquire();
+    let _cwd_guard = CwdGuard::new().expect("capture cwd");
     // When directory is None the helper falls back to cwd
     let dir = tempdir().expect("tempdir");
-    let original = std::env::current_dir().expect("cwd");
     std::env::set_current_dir(&dir).expect("chdir");
     let result = project_scope_file_str(None);
-    std::env::set_current_dir(original).expect("restore cwd");
     assert!(result.is_some(), "should return path based on cwd");
     let path = result.expect("should have a path");
     assert!(
@@ -169,8 +174,10 @@ fn collect_diag_file_layers_returns_empty_when_no_files_and_no_env_override() {
     use test_support::env_lock::EnvLock;
     let _lock = EnvLock::acquire();
     let dir = tempdir().expect("tempdir");
-    // Ensure no explicit override is active
-    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    let fake_home = tempdir().expect("fake home tempdir");
+    // Isolate user config discovery by pointing HOME to empty tempdir
+    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
+    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     let layers = collect_diag_file_layers(Some(dir.path()));
     assert!(layers.is_empty());
 }
@@ -180,8 +187,11 @@ fn collect_diag_file_layers_includes_project_layer_when_file_present() {
     use test_support::env_lock::EnvLock;
     let _lock = EnvLock::acquire();
     let dir = tempdir().expect("tempdir");
+    let fake_home = tempdir().expect("fake home tempdir");
     std::fs::write(dir.path().join(".netsuke.toml"), r"diag_json = true").expect("write config");
-    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    // Isolate user config discovery by pointing HOME to empty tempdir
+    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
+    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     let layers = collect_diag_file_layers(Some(dir.path()));
     assert!(
         !layers.is_empty(),
@@ -217,9 +227,12 @@ fn push_file_layers_does_not_panic_with_empty_directory() {
     use test_support::env_lock::EnvLock;
     let _lock = EnvLock::acquire();
     let dir = tempdir().expect("tempdir");
+    let fake_home = tempdir().expect("fake home tempdir");
     let mut composer = MergeComposer::with_capacity(1);
     let mut errors = Vec::new();
-    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    // Isolate user config discovery by pointing HOME to empty tempdir
+    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
+    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     push_file_layers(&mut composer, &mut errors, Some(dir.path()));
     assert!(
         errors.is_empty(),
@@ -232,10 +245,13 @@ fn push_file_layers_pushes_project_layer_when_config_file_present() {
     use test_support::env_lock::EnvLock;
     let _lock = EnvLock::acquire();
     let dir = tempdir().expect("tempdir");
+    let fake_home = tempdir().expect("fake home tempdir");
     std::fs::write(dir.path().join(".netsuke.toml"), r#"theme = "unicode""#).expect("write config");
     let mut composer = MergeComposer::with_capacity(1);
     let mut errors = Vec::new();
-    unsafe { std::env::remove_var(CONFIG_ENV_VAR) };
+    // Isolate user config discovery by pointing HOME to empty tempdir
+    let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
+    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     push_file_layers(&mut composer, &mut errors, Some(dir.path()));
     assert_eq!(
         composer.layers().len(),

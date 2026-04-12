@@ -61,7 +61,8 @@ mod tests {
         let world = TestWorld::default();
         let key = "NETSUKE_TEST_MUTATE_ENV_VAR_SET";
         // Ensure the variable is absent before the test
-        unsafe { std::env::remove_var(key) };
+        mutate_env_var(&world, EnvVarKey::new(key), None)
+            .expect("precondition cleanup should succeed");
         mutate_env_var(&world, EnvVarKey::new(key), Some("sentinel")).expect("set should succeed");
         assert_eq!(
             std::env::var(key).ok().as_deref(),
@@ -69,14 +70,14 @@ mod tests {
             "variable should be set"
         );
         // Cleanup
-        unsafe { std::env::remove_var(key) };
+        mutate_env_var(&world, EnvVarKey::new(key), None).expect("cleanup should succeed");
     }
 
     #[test]
     fn mutate_env_var_removes_variable_when_new_value_is_none() {
         let world = TestWorld::default();
         let key = "NETSUKE_TEST_MUTATE_ENV_VAR_REMOVE";
-        unsafe { std::env::set_var(key, "present") };
+        mutate_env_var(&world, EnvVarKey::new(key), Some("present")).expect("seed should succeed");
         mutate_env_var(&world, EnvVarKey::new(key), None).expect("remove should succeed");
         assert!(
             std::env::var(key).is_err(),
