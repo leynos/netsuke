@@ -307,6 +307,54 @@ Private helper functions for config discovery and diagnostic-JSON resolution.
 | `cli_overrides_from_matches` | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
 | `env_provider`               | Return the `NETSUKE_` prefixed Figment environment provider.         |
 
+#### `diag_json` contract
+
+Tooling that wants a stable contract for early diagnostic-JSON resolution
+should treat the input consumed by `collect_diag_file_layers`,
+`diag_json_from_layer`, and `diag_json_from_matches` as versioned schema
+`netsuke.diag-json-resolution.v1`:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:netsuke:diag-json-resolution:v1",
+  "title": "Netsuke diag_json resolution layer",
+  "type": "object",
+  "description": "Subset of merged configuration consulted before full CLI merging.",
+  "properties": {
+    "output_format": {
+      "type": "string",
+      "enum": ["human", "json"],
+      "description": "Preferred field. When present and valid, this decides diag_json."
+    },
+    "diag_json": {
+      "type": "boolean",
+      "description": "Legacy fallback field used only when output_format is absent or invalid."
+    }
+  },
+  "additionalProperties": true
+}
+```
+
+Versioning and compatibility rules:
+
+- Version `v1` has no required fields. Both `output_format` and `diag_json`
+  are optional.
+- `output_format` is the preferred field. Valid `"json"` resolves to
+  `diag_json = true`; valid `"human"` resolves to `diag_json = false`.
+- If `output_format` is present but invalid, resolution falls back to
+  `diag_json` when it is a boolean.
+- Non-object values, or objects that contain neither recognised field, produce
+  no `diag_json` decision.
+- `cli_overrides_from_matches` must continue to emit a JSON object, even when
+  no CLI override is present.
+- `is_empty_value` treats only the empty object `{}` as "no CLI overrides".
+  Downstream tooling must not replace an empty object with `null`, `[]`, or
+  any other sentinel.
+- Additional properties are ignored by `diag_json` resolution and may be
+  present because the same layer object also participates in full config
+  merging.
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the
