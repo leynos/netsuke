@@ -142,9 +142,10 @@ For BDD steps that need to track mutations through `TestWorld`, use
 ### `CwdGuard`
 
 Tests that call `std::env::set_current_dir` must restore the original working
-directory after the test. `CwdGuard` (defined locally in
-`tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`) captures
-the current directory on construction and restores it on drop:
+directory after the test. `CwdGuard` is available from `test_support`, and is
+used in `src/cli/config_merge_tests.rs`; local copies also remain in
+`tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
+captures the current directory on construction and restores it on drop:
 
 ```rust
 struct CwdGuard(std::path::PathBuf);

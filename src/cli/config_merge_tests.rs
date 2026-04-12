@@ -1,26 +1,12 @@
 //! Unit tests for private helpers in `config_merge`.
 
 use super::*;
+use anyhow::ensure;
 use clap::CommandFactory;
 use rstest::{fixture, rstest};
 use serde_json::json;
 use tempfile::tempdir;
-use test_support::EnvVarGuard;
-
-/// RAII guard that restores the process working directory on drop.
-struct CwdGuard(std::path::PathBuf);
-
-impl CwdGuard {
-    fn new() -> anyhow::Result<Self> {
-        Ok(Self(std::env::current_dir()?))
-    }
-}
-
-impl Drop for CwdGuard {
-    fn drop(&mut self) {
-        drop(std::env::set_current_dir(&self.0));
-    }
-}
+use test_support::{CwdGuard, EnvVarGuard};
 
 // ---------------------------------------------------------------------------
 // is_empty_value
@@ -117,15 +103,12 @@ fn project_scope_file_str_returns_expected_path(#[case] create_file: bool) {
     if create_file {
         std::fs::write(dir.path().join(".netsuke.toml"), "").expect("write");
     }
-    let result = project_scope_file_str(Some(dir.path()));
-    assert!(
-        result.is_some(),
-        "should return a path regardless of file presence"
-    );
-    let path = result.expect("should have a path");
-    assert!(
-        path.ends_with(".netsuke.toml"),
-        "returned path should end with .netsuke.toml"
+    let expected_path = dir.path().join(".netsuke.toml");
+    let expected = expected_path.to_string_lossy().into_owned();
+    let path = project_scope_file_str(Some(dir.path())).expect("should have a path");
+    assert_eq!(
+        path, expected,
+        "returned path should be anchored to the dir"
     );
 }
 
@@ -137,13 +120,10 @@ fn project_scope_file_str_uses_cwd_when_directory_is_none() {
     // When directory is None the helper falls back to cwd
     let dir = tempdir().expect("tempdir");
     std::env::set_current_dir(&dir).expect("chdir");
-    let result = project_scope_file_str(None);
-    assert!(result.is_some(), "should return path based on cwd");
-    let path = result.expect("should have a path");
-    assert!(
-        path.ends_with(".netsuke.toml"),
-        "returned path should end with .netsuke.toml"
-    );
+    let expected_path = dir.path().join(".netsuke.toml");
+    let expected = expected_path.to_string_lossy().into_owned();
+    let path = project_scope_file_str(None).expect("should have a path");
+    assert_eq!(path, expected, "returned path should be anchored to cwd");
 }
 
 // ---------------------------------------------------------------------------
@@ -179,16 +159,16 @@ fn project_scope_layers_returns_one_layer_when_file_present() {
 /// `APPDATA`/`LOCALAPPDATA` on Windows) and remove `CONFIG_ENV_VAR`.
 #[cfg(test)]
 #[fixture]
-fn isolated_config_env() -> (
+fn isolated_config_env() -> anyhow::Result<(
     test_support::env_lock::EnvLock,
     tempfile::TempDir,
     tempfile::TempDir,
     Vec<EnvVarGuard>,
-) {
+)> {
     use test_support::env_lock::EnvLock;
     let lock = EnvLock::acquire();
-    let dir = tempdir().expect("tempdir");
-    let fake_home = tempdir().expect("fake home tempdir");
+    let dir = tempfile::tempdir()?;
+    let fake_home = tempfile::tempdir()?;
 
     #[cfg(unix)]
     let guards = vec![
@@ -205,23 +185,23 @@ fn isolated_config_env() -> (
         EnvVarGuard::remove(CONFIG_ENV_VAR),
     ];
 
-    (lock, dir, fake_home, guards)
+    Ok((lock, dir, fake_home, guards))
 }
 
 #[rstest]
 #[case::no_file(false, true)]
 #[case::file_present(true, false)]
 fn collect_diag_file_layers_handles_project_file_presence(
-    isolated_config_env: (
+    isolated_config_env: anyhow::Result<(
         test_support::env_lock::EnvLock,
         tempfile::TempDir,
         tempfile::TempDir,
         Vec<EnvVarGuard>,
-    ),
+    )>,
     #[case] create_file: bool,
     #[case] expect_empty: bool,
-) {
-    let (_lock, dir, _fake_home, _guards) = isolated_config_env;
+) -> anyhow::Result<()> {
+    let (_lock, dir, _fake_home, _guards) = isolated_config_env?;
 
     if create_file {
         std::fs::write(dir.path().join(".netsuke.toml"), r"diag_json = true")
@@ -231,13 +211,15 @@ fn collect_diag_file_layers_handles_project_file_presence(
     let layers = collect_diag_file_layers(Some(dir.path()));
 
     if expect_empty {
-        assert!(layers.is_empty(), "expected no layers when file absent");
+        ensure!(layers.is_empty(), "expected no layers when file absent");
     } else {
-        assert!(
+        ensure!(
             !layers.is_empty(),
             "should include the project config layer when file present"
         );
     }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

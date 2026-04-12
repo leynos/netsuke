@@ -1,7 +1,7 @@
 //! Helpers for managing environment variable mutations in BDD tests.
 //!
 //! Provides shared utilities for safely mutating process-global environment
-//! variables within BDD scenarios using the `EnvLock` serialisation mechanism.
+//! variables within BDD scenarios using the `EnvLock` serialization mechanism.
 
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::types::EnvVarKey;
@@ -11,7 +11,7 @@ use anyhow::{Result, ensure};
 /// cleanup, and return `Ok(())`.
 ///
 /// Acquires the scenario-scoped `EnvLock` via `world.ensure_env_lock()` to
-/// serialise all process-global mutations (environment variables and CWD),
+/// serialize all process-global mutations (environment variables and CWD),
 /// then performs the mutation and registers the key for cleanup at scenario end.
 ///
 /// # Parameters
@@ -24,7 +24,8 @@ use anyhow::{Result, ensure};
 ///
 /// # Errors
 ///
-/// Returns an error if the environment variable name is empty, contains '=', or contains '\0'.
+/// Returns an error if the environment variable name is empty, contains '=',
+/// or contains `'\0'`, or if `new_value` contains `'\0'`.
 pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
     ensure!(
         !key.as_str().is_empty(),
@@ -46,7 +47,7 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
     }
     world.ensure_env_lock();
     let original = std::env::var_os(key.as_str());
-    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+    // SAFETY: EnvLock (held via world.env_lock) serializes mutations
     unsafe {
         match new_value {
             Some(val) => std::env::set_var(key.as_str(), val),
