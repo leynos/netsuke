@@ -110,15 +110,18 @@ fn diag_json_from_layer_ignores_invalid_output_format() {
 // ---------------------------------------------------------------------------
 
 #[rstest]
-#[case(false)]
-#[case(true)]
-fn project_scope_file_str_returns_path_regardless_of_file_existence(#[case] config_exists: bool) {
+#[case::file_absent(false)]
+#[case::file_present(true)]
+fn project_scope_file_str_returns_expected_path(#[case] create_file: bool) {
     let dir = tempdir().expect("tempdir");
-    if config_exists {
+    if create_file {
         std::fs::write(dir.path().join(".netsuke.toml"), "").expect("write");
     }
     let result = project_scope_file_str(Some(dir.path()));
-    assert!(result.is_some(), "should return a path");
+    assert!(
+        result.is_some(),
+        "should return a path regardless of file presence"
+    );
     let path = result.expect("should have a path");
     assert!(
         path.ends_with(".netsuke.toml"),
