@@ -281,6 +281,12 @@ fn push_file_layers_pushes_expected_layer_count(
     let mut composer = MergeComposer::with_capacity(1);
     let mut errors = Vec::new();
     let _home_guard = EnvVarGuard::set("HOME", fake_home.path().as_os_str());
+    #[cfg(unix)]
+    let _xdg_config_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", fake_home.path().as_os_str());
+    #[cfg(windows)]
+    let _appdata_guard = EnvVarGuard::set("APPDATA", fake_home.path().as_os_str());
+    #[cfg(windows)]
+    let _local_appdata_guard = EnvVarGuard::set("LOCALAPPDATA", fake_home.path().as_os_str());
     let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     push_file_layers(&mut composer, &mut errors, Some(dir.path()));
     assert!(errors.is_empty(), "no required errors expected");

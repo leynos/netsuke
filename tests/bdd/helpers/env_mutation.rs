@@ -38,6 +38,12 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
         !key.as_str().contains('\0'),
         "environment variable name must not contain null bytes"
     );
+    if let Some(val) = new_value {
+        ensure!(
+            !val.contains('\0'),
+            "environment variable value must not contain null bytes"
+        );
+    }
     world.ensure_env_lock();
     let original = std::env::var_os(key.as_str());
     // SAFETY: EnvLock (held via world.env_lock) serialises mutations
@@ -74,6 +80,7 @@ mod tests {
     #[case::empty_key(MutationTestCase { key: "", new_value: None, expect_error: true, expect_present: false })]
     #[case::key_with_equals(MutationTestCase { key: "KEY=VALUE", new_value: Some("test"), expect_error: true, expect_present: false })]
     #[case::key_with_null(MutationTestCase { key: "KEY\0NULL", new_value: Some("test"), expect_error: true, expect_present: false })]
+    #[case::value_with_null(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_VALUE_NULL", new_value: Some("bad\0value"), expect_error: true, expect_present: false })]
     #[case::set_new_var(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_SET", new_value: Some("sentinel"), expect_error: false, expect_present: true })]
     #[case::remove_existing_var(MutationTestCase { key: "NETSUKE_TEST_MUTATE_ENV_VAR_REMOVE", new_value: None, expect_error: false, expect_present: false })]
     fn mutate_env_var_handles_various_operations(
@@ -98,7 +105,7 @@ mod tests {
         if tc.expect_error {
             assert!(
                 result.is_err(),
-                "invalid key should be rejected (empty, contains '=', or contains null byte)"
+                "invalid key or value should be rejected before mutating the environment"
             );
         } else {
             assert!(result.is_ok(), "operation should succeed");
