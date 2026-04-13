@@ -8,6 +8,7 @@ use crate::bdd::types::{
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
+use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -138,33 +139,24 @@ fn netsuke_executable() -> Result<PathBuf> {
 fn build_netsuke_command(world: &TestWorld, args: &[&str]) -> Result<assert_cmd::Command> {
     let temp_path = get_temp_path(world)?;
 
-    // Capture environment variables set during the scenario before clearing
-    let env_vars = world.env_vars.borrow();
-    let scenario_env: Vec<(String, String)> = env_vars
-        .keys()
-        .filter_map(|key| std::env::var(key).ok().map(|val| (key.clone(), val)))
-        .collect();
-    drop(env_vars);
-
-    // Build command with sanitised environment
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
     cmd.current_dir(&temp_path).env_clear().args(args);
 
-    // Forward the real host PATH so netsuke can exec ninja and other subprocesses.
-    // netsuke itself is invoked via the fully-resolved path from netsuke_executable(),
-    // so PATH is not required to locate it.
-    if let Some(host_path) = std::env::var_os("PATH") {
-        cmd.env("PATH", host_path);
+    // Forward host PATH so netsuke can exec ninja.
+    // Acquire EnvLock only for this one read so it is consistent with
+    // any concurrent VarGuard mutations. NinjaEnvGuard is NOT held at
+    // this point because NETSUKE_NINJA is now tracked via env_vars_forward,
+    // so there is no re-entrant deadlock risk.
+    {
+        let _lock = test_support::env_lock::EnvLock::acquire();
+        if let Some(host_path) = std::env::var_os("PATH") {
+            cmd.env("PATH", host_path);
+        }
     }
 
-    // Forward NETSUKE_NINJA so BDD scenarios that install a fake ninja
-    // executable (via override_ninja_env) can locate it after env_clear().
-    if let Some(ninja) = std::env::var_os(ninja_env::NINJA_ENV) {
-        cmd.env(ninja_env::NINJA_ENV, ninja);
-    }
-
-    // Re-apply scenario-specific environment variables
-    for (key, value) in scenario_env {
+    // Forward scenario-tracked vars from TestWorld state (never reads process env).
+    let env_vars_forward = world.env_vars_forward.borrow();
+    for (key, value) in env_vars_forward.iter() {
         cmd.env(key, value);
     }
 
@@ -505,9 +497,13 @@ mod tests {
     fn world_env_vars_with_value_are_applied(prepared_world: TestWorld) {
         let world = prepared_world;
 
-        // Simulate a BDD step setting an env var using VarGuard for proper locking and restoration
-        let _guard = VarGuard::set("NETSUKE_TEST_FLAG", OsStr::new("enabled"));
-        world.track_env_var("NETSUKE_TEST_FLAG".to_owned(), None);
+        // Track the env var in TestWorld's forward map - this is the value that
+        // will be forwarded to the child command, not read from process env.
+        world.track_env_var(
+            "NETSUKE_TEST_FLAG".to_owned(),
+            None,
+            Some(OsString::from("enabled")),
+        );
 
         let cmd = build_netsuke_command(&world, &["--help"]).expect("build command");
 

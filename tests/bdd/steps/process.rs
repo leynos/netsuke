@@ -36,7 +36,10 @@ fn install_test_ninja(
     world.ninja_content.set(ninja_str);
     world.ninja_env_guard.borrow_mut().take();
     let system_env = env::SystemEnv::new();
+    let ninja_path_os = ninja_path.as_os_str().to_owned();
+    let previous = std::env::var_os(ninja_env::NINJA_ENV);
     *world.ninja_env_guard.borrow_mut() = Some(env::override_ninja_env(&system_env, ninja_path));
+    world.track_env_var(ninja_env::NINJA_ENV.to_owned(), previous, Some(ninja_path_os));
     *world.temp_dir.borrow_mut() = Some(dir);
     Ok(())
 }

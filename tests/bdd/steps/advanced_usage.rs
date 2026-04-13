@@ -3,7 +3,7 @@
 use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result};
 use rstest_bdd_macros::given;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use test_support::env::set_var;
 
@@ -34,6 +34,7 @@ fn given_config_file_with_setting(world: &TestWorld, key: String, value: String)
 /// value is tracked for restoration after the scenario completes.
 #[given("the environment variable {name} is set to {value}")]
 fn given_environment_variable(world: &TestWorld, name: String, value: String) {
+    let new_val = OsString::from(&value);
     let previous = set_var(&name, OsStr::new(&value));
-    world.track_env_var(name, previous);
+    world.track_env_var(name, previous, Some(new_val));
 }

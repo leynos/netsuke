@@ -291,13 +291,13 @@ pub(crate) fn home_points_to_stdlib_root(world: &TestWorld) -> Result<()> {
 
     // Acquire scenario-scoped lock before process-global env mutations
     world.ensure_env_lock();
-
+    let new_val = os_root.to_owned();
     let original = std::env::var_os("HOME");
     // SAFETY: EnvLock (held via world.env_lock) serialises mutations
     unsafe {
         std::env::set_var("HOME", os_root);
     }
-    world.track_env_var("HOME".into(), original);
+    world.track_env_var("HOME".into(), original, Some(new_val.clone()));
 
     #[cfg(windows)]
     {
@@ -306,7 +306,7 @@ pub(crate) fn home_points_to_stdlib_root(world: &TestWorld) -> Result<()> {
         unsafe {
             std::env::set_var("USERPROFILE", os_root);
         }
-        world.track_env_var("USERPROFILE".into(), original);
+        world.track_env_var("USERPROFILE".into(), original, Some(new_val));
     }
     Ok(())
 }

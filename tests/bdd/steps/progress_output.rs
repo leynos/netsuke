@@ -92,7 +92,10 @@ fn install_fake_ninja_with_config(world: &TestWorld, config: &FakeNinjaConfig<'_
     // Drop any existing guard first so its environment override is restored
     // before installing a replacement for this scenario.
     world.ninja_env_guard.borrow_mut().take();
+    let script_path_os = script_path.as_os_str().to_owned();
+    let previous = std::env::var_os(ninja_env::NINJA_ENV);
     *world.ninja_env_guard.borrow_mut() = Some(override_ninja_env(&env, &script_path));
+    world.track_env_var(ninja_env::NINJA_ENV.to_owned(), previous, Some(script_path_os));
     Ok(())
 }
 
