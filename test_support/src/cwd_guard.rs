@@ -3,7 +3,6 @@
 //! Provides a RAII guard that captures the current working directory and
 //! restores it on drop so tests do not leak CWD changes into other cases.
 
-use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 /// Guard that restores the original current working directory when dropped.
@@ -12,14 +11,12 @@ pub struct CwdGuard(PathBuf);
 
 impl CwdGuard {
     /// Capture the current working directory for later restoration.
-    pub fn acquire() -> Result<Self> {
-        Ok(Self(
-            std::env::current_dir().context("capture current working directory")?,
-        ))
+    pub fn acquire() -> std::io::Result<Self> {
+        Ok(Self(std::env::current_dir()?))
     }
 
     /// Alias for [`CwdGuard::acquire`] to support existing test call sites.
-    pub fn new() -> Result<Self> {
+    pub fn new() -> std::io::Result<Self> {
         Self::acquire()
     }
 }
