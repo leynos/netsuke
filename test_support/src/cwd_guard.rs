@@ -29,3 +29,51 @@ impl Drop for CwdGuard {
         drop(std::env::set_current_dir(&self.0));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::env_lock::EnvLock;
+
+    #[test]
+    fn acquire_captures_current_directory() {
+        let _lock = EnvLock::acquire();
+        let original = std::env::current_dir().expect("current_dir");
+        let guard = CwdGuard::acquire().expect("CwdGuard::acquire");
+        assert_eq!(
+            guard.0, original,
+            "guard should capture the directory that was current at acquire time"
+        );
+    }
+
+    #[test]
+    fn drop_restores_original_directory() {
+        let _lock = EnvLock::acquire();
+        let original = std::env::current_dir().expect("current_dir");
+        let temp = tempfile::tempdir().expect("tempdir");
+
+        {
+            let _guard = CwdGuard::acquire().expect("CwdGuard::acquire");
+            std::env::set_current_dir(temp.path()).expect("chdir to temp");
+            assert_ne!(
+                std::env::current_dir().expect("current_dir"),
+                original,
+                "CWD should be temp dir inside the guard scope"
+            );
+        }
+
+        assert_eq!(
+            std::env::current_dir().expect("current_dir"),
+            original,
+            "CWD should be restored after guard is dropped"
+        );
+    }
+
+    #[test]
+    fn new_is_alias_for_acquire() {
+        let _lock = EnvLock::acquire();
+        let original = std::env::current_dir().expect("current_dir");
+        let guard = CwdGuard::new().expect("CwdGuard::new");
+        assert_eq!(guard.0, original);
+    }
+}

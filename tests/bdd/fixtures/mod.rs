@@ -303,3 +303,68 @@ impl<T> RefCellOptionExt<T> for RefCell<Option<T>> {
         self.borrow_mut().take()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_env_lock_acquires_lock_on_first_call() {
+        let world = TestWorld::default();
+        assert!(
+            world.env_lock.borrow().is_none(),
+            "env_lock should be None before ensure_env_lock is called"
+        );
+        world.ensure_env_lock();
+        assert!(
+            world.env_lock.borrow().is_some(),
+            "env_lock should be Some after ensure_env_lock is called"
+        );
+    }
+
+    #[test]
+    fn ensure_env_lock_is_idempotent() {
+        let world = TestWorld::default();
+        world.ensure_env_lock();
+        world.ensure_env_lock();
+        assert!(world.env_lock.borrow().is_some());
+    }
+
+    #[test]
+    fn ensure_env_lock_captures_cwd() {
+        let world = TestWorld::default();
+        assert!(
+            world.original_cwd.borrow().is_none(),
+            "original_cwd should be None before ensure_env_lock is called"
+        );
+        world.ensure_env_lock();
+        assert!(
+            world.original_cwd.borrow().is_some(),
+            "original_cwd should be captured when env_lock is first acquired"
+        );
+        let captured = world.original_cwd.borrow().clone().expect("captured CWD");
+        let actual = std::env::current_dir().expect("current_dir");
+        assert_eq!(
+            captured, actual,
+            "captured CWD should match the actual CWD at the time of lock acquisition"
+        );
+    }
+
+    #[test]
+    fn drop_restores_cwd_after_ensure_env_lock() {
+        let original = std::env::current_dir().expect("current_dir");
+        let temp = tempfile::tempdir().expect("tempdir");
+
+        {
+            let world = TestWorld::default();
+            world.ensure_env_lock();
+            std::env::set_current_dir(temp.path()).expect("chdir");
+        }
+
+        assert_eq!(
+            std::env::current_dir().expect("current_dir"),
+            original,
+            "Drop should restore the CWD captured at ensure_env_lock time"
+        );
+    }
+}
