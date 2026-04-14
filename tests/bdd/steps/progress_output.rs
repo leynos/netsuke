@@ -93,9 +93,18 @@ fn install_fake_ninja_with_config(world: &TestWorld, config: &FakeNinjaConfig<'_
     // before installing a replacement for this scenario.
     world.ninja_env_guard.borrow_mut().take();
     let script_path_os = script_path.as_os_str().to_owned();
-    let previous = std::env::var_os(ninja_env::NINJA_ENV);
+    // Get the original value before setting so we can track it.
+    // The lock is acquired inside override_ninja_env, and the guard handles restoration.
+    let previous = {
+        let _lock = test_support::env_lock::EnvLock::acquire();
+        std::env::var_os(ninja_env::NINJA_ENV)
+    };
     *world.ninja_env_guard.borrow_mut() = Some(override_ninja_env(&env, &script_path));
-    world.track_env_var(ninja_env::NINJA_ENV.to_owned(), previous, Some(script_path_os));
+    world.track_env_var(
+        ninja_env::NINJA_ENV.to_owned(),
+        previous,
+        Some(script_path_os),
+    );
     Ok(())
 }
 

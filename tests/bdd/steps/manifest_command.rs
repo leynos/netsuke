@@ -8,7 +8,6 @@ use crate::bdd::types::{
 use anyhow::{Context, Result, ensure};
 use rstest_bdd::Slot;
 use rstest_bdd_macros::{given, then, when};
-use std::ffi::OsString;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -475,8 +474,9 @@ fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::ensure;
     use rstest::fixture;
-    use std::ffi::OsStr;
+    use std::ffi::{OsStr, OsString};
     use test_support::env::VarGuard;
 
     fn env_value<'a>(cmd: &'a assert_cmd::Command, key: &str) -> Option<&'a OsStr> {
@@ -486,16 +486,16 @@ mod tests {
     }
 
     #[fixture]
-    fn prepared_world() -> TestWorld {
+    fn prepared_world() -> Result<TestWorld> {
         let world = TestWorld::default();
-        let temp = tempfile::tempdir().expect("create temp dir");
+        let temp = tempfile::tempdir().context("create temp dir")?;
         *world.temp_dir.borrow_mut() = Some(temp);
-        world
+        Ok(world)
     }
 
     #[rstest::rstest]
-    fn world_env_vars_with_value_are_applied(prepared_world: TestWorld) {
-        let world = prepared_world;
+    fn world_env_vars_with_value_are_applied(prepared_world: Result<TestWorld>) -> Result<()> {
+        let world = prepared_world?;
 
         // Track the env var in TestWorld's forward map - this is the value that
         // will be forwarded to the child command, not read from process env.
@@ -509,12 +509,17 @@ mod tests {
 
         let val =
             env_value(&cmd, "NETSUKE_TEST_FLAG").expect("NETSUKE_TEST_FLAG should be present");
-        assert_eq!(val, OsStr::new("enabled"));
+        ensure!(
+            val == OsStr::new("enabled"),
+            "expected NETSUKE_TEST_FLAG to be 'enabled', got {:?}",
+            val
+        );
+        Ok(())
     }
 
     #[rstest::rstest]
-    fn host_env_vars_are_not_inherited(prepared_world: TestWorld) {
-        let world = prepared_world;
+    fn host_env_vars_are_not_inherited(prepared_world: Result<TestWorld>) -> Result<()> {
+        let world = prepared_world?;
 
         // Set a host env var that should NOT be inherited (not tracked in world.env_vars)
         let _guard = VarGuard::set("NETSUKE_HOST_VAR", OsStr::new("should-not-inherit"));
@@ -523,15 +528,18 @@ mod tests {
 
         // Command should NOT contain the host env var because env_clear() was called
         let val = env_value(&cmd, "NETSUKE_HOST_VAR");
-        assert!(
+        ensure!(
             val.is_none(),
             "NETSUKE_HOST_VAR should not be inherited from host environment"
         );
+        Ok(())
     }
 
     #[rstest::rstest]
-    fn host_path_is_forwarded_and_netsuke_executable_is_used(prepared_world: TestWorld) {
-        let world = prepared_world;
+    fn host_path_is_forwarded_and_netsuke_executable_is_used(
+        prepared_world: Result<TestWorld>,
+    ) -> Result<()> {
+        let world = prepared_world?;
 
         // Simulate a different netsuke early in PATH
         let _guard = VarGuard::set("PATH", OsStr::new("/fake/bin"));
@@ -542,10 +550,20 @@ mod tests {
         // build_netsuke_command was called, forwarded explicitly after env_clear().
         let path_val =
             env_value(&cmd, "PATH").expect("PATH should be explicitly forwarded to the command");
-        assert_eq!(path_val, OsStr::new("/fake/bin"));
+        ensure!(
+            path_val == OsStr::new("/fake/bin"),
+            "expected PATH to be '/fake/bin', got {:?}",
+            path_val
+        );
 
         // Command should use the resolved netsuke_executable(), not rely on PATH lookup.
         let exe = netsuke_executable().expect("netsuke_executable");
-        assert_eq!(cmd.get_program(), exe.as_os_str());
+        ensure!(
+            cmd.get_program() == exe.as_os_str(),
+            "expected program to be {:?}, got {:?}",
+            exe,
+            cmd.get_program()
+        );
+        Ok(())
     }
 }

@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: PARTIALLY COMPLETED (Stages E–F descoped)
+Status: COMPLETED (Stages E–F descoped; Stage D completed)
 
 ## Purpose / big picture
 
@@ -118,7 +118,8 @@ worked examples, and see the same results. A developer can run
 
 - [x] Stage A: Audit existing coverage and plan chapter structure.
 - [x] Stage B: Write the Advanced Usage chapter in `docs/users-guide.md`.
-- [x] Stage C: Add BDD behavioural scenarios (limited scope).
+- [x] Stage C: Add BDD behavioural scenarios (4 scenarios in
+  `tests/features/advanced_usage.feature`).
 - [x] Stage D: Integration tests added in `tests/advanced_usage_tests.rs`.
 - [~] Stage E: Descoped (design docs unchanged, roadmap will be updated
   separately).
@@ -158,20 +159,33 @@ worked examples, and see the same results. A developer can run
 
 **Stage C (BDD Scenarios):**
 
-- Created 3 BDD scenarios in `tests/features/advanced_usage.feature` covering:
+- Created 4 BDD scenarios in `tests/features/advanced_usage.feature` covering:
   1. Manifest subcommand streaming to stdout
-  2. JSON diagnostics on error
-  3. JSON diagnostics with manifest subcommand
+  2. Manifest subcommand writing to file
+  3. JSON diagnostics on error
+  4. JSON diagnostics with manifest subcommand
 - Created `tests/bdd/steps/advanced_usage.rs` with new step definitions for:
   - Creating config files with key-value pairs
   - Setting environment variables for invocations
-  - Checking stderr omission of fragments
-- Modified `tests/bdd/steps/manifest_command.rs` to support environment
-  variables from TestWorld and preserve NINJA_ENV.
+- Refactored `tests/bdd/steps/manifest_command.rs` to eliminate racy
+  process-environment reads by introducing `env_vars_forward` in `TestWorld`.
 - Configuration layering scenarios with build command deferred to rstest
   integration tests due to complexity of coordinating fake ninja with
   environment variable propagation in BDD context.
-- All 3 BDD scenarios pass.
+- All 4 BDD scenarios pass.
+
+**Stage D (Integration Tests):**
+
+- Added `tests/advanced_usage_tests.rs` with 7 rstest integration tests
+  covering:
+  - Configuration file layering (config file overrides defaults)
+  - Environment variable precedence (env var overrides config file)
+  - Invalid config value handling
+  - JSON diagnostics output format
+  - Manifest subcommand output (stdout)
+  - Graph subcommand with invalid manifest
+  - Clean subcommand execution
+- All integration tests pass and validate the documented advanced workflows.
 
 ## Decision log
 
@@ -194,24 +208,29 @@ variable setting, and DOT graph output checking).
   - 12.3 The `manifest` subcommand
   - 12.4 Configuration layering
   - 12.5 JSON diagnostics mode
-- Three BDD scenarios in `tests/features/advanced_usage.feature` covering:
+- Four BDD scenarios in `tests/features/advanced_usage.feature` covering:
   - Manifest subcommand streaming to stdout
+  - Manifest subcommand writing to file
   - JSON diagnostics on error
   - JSON diagnostics with manifest subcommand
+- Seven integration tests in `tests/advanced_usage_tests.rs` covering
+  configuration layering, JSON diagnostics, and all three utility subcommands
+  (clean, graph, manifest).
 - New step definitions in `tests/bdd/steps/advanced_usage.rs` for config file
   creation and environment variable setup.
-- Refactored environment handling in `tests/bdd/steps/manifest_command.rs` to
-  properly sanitize child process environment and preserve scenario-specific
-  variables.
+- Refactored environment handling in `tests/bdd/` to eliminate data races by
+  introducing `env_vars_forward` in `TestWorld`, ensuring all scenario-tracked
+  environment variables are forwarded to child processes from a consistent
+  snapshot rather than racy process-global reads.
 
 **What was descoped:**
 
-- Stages D–F (integration tests, design doc updates, and separate validation)
-  were descoped as the chapter provides adequate documentation coverage and the
-  existing BDD scenarios validate the core workflows.
+- Stages E–F (design doc updates and separate validation) were descoped as the
+  chapter provides adequate documentation coverage and Stage D integration
+  tests validate the core workflows.
 - Additional BDD scenarios for `clean` and `graph` subcommands and configuration
   layering were not added. The chapter documents these features adequately, and
-  they are tested elsewhere in the suite.
+  they are tested in the Stage D integration tests.
 
 **Key learnings:**
 

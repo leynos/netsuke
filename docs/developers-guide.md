@@ -370,15 +370,14 @@ helpers that launch the netsuke binary in a controlled environment:
   an error if the binary is not found.
 - **`build_netsuke_command(world, args)`** — constructs an
   `assert_cmd::Command` with a sanitized environment. The helper:
-  1. Captures scenario-specific environment variables (keys tracked in
-     `world.env_vars`, current values from the host process) before clearing.
-  2. Calls `env_clear()` to strip the inherited environment for test
+  1. Calls `env_clear()` to strip the inherited environment for test
      isolation.
-  3. Explicitly forwards `PATH` (via `std::env::var_os`) so netsuke can
-     locate ninja and other subprocesses.
-  4. Explicitly forwards `NETSUKE_NINJA` (the `ninja_env::NINJA_ENV`
-     constant) so fake-ninja overrides survive `env_clear()`.
-  5. Re-applies scenario-specific environment variables captured in step 1.
+  2. Acquires `EnvLock` and forwards `PATH` (via `std::env::var_os`) so
+     netsuke can locate ninja and other subprocesses.
+  3. Forwards all scenario-tracked environment variables from
+     `world.env_vars_forward` (including `NETSUKE_NINJA` and any variables set
+     by BDD steps) without reading the process environment, eliminating data
+     races.
 - **`run_netsuke_and_store(world, args)`** — calls `build_netsuke_command`,
   runs the command, and stores stdout, stderr, and exit status in the
   `TestWorld` fixture for subsequent `Then` step assertions.

@@ -167,8 +167,16 @@ impl TestWorld {
     /// - `key`: The environment variable name
     /// - `previous`: The previous value (if any) to restore on drop
     /// - `new_value`: The new value to forward to child netsuke processes (if `Some`)
-    pub fn track_env_var(&self, key: String, previous: Option<OsString>, new_value: Option<OsString>) {
-        self.env_vars.borrow_mut().entry(key.clone()).or_insert(previous);
+    pub fn track_env_var(
+        &self,
+        key: String,
+        previous: Option<OsString>,
+        new_value: Option<OsString>,
+    ) {
+        self.env_vars
+            .borrow_mut()
+            .entry(key.clone())
+            .or_insert(previous);
         if let Some(value) = new_value {
             self.env_vars_forward.borrow_mut().insert(key, value);
         } else {

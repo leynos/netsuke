@@ -1100,20 +1100,27 @@ Each layer overrides the previous one. This allows setting stable defaults in a
 configuration file and overriding them per-invocation with environment
 variables or flags.
 
-**Configuration file discovery:**
+**Configuration layering and precedence:**
 
-Netsuke searches for `.netsuke.toml` configuration files in this order:
+Netsuke uses a layered precedence model where configuration sources are merged,
+with later sources overriding earlier ones. The precedence order (from lowest
+to highest) is:
 
-1. `NETSUKE_CONFIG_PATH` environment variable (explicit path; bypasses all
-   other discovery).
-2. `.netsuke.toml` in the current working directory (project scope).
-3. `.netsuke.toml` in the user's home directory (user scope).
-4. Platform-specific user configuration directory
-   (`$XDG_CONFIG_HOME/netsuke` on Unix, `%APPDATA%\netsuke` on Windows).
+1. **Built-in defaults** — hard-coded fallback values.
+2. **Configuration files** (merged from multiple locations):
+   - Platform-specific config directory (`$XDG_CONFIG_HOME/netsuke` on Unix,
+     `%APPDATA%\netsuke` on Windows).
+   - User home directory (`~/.netsuke.toml`).
+   - Project directory (`.netsuke.toml` in the current working directory).
+3. **Environment variables** — any variable with the `NETSUKE_` prefix
+   (e.g., `NETSUKE_VERBOSE`, `NETSUKE_COLOUR_POLICY`).
+4. **CLI flags** — explicit command-line options (e.g., `--verbose`,
+   `--colour-policy`).
 
-Earlier entries in this list take precedence over later entries: project-scoped
-configuration overrides user-scoped configuration, and setting
-`NETSUKE_CONFIG_PATH` overrides all automatic discovery.
+Multiple configuration files are merged (not a single-winner search), and each
+successive layer overrides values from earlier layers. Setting
+`NETSUKE_CONFIG_PATH` bypasses automatic file discovery and uses only the
+specified file. The implementation is in `src/cli/config_merge.rs`.
 
 **Configuration file format:**
 
@@ -1206,7 +1213,7 @@ information:
   "diagnostics": [
     {
       "severity": "error",
-      "code": "E_MANIFEST_NOT_FOUND",
+      "code": "netsuke::runner::manifest_not_found",
       "message": "Manifest 'Netsukefile' not found in the current directory.",
       "help": "Ensure the manifest exists or pass `--file` with the correct path."
     }
