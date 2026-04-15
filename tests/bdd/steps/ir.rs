@@ -137,7 +137,27 @@ fn ir_generation_fails(world: &TestWorld) -> Result<()> {
 
 /// Compile a manifest file to IR, storing result or error in state.
 fn compile_manifest_impl(world: &TestWorld, path: &str) {
-    let outcome = netsuke::manifest::from_path(path)
+    // Convert relative test data paths to absolute to avoid issues when CWD
+    // is changed by parallel tests.  Also lock CWD to the project root so
+    // that glob patterns inside the manifest resolve correctly.
+    let resolved = if std::path::Path::new(path).is_relative() && path.starts_with("tests/") {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        world.ensure_env_lock();
+        if let Err(e) = std::env::set_current_dir(manifest_dir) {
+            let outcome = Err(format!(
+                "failed to set current directory to {manifest_dir} for path {path}: {e}"
+            ));
+            store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
+            return;
+        }
+        std::path::Path::new(manifest_dir)
+            .join(path)
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        path.to_owned()
+    };
+    let outcome = netsuke::manifest::from_path(&resolved)
         .and_then(|m| BuildGraph::from_manifest(&m).context("building IR from manifest"))
         .with_context(|| format!("IR generation failed for {path}"))
         .map_err(|e| e.to_string());

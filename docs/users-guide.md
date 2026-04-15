@@ -546,11 +546,46 @@ Netsuke layers configuration in this order, with later entries overriding
 earlier ones: defaults, configuration files, environment variables, and
 command-line flags.
 
-Configuration files are discovered using OrthoConfig. Netsuke honours
-`NETSUKE_CONFIG_PATH` first, then searches `$XDG_CONFIG_HOME/netsuke`, each
-entry in `$XDG_CONFIG_DIRS` (falling back to `/etc/xdg` on Unix-like targets),
-Windows application data directories, `$HOME/.config/netsuke`,
-`$HOME/.netsuke.toml`, and finally the project root.
+#### Configuration file discovery
+
+Configuration files are discovered using OrthoConfig. When
+`NETSUKE_CONFIG_PATH` is set, it points to a single file and bypasses all
+automatic discovery. Otherwise, Netsuke searches for configuration in three
+scopes:
+
+- **Project scope** — `.netsuke.toml` in the current working directory
+  (or the directory specified by `-C` / `--directory`).
+- **User scope** — user-specific locations:
+  - `$HOME/.netsuke.toml`
+  - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group); Unix;
+    defaults to `$HOME/.config`)
+  - `%APPDATA%\netsuke\config.toml` (Windows)
+  - `%LOCALAPPDATA%\netsuke\config.toml` (Windows)
+  - `$HOME/.config/netsuke/config.toml` (Unix fallback)
+- **System scope** — system-wide locations:
+  - Each entry in `$XDG_CONFIG_DIRS/netsuke/config.toml` (Unix; falls back
+    to `/etc/xdg/netsuke/config.toml`)
+
+Configuration precedence follows **project > user > system**: any field set in
+the project file overrides the same field from user or system files, user-scope
+settings override system-scope, and fields set only in lower-precedence files
+are still applied.
+
+#### Directory flag and project anchoring
+
+The `-C <DIR>` / `--directory <DIR>` flag re-anchors project-scope discovery to
+the specified directory instead of the current working directory. This is
+useful for build scripts and CI pipelines that invoke Netsuke from a different
+location:
+
+```sh
+netsuke -C /path/to/project build
+```
+
+With the flag, only `/path/to/project/.netsuke.toml` is considered for
+project-scope discovery; user-scope discovery is unaffected.
+
+#### Environment variables
 
 Environment variables use the `NETSUKE_` prefix (for example,
 `NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured

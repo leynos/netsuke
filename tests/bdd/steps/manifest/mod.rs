@@ -9,6 +9,7 @@ mod helpers;
 mod targets;
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::env_mutation::mutate_env_var as shared_mutate_env_var;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::types::{
     EnvVarKey, EnvVarValue, ErrorPattern, ManifestPath, RuleName, VersionString,
@@ -16,9 +17,7 @@ use crate::bdd::types::{
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::{ast::StringOrList, manifest};
 use rstest_bdd_macros::{given, then, when};
-use std::ffi::OsStr;
 use test_support::display_error_chain;
-use test_support::env::{remove_var, set_var};
 
 // ---------------------------------------------------------------------------
 // Helper functions (shared with targets.rs)
@@ -63,7 +62,33 @@ pub(super) fn get_string_from_string_or_list(
 }
 
 fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
-    let outcome = manifest::from_path(path.as_str()).map_err(|e| display_error_chain(e.as_ref()));
+    // Convert relative test data paths to absolute to avoid issues when CWD is
+    // changed by parallel tests.  Also lock CWD to the project root so that
+    // glob patterns inside the manifest resolve correctly.
+    let manifest_path = if std::path::Path::new(path.as_str()).is_relative()
+        && path.as_str().starts_with("tests/")
+    {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        // Hold the env lock and set CWD to the project root so that relative
+        // glob patterns (e.g. `tests/data/glob_files/*.txt`) resolve correctly.
+        world.ensure_env_lock();
+        // EnvLock is held; safe to mutate CWD for this scenario.
+        if let Err(e) = std::env::set_current_dir(manifest_dir) {
+            store_parse_outcome(
+                &world.manifest,
+                &world.manifest_error,
+                Err(format!("failed to set CWD to {manifest_dir}: {e}")),
+            );
+            return;
+        }
+        std::path::Path::new(manifest_dir)
+            .join(path.as_str())
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        path.as_str().to_owned()
+    };
+    let outcome = manifest::from_path(&manifest_path).map_err(|e| display_error_chain(e.as_ref()));
     store_parse_outcome(&world.manifest, &world.manifest_error, outcome);
 }
 
@@ -124,42 +149,24 @@ fn expand_env(raw: &str) -> String {
     out
 }
 
+/// Wrapper around the shared `mutate_env_var` helper for backward compatibility.
+fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>) -> Result<()> {
+    shared_mutate_env_var(world, key, new_value)
+}
+
 // ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[given("the environment variable {key:string} is set to {value:string}")]
-fn set_env_var_step(world: &TestWorld, key: &str, value: &str) -> Result<()> {
-    let key = EnvVarKey::new(key);
-    let value = EnvVarValue::new(value);
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
+fn set_env_var_step(world: &TestWorld, key: EnvVarKey, value: EnvVarValue) -> Result<()> {
     let expanded = expand_env(value.as_str());
-    let previous = set_var(key.as_str(), OsStr::new(&expanded));
-    world.track_env_var(key.into_string(), previous);
-    Ok(())
+    mutate_env_var(world, key, Some(&expanded))
 }
 
-#[expect(
-    clippy::shadow_reuse,
-    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 #[given("the environment variable {key:string} is unset")]
-fn unset_env_var_step(world: &TestWorld, key: &str) -> Result<()> {
-    let key = EnvVarKey::new(key);
-    ensure!(
-        !key.as_str().is_empty(),
-        "environment variable name must not be empty"
-    );
-    let previous = remove_var(key.as_str());
-    world.track_env_var(key.into_string(), previous);
-    Ok(())
+fn unset_env_var_step(world: &TestWorld, key: EnvVarKey) -> Result<()> {
+    mutate_env_var(world, key, None)
 }
 
 #[expect(

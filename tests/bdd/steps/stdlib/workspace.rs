@@ -8,11 +8,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use rstest_bdd_macros::given;
 use std::{env, ffi::OsStr, fs};
-use test_support::{
-    command_helper::{
-        compile_failure_helper, compile_large_output_helper, compile_uppercase_helper,
-    },
-    env::set_var,
+use test_support::command_helper::{
+    compile_failure_helper, compile_large_output_helper, compile_uppercase_helper,
 };
 
 use super::types::TemplatePath;
@@ -291,12 +288,25 @@ pub(crate) fn stdlib_path_entries(world: &TestWorld, entries: &str) -> Result<()
 pub(crate) fn home_points_to_stdlib_root(world: &TestWorld) -> Result<()> {
     let root = ensure_workspace(world)?;
     let os_root = OsStr::new(root.as_str());
-    let previous = set_var("HOME", os_root);
-    world.track_env_var("HOME".into(), previous);
+
+    // Acquire scenario-scoped lock before process-global env mutations
+    world.ensure_env_lock();
+
+    let original = std::env::var_os("HOME");
+    // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+    unsafe {
+        std::env::set_var("HOME", os_root);
+    }
+    world.track_env_var("HOME".into(), original);
+
     #[cfg(windows)]
     {
-        let previous = set_var("USERPROFILE", os_root);
-        world.track_env_var("USERPROFILE".into(), previous);
+        let original = std::env::var_os("USERPROFILE");
+        // SAFETY: EnvLock (held via world.env_lock) serialises mutations
+        unsafe {
+            std::env::set_var("USERPROFILE", os_root);
+        }
+        world.track_env_var("USERPROFILE".into(), original);
     }
     Ok(())
 }

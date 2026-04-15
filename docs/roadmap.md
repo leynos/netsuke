@@ -288,10 +288,11 @@ library, and CLI ergonomics.
     environment variables.
   - [x] Cover verbosity, colour policy, locale, spinner mode, output format,
     default targets, and theme.
-- [ ] 3.11.2. Discover configuration files in project and user scopes.
-  - [ ] Honour env overrides and CLI precedence.
-  - [ ] Add integration tests for each precedence tier. See
-    [ortho-config-users-guide.md](ortho-config-users-guide.md).
+- [x] 3.11.2. Discover configuration files in project and user scopes.
+  - [x] Honour env overrides and CLI precedence.
+  - [x] Add integration tests for each precedence tier. See
+    [ortho-config-users-guide.md](ortho-config-users-guide.md) and
+    `tests/cli_tests/config_discovery.rs`.
 - [ ] 3.11.3. Expose `--config <path>` and `NETSUKE_CONFIG`.
   - [ ] Select alternative config files.
   - [ ] Ship annotated sample configs in documentation.

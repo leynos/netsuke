@@ -13,7 +13,7 @@ use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
 use netsuke::cli_localization;
 use netsuke::locale_resolution;
-use rstest_bdd_macros::{given, then, when};
+use rstest_bdd_macros::then;
 use std::path::PathBuf;
 use std::sync::Arc;
 use test_support::locale_stubs::{StubEnv, StubSystemLocale};
@@ -23,19 +23,56 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 // ---------------------------------------------------------------------------
 
 /// Apply CLI parsing, storing result or error in world state.
-fn apply_cli(world: &TestWorld, args: &CliArgs) {
+///
+/// This function always runs `merge_with_config`, which performs automatic
+/// configuration discovery and environment variable merging. To ensure tests
+/// remain hermetic and isolated from the host environment, callers should:
+///
+/// 1. Set `NETSUKE_CONFIG_PATH` to an empty/nonexistent path to disable config
+///    file discovery, or ensure a `temp_dir` is set to anchor discovery to a
+///    controlled location.
+/// 2. Clear or set all `NETSUKE_*` environment variables to known values.
+///
+/// Tests that do not explicitly set up configuration or environment variables
+/// may be affected by ambient host configuration.
+pub(super) fn apply_cli(world: &TestWorld, args: &CliArgs) {
     let env = StubEnv {
         locale: world.locale_env.get(),
     };
     let system = StubSystemLocale {
         locale: world.locale_system.get(),
     };
-    let tokens = build_tokens(args.as_str());
+
+    // If there's a temp_dir set and the args don't already contain an
+    // explicit -C or --directory flag, prepend -C <temp_dir> for config discovery.
+    let mut tokens = build_tokens(args.as_str());
+    if let Some(temp_dir) = world.temp_dir.borrow().as_ref() {
+        let is_directory_flag = |t: &std::ffi::OsString| {
+            t.to_str().is_some_and(|s| {
+                s == "-C"
+                    || s.starts_with("-C")
+                    || s == "--directory"
+                    || s.starts_with("--directory=")
+            })
+        };
+        let has_directory_flag = tokens.iter().any(is_directory_flag);
+        if !has_directory_flag && !tokens.is_empty() {
+            let temp_path = temp_dir.path().as_os_str().to_owned();
+            tokens.insert(1, "-C".into());
+            tokens.insert(2, temp_path);
+        }
+    }
+
     let locale = locale_resolution::resolve_startup_locale(&tokens, &env, &system);
     let localizer = Arc::from(cli_localization::build_localizer(locale.as_deref()));
     let outcome = netsuke::cli::parse_with_localizer_from(tokens, &localizer)
-        .map(|(cli, _matches)| normalize_cli(cli))
-        .map_err(|e| e.to_string());
+        .map_err(|e| e.to_string())
+        .and_then(|(parsed_cli, matches)| {
+            // Apply config file discovery and merge
+            netsuke::cli::merge_with_config(&parsed_cli, &matches)
+                .map(normalize_cli)
+                .map_err(|e| e.to_string())
+        });
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 
@@ -273,18 +310,6 @@ fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<
 // ---------------------------------------------------------------------------
 // Given/When steps
 // ---------------------------------------------------------------------------
-
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
-#[given("the CLI is parsed with {args:string}")]
-#[when("the CLI is parsed with {args:string}")]
-#[when("the CLI is parsed with invalid arguments {args:string}")]
-fn parse_cli(world: &TestWorld, args: CliArgs) -> Result<()> {
-    apply_cli(world, &args);
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------
 // Then steps

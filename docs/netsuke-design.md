@@ -2104,10 +2104,10 @@ resolved alongside theme and output-mode detection so `--colour-policy never`
 behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
 auto-detection. Build dispatch also consults OrthoConfig `default_targets`
 before falling back to manifest `defaults`, letting operators set user- or
-workspace-level build defaults without editing the manifest itself.
-Accessible reporter output, timing summaries, and the semantic prefix surface
-are guarded by `insta` snapshots so spacing, prefix alignment, and wrapping
-regressions fail with reviewable diffs instead of drifting silently.
+workspace-level build defaults without editing the manifest itself. Accessible
+reporter output, timing summaries, and the semantic prefix surface are guarded
+by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
+fail with reviewable diffs instead of drifting silently.
 
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.
@@ -2142,6 +2142,123 @@ The Ninja executable may be overridden via the `NINJA_ENV` environment
 variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces
 Netsuke to execute the specified binary while preserving the default when the
 variable is unset or invalid.
+
+### 8.4.1 Configuration File Discovery
+
+**Figure: Configuration Discovery and Merge Flow** — This diagram illustrates
+how Netsuke discovers and merges configuration from multiple sources. The flow
+begins with CLI parsing, checks for project and user configuration files, and
+applies layered merging with increasing precedence: defaults < discovered
+config files < environment variables < CLI flags. The final merged
+configuration determines runtime behaviour. Accessible text description follows
+below.
+
+```mermaid
+flowchart LR
+  A[Start Netsuke] --> B[Parse CLI into Cli]
+  B --> C{Project config exists?}
+
+  C -->|Yes| D[Load project config via ConfigDiscovery]
+  C -->|No| E[No project config layer]
+
+  D --> F{User config exists?}
+  E --> F
+
+  F -->|Yes| G[Load user config via ConfigDiscovery]
+  F -->|No| H[No user config layer]
+
+  G --> I[Merge defaults + project + user]
+  H --> I[Merge defaults + project + user]
+
+  I --> J[Apply environment NETSUKE_... overrides]
+  J --> K[Apply CLI flag overrides]
+  K --> L[Resolved merged config]
+  L --> M[Run Netsuke with final behaviour]
+```
+
+Netsuke configuration discovery is implemented through OrthoConfig's
+`ConfigDiscovery` builder in `src/cli/config_merge.rs`. The
+`config_discovery()` helper constructs a discovery instance rooted at
+application name `"netsuke"`, honours the `NETSUKE_CONFIG_PATH` environment
+variable as an explicit override, and adjusts project-root discovery when the
+`-C/--directory` flag is supplied.
+
+#### Discovery scopes and layered merging
+
+Configuration discovery searches multiple scopes and composes all discovered
+files into layers using OrthoConfig's `compose_layers()`. OrthoConfig discovers
+files in precedence order: system-scope (lowest precedence), user-scope, then
+project-scope (highest precedence). When multiple config files exist,
+`compose_layers()` loads them in this order so values from later layers
+override earlier ones—meaning project-scope has highest precedence among file
+layers. After file layers are merged, environment variables and CLI arguments
+override the merged result, ensuring explicit user intent always wins.
+
+1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable, if set.
+   This allows users to point to any arbitrary configuration file path,
+   bypassing automatic discovery entirely.
+
+2. **Project scope**: Configuration files in the current working directory (or
+   the directory specified via `-C/--directory`):
+   - `.netsuke.toml` (dotfile in project root)
+   - Additional formats when features are enabled: `.netsuke.json`,
+     `.netsuke.json5`, `.netsuke.yaml`, `.netsuke.yml`
+
+3. **User scope**: Configuration files in user-specific directories:
+   - **Unix-like systems**:
+     - `$HOME/.netsuke.toml` (user home dotfile)
+     - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
+       Directory config home, typically `~/.config/netsuke/config.toml`)
+     - Fallback: `$HOME/.config/netsuke/config.toml`
+   - **Windows**:
+     - `%APPDATA%\netsuke\config.toml`
+     - `%LOCALAPPDATA%\netsuke\config.toml`
+
+4. **System scope**: System-wide configuration directories:
+   - **Unix-like systems**:
+     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base
+       Directory system config directories, defaults to
+       `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
+
+**Scope precedence**: When configuration files exist in multiple scopes,
+OrthoConfig's discovery order gives **project scope highest precedence**, then
+user scope, then system scope (project > user > system). This matches user
+expectations: project-local configuration should override user-global defaults,
+which in turn override system-wide settings. The `-C/--directory` flag anchors
+project-scope discovery to the specified directory while leaving user-scope and
+system-scope lookup unchanged, ensuring user-global and system-wide
+configuration remain available even when operating on a project in a different
+directory.
+
+**Layer merge precedence** (lowest to highest):
+
+1. Application defaults (hardcoded in `Cli::default()`)
+2. Discovered configuration file (project or user scope, as above)
+3. Environment variables (prefixed with `NETSUKE_`, e.g., `NETSUKE_JOBS=4`)
+4. Command-line arguments (e.g., `--jobs 8`)
+
+This layered merge model ensures that explicit user intent (CLI flags) always
+wins, environment-based automation (CI/CD scripts) can override configuration
+files, and configuration files provide persistent defaults without requiring
+manual flag repetition.
+
+**Implementation notes**:
+
+- The `config_discovery()` function uses OrthoConfig's builder API without
+  further customization beyond the application name and environment variable
+  override, relying on OrthoConfig's platform-specific defaults for standard
+  directory resolution.
+- The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
+  the full layer composition: it calls `config_discovery()` to obtain file
+  layers, merges them with defaults, adds environment variables via Figment,
+  and finally applies CLI overrides extracted from `ArgMatches`.
+- Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
+  YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
+  features are enabled.
+- The current implementation uses `NETSUKE_CONFIG_PATH` for the override
+  environment variable. Roadmap item 3.11.3 plans to expose a visible
+  `--config` CLI flag and rename the environment variable to `NETSUKE_CONFIG`
+  for improved user ergonomics.
 
 ### 8.5 Manual Pages
 

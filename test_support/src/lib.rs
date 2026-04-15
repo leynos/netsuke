@@ -14,6 +14,7 @@
 
 pub mod check_ninja;
 pub mod command_helper;
+pub mod cwd_guard;
 pub mod env;
 pub mod env_guard;
 pub mod env_lock;
@@ -36,6 +37,9 @@ pub use path_guard::PathGuard;
 
 /// Re-export of [`env_var_guard::EnvVarGuard`] for ergonomics in tests.
 pub use env_var_guard::EnvVarGuard;
+
+/// Re-export of [`cwd_guard::CwdGuard`] for ergonomics in tests.
+pub use cwd_guard::CwdGuard;
 
 /// Re-export of the generic environment guard utilities.
 pub use env_guard::{EnvGuard, Environment, StdEnv};

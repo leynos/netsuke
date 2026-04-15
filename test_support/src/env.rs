@@ -105,12 +105,26 @@ pub fn restore_many(vars: HashMap<String, Option<OsString>>) {
         return;
     }
     let _lock = EnvLock::acquire();
+    // SAFETY: We hold EnvLock via _lock.
+    unsafe { restore_many_locked(vars) };
+}
+
+/// Restore multiple environment variables without acquiring EnvLock.
+///
+/// This variant assumes the caller already holds [`EnvLock`]. Use this in
+/// cleanup paths where the lock is already held (e.g., in `Drop` implementations)
+/// to avoid double-locking.
+///
+/// # Safety
+///
+/// Caller must hold [`EnvLock`] for the duration of this call.
+pub unsafe fn restore_many_locked(vars: HashMap<String, Option<OsString>>) {
     for (key, val) in vars {
         if let Some(v) = val {
-            // SAFETY: `EnvLock` serialises mutations for all variables at once.
+            // SAFETY: Caller guarantees EnvLock is held.
             unsafe { std::env::set_var(key, v) };
         } else {
-            // SAFETY: `EnvLock` serialises mutations for all variables at once.
+            // SAFETY: Caller guarantees EnvLock is held.
             unsafe { std::env::remove_var(key) };
         }
     }
