@@ -155,7 +155,7 @@ worked examples, and see the same results. A developer can run
 - Section 12 "Advanced Usage" added to user guide successfully with 5
   subsections covering clean, graph, manifest, configuration layering, and JSON
   diagnostics.
-- All markdown formatting and linting checks pass.
+- All Markdown formatting and linting checks pass.
 
 **Stage C (BDD Scenarios):**
 
@@ -176,16 +176,21 @@ worked examples, and see the same results. A developer can run
 
 **Stage D (Integration Tests):**
 
-- Added `tests/advanced_usage_tests.rs` with 7 rstest integration tests
+- Added `tests/advanced_usage_tests.rs` with 9 rstest integration tests
   covering:
+  - Clean subcommand without prior build
+  - Graph subcommand with invalid manifest
+  - Manifest to unwritable path (parent blocked by regular file)
+  - Manifest subcommand output (stdout)
   - Configuration file layering (config file overrides defaults)
   - Environment variable precedence (env var overrides config file)
+  - Full three-tier precedence ladder (CLI > env > config file)
+  - JSON diagnostics with verbose suppression
   - Invalid config value handling
-  - JSON diagnostics output format
-  - Manifest subcommand output (stdout)
-  - Graph subcommand with invalid manifest
-  - Clean subcommand execution
-- All integration tests pass and validate the documented advanced workflows.
+- The original execplan assumed `netsuke manifest /no/such/dir/out.ninja`
+  would fail; in practice, netsuke creates parent directories automatically.
+  The test was adapted to use a regular file blocking the parent path instead.
+- All 9 integration tests pass and validate the documented advanced workflows.
 
 ## Decision log
 
@@ -213,9 +218,10 @@ variable setting, and DOT graph output checking).
   - Manifest subcommand writing to file
   - JSON diagnostics on error
   - JSON diagnostics with manifest subcommand
-- Seven integration tests in `tests/advanced_usage_tests.rs` covering
-  configuration layering, JSON diagnostics, and all three utility subcommands
-  (clean, graph, manifest).
+- Nine integration tests in `tests/advanced_usage_tests.rs` covering
+  configuration layering (including full CLI > env > config precedence ladder),
+  JSON diagnostics with verbose suppression, manifest to unwritable path, and
+  all three utility subcommands (clean, graph, manifest).
 - New step definitions in `tests/bdd/steps/advanced_usage.rs` for config file
   creation and environment variable setup.
 - Refactored environment handling in `tests/bdd/` to eliminate data races by
@@ -397,7 +403,7 @@ current Section 11 (Security Considerations). The chapter must:
 After writing, run `make fmt` to apply mdformat, then `make markdownlint` and
 `make nixie` to validate.
 
-Acceptance for Stage B: the new chapter reads coherently, passes markdown
+Acceptance for Stage B: the new chapter reads coherently, passes Markdown
 linting, and a human reader can follow the worked examples.
 
 ### Stage C. Add BDD behavioural scenarios
@@ -642,7 +648,7 @@ the affected files.
 
 ## Artefacts and notes
 
-Key files created or modified by this plan:
+Table: Key files created or modified by this plan
 
 | File                                    | Action                                   |
 | --------------------------------------- | ---------------------------------------- |

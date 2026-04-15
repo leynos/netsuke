@@ -158,9 +158,8 @@ let _cwd_guard = CwdGuard::acquire()?;
 std::env::set_current_dir(temp.path())?;
 ```
 
-Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse
-declaration order: `CwdGuard` restores the CWD first, and `EnvLock` releases
-second.
+Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
+order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 
 ### `restore_many` and `restore_many_locked`
 
@@ -354,8 +353,8 @@ Versioning and compatibility rules:
 - `cli_overrides_from_matches` must continue to emit a JSON object, even when
   no CLI override is present.
 - `is_empty_value` treats only the empty object `{}` as "no CLI overrides".
-  Downstream tooling must not replace an empty object with `null`, `[]`, or
-  any other sentinel.
+  Downstream tooling must not replace an empty object with `null`, `[]`, or any
+  other sentinel.
 - Additional properties are ignored by `diag_json` resolution and may be
   present because the same layer object also participates in full config
   merging.
@@ -386,16 +385,21 @@ helpers that launch the netsuke binary in a controlled environment:
 
 After `env_clear()`, only these variables are present in the spawned command:
 
-| Variable        | Source                  | Purpose                          |
-| --------------- | ----------------------- | -------------------------------- |
-| `PATH`          | Host `std::env::var_os` | Locate ninja and subprocesses    |
-| `NETSUKE_NINJA` | Host `std::env::var_os` | Override ninja path in scenarios |
-| Scenario env    | `world.env_vars` keys   | BDD-step-configured overrides    |
+| Variable     | Source                   | Purpose                       |
+| ------------ | ------------------------ | ----------------------------- |
+| `PATH`       | Host `std::env::var_os`  | Locate ninja and subprocesses |
+| Scenario env | `world.env_vars_forward` | BDD-step-configured overrides |
 
-The `world.env_vars` map is a **restoration snapshot**: keys are variables set
-during the scenario, and values are their *previous* values (for restoration
-when the scenario ends). To obtain the *current* value for a tracked variable,
-call `std::env::var` / `std::env::var_os` on the key.
+`world.env_vars_forward` is a `HashMap<String, OsString>` containing the
+*current* values that BDD steps intend to pass to child processes, including
+`NETSUKE_NINJA` when a fake ninja is installed. The helper iterates
+`env_vars_forward` and calls `cmd.env(key, value)` for each entry, so the child
+process receives exactly the variables that steps have configured without
+reading the process environment.
+
+The separate `world.env_vars` map is a **restoration snapshot**: keys are
+variables set during the scenario, and values are their *previous* values (for
+restoration when the scenario ends). It is not used by `build_netsuke_command`.
 
 ### Integration test helper
 
@@ -404,7 +408,6 @@ interface for integration tests outside the BDD framework. It sets `PATH` to an
 empty string (relying on the resolved binary path) but does **not** call
 `env_clear()`, so other environment variables (including `NETSUKE_NINJA` set
 via `override_ninja_env`) are inherited normally.
-
 
 ## Documentation upkeep
 

@@ -10,8 +10,8 @@ use rstest::rstest;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
-use test_support::env::{SystemEnv, VarGuard, override_ninja_env};
-use test_support::netsuke::run_netsuke_in;
+use test_support::env::{SystemEnv, override_ninja_env};
+use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
 
 /// Captured output from a netsuke invocation.
 struct CommandOutput {
@@ -28,6 +28,27 @@ fn run_netsuke(
 ) -> Result<CommandOutput> {
     let _guard = ninja_env.map(|path| override_ninja_env(&SystemEnv::new(), path));
     let run = run_netsuke_in(current_dir, args)?;
+    Ok(CommandOutput {
+        stdout: run.stdout,
+        stderr: run.stderr,
+        success: run.success,
+    })
+}
+
+/// Run `netsuke` in `current_dir` with supplied args, optional `NINJA_ENV`,
+/// and explicit extra environment variables.
+///
+/// Unlike [`run_netsuke`], this variant passes env vars directly to the child
+/// process via `env_clear()` + explicit forwarding, avoiding process-level
+/// `VarGuard` mutations that race under parallel test execution.
+fn run_netsuke_with_env(
+    current_dir: &Path,
+    args: &[&str],
+    ninja_env: Option<&Path>,
+    extra_env: &[(&str, &str)],
+) -> Result<CommandOutput> {
+    let _guard = ninja_env.map(|path| override_ninja_env(&SystemEnv::new(), path));
+    let run = run_netsuke_in_with_env(current_dir, args, extra_env)?;
     Ok(CommandOutput {
         stdout: run.stdout,
         stderr: run.stderr,
@@ -90,9 +111,43 @@ fn graph_with_invalid_manifest_fails_with_actionable_error() -> Result<()> {
 }
 
 // -------------------------------------------------------------------------
+// Manifest subcommand edge cases
+// -------------------------------------------------------------------------
+
+#[test]
+fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
+    let workspace = setup_minimal_workspace("manifest to unwritable path")?;
+    // Create a regular file that blocks the parent directory creation.
+    let blocker = workspace.path().join("blocker");
+    std::fs::write(&blocker, "").context("create blocker file")?;
+    let bad_path = blocker.join("out.ninja");
+
+    let output = run_netsuke(
+        workspace.path(),
+        &["manifest", bad_path.to_str().expect("path is UTF-8")],
+        None,
+    )?;
+
+    ensure!(
+        !output.success,
+        "expected manifest to unwritable path to fail"
+    );
+    ensure!(
+        output.stderr.contains("blocker"),
+        "expected path-related error mentioning 'blocker' on stderr, got:\n{}",
+        output.stderr
+    );
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
 // Configuration layering precedence
 // -------------------------------------------------------------------------
 
+/// Config file sets `verbose = true`; assert the build emits a timing summary.
+///
+/// The `.netsuke.toml` is placed in the workspace directory so netsuke's
+/// project-scope discovery finds it without needing `NETSUKE_CONFIG_PATH`.
 #[rstest]
 fn config_file_overrides_defaults() -> Result<()> {
     let workspace = setup_minimal_workspace("config file overrides")?;
@@ -100,31 +155,80 @@ fn config_file_overrides_defaults() -> Result<()> {
     std::fs::write(&config, "verbose = true\n").context("write config file")?;
     let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
 
-    let _guard = VarGuard::set(
-        "NETSUKE_CONFIG_PATH",
-        std::ffi::OsStr::new(config.to_str().expect("config path is UTF-8")),
+    let output = run_netsuke_with_env(
+        workspace.path(),
+        &["build"],
+        Some(ninja_path.as_path()),
+        &[],
+    )?;
+
+    ensure!(output.success, "expected build to succeed");
+    // verbose = true in the config file should produce a timing summary
+    ensure!(
+        output.stderr.contains("Timing"),
+        "expected verbose timing summary in stderr (config should override default), \
+         got:\n{}",
+        output.stderr
     );
-
-    let output = run_netsuke(workspace.path(), &["--help"], Some(ninja_path.as_path()))?;
-
-    ensure!(output.success, "expected --help to succeed");
     Ok(())
 }
 
+/// Config file sets `verbose = true`, env sets `NETSUKE_VERBOSE = false`.
+/// The environment should win: no timing summary in output.
 #[rstest]
 fn env_var_overrides_config_file() -> Result<()> {
     let workspace = setup_minimal_workspace("env overrides config")?;
     let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "colour_policy = \"always\"\n").context("write config file")?;
+    std::fs::write(&config, "verbose = true\n").context("write config file")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
 
-    let _config_guard = VarGuard::set(
-        "NETSUKE_CONFIG_PATH",
-        std::ffi::OsStr::new(config.to_str().expect("config path is UTF-8")),
+    let output = run_netsuke_with_env(
+        workspace.path(),
+        &["build"],
+        Some(ninja_path.as_path()),
+        &[("NETSUKE_VERBOSE", "false")],
+    )?;
+
+    ensure!(output.success, "expected build to succeed");
+    // env var verbose=false should override the config file's verbose=true
+    ensure!(
+        !output.stderr.contains("Timing"),
+        "expected no timing summary (env should override config), got:\n{}",
+        output.stderr
     );
-    let _env_guard = VarGuard::set("NETSUKE_COLOUR_POLICY", std::ffi::OsStr::new("never"));
+    Ok(())
+}
 
-    let output = run_netsuke(workspace.path(), &["--help"], None)?;
-    ensure!(output.success, "expected --help to succeed");
+/// Verify the full three-tier precedence ladder: CLI > env > config file.
+///
+/// The config file sets `verbose = true`, the environment sets
+/// `NETSUKE_VERBOSE=false` (overriding the file), and the CLI passes
+/// `--verbose` (overriding the environment). The CLI flag should win,
+/// producing a timing summary in stderr.
+#[rstest]
+fn cli_flag_overrides_env_which_overrides_config_file() -> Result<()> {
+    let workspace = setup_minimal_workspace("full precedence ladder")?;
+    let config = workspace.path().join(".netsuke.toml");
+    std::fs::write(&config, "verbose = true\n").context("write config file")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+
+    // env says false, overriding the config file's true;
+    // CLI says --verbose, overriding the env's false
+    let output = run_netsuke_with_env(
+        workspace.path(),
+        &["--verbose", "build"],
+        Some(ninja_path.as_path()),
+        &[("NETSUKE_VERBOSE", "false")],
+    )?;
+
+    ensure!(output.success, "expected verbose build to succeed");
+    // Verbose mode emits a timing summary containing "Timing"
+    ensure!(
+        output.stderr.contains("Timing"),
+        "expected verbose timing summary in stderr (CLI should override env), \
+         got:\n{}",
+        output.stderr
+    );
     Ok(())
 }
 
@@ -182,25 +286,29 @@ fn manifest_to_stdout_contains_ninja_rules() -> Result<()> {
     Ok(())
 }
 
+/// An invalid enum value in a config file produces a clear validation error
+/// rather than crashing with an unhelpful message.
 #[test]
-fn invalid_config_value_is_handled_gracefully() -> Result<()> {
+fn invalid_config_value_reports_validation_error() -> Result<()> {
     let workspace = setup_minimal_workspace("invalid config value")?;
     let config = workspace.path().join(".netsuke.toml");
     std::fs::write(&config, "colour_policy = \"loud\"\n").context("write invalid config file")?;
 
-    let _config_guard = VarGuard::set(
-        "NETSUKE_CONFIG_PATH",
-        std::ffi::OsStr::new(config.to_str().expect("config path is UTF-8")),
-    );
+    let output = run_netsuke_with_env(workspace.path(), &["manifest", "-"], None, &[])?;
 
-    let output = run_netsuke(workspace.path(), &["--help"], None)?;
-
-    // OrthoConfig silently ignores unrecognised enum values in config files,
-    // falling back to the default. The command should not crash.
     ensure!(
-        output.success,
-        "expected --help to succeed even with invalid config value, \
-         got stderr:\n{}",
+        !output.success,
+        "expected manifest with invalid config to fail"
+    );
+    // The error message should mention the invalid value and valid options.
+    ensure!(
+        output.stderr.contains("loud"),
+        "expected error to mention the invalid value 'loud', got:\n{}",
+        output.stderr
+    );
+    ensure!(
+        output.stderr.contains("auto") && output.stderr.contains("always"),
+        "expected error to list valid options, got:\n{}",
         output.stderr
     );
     Ok(())

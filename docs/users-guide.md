@@ -1086,32 +1086,17 @@ Use `manifest` to obtain the Ninja file *without* running the build, and
 
 ### 12.4 Configuration layering
 
-Netsuke uses a four-tier configuration precedence model provided by the
-`ortho-config` library:
-
-1. **Defaults:** Hard-coded fallback values in the CLI.
-2. **Configuration files:** Settings from `.netsuke.toml` (project or user
-   scope).
-3. **Environment variables:** Prefixed with `NETSUKE_` (e.g.,
-   `NETSUKE_VERBOSE`).
-4. **CLI flags:** Command-line arguments (e.g., `--verbose`).
-
-Each layer overrides the previous one. This allows setting stable defaults in a
-configuration file and overriding them per-invocation with environment
-variables or flags.
-
-**Configuration layering and precedence:**
-
 Netsuke uses a layered precedence model where configuration sources are merged,
 with later sources overriding earlier ones. The precedence order (from lowest
 to highest) is:
 
 1. **Built-in defaults** — hard-coded fallback values.
-2. **Configuration files** (merged from multiple locations):
-   - Platform-specific config directory (`$XDG_CONFIG_HOME/netsuke` on Unix,
+2. **Configuration files** (merged from multiple scopes):
+   - System / platform config directory (`$XDG_CONFIG_HOME/netsuke` on Unix,
      `%APPDATA%\netsuke` on Windows).
    - User home directory (`~/.netsuke.toml`).
-   - Project directory (`.netsuke.toml` in the current working directory).
+   - Project directory (`.netsuke.toml` in the current working directory or
+     the directory specified by `-C`).
 3. **Environment variables** — any variable with the `NETSUKE_` prefix
    (e.g., `NETSUKE_VERBOSE`, `NETSUKE_COLOUR_POLICY`).
 4. **CLI flags** — explicit command-line options (e.g., `--verbose`,
@@ -1120,7 +1105,8 @@ to highest) is:
 Multiple configuration files are merged (not a single-winner search), and each
 successive layer overrides values from earlier layers. Setting
 `NETSUKE_CONFIG_PATH` bypasses automatic file discovery and uses only the
-specified file. The implementation is in `src/cli/config_merge.rs`.
+specified file. See Section 8 ("Configuration and Localization") for the full
+discovery model.
 
 **Configuration file format:**
 

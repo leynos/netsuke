@@ -119,7 +119,7 @@ overridden by `NETSUKE_COLOUR_POLICY=auto`, and further overridden by
   instead of raw `std::env::set_var` calls. `test_support::env::set_var()`
   acquires `EnvLock` internally for one-off updates, `VarGuard` gives RAII-safe
   scoped restoration, and `remove_var()` mirrors the same pattern for unsets.
-  When a scenario needs batched cleanup, collect the original values and
+  When a scenario requires batched cleanup, collect the original values and
   restore them with `restore_many()` from `TestWorld::drop`, or keep
   `VarGuard`s alive for the scenario lifetime. For BDD scenarios specifically,
   `tests/bdd/helpers/env_mutation::mutate_env_var()` provides a convenient
