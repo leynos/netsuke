@@ -158,9 +158,8 @@ let _cwd_guard = CwdGuard::acquire()?;
 std::env::set_current_dir(temp.path())?;
 ```
 
-Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse
-declaration order: `CwdGuard` restores the CWD first, and `EnvLock` releases
-second.
+Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
+order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 
 ### `restore_many` and `restore_many_locked`
 
@@ -354,8 +353,8 @@ Versioning and compatibility rules:
 - `cli_overrides_from_matches` must continue to emit a JSON object, even when
   no CLI override is present.
 - `is_empty_value` treats only the empty object `{}` as "no CLI overrides".
-  Downstream tooling must not replace an empty object with `null`, `[]`, or
-  any other sentinel.
+  Downstream tooling must not replace an empty object with `null`, `[]`, or any
+  other sentinel.
 - Additional properties are ignored by `diag_json` resolution and may be
   present because the same layer object also participates in full config
   merging.
