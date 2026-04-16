@@ -169,54 +169,34 @@ fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
 // -------------------------------------------------------------------------
 
 #[rstest]
-fn config_file_overrides_defaults() -> Result<()> {
-    let output =
-        run_config_layer_build("config file overrides", "verbose = true\n", &["build"], &[])?;
-
-    ensure!(output.success, "expected build to succeed");
-    ensure!(
-        output.stderr.contains("Timing"),
-        "expected verbose timing summary in stderr (config should override default), \
-         got:\n{}",
-        output.stderr
-    );
-    Ok(())
-}
-
-#[rstest]
-fn env_var_overrides_config_file() -> Result<()> {
+#[case(&["build"], &[], true)]
+#[case(&["build"], &[("NETSUKE_VERBOSE", "false")], false)]
+#[case(&["--verbose", "build"], &[("NETSUKE_VERBOSE", "false")], true)]
+fn verbose_config_precedence(
+    #[case] args: &[&str],
+    #[case] extra_env: &[(&str, &str)],
+    #[case] expect_timing: bool,
+) -> Result<()> {
     let output = run_config_layer_build(
-        "env overrides config",
+        "config precedence test",
         "verbose = true\n",
-        &["build"],
-        &[("NETSUKE_VERBOSE", "false")],
+        args,
+        extra_env,
     )?;
-
     ensure!(output.success, "expected build to succeed");
-    ensure!(
-        !output.stderr.contains("Timing"),
-        "expected no timing summary (env should override config), got:\n{}",
-        output.stderr
-    );
-    Ok(())
-}
-
-#[rstest]
-fn cli_flag_overrides_env_which_overrides_config_file() -> Result<()> {
-    let output = run_config_layer_build(
-        "full precedence ladder",
-        "verbose = true\n",
-        &["--verbose", "build"],
-        &[("NETSUKE_VERBOSE", "false")],
-    )?;
-
-    ensure!(output.success, "expected verbose build to succeed");
-    ensure!(
-        output.stderr.contains("Timing"),
-        "expected verbose timing summary in stderr (CLI should override env), \
-         got:\n{}",
-        output.stderr
-    );
+    if expect_timing {
+        ensure!(
+            output.stderr.contains("Timing"),
+            "expected verbose timing summary in stderr, got:\n{}",
+            output.stderr
+        );
+    } else {
+        ensure!(
+            !output.stderr.contains("Timing"),
+            "expected no timing summary, got:\n{}",
+            output.stderr
+        );
+    }
     Ok(())
 }
 

@@ -91,7 +91,10 @@ pub fn run_netsuke_in_with_env(
     extra_env: &[(&str, &str)],
 ) -> Result<NetsukeRun> {
     let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
-    cmd.current_dir(current_dir).env_clear().env("PATH", "");
+    cmd.current_dir(current_dir).env_clear();
+    if let Some(host_path) = std::env::var_os("PATH") {
+        cmd.env("PATH", host_path);
+    }
     // Forward NETSUKE_NINJA when an override_ninja_env guard is active.
     if let Some(ninja) = std::env::var_os(NINJA_ENV) {
         cmd.env(NINJA_ENV, ninja);
