@@ -118,7 +118,7 @@ worked examples, and see the same results. A developer can run
 
 - [x] Stage A: Audit existing coverage and plan chapter structure.
 - [x] Stage B: Write the Advanced Usage chapter in `docs/users-guide.md`.
-- [x] Stage C: Add BDD behavioural scenarios (4 scenarios in
+- [x] Stage C: Add BDD behavioural scenarios (8 scenarios in
   `tests/features/advanced_usage.feature`).
 - [x] Stage D: Integration tests added in `tests/advanced_usage_tests.rs`.
 - [~] Stage E: Descoped (design docs unchanged, roadmap will be updated
@@ -159,11 +159,15 @@ worked examples, and see the same results. A developer can run
 
 **Stage C (BDD Scenarios):**
 
-- Created 4 BDD scenarios in `tests/features/advanced_usage.feature` covering:
+- Created 8 BDD scenarios in `tests/features/advanced_usage.feature` covering:
   1. Manifest subcommand streaming to stdout
   2. Manifest subcommand writing to file
-  3. JSON diagnostics on error
-  4. JSON diagnostics with manifest subcommand
+  3. Clean without manifest reports missing manifest
+  4. Graph without manifest reports missing manifest
+  5. Graph with invalid manifest reports parse error
+  6. Invalid config value reports validation error
+  7. JSON diagnostics on error
+  8. JSON diagnostics with manifest subcommand
 - Created `tests/bdd/steps/advanced_usage.rs` with new step definitions for:
   - Creating config files with key-value pairs
   - Setting environment variables for invocations
@@ -172,7 +176,7 @@ worked examples, and see the same results. A developer can run
 - Configuration layering scenarios with build command deferred to rstest
   integration tests due to complexity of coordinating fake ninja with
   environment variable propagation in BDD context.
-- All 4 BDD scenarios pass.
+- All 8 BDD scenarios pass.
 
 **Stage D (Integration Tests):**
 
@@ -213,9 +217,13 @@ variable setting, and DOT graph output checking).
   - 12.3 The `manifest` subcommand
   - 12.4 Configuration layering
   - 12.5 JSON diagnostics mode
-- Four BDD scenarios in `tests/features/advanced_usage.feature` covering:
+- Eight BDD scenarios in `tests/features/advanced_usage.feature` covering:
   - Manifest subcommand streaming to stdout
   - Manifest subcommand writing to file
+  - Clean without manifest (error handling)
+  - Graph without manifest (error handling)
+  - Graph with invalid manifest (JSON diagnostics)
+  - Invalid config value (validation error)
   - JSON diagnostics on error
   - JSON diagnostics with manifest subcommand
 - Nine integration tests in `tests/advanced_usage_tests.rs` covering
@@ -234,9 +242,11 @@ variable setting, and DOT graph output checking).
 - Stages E–F (design doc updates and separate validation) were descoped as the
   chapter provides adequate documentation coverage and Stage D integration
   tests validate the core workflows.
-- Additional BDD scenarios for `clean` and `graph` subcommands and configuration
-  layering were not added. The chapter documents these features adequately, and
-  they are tested in the Stage D integration tests.
+- Happy-path BDD scenarios for `clean` and `graph` (requiring a real or fake
+  ninja binary) and configuration layering with build execution were deferred
+  to rstest integration tests due to the complexity of coordinating fake ninja
+  with BDD environment propagation. Error-path BDD scenarios for all three
+  features were added.
 
 **Key learnings:**
 

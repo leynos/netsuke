@@ -59,8 +59,9 @@ fn run_netsuke_with_env(
 fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
     let temp = tempdir().with_context(|| format!("create temp dir for {context}"))?;
     let manifest = temp.path().join("Netsukefile");
-    std::fs::copy("tests/data/minimal.yml", &manifest)
-        .with_context(|| format!("copy minimal manifest to {}", manifest.display()))?;
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/minimal.yml");
+    std::fs::copy(&source, &manifest)
+        .with_context(|| format!("copy {} to {}", source.display(), manifest.display()))?;
     Ok(temp)
 }
 

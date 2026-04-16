@@ -1091,12 +1091,14 @@ with later sources overriding earlier ones. The precedence order (from lowest
 to highest) is:
 
 1. **Built-in defaults** — hard-coded fallback values.
-2. **Configuration files** (merged from multiple scopes):
-   - System / platform config directory (`$XDG_CONFIG_HOME/netsuke` on Unix,
-     `%APPDATA%\netsuke` on Windows).
-   - User home directory (`~/.netsuke.toml`).
-   - Project directory (`.netsuke.toml` in the current working directory or
-     the directory specified by `-C`).
+2. **Configuration files** (merged from multiple scopes, lowest first):
+   - **System** — `$XDG_CONFIG_DIRS/netsuke/config.toml` on Unix (defaults to
+     `/etc/xdg/netsuke/config.toml`).
+   - **User** — `$XDG_CONFIG_HOME/netsuke/config.toml` on Unix
+     (`~/.config/netsuke/config.toml` by default), `%APPDATA%\netsuke` and
+     `%LOCALAPPDATA%\netsuke` on Windows, or `~/.netsuke.toml`.
+   - **Project** — `.netsuke.toml` in the current working directory (or the
+     directory specified by `-C`).
 3. **Environment variables** — any variable with the `NETSUKE_` prefix
    (e.g., `NETSUKE_VERBOSE`, `NETSUKE_COLOUR_POLICY`).
 4. **CLI flags** — explicit command-line options (e.g., `--verbose`,
@@ -1159,15 +1161,17 @@ netsuke build --colour-policy always
 
 **Precedence verification:**
 
-To see which configuration is active, inspect the verbose output (if enabled)
-or use the `--help` output, which shows the default values:
+To verify which configuration values take effect, run your command with
+`--verbose`. The timing summary and diagnostic output confirm that verbose mode
+is active, for example:
 
 ```sh
-netsuke --help
+netsuke --verbose build
 ```
 
-For more complex setups, run with `--verbose` and check the diagnostic output
-at the start of the build.
+If the timing summary appears, the verbose setting reached the binary — useful
+for confirming that a config file, environment variable, or CLI flag is being
+picked up as expected.
 
 ### 12.5 JSON diagnostics
 

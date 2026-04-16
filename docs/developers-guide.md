@@ -371,8 +371,12 @@ helpers that launch the netsuke binary in a controlled environment:
   `assert_cmd::Command` with a sanitized environment. The helper:
   1. Calls `env_clear()` to strip the inherited environment for test
      isolation.
-  2. Acquires `EnvLock` and forwards `PATH` (via `std::env::var_os`) so
-     netsuke can locate ninja and other subprocesses.
+  2. Forwards `PATH` (via `std::env::var_os`) **without** acquiring `EnvLock`,
+     because the calling thread may already hold the lock via a
+     `NinjaEnvGuard` stored on the `TestWorld` — and `std::sync::Mutex` is
+     not reentrant. The direct read is safe: when a `NinjaEnvGuard` is
+     alive, it serializes all env mutations; when no guard is alive, the
+     `PATH` mutation from `prepend_dir_to_path` has already completed.
   3. Forwards all scenario-tracked environment variables from
      `world.env_vars_forward` (including `NETSUKE_NINJA` and any variables set
      by BDD steps) without reading the process environment, eliminating data
@@ -408,6 +412,14 @@ interface for integration tests outside the BDD framework. It sets `PATH` to an
 empty string (relying on the resolved binary path) but does **not** call
 `env_clear()`, so other environment variables (including `NETSUKE_NINJA` set
 via `override_ninja_env`) are inherited normally.
+
+For tests that need **deterministic, isolated** child-process environments, use
+`test_support::netsuke::run_netsuke_in_with_env(current_dir, args, extra_env)`.
+Unlike `run_netsuke_in`, this variant calls `env_clear()` so the child inherits
+**only** the variables supplied in `extra_env`, plus `NETSUKE_NINJA` (forwarded
+automatically when an `override_ninja_env` guard is active). Use this helper
+for configuration-layering tests or any test that sets environment variables
+which could race with parallel test execution.
 
 ## Documentation upkeep
 
