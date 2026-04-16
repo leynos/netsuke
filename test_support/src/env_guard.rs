@@ -97,6 +97,11 @@ impl<E: Environment> EnvGuard<E> {
         self.original.clone()
     }
 
+    /// Peek at the captured original value without consuming the guard.
+    pub fn original_ref(&self) -> Option<&OsString> {
+        self.original.as_ref()
+    }
+
     fn restore(&mut self) {
         match self.original.take() {
             Some(value) => unsafe { self.env.set_var(&self.key, &value) },

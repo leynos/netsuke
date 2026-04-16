@@ -284,4 +284,9 @@ impl NinjaEnvGuard {
     pub fn original(self) -> Option<OsString> {
         self.inner.into_original()
     }
+
+    /// Peek at the captured original value without consuming the guard.
+    pub fn original_ref(&self) -> Option<&OsString> {
+        self.inner.original_ref()
+    }
 }
