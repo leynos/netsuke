@@ -65,6 +65,29 @@ fn setup_minimal_workspace(context: &str) -> Result<TempDir> {
     Ok(temp)
 }
 
+/// Shared workspace setup for configuration-layering tests.
+///
+/// Creates a minimal workspace, writes `config_content` to `.netsuke.toml`,
+/// installs a fake ninja binary, and runs netsuke with the given `args` and
+/// `extra_env`.  Returns the captured [`CommandOutput`].
+fn run_config_layer_build(
+    context: &str,
+    config_content: &str,
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+) -> Result<CommandOutput> {
+    let workspace = setup_minimal_workspace(context)?;
+    let config = workspace.path().join(".netsuke.toml");
+    std::fs::write(&config, config_content).context("write config file")?;
+    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
+    run_netsuke_with_env(
+        workspace.path(),
+        args,
+        Some(ninja_path.as_path()),
+        extra_env,
+    )
+}
+
 // -------------------------------------------------------------------------
 // Clean subcommand edge cases
 // -------------------------------------------------------------------------
@@ -145,26 +168,12 @@ fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
 // Configuration layering precedence
 // -------------------------------------------------------------------------
 
-/// Config file sets `verbose = true`; assert the build emits a timing summary.
-///
-/// The `.netsuke.toml` is placed in the workspace directory so netsuke's
-/// project-scope discovery finds it without needing `NETSUKE_CONFIG_PATH`.
 #[rstest]
 fn config_file_overrides_defaults() -> Result<()> {
-    let workspace = setup_minimal_workspace("config file overrides")?;
-    let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "verbose = true\n").context("write config file")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
-
-    let output = run_netsuke_with_env(
-        workspace.path(),
-        &["build"],
-        Some(ninja_path.as_path()),
-        &[],
-    )?;
+    let output =
+        run_config_layer_build("config file overrides", "verbose = true\n", &["build"], &[])?;
 
     ensure!(output.success, "expected build to succeed");
-    // verbose = true in the config file should produce a timing summary
     ensure!(
         output.stderr.contains("Timing"),
         "expected verbose timing summary in stderr (config should override default), \
@@ -174,24 +183,16 @@ fn config_file_overrides_defaults() -> Result<()> {
     Ok(())
 }
 
-/// Config file sets `verbose = true`, env sets `NETSUKE_VERBOSE = false`.
-/// The environment should win: no timing summary in output.
 #[rstest]
 fn env_var_overrides_config_file() -> Result<()> {
-    let workspace = setup_minimal_workspace("env overrides config")?;
-    let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "verbose = true\n").context("write config file")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
-
-    let output = run_netsuke_with_env(
-        workspace.path(),
+    let output = run_config_layer_build(
+        "env overrides config",
+        "verbose = true\n",
         &["build"],
-        Some(ninja_path.as_path()),
         &[("NETSUKE_VERBOSE", "false")],
     )?;
 
     ensure!(output.success, "expected build to succeed");
-    // env var verbose=false should override the config file's verbose=true
     ensure!(
         !output.stderr.contains("Timing"),
         "expected no timing summary (env should override config), got:\n{}",
@@ -200,30 +201,16 @@ fn env_var_overrides_config_file() -> Result<()> {
     Ok(())
 }
 
-/// Verify the full three-tier precedence ladder: CLI > env > config file.
-///
-/// The config file sets `verbose = true`, the environment sets
-/// `NETSUKE_VERBOSE=false` (overriding the file), and the CLI passes
-/// `--verbose` (overriding the environment). The CLI flag should win,
-/// producing a timing summary in stderr.
 #[rstest]
 fn cli_flag_overrides_env_which_overrides_config_file() -> Result<()> {
-    let workspace = setup_minimal_workspace("full precedence ladder")?;
-    let config = workspace.path().join(".netsuke.toml");
-    std::fs::write(&config, "verbose = true\n").context("write config file")?;
-    let (_ninja_dir, ninja_path) = fake_ninja_check_build_file()?;
-
-    // env says false, overriding the config file's true;
-    // CLI says --verbose, overriding the env's false
-    let output = run_netsuke_with_env(
-        workspace.path(),
+    let output = run_config_layer_build(
+        "full precedence ladder",
+        "verbose = true\n",
         &["--verbose", "build"],
-        Some(ninja_path.as_path()),
         &[("NETSUKE_VERBOSE", "false")],
     )?;
 
     ensure!(output.success, "expected verbose build to succeed");
-    // Verbose mode emits a timing summary containing "Timing"
     ensure!(
         output.stderr.contains("Timing"),
         "expected verbose timing summary in stderr (CLI should override env), \
