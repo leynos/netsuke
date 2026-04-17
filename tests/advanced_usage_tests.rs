@@ -109,9 +109,11 @@ fn clean_without_prior_build_handles_gracefully() -> Result<()> {
     // as a no-op or fail with a clear message about missing build state.
     // The actual behaviour depends on ninja; either outcome is acceptable.
     ensure!(
-        output.success || output.stderr.contains("build"),
-        "expected clean to succeed or fail with a clear build-related message, \
-         got stderr:\n{}",
+        output.success
+            || output.stderr.contains("missing build file")
+            || output.stderr.contains(".ninja_log"),
+        "expected clean to succeed or fail with a build-state-related \
+         diagnostic, got stderr:\n{}",
         output.stderr
     );
     Ok(())
@@ -199,21 +201,17 @@ fn manifest_to_missing_parent_directory_succeeds_by_creating_parents() -> Result
 // -------------------------------------------------------------------------
 
 #[rstest]
-#[case(&["build"], &[], true)]
-#[case(&["build"], &[("NETSUKE_VERBOSE", "false")], false)]
-#[case(&["--verbose", "build"], &[("NETSUKE_VERBOSE", "false")], true)]
+#[case("config file enables verbose", &["build"], &[], true)]
+#[case("env var overrides config file", &["build"], &[("NETSUKE_VERBOSE", "false")], false)]
+#[case("cli flag overrides env var", &["--verbose", "build"], &[("NETSUKE_VERBOSE", "false")], true)]
 fn verbose_config_precedence(
+    #[case] scenario: &str,
     #[case] args: &[&str],
     #[case] extra_env: &[(&str, &str)],
     #[case] expect_timing: bool,
 ) -> Result<()> {
-    let output = run_config_layer_build(
-        "config precedence test",
-        "verbose = true\n",
-        args,
-        extra_env,
-    )?;
-    ensure!(output.success, "expected build to succeed");
+    let output = run_config_layer_build(scenario, "verbose = true\n", args, extra_env)?;
+    ensure!(output.success, "{scenario}: expected build to succeed");
     if expect_timing {
         ensure!(
             output.stderr.contains("Timing"),

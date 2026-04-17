@@ -371,7 +371,7 @@ helpers that launch the netsuke binary in a controlled environment:
   `assert_cmd::Command` with a sanitized environment. The helper:
   1. Calls `env_clear()` to strip the inherited environment for test
      isolation.
-  2. Forwards `PATH` (via `std::env::var_os`) **without** acquiring `EnvLock`,
+  2. Forwards `PATH` (via `std::env::var_os`) **without** acquiring `EnvLock`
      because the calling thread may already hold the lock via a
      `NinjaEnvGuard` stored on the `TestWorld` — and `std::sync::Mutex` is
      not reentrant. The direct read is safe: when a `NinjaEnvGuard` is
@@ -405,11 +405,13 @@ The separate `world.env_vars` map is a **restoration snapshot**: keys are
 variables set during the scenario, and values are their *previous* values (for
 restoration when the scenario ends). It is not used by `build_netsuke_command`.
 
-### BDD test execution flow
+### BDD test execution flow (e2e behavioural tests)
 
 The following diagram illustrates how a BDD scenario flows through the test
 infrastructure, from scenario invocation through workspace setup, command
-execution, and assertion validation:
+execution, and assertion validation. This applies to **end-to-end behavioural
+tests** defined in Gherkin feature files, not unit or code-level integration
+tests:
 
 ```mermaid
 sequenceDiagram
@@ -449,11 +451,12 @@ sequenceDiagram
     BddRunner-->>Developer: scenario_passes
 ```
 
-**Figure**: BDD test execution sequence showing how workspace setup, environment
-isolation, command invocation, and assertions flow through the test
+**Figure**: End-to-end BDD test execution sequence showing how workspace setup,
+environment isolation, command invocation, and assertions flow through the test
 infrastructure. The `TestWorld` fixture coordinates state across steps while
 `build_netsuke_command` ensures environment isolation via `env_clear()` and
-explicit forwarding of scenario-configured variables.
+explicit forwarding of scenario-configured variables. This flow applies to
+feature-file-based behavioural tests, not code-level unit or integration tests.
 
 ### Integration test helper
 
@@ -466,10 +469,11 @@ via `override_ninja_env`) are inherited normally.
 For tests that need **deterministic, isolated** child-process environments, use
 `test_support::netsuke::run_netsuke_in_with_env(current_dir, args, extra_env)`.
 Unlike `run_netsuke_in`, this variant calls `env_clear()` so the child inherits
-**only** the variables supplied in `extra_env`, plus `NETSUKE_NINJA` (forwarded
-automatically when an `override_ninja_env` guard is active). Use this helper
-for configuration-layering tests or any test that sets environment variables
-which could race with parallel test execution.
+**only** the variables supplied in `extra_env`, plus two automatically
+forwarded variables: `PATH` (from the host `std::env::var_os`) and
+`NETSUKE_NINJA` (forwarded when an `override_ninja_env` guard is active in the
+current process). Use this helper for configuration-layering tests or any test
+that sets environment variables which could race with parallel test execution.
 
 ## Documentation upkeep
 
