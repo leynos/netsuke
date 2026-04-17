@@ -11,7 +11,7 @@ use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
 use test_support::env::{SystemEnv, override_ninja_env};
-use test_support::netsuke::{run_netsuke_in, run_netsuke_in_with_env};
+use test_support::netsuke::run_netsuke_in_with_env;
 
 /// Captured output from a netsuke invocation.
 struct CommandOutput {
@@ -26,8 +26,14 @@ fn run_netsuke(
     args: &[&str],
     ninja_env: Option<&Path>,
 ) -> Result<CommandOutput> {
-    let _guard = ninja_env.map(|path| override_ninja_env(&SystemEnv::new(), path));
-    let run = run_netsuke_in(current_dir, args)?;
+    // Build environment variable list based on ninja_env parameter.
+    // When ninja_env is provided, pass it via NINJA_ENV to the isolated runner.
+    let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
+    let extra_env: Vec<(&str, &str)> = ninja_env_owned
+        .as_ref()
+        .map(|s| vec![(ninja_env::NINJA_ENV, s.as_str())])
+        .unwrap_or_default();
+    let run = run_netsuke_in_with_env(current_dir, args, &extra_env)?;
     Ok(CommandOutput {
         stdout: run.stdout,
         stderr: run.stderr,
@@ -306,8 +312,10 @@ fn invalid_config_value_reports_validation_error() -> Result<()> {
         output.stderr
     );
     ensure!(
-        output.stderr.contains("auto") && output.stderr.contains("always"),
-        "expected error to list valid options, got:\n{}",
+        output.stderr.contains("auto")
+            && output.stderr.contains("always")
+            && output.stderr.contains("never"),
+        "expected error to list valid options (auto, always, never), got:\n{}",
         output.stderr
     );
     Ok(())
