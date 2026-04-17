@@ -164,6 +164,30 @@ fn manifest_to_unwritable_path_fails_with_path_error() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn manifest_to_missing_parent_directory_succeeds_by_creating_parents() -> Result<()> {
+    let workspace = setup_minimal_workspace("manifest to missing parent")?;
+    // Netsuke automatically creates missing parent directories.
+    let nested_path = workspace.path().join("missing_parent").join("out.ninja");
+
+    let output = run_netsuke(
+        workspace.path(),
+        &["manifest", nested_path.to_str().expect("path is UTF-8")],
+        None,
+    )?;
+
+    ensure!(
+        output.success,
+        "expected manifest to succeed and create parent directories"
+    );
+    ensure!(
+        nested_path.exists(),
+        "expected manifest file to be created at {}",
+        nested_path.display()
+    );
+    Ok(())
+}
+
 // -------------------------------------------------------------------------
 // Configuration layering precedence
 // -------------------------------------------------------------------------
@@ -250,6 +274,13 @@ fn manifest_to_stdout_contains_ninja_rules() -> Result<()> {
         output.stdout.contains("rule "),
         "expected stdout to contain Ninja rule statements, got:\n{}",
         output.stdout
+    );
+    // Progress output goes to stderr; the manifest content goes to stdout.
+    // This separation allows manifest output to be cleanly piped.
+    ensure!(
+        !output.stderr.contains("rule "),
+        "expected progress messages on stderr, not manifest content, got:\n{}",
+        output.stderr
     );
     Ok(())
 }
