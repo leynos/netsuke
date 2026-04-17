@@ -453,7 +453,7 @@ sequenceDiagram
 
 **Figure**: End-to-end BDD test execution sequence showing how workspace setup,
 environment isolation, command invocation, and assertions flow through the test
-infrastructure. The `TestWorld` fixture coordinates state across steps while
+infrastructure. The `TestWorld` fixture coordinates state across steps, while
 `build_netsuke_command` ensures environment isolation via `env_clear()` and
 explicit forwarding of scenario-configured variables. This flow applies to
 feature-file-based behavioural tests, not code-level unit or integration tests.
