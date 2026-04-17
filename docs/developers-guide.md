@@ -405,6 +405,56 @@ The separate `world.env_vars` map is a **restoration snapshot**: keys are
 variables set during the scenario, and values are their *previous* values (for
 restoration when the scenario ends). It is not used by `build_netsuke_command`.
 
+### BDD test execution flow
+
+The following diagram illustrates how a BDD scenario flows through the test
+infrastructure, from scenario invocation through workspace setup, command
+execution, and assertion validation:
+
+```mermaid
+sequenceDiagram
+    actor Developer
+    participant BddRunner
+    participant TestWorld
+    participant AdvancedUsageSteps
+    participant ManifestCommandSteps
+    participant AssertCmdCommand
+    participant NetsukeBinary
+    participant NinjaTool
+
+    Developer->>BddRunner: run bdd_tests advanced_usage
+    BddRunner->>TestWorld: create TestWorld fixture
+
+    BddRunner->>AdvancedUsageSteps: execute Given a minimal Netsuke workspace
+    AdvancedUsageSteps->>ManifestCommandSteps: reuse workspace_setup_steps
+    ManifestCommandSteps->>TestWorld: create_workspace_with_manifest()
+
+    BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "manifest -"
+    AdvancedUsageSteps->>TestWorld: set_env_from_world()
+    TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
+    AssertCmdCommand->>AssertCmdCommand: inherit_NINJA_ENV()
+    AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
+    AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()
+    NetsukeBinary->>NinjaTool: optional_ninja_invocation()
+    NinjaTool-->>NetsukeBinary: build_status
+    NetsukeBinary-->>AssertCmdCommand: exit_code_stdout_stderr
+    AssertCmdCommand-->>TestWorld: store_process_output()
+
+    BddRunner->>AdvancedUsageSteps: execute Then stdout should contain Ninja_manifest
+    AdvancedUsageSteps->>TestWorld: assert_stdout_contains_manifest_markers()
+
+    BddRunner->>AdvancedUsageSteps: execute And stderr should be empty
+    AdvancedUsageSteps->>TestWorld: assert_stderr_empty()
+
+    BddRunner-->>Developer: scenario_passes
+```
+
+**Figure**: BDD test execution sequence showing how workspace setup, environment
+isolation, command invocation, and assertions flow through the test
+infrastructure. The `TestWorld` fixture coordinates state across steps while
+`build_netsuke_command` ensures environment isolation via `env_clear()` and
+explicit forwarding of scenario-configured variables.
+
 ### Integration test helper
 
 `test_support::netsuke::run_netsuke_in(current_dir, args)` provides a simpler
