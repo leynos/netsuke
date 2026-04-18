@@ -56,7 +56,7 @@ name: Build and Package
       wix-extension-version:
         description: WiX Toolset extension version for Windows packaging
         required: false
-        default: '6'
+        default: '7'
         type: string
 
 jobs:

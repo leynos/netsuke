@@ -28,7 +28,7 @@ name: Release Binary
           the WiX CLI.
         required: false
         type: string
-        default: '6'
+        default: '7'
     outputs:
       bin_name:
         description: Binary name extracted from Cargo.toml
@@ -94,7 +94,7 @@ jobs:
               "$GITHUB_EVENT_PATH")"
           fi
           if [ -z "$version" ] || [ "$version" = 'null' ]; then
-            version='6'
+            version='7'
           fi
           echo "value=$version" >>"$GITHUB_OUTPUT"
       - id: manifest_path
