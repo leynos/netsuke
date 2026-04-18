@@ -152,7 +152,7 @@ pub fn original_ref(&self) -> Option<&OsString>
 Use this to inspect the value that was in the environment *before* the guard
 was activated, without consuming the guard.  This is the correct way for BDD
 steps to obtain the prior value when calling `track_env_var` because the
-consuming `original(self)` would drop the guard prematurely:
+consuming `into_original(self)` would drop the guard prematurely:
 
 ```rust
 let guard = override_ninja_env(&SystemEnv::new(), &ninja_path);
@@ -160,13 +160,13 @@ let previous = guard.original_ref().cloned();
 world.track_env_var(
     ninja_env::NINJA_ENV.to_owned(),
     previous,
-    ninja_path.as_os_str().to_owned(),
+    Some(ninja_path.as_os_str().to_owned()),
 );
 world.ninja_env_guard = Some(guard);
 ```
 
-The consuming `original(self) -> Option<OsString>` method remains available
-when the guard is no longer needed after the read.
+The consuming `into_original(self) -> Option<OsString>` method remains
+available when the guard is no longer needed after the read.
 
 ### `CwdGuard`
 
