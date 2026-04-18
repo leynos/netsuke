@@ -10,7 +10,6 @@ use rstest::rstest;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
 use test_support::check_ninja::fake_ninja_check_build_file;
-use test_support::env::{SystemEnv, override_ninja_env};
 use test_support::netsuke::run_netsuke_in_with_env;
 
 /// Captured output from a netsuke invocation.
@@ -31,7 +30,7 @@ fn run_netsuke(
     let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
     let extra_env: Vec<(&str, &str)> = ninja_env_owned
         .as_ref()
-        .map(|s| vec![(ninja_env::NINJA_ENV, s.as_str())])
+        .map(|s| vec![("NETSUKE_NINJA", s.as_str())])
         .unwrap_or_default();
     let run = run_netsuke_in_with_env(current_dir, args, &extra_env)?;
     Ok(CommandOutput {
@@ -53,8 +52,12 @@ fn run_netsuke_with_env(
     ninja_env: Option<&Path>,
     extra_env: &[(&str, &str)],
 ) -> Result<CommandOutput> {
-    let _guard = ninja_env.map(|path| override_ninja_env(&SystemEnv::new(), path));
-    let run = run_netsuke_in_with_env(current_dir, args, extra_env)?;
+    let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
+    let mut env_vec: Vec<(&str, &str)> = extra_env.to_vec();
+    if let Some(ref s) = ninja_env_owned {
+        env_vec.push(("NETSUKE_NINJA", s.as_str()));
+    }
+    let run = run_netsuke_in_with_env(current_dir, args, &env_vec)?;
     Ok(CommandOutput {
         stdout: run.stdout,
         stderr: run.stderr,
