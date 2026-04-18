@@ -151,7 +151,7 @@ pub fn original_ref(&self) -> Option<&OsString>
 
 Use this to inspect the value that was in the environment *before* the guard
 was activated, without consuming the guard.  This is the correct way for BDD
-steps to obtain the prior value when calling `track_env_var`, because the
+steps to obtain the prior value when calling `track_env_var` because the
 consuming `original(self)` would drop the guard prematurely:
 
 ```rust
@@ -444,7 +444,7 @@ to a TOML value derived from `{value}`:
 - All other values are written as TOML strings.
 
 This step uses the `toml = "0.8"` dev-dependency added to `Cargo.toml` for
-serialisation.  Do not add further crate dependencies to support this step; the
+serialization.  Do not add further crate dependencies to support this step; the
 existing `toml` crate is sufficient for key/value configuration files of this
 kind.  The step is intentionally limited to scalar types: extend it only when a
 concrete BDD scenario requires numeric or array values.
