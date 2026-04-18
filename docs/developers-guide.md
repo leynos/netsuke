@@ -141,6 +141,33 @@ let _guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 For BDD steps that need to track mutations through `TestWorld`, use
 `mutate_env_var` from `tests/bdd/helpers/env_mutation.rs` instead.
 
+### `original_ref()` on environment guards
+
+`NinjaEnvGuard` and `EnvGuard<E>` both expose a non-consuming accessor:
+
+```rust
+pub fn original_ref(&self) -> Option<&OsString>
+```
+
+Use this to inspect the value that was in the environment *before* the guard
+was activated, without consuming the guard.  This is the correct way for BDD
+steps to obtain the prior value when calling `track_env_var`, because the
+consuming `original(self)` would drop the guard prematurely:
+
+```rust
+let guard = override_ninja_env(&SystemEnv::new(), &ninja_path);
+let previous = guard.original_ref().cloned();
+world.track_env_var(
+    ninja_env::NINJA_ENV.to_owned(),
+    previous,
+    ninja_path.as_os_str().to_owned(),
+);
+world.ninja_env_guard = Some(guard);
+```
+
+The consuming `original(self) -> Option<OsString>` method remains available
+when the guard is no longer needed after the read.
+
 ### `CwdGuard`
 
 Tests that call `std::env::set_current_dir` must restore the original working
@@ -243,12 +270,14 @@ Table: Scenario state groups and fields
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.                 |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.                            |
 | Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.                          |
-| Environment state  | `env_vars`, `env_lock`, `original_cwd`                                                                                                                                                                                                   | Environment variable snapshots, scenario-scoped lock, and CWD capture.   |
+| Environment state  | `env_vars`, `env_vars_forward`, `env_lock`, `original_cwd`                                                                                                                                                                               | Restoration snapshot, forwarding map, scenario lock, and CWD capture.    |
 
 ### Key `TestWorld` methods
 
-- `track_env_var(key, previous)` — record a variable for restoration at
-  scenario end.
+- `track_env_var(key, previous, new_value)` — record a variable for
+  restoration at scenario end and store `new_value` in `env_vars_forward` so
+  that `build_netsuke_command` can forward it to child processes without
+  re-reading the process environment.
 - `ensure_env_lock()` — acquire the scenario-scoped `EnvLock` on first
   call; subsequent calls are no-ops. Also captures the current working
   directory for later restoration.
@@ -404,6 +433,21 @@ reading the process environment.
 The separate `world.env_vars` map is a **restoration snapshot**: keys are
 variables set during the scenario, and values are their *previous* values (for
 restoration when the scenario ends). It is not used by `build_netsuke_command`.
+
+### `given_config_file_with_setting` step (`tests/bdd/steps/advanced_usage.rs`)
+
+The Gherkin step `a workspace with config file setting {key} to {value}` writes
+a `.netsuke.toml` file to the scenario's temp directory with the given key set
+to a TOML value derived from `{value}`:
+
+- `"true"` and `"false"` are parsed as TOML booleans.
+- All other values are written as TOML strings.
+
+This step uses the `toml = "0.8"` dev-dependency added to `Cargo.toml` for
+serialisation.  Do not add further crate dependencies to support this step; the
+existing `toml` crate is sufficient for key/value configuration files of this
+kind.  The step is intentionally limited to scalar types: extend it only when a
+concrete BDD scenario requires numeric or array values.
 
 ### BDD test execution flow (e2e behavioural tests)
 
