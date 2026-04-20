@@ -548,10 +548,17 @@ command-line flags.
 
 #### Configuration file discovery
 
-Configuration files are discovered using OrthoConfig. When
-`NETSUKE_CONFIG_PATH` is set, it points to a single file and bypasses all
-automatic discovery. Otherwise, Netsuke searches for configuration in three
-scopes:
+Configuration files are discovered using OrthoConfig unless you select an
+explicit file. Netsuke honours these file-selection inputs in precedence order:
+
+- `--config <PATH>`
+- `NETSUKE_CONFIG=<PATH>`
+- `NETSUKE_CONFIG_PATH=<PATH>` (legacy alias)
+- Automatic discovery
+
+When one of the explicit selectors is set, Netsuke loads only that file and
+skips automatic discovery. Otherwise, Netsuke searches for configuration in
+three scopes:
 
 - **Project scope** — `.netsuke.toml` in the current working directory
   (or the directory specified by `-C` / `--directory`).
@@ -571,6 +578,10 @@ the project file overrides the same field from user or system files, user-scope
 settings override system-scope, and fields set only in lower-precedence files
 are still applied.
 
+The explicit config path is resolved against the shell's current working
+directory, not the `-C` / `--directory` project anchor. The directory flag only
+changes where project-scope discovery and manifest lookup begin.
+
 #### Directory flag and project anchoring
 
 The `-C <DIR>` / `--directory <DIR>` flag re-anchors project-scope discovery to
@@ -584,6 +595,10 @@ netsuke -C /path/to/project build
 
 With the flag, only `/path/to/project/.netsuke.toml` is considered for
 project-scope discovery; user-scope discovery is unaffected.
+
+For a documented starting point, see
+[`docs/sample-netsuke.toml`](sample-netsuke.toml), which annotates every
+supported config-file key.
 
 #### Environment variables
 

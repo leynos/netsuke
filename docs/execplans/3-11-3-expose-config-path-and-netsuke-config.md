@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -127,19 +127,33 @@ Observable success means all of the following hold simultaneously:
 
 ## Progress
 
-- [ ] Stage A: add `--config` CLI field and wire it into discovery.
-- [ ] Stage B: support `NETSUKE_CONFIG` environment variable alongside legacy
+- [x] Stage A: add `--config` CLI field and wire it into discovery.
+- [x] Stage B: support `NETSUKE_CONFIG` environment variable alongside legacy
       `NETSUKE_CONFIG_PATH`.
-- [ ] Stage C: add Fluent localization keys and `build.rs` anchoring.
-- [ ] Stage D: add `rstest` integration tests for `--config` and
+- [x] Stage C: add Fluent localization keys and `build.rs` anchoring.
+- [x] Stage D: add `rstest` integration tests for `--config` and
       `NETSUKE_CONFIG`.
-- [ ] Stage E: add `rstest-bdd` behavioural tests.
-- [ ] Stage F: ship annotated sample config and update documentation.
-- [ ] Stage G: validation, roadmap update, and evidence capture.
+- [x] Stage E: add `rstest-bdd` behavioural tests.
+- [x] Stage F: ship annotated sample config and update documentation.
+- [x] Stage G: validation, roadmap update, and evidence capture.
 
 ## Surprises & discoveries
 
-(None yet — this section will be populated during implementation.)
+- Observation: a single `resolve_config_path()` helper in
+  `src/cli/config_merge.rs` cleanly keeps `merge_with_config()` and
+  `resolve_merged_diag_json()` aligned. This removed the old implicit reliance
+  on `ConfigDiscovery::env_var(...)` for explicit file selection and avoided
+  duplicating precedence logic. Date/Author: 2026-04-20 / implementation agent.
+
+- Observation: the existing BDD configuration-discovery steps were already
+  generic enough for `NETSUKE_CONFIG` and `--config`; only the feature file and
+  the generic isolated-CLI env cleanup list needed changes. Date/Author:
+  2026-04-20 / implementation agent.
+
+- Observation: explicit missing config files surface as file-layer merge
+  errors, so integration tests must inspect the full error chain or debug
+  output rather than only the top-level context string. Date/Author: 2026-04-20
+  / implementation agent.
 
 ## Decision log
 
@@ -172,9 +186,53 @@ Observable success means all of the following hold simultaneously:
   file path is specified before any directory change is applied. Date/Author:
   2026-04-16 / planning agent.
 
+- Decision: retire `ConfigDiscovery::env_var(...)` from Netsuke's internal
+  automatic-discovery helper and perform all explicit config-path selection in
+  `resolve_config_path()`. Rationale: once `NETSUKE_CONFIG`,
+  `NETSUKE_CONFIG_PATH`, and `--config` must share a single precedence ladder,
+  keeping the file-selection logic in one helper is simpler and prevents drift
+  between normal merging and early diag-JSON resolution. Date/Author:
+  2026-04-20 / implementation agent.
+
 ## Outcomes & retrospective
 
-(To be completed after implementation.)
+Implementation completed on 2026-04-20.
+
+Validation evidence:
+
+- `make fmt`
+- `make check-fmt`
+- `make lint`
+- `make test`
+- `make markdownlint`
+- `make nixie`
+
+Key outcomes:
+
+- Added a visible `--config <FILE>` CLI flag on `Cli` as a parse-time-only
+  field (`#[serde(skip)]`), keeping it out of value merging.
+- Added `NETSUKE_CONFIG` as the documented environment-variable selector while
+  preserving `NETSUKE_CONFIG_PATH` as a lower-precedence legacy alias.
+- Centralized explicit config selection in
+  `src/cli/config_merge.rs::resolve_config_path()`, which now drives both full
+  merging and early `diag_json` resolution.
+- Added focused integration coverage in
+  `tests/cli_tests/config_selection.rs` for CLI/env precedence, missing-file
+  handling, and continued value-level precedence over the selected file.
+- Extended the configuration-discovery BDD feature with scenarios for
+  `--config`, `NETSUKE_CONFIG`, and precedence over the legacy alias.
+- Added `docs/sample-netsuke.toml` and updated the user guide, design
+  documentation, roadmap, and this ExecPlan to reflect the final contract.
+
+Retrospective:
+
+- The main implementation risk was not in Clap or OrthoConfig integration, but
+  in keeping file-selection precedence consistent across the normal merge path,
+  early diagnostic-mode resolution, integration tests, and BDD harness.
+  Centralizing the logic in a single helper avoided that drift.
+- The existing BDD support was already flexible enough for the new env var and
+  most of the CLI coverage, so the behavioural delta stayed smaller than the
+  plan first suggested.
 
 ## Context and orientation
 

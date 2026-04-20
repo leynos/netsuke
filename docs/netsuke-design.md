@@ -2185,9 +2185,10 @@ flowchart LR
 Netsuke configuration discovery is implemented through OrthoConfig's
 `ConfigDiscovery` builder in `src/cli/config_merge.rs`. The
 `config_discovery()` helper constructs a discovery instance rooted at
-application name `"netsuke"`, honours the `NETSUKE_CONFIG_PATH` environment
-variable as an explicit override, and adjusts project-root discovery when the
-`-C/--directory` flag is supplied.
+application name `"netsuke"` and adjusts project-root discovery when the
+`-C/--directory` flag is supplied. Explicit file selection is handled before
+discovery by `resolve_config_path()`, which applies the precedence `--config` >
+`NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
 
 #### Discovery scopes and layered merging
 
@@ -2200,9 +2201,12 @@ override earlier ones—meaning project-scope has highest precedence among file
 layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
-1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable, if set.
-   This allows users to point to any arbitrary configuration file path,
-   bypassing automatic discovery entirely.
+1. **Explicit override**: the first configured selector from this list:
+   `--config <PATH>`, `NETSUKE_CONFIG`, `NETSUKE_CONFIG_PATH`. This allows
+   users to point to any arbitrary configuration file path, bypassing automatic
+   discovery entirely. `NETSUKE_CONFIG_PATH` remains supported as a
+   backward-compatible alias, but `NETSUKE_CONFIG` is the documented
+   environment variable going forward.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
@@ -2261,10 +2265,15 @@ manual flag repetition.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
-- The current implementation uses `NETSUKE_CONFIG_PATH` for the override
-  environment variable. Roadmap item 3.11.3 plans to expose a visible
-  `--config` CLI flag and rename the environment variable to `NETSUKE_CONFIG`
-  for improved user ergonomics.
+- Explicit config selection is handled outside OrthoConfig's built-in
+  discovery override surface because Netsuke needs its custom two-pass
+  project-over-user merge behaviour for automatic discovery. The selected file
+  still participates in the normal precedence ladder: defaults < file <
+  environment < CLI flags.
+- Relative paths passed to `--config` are resolved against the process current
+  working directory, not the `-C/--directory` anchor. This keeps config-file
+  selection aligned with normal shell path semantics while `-C` continues to
+  scope project discovery and manifest lookup.
 
 ### 8.5 Manual Pages
 

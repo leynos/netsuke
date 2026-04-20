@@ -8,6 +8,13 @@ use serde_json::json;
 use tempfile::tempdir;
 use test_support::{CwdGuard, EnvVarGuard};
 
+fn cli_with_directory(directory: &std::path::Path) -> Cli {
+    Cli {
+        directory: Some(directory.to_path_buf()),
+        ..Cli::default()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // is_empty_value
 // ---------------------------------------------------------------------------
@@ -156,7 +163,7 @@ fn project_scope_layers_returns_one_layer_when_file_present() {
 ///
 /// Returns (`EnvLock`, `project_dir`, `fake_home`, `env_guards`) where `env_guards`
 /// isolate `HOME` and platform-specific config paths (`XDG_CONFIG_HOME` on Unix,
-/// `APPDATA`/`LOCALAPPDATA` on Windows) and remove `CONFIG_ENV_VAR`.
+/// `APPDATA`/`LOCALAPPDATA` on Windows) and remove explicit config selectors.
 #[cfg(test)]
 #[fixture]
 fn isolated_config_env() -> anyhow::Result<(
@@ -175,6 +182,7 @@ fn isolated_config_env() -> anyhow::Result<(
         EnvVarGuard::set("HOME", fake_home.path().as_os_str()),
         EnvVarGuard::set("XDG_CONFIG_HOME", fake_home.path().as_os_str()),
         EnvVarGuard::remove(CONFIG_ENV_VAR),
+        EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
     ];
 
     #[cfg(windows)]
@@ -183,6 +191,7 @@ fn isolated_config_env() -> anyhow::Result<(
         EnvVarGuard::set("APPDATA", fake_home.path().as_os_str()),
         EnvVarGuard::set("LOCALAPPDATA", fake_home.path().as_os_str()),
         EnvVarGuard::remove(CONFIG_ENV_VAR),
+        EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
     ];
 
     Ok((lock, dir, fake_home, guards))
@@ -208,7 +217,8 @@ fn collect_diag_file_layers_handles_project_file_presence(
             .expect("write config");
     }
 
-    let layers = collect_diag_file_layers(Some(dir.path()));
+    let cli = cli_with_directory(dir.path());
+    let layers = collect_diag_file_layers(&cli);
 
     if expect_empty {
         ensure!(layers.is_empty(), "expected no layers when file absent");
@@ -270,7 +280,9 @@ fn push_file_layers_pushes_expected_layer_count(
     #[cfg(windows)]
     let _local_appdata_guard = EnvVarGuard::set("LOCALAPPDATA", fake_home.path().as_os_str());
     let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    push_file_layers(&mut composer, &mut errors, Some(dir.path()));
+    let _legacy_config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let cli = cli_with_directory(dir.path());
+    push_file_layers(&mut composer, &mut errors, &cli);
     assert!(errors.is_empty(), "no required errors expected");
     assert_eq!(
         composer.layers().len(),
