@@ -9,17 +9,18 @@ use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::uncased::Uncased;
 use ortho_config::{
-    ConfigDiscovery, LocalizationArgs, MergeComposer, MergeLayer, OrthoMergeExt, OrthoResult,
-    load_config_file_as_chain, sanitize_value,
+    ConfigDiscovery, LocalizationArgs, MergeComposer, MergeLayer, OrthoError, OrthoMergeExt,
+    OrthoResult, load_config_file_as_chain, sanitize_value,
 };
 use std::borrow::Cow;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::localization::{self, keys};
 
 use super::config::OutputFormat;
-use super::{CONFIG_ENV_VAR, Cli, ENV_PREFIX, validation_message};
+use super::{CONFIG_ENV_VAR, CONFIG_ENV_VAR_LEGACY, Cli, ENV_PREFIX, validation_message};
 
 /// Return the default manifest filename when none is provided.
 pub(super) fn default_manifest_path() -> PathBuf {
@@ -31,16 +32,44 @@ fn env_provider() -> Env {
     Env::prefixed(ENV_PREFIX)
 }
 
-/// Build the single-pass discovery used when `NETSUKE_CONFIG_PATH` is set.
-///
-/// When the env var is present `compose_layers` will find it first and return
-/// immediately, so project-vs-user ordering is irrelevant.
+/// Build the automatic discovery used when no explicit config path is set.
 fn config_discovery(directory: Option<&Path>) -> ConfigDiscovery {
-    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
+    let mut builder = ConfigDiscovery::builder("netsuke");
     if let Some(dir) = directory {
         builder = builder.clear_project_roots().add_project_root(dir);
     }
     builder.build()
+}
+
+fn env_config_path(var_name: &str) -> Option<PathBuf> {
+    std::env::var_os(var_name)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
+    cli.config
+        .clone()
+        .or_else(|| env_config_path(CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
+}
+
+fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    match load_config_file_as_chain(path) {
+        Ok(Some(chain)) => Ok(chain
+            .values
+            .into_iter()
+            .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
+            .collect()),
+        Ok(None) => Err(Arc::new(OrthoError::File {
+            path: path.to_path_buf(),
+            source: Box::new(io::Error::new(
+                io::ErrorKind::NotFound,
+                "explicit configuration file not found",
+            )),
+        })),
+        Err(err) => Err(err),
+    }
 }
 
 /// Return the expected project-scope config file path as a string, if
@@ -106,21 +135,26 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 ///
 /// If project-scope layer loading fails, this function falls back to the first-pass
 /// layers (global and user configs) rather than propagating an error. An explicit
-/// `NETSUKE_CONFIG_PATH` environment variable override will also cause the function
-/// to return early with the first-pass layers only.
-fn collect_diag_file_layers(directory: Option<&Path>) -> Vec<MergeLayer<'static>> {
-    let discovery = config_discovery(directory);
+/// explicit config path will also cause the function to return early with the
+/// selected file only.
+fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>> {
+    if let Some(path) = resolve_config_path(cli)
+        && let Ok(layers) = load_layers_from_path(&path)
+    {
+        return layers;
+    }
+
+    let discovery = config_discovery(cli.directory.as_deref());
     let file_layers = discovery.compose_layers().value;
-    let project_file = project_scope_file_str(directory);
+    let project_file = project_scope_file_str(cli.directory.as_deref());
     let first_pass_found_project = file_layers.iter().any(|l| {
         l.path()
             .is_some_and(|p| project_file.as_deref() == Some(p.as_str()))
     });
-    let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
-    if first_pass_found_project || has_explicit_config {
+    if first_pass_found_project {
         file_layers
     } else {
-        match project_scope_layers(directory) {
+        match project_scope_layers(cli.directory.as_deref()) {
             Ok(project_layers) => file_layers.into_iter().chain(project_layers).collect(),
             Err(_) => file_layers,
         }
@@ -148,7 +182,7 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
     let mut diag_json = Cli::default().diag_json;
 
-    let layers = collect_diag_file_layers(cli.directory.as_deref());
+    let layers = collect_diag_file_layers(cli);
     for layer in layers {
         let layer_value = layer.into_value();
         if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
@@ -172,20 +206,42 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
 ///
 /// Implements "project scope > user scope" by running a second direct load of
 /// the project-scope file when first-pass discovery did not include it and no
-/// explicit config-path override is active.
+/// explicit config path is active.
+///
+/// Drain a layer-load result onto `composer`, recording any error.
+fn push_layers_result(
+    composer: &mut MergeComposer,
+    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
+    result: Result<Vec<MergeLayer<'static>>, Arc<ortho_config::OrthoError>>,
+) {
+    match result {
+        Ok(layers) => {
+            for layer in layers {
+                composer.push_layer(layer);
+            }
+        }
+        Err(err) => errors.push(err),
+    }
+}
+
 fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    directory: Option<&Path>,
+    cli: &Cli,
 ) {
-    let discovery = config_discovery(directory);
+    if let Some(path) = resolve_config_path(cli) {
+        push_layers_result(composer, errors, load_layers_from_path(&path));
+        return;
+    }
+
+    let discovery = config_discovery(cli.directory.as_deref());
     let mut file_layers = discovery.compose_layers();
     errors.append(&mut file_layers.required_errors);
     if file_layers.value.is_empty() {
         errors.append(&mut file_layers.optional_errors);
     }
 
-    let project_file = project_scope_file_str(directory);
+    let project_file = project_scope_file_str(cli.directory.as_deref());
     let first_pass_found_project = file_layers.value.iter().any(|l| {
         l.path()
             .is_some_and(|p| project_file.as_deref() == Some(p.as_str()))
@@ -195,16 +251,12 @@ fn push_file_layers(
         composer.push_layer(layer);
     }
 
-    let has_explicit_config = std::env::var_os(CONFIG_ENV_VAR).is_some_and(|v| !v.is_empty());
-    if !first_pass_found_project && !has_explicit_config {
-        match project_scope_layers(directory) {
-            Ok(layers) => {
-                for layer in layers {
-                    composer.push_layer(layer);
-                }
-            }
-            Err(err) => errors.push(err),
-        }
+    if !first_pass_found_project {
+        push_layers_result(
+            composer,
+            errors,
+            project_scope_layers(cli.directory.as_deref()),
+        );
     }
 }
 
@@ -271,7 +323,7 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
         Err(err) => errors.push(err),
     }
 
-    push_file_layers(&mut composer, &mut errors, cli.directory.as_deref());
+    push_file_layers(&mut composer, &mut errors, cli);
 
     let env_provider = env_provider()
         .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
