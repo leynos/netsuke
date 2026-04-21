@@ -59,63 +59,82 @@ fn sandbox_user_scope(home: &tempfile::TempDir) -> Result<(EnvVarGuard, EnvVarGu
     ))
 }
 
+struct ConfigTestHarness {
+    _env_lock: EnvLock,
+    project: tempfile::TempDir,
+    _home: tempfile::TempDir,
+    _user_scope: (EnvVarGuard, EnvVarGuard, EnvVarGuard),
+    _cwd_guard: CwdGuard,
+}
+
+impl ConfigTestHarness {
+    fn setup() -> Result<Self> {
+        let env_lock = EnvLock::acquire();
+        let cwd_guard = CwdGuard::acquire()?;
+        let project = tempdir().context("create project directory")?;
+        let home = tempdir().context("create fake home directory")?;
+        let user_scope = sandbox_user_scope(&home)?;
+        std::env::set_current_dir(project.path()).context("change to project directory")?;
+        Ok(Self {
+            _env_lock: env_lock,
+            project,
+            _home: home,
+            _user_scope: user_scope,
+            _cwd_guard: cwd_guard,
+        })
+    }
+
+    fn write_config(&self, name: &str, content: &str) -> Result<std::path::PathBuf> {
+        let path = self.project.path().join(name);
+        fs::write(&path, content).with_context(|| format!("write config file {name}"))?;
+        std::env::set_current_dir(self.project.path()).context("change to project directory")?;
+        Ok(path)
+    }
+}
+
 #[rstest]
 fn config_flag_loads_specified_file() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
 
-    let custom = project.path().join("custom.toml");
-    fs::write(&custom, "theme = \"unicode\"\n").context("write explicit config file")?;
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
+    let custom_path = h.write_config("custom.toml", "theme = \"unicode\"\n")?;
+    let custom_arg = custom_path.to_string_lossy().into_owned();
 
-    let merged = parse_and_merge(&["netsuke", "--config", "custom.toml"])?;
+    let merged = parse_and_merge(&["netsuke", "--config", &custom_arg])?;
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
         "explicit --config file should be loaded"
     );
+    let _project_root = h.project.path();
     Ok(())
 }
 
 #[rstest]
 fn config_flag_skips_project_discovery() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 
-    fs::write(project.path().join(".netsuke.toml"), "theme = \"ascii\"\n")
-        .context("write project config")?;
-    fs::write(project.path().join("custom.toml"), "theme = \"unicode\"\n")
-        .context("write custom config")?;
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
+    let _project_config = h.write_config(".netsuke.toml", "theme = \"ascii\"\n")?;
+    let custom_path = h.write_config("custom.toml", "theme = \"unicode\"\n")?;
+    let custom_arg = custom_path.to_string_lossy().into_owned();
 
-    let merged = parse_and_merge(&["netsuke", "--config", "custom.toml"])?;
+    let merged = parse_and_merge(&["netsuke", "--config", &custom_arg])?;
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
         "explicit --config should bypass discovered project config"
     );
+    let _project_root = h.project.path();
     Ok(())
 }
 
 #[rstest]
 fn config_flag_with_nonexistent_file_produces_error() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
 
     let error = parse_and_merge(&["netsuke", "--config", "missing.toml"])
         .expect_err("missing explicit config file should fail");
@@ -124,104 +143,85 @@ fn config_flag_with_nonexistent_file_produces_error() -> Result<()> {
         message.contains("missing.toml"),
         "error should mention the missing explicit config path, got {message}"
     );
+    let _project_root = h.project.path();
     Ok(())
 }
 
 #[rstest]
 fn netsuke_config_env_loads_specified_file() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 
-    let custom = project.path().join("env.toml");
-    fs::write(&custom, "theme = \"unicode\"\n").context("write NETSUKE_CONFIG file")?;
+    let custom = h.write_config("env.toml", "theme = \"unicode\"\n")?;
     let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", custom.as_os_str());
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
 
     let merged = parse_and_merge(&["netsuke"])?;
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
         "NETSUKE_CONFIG should load the selected config file"
     );
+    let _project_root = h.project.path();
     Ok(())
 }
 
 #[rstest]
 fn netsuke_config_env_takes_precedence_over_legacy() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
 
-    let new_config = project.path().join("new.toml");
-    let legacy_config = project.path().join("legacy.toml");
-    fs::write(&new_config, "theme = \"unicode\"\n").context("write NETSUKE_CONFIG file")?;
-    fs::write(&legacy_config, "theme = \"ascii\"\n").context("write legacy config file")?;
+    let new_config = h.write_config("new.toml", "theme = \"unicode\"\n")?;
+    let legacy_config = h.write_config("legacy.toml", "theme = \"ascii\"\n")?;
     let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", new_config.as_os_str());
     let _legacy_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", legacy_config.as_os_str());
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
 
     let merged = parse_and_merge(&["netsuke"])?;
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
         "NETSUKE_CONFIG should win over NETSUKE_CONFIG_PATH"
     );
+    let _project_root = h.project.path();
     Ok(())
 }
 
 #[rstest]
 fn config_flag_takes_precedence_over_netsuke_config_env() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
 
-    let cli_config = project.path().join("cli.toml");
-    let env_config = project.path().join("env.toml");
-    fs::write(&cli_config, "theme = \"unicode\"\n").context("write CLI-selected config")?;
-    fs::write(&env_config, "theme = \"ascii\"\n").context("write env-selected config")?;
+    let cli_config_path = h.write_config("cli.toml", "theme = \"unicode\"\n")?;
+    let cli_config_arg = cli_config_path.to_string_lossy().into_owned();
+    let env_config = h.write_config("env.toml", "theme = \"ascii\"\n")?;
     let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", env_config.as_os_str());
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
 
-    let merged = parse_and_merge(&["netsuke", "--config", "cli.toml"])?;
+    let merged = parse_and_merge(&["netsuke", "--config", &cli_config_arg])?;
     ensure!(
         merged.theme == Some(ThemePreference::Unicode),
         "--config should win over NETSUKE_CONFIG"
     );
+    let _project_root = h.project.path();
     Ok(())
 }
 
 #[rstest]
 fn config_flag_values_still_overridden_by_env_and_cli_preferences() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire()?;
-    let project = tempdir().context("create project directory")?;
-    let home = tempdir().context("create fake home directory")?;
-    let _user_scope = sandbox_user_scope(&home)?;
+    let h = ConfigTestHarness::setup()?;
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", "unicode");
 
-    let custom = project.path().join("custom.toml");
-    fs::write(&custom, "theme = \"ascii\"\n").context("write explicit config file")?;
-    std::env::set_current_dir(project.path()).context("change to project directory")?;
+    let custom_path = h.write_config("custom.toml", "theme = \"ascii\"\n")?;
+    let custom_arg = custom_path.to_string_lossy().into_owned();
 
     let merged_with_cli_override =
-        parse_and_merge(&["netsuke", "--config", "custom.toml", "--theme", "ascii"])?;
+        parse_and_merge(&["netsuke", "--config", &custom_arg, "--theme", "ascii"])?;
     ensure!(
         merged_with_cli_override.theme == Some(ThemePreference::Ascii),
         "CLI preference values should still override environment and selected config"
     );
 
-    let merged_with_env_override = parse_and_merge(&["netsuke", "--config", "custom.toml"])?;
+    let merged_with_env_override = parse_and_merge(&["netsuke", "--config", &custom_arg])?;
     ensure!(
         merged_with_env_override.theme == Some(ThemePreference::Unicode),
         "environment preference values should still override the selected config"
     );
+    let _project_root = h.project.path();
     Ok(())
 }

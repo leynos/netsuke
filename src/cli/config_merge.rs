@@ -207,20 +207,30 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
 /// Implements "project scope > user scope" by running a second direct load of
 /// the project-scope file when first-pass discovery did not include it and no
 /// explicit config path is active.
+///
+/// Drain a layer-load result onto `composer`, recording any error.
+fn push_layers_result(
+    composer: &mut MergeComposer,
+    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
+    result: Result<Vec<MergeLayer<'static>>, Arc<ortho_config::OrthoError>>,
+) {
+    match result {
+        Ok(layers) => {
+            for layer in layers {
+                composer.push_layer(layer);
+            }
+        }
+        Err(err) => errors.push(err),
+    }
+}
+
 fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
     cli: &Cli,
 ) {
     if let Some(path) = resolve_config_path(cli) {
-        match load_layers_from_path(&path) {
-            Ok(layers) => {
-                for layer in layers {
-                    composer.push_layer(layer);
-                }
-            }
-            Err(err) => errors.push(err),
-        }
+        push_layers_result(composer, errors, load_layers_from_path(&path));
         return;
     }
 
@@ -242,14 +252,11 @@ fn push_file_layers(
     }
 
     if !first_pass_found_project {
-        match project_scope_layers(cli.directory.as_deref()) {
-            Ok(layers) => {
-                for layer in layers {
-                    composer.push_layer(layer);
-                }
-            }
-            Err(err) => errors.push(err),
-        }
+        push_layers_result(
+            composer,
+            errors,
+            project_scope_layers(cli.directory.as_deref()),
+        );
     }
 }
 

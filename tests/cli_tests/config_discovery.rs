@@ -37,7 +37,7 @@ impl Drop for CwdGuard {
 #[rstest]
 fn project_scope_config_discovered_automatically() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_dir = tempdir().context("create temporary project directory")?;
     let project_config = temp_dir.path().join(".netsuke.toml");
 
@@ -80,6 +80,7 @@ jobs = 8
         merged.jobs == Some(8),
         "project config jobs should be discovered"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
@@ -110,7 +111,7 @@ fn assert_user_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
 
@@ -141,14 +142,16 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
         .context("merge with user config")?
         .with_default_command();
 
-    assert_user_config_applied(&merged)
+    let result = assert_user_config_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 #[cfg(windows)]
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_appdata = tempdir().context("create temporary APPDATA directory")?;
 
@@ -179,7 +182,9 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
         .context("merge with user config")?
         .with_default_command();
 
-    assert_user_config_applied(&merged)
+    let result = assert_user_config_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 /// Project config TOML used by both Unix and Windows precedence test variants.
@@ -214,7 +219,7 @@ fn assert_project_precedence_applied(merged: &netsuke::cli::Cli) -> Result<()> {
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
@@ -251,14 +256,16 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
         .context("merge configs")?
         .with_default_command();
 
-    assert_project_precedence_applied(&merged)
+    let result = assert_project_precedence_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 #[cfg(windows)]
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_appdata = tempdir().context("create temporary APPDATA directory")?;
@@ -295,13 +302,15 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
         .context("merge configs")?
         .with_default_command();
 
-    assert_project_precedence_applied(&merged)
+    let result = assert_project_precedence_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 #[rstest]
 fn environment_variables_override_discovered_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
     // Write project-scope config
@@ -344,13 +353,14 @@ output_format = "human"
         merged.output_format == Some(OutputFormat::Human),
         "project config value should apply when no env override exists"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
 #[rstest]
 fn cli_flags_override_environment_and_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
     // Write project-scope config
@@ -409,6 +419,7 @@ output_format = "human"
         merged.colour_policy == Some(ColourPolicy::Always),
         "environment colour_policy should apply when CLI does not override"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
@@ -417,7 +428,7 @@ output_format = "human"
 #[case("--directory")]
 fn directory_flag_anchors_project_discovery_to_specified_dir(#[case] flag: &str) -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_outer = tempdir().context("create outer directory")?;
     let temp_project = temp_outer.path().join("project");
     fs::create_dir(&temp_project).context("create project subdirectory")?;
@@ -458,13 +469,14 @@ jobs = 6
         merged.jobs == Some(6),
         "config values from directory flag should be applied"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
 #[rstest]
 fn config_path_env_var_bypasses_automatic_discovery() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create project directory")?;
     let temp_custom = tempdir().context("create custom config directory")?;
 
@@ -518,6 +530,7 @@ colour_policy = "always"
         merged.colour_policy == Some(ColourPolicy::Always),
         "custom config colour_policy should be applied"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
@@ -573,7 +586,7 @@ fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
 #[rstest]
 fn list_fields_append_across_discovered_config_env_and_cli() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create project directory")?;
 
     // Write project config with default_targets
@@ -610,5 +623,7 @@ fetch_allow_scheme = ["https"]
         .context("merge with list appending")?
         .with_default_command();
 
-    assert_list_fields_appended(&merged)
+    let result = assert_list_fields_appended(&merged);
+    drop(cwd_guard);
+    result
 }
