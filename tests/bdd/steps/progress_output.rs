@@ -92,7 +92,15 @@ fn install_fake_ninja_with_config(world: &TestWorld, config: &FakeNinjaConfig<'_
     // Drop any existing guard first so its environment override is restored
     // before installing a replacement for this scenario.
     world.ninja_env_guard.borrow_mut().take();
-    *world.ninja_env_guard.borrow_mut() = Some(override_ninja_env(&env, &script_path));
+    let script_path_os = script_path.as_os_str().to_owned();
+    let guard = override_ninja_env(&env, &script_path);
+    let previous = guard.original_ref().cloned();
+    *world.ninja_env_guard.borrow_mut() = Some(guard);
+    world.track_env_var(
+        ninja_env::NINJA_ENV.to_owned(),
+        previous,
+        Some(script_path_os),
+    );
     Ok(())
 }
 

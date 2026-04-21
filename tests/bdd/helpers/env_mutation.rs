@@ -6,6 +6,7 @@
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::types::EnvVarKey;
 use anyhow::{Result, ensure};
+use std::ffi::OsString;
 
 /// Mutate an environment variable under the scenario's `EnvLock`, track it for
 /// cleanup, and return `Ok(())`.
@@ -47,6 +48,7 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
     }
     world.ensure_env_lock();
     let original = std::env::var_os(key.as_str());
+    let forward_value = new_value.map(OsString::from);
     // SAFETY: EnvLock (held via world.env_lock) serializes mutations
     unsafe {
         match new_value {
@@ -54,7 +56,7 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
             None => std::env::remove_var(key.as_str()),
         }
     }
-    world.track_env_var(key.into_string(), original);
+    world.track_env_var(key.into_string(), original, forward_value);
     Ok(())
 }
 

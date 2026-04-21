@@ -149,6 +149,10 @@ pub struct TestWorld {
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
+    /// Values to forward to child netsuke processes for scenario-tracked variables.
+    /// Populated at the same time as `env_vars` so `build_netsuke_command` never
+    /// reads the process environment for scenario-controlled vars.
+    pub env_vars_forward: RefCell<HashMap<String, OsString>>,
     /// Scenario-scoped lock for process-global environment mutations (CWD, env vars).
     /// Held for the entire scenario duration when acquired via `ensure_env_lock()`.
     pub env_lock: RefCell<Option<EnvLock>>,
@@ -157,9 +161,28 @@ pub struct TestWorld {
 }
 
 impl TestWorld {
-    /// Track an environment variable for later restoration.
-    pub fn track_env_var(&self, key: String, previous: Option<OsString>) {
-        self.env_vars.borrow_mut().entry(key).or_insert(previous);
+    /// Track an environment variable for later restoration and forward to child processes.
+    ///
+    /// # Parameters
+    /// - `key`: The environment variable name
+    /// - `previous`: The previous value (if any) to restore on drop
+    /// - `new_value`: The new value to forward to child netsuke processes (if `Some`)
+    pub fn track_env_var(
+        &self,
+        key: String,
+        previous: Option<OsString>,
+        new_value: Option<OsString>,
+    ) {
+        self.env_vars
+            .borrow_mut()
+            .entry(key.clone())
+            .or_insert(previous);
+        if let Some(value) = new_value {
+            self.env_vars_forward.borrow_mut().insert(key, value);
+        } else {
+            // When unsetting, remove from forward map to ensure it's not inherited
+            self.env_vars_forward.borrow_mut().remove(&key);
+        }
     }
 
     /// Restore environment variables without acquiring [`EnvLock`].

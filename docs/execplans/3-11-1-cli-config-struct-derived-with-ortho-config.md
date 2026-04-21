@@ -115,12 +115,19 @@ overridden by `NETSUKE_COLOUR_POLICY=auto`, and further overridden by
 
 - Risk: environment variable mutations in BDD tests can deadlock or become
   flaky if `EnvLock` is not held for the entire scenario lifetime. Severity:
-  high Likelihood: medium Mitigation: use
-  `tests/bdd/helpers/env_mutation::mutate_env_var()` for mutating environment
-  variables instead of raw `std::env::set_var` calls. `mutate_env_var()`
-  acquires the scenario `EnvLock` internally, so no explicit lock call is
-  required. Cleanup happens automatically via the `TestWorld` drop path, which
-  restores all mutated variables.
+  high Likelihood: medium Mitigation: use the wrappers in `test_support::env`
+  instead of raw `std::env::set_var` calls. `test_support::env::set_var()`
+  acquires `EnvLock` internally for one-off updates, `VarGuard` gives RAII-safe
+  scoped restoration, and `remove_var()` mirrors the same pattern for unsets.
+  When a scenario requires batched cleanup, collect the original values and
+  restore them with `restore_many()` from `TestWorld::drop`, or keep
+  `VarGuard`s alive for the scenario lifetime. For BDD scenarios specifically,
+  `tests/bdd/helpers/env_mutation::mutate_env_var()` provides a convenient
+  wrapper that acquires the scenario `EnvLock` internally and tracks variables
+  for automatic cleanup via `TestWorld::drop`. Replace any examples that
+  reference `std::env::set_var` directly with `test_support::env::set_var` or
+  `mutate_env_var`, and show `VarGuard` for scoped restores so `EnvLock` is
+  always respected.
 
 - Risk: `build.rs` symbol anchoring may be missed for new shared helpers,
   causing `make lint` failures. Severity: medium Likelihood: high Mitigation:

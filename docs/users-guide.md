@@ -963,3 +963,277 @@ Use the `-v` flag for more detailed error context or internal logging.
 
 Always review `Netsukefile` manifests, especially those from untrusted sources,
 before building.
+
+## 12\. Advanced usage
+
+This chapter covers features aimed at users who have mastered the basics and
+want to integrate Netsuke into more sophisticated workflows. These include
+utility subcommands (`clean`, `graph`, `manifest`), configuration file
+discovery and layering, and JSON diagnostics mode for programmatic consumption
+of Netsuke's output.
+
+### 12.1 The `clean` subcommand
+
+The `clean` subcommand removes build artefacts that Ninja tracked in its
+internal database. It delegates directly to `ninja -t clean`:
+
+```sh
+netsuke clean
+```
+
+This removes all output files declared in target `name:` fields that Ninja has
+built. Only file-producing targets (those with output files declared in their
+`name:` fields) are removed. Entries under the `actions` section are implicitly
+phony (treated as `{ phony: true, always: false }` by default) and are
+therefore ignored by `clean` since their names are not considered build
+artefacts.
+
+**Interaction with phony targets:** If a target outside the `actions` section
+is declared as `phony: true`, Ninja does not track it as a file, so `clean`
+ignores it as well.
+
+**Example workflow:**
+
+```sh
+# Build the project
+netsuke build
+
+# Remove all build outputs
+netsuke clean
+
+# Rebuild from scratch
+netsuke build
+```
+
+**Note:** Running `clean` in a workspace that has never been built (no
+`.ninja_log` exists) will either succeed as a no-op or report that no build
+state is available, depending on Ninja's behaviour.
+
+### 12.2 The `graph` subcommand
+
+The `graph` subcommand generates a Graphviz DOT representation of the build
+dependency graph:
+
+```sh
+netsuke graph > build.dot
+dot -Tpng build.dot -o build.png
+```
+
+This produces a visual diagram showing:
+
+- Nodes for each target and action.
+- Edges showing explicit dependencies (`sources:`, `deps:`).
+- Order-only dependencies (`order_only_deps:`).
+
+**Interpreting the output:**
+
+- Each node is labelled with the target or action name.
+- Directed edges (`->`) point from prerequisites to dependants.
+- Order-only dependencies are shown as dashed edges (if Graphviz is configured
+  to distinguish them).
+
+**Example workflow:**
+
+To understand why a particular target rebuilds when a file changes:
+
+```sh
+netsuke graph | grep -A5 -B5 my_target
+```
+
+This shows the subgraph around `my_target` and helps trace back to its
+dependencies.
+
+**Requirements:** The `graph` command requires a valid manifest. If the
+manifest is syntactically invalid or contains structural errors, `graph` will
+fail before rendering any DOT output.
+
+### 12.3 The `manifest` subcommand
+
+The `manifest` subcommand writes the generated Ninja build file to a specified
+location without invoking Ninja:
+
+```sh
+netsuke manifest out.ninja
+```
+
+This is useful for:
+
+- Inspecting the exact Ninja rules and build statements Netsuke generates.
+- Debugging template expansion or rule generation issues.
+- Integrating with tools that consume Ninja files directly.
+
+**Streaming to stdout:**
+
+Passing `-` as the path streams the manifest to stdout:
+
+```sh
+netsuke manifest - | less
+```
+
+This avoids creating a temporary file and is convenient for quick inspection.
+
+**Comparison with `--emit`:**
+
+The build command also supports `--emit <path>`, which writes the manifest and
+then invokes Ninja on it:
+
+```sh
+netsuke build --emit build.ninja
+```
+
+Use `manifest` to obtain the Ninja file *without* running the build, and
+`--emit` to obtain both the file and the build execution.
+
+### 12.4 Configuration layering
+
+Netsuke uses a layered precedence model where configuration sources are merged,
+with later sources overriding earlier ones. The precedence order (from lowest
+to highest) is:
+
+1. **Built-in defaults** — hard-coded fallback values.
+2. **Configuration files** (merged from multiple scopes, lowest first):
+   - **System** — `$XDG_CONFIG_DIRS/netsuke/config.toml` on Unix (defaults to
+     `/etc/xdg/netsuke/config.toml`).
+   - **User** — `$XDG_CONFIG_HOME/netsuke/config.toml` on Unix
+     (`~/.config/netsuke/config.toml` by default), `%APPDATA%\netsuke` and
+     `%LOCALAPPDATA%\netsuke` on Windows, or `~/.netsuke.toml`.
+   - **Project** — `.netsuke.toml` in the current working directory (or the
+     directory specified by `-C`).
+3. **Environment variables** — any variable with the `NETSUKE_` prefix
+   (e.g., `NETSUKE_VERBOSE`, `NETSUKE_COLOUR_POLICY`).
+4. **CLI flags** — explicit command-line options (e.g., `--verbose`,
+   `--colour-policy`).
+
+Multiple configuration files are merged (not a single-winner search), and each
+successive layer overrides values from earlier layers. Setting
+`NETSUKE_CONFIG_PATH` bypasses automatic file discovery and uses only the
+specified file. See Section 8 ("Configuration and Localization") for the full
+discovery model.
+
+**Configuration file format:**
+
+Configuration files are TOML. Supported keys match the CLI option names:
+
+```toml
+# .netsuke.toml
+verbose = true
+colour_policy = "always"
+spinner_mode = "enabled"
+theme = "unicode"
+default_targets = ["hello", "test"]
+```
+
+**Environment variables:**
+
+Environment variables use the `NETSUKE_` prefix and convert kebab-case option
+names to screaming snake case:
+
+- `--verbose` → `NETSUKE_VERBOSE=true`
+- `--colour-policy` → `NETSUKE_COLOUR_POLICY=always`
+- `--spinner-mode` → `NETSUKE_SPINNER_MODE=disabled`
+
+For nested fields or indexed lists, use double underscore separators:
+
+- `NETSUKE_DEFAULT_TARGETS__0=hello`
+- `NETSUKE_DEFAULT_TARGETS__1=test`
+
+**Example layering workflow:**
+
+Given a project configuration file:
+
+```toml
+# .netsuke.toml (project scope)
+verbose = true
+colour_policy = "auto"
+```
+
+Override `colour_policy` for a single invocation using an environment variable:
+
+```sh
+NETSUKE_COLOUR_POLICY=never netsuke build
+```
+
+Override both settings for a single invocation using CLI flags:
+
+```sh
+netsuke build --colour-policy always
+```
+
+**Precedence verification:**
+
+To verify which configuration values take effect, run your command with
+`--verbose`. The timing summary and diagnostic output confirm that verbose mode
+is active, for example:
+
+```sh
+netsuke --verbose build
+```
+
+If the timing summary appears, the verbose setting reached the binary — useful
+for confirming that a config file, environment variable, or CLI flag is being
+picked up as expected.
+
+### 12.5 JSON diagnostics
+
+Netsuke supports a JSON diagnostics mode for programmatic consumption of error
+messages and structured output. Enable it with:
+
+```sh
+netsuke --diag-json build
+```
+
+Or via the environment variable:
+
+```sh
+NETSUKE_OUTPUT_FORMAT=json netsuke build
+```
+
+**JSON diagnostics on error:**
+
+When a command fails, stderr contains a JSON envelope with structured error
+information:
+
+```json
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0"
+  },
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "netsuke::runner::manifest_not_found",
+      "message": "Manifest 'Netsukefile' not found in the current directory.",
+      "help": "Ensure the manifest exists or pass `--file` with the correct path."
+    }
+  ]
+}
+```
+
+**Interaction with stdout:**
+
+When JSON diagnostics are enabled, stdout remains clean for machine-readable
+output (e.g., from `manifest -`). All diagnostic messages go to stderr in JSON
+format.
+
+**Interaction with `--verbose`:**
+
+Verbose logging is suppressed in JSON mode. The `--verbose` flag does not add
+tracing output when `--diag-json` is active, preventing pollution of the
+structured JSON stream.
+
+**Example workflow - CI integration:**
+
+In a continuous integration pipeline, parse Netsuke's JSON diagnostics to
+report structured failures:
+
+```sh
+netsuke --diag-json build 2>diagnostics.json
+if [ $? -ne 0 ]; then
+  jq '.schema_version, .generator.name, .generator.version, .diagnostics[0].code, .diagnostics[0].message' diagnostics.json
+fi
+```
+
+This allows the CI system to categorize errors by code and present actionable
+messages to developers.

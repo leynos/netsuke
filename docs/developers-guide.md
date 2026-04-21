@@ -141,6 +141,33 @@ let _guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 For BDD steps that need to track mutations through `TestWorld`, use
 `mutate_env_var` from `tests/bdd/helpers/env_mutation.rs` instead.
 
+### `original_ref()` on environment guards
+
+`NinjaEnvGuard` and `EnvGuard<E>` both expose a non-consuming accessor:
+
+```rust
+pub fn original_ref(&self) -> Option<&OsString>
+```
+
+Use this to inspect the value that was in the environment *before* the guard
+was activated, without consuming the guard.  This is the correct way for BDD
+steps to obtain the prior value when calling `track_env_var` because the
+consuming `into_original(self)` would drop the guard prematurely:
+
+```rust
+let guard = override_ninja_env(&SystemEnv::new(), &ninja_path);
+let previous = guard.original_ref().cloned();
+world.track_env_var(
+    ninja_env::NINJA_ENV.to_owned(),
+    previous,
+    Some(ninja_path.as_os_str().to_owned()),
+);
+world.ninja_env_guard = Some(guard);
+```
+
+The consuming `into_original(self) -> Option<OsString>` method remains
+available when the guard is no longer needed after the read.
+
 ### `CwdGuard`
 
 Tests that call `std::env::set_current_dir` must restore the original working
@@ -158,9 +185,8 @@ let _cwd_guard = CwdGuard::acquire()?;
 std::env::set_current_dir(temp.path())?;
 ```
 
-Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse
-declaration order: `CwdGuard` restores the CWD first, and `EnvLock` releases
-second.
+Acquire `EnvLock` and then `CwdGuard` so Rust drops them in reverse declaration
+order: `CwdGuard` restores the CWD first, and `EnvLock` releases second.
 
 ### `restore_many` and `restore_many_locked`
 
@@ -244,12 +270,14 @@ Table: Scenario state groups and fields
 | Localization state | `localization_lock`, `localization_guard`, `locale_config`, `locale_env`, `locale_cli_override`, `locale_system`, `resolved_locale`, `locale_message`                                                                                    | Scenario-level localizer overrides and resolution state.                 |
 | HTTP server state  | `http_server`, `stdlib_url`                                                                                                                                                                                                              | Test HTTP server fixture for fetch scenarios.                            |
 | Output state       | `output_mode`, `simulated_no_color`, `simulated_term`, `output_prefs`, `simulated_no_emoji`, `rendered_prefix`                                                                                                                           | Accessibility and output preference resolution.                          |
-| Environment state  | `env_vars`, `env_lock`, `original_cwd`                                                                                                                                                                                                   | Environment variable snapshots, scenario-scoped lock, and CWD capture.   |
+| Environment state  | `env_vars`, `env_vars_forward`, `env_lock`, `original_cwd`                                                                                                                                                                               | Restoration snapshot, forwarding map, scenario lock, and CWD capture.    |
 
 ### Key `TestWorld` methods
 
-- `track_env_var(key, previous)` — record a variable for restoration at
-  scenario end.
+- `track_env_var(key, previous, new_value)` — record a variable for
+  restoration at scenario end and store `new_value` in `env_vars_forward` so
+  that `build_netsuke_command` can forward it to child processes without
+  re-reading the process environment.
 - `ensure_env_lock()` — acquire the scenario-scoped `EnvLock` on first
   call; subsequent calls are no-ops. Also captures the current working
   directory for later restoration.
@@ -354,11 +382,142 @@ Versioning and compatibility rules:
 - `cli_overrides_from_matches` must continue to emit a JSON object, even when
   no CLI override is present.
 - `is_empty_value` treats only the empty object `{}` as "no CLI overrides".
-  Downstream tooling must not replace an empty object with `null`, `[]`, or
-  any other sentinel.
+  Downstream tooling must not replace an empty object with `null`, `[]`, or any
+  other sentinel.
 - Additional properties are ignored by `diag_json` resolution and may be
   present because the same layer object also participates in full config
   merging.
+
+## BDD command helpers and environment handling
+
+The BDD step module `tests/bdd/steps/manifest_command.rs` provides three
+helpers that launch the netsuke binary in a controlled environment:
+
+- **`netsuke_executable()`** — locates the compiled netsuke binary using
+  `assert_cmd::cargo::cargo_bin!("netsuke")`. Returns the resolved `PathBuf` or
+  an error if the binary is not found.
+- **`build_netsuke_command(world, args)`** — constructs an
+  `assert_cmd::Command` with a sanitized environment. The helper:
+  1. Calls `env_clear()` to strip the inherited environment for test
+     isolation.
+  2. Forwards `PATH` (via `std::env::var_os`) **without** acquiring `EnvLock`
+     because the calling thread may already hold the lock via a
+     `NinjaEnvGuard` stored on the `TestWorld` — and `std::sync::Mutex` is
+     not reentrant. The direct read is safe: when a `NinjaEnvGuard` is
+     alive, it serializes all env mutations; when no guard is alive, the
+     `PATH` mutation from `prepend_dir_to_path` has already completed.
+  3. Forwards all scenario-tracked environment variables from
+     `world.env_vars_forward` (including `NETSUKE_NINJA` and any variables set
+     by BDD steps) without reading the process environment, eliminating data
+     races.
+- **`run_netsuke_and_store(world, args)`** — calls `build_netsuke_command`,
+  runs the command, and stores stdout, stderr, and exit status in the
+  `TestWorld` fixture for subsequent `Then` step assertions.
+
+### Environment contract
+
+After `env_clear()`, only these variables are present in the spawned command:
+
+| Variable     | Source                   | Purpose                       |
+| ------------ | ------------------------ | ----------------------------- |
+| `PATH`       | Host `std::env::var_os`  | Locate ninja and subprocesses |
+| Scenario env | `world.env_vars_forward` | BDD-step-configured overrides |
+
+`world.env_vars_forward` is a `HashMap<String, OsString>` containing the
+*current* values that BDD steps intend to pass to child processes, including
+`NETSUKE_NINJA` when a fake ninja is installed. The helper iterates
+`env_vars_forward` and calls `cmd.env(key, value)` for each entry, so the child
+process receives exactly the variables that steps have configured without
+reading the process environment.
+
+The separate `world.env_vars` map is a **restoration snapshot**: keys are
+variables set during the scenario, and values are their *previous* values (for
+restoration when the scenario ends). It is not used by `build_netsuke_command`.
+
+### `given_config_file_with_setting` step (`tests/bdd/steps/advanced_usage.rs`)
+
+The Gherkin step `a workspace with config file setting {key} to {value}` writes
+a `.netsuke.toml` file to the scenario's temp directory with the given key set
+to a TOML value derived from `{value}`:
+
+- `"true"` and `"false"` are parsed as TOML booleans.
+- All other values are written as TOML strings.
+
+This step uses the `toml = "0.8"` dev-dependency added to `Cargo.toml` for
+serialization.  Do not add further crate dependencies to support this step; the
+existing `toml` crate is sufficient for key/value configuration files of this
+kind.  The step is intentionally limited to scalar types: extend it only when a
+concrete BDD scenario requires numeric or array values.
+
+### BDD test execution flow (e2e behavioural tests)
+
+The following diagram illustrates how a BDD scenario flows through the test
+infrastructure, from scenario invocation through workspace setup, command
+execution, and assertion validation. This applies to **end-to-end behavioural
+tests** defined in Gherkin feature files, not unit or code-level integration
+tests:
+
+```mermaid
+sequenceDiagram
+    actor Developer
+    participant BddRunner
+    participant TestWorld
+    participant AdvancedUsageSteps
+    participant ManifestCommandSteps
+    participant AssertCmdCommand
+    participant NetsukeBinary
+    participant NinjaTool
+
+    Developer->>BddRunner: run bdd_tests advanced_usage
+    BddRunner->>TestWorld: create TestWorld fixture
+
+    BddRunner->>AdvancedUsageSteps: execute Given a minimal Netsuke workspace
+    AdvancedUsageSteps->>ManifestCommandSteps: reuse workspace_setup_steps
+    ManifestCommandSteps->>TestWorld: create_workspace_with_manifest()
+
+    BddRunner->>AdvancedUsageSteps: execute When netsuke is run with args "manifest -"
+    AdvancedUsageSteps->>TestWorld: set_env_from_world()
+    TestWorld->>AssertCmdCommand: build_command_with_explicit_path()
+    AssertCmdCommand->>AssertCmdCommand: inherit_NINJA_ENV()
+    AssertCmdCommand->>AssertCmdCommand: apply_world_environment_overrides()
+    AssertCmdCommand->>NetsukeBinary: spawn_with_env_and_path()
+    NetsukeBinary->>NinjaTool: optional_ninja_invocation()
+    NinjaTool-->>NetsukeBinary: build_status
+    NetsukeBinary-->>AssertCmdCommand: exit_code_stdout_stderr
+    AssertCmdCommand-->>TestWorld: store_process_output()
+
+    BddRunner->>AdvancedUsageSteps: execute Then stdout should contain Ninja_manifest
+    AdvancedUsageSteps->>TestWorld: assert_stdout_contains_manifest_markers()
+
+    BddRunner->>AdvancedUsageSteps: execute And stderr should be empty
+    AdvancedUsageSteps->>TestWorld: assert_stderr_empty()
+
+    BddRunner-->>Developer: scenario_passes
+```
+
+**Figure**: End-to-end BDD test execution sequence showing how workspace setup,
+environment isolation, command invocation, and assertions flow through the test
+infrastructure. The `TestWorld` fixture coordinates state across steps, while
+`build_netsuke_command` ensures environment isolation via `env_clear()` and
+explicit forwarding of scenario-configured variables. This flow applies to
+feature-file-based behavioural tests, not code-level unit or integration tests.
+
+### Integration test helper
+
+`test_support::netsuke::run_netsuke_in(current_dir, args)` provides a simpler
+interface for integration tests outside the BDD framework. It sets `PATH` to an
+empty string (relying on the resolved binary path) but does **not** call
+`env_clear()`, so other environment variables (including `NETSUKE_NINJA` set
+via `override_ninja_env`) are inherited normally.
+
+For tests that need **deterministic, isolated** child-process environments, use
+`test_support::netsuke::run_netsuke_in_with_env(current_dir, args, extra_env)`.
+Unlike `run_netsuke_in`, this variant calls `env_clear()` so the child inherits
+**only** the variables supplied in `extra_env`, plus two automatically
+forwarded variables: `PATH` (from the host `std::env::var_os`) and
+`NETSUKE_NINJA` (forwarded when an `override_ninja_env` guard is active in the
+current process). Use this helper for configuration-layering tests or any test
+that sets environment variables which could race with parallel test execution.
 
 ## Documentation upkeep
 

@@ -11,7 +11,6 @@ use rstest_bdd_macros::{given, then, when};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use test_support::netsuke::run_netsuke_in;
 
 /// Type of output stream for assertions.
 #[derive(Copy, Clone)]
@@ -90,13 +89,14 @@ struct RunResult {
     success: bool,
 }
 
-fn run_manifest_command(temp_path: &Path, output: &ManifestOutputPath) -> Result<RunResult> {
+fn run_manifest_command(world: &TestWorld, output: &ManifestOutputPath) -> Result<RunResult> {
     let args = ["manifest", output.as_str()];
-    let run = run_netsuke_in(temp_path, &args)?;
+    let mut cmd = build_netsuke_command(world, &args)?;
+    let result = cmd.output().context("run netsuke manifest command")?;
     Ok(RunResult {
-        stdout: run.stdout,
-        stderr: run.stderr,
-        success: run.success,
+        stdout: String::from_utf8_lossy(&result.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
+        success: result.status.success(),
     })
 }
 
@@ -114,16 +114,72 @@ fn store_run_result(world: &TestWorld, result: RunResult) {
     }
 }
 
+/// Locate the netsuke executable using `assert_cmd`'s binary locator.
+fn netsuke_executable() -> Result<PathBuf> {
+    let exe = assert_cmd::cargo::cargo_bin!("netsuke");
+    ensure!(
+        exe.is_file(),
+        "netsuke binary not found at {}",
+        exe.display()
+    );
+    Ok(exe.to_path_buf())
+}
+
+/// Build a netsuke command with a sanitised environment.
+///
+/// This helper constructs an `assert_cmd::Command` configured with:
+/// - The resolved netsuke executable path
+/// - Current directory set to the test workspace
+/// - Cleared inherited environment to ensure test isolation
+/// - Only scenario-specific env vars (from BDD steps) are preserved
+/// - Controlled `PATH` variable
+///
+/// Returns the configured command ready for execution.
+fn build_netsuke_command(world: &TestWorld, args: &[&str]) -> Result<assert_cmd::Command> {
+    let temp_path = get_temp_path(world)?;
+
+    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    cmd.current_dir(&temp_path).env_clear().args(args);
+
+    // Read PATH without holding EnvLock.
+    //
+    // Two cases apply:
+    // 1. A NinjaEnvGuard is alive in world.ninja_env_guard — that guard holds
+    //    EnvLock for the scenario lifetime, so no concurrent thread can mutate
+    //    any env var; the read is therefore safe.
+    // 2. No NinjaEnvGuard is alive — PATH is mutated only inside
+    //    prepend_dir_to_path, which holds EnvLock only for the duration of the
+    //    set_var call.  That mutation completes before build_netsuke_command is
+    //    called, so the read is safe.
+    //
+    // Acquiring EnvLock here would deadlock when case 1 applies because Mutex
+    // is not reentrant and the same thread already holds the lock via
+    // NinjaEnvGuard.
+    if let Some(host_path) = std::env::var_os("PATH") {
+        cmd.env("PATH", host_path);
+    }
+
+    // Forward scenario-tracked vars from TestWorld state (never reads process env).
+    let env_vars_forward = world.env_vars_forward.borrow();
+    for (key, value) in env_vars_forward.iter() {
+        cmd.env(key, value);
+    }
+
+    Ok(cmd)
+}
+
 /// Run netsuke with the given arguments and store the result.
 fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<()> {
-    let temp_path = get_temp_path(world)?;
-    let run = run_netsuke_in(&temp_path, args)?;
+    let mut cmd = build_netsuke_command(world, args)?;
+
+    let output = cmd.output().context("run netsuke command")?;
+
     store_run_result(
         world,
         RunResult {
-            stdout: run.stdout,
-            stderr: run.stderr,
-            success: run.success,
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            success: output.status.success(),
         },
     );
     Ok(())
@@ -162,8 +218,7 @@ fn directory_named_exists(world: &TestWorld, name: DirectoryName) -> Result<()> 
 
 #[when("the netsuke manifest subcommand is run with {output:string}")]
 fn run_manifest_subcommand(world: &TestWorld, output: ManifestOutputPath) -> Result<()> {
-    let temp_path = get_temp_path(world)?;
-    let result = run_manifest_command(&temp_path, &output)?;
+    let result = run_manifest_command(world, &output)?;
     store_run_result(world, result);
     Ok(())
 }
@@ -417,3 +472,7 @@ fn run_netsuke_with_directory_flag(world: &TestWorld) -> Result<()> {
     let dir_arg = workspace_path.to_string_lossy().to_string();
     run_netsuke_and_store(world, &["-C", &dir_arg])
 }
+
+#[cfg(test)]
+#[path = "manifest_command_tests.rs"]
+mod tests;
