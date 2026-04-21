@@ -155,6 +155,26 @@ Observable success means all of the following hold simultaneously:
   output rather than only the top-level context string. Date/Author: 2026-04-20
   / implementation agent.
 
+- Observation: the new integration coverage in
+  `tests/cli_tests/config_selection.rs` accumulated repeated process-level test
+  setup (`EnvLock`, temporary directories, sandboxed user scope, and working
+  directory changes). A small file-local `ConfigTestHarness` keeps those tests
+  under the project's readability thresholds without changing behaviour.
+  Date/Author: 2026-04-21 / implementation agent.
+
+- Observation: for test harnesses that both `chdir` into a temporary
+  directory and own that directory, struct field order matters because Rust
+  drops fields in reverse declaration order. The cwd-restoration guard must be
+  declared after the temporary directories so it drops first during teardown.
+  Date/Author: 2026-04-21 / implementation agent.
+
+- Observation: the `cli_tests` integration target was still flaky when the
+  new `ConfigTestHarness` tests passed relative `--config custom.toml` paths
+  under the full parallel suite. Using the helper's returned absolute paths in
+  the flag-based tests removed that cwd sensitivity while preserving the
+  precedence behaviour under test. Date/Author: 2026-04-21 / implementation
+  agent.
+
 ## Decision log
 
 - Decision: use a plain `config: Option<PathBuf>` field on `Cli` with
@@ -198,6 +218,8 @@ Observable success means all of the following hold simultaneously:
 
 Implementation completed on 2026-04-20.
 
+Follow-on maintenance completed on 2026-04-21.
+
 Validation evidence:
 
 - `make fmt`
@@ -219,6 +241,12 @@ Key outcomes:
 - Added focused integration coverage in
   `tests/cli_tests/config_selection.rs` for CLI/env precedence, missing-file
   handling, and continued value-level precedence over the selected file.
+- Refactored `tests/cli_tests/config_selection.rs` to use a local
+  `ConfigTestHarness`, removing duplicated environment and working-directory
+  setup while preserving the existing test names, assertions, and merge calls.
+- Fixed a separate cwd teardown hazard in
+  `tests/cli_tests/merge.rs::resolve_merged_diag_json_handles_malformed_project_config`
+   so the full integration suite remains stable after the harness refactor.
 - Extended the configuration-discovery BDD feature with scenarios for
   `--config`, `NETSUKE_CONFIG`, and precedence over the legacy alias.
 - Added `docs/sample-netsuke.toml` and updated the user guide, design

@@ -313,7 +313,7 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 #[rstest]
 fn resolve_merged_diag_json_handles_malformed_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
@@ -356,5 +356,6 @@ theme = "ascii
         "should honour user config output_format=json despite malformed project config"
     );
 
+    drop(cwd_guard);
     Ok(())
 }
