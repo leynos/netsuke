@@ -318,8 +318,8 @@ library, and CLI ergonomics.
 - [x] 3.13.1. Add smoke tests for novice flows.
   - [x] Test first run success, missing manifest, and help output.
   - [x] Confirm UX matches documented journey.
-- [ ] 3.13.2. Extend user documentation with advanced usage chapter.
-  - [ ] Cover `clean`, `graph`, `manifest`, configuration layering, and JSON
+- [x] 3.13.2. Extend user documentation with advanced usage chapter.
+  - [x] Cover `clean`, `graph`, `manifest`, configuration layering, and JSON
     diagnostics.
 - [ ] 3.13.3. Provide CI-focused guidance.
   - [ ] Include examples of consuming JSON diagnostics.

@@ -2109,6 +2109,12 @@ reporter output, timing summaries, and the semantic prefix surface are guarded
 by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
 fail with reviewable diffs instead of drifting silently.
 
+The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
+tests in `tests/features/advanced_usage.feature`. Netsuke treats those
+scenarios as executable documentation for the `clean`, `graph`, and `manifest`
+subcommands, configuration layering, and JSON diagnostics so the guide stays
+synchronized with runtime behaviour rather than drifting behind it.
+
 For screen readers: The following flowchart shows how the build script audits
 localization keys against English and Spanish Fluent bundles.
 
