@@ -5,7 +5,11 @@ checksum_algorithm = "sha256"
 staging_dir_template = "{bin_name}_{platform}_{arch}"
 artefacts = [
   { source = "target/{target}/release/{bin_name}{bin_ext}", required = true, output = "binary_path" },
-  { source = "target/generated-man/{target}/release/{bin_name}.1", required = false, output = "man_path", alternatives = ["target/{target}/release/build/*/out/{bin_name}.1"] },
+  { source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1", required = false, output = "man_path" },
+  { source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psm1", required = false, output = "powershell_module_path" },
+  { source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1", required = false, output = "powershell_manifest_path" },
+  { source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml", required = false, output = "powershell_maml_path" },
+  { source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt", required = false, output = "powershell_about_path" },
   { source = "LICENSE", required = true, output = "license_path" },
 ]
 

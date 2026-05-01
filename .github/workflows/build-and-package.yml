@@ -78,11 +78,44 @@ jobs:
         with:
           python-version: ${{ inputs['python-version'] }}
 
+      - name: Install cargo-orthohelp
+        shell: bash
+        run: cargo install cargo-orthohelp --version 0.8.0 --locked
+
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ inputs['bin-name'] }}
+
+      - name: Generate release help
+        shell: bash
+        run: >-
+          scripts/generate-release-help.sh
+          "${{ inputs.target }}"
+          "${{ inputs['bin-name'] }}"
+          "target/orthohelp/${{ inputs.target }}/release"
+
+      - name: Stage artefacts
+        id: stage
+        uses: >-
+          leynos/shared-actions/.github/actions/stage-release-artefacts@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
+        with:
+          config-file: .github/release-staging.toml
+          target: ${{ inputs['stage-target'] }}
+          normalize-windows-paths: ${{ inputs.platform == 'windows' }}
+
+      - name: Capture staged paths
+        id: stage_paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "binary_path=${{ steps.stage.outputs['binary-path'] }}"
+            echo "man_path=${{ steps.stage.outputs['man-path'] }}"
+            echo "license_path=${{ steps.stage.outputs['license-path'] }}"
+            echo "artifact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
@@ -94,7 +127,7 @@ jobs:
           target: ${{ inputs.target }}
           version: ${{ inputs.version }}
           formats: deb,rpm
-          man-paths: dist/${{ inputs['bin-name'] }}_linux_${{ env.MAN_ARCH }}/${{ inputs['bin-name'] }}.1
+          man-paths: ${{ steps.stage_paths.outputs.man_path }}
           outdir: dist
           deb-depends: ninja-build
           rpm-depends: ninja-build
@@ -103,29 +136,6 @@ jobs:
         if: inputs.platform == 'linux'
         shell: bash
         run: rm -rf dist/.man dist/nfpm.yaml
-
-      - name: Stage artefacts
-        if: inputs.platform != 'linux'
-        id: stage
-        uses: >-
-          leynos/shared-actions/.github/actions/stage-release-artefacts@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
-        with:
-          config-file: .github/release-staging.toml
-          target: ${{ inputs['stage-target'] }}
-          normalize-windows-paths: ${{ inputs.platform == 'windows' }}
-
-      - name: Capture staged paths
-        if: inputs.platform != 'linux'
-        id: stage_paths
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo "binary_path=${{ steps.stage.outputs['binary-path'] }}"
-            echo "man_path=${{ steps.stage.outputs['man-path'] }}"
-            echo "license_path=${{ steps.stage.outputs['license-path'] }}"
-            echo "artifact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
-          } >>"$GITHUB_OUTPUT"
 
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
