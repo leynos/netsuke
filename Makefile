@@ -8,6 +8,8 @@ MDLINT ?= $(HOME)/.bun/bin/markdownlint-cli2
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
+export PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(PATH)
+
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
 
