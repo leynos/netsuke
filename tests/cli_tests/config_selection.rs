@@ -60,6 +60,8 @@ fn sandbox_user_scope(home: &tempfile::TempDir) -> Result<(EnvVarGuard, EnvVarGu
 }
 
 struct ConfigTestHarness {
+    // Struct fields drop in declaration order; keep the lock last so process
+    // state is restored before another test can acquire `EnvLock`.
     _cwd_guard: CwdGuard,
     _user_scope: (EnvVarGuard, EnvVarGuard, EnvVarGuard),
     _home: tempfile::TempDir,
