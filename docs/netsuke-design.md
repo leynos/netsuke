@@ -2268,17 +2268,21 @@ manual flag repetition.
 
 ### 8.5 Manual Pages
 
-The CLI definition doubles as the source for user documentation. A build script
-uses `clap_mangen` to emit a `netsuke.1` manual page in
-`target/generated-man/<target>/<profile>` and mirrors the page into Cargo's
-`OUT_DIR` so release automation can discover it without additional tooling. The
-staging helper always prefers the deterministic `generated-man` copy and falls
-back to the most recent `OUT_DIR` candidate only when necessary, avoiding false
-positives when several historical build directories remain on disk. Release
-artefacts include this platform-agnostic man page; the published crate remains
-code-only. The build script honours `SOURCE_DATE_EPOCH` to produce reproducible
+The CLI definition doubles as the source for user documentation. Release
+automation now calls `cargo orthohelp` explicitly through
+`scripts/generate-release-help.sh`; ordinary Cargo builds no longer write help
+artefacts. The build script remains in place only for the localization key
+audit against Fluent bundles.
+
+Manual pages are generated under
+`target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
+generate PowerShell external help under
+`target/orthohelp/<target>/release/powershell/Netsuke/`, including the
+`en-US/Netsuke-help.xml` MAML file used by `Get-Help Netsuke -Full`. The
+release helper honours `SOURCE_DATE_EPOCH` to produce reproducible manual
 dates, emitting a warning and falling back to `1970-01-01` when the environment
-value is invalid.
+value is invalid. Release artefacts include these generated help files; the
+published crate remains code-only.
 
 ### 8.6 Release Automation
 
@@ -2286,25 +2290,30 @@ Release engineering is delegated to GitHub Actions workflows built on the
 `leynos/shared-actions` toolchain. All shared composites are pinned to explicit
 SHAs so release automation remains reproducible. The tagging workflow first
 verifies that the Git ref matches `Cargo.toml` and records the crate's binary
-name once so all subsequent jobs operate on consistent metadata. Linux builds
-invoke the `rust-build-release` composite action to cross-compile for `x86_64`
-and `aarch64`, generate the staged binary + man page directory, and then call
-the shared `linux-packages` composite a second time with explicit metadata so
-the resulting `.deb` and `.rpm` archives both declare a runtime dependency on
-`ninja-build`. Windows builds reuse the same action for compilation and now
-invoke the generic staging `stage-release-artefacts` composite from
-`leynos/shared-actions`. The composite shells out to a Cyclopts-driven script
-that reads the `.github/release-staging.toml` configuration (Tom's Obvious,
-Minimal Language (TOML)), merges the `[common]` configuration with the
-target-specific overrides, and copies the configured artefacts into a fresh
-`dist/{bin}_{platform}_{arch}` directory. It installs Astral's Python package
-manager (uv) with `astral-sh/setup-uv`, double-checks the tool is present, and
-only then launches the Python entry point so workflows stay declarative. The
-helper writes SHA-256 sums for every staged file and exports a JSON map of the
-artefact outputs, allowing the workflow to hydrate downstream steps without
-hard-coded path logic. Figure 8.1 summarises the configuration entities,
-including optional keys reserved for templated directories and explicit
-artefact destinations that the helper can adopt without breaking compatibility.
+name once so all subsequent jobs operate on consistent metadata. Each build job
+installs `cargo-orthohelp = 0.8.0`, invokes the `rust-build-release` composite
+action, and then runs `scripts/generate-release-help.sh` before staging or
+packaging.
+
+Linux builds cross-compile for `x86_64` and `aarch64`, stage the binary and
+generated manual page through `.github/release-staging.toml`, and pass the
+staged `man_path` output into the shared `linux-packages` composite. The
+resulting `.deb` and `.rpm` archives both declare a runtime dependency on
+`ninja-build`. Windows and macOS builds use the same staging composite from
+`leynos/shared-actions`; Windows staging also carries the PowerShell help files
+as release artefacts alongside the MSI package. The composite shells out to a
+Cyclopts-driven script that reads the `.github/release-staging.toml`
+configuration (Tom's Obvious, Minimal Language (TOML)), merges the `[common]`
+configuration with the target-specific overrides, and copies the configured
+artefacts into a fresh `dist/{bin}_{platform}_{arch}` directory. It installs
+Astral's Python package manager (uv) with `astral-sh/setup-uv`, double-checks
+the tool is present, and only then launches the Python entry point so workflows
+stay declarative. The helper writes SHA-256 sums for every staged file and
+exports a JSON map of the artefact outputs, allowing the workflow to hydrate
+downstream steps without hard-coded path logic. Figure 8.1 summarises the
+configuration entities, including optional keys reserved for templated
+directories and explicit artefact destinations that the helper can adopt
+without breaking compatibility.
 
 Figure 8.1: Entity relationship for the staging configuration schema.
 
@@ -2352,7 +2361,9 @@ for a CLI tool. Windows does not modify the PATH, so users must add the
 installation directory manually if they want global command resolution. The
 Unix manual page remains in the staged artefacts for parity with the other
 platforms but is not bundled into the installer to avoid shipping an
-inaccessible help format.
+inaccessible help format. Windows PowerShell help is staged as sidecar release
+artefacts in the `Netsuke` module layout so users can inspect it with
+`Get-Help Netsuke -Full`.
 
 macOS releases execute the shared action twice: once on an Intel runner and
 again on Apple Silicon. The same composite action interprets the TOML

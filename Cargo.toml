@@ -14,6 +14,15 @@ include = [
 license = "ISC"
 description = "A YAML-powered Ninja/Jinja hybrid build system."
 
+[package.metadata.ortho_config]
+root_type = "netsuke::cli::Cli"
+locales = ["en-US", "es-ES"]
+
+[package.metadata.ortho_config.windows]
+module_name = "Netsuke"
+include_common_parameters = true
+split_subcommands_into_functions = false
+
 [features]
 default = []
 legacy-digests = ["sha1", "md5"]
@@ -57,12 +66,10 @@ sys-locale = "0.3.2"
 
 [build-dependencies]
 clap = { version = "4.5.0", features = ["derive"] }
-clap_mangen = "0.2.29"
 ortho_config = { version = "0.8.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "1"
-time = { version = "0.3.44", features = ["formatting"] }
 tracing = "0.1"
 
 [lints.clippy]

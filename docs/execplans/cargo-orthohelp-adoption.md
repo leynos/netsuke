@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 This plan was approved for implementation on 2026-05-01.
 
@@ -138,8 +138,22 @@ itself does not change.
 - [x] (2026-05-01T16:37:52Z) Validated the release-help script slice with
   `make check-fmt`, `make markdownlint`, `make lint`, `make test`, and the
   focused `cargo test --test release_help_script_tests` run.
-- [ ] Implement the approved migration.
-- [ ] Run all required gates and commit the implementation.
+- [x] (2026-05-01T16:53:04Z) Removed `clap_mangen` from `build.rs`,
+  `Cargo.toml`, and `Cargo.lock`; `build.rs` now keeps only the localization
+  audit.
+- [x] (2026-05-01T16:53:04Z) Added `package.metadata.ortho_config` metadata,
+  wired release workflows to install `cargo-orthohelp = 0.8.0`, generate help
+  under `target/orthohelp`, and stage artefacts for all platforms.
+- [x] (2026-05-01T16:53:04Z) Added `rstest` workflow/staging contract tests and
+  `rstest-bdd` release-help scenarios for happy paths, failure paths, and
+  `SOURCE_DATE_EPOCH` edge behaviour.
+- [x] (2026-05-01T16:53:04Z) Updated README and user, developer, CLI design,
+  and main design documentation to describe `cargo orthohelp` release help.
+- [x] (2026-05-01T16:54:42Z) Validated the completed migration with
+  `make check-fmt`, `make markdownlint`, `make lint`, and `make test`.
+- [x] (2026-05-01T16:54:42Z) Implement the approved migration.
+- [x] (2026-05-01T16:54:42Z) Run all required gates and commit the
+  implementation.
 
 ## Surprises & discoveries
 
@@ -161,6 +175,20 @@ itself does not change.
   `cargo search cargo-orthohelp --limit 5` and `cargo info cargo-orthohelp`
   reported version `0.8.0`. Impact: the release workflow can pin the
   installation to `0.8.0`.
+
+- Observation: Linux release jobs previously did not pass `stage-target`
+  because staging was skipped on Linux. Evidence:
+  `.github/workflows/release.yml` only supplied `stage-target` for Windows and
+  macOS matrices. Impact: implementation now adds Linux target keys so the
+  shared staging action can run before Linux packaging.
+
+- Observation: `make fmt` still fails in the repository-wide Markdown fixer on
+  pre-existing MD013 line-length diagnostics outside this change, although
+  `make markdownlint` succeeds. Evidence:
+  `/tmp/fmt-script-netsuke-cargo-orthohelp-adoption.out` records the failing
+  legacy files and `git status --short` showed no unrelated formatter edits.
+  Impact: Rust formatting was applied with `cargo fmt --all`, and Markdown
+  validation continues through `make markdownlint`.
 
 ## Decision log
 
@@ -190,10 +218,32 @@ itself does not change.
   file artefacts, and explicit file paths are easier to contract-test.
   Date/Author: 2026-05-01T15:50:05Z / Codex.
 
+- Decision: pass Linux `stage-target` matrix keys and run the shared staging
+  action for Linux as well as Windows and macOS. Rationale: Linux packaging now
+  consumes the staged `man_path`, so staging must run before the Linux package
+  action. Date/Author: 2026-05-01T16:53:04Z / Codex.
+
+- Decision: keep Windows PowerShell help as staged sidecar release artefacts
+  rather than trying to embed them in the MSI in this implementation.
+  Rationale: the approved tolerance allows sidecars when MSI inclusion is not
+  already supported, and the shared Windows package action interface exposes
+  only the binary and licence inputs used here. Date/Author:
+  2026-05-01T16:53:04Z / Codex.
+
 ## Outcomes & retrospective
 
 The plan is drafted and awaiting approval. No implementation has started.
-Implementation approval has been received. The work is now in progress.
+Implementation approval was received and the approved migration has been
+completed. Release help generation now runs through
+`scripts/generate-release-help.sh`, which invokes `cargo orthohelp` for man
+pages on all targets and for PowerShell external help on Windows targets.
+`build.rs` now only performs the localization audit. `clap_mangen` has been
+removed from `Cargo.toml` and `Cargo.lock`.
+
+Validation passed with `make check-fmt`, `make markdownlint`, `make lint`, and
+`make test`. `make fmt` was attempted after documentation edits, but the
+repository-wide Markdown fixer still exits on pre-existing MD013 diagnostics in
+unrelated historical documentation; it did not leave unrelated files modified.
 
 ## Context and orientation
 
@@ -552,3 +602,8 @@ updates, and quality gates.
 
 2026-05-01 implementation revision. The plan was approved and moved to
 `Status: IN PROGRESS`; implementation is proceeding milestone by milestone.
+
+2026-05-01 completion revision. The implementation replaced build-script man
+generation with explicit `cargo orthohelp` release help generation, added unit
+and behavioural tests, updated release workflows and staging, refreshed user
+and developer documentation, and passed the required gates.

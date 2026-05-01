@@ -30,6 +30,7 @@ mod manifest_command;
 mod ninja;
 mod process;
 mod progress_output;
+mod release_help_generation;
 mod stdlib;
 
 // Step functions are registered via macros, so we don't need to re-export
