@@ -5,9 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-This plan must be approved before implementation begins.
+This plan was approved for implementation on 2026-05-01.
 
 ## Purpose / big picture
 
@@ -128,7 +128,8 @@ itself does not change.
   on crates.io with Rust version 1.88 and repository
   `https://github.com/leynos/ortho-config`.
 - [x] (2026-05-01T15:50:05Z) Drafted this ExecPlan for review.
-- [ ] Await explicit approval before implementation.
+- [x] (2026-05-01T16:37:52Z) Received explicit approval to implement the
+  planned functionality.
 - [ ] Implement the approved migration.
 - [ ] Run all required gates and commit the implementation.
 
@@ -184,6 +185,7 @@ itself does not change.
 ## Outcomes & retrospective
 
 The plan is drafted and awaiting approval. No implementation has started.
+Implementation approval has been received. The work is now in progress.
 
 ## Context and orientation
 
@@ -538,5 +540,7 @@ No new runtime dependency is planned. No new crate split is planned.
 
 Initial draft. This records the approved-design boundary, current release help
 state, intended `cargo orthohelp` workflow, validation strategy, documentation
-updates, and quality gates. Implementation remains blocked until explicit user
-approval.
+updates, and quality gates.
+
+2026-05-01 implementation revision. The plan was approved and moved to
+`Status: IN PROGRESS`; implementation is proceeding milestone by milestone.
