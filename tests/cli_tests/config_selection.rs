@@ -60,11 +60,11 @@ fn sandbox_user_scope(home: &tempfile::TempDir) -> Result<(EnvVarGuard, EnvVarGu
 }
 
 struct ConfigTestHarness {
-    _env_lock: EnvLock,
-    project: tempfile::TempDir,
-    _home: tempfile::TempDir,
-    _user_scope: (EnvVarGuard, EnvVarGuard, EnvVarGuard),
     _cwd_guard: CwdGuard,
+    _user_scope: (EnvVarGuard, EnvVarGuard, EnvVarGuard),
+    _home: tempfile::TempDir,
+    project: tempfile::TempDir,
+    _env_lock: EnvLock,
 }
 
 impl ConfigTestHarness {
