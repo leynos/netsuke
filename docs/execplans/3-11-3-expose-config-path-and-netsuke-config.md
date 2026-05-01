@@ -417,7 +417,7 @@ Acceptance for Stage B:
 3. Add the Fluent message to `locales/es-ES/messages.ftl`:
 
    ```ftl
-   cli.flag.config.help = Ruta a un archivo de configuración, omitiendo la detección automática.
+   cli.flag.config.help = Ruta de configuración; omite la detección automática.
    ```
 
 4. Update `flag_help_key()` in `src/cli_l10n.rs` to map `"config"` to
@@ -624,42 +624,28 @@ Acceptance for Stage G:
 ```rust
 /// Path to a configuration file, bypassing automatic discovery.
 ///
-/// When specified, Netsuke loads this file instead of searching for
-/// `.netsuke.toml` in project and user scopes. The file path is resolved
-/// against the process working directory.
-#[arg(long, value_name = "PATH")]
+/// When specified, Netsuke loads this file before automatic discovery and
+/// skips the layered project/user search.
+#[arg(long, value_name = "FILE")]
 #[serde(skip)]
-#[ortho_config(skip_cli)]
 pub config: Option<PathBuf>,
 ```
 
-The `#[serde(skip)]` annotation prevents the field from being serialized into
-the JSON value that feeds the merge pipeline. The `#[ortho_config (skip_cli)]`
-annotation (matching the existing `command` field pattern) prevents OrthoConfig
-from trying to merge this field across layers.
+The `#[serde(skip)]` annotation prevents the field from being serialised into
+the JSON value that feeds the merge pipeline.
 
 ### Config path resolution helper (`src/cli/config_merge.rs`)
 
 ```rust
 /// Resolve the effective explicit config file path.
 ///
-/// Precedence: `--config` CLI flag > `NETSUKE_CONFIG` env var >
-/// `NETSUKE_CONFIG_PATH` env var > `None` (use automatic discovery).
+/// Precedence: `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+/// Empty environment values are ignored.
 fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
-    if let Some(ref path) = cli.config {
-        return Some(path.clone());
-    }
-    if let Some(val) = std::env::var_os("NETSUKE_CONFIG") {
-        if !val.is_empty() {
-            return Some(PathBuf::from(val));
-        }
-    }
-    if let Some(val) = std::env::var_os(CONFIG_ENV_VAR) {
-        if !val.is_empty() {
-            return Some(PathBuf::from(val));
-        }
-    }
-    None
+    cli.config
+        .clone()
+        .or_else(|| env_config_path(CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
 }
 ```
 
@@ -669,26 +655,42 @@ fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
 fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    directory: Option<&Path>,
-    explicit_config: Option<&Path>,
+    cli: &Cli,
 )
 ```
 
-When `explicit_config` is `Some`, the function loads that single file via
-`load_config_file_as_chain` and pushes the resulting layers. It does not run
-`config_discovery()` or the second-pass project-scope loader. When the file
-does not exist or fails to parse, the error is pushed to `errors`.
+The helper resolves an explicit config path internally with
+`resolve_config_path(cli)`. When a path is present, it loads that file via
+`load_layers_from_path()`, pushes every layer in the returned chain, and stops.
+If the file does not exist or fails to parse, the resulting error is appended
+to `errors` and discovery does not continue.
+
+Without an explicit path, `push_file_layers()` runs `config_discovery()` using
+`cli.directory.as_deref()` to anchor project-root discovery. It appends
+`compose_layers()` required errors unconditionally, appends optional errors
+only when no file layers were found, and pushes every discovered layer onto the
+composer. If the first pass did not include the project `.netsuke.toml`, the
+helper performs a direct second-pass load via `project_scope_layers()`. That
+second pass uses the same directory anchor, or the current working directory
+when `-C/--directory` was not supplied. Any project-scope parse or extends
+error from that direct load is appended to `errors`.
 
 ### Updated `collect_diag_file_layers` signature
 
 ```rust
-fn collect_diag_file_layers(
-    directory: Option<&Path>,
-    explicit_config: Option<&Path>,
-) -> Vec<MergeLayer<'static>>
+fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>>
 ```
 
-Mirrors the `push_file_layers` change for early diag-JSON resolution.
+This mirrors the same resolution order for early diag-JSON evaluation. An
+explicit config path is resolved first and, when `load_layers_from_path()`
+succeeds, its layers are returned immediately. If that explicit load fails, the
+helper falls back to discovery rather than surfacing the error. Otherwise it
+uses the same `config_discovery(cli.directory.as_deref())` path as
+`push_file_layers()`, returns the first-pass file layers when the project file
+was already discovered, and only falls back to `project_scope_layers()` when
+the first pass missed the project `.netsuke.toml`. If the direct project load
+fails, the helper returns the first-pass layers instead of propagating the
+error.
 
 ### Fluent key (`src/localization/keys.rs`)
 
