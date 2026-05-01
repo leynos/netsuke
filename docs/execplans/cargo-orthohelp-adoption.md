@@ -130,6 +130,14 @@ itself does not change.
 - [x] (2026-05-01T15:50:05Z) Drafted this ExecPlan for review.
 - [x] (2026-05-01T16:37:52Z) Received explicit approval to implement the
   planned functionality.
+- [x] (2026-05-01T16:37:52Z) Committed the approval/status update after
+  `make markdownlint` passed.
+- [x] (2026-05-01T16:37:52Z) Added the first implementation patch for the
+  `scripts/generate-release-help.sh` boundary and its `rstest` integration
+  tests.
+- [x] (2026-05-01T16:37:52Z) Validated the release-help script slice with
+  `make check-fmt`, `make markdownlint`, `make lint`, `make test`, and the
+  focused `cargo test --test release_help_script_tests` run.
 - [ ] Implement the approved migration.
 - [ ] Run all required gates and commit the implementation.
 
