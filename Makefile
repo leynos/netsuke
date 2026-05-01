@@ -4,7 +4,7 @@ APP ?= netsuke
 CARGO ?= cargo
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
-MDLINT ?= $(HOME)/.bun/bin/markdownlint-cli2
+MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 

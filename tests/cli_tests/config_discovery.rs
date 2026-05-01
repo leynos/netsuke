@@ -53,6 +53,7 @@ jobs = 8
     .context("write project .netsuke.toml")?;
 
     // Clear env vars that could interfere
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _locale_guard = EnvVarGuard::remove("NETSUKE_LOCALE");
@@ -127,6 +128,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _xdg_config_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config_home.as_os_str());
     let _xdg_config_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     // Clear other env vars
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -166,6 +168,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     // Set APPDATA to fake directory (Windows)
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     // Clear other env vars
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -242,6 +245,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
     let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -288,6 +292,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
 
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -326,6 +331,7 @@ output_format = "human"
     .context("write project .netsuke.toml")?;
 
     // Set environment variables that should override the file
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("12"));
@@ -377,6 +383,7 @@ output_format = "human"
     .context("write project .netsuke.toml")?;
 
     // Set environment variables
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("8"));
@@ -447,6 +454,7 @@ jobs = 6
     // Stay in outer directory but use directory flag to point to project
     std::env::set_current_dir(&temp_outer).context("change to outer directory")?;
 
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -503,6 +511,7 @@ colour_policy = "always"
     )
     .context("write custom config")?;
 
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", custom_config.as_os_str());
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -600,6 +609,7 @@ fetch_allow_scheme = ["https"]
     )
     .context("write project .netsuke.toml with lists")?;
 
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     // Set single-value environment variables for list fields
     let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));

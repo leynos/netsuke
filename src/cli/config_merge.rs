@@ -133,10 +133,10 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 ///
 /// Mirrors the two-pass logic of [`push_file_layers`] without a `MergeComposer`.
 ///
-/// If project-scope layer loading fails, this function falls back to the first-pass
-/// layers (global and user configs) rather than propagating an error. An explicit
-/// explicit config path will also cause the function to return early with the
-/// selected file only.
+/// If project-scope layer loading fails, this function falls back to the
+/// first-pass layers (global and user configs) rather than propagating an
+/// error. An explicit config path returns the selected file's layers, or an
+/// empty set when the selected file cannot be loaded.
 fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>> {
     if let Some(path) = resolve_config_path(cli) {
         return load_layers_from_path(&path).unwrap_or_default();
