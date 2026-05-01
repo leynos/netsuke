@@ -154,6 +154,8 @@ itself does not change.
 - [x] (2026-05-01T16:54:42Z) Implement the approved migration.
 - [x] (2026-05-01T16:54:42Z) Run all required gates and commit the
   implementation.
+- [x] (2026-05-01T17:06:39Z) Fixed the post-turn hook environment failure by
+  making the Makefile resolve `cargo` from `PATH` or `$HOME/.cargo/bin/cargo`.
 
 ## Surprises & discoveries
 
@@ -190,6 +192,13 @@ itself does not change.
   Impact: Rust formatting was applied with `cargo fmt --all`, and Markdown
   validation continues through `make markdownlint`.
 
+- Observation: the post-turn hook invokes `make check-fmt lint` in an
+  environment where `cargo` is not on `PATH`. Evidence: the hook reported
+  `make: cargo: No such file or directory` before running `cargo fmt`. Impact:
+  the Makefile now resolves `CARGO` using `command -v cargo`, falling back to
+  `$HOME/.cargo/bin/cargo`, matching the existing `markdownlint-cli2` fallback
+  pattern.
+
 ## Decision log
 
 - Decision: keep this plan in `Status: DRAFT` until the user approves it.
@@ -217,6 +226,12 @@ itself does not change.
   staging support. Rationale: the local staging configuration currently lists
   file artefacts, and explicit file paths are easier to contract-test.
   Date/Author: 2026-05-01T15:50:05Z / Codex.
+
+- Decision: keep the Makefile `CARGO` variable overrideable while adding a
+  non-login-shell fallback to `$HOME/.cargo/bin/cargo`. Rationale: local users
+  and CI can still set `CARGO=...`, while hooks that run without the usual
+  shell profile can still execute the required Rust gates. Date/Author:
+  2026-05-01T17:06:39Z / Codex.
 
 - Decision: pass Linux `stage-target` matrix keys and run the shared staging
   action for Linux as well as Windows and macOS. Rationale: Linux packaging now

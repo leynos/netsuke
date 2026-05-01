@@ -1,7 +1,7 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
 
 APP ?= netsuke
-CARGO ?= cargo
+CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
