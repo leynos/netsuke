@@ -7,7 +7,7 @@ CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
 KANI_VERSION_CHECK ?= scripts/check-kani-version.sh
-MDLINT ?= markdownlint-cli2
+MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
