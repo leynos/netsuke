@@ -1,7 +1,7 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
 
 APP ?= netsuke
-CARGO ?= $(HOME)/.cargo/bin/cargo
+CARGO ?= cargo
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 MDLINT ?= $(HOME)/.bun/bin/markdownlint-cli2
