@@ -138,10 +138,8 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 /// explicit config path will also cause the function to return early with the
 /// selected file only.
 fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>> {
-    if let Some(path) = resolve_config_path(cli)
-        && let Ok(layers) = load_layers_from_path(&path)
-    {
-        return layers;
+    if let Some(path) = resolve_config_path(cli) {
+        return load_layers_from_path(&path).unwrap_or_default();
     }
 
     let discovery = config_discovery(cli.directory.as_deref());

@@ -7,7 +7,7 @@
 use anyhow::{Context, Result, ensure};
 use netsuke::cli_localization;
 use netsuke::theme::ThemePreference;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::ffi::OsStr;
 use std::fs;
 use std::sync::Arc;
@@ -94,47 +94,201 @@ impl ConfigTestHarness {
     }
 }
 
+#[fixture]
+fn config_harness() -> Result<ConfigTestHarness> {
+    ConfigTestHarness::setup()
+}
+
+#[derive(Clone, Copy)]
+struct ConfigFile {
+    name: &'static str,
+    content: &'static str,
+}
+
+impl ConfigFile {
+    const fn new(name: &'static str, content: &'static str) -> Self {
+        Self { name, content }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ConfigSelectionCase {
+    project_config: Option<ConfigFile>,
+    cli_config: Option<ConfigFile>,
+    env_config: Option<ConfigFile>,
+    legacy_config: Option<ConfigFile>,
+    env_theme: Option<&'static str>,
+    cli_theme: Option<&'static str>,
+    expected_theme: ThemePreference,
+    message: &'static str,
+}
+
+impl ConfigSelectionCase {
+    const fn new(expected_theme: ThemePreference, message: &'static str) -> Self {
+        Self {
+            project_config: None,
+            cli_config: None,
+            env_config: None,
+            legacy_config: None,
+            env_theme: None,
+            cli_theme: None,
+            expected_theme,
+            message,
+        }
+    }
+
+    const fn with_project_config(mut self, config: ConfigFile) -> Self {
+        self.project_config = Some(config);
+        self
+    }
+
+    const fn with_cli_config(mut self, config: ConfigFile) -> Self {
+        self.cli_config = Some(config);
+        self
+    }
+
+    const fn with_env_config(mut self, config: ConfigFile) -> Self {
+        self.env_config = Some(config);
+        self
+    }
+
+    const fn with_legacy_config(mut self, config: ConfigFile) -> Self {
+        self.legacy_config = Some(config);
+        self
+    }
+
+    const fn with_env_theme(mut self, theme: &'static str) -> Self {
+        self.env_theme = Some(theme);
+        self
+    }
+
+    const fn with_cli_theme(mut self, theme: &'static str) -> Self {
+        self.cli_theme = Some(theme);
+        self
+    }
+}
+
+fn write_optional_config(
+    harness: &ConfigTestHarness,
+    config: Option<ConfigFile>,
+) -> Result<Option<String>> {
+    config
+        .map(|file| {
+            harness
+                .write_config(file.name, file.content)
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .transpose()
+}
+
 #[rstest]
-fn config_flag_loads_specified_file() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
+#[case::config_flag_loads_specified_file(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "explicit --config file should be loaded",
+    )
+    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"unicode\"\n")),
+)]
+#[case::config_flag_skips_project_discovery(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "explicit --config should bypass discovered project config",
+    )
+    .with_project_config(ConfigFile::new(".netsuke.toml", "theme = \"ascii\"\n"))
+    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"unicode\"\n")),
+)]
+#[case::netsuke_config_env_loads_specified_file(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "NETSUKE_CONFIG should load the selected config file",
+    )
+    .with_env_config(ConfigFile::new("env.toml", "theme = \"unicode\"\n")),
+)]
+#[case::netsuke_config_env_takes_precedence_over_legacy(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "NETSUKE_CONFIG should win over NETSUKE_CONFIG_PATH",
+    )
+    .with_env_config(ConfigFile::new("new.toml", "theme = \"unicode\"\n"))
+    .with_legacy_config(ConfigFile::new("legacy.toml", "theme = \"ascii\"\n")),
+)]
+#[case::config_flag_takes_precedence_over_netsuke_config_env(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "--config should win over NETSUKE_CONFIG",
+    )
+    .with_cli_config(ConfigFile::new("cli.toml", "theme = \"unicode\"\n"))
+    .with_env_config(ConfigFile::new("env.toml", "theme = \"ascii\"\n")),
+)]
+#[case::config_flag_values_still_overridden_by_cli_preferences(
+    ConfigSelectionCase::new(
+        ThemePreference::Ascii,
+        "CLI preference values should still override environment and selected config",
+    )
+    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"ascii\"\n"))
+    .with_env_theme("unicode")
+    .with_cli_theme("ascii"),
+)]
+#[case::config_flag_values_still_overridden_by_env_preferences(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "environment preference values should still override the selected config",
+    )
+    .with_cli_config(ConfigFile::new("custom.toml", "theme = \"ascii\"\n"))
+    .with_env_theme("unicode"),
+)]
+fn config_selection_precedence_cases(
+    config_harness: Result<ConfigTestHarness>,
+    #[case] case: ConfigSelectionCase,
+) -> Result<()> {
+    let h = config_harness?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
 
-    let custom_path = h.write_config("custom.toml", "theme = \"unicode\"\n")?;
-    let custom_arg = custom_path.to_string_lossy().into_owned();
+    let _project_config = write_optional_config(&h, case.project_config)?;
+    let cli_config = write_optional_config(&h, case.cli_config)?;
+    let env_config = write_optional_config(&h, case.env_config)?;
+    let legacy_config = write_optional_config(&h, case.legacy_config)?;
 
-    let merged = parse_and_merge(&["netsuke", "--config", &custom_arg])?;
+    let mut env_guards = Vec::new();
+    if let Some(path) = env_config.as_deref() {
+        env_guards.push(EnvVarGuard::set("NETSUKE_CONFIG", path));
+    }
+    if let Some(path) = legacy_config.as_deref() {
+        env_guards.push(EnvVarGuard::set("NETSUKE_CONFIG_PATH", path));
+    }
+    if let Some(theme) = case.env_theme {
+        env_guards.push(EnvVarGuard::set("NETSUKE_THEME", theme));
+    }
+
+    let mut args = vec![String::from("netsuke")];
+    if let Some(path) = cli_config {
+        args.push(String::from("--config"));
+        args.push(path);
+    }
+    if let Some(theme) = case.cli_theme {
+        args.push(String::from("--theme"));
+        args.push(String::from(theme));
+    }
+
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    let merged = parse_and_merge(&arg_refs)?;
     ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "explicit --config file should be loaded"
+        merged.theme == Some(case.expected_theme),
+        "{}",
+        case.message
     );
     let _project_root = h.project.path();
+    drop(env_guards);
     Ok(())
 }
 
 #[rstest]
-fn config_flag_skips_project_discovery() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
-    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-
-    let _project_config = h.write_config(".netsuke.toml", "theme = \"ascii\"\n")?;
-    let custom_path = h.write_config("custom.toml", "theme = \"unicode\"\n")?;
-    let custom_arg = custom_path.to_string_lossy().into_owned();
-
-    let merged = parse_and_merge(&["netsuke", "--config", &custom_arg])?;
-    ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "explicit --config should bypass discovered project config"
-    );
-    let _project_root = h.project.path();
-    Ok(())
-}
-
-#[rstest]
-fn config_flag_with_nonexistent_file_produces_error() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
+fn config_flag_with_nonexistent_file_produces_error(
+    config_harness: Result<ConfigTestHarness>,
+) -> Result<()> {
+    let h = config_harness?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 
@@ -144,85 +298,6 @@ fn config_flag_with_nonexistent_file_produces_error() -> Result<()> {
     ensure!(
         message.contains("missing.toml"),
         "error should mention the missing explicit config path, got {message}"
-    );
-    let _project_root = h.project.path();
-    Ok(())
-}
-
-#[rstest]
-fn netsuke_config_env_loads_specified_file() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-
-    let custom = h.write_config("env.toml", "theme = \"unicode\"\n")?;
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", custom.as_os_str());
-
-    let merged = parse_and_merge(&["netsuke"])?;
-    ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "NETSUKE_CONFIG should load the selected config file"
-    );
-    let _project_root = h.project.path();
-    Ok(())
-}
-
-#[rstest]
-fn netsuke_config_env_takes_precedence_over_legacy() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
-
-    let new_config = h.write_config("new.toml", "theme = \"unicode\"\n")?;
-    let legacy_config = h.write_config("legacy.toml", "theme = \"ascii\"\n")?;
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", new_config.as_os_str());
-    let _legacy_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", legacy_config.as_os_str());
-
-    let merged = parse_and_merge(&["netsuke"])?;
-    ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "NETSUKE_CONFIG should win over NETSUKE_CONFIG_PATH"
-    );
-    let _project_root = h.project.path();
-    Ok(())
-}
-
-#[rstest]
-fn config_flag_takes_precedence_over_netsuke_config_env() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
-
-    let cli_config_path = h.write_config("cli.toml", "theme = \"unicode\"\n")?;
-    let cli_config_arg = cli_config_path.to_string_lossy().into_owned();
-    let env_config = h.write_config("env.toml", "theme = \"ascii\"\n")?;
-    let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG", env_config.as_os_str());
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-
-    let merged = parse_and_merge(&["netsuke", "--config", &cli_config_arg])?;
-    ensure!(
-        merged.theme == Some(ThemePreference::Unicode),
-        "--config should win over NETSUKE_CONFIG"
-    );
-    let _project_root = h.project.path();
-    Ok(())
-}
-
-#[rstest]
-fn config_flag_values_still_overridden_by_env_and_cli_preferences() -> Result<()> {
-    let h = ConfigTestHarness::setup()?;
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", "unicode");
-
-    let custom_path = h.write_config("custom.toml", "theme = \"ascii\"\n")?;
-    let custom_arg = custom_path.to_string_lossy().into_owned();
-
-    let merged_with_cli_override =
-        parse_and_merge(&["netsuke", "--config", &custom_arg, "--theme", "ascii"])?;
-    ensure!(
-        merged_with_cli_override.theme == Some(ThemePreference::Ascii),
-        "CLI preference values should still override environment and selected config"
-    );
-
-    let merged_with_env_override = parse_and_merge(&["netsuke", "--config", &custom_arg])?;
-    ensure!(
-        merged_with_env_override.theme == Some(ThemePreference::Unicode),
-        "environment preference values should still override the selected config"
     );
     let _project_root = h.project.path();
     Ok(())
