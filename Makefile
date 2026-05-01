@@ -1,10 +1,10 @@
 .PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
 
 APP ?= netsuke
-CARGO ?= cargo
+CARGO ?= $(HOME)/.cargo/bin/cargo
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
-MDLINT ?= markdownlint-cli2
+MDLINT ?= $(HOME)/.bun/bin/markdownlint-cli2
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
