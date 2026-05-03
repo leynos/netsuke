@@ -156,6 +156,10 @@ itself does not change.
   implementation.
 - [x] (2026-05-01T17:06:39Z) Fixed the post-turn hook environment failure by
   making the Makefile resolve `cargo` from `PATH` or `$HOME/.cargo/bin/cargo`.
+- [x] (2026-05-04T10:12:00Z) Rebasing onto `origin/main` completed without
+  file conflicts. The branch now includes main's CI guidance ExecPlan.
+- [x] (2026-05-04T10:12:00Z) Added the missing `make typecheck` validation
+  target requested for the post-rebase gate.
 
 ## Surprises & discoveries
 
@@ -199,6 +203,12 @@ itself does not change.
   `$HOME/.cargo/bin/cargo`, matching the existing `markdownlint-cli2` fallback
   pattern.
 
+- Observation: the post-rebase validation request includes `make typecheck`,
+  but the rebased Makefile did not define that target. Evidence:
+  `make -n typecheck` failed with `No rule to make target 'typecheck'`. Impact:
+  the Makefile now exposes `typecheck` as a `cargo check` wrapper for all
+  targets and all features, with warnings denied.
+
 ## Decision log
 
 - Decision: keep this plan in `Status: DRAFT` until the user approves it.
@@ -232,6 +242,13 @@ itself does not change.
   and CI can still set `CARGO=...`, while hooks that run without the usual
   shell profile can still execute the required Rust gates. Date/Author:
   2026-05-01T17:06:39Z / Codex.
+
+- Decision: implement `make typecheck` as
+  `RUSTFLAGS="-D warnings" cargo check --all-targets --all-features`.
+  Rationale: this matches the breadth of `make test` and `make lint`, gives the
+  requested validation command a stable Makefile entry point, and keeps warning
+  policy consistent with the rest of the Rust gates. Date/Author:
+  2026-05-04T10:12:00Z / Codex.
 
 - Decision: pass Linux `stage-target` matrix keys and run the shared staging
   action for Linux as well as Windows and macOS. Rationale: Linux packaging now
