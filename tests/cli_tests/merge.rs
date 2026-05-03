@@ -342,6 +342,7 @@ theme = "ascii
     let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
