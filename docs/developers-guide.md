@@ -25,6 +25,34 @@ For documentation changes, also run:
 - `make markdownlint`
 - `make nixie`
 
+## Release help tooling
+
+Release builds generate help artefacts explicitly with `cargo orthohelp`,
+rather than from `build.rs`. The build script remains responsible for the
+localization key audit only. Release automation installs the pinned tool with:
+
+```bash
+cargo install cargo-orthohelp --version 0.8.0 --locked
+```
+
+The workflow then calls:
+
+```bash
+scripts/generate-release-help.sh <target> <bin-name> <out-dir>
+```
+
+The script writes manual pages under
+`target/orthohelp/<target>/release/man/man1/` and, for Windows targets,
+PowerShell external help under
+`target/orthohelp/<target>/release/powershell/Netsuke/`. It computes the manual
+date from `SOURCE_DATE_EPOCH`, falling back to `1970-01-01` when unset or
+invalid.
+
+Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
+when adding, renaming, or removing user-facing options. Changes to CLI
+documentation metadata should be covered by `rstest` workflow/script contract
+tests and by `rstest-bdd` release-help scenarios.
+
 ## Test suite map
 
 Netsuke uses a mixed strategy:

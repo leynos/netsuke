@@ -76,11 +76,11 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
+          leynos/shared-actions/.github/actions/determine-release-modes@d400b079fb6a8fa92f7e7b6c57f3d1c92a4b2d54
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
+          leynos/shared-actions/.github/actions/ensure-cargo-version@d400b079fb6a8fa92f7e7b6c57f3d1c92a4b2d54
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -107,7 +107,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
+          leynos/shared-actions/.github/actions/export-cargo-metadata@d400b079fb6a8fa92f7e7b6c57f3d1c92a4b2d54
         with:
           manifest-path: ${{ steps.manifest_path.outputs.value }}
           fields: bin-name
@@ -121,9 +121,11 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             artifact: linux-amd64
             package_arch: amd64
+            target_key: linux-x86_64
           - target: aarch64-unknown-linux-gnu
             artifact: linux-arm64
             package_arch: arm64
+            target_key: linux-aarch64
     uses: ./.github/workflows/build-and-package.yml
     with:
       platform: linux
@@ -134,6 +136,7 @@ jobs:
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artifact }}
       should-upload-workflow-artifacts: ${{ fromJSON(needs.metadata.outputs.should_upload_workflow_artifacts) }}
       package-arch: ${{ matrix.package_arch }}
+      stage-target: ${{ matrix.target_key }}
 
   build-windows:
     needs: metadata
@@ -221,7 +224,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
+          leynos/shared-actions/.github/actions/upload-release-assets@d400b079fb6a8fa92f7e7b6c57f3d1c92a4b2d54
         with:
           release-tag: ${{ github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

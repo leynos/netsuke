@@ -42,6 +42,21 @@ Refer to the project's `README.md` or release pages for pre-compiled binaries
 if available. Ensure the `ninja` executable is also installed and available in
 your system's `PATH`.
 
+### Release help artefacts
+
+Release archives include platform help files generated from the same command
+metadata that powers `netsuke --help`. Unix-like release artefacts include the
+`netsuke.1` manual page. Windows release artefacts include PowerShell external
+help in a `Netsuke` module layout, so installed or unpacked artefacts can be
+inspected with:
+
+```powershell
+Get-Help Netsuke -Full
+```
+
+This changes release packaging only. The Netsuke command-line flags,
+subcommands, output, and exit statuses are unchanged.
+
 ### Basic Usage
 
 The primary way to use Netsuke is through its command-line interface (CLI). The
