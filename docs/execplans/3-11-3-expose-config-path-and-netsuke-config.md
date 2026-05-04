@@ -164,8 +164,8 @@ Observable success means all of the following hold simultaneously:
 
 - Observation: for test harnesses that both `chdir` into a temporary
   directory and own that directory, struct field order matters because Rust
-  drops fields in reverse declaration order. The cwd-restoration guard must be
-  declared after the temporary directories so it drops first during teardown.
+  drops fields in declaration order. The cwd-restoration guard must be
+  declared before the temporary directories so it drops first during teardown.
   Date/Author: 2026-04-21 / implementation agent.
 
 - Observation: the `cli_tests` integration target was still flaky when the
@@ -267,24 +267,26 @@ Retrospective:
 Read these files in order before changing code.
 
 1. `src/cli/mod.rs` — the `Cli` struct (lines 40–142). This is the clap
-   parser and OrthoConfig merge root. It defines the current `CONFIG_ENV_VAR`
-   constant (`"NETSUKE_CONFIG_PATH"`) and the `ENV_PREFIX` constant
-   (`"NETSUKE_"`). The new `config` field will be added here.
+   parser and OrthoConfig merge root. It defines both config constants:
+   `CONFIG_ENV_VAR` (`"NETSUKE_CONFIG"`) and `CONFIG_ENV_VAR_LEGACY`
+   (`"NETSUKE_CONFIG_PATH"`), plus `ENV_PREFIX` (`"NETSUKE_"`).
 
 2. `src/cli/config_merge.rs` — the merge pipeline. The key functions are:
 
-   - `config_discovery(directory)` (line 38): builds a `ConfigDiscovery`
-     using `CONFIG_ENV_VAR`. This function must be updated to also accept an
-     explicit config path from `--config`.
-   - `push_file_layers(composer, errors, directory)` (line 176): two-pass
-     file discovery. When an explicit config path is provided, this function
-     should load that file directly and skip all discovery.
-   - `collect_diag_file_layers(directory)` (line 111): mirrors
-     `push_file_layers` for early diag-JSON resolution. Must also honour
-     `--config`.
-   - `merge_with_config(cli, matches)` (line 264): the top-level merge
-     entry point. The `cli.config` field is read here to decide whether to
-     use explicit loading or discovery.
+   - `resolve_config_path(cli)` (line 50): applies the precedence
+     `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH` and returns the
+     explicit config path when set.
+   - `config_discovery(directory)` (line 38): builds a `ConfigDiscovery` rooted
+     at `netsuke`, with `-C/--directory` forwarded via `cli.directory` as the
+     optional project-root anchor.
+   - `push_file_layers(composer, errors, cli)` (line 226): uses `resolve_config_path(cli)`.
+     When a path is found, it loads that single file and skips discovery; otherwise,
+     it runs the two-pass discovery path.
+   - `collect_diag_file_layers(cli)` (line 141): uses the same `&Cli` driven
+     `resolve_config_path(cli)` path before discovery so diagnostic-json
+     resolution honours explicit selection.
+   - `merge_with_config(cli, matches)` (line 315): reads selection through
+     `resolve_config_path(cli)` and delegates to `push_file_layers` with `&Cli`.
 
 3. `src/cli/config.rs` — the `CliConfig` typed view. The `config` field does
    NOT belong here because it is a file selector, not a runtime preference.
@@ -337,35 +339,17 @@ Add a new `config: Option<PathBuf>` field to the `Cli` struct in
 
 Update the default impl for `Cli` to set `config: None`.
 
-Then, update the merge pipeline in `src/cli/config_merge.rs`:
+Then, align the merge pipeline in `src/cli/config_merge.rs` with the landed
+`resolve_config_path(cli)` contract:
 
-1. Add a new constant: `const CONFIG_ENV_VAR_NEW: &str = "NETSUKE_CONFIG";`
-   (or rename the semantics — see below).
-
-2. Create a helper `fn resolve_config_path(cli: &Cli) -> Option<PathBuf>`
-   that implements the precedence: `cli.config` (from `--config`) >
-   `NETSUKE_CONFIG` env var > `NETSUKE_CONFIG_PATH` env var > `None` (use
-   discovery). This helper reads environment variables directly
-   (`std::env::var_os`) because the env-var layer in the merge pipeline is for
-   preference values, not for file selection.
-
-3. Update `config_discovery()` to accept an `Option<&Path>` for the explicit
-   config path. When `Some`, skip `ConfigDiscovery` entirely and load the file
-   directly via `load_config_file_as_chain`.
-
-4. Update `push_file_layers()` to call `resolve_config_path` and, when a
-   path is returned, load that single file instead of running two-pass
-   discovery. When the explicit path does not exist or fails to parse,
-   propagate the error rather than falling back to discovery — the user
-   explicitly requested this file.
-
-5. Update `collect_diag_file_layers()` with the same explicit-path logic
-   so `resolve_merged_diag_json` honours `--config` and `NETSUKE_CONFIG`.
-
-6. Update `merge_with_config()` — the existing code passes
-   `cli.directory.as_deref()` into `push_file_layers`. Now also pass the
-   resolved config path. The function signature of `push_file_layers` will gain
-   an `explicit_config: Option<&Path>` parameter.
+1. `resolve_config_path(cli)` applies precedence as `--config` >
+   `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`, before discovery.
+2. `push_file_layers(composer, errors, cli)` and
+   `collect_diag_file_layers(cli)` both call `resolve_config_path(cli)` directly.
+   When a path is selected they load that file only, bypassing discovery.
+3. `merge_with_config(cli, matches)` reads selection through `resolve_config_path(cli)`
+   and delegates to `push_file_layers` with the same `&Cli` pipeline, so all
+   config entry points resolve explicit selectors the same way.
 
 Acceptance for Stage A:
 
@@ -388,10 +372,10 @@ NETSUKE_CONFIG_PATH  (env var, legacy silent alias)
 automatic discovery  (lowest, two-pass project > user)
 ```
 
-Update the `has_explicit_config` checks in `push_file_layers` and
-`collect_diag_file_layers` to also check `NETSUKE_CONFIG`. Currently these
-check `CONFIG_ENV_VAR` (`NETSUKE_CONFIG_PATH`); they must now check both env
-vars and the CLI field.
+Update `push_file_layers()` and `collect_diag_file_layers()` to rely on
+`resolve_config_path(cli)` for explicit config selection. When that helper
+returns a path, the selected file is loaded directly and discovery is skipped;
+otherwise these functions continue with the two-pass discovery flow.
 
 Acceptance for Stage B:
 
@@ -643,7 +627,8 @@ the JSON value that feeds the merge pipeline.
 /// Empty environment values are ignored.
 fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
     cli.config
-        .clone()
+        .as_ref()
+        .map(PathBuf::from)
         .or_else(|| env_config_path(CONFIG_ENV_VAR))
         .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
 }

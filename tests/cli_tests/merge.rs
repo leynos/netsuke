@@ -343,6 +343,8 @@ theme = "ascii
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
+    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
@@ -386,6 +388,8 @@ theme = "ascii
 
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
     let config_arg = explicit_config.to_string_lossy().into_owned();

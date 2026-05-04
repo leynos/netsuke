@@ -2034,9 +2034,9 @@ applies `Cli::with_default_command` after parsing so invoking `netsuke` with no
 explicit command still triggers a build. Configuration is layered with
 OrthoConfig (defaults, configuration files, environment variables, then CLI
 overrides) while treating clap defaults as absent so file or environment values
-are not masked. Explicit config selection respects `-C/--directory` for
-project-root discovery, and the precedence is `--config` > `NETSUKE_CONFIG` >
-legacy `NETSUKE_CONFIG_PATH`. Environment variables use the `NETSUKE_` prefix
+are not masked. Explicit config selection is resolved before discovery with
+precedence `--config` > `NETSUKE_CONFIG` > legacy `NETSUKE_CONFIG_PATH`; `-C/--directory`
+only affects project-root discovery. Environment variables use the `NETSUKE_` prefix
 with `__` as a nesting separator. CLI help and clap errors are localized via
 Fluent resources; locale resolution is handled in `src/locale_resolution.rs`
 with the precedence `--locale` -> `NETSUKE_LOCALE` -> configuration `locale` ->
@@ -2202,13 +2202,11 @@ override earlier ones—meaning project-scope has highest precedence among file
 layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
-1. **Explicit override**: the first configured selector from this list:
-   `--config <PATH>`, `NETSUKE_CONFIG`, `NETSUKE_CONFIG_PATH`. This allows
-   users to point to any arbitrary configuration file path, bypassing automatic
-   discovery entirely while still respecting the project-root anchor supplied
-   by `-C/--directory`. `NETSUKE_CONFIG_PATH` remains supported as a
-   backward-compatible alias, but `NETSUKE_CONFIG` is the documented
-   environment variable going forward.
+1. **Explicit override**: `--config <PATH>`, `NETSUKE_CONFIG`, and
+   `NETSUKE_CONFIG_PATH` are evaluated in that precedence order before
+   discovery. These explicit selectors bypass automatic discovery and ignore the
+   project-root anchor supplied by `-C/--directory`. `NETSUKE_CONFIG_PATH`
+   remains a backward-compatible alias of `NETSUKE_CONFIG`.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
@@ -2245,7 +2243,7 @@ directory.
 **Layer merge precedence** (lowest to highest):
 
 1. Application defaults (hardcoded in `Cli::default()`)
-2. Discovered configuration file (project or user scope, as above)
+2. Selected configuration file layer (explicit or discovered)
 3. Environment variables (prefixed with `NETSUKE_`, e.g., `NETSUKE_JOBS=4`)
 4. Command-line arguments (e.g., `--jobs 8`)
 
@@ -2261,17 +2259,18 @@ manual flag repetition.
   override, relying on OrthoConfig's platform-specific defaults for standard
   directory resolution.
 - The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
-  the full layer composition: it calls `config_discovery()` to obtain file
-  layers, merges them with defaults, adds environment variables via Figment,
-  and finally applies CLI overrides extracted from `ArgMatches`.
+  the full layer composition: it resolves selection through
+  `resolve_config_path()`, calls `push_file_layers()` to load layers, merges them
+  with defaults, adds environment variables via Figment, and finally applies CLI
+  overrides extracted from `ArgMatches`.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
-- Explicit config selection is handled outside OrthoConfig's built-in
-  discovery override surface because Netsuke needs its custom two-pass
-  project-over-user merge behaviour for automatic discovery. The selected file
-  still participates in the normal precedence ladder: defaults < file <
-  environment < CLI flags.
+- Explicit config selection is handled outside OrthoConfig's built-in discovery
+  override surface so Netsuke keeps its custom two-pass project-over-user merge
+  behaviour for automatic discovery. If an explicit selector is set, the selected
+  file is loaded directly and bypasses discovery, but still participates in the
+  normal precedence ladder: defaults < file < environment < CLI.
 - Relative paths passed to `--config` are resolved against the process current
   working directory, not the `-C/--directory` anchor. This keeps config-file
   selection aligned with normal shell path semantics while `-C` continues to
