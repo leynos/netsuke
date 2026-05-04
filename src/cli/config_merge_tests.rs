@@ -8,6 +8,13 @@ use serde_json::json;
 use tempfile::tempdir;
 use test_support::{CwdGuard, EnvVarGuard};
 
+fn cli_with_directory(directory: &std::path::Path) -> Cli {
+    Cli {
+        directory: Some(directory.to_path_buf()),
+        ..Cli::default()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // is_empty_value
 // ---------------------------------------------------------------------------
@@ -156,7 +163,7 @@ fn project_scope_layers_returns_one_layer_when_file_present() {
 ///
 /// Returns (`EnvLock`, `project_dir`, `fake_home`, `env_guards`) where `env_guards`
 /// isolate `HOME` and platform-specific config paths (`XDG_CONFIG_HOME` on Unix,
-/// `APPDATA`/`LOCALAPPDATA` on Windows) and remove `CONFIG_ENV_VAR`.
+/// `APPDATA`/`LOCALAPPDATA` on Windows) and remove explicit config selectors.
 #[cfg(test)]
 #[fixture]
 fn isolated_config_env() -> anyhow::Result<(
@@ -175,6 +182,7 @@ fn isolated_config_env() -> anyhow::Result<(
         EnvVarGuard::set("HOME", fake_home.path().as_os_str()),
         EnvVarGuard::set("XDG_CONFIG_HOME", fake_home.path().as_os_str()),
         EnvVarGuard::remove(CONFIG_ENV_VAR),
+        EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
     ];
 
     #[cfg(windows)]
@@ -183,6 +191,7 @@ fn isolated_config_env() -> anyhow::Result<(
         EnvVarGuard::set("APPDATA", fake_home.path().as_os_str()),
         EnvVarGuard::set("LOCALAPPDATA", fake_home.path().as_os_str()),
         EnvVarGuard::remove(CONFIG_ENV_VAR),
+        EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
     ];
 
     Ok((lock, dir, fake_home, guards))
@@ -208,7 +217,8 @@ fn collect_diag_file_layers_handles_project_file_presence(
             .expect("write config");
     }
 
-    let layers = collect_diag_file_layers(Some(dir.path()));
+    let cli = cli_with_directory(dir.path());
+    let layers = collect_diag_file_layers(&cli);
 
     if expect_empty {
         ensure!(layers.is_empty(), "expected no layers when file absent");
@@ -270,11 +280,130 @@ fn push_file_layers_pushes_expected_layer_count(
     #[cfg(windows)]
     let _local_appdata_guard = EnvVarGuard::set("LOCALAPPDATA", fake_home.path().as_os_str());
     let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    push_file_layers(&mut composer, &mut errors, Some(dir.path()));
+    let _legacy_config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let cli = cli_with_directory(dir.path());
+    push_file_layers(&mut composer, &mut errors, &cli);
     assert!(errors.is_empty(), "no required errors expected");
     assert_eq!(
         composer.layers().len(),
         expected_layers,
         "unexpected number of layers pushed"
+    );
+}
+
+// -----------------------------------------------------------------------
+// env_config_path
+// -----------------------------------------------------------------------
+
+#[test]
+fn env_config_path_returns_none_when_var_unset() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _guard = EnvVarGuard::remove("__NETSUKE_TEST_VAR");
+    assert!(env_config_path("__NETSUKE_TEST_VAR").is_none());
+}
+
+#[test]
+fn env_config_path_returns_none_when_var_empty() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _guard = EnvVarGuard::set("__NETSUKE_TEST_VAR", std::ffi::OsStr::new(""));
+    assert!(env_config_path("__NETSUKE_TEST_VAR").is_none());
+}
+
+#[test]
+fn env_config_path_returns_path_when_var_set() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _guard = EnvVarGuard::set("__NETSUKE_TEST_VAR", std::ffi::OsStr::new("/tmp/foo.toml"));
+    let result = env_config_path("__NETSUKE_TEST_VAR");
+    assert_eq!(result, Some(std::path::PathBuf::from("/tmp/foo.toml")));
+}
+
+// -----------------------------------------------------------------------
+// resolve_config_path
+// -----------------------------------------------------------------------
+
+#[test]
+fn resolve_config_path_cli_wins_over_env() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
+    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let cli = Cli {
+        config: Some(std::path::PathBuf::from("/cli/path.toml")),
+        ..Cli::default()
+    };
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/cli/path.toml")),
+        "cli.config should take precedence over CONFIG_ENV_VAR"
+    );
+}
+
+#[test]
+fn resolve_config_path_env_wins_over_legacy() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
+    let _legacy_guard = EnvVarGuard::set(
+        CONFIG_ENV_VAR_LEGACY,
+        std::ffi::OsStr::new("/legacy/path.toml"),
+    );
+    let cli = Cli::default();
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/env/path.toml")),
+        "CONFIG_ENV_VAR should take precedence over CONFIG_ENV_VAR_LEGACY"
+    );
+}
+
+#[test]
+fn resolve_config_path_legacy_used_when_primary_absent() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
+    let _legacy_guard = EnvVarGuard::set(
+        CONFIG_ENV_VAR_LEGACY,
+        std::ffi::OsStr::new("/legacy/path.toml"),
+    );
+    let cli = Cli::default();
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/legacy/path.toml")),
+        "CONFIG_ENV_VAR_LEGACY should be used when primary env var absent"
+    );
+}
+
+#[test]
+fn resolve_config_path_returns_none_when_all_absent() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
+    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let cli = Cli::default();
+    assert!(
+        resolve_config_path(&cli).is_none(),
+        "should return None when no selector is active"
+    );
+}
+
+#[test]
+fn resolve_config_path_cli_wins_over_both_env_vars() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
+    let _legacy_guard = EnvVarGuard::set(
+        CONFIG_ENV_VAR_LEGACY,
+        std::ffi::OsStr::new("/legacy/path.toml"),
+    );
+    let cli = Cli {
+        config: Some(std::path::PathBuf::from("/cli/path.toml")),
+        ..Cli::default()
+    };
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/cli/path.toml")),
+        "cli.config should win over both env vars"
     );
 }

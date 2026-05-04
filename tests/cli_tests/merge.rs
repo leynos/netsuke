@@ -251,6 +251,8 @@ default_targets = ["hello"]
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _colour_policy_guard = EnvVarGuard::set("NETSUKE_COLOUR_POLICY", OsStr::new("always"));
     let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
+    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
@@ -274,6 +276,8 @@ fn cli_merge_with_config_prefers_cli_theme_over_env_and_file() -> Result<()> {
 
     let _config_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
+    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
@@ -313,7 +317,7 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 #[rstest]
 fn resolve_merged_diag_json_handles_malformed_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
@@ -342,6 +346,9 @@ theme = "ascii
     let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
+    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
 
     std::env::set_current_dir(&temp_project).context("change to project directory")?;
 
@@ -356,5 +363,60 @@ theme = "ascii
         "should honour user config output_format=json despite malformed project config"
     );
 
+    drop(cwd_guard);
+    Ok(())
+}
+
+#[rstest]
+fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error() -> Result<()> {
+    let _env_lock = EnvLock::acquire();
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let temp_project = tempdir().context("create temporary project directory")?;
+
+    fs::write(
+        temp_project.path().join(".netsuke.toml"),
+        r#"
+output_format = "json"
+"#,
+    )
+    .context("write project .netsuke.toml")?;
+
+    let explicit_config = temp_project.path().join("broken.toml");
+    fs::write(
+        &explicit_config,
+        r#"
+theme = "ascii
+"#,
+    )
+    .context("write malformed explicit config")?;
+
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
+    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
+    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
+    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
+    std::env::set_current_dir(&temp_project).context("change to project directory")?;
+
+    let config_arg = explicit_config.to_string_lossy().into_owned();
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
+            .context("parse CLI with malformed explicit config")?;
+
+    ensure!(
+        !netsuke::cli::resolve_merged_diag_json(&cli, &matches),
+        "malformed explicit config should not fall back to discovered project config"
+    );
+
+    let (cli_with_diag, matches_with_diag) = netsuke::cli::parse_with_localizer_from(
+        ["netsuke", "--config", &config_arg, "--diag-json"],
+        &localizer,
+    )
+    .context("parse CLI with explicit diagnostic JSON flag")?;
+    ensure!(
+        netsuke::cli::resolve_merged_diag_json(&cli_with_diag, &matches_with_diag),
+        "--diag-json should still force structured diagnostics"
+    );
+
+    drop(cwd_guard);
     Ok(())
 }

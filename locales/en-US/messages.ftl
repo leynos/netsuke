@@ -7,6 +7,7 @@ cli.usage = { $usage }
 # Root-level flag help text.
 cli.flag.file.help = Path to the Netsuke manifest file to use.
 cli.flag.directory.help = Run as if started in this directory.
+cli.flag.config.help = Path to a configuration file, bypassing automatic discovery.
 cli.flag.jobs.help = Set the number of parallel build jobs.
 cli.flag.verbose.help = Enable verbose diagnostic logging and completion timing summaries.
 cli.flag.locale.help = Locale tag for CLI copy (for example: en-US, es-ES).

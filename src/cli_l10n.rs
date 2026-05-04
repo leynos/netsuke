@@ -124,6 +124,7 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
         None => match arg_id {
             "file" => Some(keys::CLI_FLAG_FILE_HELP),
             "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),
+            "config" => Some(keys::CLI_FLAG_CONFIG_HELP),
             "jobs" => Some(keys::CLI_FLAG_JOBS_HELP),
             "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
             "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),

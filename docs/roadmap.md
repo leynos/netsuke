@@ -293,9 +293,9 @@ library, and CLI ergonomics.
   - [x] Add integration tests for each precedence tier. See
     [ortho-config-users-guide.md](ortho-config-users-guide.md) and
     `tests/cli_tests/config_discovery.rs`.
-- [ ] 3.11.3. Expose `--config <path>` and `NETSUKE_CONFIG`.
-  - [ ] Select alternative config files.
-  - [ ] Ship annotated sample configs in documentation.
+- [x] 3.11.3. Expose `--config <path>` and `NETSUKE_CONFIG`.
+  - [x] Select alternative config files.
+  - [x] Ship annotated sample configs in documentation.
 - [ ] 3.11.4. Add regression tests for OrthoConfig precedence ladder.
   - [ ] Test defaults < file < env < CLI precedence. See
     [ortho-config-users-guide.md](ortho-config-users-guide.md).
