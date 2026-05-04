@@ -289,6 +289,7 @@ fn config_flag_with_nonexistent_file_produces_error(
     config_harness: Result<ConfigTestHarness>,
 ) -> Result<()> {
     let h = config_harness?;
+    h.write_config(".netsuke.toml", "theme = \"unicode\"\n")?;
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
 
