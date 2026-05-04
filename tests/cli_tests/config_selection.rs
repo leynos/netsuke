@@ -1,8 +1,48 @@
-//! Integration tests for explicit configuration file selection.
+//! Integration tests for explicit configuration file selection and precedence.
 //!
-//! These tests cover the visible `--config` flag and `NETSUKE_CONFIG`
-//! environment variable, plus compatibility with the legacy
-//! `NETSUKE_CONFIG_PATH` override.
+//! # Scope
+//!
+//! These tests exercise the user-visible configuration-selection contract
+//! introduced in milestone 3.11.3:
+//!
+//! - `--config <PATH>` CLI flag (highest precedence)
+//! - `NETSUKE_CONFIG` environment variable
+//! - `NETSUKE_CONFIG_PATH` legacy alias (lowest explicit precedence)
+//! - Automatic project-scope discovery (when no explicit selector is active)
+//!
+//! # Relationship to other test modules
+//!
+//! - [`config_discovery`](super::config_discovery): covers automatic
+//!   multi-scope discovery and env-var overrides without an explicit
+//!   `--config` flag; the two modules are complementary.
+//! - [`merge`](super::merge): covers `OrthoConfig` layer-composition
+//!   semantics (defaults → file → env → CLI); the present module targets
+//!   the *selection* of which file enters that pipeline.
+//! - `tests/features/configuration_discovery.feature`: BDD scenarios that
+//!   duplicate the key precedence cases at the acceptance level.
+//!
+//! # Test infrastructure
+//!
+//! Every test receives a [`ConfigTestHarness`] via the `config_harness`
+//! rstest fixture.  The harness:
+//!
+//! 1. Acquires [`EnvLock`] (serialises all env-mutating tests process-wide).
+//! 2. Captures the process working directory via [`CwdGuard`].
+//! 3. Creates isolated `project` and `home` tempdirs.
+//! 4. Calls [`sandbox_user_scope`] to point `HOME`, `XDG_CONFIG_HOME`, and
+//!    `XDG_CONFIG_DIRS` at the fake home so `OrthoConfig` user-scope discovery
+//!    cannot read real host config files.
+//! 5. Changes the process CWD to the project tempdir.
+//!
+//! Fields drop in declaration order; `_cwd_guard` is declared first so the
+//! CWD is restored before `_env_lock` releases the mutex, preventing a race
+//! where another test calls `std::env::current_dir()` while the CWD still
+//! points at a deleted tempdir.
+//!
+//! [`parse_and_merge`] parses CLI arguments with a localiser and drives the
+//! full `merge_with_config` pipeline, returning the merged [`Cli`] struct.
+//! [`ConfigSelectionCase`] is a const-buildable descriptor used by the main
+//! parametric test [`config_selection_precedence_cases`].
 
 use anyhow::{Context, Result, ensure};
 use netsuke::cli_localization;

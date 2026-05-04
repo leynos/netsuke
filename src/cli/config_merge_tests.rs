@@ -290,3 +290,120 @@ fn push_file_layers_pushes_expected_layer_count(
         "unexpected number of layers pushed"
     );
 }
+
+// -----------------------------------------------------------------------
+// env_config_path
+// -----------------------------------------------------------------------
+
+#[test]
+fn env_config_path_returns_none_when_var_unset() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _guard = EnvVarGuard::remove("__NETSUKE_TEST_VAR");
+    assert!(env_config_path("__NETSUKE_TEST_VAR").is_none());
+}
+
+#[test]
+fn env_config_path_returns_none_when_var_empty() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _guard = EnvVarGuard::set("__NETSUKE_TEST_VAR", std::ffi::OsStr::new(""));
+    assert!(env_config_path("__NETSUKE_TEST_VAR").is_none());
+}
+
+#[test]
+fn env_config_path_returns_path_when_var_set() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _guard = EnvVarGuard::set("__NETSUKE_TEST_VAR", std::ffi::OsStr::new("/tmp/foo.toml"));
+    let result = env_config_path("__NETSUKE_TEST_VAR");
+    assert_eq!(result, Some(std::path::PathBuf::from("/tmp/foo.toml")));
+}
+
+// -----------------------------------------------------------------------
+// resolve_config_path
+// -----------------------------------------------------------------------
+
+#[test]
+fn resolve_config_path_cli_wins_over_env() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
+    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let cli = Cli {
+        config: Some(std::path::PathBuf::from("/cli/path.toml")),
+        ..Cli::default()
+    };
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/cli/path.toml")),
+        "cli.config should take precedence over CONFIG_ENV_VAR"
+    );
+}
+
+#[test]
+fn resolve_config_path_env_wins_over_legacy() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
+    let _legacy_guard = EnvVarGuard::set(
+        CONFIG_ENV_VAR_LEGACY,
+        std::ffi::OsStr::new("/legacy/path.toml"),
+    );
+    let cli = Cli::default();
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/env/path.toml")),
+        "CONFIG_ENV_VAR should take precedence over CONFIG_ENV_VAR_LEGACY"
+    );
+}
+
+#[test]
+fn resolve_config_path_legacy_used_when_primary_absent() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
+    let _legacy_guard = EnvVarGuard::set(
+        CONFIG_ENV_VAR_LEGACY,
+        std::ffi::OsStr::new("/legacy/path.toml"),
+    );
+    let cli = Cli::default();
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/legacy/path.toml")),
+        "CONFIG_ENV_VAR_LEGACY should be used when primary env var absent"
+    );
+}
+
+#[test]
+fn resolve_config_path_returns_none_when_all_absent() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
+    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let cli = Cli::default();
+    assert!(
+        resolve_config_path(&cli).is_none(),
+        "should return None when no selector is active"
+    );
+}
+
+#[test]
+fn resolve_config_path_cli_wins_over_both_env_vars() {
+    use test_support::env_lock::EnvLock;
+    let _lock = EnvLock::acquire();
+    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
+    let _legacy_guard = EnvVarGuard::set(
+        CONFIG_ENV_VAR_LEGACY,
+        std::ffi::OsStr::new("/legacy/path.toml"),
+    );
+    let cli = Cli {
+        config: Some(std::path::PathBuf::from("/cli/path.toml")),
+        ..Cli::default()
+    };
+    assert_eq!(
+        resolve_config_path(&cli),
+        Some(std::path::PathBuf::from("/cli/path.toml")),
+        "cli.config should win over both env vars"
+    );
+}
