@@ -33,7 +33,7 @@ Observable success means all of the following hold simultaneously:
   set.
 - When both are set, `NETSUKE_CONFIG` takes precedence over
   `NETSUKE_CONFIG_PATH`.
-- `netsuke --help` shows the `--config` flag with localised help text.
+- `netsuke --help` shows the `--config` flag with localized help text.
 - `docs/sample-netsuke.toml` is a valid, parsable config file with comments
   explaining every key.
 - `make check-fmt`, `make lint`, and `make test` all pass.
@@ -164,8 +164,8 @@ Observable success means all of the following hold simultaneously:
 
 - Observation: for test harnesses that both `chdir` into a temporary
   directory and own that directory, struct field order matters because Rust
-  drops fields in declaration order. The cwd-restoration guard must be
-  declared before the temporary directories so it drops first during teardown.
+  drops fields in declaration order. The cwd-restoration guard must be declared
+  before the temporary directories so it drops first during teardown.
   Date/Author: 2026-04-21 / implementation agent.
 
 - Observation: the `cli_tests` integration target was still flaky when the
@@ -279,7 +279,8 @@ Read these files in order before changing code.
    - `config_discovery(directory)` (line 38): builds a `ConfigDiscovery` rooted
      at `netsuke`, with `-C/--directory` forwarded via `cli.directory` as the
      optional project-root anchor.
-   - `push_file_layers(composer, errors, cli)` (line 226): uses `resolve_config_path(cli)`.
+   - `push_file_layers(composer, errors, cli)` (line 226): uses
+     `resolve_config_path(cli)`.
      When a path is found, it loads that single file and skips discovery; otherwise,
      it runs the two-pass discovery path.
    - `collect_diag_file_layers(cli)` (line 141): uses the same `&Cli` driven
@@ -335,7 +336,7 @@ Add a new `config: Option<PathBuf>` field to the `Cli` struct in
 - is excluded from the override detection in `cli_overrides_from_matches`
   by virtue of `#[serde(skip)]` (serde-skipped fields do not appear in the
   serialized JSON, so they cannot leak into the merge pipeline);
-- has localised help text via the existing localization infrastructure.
+- has localized help text via the existing localization infrastructure.
 
 Update the default impl for `Cli` to set `config: None`.
 
@@ -345,9 +346,11 @@ Then, align the merge pipeline in `src/cli/config_merge.rs` with the landed
 1. `resolve_config_path(cli)` applies precedence as `--config` >
    `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`, before discovery.
 2. `push_file_layers(composer, errors, cli)` and
-   `collect_diag_file_layers(cli)` both call `resolve_config_path(cli)` directly.
-   When a path is selected they load that file only, bypassing discovery.
-3. `merge_with_config(cli, matches)` reads selection through `resolve_config_path(cli)`
+   `collect_diag_file_layers(cli)` both call `resolve_config_path(cli)`
+   directly. When a path is selected they load that file only, bypassing
+   discovery.
+3. `merge_with_config(cli, matches)` reads selection through
+   `resolve_config_path(cli)`
    and delegates to `push_file_layers` with the same `&Cli` pipeline, so all
    config entry points resolve explicit selectors the same way.
 
@@ -416,7 +419,7 @@ Acceptance for Stage C:
 
 - `make lint` passes (including `cargo doc` and the build-time Fluent
   audit).
-- `netsuke --help` shows the `--config` flag with localised English text.
+- `netsuke --help` shows the `--config` flag with localized English text.
 
 ### Stage D. `rstest` integration tests
 
@@ -556,7 +559,7 @@ Acceptance for Stage E:
      discovery.
    - Mention the sample config file and where to find it.
    - Ensure the existing `NETSUKE_CONFIG_PATH` documentation is preserved
-     but de-emphasised as a legacy alias.
+     but de-emphasized as a legacy alias.
 
 3. Update `docs/netsuke-design.md` section 8.4:
 
@@ -615,7 +618,7 @@ Acceptance for Stage G:
 pub config: Option<PathBuf>,
 ```
 
-The `#[serde(skip)]` annotation prevents the field from being serialised into
+The `#[serde(skip)]` annotation prevents the field from being serialized into
 the JSON value that feeds the merge pipeline.
 
 ### Config path resolution helper (`src/cli/config_merge.rs`)

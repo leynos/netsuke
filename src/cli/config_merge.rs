@@ -200,12 +200,6 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
     diag_json_from_matches(cli, matches, diag_json)
 }
 
-/// Push all config-file layers onto `composer` in the correct precedence order.
-///
-/// Implements "project scope > user scope" by running a second direct load of
-/// the project-scope file when first-pass discovery did not include it and no
-/// explicit config path is active.
-///
 /// Drain a layer-load result onto `composer`, recording any error.
 fn push_layers_result(
     composer: &mut MergeComposer,
@@ -222,6 +216,14 @@ fn push_layers_result(
     }
 }
 
+/// Push all config-file layers onto `composer` in the correct precedence order.
+///
+/// When an explicit config path is active (`--config`, `NETSUKE_CONFIG`, or
+/// `NETSUKE_CONFIG_PATH`) only that file is loaded and automatic discovery is
+/// skipped.  When no explicit selector is active the function runs two-pass
+/// discovery: a combined project-and-user discovery pass, followed by a
+/// second direct load of the project-scope file when the first pass did not
+/// include it.  This ensures "project scope > user scope" layering.
 fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,

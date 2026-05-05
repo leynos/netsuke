@@ -253,6 +253,7 @@ default_targets = ["hello"]
     let _scheme_guard = EnvVarGuard::remove("NETSUKE_FETCH_ALLOW_SCHEME");
     let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
     let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
+    let _netsuke_config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
@@ -278,6 +279,7 @@ fn cli_merge_with_config_prefers_cli_theme_over_env_and_file() -> Result<()> {
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
     let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
+    let _netsuke_config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
