@@ -6,7 +6,7 @@ use clap::CommandFactory;
 use rstest::{fixture, rstest};
 use serde_json::json;
 use tempfile::tempdir;
-use test_support::{CwdGuard, EnvVarGuard};
+use test_support::{CwdGuard, EnvVarGuard, env_lock::EnvLock};
 
 fn cli_with_directory(directory: &std::path::Path) -> Cli {
     Cli {
@@ -324,60 +324,59 @@ fn env_config_path_returns_path_when_var_set() {
 // resolve_config_path
 // -----------------------------------------------------------------------
 
-#[test]
-fn resolve_config_path_cli_wins_over_env() {
-    use test_support::env_lock::EnvLock;
+#[rstest]
+#[case::cli_wins_over_env(
+    (Some("/env/path.toml"), None),
+    Some("/cli/path.toml"),
+    Some("/cli/path.toml"),
+    "cli.config should take precedence over CONFIG_ENV_VAR"
+)]
+#[case::env_wins_over_legacy(
+    (Some("/env/path.toml"), Some("/legacy/path.toml")),
+    None,
+    Some("/env/path.toml"),
+    "CONFIG_ENV_VAR should take precedence over CONFIG_ENV_VAR_LEGACY"
+)]
+#[case::legacy_used_when_primary_absent(
+    (None, Some("/legacy/path.toml")),
+    None,
+    Some("/legacy/path.toml"),
+    "CONFIG_ENV_VAR_LEGACY should be used when primary env var absent"
+)]
+#[case::cli_wins_over_both_env_vars(
+    (Some("/env/path.toml"), Some("/legacy/path.toml")),
+    Some("/cli/path.toml"),
+    Some("/cli/path.toml"),
+    "cli.config should win over both env vars"
+)]
+fn resolve_config_path_precedence(
+    #[case] env_vars: (Option<&'static str>, Option<&'static str>),
+    #[case] cli_config: Option<&'static str>,
+    #[case] expected: Option<&'static str>,
+    #[case] msg: &'static str,
+) {
     let _lock = EnvLock::acquire();
-    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
-    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
+    let _env_guard = env_vars.0.map_or_else(
+        || EnvVarGuard::remove(CONFIG_ENV_VAR),
+        |v| EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new(v)),
+    );
+    let _legacy_guard = env_vars.1.map_or_else(
+        || EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
+        |v| EnvVarGuard::set(CONFIG_ENV_VAR_LEGACY, std::ffi::OsStr::new(v)),
+    );
     let cli = Cli {
-        config: Some(std::path::PathBuf::from("/cli/path.toml")),
+        config: cli_config.map(std::path::PathBuf::from),
         ..Cli::default()
     };
     assert_eq!(
         resolve_config_path(&cli),
-        Some(std::path::PathBuf::from("/cli/path.toml")),
-        "cli.config should take precedence over CONFIG_ENV_VAR"
-    );
-}
-
-#[test]
-fn resolve_config_path_env_wins_over_legacy() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
-    let _legacy_guard = EnvVarGuard::set(
-        CONFIG_ENV_VAR_LEGACY,
-        std::ffi::OsStr::new("/legacy/path.toml"),
-    );
-    let cli = Cli::default();
-    assert_eq!(
-        resolve_config_path(&cli),
-        Some(std::path::PathBuf::from("/env/path.toml")),
-        "CONFIG_ENV_VAR should take precedence over CONFIG_ENV_VAR_LEGACY"
-    );
-}
-
-#[test]
-fn resolve_config_path_legacy_used_when_primary_absent() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    let _legacy_guard = EnvVarGuard::set(
-        CONFIG_ENV_VAR_LEGACY,
-        std::ffi::OsStr::new("/legacy/path.toml"),
-    );
-    let cli = Cli::default();
-    assert_eq!(
-        resolve_config_path(&cli),
-        Some(std::path::PathBuf::from("/legacy/path.toml")),
-        "CONFIG_ENV_VAR_LEGACY should be used when primary env var absent"
+        expected.map(std::path::PathBuf::from),
+        "{msg}",
     );
 }
 
 #[test]
 fn resolve_config_path_returns_none_when_all_absent() {
-    use test_support::env_lock::EnvLock;
     let _lock = EnvLock::acquire();
     let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
@@ -385,25 +384,5 @@ fn resolve_config_path_returns_none_when_all_absent() {
     assert!(
         resolve_config_path(&cli).is_none(),
         "should return None when no selector is active"
-    );
-}
-
-#[test]
-fn resolve_config_path_cli_wins_over_both_env_vars() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let _env_guard = EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new("/env/path.toml"));
-    let _legacy_guard = EnvVarGuard::set(
-        CONFIG_ENV_VAR_LEGACY,
-        std::ffi::OsStr::new("/legacy/path.toml"),
-    );
-    let cli = Cli {
-        config: Some(std::path::PathBuf::from("/cli/path.toml")),
-        ..Cli::default()
-    };
-    assert_eq!(
-        resolve_config_path(&cli),
-        Some(std::path::PathBuf::from("/cli/path.toml")),
-        "cli.config should win over both env vars"
     );
 }
