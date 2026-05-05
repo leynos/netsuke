@@ -319,9 +319,9 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 #[rstest]
 fn resolve_merged_diag_json_handles_malformed_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
     // User config: valid, sets output_format=json
     let user_config = temp_home.path().join(".netsuke.toml");
@@ -365,15 +365,14 @@ theme = "ascii
         "should honour user config output_format=json despite malformed project config"
     );
 
-    drop(cwd_guard);
     Ok(())
 }
 
 #[rstest]
 fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
+    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
     fs::write(
         temp_project.path().join(".netsuke.toml"),
@@ -419,6 +418,5 @@ theme = "ascii
         "--diag-json should still force structured diagnostics"
     );
 
-    drop(cwd_guard);
     Ok(())
 }
