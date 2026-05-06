@@ -309,23 +309,36 @@ This union deserialises into the same `Recipe` enum used for rules. The parser
 enforces that only one variant is present and errors if multiple recipe fields
 are specified.
 
-- `sources`: The input files required by the command. This can be a single
-  string or a list of strings. If any source entry matches the `name` of
-  another target, that target is built first, before the current target's
-  explicit `deps`.
+- `sources`: Files or target outputs the recipe materially consumes. This can
+  be a single string or a list of strings. If any source entry matches the
+  `name` of another target, that target is built first. `sources` contribute to
+  the recipe input placeholders `ins` and Ninja `$in`.
 
-- `deps`: An optional list of other target names. These targets are explicit
-  dependencies and must be successfully built before this target can be. A
-  change in any of these dependencies will trigger a rebuild of the current
-  target. Netsuke lowers `deps` into the same explicit IR and Ninja dependency
-  edge class as `sources`; if a future schema chooses to make `sources` the
-  only explicit dependency field, that decision must be recorded in this design
-  and the user guide before `deps` is deprecated.
+- `deps`: An optional list of prerequisite target names or paths that must be
+  successfully built before this target can be considered current. A change in
+  any of these dependencies will trigger a rebuild of the current target, but
+  `deps` do not appear in `ins` or Ninja `$in`.
 
-- `order_only_deps`: An optional list of other target names that must be built
-  before this target, but whose modification does not trigger a rebuild of this
-  target. This maps directly to Ninja's order-only dependencies, specified with
-  the `||` operator.[^7]
+- `order_only_deps`: An optional list of prerequisite target names or paths
+  that must be built before this target, but whose modification does not
+  trigger a rebuild of this target. This maps directly to Ninja's order-only
+  dependencies, specified with the `||` operator.[^7]
+
+<!-- markdownlint-disable MD013 -->
+
+| Field | Meaning | Passed to recipe as input? | Rebuild trigger? | Ninja mapping |
+| ----- | ------- | -------------------------- | ---------------- | ------------- |
+| `sources` | Files or target outputs the recipe materially consumes. | Yes | Yes | Explicit inputs: `build out: rule sources...` |
+| `deps` | Prerequisites that must be built and should affect freshness, but are not recipe input arguments. | No | Yes | Implicit inputs: `build out: rule sources... \| deps...` |
+| `order_only_deps` | Prerequisites needed only for sequencing or setup. | No | No | Order-only inputs: `build out: rule sources... \|\| order_only...` |
+
+<!-- markdownlint-enable MD013 -->
+
+The cleaner model is:
+
+- `sources` contribute to `ins` / `$in`.
+- `deps` affect ordering and rebuild decisions, but do not appear in `ins`.
+- `order_only_deps` affect ordering only.
 
 - `vars`: An optional mapping of local variables. These variables override any
   global variables defined in the top-level `vars` section for the scope of
@@ -1547,10 +1560,12 @@ This transformation involves several steps:
    the `actions` map. Actions are hashed on the fully resolved command and file
    set, so identical rule templates yield distinct actions when their paths
    differ. Create a corresponding `ir::BuildEdge` linking the target to the
-   action identifier and transfer the `phony` and `always` flags. Explicit
-   dependencies from `sources` and `deps` are lowered into the edge's explicit
-   input list so Ninja orders and rebuilds them consistently; `order_only_deps`
-   remains separate and maps to Ninja's `||` class.
+   action identifier and transfer the `phony` and `always` flags. `sources` are
+   lowered into the edge's explicit input list so recipe interpolation and
+   Ninja `$in` see only material inputs. `deps` are lowered into a separate
+   implicit dependency list so Ninja orders and rebuilds them without exposing
+   them as recipe arguments; `order_only_deps` remains separate and maps to
+   Ninja's `||` class.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
