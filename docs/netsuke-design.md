@@ -52,13 +52,15 @@ before execution, a critical requirement for compatibility with Ninja.
 3. Stage 3: Template Expansion
 
    Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and
-   the `foreach` and `when` keys. Each mapping containing these keys is
-   expanded with an iteration context providing `item` and optional `index`.
-   Variable lookups respect the precedence `globals` < `target.vars` <
-   per-iteration locals, and this context is preserved for later rendering. At
-   this stage Jinja must not modify the YAML structure directly; control
-   constructs live only within these explicit keys. Structural Jinja blocks
-   (`{% ... %}`) are not permitted to reshape mappings or sequences.
+   the `foreach` and `when` keys in top-level `targets`. Each target mapping
+   containing these keys is expanded with an iteration context providing `item`
+   and optional `index`. Variable lookups respect the precedence `globals` <
+   `target.vars` < per-iteration locals, and this context is preserved for
+   later rendering. At this stage Jinja must not modify the YAML structure
+   directly; control constructs live only within these explicit keys.
+   Structural Jinja blocks (`{% ... %}`) are not permitted to reshape mappings
+   or sequences. Applying the same expansion pass to top-level `actions` is
+   planned in roadmap task 3.14.2 and is not current loader behaviour.
 
 4. Stage 4: Deserialisation & Final Rendering
 
@@ -183,10 +185,10 @@ level keys.
   to a Ninja `build` statement.[^3]
 
 - `actions`: A secondary list of build targets. Any target placed here is
-  treated as `{ phony: true, always: false }` by default. Entries in this list
-  participate in the same manifest-time `foreach` and `when` expansion as
-  `targets`, so preparation and test actions can be selected declaratively
-  before Netsuke synthesizes the static build graph.
+  treated as `{ phony: true, always: false }` by default. Planned action-level
+  `foreach` and `when` support will allow preparation and test actions to be
+  selected declaratively before Netsuke synthesizes the static build graph, but
+  the current loader expands only top-level `targets`.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
@@ -397,14 +399,18 @@ The cleaner model is:
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
-### 2.5 Generated Targets and Actions with `foreach`
+### 2.5 Generated Targets with `foreach`
 
 Large sets of similar outputs can clutter a manifest when written individually.
-Netsuke supports a `foreach` entry within `targets` and `actions` to generate
+Netsuke supports a `foreach` entry within top-level `targets` to generate
 multiple entries succinctly. The `foreach` and optional `when` keys accept bare
 Jinja expressions evaluated after the initial YAML pass. Each resulting value
 becomes `item` in the entry context, and the per-iteration environment is
 carried forward to later rendering.
+
+Action-level `foreach` and `when` expansion is planned, not implemented. Until
+roadmap task 3.14.2 lands, `foreach` or `when` under top-level `actions` is not
+removed by the loader and will fail typed deserialisation as an unknown field.
 
 Conditions are manifest-time decisions. Netsuke evaluates `when` while loading
 the manifest, before the AST is deserialised, before IR generation, and before
@@ -425,7 +431,7 @@ The expansion flow is:
 
 ```mermaid
 flowchart TD
-    A[Iterate over targets and actions in YAML] --> B{Has foreach?}
+    A[Iterate over targets in YAML] --> B{Has foreach?}
     B -- Yes --> C[Evaluate foreach expression]
     C --> D[For each item:]
     D --> E{Has when?}
@@ -1797,11 +1803,13 @@ This transformation involves several steps:
 
 2. **Target Expansion:** Iterate through the `manifest.targets` and the optional
    `manifest.actions`. Entries in `actions` are treated identically to targets
-   but with `phony` defaulting to `true`. Both collections have already had
-   manifest-time `foreach` and `when` clauses expanded before deserialisation,
-   so the IR stage receives only entries that should exist in the static build
-   graph. For each item, resolve all strings into `Utf8PathBuf`s and resolve
-   all dependency names against other targets.
+   but with `phony` defaulting to `true`. The `targets` collection has already
+   had manifest-time `foreach` and `when` clauses expanded before
+   deserialisation, so the IR stage receives only selected target entries. The
+   current loader does not expand `foreach` or `when` in `actions`;
+   action-level expansion remains planned under roadmap task 3.14.2. For each
+   item, resolve all strings into `Utf8PathBuf`s and resolve all dependency
+   names against other targets.
 
 3. **Action Registration and Edge Creation:** For each expanded target,
    resolve the referenced rule template, merge rule-level and target-level
