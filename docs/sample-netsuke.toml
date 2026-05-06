@@ -1,0 +1,63 @@
+# Sample Netsuke configuration
+#
+# Copy this file to `.netsuke.toml` in a project root, or point Netsuke at it
+# with `--config /path/to/file.toml` or `NETSUKE_CONFIG=/path/to/file.toml`.
+#
+# All settings below are commented out so the file is valid as-is. Uncomment
+# only the keys you want to change.
+
+# Path to the manifest file to use instead of `Netsukefile`.
+# file = "Netsukefile"
+
+# Number of parallel build jobs. Valid range: 1-64.
+# jobs = 8
+
+# Enable verbose diagnostics and timing summaries.
+# verbose = true
+
+# Locale for CLI messages, for example `en-US` or `es-ES`.
+# locale = "en-US"
+
+# Force accessible output mode on or off.
+# accessible = true
+
+# Suppress emoji glyphs in output.
+# no_emoji = false
+
+# Theme preset: `auto`, `unicode`, or `ascii`.
+# theme = "auto"
+
+# Colour output policy: `auto`, `always`, or `never`.
+# colour_policy = "auto"
+
+# Force standard stage and task progress summaries on or off.
+# progress = true
+
+# Spinner mode: `enabled` or `disabled`.
+# spinner_mode = "enabled"
+
+# Emit machine-readable diagnostics on stderr.
+# diag_json = false
+
+# Diagnostic output format: `human` or `json`.
+# output_format = "human"
+
+# Default build targets when the CLI does not name any targets.
+# default_targets = ["fmt", "lint", "test"]
+
+# Additional URL schemes allowed for the `fetch` helper.
+# fetch_allow_scheme = ["https"]
+
+# Hostnames allowed when `fetch_default_deny = true`.
+# Supports wildcards such as `*.example.com`.
+# fetch_allow_host = ["example.com", "*.example.com"]
+
+# Hostnames that are always blocked.
+# Supports wildcards such as `*.example.com`.
+# fetch_block_host = ["metadata.internal"]
+
+# Deny all fetch hosts by default and allow only the declared allowlist.
+# fetch_default_deny = false
+
+# CLI-only controls such as `--config`, `--directory`, and subcommands are not
+# read from config files.

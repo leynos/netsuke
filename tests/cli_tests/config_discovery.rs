@@ -37,7 +37,7 @@ impl Drop for CwdGuard {
 #[rstest]
 fn project_scope_config_discovered_automatically() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_dir = tempdir().context("create temporary project directory")?;
     let project_config = temp_dir.path().join(".netsuke.toml");
 
@@ -53,6 +53,7 @@ jobs = 8
     .context("write project .netsuke.toml")?;
 
     // Clear env vars that could interfere
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _locale_guard = EnvVarGuard::remove("NETSUKE_LOCALE");
@@ -80,6 +81,7 @@ jobs = 8
         merged.jobs == Some(8),
         "project config jobs should be discovered"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
@@ -110,7 +112,7 @@ fn assert_user_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
 
@@ -126,6 +128,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _xdg_config_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", xdg_config_home.as_os_str());
     let _xdg_config_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     // Clear other env vars
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -141,14 +144,16 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
         .context("merge with user config")?
         .with_default_command();
 
-    assert_user_config_applied(&merged)
+    let result = assert_user_config_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 #[cfg(windows)]
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_appdata = tempdir().context("create temporary APPDATA directory")?;
 
@@ -163,6 +168,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     // Set APPDATA to fake directory (Windows)
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     // Clear other env vars
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -179,7 +185,9 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
         .context("merge with user config")?
         .with_default_command();
 
-    assert_user_config_applied(&merged)
+    let result = assert_user_config_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 /// Project config TOML used by both Unix and Windows precedence test variants.
@@ -214,7 +222,7 @@ fn assert_project_precedence_applied(merged: &netsuke::cli::Cli) -> Result<()> {
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_home = tempdir().context("create temporary home directory")?;
@@ -237,6 +245,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
     let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
     let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -251,14 +260,16 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
         .context("merge configs")?
         .with_default_command();
 
-    assert_project_precedence_applied(&merged)
+    let result = assert_project_precedence_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 #[cfg(windows)]
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
     let temp_project = tempdir().context("create temporary project directory")?;
     let temp_appdata = tempdir().context("create temporary APPDATA directory")?;
@@ -281,6 +292,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
 
     let _appdata_guard = EnvVarGuard::set("APPDATA", temp_appdata.path().as_os_str());
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -295,13 +307,15 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
         .context("merge configs")?
         .with_default_command();
 
-    assert_project_precedence_applied(&merged)
+    let result = assert_project_precedence_applied(&merged);
+    drop(cwd_guard);
+    result
 }
 
 #[rstest]
 fn environment_variables_override_discovered_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
     // Write project-scope config
@@ -317,6 +331,7 @@ output_format = "human"
     .context("write project .netsuke.toml")?;
 
     // Set environment variables that should override the file
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("12"));
@@ -344,13 +359,14 @@ output_format = "human"
         merged.output_format == Some(OutputFormat::Human),
         "project config value should apply when no env override exists"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
 #[rstest]
 fn cli_flags_override_environment_and_config() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
 
     // Write project-scope config
@@ -367,6 +383,7 @@ output_format = "human"
     .context("write project .netsuke.toml")?;
 
     // Set environment variables
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::set("NETSUKE_THEME", OsStr::new("unicode"));
     let _jobs_guard = EnvVarGuard::set("NETSUKE_JOBS", OsStr::new("8"));
@@ -409,6 +426,7 @@ output_format = "human"
         merged.colour_policy == Some(ColourPolicy::Always),
         "environment colour_policy should apply when CLI does not override"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
@@ -417,7 +435,7 @@ output_format = "human"
 #[case("--directory")]
 fn directory_flag_anchors_project_discovery_to_specified_dir(#[case] flag: &str) -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_outer = tempdir().context("create outer directory")?;
     let temp_project = temp_outer.path().join("project");
     fs::create_dir(&temp_project).context("create project subdirectory")?;
@@ -436,6 +454,7 @@ jobs = 6
     // Stay in outer directory but use directory flag to point to project
     std::env::set_current_dir(&temp_outer).context("change to outer directory")?;
 
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -458,13 +477,14 @@ jobs = 6
         merged.jobs == Some(6),
         "config values from directory flag should be applied"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
 #[rstest]
 fn config_path_env_var_bypasses_automatic_discovery() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create project directory")?;
     let temp_custom = tempdir().context("create custom config directory")?;
 
@@ -491,6 +511,7 @@ colour_policy = "always"
     )
     .context("write custom config")?;
 
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::set("NETSUKE_CONFIG_PATH", custom_config.as_os_str());
     let _theme_guard = EnvVarGuard::remove("NETSUKE_THEME");
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
@@ -518,6 +539,7 @@ colour_policy = "always"
         merged.colour_policy == Some(ColourPolicy::Always),
         "custom config colour_policy should be applied"
     );
+    drop(cwd_guard);
     Ok(())
 }
 
@@ -573,7 +595,7 @@ fn assert_list_fields_appended(merged: &netsuke::cli::Cli) -> Result<()> {
 #[rstest]
 fn list_fields_append_across_discovered_config_env_and_cli() -> Result<()> {
     let _env_lock = EnvLock::acquire();
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+    let cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
     let temp_project = tempdir().context("create project directory")?;
 
     // Write project config with default_targets
@@ -587,6 +609,7 @@ fetch_allow_scheme = ["https"]
     )
     .context("write project .netsuke.toml with lists")?;
 
+    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     // Set single-value environment variables for list fields
     let _targets_guard = EnvVarGuard::set("NETSUKE_DEFAULT_TARGETS", OsStr::new("test"));
@@ -610,5 +633,7 @@ fetch_allow_scheme = ["https"]
         .context("merge with list appending")?
         .with_default_command();
 
-    assert_list_fields_appended(&merged)
+    let result = assert_list_fields_appended(&merged);
+    drop(cwd_guard);
+    result
 }

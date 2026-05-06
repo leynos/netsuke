@@ -25,7 +25,8 @@ use validation::configure_validation_parsers;
 
 /// Maximum number of jobs accepted by the CLI.
 const MAX_JOBS: usize = 64;
-const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
+const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
 const ENV_PREFIX: &str = "NETSUKE_";
 
 fn validation_message(
@@ -52,6 +53,11 @@ pub struct Cli {
     /// This affects manifest lookup, output paths, and config discovery.
     #[arg(short = 'C', long, value_name = "DIR")]
     pub directory: Option<PathBuf>,
+
+    /// Path to a configuration file, bypassing automatic discovery.
+    #[arg(long, value_name = "FILE")]
+    #[serde(skip)]
+    pub config: Option<PathBuf>,
 
     /// Set the number of parallel build jobs.
     ///
@@ -160,6 +166,7 @@ impl Default for Cli {
         Self {
             file: default_manifest_path(),
             directory: None,
+            config: None,
             jobs: None,
             verbose: false,
             locale: None,

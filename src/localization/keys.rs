@@ -14,6 +14,7 @@ define_keys! {
     CLI_USAGE => "cli.usage",
     CLI_FLAG_FILE_HELP => "cli.flag.file.help",
     CLI_FLAG_DIRECTORY_HELP => "cli.flag.directory.help",
+    CLI_FLAG_CONFIG_HELP => "cli.flag.config.help",
     CLI_FLAG_JOBS_HELP => "cli.flag.jobs.help",
     CLI_FLAG_VERBOSE_HELP => "cli.flag.verbose.help",
     CLI_FLAG_LOCALE_HELP => "cli.flag.locale.help",

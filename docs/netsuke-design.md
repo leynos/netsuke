@@ -2034,10 +2034,11 @@ applies `Cli::with_default_command` after parsing so invoking `netsuke` with no
 explicit command still triggers a build. Configuration is layered with
 OrthoConfig (defaults, configuration files, environment variables, then CLI
 overrides) while treating clap defaults as absent so file or environment values
-are not masked. Configuration discovery honours `NETSUKE_CONFIG_PATH` and the
-standard OrthoConfig search order; environment variables use the `NETSUKE_`
-prefix with `__` as a nesting separator. CLI help and clap errors are localized
-via Fluent resources; locale resolution is handled in
+are not masked. Explicit config selection is resolved before discovery with
+precedence `--config` > `NETSUKE_CONFIG` > legacy `NETSUKE_CONFIG_PATH`;
+`-C/--directory` only affects project-root discovery. Environment variables use
+the `NETSUKE_` prefix with `__` as a nesting separator. CLI help and clap
+errors are localized via Fluent resources; locale resolution is handled in
 `src/locale_resolution.rs` with the precedence `--locale` -> `NETSUKE_LOCALE`
 -> configuration `locale` -> system default. System locale strings are
 normalized by stripping encoding suffixes (such as `.UTF-8`), removing variant
@@ -2185,9 +2186,70 @@ flowchart LR
 Netsuke configuration discovery is implemented through OrthoConfig's
 `ConfigDiscovery` builder in `src/cli/config_merge.rs`. The
 `config_discovery()` helper constructs a discovery instance rooted at
-application name `"netsuke"`, honours the `NETSUKE_CONFIG_PATH` environment
-variable as an explicit override, and adjusts project-root discovery when the
-`-C/--directory` flag is supplied.
+application name `"netsuke"` and adjusts project-root discovery when the
+`-C/--directory` flag is supplied. Explicit file selection is handled before
+discovery by `resolve_config_path()`, which applies the precedence `--config` >
+`NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+
+**Figure: Explicit Config Selector Resolution** — This diagram shows how
+Netsuke chooses the configuration file before automatic discovery. Netsuke first
+checks `--config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`. The first
+explicit selector found is loaded directly; if that file is missing or invalid,
+Netsuke reports the explicit-file error instead of falling back to discovery.
+Only when no explicit selector is present does Netsuke run two-pass config
+discovery and then proceed with the merged configuration.
+
+```mermaid
+flowchart TD
+  Start([Start netsuke invocation])
+  HasCliConfig{CLI flag
+  --config set?}
+  HasEnvConfig{Env NETSUKE_CONFIG
+  set?}
+  HasEnvConfigPath{Env NETSUKE_CONFIG_PATH
+  set?}
+  UseCliConfig[[Use CLI --config path
+  as config file]]
+  UseEnvConfig[[Use NETSUKE_CONFIG path
+  as config file]]
+  UseEnvConfigPath[[Use NETSUKE_CONFIG_PATH path
+  as config file]]
+  RunDiscovery[[Run two-pass
+  config discovery]]
+  LoadConfig[[Load selected config
+  into merge pipeline]]
+  ErrorMissing[[Error: explicit config
+  file missing or invalid]]
+
+  Start --> HasCliConfig
+  HasCliConfig -- Yes --> UseCliConfig
+  HasCliConfig -- No --> HasEnvConfig
+
+  HasEnvConfig -- Yes --> UseEnvConfig
+  HasEnvConfig -- No --> HasEnvConfigPath
+
+  HasEnvConfigPath -- Yes --> UseEnvConfigPath
+  HasEnvConfigPath -- No --> RunDiscovery
+
+  UseCliConfig --> CheckCliFile{File exists
+  and parses?}
+  CheckCliFile -- Yes --> LoadConfig
+  CheckCliFile -- No --> ErrorMissing
+
+  UseEnvConfig --> CheckEnvFile{File exists
+  and parses?}
+  CheckEnvFile -- Yes --> LoadConfig
+  CheckEnvFile -- No --> ErrorMissing
+
+  UseEnvConfigPath --> CheckEnvPathFile{File exists
+  and parses?}
+  CheckEnvPathFile -- Yes --> LoadConfig
+  CheckEnvPathFile -- No --> ErrorMissing
+
+  RunDiscovery --> LoadConfig
+  LoadConfig --> End([Proceed with merged config])
+  ErrorMissing --> End
+```
 
 #### Discovery scopes and layered merging
 
@@ -2200,9 +2262,11 @@ override earlier ones—meaning project-scope has highest precedence among file
 layers. After file layers are merged, environment variables and CLI arguments
 override the merged result, ensuring explicit user intent always wins.
 
-1. **Explicit override**: `NETSUKE_CONFIG_PATH` environment variable, if set.
-   This allows users to point to any arbitrary configuration file path,
-   bypassing automatic discovery entirely.
+1. **Explicit override**: `--config <PATH>`, `NETSUKE_CONFIG`, and
+   `NETSUKE_CONFIG_PATH` are evaluated in that precedence order before
+   discovery. These explicit selectors bypass automatic discovery and ignore
+   the project-root anchor supplied by `-C/--directory`. `NETSUKE_CONFIG_PATH`
+   remains a backward-compatible alias of `NETSUKE_CONFIG`.
 
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
@@ -2239,7 +2303,7 @@ directory.
 **Layer merge precedence** (lowest to highest):
 
 1. Application defaults (hardcoded in `Cli::default()`)
-2. Discovered configuration file (project or user scope, as above)
+2. Selected configuration file layer (explicit or discovered)
 3. Environment variables (prefixed with `NETSUKE_`, e.g., `NETSUKE_JOBS=4`)
 4. Command-line arguments (e.g., `--jobs 8`)
 
@@ -2255,16 +2319,23 @@ manual flag repetition.
   override, relying on OrthoConfig's platform-specific defaults for standard
   directory resolution.
 - The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
-  the full layer composition: it calls `config_discovery()` to obtain file
-  layers, merges them with defaults, adds environment variables via Figment,
-  and finally applies CLI overrides extracted from `ArgMatches`.
+  the full layer composition: it resolves selection through
+  `resolve_config_path()`, calls `push_file_layers()` to load layers, merges
+  them with defaults, adds environment variables via Figment, and finally
+  applies CLI overrides extracted from `ArgMatches`.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
-- The current implementation uses `NETSUKE_CONFIG_PATH` for the override
-  environment variable. Roadmap item 3.11.3 plans to expose a visible
-  `--config` CLI flag and rename the environment variable to `NETSUKE_CONFIG`
-  for improved user ergonomics.
+- Explicit config selection is handled outside OrthoConfig's built-in discovery
+  override surface so Netsuke keeps its custom two-pass project-over-user merge
+  behaviour for automatic discovery. If an explicit selector is set, the
+  selected file is loaded directly and bypasses discovery, but still
+  participates in the normal precedence ladder: defaults < file < environment <
+  CLI.
+- Relative paths passed to `--config` are resolved against the process current
+  working directory, not the `-C/--directory` anchor. This keeps config-file
+  selection aligned with normal shell path semantics while `-C` continues to
+  scope project discovery and manifest lookup.
 
 ### 8.5 Manual Pages
 

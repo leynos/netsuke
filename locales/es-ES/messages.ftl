@@ -7,6 +7,7 @@ cli.usage = { $usage }
 # Texto de ayuda para opciones globales.
 cli.flag.file.help = Ruta al archivo de manifiesto Netsuke.
 cli.flag.directory.help = Ejecutar como si se iniciara en este directorio.
+cli.flag.config.help = Ruta a un archivo de configuración, omitiendo la detección automática.
 cli.flag.jobs.help = Número de trabajos de compilación en paralelo.
 cli.flag.verbose.help = Habilitar registro de diagnóstico detallado y resúmenes de tiempo al completar.
 cli.flag.locale.help = Etiqueta de idioma para la CLI (por ejemplo: en-US, es-ES).
