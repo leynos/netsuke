@@ -2191,6 +2191,66 @@ application name `"netsuke"` and adjusts project-root discovery when the
 discovery by `resolve_config_path()`, which applies the precedence `--config` >
 `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
 
+**Figure: Explicit Config Selector Resolution** — This diagram shows how
+Netsuke chooses the configuration file before automatic discovery. Netsuke first
+checks `--config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`. The first
+explicit selector found is loaded directly; if that file is missing or invalid,
+Netsuke reports the explicit-file error instead of falling back to discovery.
+Only when no explicit selector is present does Netsuke run two-pass config
+discovery and then proceed with the merged configuration.
+
+```mermaid
+flowchart TD
+  Start([Start netsuke invocation])
+  HasCliConfig{CLI flag
+  --config set?}
+  HasEnvConfig{Env NETSUKE_CONFIG
+  set?}
+  HasEnvConfigPath{Env NETSUKE_CONFIG_PATH
+  set?}
+  UseCliConfig[[Use CLI --config path
+  as config file]]
+  UseEnvConfig[[Use NETSUKE_CONFIG path
+  as config file]]
+  UseEnvConfigPath[[Use NETSUKE_CONFIG_PATH path
+  as config file]]
+  RunDiscovery[[Run two-pass
+  config discovery]]
+  LoadConfig[[Load selected config
+  into merge pipeline]]
+  ErrorMissing[[Error: explicit config
+  file missing or invalid]]
+
+  Start --> HasCliConfig
+  HasCliConfig -- Yes --> UseCliConfig
+  HasCliConfig -- No --> HasEnvConfig
+
+  HasEnvConfig -- Yes --> UseEnvConfig
+  HasEnvConfig -- No --> HasEnvConfigPath
+
+  HasEnvConfigPath -- Yes --> UseEnvConfigPath
+  HasEnvConfigPath -- No --> RunDiscovery
+
+  UseCliConfig --> CheckCliFile{File exists
+  and parses?}
+  CheckCliFile -- Yes --> LoadConfig
+  CheckCliFile -- No --> ErrorMissing
+
+  UseEnvConfig --> CheckEnvFile{File exists
+  and parses?}
+  CheckEnvFile -- Yes --> LoadConfig
+  CheckEnvFile -- No --> ErrorMissing
+
+  UseEnvConfigPath --> CheckEnvPathFile{File exists
+  and parses?}
+  CheckEnvPathFile -- Yes --> LoadConfig
+  CheckEnvPathFile -- No --> ErrorMissing
+
+  RunDiscovery --> LoadConfig
+  LoadConfig --> End([Proceed with merged config])
+  ErrorMissing --> End
+```
+
 #### Discovery scopes and layered merging
 
 Configuration discovery searches multiple scopes and composes all discovered
