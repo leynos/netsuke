@@ -273,10 +273,33 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   console when the rule is executed. This maps to Ninja's `description` field
   and improves the user's visibility into the build process.[^2]
 
-- `deps`: An optional field to configure support for C/C++-style header
-  dependency generation. Its value specifies the format (e.g., `gcc` or
-  `msvc`), which instructs Netsuke to generate the appropriate `depfile` or
-  `deps` attribute in the corresponding Ninja rule.[^3]
+#### Planned compiler dependency import
+
+Rule-level compiler dependency import is not part of the current manifest
+surface. When implemented, it will use `deps_from` rather than overloading
+`deps`, because `deps` already names target and action prerequisites.
+
+The planned shape is:
+
+```yaml
+rules:
+  - name: compile
+    command: >-
+      {{ cc }} {{ cflags }} -MMD -MF {{ depfile }}
+      -c {{ ins }} -o {{ outs }}
+    deps_from:
+      format: gcc
+      depfile: "{{ outs }}.d"
+```
+
+- `deps_from.format`: The dependency-file format emitted by the tool. Initial
+  support is expected to cover Ninja's `gcc` and `msvc` formats.[^3]
+- `deps_from.depfile`: The dependency file path template written by the recipe
+  and passed to Ninja's `depfile` rule attribute. The template may refer to the
+  same output placeholders as the rule recipe.
+
+Netsuke must not document or accept rule-level `deps` as an alias for this
+feature.
 
 ### 2.4 Defining `targets`
 
@@ -1613,9 +1636,11 @@ structures to the Ninja file syntax.
    rule cc
      command = gcc -c -o $out $in
      description = CC $out
-     depfile = $out.d
-     deps = gcc
    ```
+
+   The planned `deps_from` manifest field will populate `ir::Action.depfile`
+   and `ir::Action.deps_format`, allowing this rule writer to emit Ninja's
+   `depfile` and `deps` attributes without overloading target prerequisites.
 
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
    `ir::BuildEdge`, write a corresponding Ninja `build` statement. This

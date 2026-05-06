@@ -162,8 +162,6 @@ rules:
     command: "{{ cc }} {{ cflags }} -c {{ ins }} -o {{ outs }}"
     # Optional: Displayed during the build
     description: "Compiling {{ outs }}"
-    # Optional: Ninja dependency file info (gcc or msvc format)
-    deps: gcc
 
 ```
 
@@ -187,9 +185,6 @@ rules:
 
 - `description` (Optional): A user-friendly message printed by Ninja when
   this rule runs. Can contain `{{ ins }}` / `{{ outs }}`.
-
-- `deps` (Optional): Specifies dependency file format (`gcc` or `msvc`) for
-  C/C++ header dependencies, generating Ninja's `depfile` and `deps` attributes.
 
 ## 5\. Defining Targets and Actions
 

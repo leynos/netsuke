@@ -362,6 +362,16 @@ library, and CLI ergonomics.
     action.
   - [ ] Test absent-command fallback without invoking `shell()`.
   - [ ] Test `deps` lowering in the IR and emitted Ninja build statements.
+- [ ] 3.14.6. Add rule-level `deps_from` for compiler dependency imports.
+  Requires 3.14.3. See
+  [netsuke-design.md §2.3](netsuke-design.md#planned-compiler-dependency-import).
+  - [ ] Parse `deps_from.format` and `deps_from.depfile` without accepting
+    rule-level `deps` as an alias.
+  - [ ] Validate the initial `gcc` and `msvc` dependency formats.
+  - [ ] Lower `deps_from` into the IR action `depfile` and Ninja `deps`
+    attributes.
+  - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
+    is implemented.
 
 **Success criterion:** Netsuke ships a localizable, accessible, and fully
 configurable CLI that delivers real-time feedback, machine-readable
