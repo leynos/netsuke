@@ -632,10 +632,11 @@ schema defined in Section 2. They will be defined in a dedicated module,
 `src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
 enable automatic deserialisation and easy debugging.
 
-Fields and types marked as planned elsewhere in this document are
-forward-looking API sketches. In particular, `ExecRecipe`, `EnvValue`, and
-`EnvOperation` describe the intended schema once the roadmap tasks land; they
-are not assertions about the current codebase.
+The authoritative live AST contract is [src/ast.rs](../src/ast.rs). Fields and
+types marked `FUTURE` in the snippet below are forward-looking API sketches. In
+particular, `Rule.env`, `Target.description`, `Target.env`, `Recipe::Exec`,
+`ExecRecipe`, `EnvValue`, and `EnvOperation` describe the intended schema once
+the roadmap tasks land; they are not assertions about the current codebase.
 
 Rust
 
@@ -672,6 +673,7 @@ pub struct Rule {
     #[serde(flatten)]
     pub recipe: Recipe,
     pub description: Option<String>,
+    // FUTURE: planned Rule.env extension; not present in src/ast.rs yet.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
     #[serde(default)]
@@ -686,10 +688,11 @@ pub enum Recipe {
     Command { command: String },
     Script { script: String },
     Rule { rule: StringOrList },
+    // FUTURE: planned Recipe::Exec extension; not present in src/ast.rs yet.
     Exec { exec: ExecRecipe },
 }
 
-/// A structured command recipe that avoids shell word splitting.
+/// FUTURE: A structured command recipe that avoids shell word splitting.
 #[serde(deny_unknown_fields)]
 pub struct ExecRecipe {
     pub program: String,
@@ -716,8 +719,10 @@ pub struct Target {
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
 
+    // FUTURE: planned Target.description extension; not present in src/ast.rs yet.
     pub description: Option<String>,
 
+    // FUTURE: planned Target.env extension; not present in src/ast.rs yet.
     #[serde(default)]
     pub env: HashMap<String, EnvValue>,
 
@@ -730,7 +735,7 @@ pub struct Target {
     pub always: bool,
 }
 
-/// Environment variable operations applied to a recipe invocation.
+/// FUTURE: Environment variable operations applied to a recipe invocation.
 #[serde(untagged)]
 pub enum EnvValue {
     Value(String),
@@ -1654,10 +1659,13 @@ the Ninja build system, which consists of "Action" nodes (commands) and
 "Target" nodes (files).[^7] This close mapping simplifies the final code
 generation step.
 
-Planned fields in the following snippet are forward-looking IR sketches rather
-than implemented Rust definitions. `EnvBinding` and the `Exec` recipe variant
-capture the intended lowering target for the environment and structured recipe
-roadmap tasks.
+The authoritative live IR contract is [src/ir/graph.rs](../src/ir/graph.rs),
+re-exported through [src/ir/mod.rs](../src/ir/mod.rs). There is no top-level
+`src/ir.rs` file in the current codebase. Fields and types marked `FUTURE` in
+the snippet below are forward-looking IR sketches rather than implemented Rust
+definitions. `Action.env`, `EnvBinding`, and the `Exec` recipe variant capture
+the intended lowering target for the environment and structured recipe roadmap
+tasks.
 
 Rust
 
@@ -1685,6 +1693,7 @@ pub struct BuildGraph {
 pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
+    // FUTURE: planned Action.env extension; not present in src/ir/graph.rs yet.
     pub env: HashMap<String, EnvBinding>,
     pub depfile: Option<String>, // Template for the .d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
@@ -1692,8 +1701,9 @@ pub struct Action {
     pub restat: bool,
 }
 
-/// A resolved environment operation for one action invocation.
+/// FUTURE: A resolved environment operation for one action invocation.
 pub enum EnvBinding {
+    // FUTURE: these variants are planned, not part of the live IR contract.
     Set(String),
     Default(String),
     Prepend(String),
