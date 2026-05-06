@@ -368,9 +368,11 @@ theme = "ascii
     Ok(())
 }
 
+#[cfg(unix)]
 #[rstest]
 fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error() -> Result<()> {
     let _env_lock = EnvLock::acquire();
+    let temp_home = tempdir().context("create temporary home directory")?;
     let temp_project = tempdir().context("create temporary project directory")?;
     let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
 
@@ -391,6 +393,10 @@ theme = "ascii
     )
     .context("write malformed explicit config")?;
 
+    let temp_xdg_home = tempdir().context("create temporary XDG config home")?;
+    let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
+    let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
+    let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
     let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
     let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
     let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
