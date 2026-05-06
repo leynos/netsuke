@@ -1,30 +1,35 @@
-//! Expands manifest foreach directives into concrete targets.
+//! Expands manifest foreach directives into concrete targets and actions.
 use super::{ManifestMap, ManifestValue};
 use crate::localization::{self, keys};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 
-/// Expand manifest targets defined with the `foreach` key.
+/// Expand manifest targets and actions defined with the `foreach` key.
 ///
 /// # Errors
 ///
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialise, or when target metadata is malformed.
 pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> {
-    let Some(targets) = doc.get_mut("targets").and_then(|v| v.as_array_mut()) else {
+    expand_section(doc, "targets", env)?;
+    expand_section(doc, "actions", env)
+}
+
+fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<()> {
+    let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
         return Ok(());
     };
 
     let mut expanded = Vec::new();
-    for target in std::mem::take(targets) {
-        match target {
+    for entry in std::mem::take(entries) {
+        match entry {
             ManifestValue::Object(map) => expanded.extend(expand_target(map, env)?),
             other => expanded.push(other),
         }
     }
 
-    *targets = expanded;
+    *entries = expanded;
     Ok(())
 }
 
@@ -177,173 +182,5 @@ fn eval_expression(env: &Environment, name: &str, expr: &str, ctx: Value) -> Res
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use minijinja::Environment;
-    use rstest::rstest;
-
-    fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
-        doc.get("targets")
-            .and_then(|v| v.as_array())
-            .map(Vec::as_slice)
-            .context("targets sequence missing")
-    }
-
-    #[test]
-    fn expand_foreach_expands_sequence_values() -> Result<()> {
-        let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: literal
-    foreach:
-      - 1
-      - 2
-    vars:
-      static: keep",
-        )?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.len() == 2, "expected two targets");
-        for (idx, target) in targets.iter().enumerate() {
-            let map = target.as_object().context("target map")?;
-            let vars = map
-                .get("vars")
-                .and_then(|v| v.as_object())
-                .context("vars map")?;
-            let index_val = vars.get("index").context("index value")?;
-            let item_val = vars.get("item").context("item value")?;
-            let ManifestValue::Number(index_num) = index_val else {
-                anyhow::bail!("index should be numeric: {index_val:?}");
-            };
-            let index = index_num
-                .as_u64()
-                .context("numeric index conversion failed")?;
-            anyhow::ensure!(index == idx as u64, "unexpected index value: {index}");
-            let ManifestValue::Number(item_num) = item_val else {
-                anyhow::bail!("item should be numeric: {item_val:?}");
-            };
-            let item = item_num
-                .as_u64()
-                .context("numeric item conversion failed")?;
-            anyhow::ensure!(item == (idx + 1) as u64, "unexpected item value: {item}");
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn expand_foreach_applies_when_expression() -> Result<()> {
-        let env = Environment::new();
-        let mut doc: ManifestValue = serde_saphyr::from_str(
-            "targets:
-  - name: literal
-    foreach: '[1, 2, 3]'
-    when: 'item > 1'",
-        )?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.len() == 2, "expected filtered targets");
-        let indexes: Vec<u64> = targets
-            .iter()
-            .map(|target| -> Result<u64> {
-                let map = target.as_object().context("target map")?;
-                let vars = map
-                    .get("vars")
-                    .and_then(|v| v.as_object())
-                    .context("vars map")?;
-                let index_value = vars.get("index").context("index value")?;
-                let ManifestValue::Number(num) = index_value else {
-                    anyhow::bail!("index missing");
-                };
-                num.as_u64().context("numeric index conversion failed")
-            })
-            .collect::<Result<_>>()?;
-        anyhow::ensure!(
-            indexes == vec![1, 2],
-            "unexpected filtered indexes: {:?}",
-            indexes
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn expand_foreach_preserves_object_key_order() -> Result<()> {
-        let env = Environment::new();
-        let yaml = r"targets:
-  - name: literal
-    vars:
-      existing: keep
-    foreach:
-      - 1
-      - 2
-    when: 'true'
-    after: done
-";
-        let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(targets.len() == 2, "expected expanded targets");
-        for target in targets {
-            let map = target.as_object().context("target object")?;
-            let keys: Vec<&str> = map.keys().map(String::as_str).collect();
-            anyhow::ensure!(
-                keys == ["name", "vars", "after"],
-                "key order should remain stable: {:?}",
-                keys
-            );
-        }
-        Ok(())
-    }
-
-    #[rstest]
-    #[case("false", 0, "expression false drops target")]
-    #[case("0", 0, "expression 0 drops target")]
-    #[case("true", 1, "expression true keeps target")]
-    #[case("1 == 1", 1, "expression equality keeps target")]
-    #[case("{{ 0 }}", 0, "template 0 drops target")]
-    #[case("{{ 1 }}", 1, "template 1 keeps target")]
-    #[case("{{ \"true\" }}", 1, "template lowercase true keeps target")]
-    #[case("{{ \"True\" }}", 1, "template mixed case True keeps target")]
-    #[case("{{ \"TRUE\" }}", 1, "template uppercase TRUE keeps target")]
-    #[case("{{ 2 }}", 0, "template 2 drops target (only 1 is truthy)")]
-    #[case("{{ \"yes\" }}", 0, "template yes drops target (only true/1 truthy)")]
-    fn expand_static_target_when_evaluation(
-        #[case] when_expr: &str,
-        #[case] expected_count: usize,
-        #[case] description: &str,
-    ) -> Result<()> {
-        let env = Environment::new();
-        let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
-        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
-        expand_foreach(&mut doc, &env)?;
-        let targets = targets(&doc)?;
-        anyhow::ensure!(
-            targets.len() == expected_count,
-            "{description}: expected {expected_count} target(s), got {}",
-            targets.len()
-        );
-        if expected_count == 1 {
-            let target = targets.first().context("target")?;
-            let map = target.as_object().context("target object")?;
-            anyhow::ensure!(
-                !map.contains_key("when"),
-                "{description}: when field should be removed after evaluation"
-            );
-        }
-        Ok(())
-    }
-
-    #[rstest]
-    #[case("{{ unclosed", "malformed template")]
-    #[case("", "empty when expression")]
-    fn expand_static_target_when_invalid_errors(
-        #[case] when_expr: &str,
-        #[case] description: &str,
-    ) -> Result<()> {
-        let env = Environment::new();
-        let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
-        let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
-        let result = expand_foreach(&mut doc, &env);
-        anyhow::ensure!(result.is_err(), "{description} should return Err");
-        Ok(())
-    }
-}
+#[path = "expand_tests.rs"]
+mod tests;

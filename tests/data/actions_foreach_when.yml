@@ -1,0 +1,12 @@
+netsuke_version: 1.0.0
+actions:
+  - foreach:
+      - setup
+      - skip
+      - test
+    when: item != 'skip'
+    name: "{{ item }}"
+    command: "echo '{{ item }}'"
+targets:
+  - name: done
+    command: "true"
