@@ -487,6 +487,31 @@ For `prepend` and `append`, Netsuke uses the platform path-list separator. A
 future extension may allow an explicit `separator`, but the default must be
 host-correct so common `PATH` edits do not require shell code.
 
+The manifest `env` block affects only the execution environment Netsuke applies
+to rules, targets, and actions. It is separate from the Jinja `env()` helper in
+[§4.4](#44-essential-custom-functions), which reads from the process
+environment while the manifest is evaluated.
+
+#### Environment Layering and Conflicts
+
+Environment values move through three layers:
+
+- The manifest schema accepts `env` mappings on rules, targets, and actions.
+  A scalar string is shorthand for an exact set operation.
+- The AST represents those entries as `EnvValue` and `EnvOperation`, preserving
+  the user-facing shape for validation and diagnostics.
+- The IR lowers each validated entry into an `EnvBinding`, which is the backend
+  contract used when rendering an executable action.
+
+Each explicit operation object must contain exactly one of `value`, `default`,
+`prepend`, `append`, or `unset`. Objects that contain none or more than one of
+those keys are invalid, even when the operations could theoretically be
+composed. Rule-level bindings are merged first. Target or action bindings then
+replace rule bindings with the same variable name, while bindings for distinct
+variables are carried forward unchanged. Composition across levels, such as a
+rule-level `prepend` followed by a target-level `append` for the same variable,
+is deferred until the design defines ordered environment operations.
+
 Example:
 
 ```yaml
@@ -606,6 +631,11 @@ Tree (AST) of the build manifest. These structs must precisely mirror the YAML
 schema defined in Section 2. They will be defined in a dedicated module,
 `src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
 enable automatic deserialisation and easy debugging.
+
+Fields and types marked as planned elsewhere in this document are
+forward-looking API sketches. In particular, `ExecRecipe`, `EnvValue`, and
+`EnvOperation` describe the intended schema once the roadmap tasks land; they
+are not assertions about the current codebase.
 
 Rust
 
@@ -969,7 +999,11 @@ providing a secure bridge to the underlying system.
   `PATH`, `CC`). It returns an error if the variable is undefined and no
   `default` is provided, or if the variable contains invalid UTF-8. The
   `default` argument is planned; the current implementation only accepts the
-  variable name.
+  variable name. This helper only reads the process environment during manifest
+  evaluation; it does not set the action execution environment. The planned
+  manifest-level `env` block in
+  [§2.6](#26-planned-recipe-ergonomics-and-execution-feedback) controls the
+  environment Netsuke applies when actions run.
 
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: Expand filesystem
   patterns (e.g., `src/**/*.c`) into a list of matched paths. Results are
@@ -1620,6 +1654,11 @@ the Ninja build system, which consists of "Action" nodes (commands) and
 "Target" nodes (files).[^7] This close mapping simplifies the final code
 generation step.
 
+Planned fields in the following snippet are forward-looking IR sketches rather
+than implemented Rust definitions. `EnvBinding` and the `Exec` recipe variant
+capture the intended lowering target for the environment and structured recipe
+roadmap tasks.
+
 Rust
 
 ```rust
@@ -1647,7 +1686,7 @@ pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
     pub env: HashMap<String, EnvBinding>,
-    pub depfile: Option<String>, // Template for the.d file path, e.g., "$out.d"
+    pub depfile: Option<String>, // Template for the .d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
     pub pool: Option<String>,
     pub restat: bool,
