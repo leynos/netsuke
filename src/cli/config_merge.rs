@@ -47,9 +47,14 @@ fn env_config_path(var_name: &str) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+#[expect(
+    clippy::option_as_ref_cloned,
+    reason = "make cloning the selected config path explicit"
+)]
 fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
     cli.config
-        .clone()
+        .as_ref()
+        .cloned()
         .or_else(|| env_config_path(CONFIG_ENV_VAR))
         .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
 }
