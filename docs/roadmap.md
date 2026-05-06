@@ -325,6 +325,42 @@ library, and CLI ergonomics.
   - [ ] Include examples of consuming JSON diagnostics.
   - [ ] Document configuring quiet/verbose modes for automation.
 
+### 3.14. Conditional action planning
+
+- [ ] 3.14.1. Record manifest-time condition semantics for actions and targets.
+  See [netsuke-design.md §2.5](netsuke-design.md).
+  - [ ] State that `foreach` and `when` are evaluated before typed AST
+    deserialisation, IR generation, and Ninja execution.
+  - [ ] Document that build-time branching belongs in recipes unless a future
+    runtime-condition feature is designed.
+- [ ] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
+  Requires 2.2.3. See [netsuke-design.md §2.5](netsuke-design.md).
+  - [ ] Preserve the existing implicit `phony: true` action behaviour after
+    expansion.
+  - [ ] Support complementary branches such as `when: command_available(...)`
+    and `when: not command_available(...)`.
+- [ ] 3.14.3. Lower target and action `deps` into explicit IR and Ninja
+  dependency edges. Requires 1.2.2 and 1.3.2. See
+  [netsuke-design.md §§2.4 and 5.3](netsuke-design.md).
+  - [ ] Merge `sources` and `deps` into the explicit `BuildEdge.inputs` class
+    unless a documented schema decision replaces `deps` with `sources`.
+  - [ ] Align cycle detection, generated Ninja output, and user-facing
+    dependency documentation.
+- [ ] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
+  executable probe. Requires 3.5.1. See
+  [executable discovery](netsuke-design.md#executable-discovery-filter-which).
+  - [ ] Reuse the `which` resolver and cache.
+  - [ ] Return `false` for absent commands instead of raising
+    `netsuke::jinja::which::not_found`.
+  - [ ] Preserve argument validation diagnostics for invalid options.
+- [ ] 3.14.5. Add regression coverage for conditional action dependency
+  manifests.
+  - [ ] Test action-level `when` and action-level `foreach`.
+  - [ ] Test complementary nextest and legacy branches select exactly one
+    action.
+  - [ ] Test absent-command fallback without invoking `shell()`.
+  - [ ] Test `deps` lowering in the IR and emitted Ninja build statements.
+
 **Success criterion:** Netsuke ships a localizable, accessible, and fully
 configurable CLI that delivers real-time feedback, machine-readable
 diagnostics, and the onboarding experience defined in the Netsuke CLI design

@@ -183,7 +183,10 @@ level keys.
   to a Ninja `build` statement.[^3]
 
 - `actions`: A secondary list of build targets. Any target placed here is
-  treated as `{ phony: true, always: false }` by default.
+  treated as `{ phony: true, always: false }` by default. Entries in this list
+  participate in the same manifest-time `foreach` and `when` expansion as
+  `targets`, so preparation and test actions can be selected declaratively
+  before Netsuke synthesizes the static build graph.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
@@ -314,7 +317,10 @@ are specified.
 - `deps`: An optional list of other target names. These targets are explicit
   dependencies and must be successfully built before this target can be. A
   change in any of these dependencies will trigger a rebuild of the current
-  target.
+  target. Netsuke lowers `deps` into the same explicit IR and Ninja dependency
+  edge class as `sources`; if a future schema chooses to make `sources` the
+  only explicit dependency field, that decision must be recorded in this design
+  and the user guide before `deps` is deprecated.
 
 - `order_only_deps`: An optional list of other target names that must be built
   before this target, but whose modification does not trigger a rebuild of this
@@ -337,14 +343,21 @@ are specified.
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
-### 2.5 Generated Targets with `foreach`
+### 2.5 Generated Targets and Actions with `foreach`
 
 Large sets of similar outputs can clutter a manifest when written individually.
-Netsuke supports a `foreach` entry within `targets` to generate multiple
-outputs succinctly. The `foreach` and optional `when` keys accept bare Jinja
-expressions evaluated after the initial YAML pass. Each resulting value becomes
-`item` in the target context, and the per-iteration environment is carried
-forward to later rendering.
+Netsuke supports a `foreach` entry within `targets` and `actions` to generate
+multiple entries succinctly. The `foreach` and optional `when` keys accept bare
+Jinja expressions evaluated after the initial YAML pass. Each resulting value
+becomes `item` in the entry context, and the per-iteration environment is
+carried forward to later rendering.
+
+Conditions are manifest-time decisions. Netsuke evaluates `when` while loading
+the manifest, before the AST is deserialised, before IR generation, and before
+Ninja executes. The generated IR and `build.ninja` file therefore contain only
+the selected entries. Build-time branching remains the responsibility of the
+recipe command or script unless a separate future feature explicitly models
+runtime conditions.
 
 ```yaml
 - foreach: glob('assets/svg/*.svg')
@@ -358,15 +371,15 @@ The expansion flow is:
 
 ```mermaid
 flowchart TD
-    A[Iterate over targets in YAML] --> B{Has foreach?}
+    A[Iterate over targets and actions in YAML] --> B{Has foreach?}
     B -- Yes --> C[Evaluate foreach expression]
     C --> D[For each item:]
     D --> E{Has when?}
     E -- Yes --> F[Evaluate when expression]
-    F -- True --> G[Expand target with item/index]
-    F -- False --> H[Skip target]
+    F -- True --> G[Expand entry with item/index]
+    F -- False --> H[Skip entry]
     E -- No --> G
-    B -- No --> I[Keep target as is]
+    B -- No --> I[Evaluate static when, then keep or skip entry]
 ```
 
 Each element in the sequence produces a separate target. The iteration context:
@@ -980,6 +993,22 @@ entries were inspected, a shortened preview of the path list, and platform
 appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
 Invalid arguments surface as `netsuke::jinja::which::args`.
 
+Netsuke also exposes a boolean executable probe for conditional manifest
+generation:
+
+- **Usage:** `{{ command_available("cargo-nextest", fresh=false,
+  cwd_mode="auto") }}`
+- **Returns:** `true` when the command resolver finds at least one executable,
+  and `false` when the command is absent.
+- **Errors:** Invalid arguments still surface as
+  `netsuke::jinja::which::args`; command absence is not an error.
+
+`command_available` reuses the `which` resolver and cache so manifests can
+write complementary manifest-time branches without forcing authors through the
+impure `shell()` filter. It is intended for `when` clauses such as selecting a
+`cargo-nextest` action when `cargo-nextest` is installed and a legacy
+`cargo test` action otherwise.
+
 Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
 reuse, and list-all semantics. Behavioural MiniJinja fixtures exercise the
 filter in Stage 3/4 renders to prove determinism across repeated invocations
@@ -1506,8 +1535,11 @@ This transformation involves several steps:
 
 2. **Target Expansion:** Iterate through the `manifest.targets` and the optional
    `manifest.actions`. Entries in `actions` are treated identically to targets
-   but with `phony` defaulting to `true`. For each item, resolve all strings
-   into `Utf8PathBuf`s and resolve all dependency names against other targets.
+   but with `phony` defaulting to `true`. Both collections have already had
+   manifest-time `foreach` and `when` clauses expanded before deserialisation,
+   so the IR stage receives only entries that should exist in the static build
+   graph. For each item, resolve all strings into `Utf8PathBuf`s and resolve
+   all dependency names against other targets.
 
 3. **Action Registration and Edge Creation:** For each expanded target,
    resolve the referenced rule template, interpolate its command with the
@@ -1515,7 +1547,10 @@ This transformation involves several steps:
    the `actions` map. Actions are hashed on the fully resolved command and file
    set, so identical rule templates yield distinct actions when their paths
    differ. Create a corresponding `ir::BuildEdge` linking the target to the
-   action identifier and transfer the `phony` and `always` flags.
+   action identifier and transfer the `phony` and `always` flags. Explicit
+   dependencies from `sources` and `deps` are lowered into the edge's explicit
+   input list so Ninja orders and rebuilds them consistently; `order_only_deps`
+   remains separate and maps to Ninja's `||` class.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
