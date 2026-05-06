@@ -2035,29 +2035,29 @@ explicit command still triggers a build. Configuration is layered with
 OrthoConfig (defaults, configuration files, environment variables, then CLI
 overrides) while treating clap defaults as absent so file or environment values
 are not masked. Explicit config selection is resolved before discovery with
-precedence `--config` > `NETSUKE_CONFIG` > legacy `NETSUKE_CONFIG_PATH`; `-C/--directory`
-only affects project-root discovery. Environment variables use the `NETSUKE_` prefix
-with `__` as a nesting separator. CLI help and clap errors are localized via
-Fluent resources; locale resolution is handled in `src/locale_resolution.rs`
-with the precedence `--locale` -> `NETSUKE_LOCALE` -> configuration `locale` ->
-system default. System locale strings are normalized by stripping encoding
-suffixes (such as `.UTF-8`), removing variant suffixes (such as `@latin`), and
-replacing underscores with hyphens before validation. English plus Spanish
-catalogues ship in `locales/`; unsupported locales fall back to `en-US`.
-Runtime diagnostics (for example manifest parsing, stdlib template errors, and
-runner failures) use the same Fluent localizer so the locale selection is
-consistent across user-facing output. A build-time audit in `build.rs`
-validates that all referenced Fluent message keys exist in the bundled
-catalogues, ensuring missing strings fail CI before release. CLI execution and
-dispatch live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
-management, Ninja invocation, argument redaction, and the temporary file
-helpers reside in `src/runner/process.rs`, allowing the runner entry point to
-delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
-option but is resolved internally: Netsuke runs Ninja with a configured working
-directory and resolves relative output paths (for example `build --emit` and
-`manifest`) under the same directory so behaviour matches a real directory
-change. Error scenarios are validated using clap's `ErrorKind` enumeration in
-unit tests and via Cucumber steps for behavioural coverage.
+precedence `--config` > `NETSUKE_CONFIG` > legacy `NETSUKE_CONFIG_PATH`;
+`-C/--directory` only affects project-root discovery. Environment variables use
+the `NETSUKE_` prefix with `__` as a nesting separator. CLI help and clap
+errors are localized via Fluent resources; locale resolution is handled in
+`src/locale_resolution.rs` with the precedence `--locale` -> `NETSUKE_LOCALE`
+-> configuration `locale` -> system default. System locale strings are
+normalized by stripping encoding suffixes (such as `.UTF-8`), removing variant
+suffixes (such as `@latin`), and replacing underscores with hyphens before
+validation. English plus Spanish catalogues ship in `locales/`; unsupported
+locales fall back to `en-US`. Runtime diagnostics (for example manifest
+parsing, stdlib template errors, and runner failures) use the same Fluent
+localizer so the locale selection is consistent across user-facing output. A
+build-time audit in `build.rs` validates that all referenced Fluent message
+keys exist in the bundled catalogues, ensuring missing strings fail CI before
+release. CLI execution and dispatch live in `src/runner.rs`, keeping `main.rs`
+focused on parsing. Process management, Ninja invocation, argument redaction,
+and the temporary file helpers reside in `src/runner/process.rs`, allowing the
+runner entry point to delegate low-level concerns. The working directory flag
+mirrors Ninja's `-C` option but is resolved internally: Netsuke runs Ninja with
+a configured working directory and resolves relative output paths (for example
+`build --emit` and `manifest`) under the same directory so behaviour matches a
+real directory change. Error scenarios are validated using clap's `ErrorKind`
+enumeration in unit tests and via Cucumber steps for behavioural coverage.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
@@ -2204,8 +2204,8 @@ override the merged result, ensuring explicit user intent always wins.
 
 1. **Explicit override**: `--config <PATH>`, `NETSUKE_CONFIG`, and
    `NETSUKE_CONFIG_PATH` are evaluated in that precedence order before
-   discovery. These explicit selectors bypass automatic discovery and ignore the
-   project-root anchor supplied by `-C/--directory`. `NETSUKE_CONFIG_PATH`
+   discovery. These explicit selectors bypass automatic discovery and ignore
+   the project-root anchor supplied by `-C/--directory`. `NETSUKE_CONFIG_PATH`
    remains a backward-compatible alias of `NETSUKE_CONFIG`.
 
 2. **Project scope**: Configuration files in the current working directory (or
@@ -2260,17 +2260,18 @@ manual flag repetition.
   directory resolution.
 - The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
   the full layer composition: it resolves selection through
-  `resolve_config_path()`, calls `push_file_layers()` to load layers, merges them
-  with defaults, adds environment variables via Figment, and finally applies CLI
-  overrides extracted from `ArgMatches`.
+  `resolve_config_path()`, calls `push_file_layers()` to load layers, merges
+  them with defaults, adds environment variables via Figment, and finally
+  applies CLI overrides extracted from `ArgMatches`.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
 - Explicit config selection is handled outside OrthoConfig's built-in discovery
   override surface so Netsuke keeps its custom two-pass project-over-user merge
-  behaviour for automatic discovery. If an explicit selector is set, the selected
-  file is loaded directly and bypasses discovery, but still participates in the
-  normal precedence ladder: defaults < file < environment < CLI.
+  behaviour for automatic discovery. If an explicit selector is set, the
+  selected file is loaded directly and bypasses discovery, but still
+  participates in the normal precedence ladder: defaults < file < environment <
+  CLI.
 - Relative paths passed to `--config` are resolved against the process current
   working directory, not the `-C/--directory` anchor. This keeps config-file
   selection aligned with normal shell path semantics while `-C` continues to
