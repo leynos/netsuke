@@ -3,6 +3,7 @@
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
 
+use super::helpers::unix_config_env;
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
 use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
@@ -18,14 +19,12 @@ use std::sync::Arc;
 use tempfile::tempdir;
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 
-/// RAII guard that restores the process working directory on drop.
-///
-/// Acquire this *after* `EnvLock` so the drop order (CWD restored first,
-/// lock released second) mirrors the acquire order.
-struct CwdGuard(std::path::PathBuf);
+/// RAII guard that restores the CWD on drop. Acquire after `EnvLock` so
+/// the CWD is restored before the lock releases.
+pub(super) struct CwdGuard(std::path::PathBuf);
 
 impl CwdGuard {
-    fn acquire() -> anyhow::Result<Self> {
+    pub(super) fn acquire() -> anyhow::Result<Self> {
         Ok(Self(
             std::env::current_dir().context("capture current working directory")?,
         ))
@@ -37,7 +36,6 @@ impl Drop for CwdGuard {
         drop(std::env::set_current_dir(&self.0));
     }
 }
-
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
     Ok(sanitize_value(&Cli::default())?)
@@ -317,49 +315,28 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 
 #[cfg(unix)]
 #[rstest]
-fn resolve_merged_diag_json_handles_malformed_project_config() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_home = tempdir().context("create temporary home directory")?;
-    let temp_project = tempdir().context("create temporary project directory")?;
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+fn resolve_merged_diag_json_handles_malformed_project_config(
+    unix_config_env: Result<super::helpers::UnixConfigTestEnv>,
+) -> Result<()> {
+    let env = unix_config_env?;
 
     // User config: valid, sets output_format=json
-    let user_config = temp_home.path().join(".netsuke.toml");
-    fs::write(
-        &user_config,
-        r#"
-output_format = "json"
-"#,
-    )
-    .context("write user .netsuke.toml")?;
+    let user_config = env.temp_home.path().join(".netsuke.toml");
+    fs::write(&user_config, "output_format = \"json\"\n").context("write user .netsuke.toml")?;
 
     // Project config: malformed (missing closing quote)
-    let project_config = temp_project.path().join(".netsuke.toml");
-    fs::write(
-        &project_config,
-        r#"
-theme = "ascii
-"#,
-    )
-    .context("write malformed project .netsuke.toml")?;
+    let project_config = env.temp_project.path().join(".netsuke.toml");
+    fs::write(&project_config, "theme = \"ascii\n")
+        .context("write malformed project .netsuke.toml")?;
 
-    let temp_xdg_home = tempdir().context("create temporary XDG config home")?;
-    let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
-    let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
-    let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
-    let _config_path_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
-    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
-
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
+    std::env::set_current_dir(&env.temp_project).context("change to project directory")?;
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for malformed project config test")?;
 
-    // resolve_merged_diag_json should not propagate the project config parse error,
-    // but should fall back to the valid user config setting (output_format=json)
+    // Malformed project config parse error should not propagate;
+    // resolve_merged_diag_json should fall back to the valid user config (output_format=json)
     ensure!(
         netsuke::cli::resolve_merged_diag_json(&cli, &matches),
         "should honour user config output_format=json despite malformed project config"
@@ -370,38 +347,21 @@ theme = "ascii
 
 #[cfg(unix)]
 #[rstest]
-fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let temp_home = tempdir().context("create temporary home directory")?;
-    let temp_project = tempdir().context("create temporary project directory")?;
-    let _cwd_guard = CwdGuard::acquire().context("capture current working directory")?;
+fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error(
+    unix_config_env: Result<super::helpers::UnixConfigTestEnv>,
+) -> Result<()> {
+    let env = unix_config_env?;
 
     fs::write(
-        temp_project.path().join(".netsuke.toml"),
-        r#"
-output_format = "json"
-"#,
+        env.temp_project.path().join(".netsuke.toml"),
+        "output_format = \"json\"\n",
     )
     .context("write project .netsuke.toml")?;
 
-    let explicit_config = temp_project.path().join("broken.toml");
-    fs::write(
-        &explicit_config,
-        r#"
-theme = "ascii
-"#,
-    )
-    .context("write malformed explicit config")?;
+    let explicit_config = env.temp_project.path().join("broken.toml");
+    fs::write(&explicit_config, "theme = \"ascii\n").context("write malformed explicit config")?;
 
-    let temp_xdg_home = tempdir().context("create temporary XDG config home")?;
-    let _home_guard = EnvVarGuard::set("HOME", temp_home.path().as_os_str());
-    let _xdg_home_guard = EnvVarGuard::set("XDG_CONFIG_HOME", temp_xdg_home.path().as_os_str());
-    let _xdg_dirs_guard = EnvVarGuard::set("XDG_CONFIG_DIRS", OsStr::new(""));
-    let _config_guard = EnvVarGuard::remove("NETSUKE_CONFIG");
-    let _legacy_guard = EnvVarGuard::remove("NETSUKE_CONFIG_PATH");
-    let _diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
-    let _output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
+    std::env::set_current_dir(&env.temp_project).context("change to project directory")?;
 
     let config_arg = explicit_config.to_string_lossy().into_owned();
     let localizer = Arc::from(cli_localization::build_localizer(None));
