@@ -15,6 +15,7 @@ pub(super) fn os_args(args: &[&str]) -> Vec<OsString> {
 /// Creates empty temporary directories for home and project, acquires
 /// `EnvLock`, and sets `HOME`, `XDG_CONFIG_HOME`, and `XDG_CONFIG_DIRS`
 /// to empty paths so host-level config files cannot leak into assertions.
+#[cfg(unix)]
 pub(super) struct UnixConfigTestEnv {
     _cwd_guard: super::merge::CwdGuard,
     pub(super) temp_home: tempfile::TempDir,
