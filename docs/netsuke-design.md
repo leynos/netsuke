@@ -251,8 +251,11 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   [`shell-quote`](https://docs.rs/shell-quote/latest/shell_quote/) crate (Sh
   mode) before hashing the action. The IR stores the fully expanded command;
   Ninja executes this text verbatim. After interpolation, the command must be
-  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). Any
-  interpolation other than `ins` or `outs` is automatically shell-escaped.
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode).
+  Automatic shell escaping applies only where the schema has enough structure
+  to identify argument boundaries. Plain command strings remain shell text;
+  authors should use structured recipes or explicit quoting helpers for
+  arbitrary variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to an interpreter. If the first line begins with `#!`
@@ -272,6 +275,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
 - `description`: An optional, user-friendly string that is printed to the
   console when the rule is executed. This maps to Ninja's `description` field
   and improves the user's visibility into the build process.[^2]
+
+- `env`: A planned mapping of environment variables to apply when the rule runs.
+  See [§2.6](#26-planned-recipe-ergonomics-and-execution-feedback). Until this
+  field is implemented, recipes must perform their own environment setup.
 
 #### Planned compiler dependency import
 
@@ -323,10 +330,21 @@ rule:
 - `script`: A multi-line script passed to the interpreter. When present, it is
   defined using the YAML `|` block style.
 
-Only one of `rule`, `command`, or `script` may be specified. The parser
-validates this exclusivity during deserialisation. When multiple fields are
-present, Netsuke emits a `RecipeConflict` error with the message "rule, command
-and script are mutually exclusive".
+- `description`: A planned, target-local status string. When present on a target
+  or action, it overrides the referenced rule description for the concrete
+  build edge. This lets selected conditional actions explain what they are
+  doing without embedding `echo` statements in recipes.
+
+- `env`: A planned mapping of environment variables to apply when this target or
+  action runs. Target-level values override rule-level values after the rule is
+  resolved.
+
+Only one of `rule`, `command`, `script`, or the planned structured `exec`
+recipe may be specified. The parser validates this exclusivity during
+deserialisation. When multiple fields are present, Netsuke emits a
+`RecipeConflict` error with the message "rule, command and script are mutually
+exclusive". When `exec` is implemented, this diagnostic must include all recipe
+field names.
 
 This union deserialises into the same `Recipe` enum used for rules. The parser
 enforces that only one variant is present and errors if multiple recipe fields
@@ -428,7 +446,110 @@ Jinja control structures cannot shape the YAML; all templating must occur
 within the string values. The resulting build graph is still fully static and
 behaves the same as if every target were declared explicitly.
 
-### 2.6 Table: Netsuke Manifest vs. Makefile
+### 2.6 Planned Recipe Ergonomics and Execution Feedback
+
+The current string-based recipe model makes advanced shell usage leak Ninja
+syntax into manifests. For example, a shell fallback such as `${CARGO:-cargo}`
+must be written as `$${CARGO:-cargo}` so Ninja leaves the dollar expression for
+the shell. That is the wrong abstraction boundary: Netsuke owns the manifest
+schema and the chosen backend, so manifest authors should not need to know
+Ninja's dollar-escaping rules.
+
+Netsuke should add four complementary capabilities.
+
+#### Backend Dollar Escaping
+
+After Netsuke has resolved its own placeholders (`ins`, `outs`, `$in`, and
+`$out`) and before writing a Ninja file, the Ninja backend must escape any
+remaining literal dollar signs in command and script text as `$$`. This keeps
+shell variables such as `$PATH`, `${CARGO:-cargo}`, and `$RUSTFLAGS` readable
+in the manifest while preserving the existing generated Ninja semantics.
+
+This is a backend concern, not an IR concern. The IR continues to contain plain
+command or script text with no Ninja-specific escaping.
+
+#### Structured Environment Mapping
+
+Rules, targets, and actions should accept an `env` mapping. Rule-level values
+define defaults for all users of that rule; target and action values override
+or extend them after rule resolution.
+
+The initial schema should support:
+
+- `NAME: "value"`: set an exact variable value.
+- `NAME: { value: "value" }`: set an exact value using explicit object syntax.
+- `NAME: { default: "value" }`: set the value only when the variable is absent.
+- `NAME: { prepend: "path" }`: prepend one path entry to the inherited value.
+- `NAME: { append: "path" }`: append one path entry to the inherited value.
+- `NAME: { unset: true }`: remove the variable for this recipe invocation.
+
+For `prepend` and `append`, Netsuke uses the platform path-list separator. A
+future extension may allow an explicit `separator`, but the default must be
+host-correct so common `PATH` edits do not require shell code.
+
+Example:
+
+```yaml
+actions:
+  - name: test-nextest
+    description: Run tests with cargo-nextest
+    when: command_available(env("CARGO", default="cargo") ~ " nextest")
+    env:
+      PATH:
+        prepend: "{{ prepend_path }}"
+      CARGO:
+        default: cargo
+      RUSTFLAGS: >-
+        {{ [rust_flags, env('RUST_FLAGS', default='')] | compact | join(' ') }}
+    exec:
+      program: "{{ env('CARGO', default='cargo') }}"
+      args:
+        - nextest
+        - run
+        - "{{ cargo_flags }}"
+        - "{{ env('BUILD_JOBS', default='') }}"
+```
+
+The example is illustrative rather than final syntax for Cargo subcommands. The
+implementation must define whether `program` may include subcommands or whether
+`args` must carry every token after the executable.
+
+#### Structured `exec` Recipes
+
+A planned `exec` recipe should model commands as an executable plus an argument
+vector instead of shell text:
+
+```yaml
+exec:
+  program: "{{ env('CARGO', default='cargo') }}"
+  args:
+    - nextest
+    - run
+    - "{{ cargo_flags }}"
+```
+
+The renderer must treat each argument as one argv element and quote it for the
+selected backend. List-valued expressions should be supported without forcing
+authors to pre-tokenize flags into strings. This avoids accidental word
+splitting and reduces the need for `shell_escape` in ordinary recipes.
+
+#### Execution Feedback
+
+The existing `description` field is the right primitive for normal status text.
+Netsuke should extend it to targets and actions, and should use the selected
+edge's description when emitting Ninja progress. Conditional branch-selection
+messages belong in Netsuke's verbose diagnostics, not in mandatory recipe
+output:
+
+- In normal output, the selected action's `description` explains the task being
+  run.
+- In verbose output, Netsuke reports why manifest-time conditional branches were
+  included or skipped.
+- Netsuke should not add generic mutually exclusive `debug`, `info`, or `warn`
+  manifest keys for recipe selection. Warnings should be reserved for degraded
+  behaviour that Netsuke can classify itself.
+
+### 2.7 Table: Netsuke Manifest vs. Makefile
 
 To illustrate the ergonomic advantages of the Netsuke schema, the following
 table compares a simple C compilation project defined in both a traditional
@@ -522,6 +643,8 @@ pub struct Rule {
     pub recipe: Recipe,
     pub description: Option<String>,
     #[serde(default)]
+    pub env: HashMap<String, EnvValue>,
+    #[serde(default)]
     pub deps: StringOrList,
     // Additional fields like 'pool' or 'restat' can be added here
     // to map to more advanced Ninja features.
@@ -533,6 +656,15 @@ pub enum Recipe {
     Command { command: String },
     Script { script: String },
     Rule { rule: StringOrList },
+    Exec { exec: ExecRecipe },
+}
+
+/// A structured command recipe that avoids shell word splitting.
+#[serde(deny_unknown_fields)]
+pub struct ExecRecipe {
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 /// Represents a single build target or edge in the dependency graph.
@@ -554,6 +686,11 @@ pub struct Target {
     #[serde(default)]
     pub vars: HashMap<String, serde_json::Value>,
 
+    pub description: Option<String>,
+
+    #[serde(default)]
+    pub env: HashMap<String, EnvValue>,
+
     /// Run this target when requested even if a file with the same name exists.
     #[serde(default)]
     pub phony: bool,
@@ -561,6 +698,22 @@ pub struct Target {
     /// Run this target on every invocation regardless of timestamps.
     #[serde(default)]
     pub always: bool,
+}
+
+/// Environment variable operations applied to a recipe invocation.
+#[serde(untagged)]
+pub enum EnvValue {
+    Value(String),
+    Operation(EnvOperation),
+}
+
+#[serde(deny_unknown_fields)]
+pub struct EnvOperation {
+    pub value: Option<String>,
+    pub default: Option<String>,
+    pub prepend: Option<String>,
+    pub append: Option<String>,
+    pub unset: Option<bool>,
 }
 
 /// An enum to handle fields that can be either a single string or a list of strings.
@@ -810,11 +963,13 @@ powerful build tool, Netsuke must expose a curated set of custom functions to
 the template environment. These functions will be implemented in safe Rust,
 providing a secure bridge to the underlying system.
 
-- `env(var_name: &str) -> Result<String, Error>`: A function that reads an
-  environment variable from the system. This allows build configurations to be
-  influenced by the external environment (e.g., `PATH`, `CC`). It returns an
-  error if the variable is undefined or contains invalid UTF-8 to ensure
-  manifests fail fast on missing inputs.
+- `env(var_name: &str, default: Option<String>) -> Result<String, Error>`: A
+  function that reads an environment variable from the system. This allows
+  build configurations to be influenced by the external environment (e.g.,
+  `PATH`, `CC`). It returns an error if the variable is undefined and no
+  `default` is provided, or if the variable contains invalid UTF-8. The
+  `default` argument is planned; the current implementation only accepts the
+  variable name.
 
 - `glob(pattern: &str) -> Result<Vec<String>, Error>`: Expand filesystem
   patterns (e.g., `src/**/*.c`) into a list of matched paths. Results are
@@ -852,7 +1007,17 @@ for transforming data within templates.
   safe inclusion as a single argument in a shell command. This is a
   non-negotiable security feature to prevent command injection vulnerabilities.
   The implementation will use the `shell-quote` crate for robust, shell-aware
-  quoting.[^22]
+  quoting.[^22] This filter is planned and must be reconciled with structured
+  `exec` recipes so users do not need it for ordinary argv construction.
+
+- `| shell_join`: A planned filter that accepts a list of arguments and returns
+  one shell-safe command fragment. Each list element is quoted as a separate
+  argument. This is for deliberate shell recipes; structured `exec` recipes
+  remain preferred when no shell syntax is needed.
+
+- `| compact`: A planned collection filter that removes empty strings and null
+  values while preserving order. It supports patterns such as constructing
+  `RUSTFLAGS` from an optional user override without hand-written shell tests.
 
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.
@@ -1481,10 +1646,20 @@ pub struct BuildGraph {
 pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
+    pub env: HashMap<String, EnvBinding>,
     pub depfile: Option<String>, // Template for the.d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
     pub pool: Option<String>,
     pub restat: bool,
+}
+
+/// A resolved environment operation for one action invocation.
+pub enum EnvBinding {
+    Set(String),
+    Default(String),
+    Prepend(String),
+    Append(String),
+    Unset,
 }
 
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
@@ -1523,13 +1698,14 @@ classDiagram
         +HashMap<Utf8PathBuf, BuildEdge> targets
         +Vec<Utf8PathBuf> default_targets
     }
-    class Action {
-        +Recipe recipe
-        +Option<String> description
-        +Option<String> depfile
-        +Option<String> deps_format
-        +Option<String> pool
-        +bool restat
+     class Action {
+         +Recipe recipe
+         +Option<String> description
+         +HashMap<String, EnvBinding> env
+         +Option<String> depfile
+         +Option<String> deps_format
+         +Option<String> pool
+         +bool restat
     }
     class BuildEdge {
         +String action_id
@@ -1541,11 +1717,12 @@ classDiagram
         +bool always
     }
     class Recipe {
-        <<enum>>
-        Command
-        Script
-        Rule
-    }
+         <<enum>>
+         Command
+         Script
+         Rule
+         Exec
+     }
     class ninja_gen {
         +generate(graph: &BuildGraph) String
     }
@@ -1578,12 +1755,15 @@ This transformation involves several steps:
    all dependency names against other targets.
 
 3. **Action Registration and Edge Creation:** For each expanded target,
-   resolve the referenced rule template, interpolate its command with the
-   target's input and output paths, and register the resulting `ir::Action` in
-   the `actions` map. Actions are hashed on the fully resolved command and file
-   set, so identical rule templates yield distinct actions when their paths
-   differ. Create a corresponding `ir::BuildEdge` linking the target to the
-   action identifier and transfer the `phony` and `always` flags. `sources` are
+   resolve the referenced rule template, merge rule-level and target-level
+   execution metadata, interpolate its command with the target's input and
+   output paths, and register the resulting `ir::Action` in the `actions` map.
+   Target-level `description` and `env` values override or extend the
+   referenced rule before hashing. Actions are hashed on the fully resolved
+   recipe, environment bindings, and file set, so identical rule templates
+   yield distinct actions when their paths or execution environment differ.
+   Create a corresponding `ir::BuildEdge` linking the target to the action
+   identifier and transfer the `phony` and `always` flags. `sources` are
    lowered into the edge's explicit input list so recipe interpolation and
    Ninja `$in` see only material inputs. `deps` are lowered into a separate
    implicit dependency list so Ninja orders and rebuilds them without exposing
@@ -1628,6 +1808,16 @@ structures to the Ninja file syntax.
    When an action's `recipe` is a script, the generated rule wraps the script
    in an invocation of `/bin/sh -e -c` so that multi-line scripts execute
    consistently across platforms.
+
+   Command and script text must be converted from IR text to backend text at
+   this stage. After Netsuke placeholders have been resolved, remaining literal
+   dollar signs are escaped as `$$` for Ninja so shell variables survive to the
+   shell. Structured `exec` recipes are rendered by quoting each argv element
+   as one argument for the selected backend.
+
+   Resolved environment bindings are emitted as backend-specific command
+   prefixes or generated wrapper script assignments. The implementation must
+   avoid exposing Ninja variables as the user-facing environment API.
 
    Code snippet
 

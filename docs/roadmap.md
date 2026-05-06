@@ -372,6 +372,53 @@ library, and CLI ergonomics.
     attributes.
   - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
     is implemented.
+- [ ] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
+  Requires 1.3.2. See [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
+  - [ ] Preserve shell variables such as `$PATH`, `${CARGO:-cargo}`, and
+    `$RUSTFLAGS` in generated Ninja by emitting literal dollars as `$$`.
+  - [ ] Keep the IR free of Ninja-specific dollar escaping.
+  - [ ] Add command and script regression tests covering shell variables,
+    `$in` / `$out`, and unrelated identifiers such as `$input`.
+- [ ] 3.14.8. Make Jinja command helpers match the documented ergonomics.
+  Requires 2.2.4 and 3.14.4. See
+  [netsuke-design.md §§4.4 and 4.5](netsuke-design.md).
+  - [ ] Add `env(name, default=...)` without changing the existing missing and
+    invalid UTF-8 diagnostics.
+  - [ ] Implement or remove the documented `shell_escape` helper so the user
+    guide and code agree.
+  - [ ] Add `shell_join` and `compact` helpers for deliberate shell recipes.
+  - [ ] Add documentation and tests showing optional `RUSTFLAGS` construction
+    without shell parameter expansion.
+- [ ] 3.14.9. Add structured recipe environment mappings.
+  Requires 3.14.7 and 3.14.8. See
+  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
+  - [ ] Parse rule, target, and action `env` mappings with `value`, `default`,
+    `prepend`, `append`, and `unset` operations.
+  - [ ] Merge rule-level and target/action-level environment bindings during
+    IR generation.
+  - [ ] Emit backend-specific environment setup without exposing Ninja variable
+    syntax in the manifest contract.
+  - [ ] Test platform path-list separators for `prepend` and `append`.
+- [ ] 3.14.10. Add structured `exec` recipes for argv-safe commands.
+  Requires 3.14.8 and 3.14.9. See
+  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
+  - [ ] Extend the recipe union with `exec.program` and `exec.args`.
+  - [ ] Reject manifests that combine `exec` with `rule`, `command`, or
+    `script`.
+  - [ ] Preserve list-valued argument expressions without accidental shell word
+    splitting.
+  - [ ] Add Ninja output and execution tests for arguments containing spaces,
+    shell metacharacters, and empty optional values.
+- [ ] 3.14.11. Surface selected conditional actions without recipe `echo`.
+  Requires 3.14.2 and 3.14.4. See
+  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
+  - [ ] Add target/action `description` support and let it override referenced
+    rule descriptions for the concrete edge.
+  - [ ] Report selected action descriptions in normal Ninja progress output.
+  - [ ] In verbose mode, report why manifest-time `when` branches were included
+    or skipped.
+  - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a
+    later diagnostics design defines severity semantics.
 
 **Success criterion:** Netsuke ships a localizable, accessible, and fully
 configurable CLI that delivers real-time feedback, machine-readable
