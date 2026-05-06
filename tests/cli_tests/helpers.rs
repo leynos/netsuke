@@ -16,10 +16,9 @@ pub(super) fn os_args(args: &[&str]) -> Vec<OsString> {
 /// `EnvLock`, and sets `HOME`, `XDG_CONFIG_HOME`, and `XDG_CONFIG_DIRS`
 /// to empty paths so host-level config files cannot leak into assertions.
 pub(super) struct UnixConfigTestEnv {
-    pub(super) _env_lock: test_support::env_lock::EnvLock,
+    _cwd_guard: super::merge::CwdGuard,
     pub(super) temp_home: tempfile::TempDir,
     pub(super) temp_project: tempfile::TempDir,
-    _cwd_guard: super::merge::CwdGuard,
     _xdg_home: tempfile::TempDir,
     _home_guard: test_support::EnvVarGuard,
     _xdg_home_guard: test_support::EnvVarGuard,
@@ -28,6 +27,7 @@ pub(super) struct UnixConfigTestEnv {
     _config_guard: test_support::EnvVarGuard,
     _diag_json_guard: test_support::EnvVarGuard,
     _output_format_guard: test_support::EnvVarGuard,
+    pub(super) _env_lock: test_support::env_lock::EnvLock,
 }
 
 #[cfg(unix)]
@@ -53,10 +53,9 @@ pub(super) fn unix_config_env() -> anyhow::Result<UnixConfigTestEnv> {
     let diag_json_guard = EnvVarGuard::remove("NETSUKE_DIAG_JSON");
     let output_format_guard = EnvVarGuard::remove("NETSUKE_OUTPUT_FORMAT");
     Ok(UnixConfigTestEnv {
-        _env_lock: env_lock,
+        _cwd_guard: cwd_guard,
         temp_home,
         temp_project,
-        _cwd_guard: cwd_guard,
         _xdg_home: xdg_home,
         _home_guard: home_guard,
         _xdg_home_guard: xdg_home_guard,
@@ -65,5 +64,6 @@ pub(super) fn unix_config_env() -> anyhow::Result<UnixConfigTestEnv> {
         _config_guard: config_guard,
         _diag_json_guard: diag_json_guard,
         _output_format_guard: output_format_guard,
+        _env_lock: env_lock,
     })
 }

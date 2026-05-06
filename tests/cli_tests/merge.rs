@@ -3,6 +3,7 @@
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
 
+#[cfg(unix)]
 use super::helpers::unix_config_env;
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::Cli;
