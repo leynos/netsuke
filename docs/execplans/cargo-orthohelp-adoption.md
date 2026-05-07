@@ -160,6 +160,10 @@ itself does not change.
   file conflicts. The branch now includes main's CI guidance ExecPlan.
 - [x] (2026-05-04T10:12:00Z) Added the missing `make typecheck` validation
   target requested for the post-rebase gate.
+- [x] (2026-05-07T00:00:00Z) Rebasing onto `origin/main` completed without
+  file conflicts. The branch now includes main's `--config <PATH>` and
+  `NETSUKE_CONFIG` precedence work while preserving the `cargo orthohelp`
+  release-help migration and the updated `leynos/shared-actions` pins.
 
 ## Surprises & discoveries
 
@@ -208,6 +212,12 @@ itself does not change.
   `make -n typecheck` failed with `No rule to make target 'typecheck'`. Impact:
   the Makefile now exposes `typecheck` as a `cargo check` wrapper for all
   targets and all features, with warnings denied.
+
+- Observation: the 2026-05-07 rebase onto `origin/main` applied without
+  conflicts even though main had updated CLI configuration precedence, related
+  tests, workflows, and documentation. Evidence: `git rebase origin/main`
+  completed all eight branch commits successfully. Impact: no manual merge
+  resolution was required; validation remains the primary risk control.
 
 ## Decision log
 

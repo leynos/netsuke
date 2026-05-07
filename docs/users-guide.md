@@ -42,7 +42,6 @@ Refer to the project's `README.md` or release pages for pre-compiled binaries
 if available. Ensure the `ninja` executable is also installed and available in
 your system's `PATH`.
 
-
 ### Release help artefacts
 
 Release archives include platform help files generated from the same command
