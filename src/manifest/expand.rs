@@ -82,7 +82,7 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
 /// Empty expressions are rejected as invalid.
 fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
     anyhow::ensure!(
-        !expr.is_empty(),
+        !expr.trim().is_empty(),
         "{}",
         localization::message(keys::MANIFEST_WHEN_EMPTY)
     );

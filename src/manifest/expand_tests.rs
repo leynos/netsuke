@@ -244,6 +244,7 @@ fn expand_static_target_when_evaluation(
 #[rstest]
 #[case("{{ unclosed", "malformed template")]
 #[case("", "empty when expression")]
+#[case("   ", "whitespace-only when expression")]
 fn expand_static_target_when_invalid_errors(
     #[case] when_expr: &str,
     #[case] description: &str,
