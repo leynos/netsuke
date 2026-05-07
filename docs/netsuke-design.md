@@ -369,6 +369,8 @@ are specified.
 
 <!-- markdownlint-disable MD013 -->
 
+Table: Dependency field lowering semantics
+
 | Field | Meaning | Passed to recipe as input? | Rebuild trigger? | Ninja mapping |
 | ----- | ------- | -------------------------- | ---------------- | ------------- |
 | `sources` | Files or target outputs the recipe materially consumes. | Yes | Yes | Explicit inputs: `build out: rule sources...` |
@@ -428,6 +430,8 @@ runtime conditions.
 ```
 
 The expansion flow is:
+
+Figure: Foreach/When expansion flow
 
 ```mermaid
 flowchart TD
@@ -1666,12 +1670,11 @@ the Ninja build system, which consists of "Action" nodes (commands) and
 generation step.
 
 The authoritative live IR contract is [src/ir/graph.rs](../src/ir/graph.rs),
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs). There is no top-level
-`src/ir.rs` file in the current codebase. Fields and types marked `FUTURE` in
-the snippet below are forward-looking IR sketches rather than implemented Rust
-definitions. `Action.env`, `EnvBinding`, and the `Exec` recipe variant capture
-the intended lowering target for the environment and structured recipe roadmap
-tasks.
+re-exported through [src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR
+file in the current codebase. Fields and types marked `FUTURE` in the snippet
+below are forward-looking IR sketches rather than implemented Rust definitions.
+`Action.env`, `EnvBinding`, and the `Exec` recipe variant capture the intended
+lowering target for roadmap tasks `3.14.9` and `3.14.10`.
 
 Rust
 
@@ -1811,27 +1814,38 @@ This transformation involves several steps:
    `manifest.actions`. Entries in `actions` are treated identically to targets
    but with `phony` defaulting to `true`. The `targets` collection has already
    had manifest-time `foreach` and `when` clauses expanded before
-   deserialisation, so the IR stage receives only selected target entries. The
-   current loader does not expand `foreach` or `when` in `actions`;
-   action-level expansion remains planned under roadmap task 3.14.2. For each
-   item, resolve all strings into `Utf8PathBuf`s and resolve all dependency
-   names against other targets.
+   deserialisation, and `actions` participate in the same expansion pass. The
+   IR stage receives only selected target and action entries. For each item,
+   resolve all strings into `Utf8PathBuf`s and resolve all dependency names
+   against other targets.
 
-3. **Action Registration and Edge Creation:** For each expanded target,
-   resolve the referenced rule template, merge rule-level and target-level
-   execution metadata, interpolate its command with the target's input and
-   output paths, and register the resulting `ir::Action` in the `actions` map.
-   Target-level `description` and `env` values override or extend the
-   referenced rule before hashing. Actions are hashed on the fully resolved
-   recipe, environment bindings, and file set, so identical rule templates
-   yield distinct actions when their paths or execution environment differ.
-   Create a corresponding `ir::BuildEdge` linking the target to the action
-   identifier and transfer the `phony` and `always` flags. `sources` are
-   lowered into the edge's explicit input list so recipe interpolation and
-   Ninja `$in` see only material inputs. `deps` are lowered into a separate
-   `implicit_deps` list, which maps to Ninja's implicit dependency syntax (`|`)
-   so Ninja orders and rebuilds them without exposing them as recipe arguments;
-   `order_only_deps` remains separate and maps to Ninja's `||` class.
+3. **Action Registration and Edge Creation:**
+
+   Current behavior:
+
+   For each expanded target, resolve the referenced rule template, merge
+   rule-level and target-level execution metadata, interpolate its command with
+   the target's input and output paths, and register the resulting `ir::Action`
+   in the `actions` map.
+   Actions are hashed on the fully resolved recipe and file set, so identical
+   rule templates yield distinct actions when their paths differ. Create a
+   corresponding `ir::BuildEdge` linking the target to the action identifier
+   and transfer the `phony` and `always` flags. `sources` are lowered into the
+   edge's explicit input list so recipe interpolation and Ninja `$in` see only
+   material inputs. `deps` are lowered into a separate `implicit_deps` list,
+   which maps to Ninja's implicit dependency syntax (`|`) so Ninja orders and
+   rebuilds them without exposing them as recipe arguments; `order_only_deps`
+   remains separate and maps to Ninja's `||` class.
+
+   FUTURE:
+
+   Roadmap tasks `3.14.9` and `3.14.11` will extend `ir::Action`, action
+   registration, and the `actions` map with target-level `description` and
+   `env` behaviour. Target-level `description` and `env` values will override
+   or extend the referenced rule for the concrete action. Env-aware action
+   hashing will include resolved environment bindings alongside the recipe and
+   file set so otherwise identical actions remain distinct when their execution
+   environment differs.
 
 4. **Graph Validation:** As the graph is constructed, perform validation checks.
    This includes ensuring that every rule referenced by a target exists in the
@@ -1922,14 +1936,16 @@ default my_app
 
 ### 5.5 Design Decisions
 
-The IR structures defined in `src/ir.rs` are minimal containers that mirror
-Ninja's conceptual model while remaining backend-agnostic. `BuildGraph`
-collects all `Action`s and `BuildEdge`s in hash maps keyed by stable strings
-and `Utf8PathBuf`s so the graph can be deterministically traversed for snapshot
-tests. Actions hold the parsed `Recipe` and optional execution metadata.
-`BuildEdge` connects inputs to outputs using an action identifier and carries
-the `phony` and `always` flags verbatim from the manifest. No Ninja specific
-placeholders are stored in the IR to keep the representation portable.
+The live IR structures defined in [src/ir/graph.rs](../src/ir/graph.rs), and
+re-exported through [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers
+that mirror Ninja's conceptual model while remaining backend-agnostic.
+`BuildGraph` collects all `Action`s and `BuildEdge`s in hash maps keyed by
+stable strings and `Utf8PathBuf`s so the graph can be deterministically
+traversed for snapshot tests. Actions hold the parsed `Recipe` and optional
+execution metadata. `BuildEdge` connects inputs to outputs using an action
+identifier and carries the `phony` and `always` flags verbatim from the
+manifest. No Ninja specific placeholders are stored in the IR to keep the
+representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialisation of their recipe, inputs, and outputs. Because commands embed
