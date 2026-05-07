@@ -1,4 +1,4 @@
-# Adopt `cargo orthohelp` for release help artefacts
+# Adopt `cargo-orthohelp` for release help artefacts
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
@@ -19,7 +19,7 @@ the release workflow from using the richer `OrthoConfigDocs` metadata described
 in `docs/ortho-config-users-guide.md`.
 
 After this change, the release workflow generates both the Unix manual page and
-Windows PowerShell external help by calling `cargo orthohelp` explicitly. A
+Windows PowerShell external help by calling `cargo-orthohelp` explicitly. A
 normal `cargo build` still runs the localization audit in `build.rs`, but it no
 longer writes release help files. Users observe the change in release
 artefacts: Linux and macOS packages still include `netsuke.1`, and Windows
@@ -33,7 +33,7 @@ itself does not change.
 - Keep the branch named `cargo-orthohelp-adoption`.
 - Keep `build.rs` for the localization-key audit unless a later approved
   implementation discovery proves the audit must move.
-- Remove `clap_mangen` from the build path when `cargo orthohelp` owns release
+- Remove `clap_mangen` from the build path when `cargo-orthohelp` owns release
   help generation.
 - Preserve reproducible manual dates. An unset or invalid
   `SOURCE_DATE_EPOCH` must continue to produce `1970-01-01`, with a warning for
@@ -73,7 +73,7 @@ itself does not change.
   before changing strategy.
 - Tests: if `make check-fmt`, `make lint`, or `make test` still fails after
   three focused fix attempts, stop and ask for direction.
-- Ambiguity: if `cargo orthohelp` output paths or flags differ from
+- Ambiguity: if `cargo-orthohelp` output paths or flags differ from
   `docs/ortho-config-users-guide.md` and `cargo info cargo-orthohelp`, stop and
   reconcile the versioned tool behaviour before proceeding.
 
@@ -85,7 +85,7 @@ itself does not change.
   `cargo install cargo-orthohelp --version 0.8.0 --locked`, and contract-test
   that the release workflow installs the tool before generating help.
 
-- Risk: `cargo orthohelp` cache behaviour may produce stale documentation.
+- Risk: `cargo-orthohelp` cache behaviour may produce stale documentation.
   Severity: medium. Likelihood: medium. Mitigation: do not use `--cache` or
   `--no-build` in the release workflow for the first adoption. Generate from a
   fresh bridge build each release.
@@ -148,7 +148,7 @@ itself does not change.
   `rstest-bdd` release-help scenarios for happy paths, failure paths, and
   `SOURCE_DATE_EPOCH` edge behaviour.
 - [x] (2026-05-01T16:53:04Z) Updated README and user, developer, CLI design,
-  and main design documentation to describe `cargo orthohelp` release help.
+  and main design documentation to describe `cargo-orthohelp` release help.
 - [x] (2026-05-01T16:54:42Z) Validated the completed migration with
   `make check-fmt`, `make markdownlint`, `make lint`, and `make test`.
 - [x] (2026-05-01T16:54:42Z) Implement the approved migration.
@@ -162,7 +162,7 @@ itself does not change.
   target requested for the post-rebase gate.
 - [x] (2026-05-07T00:00:00Z) Rebasing onto `origin/main` completed without
   file conflicts. The branch now includes main's `--config <PATH>` and
-  `NETSUKE_CONFIG` precedence work while preserving the `cargo orthohelp`
+  `NETSUKE_CONFIG` precedence work while preserving the `cargo-orthohelp`
   release-help migration and the updated `leynos/shared-actions` pins.
 
 ## Surprises & discoveries
@@ -219,6 +219,13 @@ itself does not change.
   completed all eight branch commits successfully. Impact: no manual merge
   resolution was required; validation remains the primary risk control.
 
+- Observation: `cargo-orthohelp` does not accept Cargo's injected subcommand
+  token when invoked as `cargo orthohelp`. Evidence: Cargo external subcommand
+  dispatch executes `cargo-orthohelp orthohelp ...`, but the tool exposes a
+  top-level `cargo-orthohelp [OPTIONS]` interface with no `orthohelp`
+  subcommand. Impact: the release-help script must invoke `cargo-orthohelp`
+  directly and tests must fake that binary on `PATH`.
+
 ## Decision log
 
 - Decision: keep this plan in `Status: DRAFT` until the user approves it.
@@ -232,7 +239,7 @@ itself does not change.
   makes release help generation observable and testable. Date/Author:
   2026-05-01T15:50:05Z / Codex.
 
-- Decision: do not use `cargo orthohelp --cache` or `--no-build` in release
+- Decision: do not use `cargo-orthohelp --cache` or `--no-build` in release
   automation for the first adoption. Rationale: release documentation should be
   regenerated from current sources; stale-cache risk is not worth the small
   speed gain. Date/Author: 2026-05-01T15:50:05Z / Codex.
@@ -277,7 +284,7 @@ itself does not change.
 The plan is drafted and awaiting approval. No implementation has started.
 Implementation approval was received and the approved migration has been
 completed. Release help generation now runs through
-`scripts/generate-release-help.sh`, which invokes `cargo orthohelp` for man
+`scripts/generate-release-help.sh`, which invokes `cargo-orthohelp` for man
 pages on all targets and for PowerShell external help on Windows targets.
 `build.rs` now only performs the localization audit. `clap_mangen` has been
 removed from `Cargo.toml` and `Cargo.lock`.
@@ -320,7 +327,7 @@ The relevant release and documentation files are:
 
 The required documentation and skill signposts are:
 
-- `docs/ortho-config-users-guide.md`: source for `cargo orthohelp`, output
+- `docs/ortho-config-users-guide.md`: source for `cargo-orthohelp`, output
   layouts, metadata, and PowerShell options.
 - `docs/netsuke-design.md`: release automation and current manual-page design.
 - `docs/rust-testing-with-rstest-fixtures.md`: fixture and parameterized test
@@ -336,7 +343,7 @@ The required documentation and skill signposts are:
 
 Terms used in this plan:
 
-- `cargo orthohelp`: Cargo subcommand installed from the `cargo-orthohelp`
+- `cargo-orthohelp`: command-line tool installed from the `cargo-orthohelp`
   crate. It builds a bridge binary, asks `OrthoConfigDocs` for documentation
   metadata, localizes that metadata, and writes help artefacts.
 - MAML: Microsoft Assistance Markup Language, the XML format used by
@@ -356,9 +363,9 @@ the branch is still `cargo-orthohelp-adoption`.
 Stage B adds a small release-help boundary before changing workflows. Create
 `scripts/generate-release-help.sh`. The script accepts the target triple,
 binary name, and output root, computes a reproducible manual date from
-`SOURCE_DATE_EPOCH`, runs `cargo orthohelp --format man`, and verifies that
+`SOURCE_DATE_EPOCH`, runs `cargo-orthohelp --format man`, and verifies that
 `<out>/man/man1/<bin>.1` exists. When the target triple contains `windows`, it
-also runs `cargo orthohelp --format ps --ps-module-name Netsuke` and verifies
+also runs `cargo-orthohelp --format ps --ps-module-name Netsuke` and verifies
 that the four expected PowerShell files exist under
 `<out>/powershell/Netsuke/en-US`. Invalid `SOURCE_DATE_EPOCH` values should
 warn and fall back to `1970-01-01`. The script must not use `--cache` or
@@ -370,7 +377,7 @@ directories and a fake `cargo` executable placed first on `PATH` so tests do
 not need network access or a real `cargo-orthohelp` install. Cover at least:
 successful man generation, successful Windows MAML generation, valid
 `SOURCE_DATE_EPOCH`, invalid `SOURCE_DATE_EPOCH`, unset `SOURCE_DATE_EPOCH`,
-fake `cargo orthohelp` failure, missing generated man output, and missing
+fake `cargo-orthohelp` failure, missing generated man output, and missing
 generated MAML output.
 
 Stage D updates release metadata and workflow wiring. In `Cargo.toml`, remove
@@ -431,7 +438,7 @@ Add `tests/features/release_help_generation.feature` and
 `tests/bdd/steps/mod.rs`. Use `rstest-bdd` v0.5.0 scenarios to describe
 observable release behaviour:
 
-- A release build generates and stages a manual page from `cargo orthohelp`.
+- A release build generates and stages a manual page from `cargo-orthohelp`.
 - A Windows release build generates and stages PowerShell MAML help.
 - Invalid `SOURCE_DATE_EPOCH` falls back to `1970-01-01` with a warning.
 - Missing generated help files fail the release-help step with a clear error.
@@ -439,7 +446,7 @@ observable release behaviour:
   or Cargo `OUT_DIR` for help artefacts.
 
 Stage F updates documentation. In `docs/netsuke-design.md`, replace the
-`clap_mangen` manual-page section with the `cargo orthohelp` release-help
+`clap_mangen` manual-page section with the `cargo-orthohelp` release-help
 design and record the decision that `build.rs` remains only for the
 localization audit. In `docs/users-guide.md`, document that release artefacts
 include a Unix manual page and Windows PowerShell help, and describe the
@@ -479,7 +486,7 @@ After approval, install or verify the release helper tool locally:
 
 ```bash
 cargo install cargo-orthohelp --version 0.8.0 --locked
-cargo orthohelp --help
+cargo-orthohelp --help
 ```
 
 The release workflow will perform its own install step, so local installation
@@ -605,11 +612,12 @@ The release-help script interface should be stable and simple:
 scripts/generate-release-help.sh <target> <bin-name> <out-dir>
 ```
 
-The script must call `cargo orthohelp` rather than `cargo-orthohelp` directly
-so it uses Cargo's normal subcommand resolution:
+The script must call `cargo-orthohelp` directly rather than using Cargo
+external subcommand dispatch because `cargo orthohelp` injects `orthohelp` as a
+positional argument:
 
 ```bash
-cargo orthohelp \
+cargo-orthohelp \
   --format man \
   --out-dir "$out_dir" \
   --locale en-US \
@@ -620,7 +628,7 @@ cargo orthohelp \
 For Windows targets, it must also call:
 
 ```bash
-cargo orthohelp \
+cargo-orthohelp \
   --format ps \
   --out-dir "$out_dir" \
   --locale en-US \
@@ -639,13 +647,13 @@ No new runtime dependency is planned. No new crate split is planned.
 ## Revision note
 
 Initial draft. This records the approved-design boundary, current release help
-state, intended `cargo orthohelp` workflow, validation strategy, documentation
+state, intended `cargo-orthohelp` workflow, validation strategy, documentation
 updates, and quality gates.
 
 2026-05-01 implementation revision. The plan was approved and moved to
 `Status: IN PROGRESS`; implementation is proceeding milestone by milestone.
 
 2026-05-01 completion revision. The implementation replaced build-script man
-generation with explicit `cargo orthohelp` release help generation, added unit
+generation with explicit `cargo-orthohelp` release help generation, added unit
 and behavioural tests, updated release workflows and staging, refreshed user
 and developer documentation, and passed the required gates.

@@ -1,9 +1,9 @@
 //! Tests for the release-help generation script boundary.
 //!
-//! The script shells out to `cargo orthohelp`, so these tests place a fake
-//! `cargo` executable first on `PATH`. This validates command construction and
-//! output verification without requiring network access or a real
-//! `cargo-orthohelp` installation.
+//! The script shells out to `cargo-orthohelp`, so these tests place a fake
+//! `cargo-orthohelp` executable first on `PATH`. This validates command
+//! construction and output verification without requiring network access or a
+//! real `cargo-orthohelp` installation.
 
 #![cfg(unix)]
 
@@ -32,9 +32,9 @@ fn script_fixture() -> Result<ScriptFixture> {
     let temp_dir = tempfile::tempdir().context("create release help test tempdir")?;
     let fake_bin_dir = temp_dir.path().join("bin");
     let out_dir = temp_dir.path().join("out");
-    let log_path = temp_dir.path().join("cargo-args.log");
-    fs::create_dir_all(&fake_bin_dir).context("create fake cargo bin directory")?;
-    write_fake_cargo(&fake_bin_dir.join("cargo"))?;
+    let log_path = temp_dir.path().join("cargo-orthohelp-args.log");
+    fs::create_dir_all(&fake_bin_dir).context("create fake cargo-orthohelp bin directory")?;
+    write_fake_cargo_orthohelp(&fake_bin_dir.join("cargo-orthohelp"))?;
     Ok(ScriptFixture {
         _temp_dir: temp_dir,
         fake_bin_dir,
@@ -43,25 +43,25 @@ fn script_fixture() -> Result<ScriptFixture> {
     })
 }
 
-fn write_fake_cargo(path: &Path) -> Result<()> {
-    fs::write(path, fake_cargo_script())
-        .with_context(|| format!("write fake cargo script {}", path.display()))?;
+fn write_fake_cargo_orthohelp(path: &Path) -> Result<()> {
+    fs::write(path, fake_cargo_orthohelp_script())
+        .with_context(|| format!("write fake cargo-orthohelp script {}", path.display()))?;
     let mut permissions = fs::metadata(path)
-        .with_context(|| format!("read fake cargo metadata {}", path.display()))?
+        .with_context(|| format!("read fake cargo-orthohelp metadata {}", path.display()))?
         .permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(path, permissions)
-        .with_context(|| format!("mark fake cargo executable {}", path.display()))
+        .with_context(|| format!("mark fake cargo-orthohelp executable {}", path.display()))
 }
 
-const fn fake_cargo_script() -> &'static str {
+const fn fake_cargo_orthohelp_script() -> &'static str {
     r#"#!/usr/bin/env bash
 set -euo pipefail
 
-printf '%s\n' "$*" >>"${CARGO_FAKE_LOG}"
+printf '%s\n' "$*" >>"${ORTHOHELP_FAKE_LOG}"
 
 if [[ "${ORTHOHELP_FAKE_FAIL:-0}" == "1" ]]; then
-  echo "fake cargo failure" >&2
+  echo "fake cargo-orthohelp failure" >&2
   exit 42
 fi
 
@@ -109,11 +109,11 @@ esac
 "#
 }
 
-fn path_with_fake_cargo(fixture: &ScriptFixture) -> Result<OsString> {
+fn path_with_fake_cargo_orthohelp(fixture: &ScriptFixture) -> Result<OsString> {
     let existing_path = std::env::var_os("PATH").unwrap_or_default();
     let mut entries = vec![fixture.fake_bin_dir.clone()];
     entries.extend(std::env::split_paths(&existing_path));
-    std::env::join_paths(entries).context("construct PATH with fake cargo first")
+    std::env::join_paths(entries).context("construct PATH with fake cargo-orthohelp first")
 }
 
 #[derive(Clone, Copy)]
@@ -159,8 +159,8 @@ fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<
         .arg("netsuke")
         .arg(&fixture.out_dir)
         .current_dir(repo_root)
-        .env("PATH", path_with_fake_cargo(fixture)?)
-        .env("CARGO_FAKE_LOG", &fixture.log_path)
+        .env("PATH", path_with_fake_cargo_orthohelp(fixture)?)
+        .env("ORTHOHELP_FAKE_LOG", &fixture.log_path)
         .env_remove("SOURCE_DATE_EPOCH")
         .env_remove("ORTHOHELP_FAKE_FAIL")
         .env_remove("ORTHOHELP_FAKE_SKIP_OUTPUT");
@@ -179,8 +179,12 @@ fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<
 }
 
 fn logged_args(fixture: &ScriptFixture) -> Result<String> {
-    fs::read_to_string(&fixture.log_path)
-        .with_context(|| format!("read fake cargo log {}", fixture.log_path.display()))
+    fs::read_to_string(&fixture.log_path).with_context(|| {
+        format!(
+            "read fake cargo-orthohelp log {}",
+            fixture.log_path.display()
+        )
+    })
 }
 
 #[rstest]
@@ -200,7 +204,7 @@ fn generates_manual_page_for_non_windows_target(
     );
     let log = logged_args(&fixture)?;
     ensure!(
-        log.contains("orthohelp --format man"),
+        log.contains("--format man"),
         "expected man generation command, got {log}"
     );
     ensure!(
@@ -292,12 +296,12 @@ fn propagates_cargo_orthohelp_failures(script_fixture: Result<ScriptFixture>) ->
 
     ensure!(
         !output.status.success(),
-        "script should fail when cargo orthohelp fails"
+        "script should fail when cargo-orthohelp fails"
     );
     let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
     ensure!(
-        stderr.contains("fake cargo failure"),
-        "expected cargo failure to be visible, got {stderr}"
+        stderr.contains("fake cargo-orthohelp failure"),
+        "expected cargo-orthohelp failure to be visible, got {stderr}"
     );
     Ok(())
 }

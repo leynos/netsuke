@@ -86,7 +86,7 @@ bin_name="$2"
 out_dir="$3"
 man_date="$(manual_date)"
 
-cargo orthohelp \
+cargo-orthohelp \
   --format man \
   --out-dir "$out_dir" \
   --locale en-US \
@@ -96,7 +96,7 @@ cargo orthohelp \
 require_file "$out_dir/man/man1/${bin_name}.1" "manual page was not generated"
 
 if target_is_windows "$target"; then
-  cargo orthohelp \
+  cargo-orthohelp \
     --format ps \
     --out-dir "$out_dir" \
     --locale en-US \
