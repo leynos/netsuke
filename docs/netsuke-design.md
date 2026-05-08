@@ -55,7 +55,7 @@ before execution, a critical requirement for compatibility with Ninja.
    the `foreach` and `when` keys in top-level `targets` and `actions`. Each
    mapping containing these keys is expanded with an iteration context
    providing `item` and optional `index`. Variable lookups respect the
-   precedence `globals` < `target.vars` < per-iteration locals, and this
+   precedence `globals` < `entry.vars` < per-iteration locals, and this
    context is preserved for later rendering. At this stage Jinja must not
    modify the YAML structure directly; control constructs live only within
    these explicit keys. Structural Jinja blocks (`{% ... %}`) are not permitted
@@ -408,7 +408,7 @@ written individually. Netsuke supports a `foreach` entry within top-level
 and optional `when` keys accept bare Jinja expressions evaluated after the
 initial YAML pass. Each resulting value becomes `item` in the entry context,
 and the optional `index` value records the zero-based iteration index. Variable
-lookups respect the precedence `globals` < `target.vars` < per-iteration
+lookups respect the precedence `globals` < `entry.vars` < per-iteration
 locals, and the per-iteration context is carried forward to later rendering.
 
 Conditions are manifest-time decisions. Netsuke evaluates `when` while loading
@@ -432,7 +432,7 @@ Figure: Foreach/When expansion flow
 
 ```mermaid
 flowchart TD
-    A[Iterate over targets in YAML] --> B{Has foreach?}
+    A[Iterate over entries in YAML] --> B{Has foreach?}
     B -- Yes --> C[Evaluate foreach expression]
     C --> D[For each item:]
     D --> E{Has when?}
@@ -443,11 +443,11 @@ flowchart TD
     B -- No --> I[Evaluate static when, then keep or skip entry]
 ```
 
-Each element in the sequence produces a separate target. The iteration context:
+Each element in the sequence produces a separate entry. The iteration context:
 
 - `item`: current element
 - `index`: 0-based index (optional)
-- Variables resolve with precedence `globals` < `target.vars` < iteration locals
+- Variables resolve with precedence `globals` < `entry.vars` < iteration locals
 
 Jinja control structures cannot shape the YAML; all templating must occur
 within the string values. The resulting build graph is still fully static and
@@ -838,9 +838,9 @@ first load it into a `serde_json::Value` tree.
 Once parsed, Netsuke performs a series of transformation stages:
 
 1. **Template Expansion:** The `foreach` and optional `when` keys in the raw
-   YAML are evaluated to generate additional targets. Each iteration layers the
-   `item` and `index` variables over the manifest's globals and any target
-   locals.
+   YAML are evaluated to generate additional target and action entries. Each
+   iteration layers the `item` and `index` variables over the manifest's
+   globals and any entry-local variables.
 2. **Deserialisation:** The expanded document is deserialised into the typed
    [`NetsukeManifest`] AST.
 3. **Final Rendering:** Remaining string fields are rendered using Jinja,
