@@ -519,6 +519,43 @@ forwarded variables: `PATH` (from the host `std::env::var_os`) and
 current process). Use this helper for configuration-layering tests or any test
 that sets environment variables which could race with parallel test execution.
 
+## Manifest processing helpers
+
+### Expansion helpers
+
+#### expand_foreach
+
+`src/manifest/expand.rs` exposes
+`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()>`.
+
+**Purpose:** expands `foreach`/`when` directives in both `targets` and
+`actions` top-level arrays before the manifest is deserialised into the AST.
+
+**Inputs:**
+
+- `doc: &mut ManifestValue`: the raw parsed YAML/JSON value.
+- `env: &Environment`: a Minijinja `Environment` used to evaluate bare Jinja
+  expressions.
+
+**Behaviour:**
+
+- Iterates over both `targets` and `actions` top-level arrays via a shared
+  `expand_section` helper.
+- For each object entry that contains a `foreach` key, evaluates the
+  expression, emits one expanded copy per item with `item` and `index`
+  (0-based) injected into `vars`, and removes `foreach` from each result.
+- Evaluates the optional `when` key: rejects empty or whitespace-only values as
+  invalid; drops entries that evaluate to falsy; removes `when` from kept
+  entries.
+- Non-object entries and entries without `foreach` are passed through
+  unchanged.
+- Action entries retain their implicit `phony: true` default after expansion.
+
+**Error conditions:** returns `Err` on malformed Jinja expressions,
+whitespace-only `when` values, or type mismatches in the iterable.
+
+**Cross-references:** `docs/netsuke-design.md` §2.5 and roadmap task 3.14.2.
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the

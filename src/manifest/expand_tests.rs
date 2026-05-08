@@ -1,0 +1,258 @@
+//! Unit tests for manifest foreach expansion.
+
+use super::*;
+use minijinja::Environment;
+use rstest::rstest;
+
+fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
+    doc.get("targets")
+        .and_then(|v| v.as_array())
+        .map(Vec::as_slice)
+        .context("targets sequence missing")
+}
+
+fn actions(doc: &ManifestValue) -> Result<&[ManifestValue]> {
+    doc.get("actions")
+        .and_then(|v| v.as_array())
+        .map(Vec::as_slice)
+        .context("actions sequence missing")
+}
+
+fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u64>> {
+    entries
+        .iter()
+        .map(|entry| -> Result<u64> {
+            let map = entry
+                .as_object()
+                .with_context(|| format!("{section} entry map"))?;
+            let vars = map
+                .get("vars")
+                .and_then(|v| v.as_object())
+                .with_context(|| format!("{section} vars map"))?;
+            let index_value = vars
+                .get("index")
+                .with_context(|| format!("{section} index value"))?;
+            let ManifestValue::Number(num) = index_value else {
+                anyhow::bail!("{section} index missing");
+            };
+            num.as_u64()
+                .with_context(|| format!("{section} numeric index conversion failed"))
+        })
+        .collect()
+}
+
+#[test]
+fn expand_foreach_expands_sequence_values() -> Result<()> {
+    let env = Environment::new();
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - name: literal
+    foreach:
+      - 1
+      - 2
+    vars:
+      static: keep",
+    )?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 2, "expected two targets");
+    for (idx, target) in targets.iter().enumerate() {
+        let map = target.as_object().context("target map")?;
+        let vars = map
+            .get("vars")
+            .and_then(|v| v.as_object())
+            .context("vars map")?;
+        let index_val = vars.get("index").context("index value")?;
+        let item_val = vars.get("item").context("item value")?;
+        let ManifestValue::Number(index_num) = index_val else {
+            anyhow::bail!("index should be numeric: {index_val:?}");
+        };
+        let index = index_num
+            .as_u64()
+            .context("numeric index conversion failed")?;
+        anyhow::ensure!(index == idx as u64, "unexpected index value: {index}");
+        let ManifestValue::Number(item_num) = item_val else {
+            anyhow::bail!("item should be numeric: {item_val:?}");
+        };
+        let item = item_num
+            .as_u64()
+            .context("numeric item conversion failed")?;
+        anyhow::ensure!(item == (idx + 1) as u64, "unexpected item value: {item}");
+    }
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_applies_when_expression() -> Result<()> {
+    let env = Environment::new();
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - name: literal
+    foreach: '[1, 2, 3]'
+    when: 'item > 1'",
+    )?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 2, "expected filtered targets");
+    let indexes = indexes(targets, "target")?;
+    anyhow::ensure!(
+        indexes == vec![1, 2],
+        "unexpected filtered indexes: {:?}",
+        indexes
+    );
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_expands_actions_sequence_values() -> Result<()> {
+    let env = Environment::new();
+    let yaml = "actions:
+  - name: literal
+    foreach:
+      - alpha
+      - beta
+    command: echo {{ item }}
+    vars:
+      static: keep";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let actions = actions(&doc)?;
+    anyhow::ensure!(actions.len() == 2, "expected two actions");
+    anyhow::ensure!(indexes(actions, "action")? == vec![0, 1], "wrong indexes");
+    for action in actions {
+        let map = action.as_object().context("action map")?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed after action expansion"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_applies_action_when_expression() -> Result<()> {
+    let env = Environment::new();
+    let yaml = "actions:
+  - name: literal
+    command: echo {{ item }}
+    foreach: '[1, 2, 3]'
+    when: 'item > 1'";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let actions = actions(&doc)?;
+    anyhow::ensure!(actions.len() == 2, "expected filtered actions");
+    anyhow::ensure!(indexes(actions, "action")? == vec![1, 2], "wrong indexes");
+    Ok(())
+}
+
+#[test]
+fn expand_static_action_when_false_drops_action() -> Result<()> {
+    let env = Environment::new();
+    let yaml = "actions:
+  - name: skipped
+    command: echo skipped
+    when: 'false'
+  - name: kept
+    command: echo kept";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let actions = actions(&doc)?;
+    anyhow::ensure!(actions.len() == 1, "expected one action");
+    let map = actions
+        .first()
+        .and_then(ManifestValue::as_object)
+        .context("action map")?;
+    let name = map
+        .get("name")
+        .and_then(ManifestValue::as_str)
+        .context("action name")?;
+    anyhow::ensure!(name == "kept", "unexpected action name: {name}");
+    anyhow::ensure!(
+        !map.contains_key("when"),
+        "when should be removed after action expansion"
+    );
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_preserves_object_key_order() -> Result<()> {
+    let env = Environment::new();
+    let yaml = r"targets:
+  - name: literal
+    vars:
+      existing: keep
+    foreach:
+      - 1
+      - 2
+    when: 'true'
+    after: done
+";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 2, "expected expanded targets");
+    for target in targets {
+        let map = target.as_object().context("target object")?;
+        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+        anyhow::ensure!(
+            keys == ["name", "vars", "after"],
+            "key order should remain stable: {:?}",
+            keys
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
+#[case("false", 0, "expression false drops target")]
+#[case("0", 0, "expression 0 drops target")]
+#[case("true", 1, "expression true keeps target")]
+#[case("1 == 1", 1, "expression equality keeps target")]
+#[case("{{ 0 }}", 0, "template 0 drops target")]
+#[case("{{ 1 }}", 1, "template 1 keeps target")]
+#[case("{{ \"true\" }}", 1, "template lowercase true keeps target")]
+#[case("{{ \"True\" }}", 1, "template mixed case True keeps target")]
+#[case("{{ \"TRUE\" }}", 1, "template uppercase TRUE keeps target")]
+#[case("{{ 2 }}", 0, "template 2 drops target (only 1 is truthy)")]
+#[case("{{ \"yes\" }}", 0, "template yes drops target (only true/1 truthy)")]
+fn expand_static_target_when_evaluation(
+    #[case] when_expr: &str,
+    #[case] expected_count: usize,
+    #[case] description: &str,
+) -> Result<()> {
+    let env = Environment::new();
+    let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(
+        targets.len() == expected_count,
+        "{description}: expected {expected_count} target(s), got {}",
+        targets.len()
+    );
+    if expected_count == 1 {
+        let target = targets.first().context("target")?;
+        let map = target.as_object().context("target object")?;
+        anyhow::ensure!(
+            !map.contains_key("when"),
+            "{description}: when field should be removed after evaluation"
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
+#[case("{{ unclosed", "malformed template")]
+#[case("", "empty when expression")]
+#[case("   ", "whitespace-only when expression")]
+fn expand_static_target_when_invalid_errors(
+    #[case] when_expr: &str,
+    #[case] description: &str,
+) -> Result<()> {
+    let env = Environment::new();
+    let yaml = format!("targets:\n  - name: target\n    when: '{when_expr}'");
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+    let result = expand_foreach(&mut doc, &env);
+    anyhow::ensure!(result.is_err(), "{description} should return Err");
+    Ok(())
+}

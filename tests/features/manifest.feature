@@ -118,6 +118,17 @@ Feature: Manifest Parsing
     And the target 2 command is "echo 'bar'"
     And the target 2 index is 1
 
+  Scenario: Generating actions with foreach and when
+    Given the manifest file "tests/data/actions_foreach_when.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 2 actions
+    And the action 1 name is "setup"
+    And the action 1 command is "echo 'setup'"
+    And the action 1 index is 0
+    And the action 2 name is "test"
+    And the action 2 command is "echo 'test'"
+    And the action 2 index is 2
+
   Scenario: Generating targets with glob
     Given the manifest file "tests/data/glob.yml" is parsed
     When the manifest is checked

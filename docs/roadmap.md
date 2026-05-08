@@ -325,6 +325,101 @@ library, and CLI ergonomics.
   - [ ] Include examples of consuming JSON diagnostics.
   - [ ] Document configuring quiet/verbose modes for automation.
 
+### 3.14. Conditional action planning
+
+- [ ] 3.14.1. Record manifest-time condition semantics for actions and targets.
+  See [netsuke-design.md §2.5](netsuke-design.md).
+  - [ ] State that `foreach` and `when` are evaluated before typed AST
+    deserialisation, IR generation, and Ninja execution.
+  - [ ] Document that build-time branching belongs in recipes unless a future
+    runtime-condition feature is designed.
+- [x] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
+  Requires 2.2.3. See [netsuke-design.md §2.5](netsuke-design.md).
+  - [x] Preserve the existing implicit `phony: true` action behaviour after
+    expansion.
+  - [ ] Support complementary branches such as `when: command_available(...)`
+    and `when: not command_available(...)`.
+- [ ] 3.14.3. Lower target and action `deps` into implicit IR and Ninja
+  dependency edges. Requires 1.2.2 and 1.3.2. See
+  [netsuke-design.md §§2.4 and 5.3](netsuke-design.md).
+  - [ ] Keep `sources` in the explicit recipe-input class used for `ins` and
+    `$in`.
+  - [ ] Add a separate implicit dependency class for `deps` so they affect
+    ordering and rebuild decisions without appearing in recipe arguments.
+  - [ ] Align cycle detection, generated Ninja output, and user-facing
+    dependency documentation.
+- [ ] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
+  executable probe. Requires 3.5.1. See
+  [executable discovery](netsuke-design.md#executable-discovery-filter-which).
+  - [ ] Reuse the `which` resolver and cache.
+  - [ ] Return `false` for absent commands instead of raising
+    `netsuke::jinja::which::not_found`.
+  - [ ] Preserve argument validation diagnostics for invalid options.
+- [ ] 3.14.5. Add regression coverage for conditional action dependency
+  manifests.
+  - [ ] Test action-level `when` and action-level `foreach`.
+  - [ ] Test complementary nextest and legacy branches select exactly one
+    action.
+  - [ ] Test absent-command fallback without invoking `shell()`.
+  - [ ] Test `deps` lowering in the IR and emitted Ninja build statements.
+- [ ] 3.14.6. Add rule-level `deps_from` for compiler dependency imports.
+  Requires 3.14.3. See
+  [netsuke-design.md §2.3](netsuke-design.md#planned-compiler-dependency-import).
+  - [ ] Parse `deps_from.format` and `deps_from.depfile` without accepting
+    rule-level `deps` as an alias.
+  - [ ] Validate the initial `gcc` and `msvc` dependency formats.
+  - [ ] Lower `deps_from` into the IR action `depfile` and Ninja `deps`
+    attributes.
+  - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
+    is implemented.
+- [ ] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
+  Requires 1.3.2. See [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
+  - [ ] Preserve shell variables such as `$PATH`, `${CARGO:-cargo}`, and
+    `$RUSTFLAGS` in generated Ninja by emitting literal dollars as `$$`.
+  - [ ] Keep the IR free of Ninja-specific dollar escaping.
+  - [ ] Add command and script regression tests covering shell variables,
+    `$in` / `$out`, and unrelated identifiers such as `$input`.
+- [ ] 3.14.8. Make Jinja command helpers match the documented ergonomics.
+  Requires 2.2.4 and 3.14.4. See
+  [netsuke-design.md §§4.4 and 4.5](netsuke-design.md).
+  - [ ] Add `env(name, default=...)` without changing the existing missing and
+    invalid UTF-8 diagnostics.
+  - [ ] Implement or remove the documented `shell_escape` helper so the user
+    guide and code agree.
+  - [ ] Add `shell_join` and `compact` helpers for deliberate shell recipes.
+  - [ ] Add documentation and tests showing optional `RUSTFLAGS` construction
+    without shell parameter expansion.
+- [ ] 3.14.9. Add structured recipe environment mappings.
+  Requires 3.14.7 and 3.14.8. See
+  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
+  - [ ] Parse rule, target, and action `env` mappings with `value`, `default`,
+    `prepend`, `append`, and `unset` operations.
+  - [ ] Merge rule-level and target/action-level environment bindings during
+    IR generation.
+  - [ ] Emit backend-specific environment setup without exposing Ninja variable
+    syntax in the manifest contract.
+  - [ ] Test platform path-list separators for `prepend` and `append`.
+- [ ] 3.14.10. Add structured `exec` recipes for argv-safe commands.
+  Requires 3.14.8 and 3.14.9. See
+  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
+  - [ ] Extend the recipe union with `exec.program` and `exec.args`.
+  - [ ] Reject manifests that combine `exec` with `rule`, `command`, or
+    `script`.
+  - [ ] Preserve list-valued argument expressions without accidental shell word
+    splitting.
+  - [ ] Add Ninja output and execution tests for arguments containing spaces,
+    shell metacharacters, and empty optional values.
+- [ ] 3.14.11. Surface selected conditional actions without recipe `echo`.
+  Requires 3.14.2 and 3.14.4. See
+  [netsuke-design.md §2.6](netsuke-design.md#26-planned-recipe-ergonomics-and-execution-feedback).
+  - [ ] Add target/action `description` support and let it override referenced
+    rule descriptions for the concrete edge.
+  - [ ] Report selected action descriptions in normal Ninja progress output.
+  - [ ] In verbose mode, report why manifest-time `when` branches were included
+    or skipped.
+  - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a
+    later diagnostics design defines severity semantics.
+
 **Success criterion:** Netsuke ships a localizable, accessible, and fully
 configurable CLI that delivers real-time feedback, machine-readable
 diagnostics, and the onboarding experience defined in the Netsuke CLI design

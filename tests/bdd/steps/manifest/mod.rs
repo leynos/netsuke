@@ -15,7 +15,10 @@ use crate::bdd::types::{
     EnvVarKey, EnvVarValue, ErrorPattern, ManifestPath, RuleName, VersionString,
 };
 use anyhow::{Context, Result, bail, ensure};
-use netsuke::{ast::StringOrList, manifest};
+use netsuke::{
+    ast::{Recipe, StringOrList, Target},
+    manifest,
+};
 use rstest_bdd_macros::{given, then, when};
 use test_support::display_error_chain;
 
@@ -287,4 +290,87 @@ fn first_action_phony(world: &TestWorld) -> Result<()> {
         Ok(())
     });
     with_manifest_error_context(world, result.context("manifest has not been parsed"))?
+}
+
+fn with_action<T, F>(world: &TestWorld, index: usize, f: F) -> Result<T>
+where
+    F: FnOnce(&Target) -> Result<T>,
+{
+    ensure!(index > 0, "action index is 1-based");
+    let result = world.manifest.with_ref(|m| {
+        let action = m
+            .actions
+            .get(index - 1)
+            .with_context(|| format!("missing action {index}"))?;
+        f(action)
+    });
+    with_manifest_error_context(world, result.context("manifest has not been parsed"))?
+}
+
+#[then("the manifest has {count:usize} actions")]
+fn manifest_has_actions(world: &TestWorld, count: usize) -> Result<()> {
+    let result = world.manifest.with_ref(|m| {
+        ensure!(
+            m.actions.len() == count,
+            "expected manifest to have {count} actions, got {}",
+            m.actions.len()
+        );
+        Ok(())
+    });
+    with_manifest_error_context(world, result.context("manifest has not been parsed"))?
+}
+
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
+#[then("the action {index:usize} name is {name:string}")]
+fn action_name_n(world: &TestWorld, index: usize, name: &str) -> Result<()> {
+    let name = crate::bdd::types::TargetName::new(name);
+    with_action(world, index, |action| {
+        let actual = get_string_from_string_or_list(&action.name, "name")?;
+        ensure!(
+            actual == name.as_str(),
+            "expected action {index} name '{name}', got '{actual}'"
+        );
+        Ok(())
+    })
+}
+
+#[expect(
+    clippy::shadow_reuse,
+    reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
+)]
+#[then("the action {index:usize} command is {command:string}")]
+fn action_command_n(world: &TestWorld, index: usize, command: &str) -> Result<()> {
+    let command = crate::bdd::types::CommandText::new(command);
+    with_action(world, index, |action| match &action.recipe {
+        Recipe::Command { command: actual } => {
+            ensure!(
+                actual == command.as_str(),
+                "expected action {index} command '{command}', got '{actual}'"
+            );
+            Ok(())
+        }
+        other => bail!("Expected command recipe, got: {other:?}"),
+    })
+}
+
+#[then("the action {index:usize} index is {expected:usize}")]
+fn action_index_n(world: &TestWorld, index: usize, expected: usize) -> Result<()> {
+    with_action(world, index, |action| {
+        let index_value = action
+            .vars
+            .get("index")
+            .with_context(|| format!("action {index} missing 'index' variable"))?
+            .as_u64()
+            .with_context(|| format!("action {index} index is not an integer"))?;
+        let actual = usize::try_from(index_value)
+            .with_context(|| format!("action {index} index does not fit into usize"))?;
+        ensure!(
+            actual == expected,
+            "unexpected index for action {index}: expected {expected}, got {actual}"
+        );
+        Ok(())
+    })
 }

@@ -162,8 +162,6 @@ rules:
     command: "{{ cc }} {{ cflags }} -c {{ ins }} -o {{ outs }}"
     # Optional: Displayed during the build
     description: "Compiling {{ outs }}"
-    # Optional: Ninja dependency file info (gcc or msvc format)
-    deps: gcc
 
 ```
 
@@ -187,9 +185,6 @@ rules:
 
 - `description` (Optional): A user-friendly message printed by Ninja when
   this rule runs. Can contain `{{ ins }}` / `{{ outs }}`.
-
-- `deps` (Optional): Specifies dependency file format (`gcc` or `msvc`) for
-  C/C++ header dependencies, generating Ninja's `depfile` and `deps` attributes.
 
 ## 5\. Defining Targets and Actions
 
@@ -280,9 +275,10 @@ Netsuke processes the manifest in stages:
    `serde_json::Value`).
 
 2. Template Expansion (`foreach`, `when`): Evaluate `foreach` expressions to
-   generate multiple target definitions. The `item` (and optional `index`)
-   become available in the context. Evaluate `when` expressions to
-   conditionally include/exclude targets.
+   generate multiple target or action definitions. The `item` (and optional
+   `index`) become available in the context. Evaluate `when` expressions to
+   conditionally include/exclude entries (`when` can exclude both targets and
+   actions).
 
 3. Deserialisation to AST: Convert the expanded intermediate structure into
    Netsuke's typed Rust structs (`NetsukeManifest`, `Target`, etc.).
@@ -293,7 +289,8 @@ Netsuke processes the manifest in stages:
 
 ### `foreach` and `when`
 
-These keys enable generating multiple similar targets programmatically.
+These keys enable generating multiple similar targets or actions
+programmatically.
 
 ```yaml
 targets:
@@ -310,11 +307,23 @@ targets:
 
 ```
 
+```yaml
+actions:
+  # Generate named test actions, skipping disabled suites.
+  - foreach:
+      - unit
+      - integration
+      - disabled
+    when: item != 'disabled'
+    name: "test-{{ item }}"
+    command: "cargo test --test {{ item }}"
+```
+
 - `foreach`: A Jinja expression evaluating to a list (or any iterable). A
-  target definition will be generated for each item.
+  target or action definition will be generated for each item.
 
 - `when` (Optional): A Jinja expression evaluating to a boolean. If false,
-  the target generated for the current `item` is skipped.
+  the target or action generated for the current `item` is skipped.
 
 ### User-defined Macros
 
