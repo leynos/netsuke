@@ -138,7 +138,8 @@ impl MacroInstance {
             )
         })?;
         // SAFETY: `register_macro` requires an `Environment<'static>`, so the template
-        // bytecode outlives the captured state stored in the macro instance.
+        // bytecode and captured output outlive the cached state stored in the macro
+        // instance.
         let captured_static: Captured<'static> = unsafe { std::mem::transmute(captured) };
         Ok(Self {
             state: MacroStateGuard::new(captured_static),

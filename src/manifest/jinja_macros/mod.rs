@@ -151,10 +151,9 @@ pub(crate) fn register_manifest_macros(
 /// .unwrap();
 /// let template = env.get_template("macro").unwrap();
 /// let captured = template.render_captured(()).unwrap();
-/// let state = captured.state();
-/// let value = state.lookup("greet").unwrap();
+/// let value = captured.state().lookup("greet").unwrap();
 /// let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
-/// let rendered = call_macro_value(&state, &value, &[], Some(kwargs)).unwrap();
+/// let rendered = call_macro_value(captured.state(), &value, &[], Some(kwargs)).unwrap();
 /// assert_eq!(rendered.to_string(), "hi Ada");
 /// ```
 pub(crate) fn call_macro_value(
