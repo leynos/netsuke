@@ -330,6 +330,7 @@ fn resolve_merged_diag_json_handles_malformed_project_config(
     fs::write(&project_config, "theme = \"ascii\n")
         .context("write malformed project .netsuke.toml")?;
 
+    let _cwd_guard = CwdGuard::acquire()?;
     std::env::set_current_dir(&env.temp_project).context("change to project directory")?;
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
@@ -362,6 +363,7 @@ fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error(
     let explicit_config = env.temp_project.path().join("broken.toml");
     fs::write(&explicit_config, "theme = \"ascii\n").context("write malformed explicit config")?;
 
+    let _cwd_guard = CwdGuard::acquire()?;
     std::env::set_current_dir(&env.temp_project).context("change to project directory")?;
 
     let config_arg = explicit_config.to_string_lossy().into_owned();

@@ -2,14 +2,18 @@
 
 ## Status
 
-Accepted on 8 May 2026.
+Accepted
+
+## Date
+
+2026-05-08
 
 ## Context and problem statement
 
 Netsuke manifests support `foreach` and `when` control keys during manifest
 target expansion. The implementation in `src/manifest/expand.rs` walks the
 top-level `targets` sequence, expands each target into zero or more concrete
-targets, and removes the control keys before downstream deserialisation.
+targets, and removes the control keys before downstream deserialization.
 
 The open question is whether the same control keys should also be supported on
 individual actions inside a target. Action-level support would make a single
@@ -52,5 +56,7 @@ filtering.
   controls.
 - Future action-level repetition should be designed as a separate manifest
   feature with its own ADR before implementation.
-- Validators may reject action-level `foreach` and `when` if doing so improves
-  user feedback.
+- Validators MUST reject action-level `foreach` and `when` keys. Validators
+  are required to produce an error, not merely a warning, when these control
+  keys appear at action level so mistyped control keys are not silently
+  accepted.

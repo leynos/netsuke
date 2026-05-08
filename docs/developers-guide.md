@@ -116,12 +116,12 @@ The pipeline is:
    expression or literal sequence, evaluates any `when` guard, injects
    `vars.item` and `vars.index` for generated targets, and replaces
    `targets` with the expanded concrete list.
-4. Downstream deserialisation and rendering consume the expanded
+4. Downstream deserialization and rendering consume the expanded
    `ManifestValue`; they should not see the `foreach` or `when` control keys.
 
 Callers must treat expansion as fallible. Errors can come from malformed
 target metadata, such as a non-object `vars` value, expression parse or
-evaluation failures in `foreach` or `when`, and serialisation failures while
+evaluation failures in `foreach` or `when`, and serialization failures while
 copying the MiniJinja item value into manifest `vars`. Propagate these errors
 with context rather than defaulting to a partially expanded manifest.
 
