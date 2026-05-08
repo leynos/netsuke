@@ -220,6 +220,13 @@ Implementation completed on 2026-04-20.
 
 Follow-on maintenance completed on 2026-04-21.
 
+Completion re-evaluated on 2026-05-08. The implementation still satisfies the
+planned contract: the roadmap entry is marked done, user-facing documentation
+describes `--config`, `NETSUKE_CONFIG`, and the legacy alias, the annotated
+sample config is present, and both `rstest` integration coverage and
+`rstest-bdd` behavioural coverage exercise the explicit config selection
+precedence. No roadmap change was required.
+
 Validation evidence:
 
 - `make fmt`
@@ -350,9 +357,9 @@ Then, align the merge pipeline in `src/cli/config_merge.rs` with the landed
    directly. When a path is selected they load that file only, bypassing
    discovery.
 3. `merge_with_config(cli, matches)` reads selection through
-   `resolve_config_path(cli)`
-   and delegates to `push_file_layers` with the same `&Cli` pipeline, so all
-   config entry points resolve explicit selectors the same way.
+   `resolve_config_path(cli)` and delegates to `push_file_layers` with the same
+   `&Cli` pipeline, so all config entry points resolve explicit selectors the
+   same way.
 
 Acceptance for Stage A:
 
