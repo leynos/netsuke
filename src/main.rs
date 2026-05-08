@@ -118,31 +118,25 @@ fn parse_cli_or_exit(
     }
 }
 
+fn handle_config_load_error(err: &(dyn std::error::Error + 'static), mode: DiagMode) -> ExitCode {
+    if mode.is_json() {
+        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
+    } else {
+        init_tracing(Level::ERROR);
+        tracing::error!(error = %err, "configuration load failed");
+        ExitCode::FAILURE
+    }
+}
+
 fn resolve_diag_mode_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     env: &impl cli::EnvSource,
     startup_mode: DiagMode,
 ) -> Result<DiagMode, ExitCode> {
-    match cli::resolve_merged_diag_json(parsed_cli, matches, env) {
-        Ok(enabled) => Ok(DiagMode::from_json_enabled(enabled)),
-        Err(err) => map_config_load_failure(&err, startup_mode),
-    }
-}
-
-fn map_config_load_failure<T>(
-    err: &Arc<ortho_config::OrthoError>,
-    mode: DiagMode,
-) -> Result<T, ExitCode> {
-    if mode.is_json() {
-        Err(diagnostic_json::emit_or_fallback(
-            diagnostic_json::render_error_json(err.as_ref()),
-        ))
-    } else {
-        init_tracing(Level::ERROR);
-        tracing::error!(error = %err, "configuration load failed");
-        Err(ExitCode::FAILURE)
-    }
+    cli::resolve_merged_diag_json(parsed_cli, matches, env)
+        .map(DiagMode::from_json_enabled)
+        .map_err(|err| handle_config_load_error(err.as_ref(), startup_mode))
 }
 
 fn merge_cli_or_exit(
@@ -151,10 +145,9 @@ fn merge_cli_or_exit(
     env: &impl cli::EnvSource,
     mode: DiagMode,
 ) -> Result<cli::Cli, ExitCode> {
-    match cli::merge_with_config(parsed_cli, matches, env) {
-        Ok(merged) => Ok(merged.with_default_command()),
-        Err(err) => map_config_load_failure(&err, mode),
-    }
+    cli::merge_with_config(parsed_cli, matches, env)
+        .map(cli::Cli::with_default_command)
+        .map_err(|err| handle_config_load_error(err.as_ref(), mode))
 }
 
 fn configure_runtime(
