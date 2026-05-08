@@ -38,6 +38,31 @@ fn artefact_sources(config: &Value) -> Result<Vec<&str>> {
         .collect()
 }
 
+fn rust_build_release_step_blocks(contents: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut current_block = Vec::new();
+
+    for line in contents.lines() {
+        if line.starts_with("      - ") && !current_block.is_empty() {
+            let block = current_block.join("\n");
+            if block.contains("rust-build-release@") {
+                blocks.push(block);
+            }
+            current_block.clear();
+        }
+        current_block.push(line);
+    }
+
+    if !current_block.is_empty() {
+        let block = current_block.join("\n");
+        if block.contains("rust-build-release@") {
+            blocks.push(block);
+        }
+    }
+
+    blocks
+}
+
 #[test]
 fn behavioural_build_and_package_wiring_matches_shared_actions() {
     let contents = workflow_contents("build-and-package.yml")
@@ -94,6 +119,17 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
         contents.contains("\"target/orthohelp/${{ inputs.target }}/release\""),
         "workflow should generate help under target/orthohelp"
     );
+    let rust_build_steps = rust_build_release_step_blocks(&contents);
+    assert!(
+        !rust_build_steps.is_empty(),
+        "workflow should call rust-build-release"
+    );
+    for step in rust_build_steps {
+        assert!(
+            step.contains("skip-man-page-discovery: 'true'"),
+            "rust-build-release call should skip embedded man-page discovery"
+        );
+    }
     assert!(
         contents.contains("man-paths: ${{ steps.stage_paths.outputs.man_path }}"),
         "Linux packaging should consume the staged man_path output"
