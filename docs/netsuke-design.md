@@ -464,7 +464,7 @@ Ninja's dollar-escaping rules.
 
 Netsuke should add four complementary capabilities.
 
-#### Backend Dollar Escaping
+#### Backend dollar escaping
 
 After Netsuke has resolved its own placeholders (`ins`, `outs`, `$in`, and
 `$out`) and before writing a Ninja file, the Ninja backend must escape any
@@ -475,7 +475,7 @@ in the manifest while preserving the existing generated Ninja semantics.
 This is a backend concern, not an IR concern. The IR continues to contain plain
 command or script text with no Ninja-specific escaping.
 
-#### Structured Environment Mapping
+#### Structured environment mapping
 
 Rules, targets, and actions should accept an `env` mapping. Rule-level values
 define defaults for all users of that rule; target and action values override
@@ -499,7 +499,7 @@ to rules, targets, and actions. It is separate from the Jinja `env()` helper in
 [§4.4](#44-essential-custom-functions), which reads from the process
 environment while the manifest is evaluated.
 
-#### Environment Layering and Conflicts
+#### Environment layering and conflicts
 
 Environment values move through three layers:
 
@@ -546,7 +546,7 @@ The example is illustrative rather than final syntax for Cargo subcommands. The
 implementation must define whether `program` may include subcommands or whether
 `args` must carry every token after the executable.
 
-#### Structured `exec` Recipes
+#### Structured `exec` recipes
 
 A planned `exec` recipe should model commands as an executable plus an argument
 vector instead of shell text:
@@ -565,7 +565,7 @@ selected backend. List-valued expressions should be supported without forcing
 authors to pre-tokenize flags into strings. This avoids accidental word
 splitting and reduces the need for `shell_escape` in ordinary recipes.
 
-#### Execution Feedback
+#### Execution feedback
 
 The existing `description` field is the right primitive for normal status text.
 Netsuke should extend it to targets and actions, and should use the selected
@@ -1818,7 +1818,7 @@ This transformation involves several steps:
 
 3. **Action Registration and Edge Creation:**
 
-   Current behavior:
+   Current behaviour:
 
    For each expanded target, resolve the referenced rule template, merge
    rule-level and target-level execution metadata, interpolate its command with
