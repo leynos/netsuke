@@ -99,6 +99,44 @@ These points are strategy rules, not optional style guidance.
    represent distinct domain concepts.
 5. Run `cargo test --test bdd_tests` and then the full quality gates.
 
+## Manifest `foreach` expansion
+
+Manifest target expansion is implemented by `expand_foreach` in
+`src/manifest/expand.rs`. It is target-scoped: a target may define
+`foreach` to create one concrete target per item, and may define `when` to
+filter either generated targets or a static target before later manifest
+stages run.
+
+The pipeline is:
+
+1. Manifest parsing produces a mutable `ManifestValue` document.
+2. The manifest expansion stage passes that document and the configured
+   MiniJinja `Environment` to `expand_foreach`.
+3. `expand_foreach` reads `targets`, evaluates each target's `foreach`
+   expression or literal sequence, evaluates any `when` guard, injects
+   `vars.item` and `vars.index` for generated targets, and replaces
+   `targets` with the expanded concrete list.
+4. Downstream deserialisation and rendering consume the expanded
+   `ManifestValue`; they should not see the `foreach` or `when` control keys.
+
+Callers must treat expansion as fallible. Errors can come from malformed
+target metadata, such as a non-object `vars` value, expression parse or
+evaluation failures in `foreach` or `when`, and serialisation failures while
+copying the MiniJinja item value into manifest `vars`. Propagate these errors
+with context rather than defaulting to a partially expanded manifest.
+
+Minimal target-level example:
+
+```yaml
+targets:
+  - name: "lint-{{ item }}"
+    foreach:
+      - src
+      - tests
+    when: "item != 'tests' or env.CI == 'true'"
+    command: "cargo clippy --manifest-path {{ item }}/Cargo.toml"
+```
+
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global

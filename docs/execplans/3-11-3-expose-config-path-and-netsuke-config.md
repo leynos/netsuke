@@ -227,6 +227,13 @@ sample config is present, and both `rstest` integration coverage and
 `rstest-bdd` behavioural coverage exercise the explicit config selection
 precedence. No roadmap change was required.
 
+Compile-time/UI testing was also evaluated on 2026-05-08. The repository has
+no `trybuild`, `compiletest`, or `ui_test` harness, and no local proc-macro
+crate or public macro API whose compile-fail diagnostics need a UI contract.
+The existing `rstest-bdd-macros` dependency already uses strict compile-time
+validation for behavioural step binding, so no additional compile-time test
+harness is required for this milestone.
+
 Validation evidence:
 
 - `make fmt`
