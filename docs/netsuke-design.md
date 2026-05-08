@@ -414,12 +414,12 @@ Action-level `foreach` and `when` expansion is implemented by the same loader
 pass as target-level expansion; entries from top-level `actions` keep their
 implicit `phony: true` default after expansion.
 
-Conditions are manifest-time decisions. Netsuke evaluates `when` while loading
-the manifest, before the AST is deserialised, before IR generation, and before
-Ninja executes. The generated IR and `build.ninja` file therefore contain only
-the selected entries. Build-time branching remains the responsibility of the
-recipe command or script unless a separate future feature explicitly models
-runtime conditions.
+Conditions are manifest-time decisions. Netsuke evaluates both `foreach` and
+`when` while loading the manifest, before the AST is deserialised, before IR
+generation, and before Ninja executes. The generated IR and `build.ninja` file
+therefore contain only the selected entries. Build-time branching remains the
+responsibility of the recipe command or script unless a separate future feature
+explicitly models runtime conditions.
 
 ```yaml
 - foreach: glob('assets/svg/*.svg')
@@ -843,7 +843,8 @@ Once parsed, Netsuke performs a series of transformation stages:
 1. **Template Expansion:** The `foreach` and optional `when` keys in the raw
    YAML are evaluated to generate additional target and action entries. Each
    iteration layers the `item` and `index` variables over the manifest's
-   globals and any entry-local variables.
+   globals and any entry-local variables. This is the only stage that owns
+   manifest-time condition semantics.
 2. **Deserialisation:** The expanded document is deserialised into the typed
    [`NetsukeManifest`] AST.
 3. **Final Rendering:** Remaining string fields are rendered using Jinja,
@@ -885,7 +886,9 @@ logs.
 The ingestion pipeline now parses the manifest as YAML before any Jinja
 evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
 fields are rendered only after deserialisation, keeping data and templating
-concerns clearly separated.
+concerns clearly separated. Because the expansion pass runs before typed AST
+deserialisation, `foreach` and `when` are not AST fields, and they must not be
+interpreted by IR generation, Ninja generation, or the process runner.
 
 ### 3.5 Testing
 

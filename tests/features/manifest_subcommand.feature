@@ -13,6 +13,15 @@ Feature: Manifest subcommand
     And stdout should contain "rule "
     And the file "-" should not exist
 
+  Scenario: Manifest-time conditions select generated actions and targets
+    Given a Netsuke workspace with conditional actions and targets
+    When the netsuke manifest subcommand is run with "-"
+    Then the command should succeed
+    And stdout should contain "build action-kept:"
+    And stdout should contain "build target-kept:"
+    And stdout should not contain "action-skipped"
+    And stdout should not contain "target-skipped"
+
   Scenario: Manifest subcommand fails when output path is a directory
     Given a minimal Netsuke workspace
     And a directory named "out.ninja" exists

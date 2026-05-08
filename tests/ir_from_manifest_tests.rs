@@ -55,6 +55,69 @@ fn missing_rule_fails() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+#[case::skipped_target_duplicate_output(
+    concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: kept\n",
+        "    command: echo kept\n",
+        "  - name: kept\n",
+        "    command: echo skipped\n",
+        "    when: 'false'\n",
+    ),
+    "kept"
+)]
+#[case::skipped_action_missing_rule(
+    concat!(
+        "netsuke_version: '1.0.0'\n",
+        "actions:\n",
+        "  - name: skipped-action\n",
+        "    rule: missing\n",
+        "    when: 'false'\n",
+        "targets:\n",
+        "  - name: kept\n",
+        "    command: echo kept\n",
+    ),
+    "kept"
+)]
+#[case::skipped_target_cycle(
+    concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: kept\n",
+        "    command: echo kept\n",
+        "  - name: skipped-a\n",
+        "    command: echo skipped-a\n",
+        "    sources: skipped-b\n",
+        "    when: 'false'\n",
+        "  - name: skipped-b\n",
+        "    command: echo skipped-b\n",
+        "    sources: skipped-a\n",
+        "    when: 'false'\n",
+    ),
+    "kept"
+)]
+fn skipped_manifest_conditions_do_not_contribute_to_ir(
+    #[case] yaml: &str,
+    #[case] expected_target: &str,
+) -> Result<()> {
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    ensure!(
+        graph
+            .targets
+            .contains_key(&Utf8PathBuf::from(expected_target)),
+        "selected target should be present in IR"
+    );
+    ensure!(
+        graph.targets.len() == 1,
+        "filtered entries should be absent from IR targets: {:?}",
+        graph.targets.keys().collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
 #[derive(Debug)]
 enum ExpectedError {
     DuplicateOutput(Vec<String>),

@@ -18,6 +18,13 @@ fn actions(doc: &ManifestValue) -> Result<&[ManifestValue]> {
         .context("actions sequence missing")
 }
 
+fn section_entries<'a>(doc: &'a ManifestValue, section: &str) -> Result<&'a [ManifestValue]> {
+    doc.get(section)
+        .and_then(|v| v.as_array())
+        .map(Vec::as_slice)
+        .with_context(|| format!("{section} sequence missing"))
+}
+
 fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u64>> {
     entries
         .iter()
@@ -39,6 +46,83 @@ fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u64>> {
                 .with_context(|| format!("{section} numeric index conversion failed"))
         })
         .collect()
+}
+
+#[rstest]
+#[case::targets("targets")]
+#[case::actions("actions")]
+fn expand_static_when_false_removes_entry_before_typed_ast(#[case] section: &str) -> Result<()> {
+    let env = Environment::new();
+    let yaml = format!(
+        "{section}:
+  - name: skipped
+    command: echo skipped
+    when: 'false'
+  - name: kept
+    command: echo kept"
+    );
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let entries = section_entries(&doc, section)?;
+    anyhow::ensure!(entries.len() == 1, "expected one kept {section} entry");
+    let map = entries
+        .first()
+        .and_then(ManifestValue::as_object)
+        .with_context(|| format!("{section} entry map"))?;
+    let name = map
+        .get("name")
+        .and_then(ManifestValue::as_str)
+        .with_context(|| format!("{section} entry name"))?;
+    anyhow::ensure!(name == "kept", "unexpected kept {section} name: {name}");
+    anyhow::ensure!(
+        !map.contains_key("when"),
+        "when should be removed before typed AST deserialisation"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::targets("targets")]
+#[case::actions("actions")]
+fn expand_foreach_when_injects_iteration_vars_only_for_kept_entries(
+    #[case] section: &str,
+) -> Result<()> {
+    let env = Environment::new();
+    let yaml = format!(
+        "{section}:
+  - foreach:
+      - skip
+      - keep
+      - also-keep
+    when: item != 'skip'
+    name: '{{{{ item }}}}'
+    command: echo {{{{ item }}}}"
+    );
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+    expand_foreach(&mut doc, &env)?;
+    let entries = section_entries(&doc, section)?;
+    anyhow::ensure!(entries.len() == 2, "expected two kept {section} entries");
+    anyhow::ensure!(
+        indexes(entries, section)? == vec![1, 2],
+        "indexes should preserve original iteration positions"
+    );
+    let names: Result<Vec<_>> = entries
+        .iter()
+        .map(|entry| {
+            entry
+                .as_object()
+                .and_then(|map| map.get("name"))
+                .and_then(ManifestValue::as_str)
+                .map(str::to_owned)
+                .with_context(|| format!("{section} name"))
+        })
+        .collect();
+    let expected_names = vec!["{{ item }}".to_owned(), "{{ item }}".to_owned()];
+    anyhow::ensure!(
+        names? == expected_names,
+        "final string rendering should happen after expansion"
+    );
+    Ok(())
 }
 
 #[test]
@@ -254,5 +338,22 @@ fn expand_static_target_when_invalid_errors(
     let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
     let result = expand_foreach(&mut doc, &env);
     anyhow::ensure!(result.is_err(), "{description} should return Err");
+    Ok(())
+}
+
+#[rstest]
+#[case::targets("targets")]
+#[case::actions("actions")]
+fn expand_foreach_invalid_expression_errors_during_template_expansion(
+    #[case] section: &str,
+) -> Result<()> {
+    let env = Environment::new();
+    let yaml = format!("{section}:\n  - name: bad\n    foreach: '('");
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
+    let result = expand_foreach(&mut doc, &env);
+    anyhow::ensure!(
+        result.is_err(),
+        "invalid foreach expression should fail for {section}"
+    );
     Ok(())
 }

@@ -278,7 +278,9 @@ Netsuke processes the manifest in stages:
    generate multiple target or action definitions. The `item` (and optional
    `index`) become available in the context. Evaluate `when` expressions to
    conditionally include/exclude entries (`when` can exclude both targets and
-   actions).
+   actions). This is a manifest-time selection step; skipped entries are
+   removed before Netsuke builds the typed manifest AST, creates its IR, emits
+   `build.ninja`, or runs Ninja.
 
 3. Deserialisation to AST: Convert the expanded intermediate structure into
    Netsuke's typed Rust structs (`NetsukeManifest`, `Target`, etc.).
@@ -324,6 +326,30 @@ actions:
 
 - `when` (Optional): A Jinja expression evaluating to a boolean. If false,
   the target or action generated for the current `item` is skipped.
+
+`foreach` and `when` do not create build-time branches. They decide which
+manifest entries exist while Netsuke loads the manifest. The generated Ninja
+file contains only the selected targets and actions, so a skipped entry cannot
+contribute rules, outputs, dependencies, defaults, or command text later in the
+build pipeline.
+
+When a decision must happen while a target is being built, put that branching
+inside the recipe command or script:
+
+```yaml
+targets:
+  - name: report
+    script: |
+      if test -f report.in; then
+        ./render report.in > report
+      else
+        ./render-empty > report
+      fi
+```
+
+A future runtime-condition feature may model build-time branching directly, but
+current manifests should treat recipe commands and scripts as the build-time
+decision point.
 
 ### User-defined Macros
 

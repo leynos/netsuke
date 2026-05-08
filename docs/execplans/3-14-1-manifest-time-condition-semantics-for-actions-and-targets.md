@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT (awaiting approval)
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -144,18 +144,30 @@ explicitly approved.
 - [x] 2026-05-08: Used a Wyvern agent team to inspect the design semantics,
       code pipeline, and documentation/testing references.
 - [x] 2026-05-08: Drafted this pre-implementation ExecPlan.
-- [ ] Stage A: confirm the current semantic contract and document any mismatch
+- [x] 2026-05-08: User approved implementation of this ExecPlan and work
+      moved from planning into execution.
+- [x] Stage A: confirm the current semantic contract and document any mismatch
       between code, design docs, and user docs.
-- [ ] Stage B: update `docs/netsuke-design.md`, `docs/users-guide.md`, and the
+- [x] Stage B: update `docs/netsuke-design.md`, `docs/users-guide.md`, and the
       relevant internal documentation with the manifest-time condition rule.
-- [ ] Stage C: add `rstest` coverage for action/target parity, false `when`
+- [x] Stage C: add `rstest` coverage for action/target parity, false `when`
       removal before typed AST, invalid `when`/`foreach` paths, and IR
       exclusion of filtered entries.
-- [ ] Stage D: add `rstest-bdd` behavioural coverage for generated Ninja
+- [x] Stage D: add `rstest-bdd` behavioural coverage for generated Ninja
       output containing only selected conditional actions and targets.
-- [ ] Stage E: run validation, update this plan with evidence, mark
+- [x] Stage E: run validation, update this plan with evidence, mark
       `docs/roadmap.md` item `3.14.1` done, commit, push, and open the
       implementation pull request.
+- [x] 2026-05-08: Confirmed the current code already implements the intended
+      manifest-time order. The change records that contract in user, design,
+      and developer documentation, then locks it with regression tests.
+- [x] 2026-05-08: Focused validation passed for expansion tests, IR exclusion
+      tests, and the new BDD manifest-time condition scenario.
+- [x] 2026-05-08: Final gates passed for `make check-fmt`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`. `make fmt` was run
+      first and applied `cargo fmt`, then failed on pre-existing repository-wide
+      Markdown line-length and table findings outside this change; unrelated
+      formatter churn was restored.
 
 ## Surprises & Discoveries
 
@@ -174,6 +186,14 @@ explicitly approved.
 - The current roadmap has `3.14.2` already marked done, so this item should not
   reimplement action-level expansion. It should document and lock the
   manifest-time semantics that now apply to both sections.
+- `tests/bdd/steps/manifest_command.rs` already exceeds the repository's
+  400-line soft limit, so the new BDD workspace setup step belongs in a small
+  separate module instead of growing that file.
+- A new `foreach: not_defined` negative test did not fail under a plain
+  `minijinja::Environment::new()` because the local test environment did not
+  use the manifest loader's strict undefined policy. The negative expansion
+  case now uses malformed expression syntax so it proves parse-time failure
+  independent of undefined-variable policy.
 
 ## Decision Log
 
@@ -198,6 +218,19 @@ explicitly approved.
   Rationale: this task primarily documents and tests an existing deterministic
   pipeline. Parameterized `rstest` cases should be enough unless the
   implementation broadens. Date/Author: 2026-05-08 / planning agent.
+
+- Decision: add BDD setup in `tests/bdd/steps/conditional_manifest.rs` instead
+  of extending `tests/bdd/steps/manifest_command.rs`. Rationale: the existing
+  manifest command step file is already over the AGENTS.md file-size guidance,
+  and a focused module keeps the new behaviour colocated without increasing
+  that debt. Date/Author: 2026-05-08 / implementation agent.
+
+- Decision: test invalid `foreach` with malformed syntax rather than an
+  undefined name. Rationale: `src/manifest/expand_tests.rs` exercises
+  `expand_foreach` directly with a basic MiniJinja environment, while strict
+  undefined behaviour is configured by the higher-level manifest loader.
+  Malformed syntax still fails during template expansion and matches this
+  test's boundary. Date/Author: 2026-05-08 / implementation agent.
 
 ## Skills and references
 
@@ -351,11 +384,60 @@ Expected successful final output is that each command exits with status `0`. If
 
 ## Outcomes & Retrospective
 
-Not started. This section must be filled in during implementation with:
+Implemented. The semantic behaviour did not change: Netsuke already evaluates
+top-level action and target `foreach`/`when` clauses during manifest loading,
+before typed AST deserialisation, IR generation, Ninja generation, and Ninja
+execution. This work records that contract and adds regression coverage so the
+boundary is harder to move accidentally.
 
-- what documentation changed,
-- what tests were added or updated,
-- whether any semantics changed,
-- the final validation evidence,
-- the commit hash, and
-- any follow-up work discovered for later `3.14.x` roadmap items.
+Documentation changed in `docs/netsuke-design.md`, `docs/users-guide.md`, and
+`docs/developers-guide.md`. The user guide now states that manifest conditions
+select entries at load time and that build-time branching belongs in recipe
+commands or scripts until a future runtime-condition feature is designed. The
+roadmap entry `3.14.1` is marked done.
+
+Tests changed in `src/manifest/expand_tests.rs`,
+`tests/ir_from_manifest_tests.rs`, `tests/features/manifest_subcommand.feature`,
+and `tests/bdd/steps/conditional_manifest.rs`. The unit tests cover action and
+target parity, false `when` removal before typed AST deserialisation,
+iteration vars on kept entries, invalid `foreach`, and IR exclusion for skipped
+duplicates, missing rules, and cycles. The behavioural scenario proves that
+`netsuke manifest -` emits only selected conditional actions and targets.
+
+Validation evidence:
+
+```plaintext
+cargo test --workspace expand_ -- --nocapture
+26 passed; 0 failed
+
+cargo test --workspace skipped_manifest_conditions_do_not_contribute_to_ir -- --nocapture
+3 passed; 0 failed
+
+cargo test --test bdd_tests manifest_time_conditions -- --nocapture
+1 passed; 0 failed
+
+make check-fmt
+exit status 0
+
+make lint
+exit status 0
+
+make test
+exit status 0
+
+make markdownlint
+exit status 0
+
+make nixie
+exit status 0
+```
+
+`make fmt` was attempted and logged to
+`/tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out`. It failed
+after `cargo fmt` because repository-wide Markdown formatting/linting still
+reports pre-existing issues in unrelated documents. No follow-up work is needed
+for this roadmap item, but cleaning those repository-wide Markdown formatter
+findings would make the formatter gate less noisy for future documentation
+changes.
+
+Commit hash: see the branch head for the committed implementation.
