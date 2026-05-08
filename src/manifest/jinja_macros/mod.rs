@@ -150,7 +150,8 @@ pub(crate) fn register_manifest_macros(
 /// )
 /// .unwrap();
 /// let template = env.get_template("macro").unwrap();
-/// let state = template.eval_to_state(()).unwrap();
+/// let captured = template.render_captured(()).unwrap();
+/// let state = captured.state();
 /// let value = state.lookup("greet").unwrap();
 /// let kwargs = Kwargs::from_iter([(String::from("name"), Value::from("Ada"))]);
 /// let rendered = call_macro_value(&state, &value, &[], Some(kwargs)).unwrap();

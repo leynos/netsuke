@@ -3,11 +3,10 @@ use super::call_macro_value;
 use crate::localization::{self, keys};
 use anyhow::Context;
 use minijinja::{
-    AutoEscape, Environment, Error, ErrorKind, State,
+    AutoEscape, Captured, Environment, Error, ErrorKind, State,
     value::{Kwargs, Object, Rest, Value},
 };
 use std::{
-    mem,
     ptr::NonNull,
     sync::{Arc, OnceLock},
     thread::ThreadId,
@@ -129,20 +128,20 @@ impl MacroInstance {
             localization::message(keys::MANIFEST_MACRO_TEMPLATE_LOAD_FAILED)
                 .with_arg("template", template_name)
         })?;
-        let state = template.eval_to_state(()).with_context(|| {
+        let captured = template.render_captured(()).with_context(|| {
             localization::message(keys::MANIFEST_MACRO_INIT_FAILED).with_arg("macro", macro_name)
         })?;
-        let value = state.lookup(macro_name).ok_or_else(|| {
+        let value = captured.state().lookup(macro_name).ok_or_else(|| {
             anyhow::anyhow!(
                 "{}",
                 localization::message(keys::MANIFEST_MACRO_MISSING).with_arg("macro", macro_name)
             )
         })?;
         // SAFETY: `register_macro` requires an `Environment<'static>`, so the template
-        // bytecode outlives the cached state stored in the macro instance.
-        let state_static: State<'static, 'static> = unsafe { mem::transmute(state) };
+        // bytecode outlives the captured state stored in the macro instance.
+        let captured_static: Captured<'static> = unsafe { std::mem::transmute(captured) };
         Ok(Self {
-            state: MacroStateGuard::new(state_static),
+            state: MacroStateGuard::new(captured_static),
             value,
             owner_thread: std::thread::current().id(),
         })
@@ -154,7 +153,7 @@ unsafe impl Sync for MacroInstance {}
 
 /// Owning handle for the compiled [`State`] used when invoking a macro.
 ///
-/// The boxed state gives the macro a stable context across repeated calls while
+/// The boxed capture gives the macro a stable context across repeated calls while
 /// keeping the allocation scoped to the cache lifetime.
 ///
 /// # Safety
@@ -164,25 +163,21 @@ unsafe impl Sync for MacroInstance {}
 /// of manifest macros, which remain registered for the duration of the build.
 #[derive(Debug)]
 struct MacroStateGuard {
-    ptr: NonNull<State<'static, 'static>>,
+    ptr: NonNull<Captured<'static>>,
 }
 
 impl MacroStateGuard {
-    fn new(state: State<'static, 'static>) -> Self {
-        let boxed = Box::new(state);
+    fn new(captured: Captured<'static>) -> Self {
+        let boxed = Box::new(captured);
         let ptr = Box::into_raw(boxed);
-        // SAFETY: Box::into_raw never returns null for non-ZST types. State is
-        // non-zero-sized so the pointer is guaranteed valid.
+        // SAFETY: Box::into_raw never returns null for non-ZST types. Captured
+        // is non-zero-sized so the pointer is guaranteed valid.
         let ptr_non_null = unsafe { NonNull::new_unchecked(ptr) };
         Self { ptr: ptr_non_null }
     }
 
-    #[expect(
-        clippy::missing_const_for_fn,
-        reason = "Macro state guard relies on pointer dereferencing not supported in const contexts"
-    )]
     fn as_ref(&self) -> &State<'static, 'static> {
-        unsafe { self.ptr.as_ref() }
+        unsafe { self.ptr.as_ref().state() }
     }
 }
 
