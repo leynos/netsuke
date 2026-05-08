@@ -65,7 +65,7 @@ jobs = 8
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for project config discovery")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with project config")?
         .with_default_command();
 
@@ -140,7 +140,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for user config discovery")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with user config")?
         .with_default_command();
 
@@ -181,7 +181,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for user config discovery")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with user config")?
         .with_default_command();
 
@@ -256,7 +256,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for precedence test")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge configs")?
         .with_default_command();
 
@@ -303,7 +303,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for precedence test")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge configs")?
         .with_default_command();
 
@@ -343,7 +343,7 @@ output_format = "human"
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
         netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer).context("parse CLI")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with env overrides")?
         .with_default_command();
 
@@ -406,7 +406,7 @@ output_format = "human"
         &localizer,
     )
     .context("parse CLI with flag overrides")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with CLI overrides")?
         .with_default_command();
 
@@ -465,7 +465,7 @@ jobs = 6
     let (cli, matches) =
         netsuke::cli::parse_with_localizer_from(["netsuke", flag, "project"], &localizer)
             .context("parse CLI with directory flag")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with directory flag discovery")?
         .with_default_command();
 
@@ -523,7 +523,7 @@ colour_policy = "always"
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI with NETSUKE_CONFIG_PATH")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with explicit config path")?
         .with_default_command();
 
@@ -629,7 +629,7 @@ fetch_allow_scheme = ["https"]
         &localizer,
     )
     .context("parse CLI with list overrides")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge with list appending")?
         .with_default_command();
 

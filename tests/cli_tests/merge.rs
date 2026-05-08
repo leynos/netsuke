@@ -258,10 +258,10 @@ default_targets = ["hello"]
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI args for merge")?;
     ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
+        netsuke::cli::resolve_merged_diag_json(&cli, &matches, &netsuke::cli::RealEnv)?,
         "pre-merge diagnostic mode should honour config diag_json",
     );
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge CLI and configuration layers")?
         .with_default_command();
     assert_config_skips_empty_cli_layer_invariants(&merged)
@@ -284,7 +284,7 @@ fn cli_merge_with_config_prefers_cli_theme_over_env_and_file() -> Result<()> {
     let (cli, matches) =
         netsuke::cli::parse_with_localizer_from(["netsuke", "--theme", "ascii"], &localizer)
             .context("parse CLI args for theme override merge")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
+    let merged = netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge theme across CLI, env, and config layers")?
         .with_default_command();
 
@@ -336,11 +336,11 @@ fn resolve_merged_diag_json_handles_malformed_project_config(
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI for malformed project config test")?;
 
-    // Malformed project config parse error should not propagate;
-    // resolve_merged_diag_json should fall back to the valid user config (output_format=json)
+    let error = netsuke::cli::resolve_merged_diag_json(&cli, &matches, &netsuke::cli::RealEnv)
+        .expect_err("malformed project config should surface before merge");
     ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli, &matches),
-        "should honour user config output_format=json despite malformed project config"
+        format!("{error:?}").contains(".netsuke.toml"),
+        "error should mention the malformed project config"
     );
 
     Ok(())
@@ -370,9 +370,11 @@ fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error(
         netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
             .context("parse CLI with malformed explicit config")?;
 
+    let error = netsuke::cli::resolve_merged_diag_json(&cli, &matches, &netsuke::cli::RealEnv)
+        .expect_err("malformed explicit config should surface before discovery fallback");
     ensure!(
-        !netsuke::cli::resolve_merged_diag_json(&cli, &matches),
-        "malformed explicit config should not fall back to discovered project config"
+        format!("{error:?}").contains("broken.toml"),
+        "error should mention the malformed explicit config"
     );
 
     let (cli_with_diag, matches_with_diag) = netsuke::cli::parse_with_localizer_from(
@@ -380,9 +382,15 @@ fn resolve_merged_diag_json_does_not_discover_after_explicit_config_error(
         &localizer,
     )
     .context("parse CLI with explicit diagnostic JSON flag")?;
+    let diag_flag_error = netsuke::cli::resolve_merged_diag_json(
+        &cli_with_diag,
+        &matches_with_diag,
+        &netsuke::cli::RealEnv,
+    )
+    .expect_err("malformed explicit config should surface even with --diag-json");
     ensure!(
-        netsuke::cli::resolve_merged_diag_json(&cli_with_diag, &matches_with_diag),
-        "--diag-json should still force structured diagnostics"
+        format!("{diag_flag_error:?}").contains("broken.toml"),
+        "error should mention the malformed explicit config"
     );
 
     Ok(())

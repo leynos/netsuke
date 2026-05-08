@@ -75,7 +75,7 @@ fn parse_and_merge(args: &[&str]) -> Result<netsuke::cli::Cli> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(args, &localizer)
         .context("parse CLI for config selection test")?;
-    netsuke::cli::merge_with_config(&cli, &matches)
+    netsuke::cli::merge_with_config(&cli, &matches, &netsuke::cli::RealEnv)
         .context("merge CLI with selected config")?
         .with_default_command()
         .pipe(Ok)

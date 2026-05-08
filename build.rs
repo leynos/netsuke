@@ -60,6 +60,11 @@ type ThemeContextCtor = fn(
     Option<cli::config::ColourPolicy>,
     output_mode::OutputMode,
 ) -> theme::ThemeContext;
+type ResolveMergedDiagJsonFn =
+    fn(&cli::Cli, &ArgMatches, &cli::RealEnv) -> ortho_config::OrthoResult<bool>;
+type MergeWithConfigFn =
+    fn(&cli::Cli, &ArgMatches, &cli::RealEnv) -> ortho_config::OrthoResult<cli::Cli>;
+type EnvSourceVarFn = fn(&cli::RealEnv, &str) -> Option<OsString>;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -113,9 +118,9 @@ const fn assert_symbols_linked() {
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
     const _: fn(&str) -> Option<bool> = cli_l10n::parse_bool_hint;
-    const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_diag_json;
-    const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
-        cli::merge_with_config;
+    const _: ResolveMergedDiagJsonFn = cli::resolve_merged_diag_json;
+    const _: MergeWithConfigFn = cli::merge_with_config;
+    const _: EnvSourceVarFn = <cli::RealEnv as cli::EnvSource>::var_os;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
     const _: fn(&cli::Cli) -> cli::config::CliConfig = cli::Cli::config;
     const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_diag_json;

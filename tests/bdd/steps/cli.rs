@@ -69,7 +69,7 @@ pub(super) fn apply_cli(world: &TestWorld, args: &CliArgs) {
         .map_err(|e| e.to_string())
         .and_then(|(parsed_cli, matches)| {
             // Apply config file discovery and merge
-            netsuke::cli::merge_with_config(&parsed_cli, &matches)
+            netsuke::cli::merge_with_config(&parsed_cli, &matches, &netsuke::cli::RealEnv)
                 .map(normalize_cli)
                 .map_err(|e| e.to_string())
         });
