@@ -521,30 +521,40 @@ that sets environment variables which could race with parallel test execution.
 
 ## Manifest processing helpers
 
-### `expand_foreach`
+### Expansion helpers
+
+#### expand_foreach
 
 `src/manifest/expand.rs` exposes
-`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()>` for
-manifest-time expansion before the raw document is deserialised into the AST.
-It accepts a mutable `ManifestValue`, representing the raw JSON/YAML tree, and
-a MiniJinja `Environment` used to evaluate bare expressions.
+`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()>`.
 
-The helper iterates over both top-level `targets` and `actions`. For each
-object entry with a `foreach` key, it evaluates the expression, emits one
-expanded entry per item, injects `item` and `index` into `vars`, and removes
-`foreach` from the expanded result. It also evaluates an optional `when` key as
-either a Jinja expression or template. Empty or whitespace-only `when` values
-are rejected, and entries whose condition evaluates to a falsy value are
-dropped.
+**Purpose:** expands `foreach`/`when` directives in both `targets` and
+`actions` top-level arrays before the manifest is deserialised into the AST.
 
-Entries without `foreach` still have `when` evaluated and stripped. Non-object
-entries are passed through unchanged. The function returns `Err` for malformed
-Jinja expressions, whitespace-only `when` values, and type mismatches such as a
-`foreach` expression that does not evaluate to an iterable.
+**Inputs:**
 
-For pipeline context, see
-[netsuke-design.md §2.5](netsuke-design.md#25-generated-targets-with-foreach)
-and roadmap task 3.14.2 in [roadmap.md](roadmap.md).
+- `doc: &mut ManifestValue`: the raw parsed YAML/JSON value.
+- `env: &Environment`: a Minijinja `Environment` used to evaluate bare Jinja
+  expressions.
+
+**Behaviour:**
+
+- Iterates over both `targets` and `actions` top-level arrays via a shared
+  `expand_section` helper.
+- For each object entry that contains a `foreach` key, evaluates the
+  expression, emits one expanded copy per item with `item` and `index`
+  (0-based) injected into `vars`, and removes `foreach` from each result.
+- Evaluates the optional `when` key: rejects empty or whitespace-only values as
+  invalid; drops entries that evaluate to falsy; removes `when` from kept
+  entries.
+- Non-object entries and entries without `foreach` are passed through
+  unchanged.
+- Action entries retain their implicit `phony: true` default after expansion.
+
+**Error conditions:** returns `Err` on malformed Jinja expressions,
+whitespace-only `when` values, or type mismatches in the iterable.
+
+**Cross-references:** `docs/netsuke-design.md` §2.5 and roadmap task 3.14.2.
 
 ## Documentation upkeep
 
