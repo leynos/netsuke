@@ -400,7 +400,7 @@ The cleaner model is:
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
-### 2.5 Generated Targets with `foreach`
+### 2.5 Generated Targets and Actions with `foreach`
 
 Large sets of similar outputs or setup actions can clutter a manifest when
 written individually. Netsuke supports a `foreach` entry within top-level
