@@ -410,6 +410,9 @@ initial YAML pass. Each resulting value becomes `item` in the entry context,
 and the optional `index` value records the zero-based iteration index. Variable
 lookups respect the precedence `globals` < `entry.vars` < per-iteration
 locals, and the per-iteration context is carried forward to later rendering.
+Action-level `foreach` and `when` expansion is implemented by the same loader
+pass as target-level expansion; entries from top-level `actions` keep their
+implicit `phony: true` default after expansion.
 
 Conditions are manifest-time decisions. Netsuke evaluates `when` while loading
 the manifest, before the AST is deserialised, before IR generation, and before

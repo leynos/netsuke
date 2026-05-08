@@ -519,6 +519,33 @@ forwarded variables: `PATH` (from the host `std::env::var_os`) and
 current process). Use this helper for configuration-layering tests or any test
 that sets environment variables which could race with parallel test execution.
 
+## Manifest processing helpers
+
+### `expand_foreach`
+
+`src/manifest/expand.rs` exposes
+`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()>` for
+manifest-time expansion before the raw document is deserialised into the AST.
+It accepts a mutable `ManifestValue`, representing the raw JSON/YAML tree, and
+a MiniJinja `Environment` used to evaluate bare expressions.
+
+The helper iterates over both top-level `targets` and `actions`. For each
+object entry with a `foreach` key, it evaluates the expression, emits one
+expanded entry per item, injects `item` and `index` into `vars`, and removes
+`foreach` from the expanded result. It also evaluates an optional `when` key as
+either a Jinja expression or template. Empty or whitespace-only `when` values
+are rejected, and entries whose condition evaluates to a falsy value are
+dropped.
+
+Entries without `foreach` still have `when` evaluated and stripped. Non-object
+entries are passed through unchanged. The function returns `Err` for malformed
+Jinja expressions, whitespace-only `when` values, and type mismatches such as a
+`foreach` expression that does not evaluate to an iterable.
+
+For pipeline context, see
+[netsuke-design.md §2.5](netsuke-design.md#25-generated-targets-with-foreach)
+and roadmap task 3.14.2 in [roadmap.md](roadmap.md).
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the

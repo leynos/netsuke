@@ -333,9 +333,9 @@ library, and CLI ergonomics.
     deserialisation, IR generation, and Ninja execution.
   - [ ] Document that build-time branching belongs in recipes unless a future
     runtime-condition feature is designed.
-- [ ] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
+- [x] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
   Requires 2.2.3. See [netsuke-design.md §2.5](netsuke-design.md).
-  - [ ] Preserve the existing implicit `phony: true` action behaviour after
+  - [x] Preserve the existing implicit `phony: true` action behaviour after
     expansion.
   - [ ] Support complementary branches such as `when: command_available(...)`
     and `when: not command_available(...)`.
