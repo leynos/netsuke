@@ -20,7 +20,10 @@ mod parsing;
 mod validation;
 
 use config_merge::default_manifest_path;
-pub use config_merge::{EnvSource, RealEnv, merge_with_config, resolve_merged_diag_json};
+/// Merge a parsed CLI struct with layered configuration files.
+pub use config_merge::merge_with_config;
+/// Resolve whether JSON diagnostics should be active after config discovery.
+pub use config_merge::resolve_merged_diag_json;
 use validation::configure_validation_parsers;
 
 /// Maximum number of jobs accepted by the CLI.

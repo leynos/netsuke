@@ -23,14 +23,14 @@ use super::config::OutputFormat;
 use super::{CONFIG_ENV_VAR, CONFIG_ENV_VAR_LEGACY, Cli, ENV_PREFIX, validation_message};
 
 /// Source for process-style environment variable lookups.
-pub trait EnvSource {
+pub(crate) trait EnvSource {
     /// Return the raw OS string value for an environment variable.
     fn var_os(&self, name: &str) -> Option<std::ffi::OsString>;
 }
 
 /// Environment source backed by the real process environment.
 #[derive(Debug, Default, Clone, Copy)]
-pub struct RealEnv;
+pub(crate) struct RealEnv;
 
 impl EnvSource for RealEnv {
     fn var_os(&self, name: &str) -> Option<std::ffi::OsString> {
@@ -203,7 +203,13 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
 /// Returns an [`ortho_config::OrthoError`] when an explicit or discovered
 /// configuration layer required for diagnostic-mode resolution cannot be
 /// loaded.
-pub fn resolve_merged_diag_json(
+pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
+    resolve_merged_diag_json_env(cli, matches, &RealEnv)
+}
+
+/// Resolve the effective diagnostic JSON preference with injected environment access.
+#[doc(hidden)]
+pub(crate) fn resolve_merged_diag_json_env(
     cli: &Cli,
     matches: &ArgMatches,
     env: &impl EnvSource,
@@ -344,7 +350,13 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
 ///
 /// Returns an [`ortho_config::OrthoError`] if layer composition or merging
 /// fails.
-pub fn merge_with_config(
+pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
+    merge_with_config_env(cli, matches, &RealEnv)
+}
+
+/// Merge configuration layers over the parsed CLI values with injected environment access.
+#[doc(hidden)]
+pub(crate) fn merge_with_config_env(
     cli: &Cli,
     matches: &ArgMatches,
     env: &impl EnvSource,
