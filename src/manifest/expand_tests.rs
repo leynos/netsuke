@@ -76,7 +76,7 @@ fn expand_static_when_false_removes_entry_before_typed_ast(#[case] section: &str
     anyhow::ensure!(name == "kept", "unexpected kept {section} name: {name}");
     anyhow::ensure!(
         !map.contains_key("when"),
-        "when should be removed before typed AST deserialisation"
+        "when should be removed before typed AST deserialization"
     );
     Ok(())
 }
@@ -122,6 +122,19 @@ fn expand_foreach_when_injects_iteration_vars_only_for_kept_entries(
         names? == expected_names,
         "final string rendering should happen after expansion"
     );
+    for entry in entries {
+        let map = entry
+            .as_object()
+            .with_context(|| format!("{section} entry map"))?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed before typed AST deserialization"
+        );
+        anyhow::ensure!(
+            !map.contains_key("when"),
+            "when should be removed before typed AST deserialization"
+        );
+    }
     Ok(())
 }
 

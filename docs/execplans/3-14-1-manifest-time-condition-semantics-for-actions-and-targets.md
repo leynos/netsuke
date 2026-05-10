@@ -13,8 +13,9 @@ Roadmap item `3.14.1` asks Netsuke to make the conditional planning contract
 unambiguous for both top-level `targets` and top-level `actions`. A Netsuke
 manifest can use `foreach` to generate entries and `when` to include or skip
 entries. The important rule is that these are manifest-time decisions: Netsuke
-evaluates them while loading the manifest, before typed AST deserialization,
-before IR generation, and before the Ninja backend executes anything.
+evaluates them while loading the manifest, before typed Abstract Syntax Tree
+(AST) deserialization, before Intermediate Representation (IR) generation, and
+before the Ninja backend executes anything.
 
 After this work is complete, a user reading `docs/users-guide.md` and
 `docs/netsuke-design.md` will understand that selected entries are the only
@@ -170,6 +171,11 @@ Observable success means:
       pre-approval wording from this completed plan, adding `set -o pipefail`
       to validation pipelines, and adding debug tracing for filtered manifest
       entries plus expansion summary counts.
+- [x] 2026-05-10: Addressed follow-up review comments by defining Abstract
+      Syntax Tree (AST) and Intermediate Representation (IR) on first use,
+      setting `pipefail` once for the validation shell block, and asserting
+      that kept `foreach` plus `when` entries do not retain loader-only
+      control fields.
 
 ## Surprises & Discoveries
 
@@ -384,12 +390,13 @@ cargo test --test bdd_tests manifest_time_conditions
 Final validation must run these commands sequentially and capture logs:
 
 ```sh
-set -o pipefail && make fmt 2>&1 | tee /tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
-set -o pipefail && make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
-set -o pipefail && make lint 2>&1 | tee /tmp/lint-netsuke-3-14-1-manifest-time-condition-semantics.out
-set -o pipefail && make test 2>&1 | tee /tmp/test-netsuke-3-14-1-manifest-time-condition-semantics.out
-set -o pipefail && make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-3-14-1-manifest-time-condition-semantics.out
-set -o pipefail && make nixie 2>&1 | tee /tmp/nixie-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail
+make fmt 2>&1 | tee /tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
+make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
+make lint 2>&1 | tee /tmp/lint-netsuke-3-14-1-manifest-time-condition-semantics.out
+make test 2>&1 | tee /tmp/test-netsuke-3-14-1-manifest-time-condition-semantics.out
+make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-3-14-1-manifest-time-condition-semantics.out
+make nixie 2>&1 | tee /tmp/nixie-netsuke-3-14-1-manifest-time-condition-semantics.out
 ```
 
 Expected successful final output is that each command exits with status `0`. If
