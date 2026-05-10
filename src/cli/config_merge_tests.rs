@@ -27,9 +27,7 @@ impl TestEnv {
         self.values.insert(name, value.into());
         self
     }
-}
 
-impl TestEnv {
     fn var_os(&self, name: &str) -> Option<OsString> {
         self.values.get(name).cloned()
     }

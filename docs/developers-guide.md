@@ -395,7 +395,7 @@ public merge API.
 `collect_diag_file_layers` and `push_file_layers` call `resolve_config_path`
 with `std::env::var_os`, so both early diagnostic resolution and the full merge
 path use the same explicit config selector precedence. The public API remains
-two argument:
+two arguments:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
