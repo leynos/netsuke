@@ -325,16 +325,6 @@ library, and CLI ergonomics.
   - [ ] Include examples of consuming JSON diagnostics.
   - [ ] Document configuring quiet/verbose modes for automation.
 
-### 3.14. Manifest authoring polish
-
-Section 3.14 was previously absent from this roadmap. The remaining
-manifest-authoring documentation scope from issue #299 is restored here so the
-numbering gap is explicit rather than silent.
-
-- [x] 3.14.1. Clarify advanced target authoring semantics.
-  - [x] Document target-level `foreach` and `when` behaviour for contributors.
-  - [x] Record the action-level `foreach` and `when` scope decision in an ADR.
-
 **Success criterion:** Netsuke ships a localizable, accessible, and fully
 configurable CLI that delivers real-time feedback, machine-readable
 diagnostics, and the onboarding experience defined in the Netsuke CLI design

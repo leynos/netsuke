@@ -240,6 +240,38 @@ fn config_driven_diag_json_formats_merge_failures_as_json() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn output_format_json_formats_config_load_failures_as_json() -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    let config_path = temp.path().join("broken.toml");
+    fs::write(&config_path, "theme = \"ascii\n")
+        .with_context(|| format!("write malformed config {}", config_path.display()))?;
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .args([
+            "--config",
+            &config_path.to_string_lossy(),
+            "--output-format",
+            "json",
+        ])
+        .output()
+        .context("run netsuke with malformed config and JSON output format")?;
+
+    ensure!(!output.status.success(), "expected config load failure");
+    ensure!(
+        output.stdout.is_empty(),
+        "stdout should remain empty on config load failure"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
+    let value: Value = serde_json::from_str(&stderr).context("stderr should be valid JSON")?;
+    ensure!(
+        value.get("diagnostics").and_then(Value::as_array).is_some(),
+        "JSON diagnostics should include a diagnostics array: {value:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn diag_json_success_discards_child_stderr(
     temp_with_minimal_manifest: Result<TempDir>,

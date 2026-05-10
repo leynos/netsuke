@@ -101,29 +101,29 @@ These points are strategy rules, not optional style guidance.
 
 ## Manifest `foreach` expansion
 
-Manifest target expansion is implemented by `expand_foreach` in
-`src/manifest/expand.rs`. It is target-scoped: a target may define
-`foreach` to create one concrete target per item, and may define `when` to
-filter either generated targets or a static target before later manifest
-stages run.
+Manifest collection expansion is implemented by `expand_foreach` in
+`src/manifest/expand.rs`. It processes collection-valued manifest entries such
+as `targets` and `actions`: each item may define `foreach` to create one
+concrete item per value, and may define `when` to filter generated or static
+items before later manifest stages run.
 
 The pipeline is:
 
 1. Manifest parsing produces a mutable `ManifestValue` document.
 2. The manifest expansion stage passes that document and the configured
    MiniJinja `Environment` to `expand_foreach`.
-3. `expand_foreach` reads `targets`, evaluates each target's `foreach`
-   expression or literal sequence, evaluates any `when` guard, injects
-   `vars.item` and `vars.index` for generated targets, and replaces
-   `targets` with the expanded concrete list.
+3. `expand_foreach` reads `targets` and `actions`, evaluates each item's
+   `foreach` expression or literal sequence, evaluates any `when` guard,
+   injects `vars.item` and `vars.index` for generated items, and replaces each
+   original collection with the expanded concrete list.
 4. Downstream deserialization and rendering consume the expanded
    `ManifestValue`; they should not see the `foreach` or `when` control keys.
 
 Callers must treat expansion as fallible. Errors can come from malformed
-target metadata, such as a non-object `vars` value, expression parse or
+item metadata, such as a non-object `vars` value, expression parse or
 evaluation failures in `foreach` or `when`, and serialization failures while
 copying the MiniJinja item value into manifest `vars`. Propagate these errors
-with context rather than defaulting to a partially expanded manifest.
+with context rather than defaulting to a partially expanded `ManifestValue`.
 
 Minimal target-level example:
 

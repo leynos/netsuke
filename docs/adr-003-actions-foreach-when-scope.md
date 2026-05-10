@@ -4,6 +4,9 @@
 
 Accepted
 
+Accepted: Netsuke keeps `foreach` and `when` scoped to manifest targets so
+expansion remains a single, predictable pre-deserialization pass.
+
 ## Date
 
 2026-05-08

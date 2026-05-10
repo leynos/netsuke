@@ -215,14 +215,50 @@ pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
     }
 }
 
-/// Inspect raw arguments and detect whether `--diag-json` was supplied.
+/// Inspect raw arguments and detect whether JSON diagnostics were requested.
 ///
-/// A bare `--diag-json` enables JSON diagnostics. The helper mirrors clap's
-/// flag semantics, so `--diag-json=value` is ignored rather than interpreted
-/// as a boolean assignment.
+/// A bare `--diag-json` enables JSON diagnostics. `--output-format json` is a
+/// diagnostic-format alias and `--output-format human` disables JSON
+/// diagnostics. The helper mirrors clap's flag semantics, so
+/// `--diag-json=value` is ignored rather than interpreted as a boolean
+/// assignment.
 #[must_use]
 pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
-    args.iter()
-        .take_while(|arg| arg.to_string_lossy() != "--")
-        .find_map(|arg| (arg.to_string_lossy() == "--diag-json").then_some(true))
+    let mut diag_json_hint = None;
+    let mut output_format_hint = None;
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        let text = arg.to_string_lossy();
+        if text == "--" {
+            break;
+        }
+        if text == "--diag-json" {
+            diag_json_hint = Some(true);
+            continue;
+        }
+        if text == "--output-format" {
+            let Some(next) = iter.peek() else {
+                break;
+            };
+            let next_text = next.to_string_lossy();
+            if next_text == "--" {
+                break;
+            }
+            output_format_hint = diag_json_hint_from_output_format(&next_text);
+            iter.next();
+            continue;
+        }
+        if let Some(value) = text.strip_prefix("--output-format=") {
+            output_format_hint = diag_json_hint_from_output_format(value);
+        }
+    }
+    output_format_hint.or(diag_json_hint)
+}
+
+fn diag_json_hint_from_output_format(value: &str) -> Option<bool> {
+    match value {
+        "json" => Some(true),
+        "human" => Some(false),
+        _ => None,
+    }
 }

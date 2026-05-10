@@ -99,6 +99,22 @@ fn diag_json_hint_from_args_detects_bare_flag_after_ignored_equals_form() -> Res
 }
 
 #[rstest]
+#[case::space_json(vec!["netsuke", "--output-format", "json"], Some(true))]
+#[case::equals_json(vec!["netsuke", "--output-format=json"], Some(true))]
+#[case::space_human(vec!["netsuke", "--diag-json", "--output-format", "human"], Some(false))]
+#[case::equals_human(vec!["netsuke", "--diag-json", "--output-format=human"], Some(false))]
+#[case::invalid(vec!["netsuke", "--output-format", "tap"], None)]
+fn diag_json_hint_from_args_honours_output_format(
+    #[case] raw_args: Vec<&str>,
+    #[case] expected: Option<bool>,
+) -> Result<()> {
+    let args = os_args(&raw_args);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(hint == expected, "expected {expected:?}, got: {hint:?}");
+    Ok(())
+}
+
+#[rstest]
 fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(Some("es-ES")));
     let err = netsuke::cli::parse_with_localizer_from(
