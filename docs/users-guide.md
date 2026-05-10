@@ -282,7 +282,7 @@ Netsuke processes the manifest in stages:
    removed before Netsuke builds the typed manifest AST, creates its IR, emits
    `build.ninja`, or runs Ninja.
 
-3. Deserialisation to AST: Convert the expanded intermediate structure into
+3. Deserialization to AST: Convert the expanded intermediate structure into
    Netsuke's typed Rust structs (`NetsukeManifest`, `Target`, etc.).
 
 4. Final Rendering: Render Jinja expressions **only within string fields**

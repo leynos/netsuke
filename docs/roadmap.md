@@ -330,7 +330,7 @@ library, and CLI ergonomics.
 - [x] 3.14.1. Record manifest-time condition semantics for actions and targets.
   See [netsuke-design.md §2.5](netsuke-design.md).
   - [x] State that `foreach` and `when` are evaluated before typed AST
-    deserialisation, IR generation, and Ninja execution.
+    deserialization, IR generation, and Ninja execution.
   - [x] Document that build-time branching belongs in recipes unless a future
     runtime-condition feature is designed.
 - [x] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.

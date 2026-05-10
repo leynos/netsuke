@@ -61,9 +61,9 @@ before execution, a critical requirement for compatibility with Ninja.
    these explicit keys. Structural Jinja blocks (`{% ... %}`) are not permitted
    to reshape mappings or sequences.
 
-4. Stage 4: Deserialisation & Final Rendering
+4. Stage 4: Deserialization & Final Rendering
 
-   The expanded `Value` is deserialised into strongly typed Rust structs. Jinja
+   The expanded `Value` is deserialized into strongly typed Rust structs. Jinja
    expressions are then rendered, but only within string fields. Structural
    templating using `{% %}` blocks is forbidden; all control flow must appear
    in YAML values.
@@ -96,7 +96,7 @@ before execution, a critical requirement for compatibility with Ninja.
 flowchart TD
     A[Stage 1:\nManifest Ingestion] --> B[Stage 2:\nInitial YAML Parsing]
     B --> C[Stage 3:\nTemplate Expansion]
-    C --> D[Stage 4:\nDeserialisation & Final Rendering]
+    C --> D[Stage 4:\nDeserialization & Final Rendering]
     D --> E[Stage 5:\nIR Generation & Validation]
     E --> F[Stage 6:\nNinja Synthesis & Execution]
 ```
@@ -270,7 +270,7 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   setting. Exactly one of `command`, `script`, or `rule` must be provided. The
   manifest parser enforces this rule to prevent invalid states.
 
-  Internally, these options deserialise into a shared `Recipe` enum. Presence
+  Internally, these options deserialize into a shared `Recipe` enum. Presence
   of exactly one of `command`, `script`, or `rule` determines the variant.
 
 - `description`: An optional, user-friendly string that is printed to the
@@ -342,12 +342,12 @@ rule:
 
 Only one of `rule`, `command`, `script`, or the planned structured `exec`
 recipe may be specified. The parser validates this exclusivity during
-deserialisation. When multiple fields are present, Netsuke emits a
+deserialization. When multiple fields are present, Netsuke emits a
 `RecipeConflict` error with the message "rule, command and script are mutually
 exclusive". When `exec` is implemented, this diagnostic must include all recipe
 field names.
 
-This union deserialises into the same `Recipe` enum used for rules. The parser
+This union deserializes into the same `Recipe` enum used for rules. The parser
 enforces that only one variant is present and errors if multiple recipe fields
 are specified.
 
@@ -415,7 +415,7 @@ pass as target-level expansion; entries from top-level `actions` keep their
 implicit `phony: true` default after expansion.
 
 Conditions are manifest-time decisions. Netsuke evaluates both `foreach` and
-`when` while loading the manifest, before the AST is deserialised, before IR
+`when` while loading the manifest, before the AST is deserialized, before IR
 generation, and before Ninja executes. The generated IR and `build.ninja` file
 therefore contain only the selected entries. Build-time branching remains the
 responsibility of the recipe command or script unless a separate future feature
@@ -599,10 +599,10 @@ explicit, structured, and self-documenting nature.
 | Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: [main.o, utils.o] }                                           |
 | Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
 
-## Section 3: Parsing and Deserialisation Strategy
+## Section 3: Parsing and Deserialization Strategy
 
 Once the Jinja evaluation stage has produced a pure YAML string, the next
-critical step is to parse this string and deserialise it into a structured, in-
+critical step is to parse this string and deserialize it into a structured, in-
 memory representation. The choice of libraries and the definition of the target
 data structures are crucial for the robustness and maintainability of Netsuke.
 
@@ -617,7 +617,7 @@ panic-free alternative to the archived `serde_yml` without forcing a redesign
 of the parsing pipeline.
 
 Because `serde_saphyr` intentionally omits a bespoke `Value` tree, Netsuke
-deserialises manifests into `serde_json::Value` for its intermediate
+deserializes manifests into `serde_json::Value` for its intermediate
 transformations. The JSON value retains YAML anchors, scalars, and sequences in
 data structures that are easy to traverse and mutate. Once templating and
 `foreach` expansion complete, `serde_json::from_value` hydrates the strongly
@@ -636,11 +636,11 @@ releases.
 
 ### 3.2 Core Data Structures (`ast.rs`)
 
-The Rust structs that `serde_saphyr` deserialises into form the Abstract Syntax
+The Rust structs that `serde_saphyr` deserializes into form the Abstract Syntax
 Tree (AST) of the build manifest. These structs must precisely mirror the YAML
 schema defined in Section 2. They will be defined in a dedicated module,
 `src/ast.rs`, and annotated with `#[derive(Deserialize)]` (and `Debug`) to
-enable automatic deserialisation and easy debugging.
+enable automatic deserialization and easy debugging.
 
 The authoritative live AST contract is [src/ast.rs](../src/ast.rs). Fields and
 types marked `FUTURE` in the snippet below are forward-looking API sketches. In
@@ -845,7 +845,7 @@ Once parsed, Netsuke performs a series of transformation stages:
    iteration layers the `item` and `index` variables over the manifest's
    globals and any entry-local variables. This is the only stage that owns
    manifest-time condition semantics.
-2. **Deserialisation:** The expanded document is deserialised into the typed
+2. **Deserialization:** The expanded document is deserialized into the typed
    [`NetsukeManifest`] AST.
 3. **Final Rendering:** Remaining string fields are rendered using Jinja,
    resolving expressions such as `{{ glob('src/*.c') }}`.
@@ -874,7 +874,7 @@ see keys in a stable sequence after foreach expansion, matching the authoring
 intent and keeping diagnostics and serialised output predictable. Targets also
 accept optional `phony` and `always` booleans. They default to `false`, making
 it explicit when an action should run regardless of file timestamps. Targets
-listed in the `actions` section are deserialised using a custom helper so they
+listed in the `actions` section are deserialized using a custom helper so they
 are always treated as `phony` tasks. This ensures preparation actions never
 generate build artefacts. Convenience functions in `src/manifest.rs` load a
 manifest from a string or a file path, returning `anyhow::Result` for
@@ -885,15 +885,15 @@ logs.
 
 The ingestion pipeline now parses the manifest as YAML before any Jinja
 evaluation. A dedicated expansion pass handles `foreach` and `when`, and string
-fields are rendered only after deserialisation, keeping data and templating
+fields are rendered only after deserialization, keeping data and templating
 concerns clearly separated. Because the expansion pass runs before typed AST
-deserialisation, `foreach` and `when` are not AST fields, and they must not be
+deserialization, `foreach` and `when` are not AST fields, and they must not be
 interpreted by IR generation, Ninja generation, or the process runner.
 
 ### 3.5 Testing
 
 Unit tests in `tests/ast_tests.rs` and behavioural scenarios in
-`tests/features/manifest.feature` exercise the deserialisation logic. They
+`tests/features/manifest.feature` exercise the deserialization logic. They
 assert that manifests fail to parse when unknown fields are present, and that a
 minimal manifest round-trips correctly. A collection of sample manifests under
 `tests/data` cover both valid and invalid permutations of the schema. These
@@ -1817,7 +1817,7 @@ This transformation involves several steps:
    `manifest.actions`. Entries in `actions` are treated identically to targets
    but with `phony` defaulting to `true`. The `targets` collection has already
    had manifest-time `foreach` and `when` clauses expanded before
-   deserialisation, and `actions` participate in the same expansion pass. The
+   deserialization, and `actions` participate in the same expansion pass. The
    IR stage receives only selected target and action entries. For each item,
    resolve all strings into `Utf8PathBuf`s and resolve all dependency names
    against other targets.
@@ -2352,7 +2352,7 @@ The behaviour of each subcommand is clearly defined:
 
 - `Netsuke build [--emit FILE] [targets...]`: This is the primary and default
 command. It executes the full six-stage pipeline: Manifest Ingestion, Initial
-YAML Parsing, Template Expansion, Deserialisation & Final Rendering, IR
+YAML Parsing, Template Expansion, Deserialization & Final Rendering, IR
 Generation & Validation, and Ninja Synthesis & Execution. By default the
 generated Ninja file is written to a securely created temporary location and
 removed after the build completes. Supplying `--emit FILE` writes the Ninja

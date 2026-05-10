@@ -13,7 +13,7 @@ Roadmap item `3.14.1` asks Netsuke to make the conditional planning contract
 unambiguous for both top-level `targets` and top-level `actions`. A Netsuke
 manifest can use `foreach` to generate entries and `when` to include or skip
 entries. The important rule is that these are manifest-time decisions: Netsuke
-evaluates them while loading the manifest, before typed AST deserialisation,
+evaluates them while loading the manifest, before typed AST deserialization,
 before IR generation, and before the Ninja backend executes anything.
 
 After this work is complete, a user reading `docs/users-guide.md` and
@@ -31,22 +31,19 @@ Observable success means:
 3. Internally facing documentation names the code boundaries that enforce the
    rule.
 4. `rstest` coverage proves `when` and `foreach` are removed before typed AST
-   deserialisation and that filtered entries cannot affect IR generation.
+   deserialization and that filtered entries cannot affect IR generation.
 5. `rstest-bdd` coverage exercises the externally observable workflow when a
    generated Ninja manifest contains only selected conditional entries.
 6. `docs/roadmap.md` marks `3.14.1` done only after the implementation and
    validation gates pass.
 
-This plan is pre-implementation. Do not implement it until the plan is
-explicitly approved.
-
 ## Constraints
 
 - Do not add runtime-condition semantics in this roadmap item. Runtime
   branching is out of scope unless a separate approved design is written.
-- Do not move `foreach` or `when` evaluation after typed AST deserialisation.
+- Do not move `foreach` or `when` evaluation after typed AST deserialization.
   The manifest pipeline must remain YAML value loading, template expansion,
-  typed AST deserialisation, final string rendering, IR generation, Ninja
+  typed AST deserialization, final string rendering, IR generation, Ninja
   synthesis, and optional Ninja execution.
 - Keep domain and policy logic at the manifest/IR boundary. Adapters such as
   CLI command handling and Ninja process execution must not decide condition
@@ -140,7 +137,7 @@ explicitly approved.
       `en-gb-oxendict-style` guidance.
 - [x] 2026-05-08: Reviewed repository `AGENTS.md`, `docs/roadmap.md`,
       `docs/netsuke-design.md` section 2.5, current manifest expansion code,
-      AST deserialisation, IR generation, and existing tests.
+      AST deserialization, IR generation, and existing tests.
 - [x] 2026-05-08: Used a Wyvern agent team to inspect the design semantics,
       code pipeline, and documentation/testing references.
 - [x] 2026-05-08: Drafted this pre-implementation ExecPlan.
@@ -168,11 +165,16 @@ explicitly approved.
       first and applied `cargo fmt`, then failed on pre-existing repository-wide
       Markdown line-length and table findings outside this change; unrelated
       formatter churn was restored.
+- [x] 2026-05-10: Addressed review warnings by normalizing requested
+      deserialization spelling in changed documentation, removing obsolete
+      pre-approval wording from this completed plan, adding `set -o pipefail`
+      to validation pipelines, and adding debug tracing for filtered manifest
+      entries plus expansion summary counts.
 
 ## Surprises & Discoveries
 
 - `docs/netsuke-design.md` section 2.5 already states the core rule:
-  conditions are manifest-time decisions evaluated before AST deserialisation,
+  conditions are manifest-time decisions evaluated before AST deserialization,
   IR generation, and Ninja execution.
 - `src/manifest/mod.rs` already has explicit load stages:
   `InitialYamlParsing`, `TemplateExpansion`, and `FinalRendering`.
@@ -194,6 +196,10 @@ explicitly approved.
   use the manifest loader's strict undefined policy. The negative expansion
   case now uses malformed expression syntax so it proves parse-time failure
   independent of undefined-variable policy.
+- The first implementation documented the contract but left filtering
+  observability implicit. Review flagged that the manifest expansion boundary
+  should emit traceable decisions because filtered entries affect the generated
+  static plan.
 
 ## Decision Log
 
@@ -232,6 +238,13 @@ explicitly approved.
   Malformed syntax still fails during template expansion and matches this
   test's boundary. Date/Author: 2026-05-08 / implementation agent.
 
+- Decision: use structured `debug!` tracing rather than user-facing output for
+  conditional filtering decisions. Rationale: filtering is a manifest-loading
+  diagnostic concern, not normal CLI output. Debug-level fields preserve entry
+  name, `when` expression text, iteration index where present, the false
+  decision, and section-level filtered counts without changing generated
+  manifests or command output. Date/Author: 2026-05-10 / implementation agent.
+
 ## Skills and references
 
 Use these skills before implementation:
@@ -267,7 +280,7 @@ Use these repository documents:
 
 The current manifest pipeline is implemented in `src/manifest/mod.rs`.
 `from_str_named` parses YAML into `serde_json::Value`, registers globals and
-stdlib helpers, runs `expand_foreach`, deserialises the expanded tree into
+stdlib helpers, runs `expand_foreach`, deserializes the expanded tree into
 `NetsukeManifest`, and then renders string fields. The relevant stages are
 reported through `ManifestLoadStage`.
 
@@ -311,7 +324,7 @@ the `foreach` and `when` section of `docs/users-guide.md`,
 `src/manifest/mod.rs`, `src/manifest/expand.rs`, `src/ast.rs`,
 `src/ir/from_manifest.rs`, and `src/ninja_gen.rs`. Confirm that the docs and
 code agree that `foreach` and `when` are evaluated before typed AST
-deserialisation. If they disagree, update `Decision Log` and stop for approval
+deserialization. If they disagree, update `Decision Log` and stop for approval
 before changing behaviour.
 
 Stage B updates documentation. In `docs/netsuke-design.md`, make the pipeline
@@ -325,7 +338,7 @@ the selected graph rather than reinterpreting manifest conditions.
 
 Stage C adds focused `rstest` coverage. Prefer parameterized cases that run the
 same assertion against `targets` and `actions`. Cover at least these cases:
-`when: false` entries are removed before typed AST deserialisation; `foreach`
+`when: false` entries are removed before typed AST deserialization; `foreach`
 with `when` carries `item` and `index` only into kept entries; invalid
 `foreach` and invalid or empty `when` fail during template expansion; filtered
 entries do not contribute missing-rule, duplicate-output, or cycle errors in IR
@@ -371,12 +384,12 @@ cargo test --test bdd_tests manifest_time_conditions
 Final validation must run these commands sequentially and capture logs:
 
 ```sh
-make fmt 2>&1 | tee /tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
-make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
-make lint 2>&1 | tee /tmp/lint-netsuke-3-14-1-manifest-time-condition-semantics.out
-make test 2>&1 | tee /tmp/test-netsuke-3-14-1-manifest-time-condition-semantics.out
-make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-3-14-1-manifest-time-condition-semantics.out
-make nixie 2>&1 | tee /tmp/nixie-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail && make fmt 2>&1 | tee /tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail && make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail && make lint 2>&1 | tee /tmp/lint-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail && make test 2>&1 | tee /tmp/test-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail && make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-3-14-1-manifest-time-condition-semantics.out
+set -o pipefail && make nixie 2>&1 | tee /tmp/nixie-netsuke-3-14-1-manifest-time-condition-semantics.out
 ```
 
 Expected successful final output is that each command exits with status `0`. If
@@ -386,7 +399,7 @@ Expected successful final output is that each command exits with status `0`. If
 
 Implemented. The semantic behaviour did not change: Netsuke already evaluates
 top-level action and target `foreach`/`when` clauses during manifest loading,
-before typed AST deserialisation, IR generation, Ninja generation, and Ninja
+before typed AST deserialization, IR generation, Ninja generation, and Ninja
 execution. This work records that contract and adds regression coverage so the
 boundary is harder to move accidentally.
 
@@ -396,11 +409,18 @@ select entries at load time and that build-time branching belongs in recipe
 commands or scripts until a future runtime-condition feature is designed. The
 roadmap entry `3.14.1` is marked done.
 
+Review follow-up changed `src/manifest/expand.rs` to emit debug observability
+for conditional filtering. Each skipped entry logs its manifest entry name, the
+`when` expression text, `when_result = false`, and the iteration index for
+`foreach` entries. The top-level expansion pass also logs filtered target,
+filtered action, and total filtered counts.
+
 Tests changed in `src/manifest/expand_tests.rs`,
-`tests/ir_from_manifest_tests.rs`, `tests/features/manifest_subcommand.feature`,
-and `tests/bdd/steps/conditional_manifest.rs`. The unit tests cover action and
-target parity, false `when` removal before typed AST deserialisation,
-iteration vars on kept entries, invalid `foreach`, and IR exclusion for skipped
+`tests/ir_from_manifest_tests.rs`,
+`tests/features/manifest_subcommand.feature`, and
+`tests/bdd/steps/conditional_manifest.rs`. The unit tests cover action and
+target parity, false `when` removal before typed AST deserialization, iteration
+vars on kept entries, invalid `foreach`, and IR exclusion for skipped
 duplicates, missing rules, and cycles. The behavioural scenario proves that
 `netsuke manifest -` emits only selected conditional actions and targets.
 

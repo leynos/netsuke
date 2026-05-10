@@ -4,6 +4,7 @@ use crate::localization::{self, keys};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
+use tracing::debug;
 
 /// Expand manifest targets and actions defined with the `foreach` key.
 ///
@@ -12,49 +13,107 @@ use serde_json::{Number as JsonNumber, map::Entry};
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialise, or when target metadata is malformed.
 pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> {
-    expand_section(doc, "targets", env)?;
-    expand_section(doc, "actions", env)
+    let filtered_targets = expand_section(doc, "targets", env)?;
+    let filtered_actions = expand_section(doc, "actions", env)?;
+    debug!(
+        filtered_targets,
+        filtered_actions,
+        filtered_total = filtered_targets + filtered_actions,
+        "expanded manifest foreach and when directives"
+    );
+    Ok(())
 }
 
-fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<()> {
+fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<usize> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
-        return Ok(());
+        return Ok(0);
     };
 
     let mut expanded = Vec::new();
+    let mut filtered = 0;
     for entry in std::mem::take(entries) {
         match entry {
-            ManifestValue::Object(map) => expanded.extend(expand_target(map, env)?),
+            ManifestValue::Object(map) => {
+                let expansion = expand_target(map, env)?;
+                filtered += expansion.filtered;
+                expanded.extend(expansion.entries);
+            }
             other => expanded.push(other),
         }
     }
 
     *entries = expanded;
-    Ok(())
+    Ok(filtered)
 }
 
-fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Vec<ManifestValue>> {
+struct Expansion {
+    entries: Vec<ManifestValue>,
+    filtered: usize,
+}
+
+fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Expansion> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, env)?;
         let mut items = Vec::new();
+        let mut filtered = 0;
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            if !when_allows(&mut clone, env, Some((&item, index)))? {
+            let decision = when_allows(&mut clone, env, Some((&item, index)))?;
+            if !decision.allowed {
+                filtered += 1;
+                log_filtered_entry(&clone, decision.expression.as_deref(), Some(index));
                 continue;
             }
             inject_iteration_vars(&mut clone, &item, index)?;
             items.push(ManifestValue::Object(clone));
         }
-        Ok(items)
+        Ok(Expansion {
+            entries: items,
+            filtered,
+        })
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        if !when_allows(&mut map, env, None)? {
-            return Ok(vec![]);
+        let decision = when_allows(&mut map, env, None)?;
+        if !decision.allowed {
+            log_filtered_entry(&map, decision.expression.as_deref(), None);
+            return Ok(Expansion {
+                entries: vec![],
+                filtered: 1,
+            });
         }
-        Ok(vec![ManifestValue::Object(map)])
+        Ok(Expansion {
+            entries: vec![ManifestValue::Object(map)],
+            filtered: 0,
+        })
     }
+}
+
+fn log_filtered_entry(map: &ManifestMap, expression: Option<&str>, iteration_index: Option<usize>) {
+    let entry_name = entry_name(map);
+    if let Some(index) = iteration_index {
+        debug!(
+            entry_name,
+            iteration_index = index,
+            when_expression = expression.unwrap_or_default(),
+            when_result = false,
+            "filtered manifest entry by when expression"
+        );
+    } else {
+        debug!(
+            entry_name,
+            when_expression = expression.unwrap_or_default(),
+            when_result = false,
+            "filtered manifest entry by when expression"
+        );
+    }
+}
+
+fn entry_name(map: &ManifestMap) -> &str {
+    map.get("name")
+        .and_then(ManifestValue::as_str)
+        .unwrap_or("<unnamed>")
 }
 
 fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {
@@ -111,20 +170,32 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
 ///
 /// Accepts an optional iteration context (`item`, `index`) for foreach targets;
 /// static targets pass `None`.
+struct WhenDecision {
+    allowed: bool,
+    expression: Option<String>,
+}
+
 fn when_allows(
     map: &mut ManifestMap,
     env: &Environment,
     iteration: Option<(&Value, usize)>,
-) -> Result<bool> {
+) -> Result<WhenDecision> {
     let Some(when_val) = map.remove("when") else {
-        return Ok(true);
+        return Ok(WhenDecision {
+            allowed: true,
+            expression: None,
+        });
     };
     let expr = as_str(&when_val, "when")?;
     let ctx = match iteration {
         Some((item, index)) => context! { item, index },
         None => context! {},
     };
-    eval_when(env, expr, ctx)
+    let allowed = eval_when(env, expr, ctx)?;
+    Ok(WhenDecision {
+        allowed,
+        expression: Some(expr.to_owned()),
+    })
 }
 
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
