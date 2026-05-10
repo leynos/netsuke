@@ -38,28 +38,28 @@ fn artefact_sources(config: &Value) -> Result<Vec<&str>> {
         .collect()
 }
 
+fn flush_block(current: &mut Vec<&str>, blocks: &mut Vec<String>) {
+    if !current.is_empty() {
+        let block = current.join("\n");
+        if block.contains("rust-build-release@") {
+            blocks.push(block);
+        }
+        current.clear();
+    }
+}
+
 fn rust_build_release_step_blocks(contents: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let mut current_block = Vec::new();
 
     for line in contents.lines() {
-        if line.starts_with("      - ") && !current_block.is_empty() {
-            let block = current_block.join("\n");
-            if block.contains("rust-build-release@") {
-                blocks.push(block);
-            }
-            current_block.clear();
+        if line.starts_with("      - ") {
+            flush_block(&mut current_block, &mut blocks);
         }
         current_block.push(line);
     }
 
-    if !current_block.is_empty() {
-        let block = current_block.join("\n");
-        if block.contains("rust-build-release@") {
-            blocks.push(block);
-        }
-    }
-
+    flush_block(&mut current_block, &mut blocks);
     blocks
 }
 
