@@ -164,6 +164,10 @@ itself does not change.
   file conflicts. The branch now includes main's `--config <PATH>` and
   `NETSUKE_CONFIG` precedence work while preserving the `cargo-orthohelp`
   release-help migration and the updated `leynos/shared-actions` pins.
+- [x] (2026-05-10T00:00:00Z) Added the missing
+  `.github/release-staging.toml`, updated GoReleaser to gzip and stage the
+  `cargo-orthohelp` man page when needed, and added focused contract tests for
+  release staging outputs.
 
 ## Surprises & discoveries
 
@@ -226,6 +230,14 @@ itself does not change.
   subcommand. Impact: the release-help script must invoke `cargo-orthohelp`
   directly and tests must fake that binary on `PATH`.
 
+- Observation: `stage-release-artefacts` composes artefacts from both
+  `[[common.artefacts]]` and target-specific `[[targets.<key>.artefacts]]`.
+  Evidence: the shared action README documents `[common]` and `[targets.*]`,
+  and its `config.py` loader concatenates common and target artefact entries.
+  Impact: binary and licence staging can remain common while man pages are
+  required only for Linux/macOS and PowerShell sidecars are declared only for
+  Windows targets.
+
 ## Decision log
 
 - Decision: keep this plan in `Status: DRAFT` until the user approves it.
@@ -278,6 +290,12 @@ itself does not change.
   already supported, and the shared Windows package action interface exposes
   only the binary and licence inputs used here. Date/Author:
   2026-05-01T16:53:04Z / Codex.
+
+- Decision: use target-specific staging artefacts instead of optional common
+  help entries. Rationale: `stage-release-artefacts` supports target-local
+  artefacts, allowing man pages to be required on Linux/macOS without forcing
+  Windows staging to produce them, and allowing PowerShell sidecars to remain
+  Windows-only. Date/Author: 2026-05-10T00:00:00Z / Codex.
 
 ## Outcomes & retrospective
 

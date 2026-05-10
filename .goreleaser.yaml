@@ -5,10 +5,18 @@ project_name: netsuke
 before:
   hooks:
     - |
-        test -s dist/netsuke.1.gz || {
-          echo "::error title=Manpage missing::dist/netsuke.1.gz not found. Ensure package job staged it before packaging.";
-          exit 1;
-        }
+        set -euo pipefail
+        # Accept a pre-staged gzip (legacy) or produce one from the orthohelp output.
+        if [ ! -s dist/netsuke.1.gz ]; then
+          SRC="target/orthohelp/${GOOS}-${GOARCH}/release/man/man1/netsuke.1"
+          if [ ! -f "$SRC" ]; then
+            echo "::error title=Manpage missing::Neither dist/netsuke.1.gz nor $SRC found."
+            exit 1
+          fi
+          mkdir -p dist
+          gzip -kn -9 "$SRC"
+          mv "${SRC}.gz" dist/netsuke.1.gz
+        fi
 
 builds:
   # GoReleaser packages prebuilt Rust binaries. `skip_build: true` avoids

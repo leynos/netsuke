@@ -3,44 +3,110 @@ bin_name = "netsuke"
 dist_dir = "dist"
 checksum_algorithm = "sha256"
 staging_dir_template = "{bin_name}_{platform}_{arch}"
-artefacts = [
-  { source = "target/{target}/release/{bin_name}{bin_ext}", required = true, output = "binary_path" },
-  { source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1", required = false, output = "man_path" },
-  { source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psm1", required = false, output = "powershell_module_path" },
-  { source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1", required = false, output = "powershell_manifest_path" },
-  { source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml", required = false, output = "powershell_maml_path" },
-  { source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt", required = false, output = "powershell_about_path" },
-  { source = "LICENSE", required = true, output = "license_path" },
-]
+
+[[common.artefacts]]
+source = "target/{target}/release/{bin_name}{bin_ext}"
+output = "binary_path"
+required = true
+
+[[common.artefacts]]
+source = "LICENSE"
+destination = "LICENSE"
+output = "license_path"
+required = true
+
+[targets.linux-x86_64]
+platform = "linux"
+arch = "x86_64"
+target = "x86_64-unknown-linux-gnu"
+
+[[targets.linux-x86_64.artefacts]]
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
+destination = "{bin_name}.1"
+output = "man_path"
+required = true
+
+[targets.linux-aarch64]
+platform = "linux"
+arch = "aarch64"
+target = "aarch64-unknown-linux-gnu"
+
+[[targets.linux-aarch64.artefacts]]
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
+destination = "{bin_name}.1"
+output = "man_path"
+required = true
 
 [targets.windows-x86_64]
 platform = "windows"
-arch = "amd64"
+arch = "x86_64"
 target = "x86_64-pc-windows-msvc"
 bin_ext = ".exe"
 
+[[targets.windows-x86_64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psm1"
+destination = "powershell/Netsuke/Netsuke.psm1"
+required = false
+
+[[targets.windows-x86_64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1"
+destination = "powershell/Netsuke/Netsuke.psd1"
+required = false
+
+[[targets.windows-x86_64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml"
+destination = "powershell/Netsuke/en-US/Netsuke-help.xml"
+required = false
+
+[[targets.windows-x86_64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt"
+destination = "powershell/Netsuke/en-US/about_Netsuke.help.txt"
+required = false
+
 [targets.windows-aarch64]
 platform = "windows"
-arch = "arm64"
+arch = "aarch64"
 target = "aarch64-pc-windows-msvc"
 bin_ext = ".exe"
+
+[[targets.windows-aarch64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psm1"
+destination = "powershell/Netsuke/Netsuke.psm1"
+required = false
+
+[[targets.windows-aarch64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1"
+destination = "powershell/Netsuke/Netsuke.psd1"
+required = false
+
+[[targets.windows-aarch64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml"
+destination = "powershell/Netsuke/en-US/Netsuke-help.xml"
+required = false
+
+[[targets.windows-aarch64.artefacts]]
+source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt"
+destination = "powershell/Netsuke/en-US/about_Netsuke.help.txt"
+required = false
 
 [targets.macos-x86_64]
 platform = "macos"
 arch = "x86_64"
 target = "x86_64-apple-darwin"
 
+[[targets.macos-x86_64.artefacts]]
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
+destination = "{bin_name}.1"
+output = "man_path"
+required = true
+
 [targets.macos-aarch64]
 platform = "macos"
-arch = "arm64"
+arch = "aarch64"
 target = "aarch64-apple-darwin"
 
-[targets.linux-x86_64]
-platform = "linux"
-arch = "amd64"
-target = "x86_64-unknown-linux-gnu"
-
-[targets.linux-aarch64]
-platform = "linux"
-arch = "arm64"
-target = "aarch64-unknown-linux-gnu"
+[[targets.macos-aarch64.artefacts]]
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
+destination = "{bin_name}.1"
+output = "man_path"
+required = true

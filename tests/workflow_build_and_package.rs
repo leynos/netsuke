@@ -22,20 +22,40 @@ fn staging_config() -> Result<Value> {
 }
 
 fn artefact_sources(config: &Value) -> Result<Vec<&str>> {
-    let artefacts = config
+    let mut sources = Vec::new();
+    let common_artefacts = config
         .get("common")
         .and_then(|common| common.get("artefacts"))
         .and_then(Value::as_array)
         .context("common artefacts should be an array")?;
-    artefacts
-        .iter()
-        .map(|artefact| {
+    for artefact in common_artefacts {
+        sources.push(
             artefact
                 .get("source")
                 .and_then(Value::as_str)
-                .context("artefact source should be a string")
-        })
-        .collect()
+                .context("common artefact source should be a string")?,
+        );
+    }
+
+    let targets = config
+        .get("targets")
+        .and_then(Value::as_table)
+        .context("targets should be a table")?;
+    for target in targets.values() {
+        let Some(artefacts) = target.get("artefacts").and_then(Value::as_array) else {
+            continue;
+        };
+        for artefact in artefacts {
+            sources.push(
+                artefact
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .context("target artefact source should be a string")?,
+            );
+        }
+    }
+
+    Ok(sources)
 }
 
 fn flush_block(current: &mut Vec<&str>, blocks: &mut Vec<String>) {
@@ -61,6 +81,15 @@ fn rust_build_release_step_blocks(contents: &str) -> Vec<String> {
 
     flush_block(&mut current_block, &mut blocks);
     blocks
+}
+
+fn workflow_step_body<'a>(contents: &'a str, step_name: &str) -> Vec<&'a str> {
+    let step = format!("- name: {step_name}");
+    contents
+        .lines()
+        .skip_while(|line| !line.contains(&step))
+        .take_while(|line| !line.contains("      - name: ") || line.contains(&step))
+        .collect()
 }
 
 #[test]
@@ -141,18 +170,38 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
 }
 
 #[rstest]
+#[case("config-file: .github/release-staging.toml")]
+#[case("man-paths: ${{ steps.stage_paths.outputs.man_path }}")]
+fn build_and_package_wires_staged_release_outputs(#[case] expected: &str) {
+    let contents = workflow_contents("build-and-package.yml")
+        .expect("build-and-package workflow should be readable");
+
+    assert!(
+        contents.contains(expected),
+        "build-and-package workflow should contain {expected}"
+    );
+}
+
+#[test]
+fn windows_upload_includes_staged_artifact_dir() {
+    let contents = workflow_contents("build-and-package.yml")
+        .expect("build-and-package workflow should be readable");
+    let step_body = workflow_step_body(&contents, "Upload Windows artefacts").join("\n");
+
+    assert!(
+        step_body.contains("${{ steps.stage_paths.outputs.artifact_dir }}"),
+        "Windows upload should include staged sidecar artefacts"
+    );
+}
+
+#[rstest]
 #[case("Stage artefacts")]
 #[case("Capture staged paths")]
 fn behavioural_staging_runs_for_every_platform(#[case] step_name: &str) {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");
     let step = format!("- name: {step_name}");
-    let step_body = contents
-        .lines()
-        .skip_while(|line| !line.contains(&step))
-        .take_while(|line| !line.contains("      - name: ") || line.contains(&step))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let step_body = workflow_step_body(&contents, step_name).join("\n");
 
     assert!(
         step_body.contains(&step),
@@ -198,13 +247,14 @@ fn release_staging_does_not_reference_build_script_help_paths(
 #[test]
 fn orthohelp_man_page_has_no_out_dir_alternative() -> Result<()> {
     let config = staging_config()?;
-    let artefacts = config
-        .get("common")
-        .and_then(|common| common.get("artefacts"))
-        .and_then(Value::as_array)
-        .context("common artefacts should be an array")?;
-    let man_page = artefacts
-        .iter()
+    let targets = config
+        .get("targets")
+        .and_then(Value::as_table)
+        .context("targets should be a table")?;
+    let man_page = targets
+        .values()
+        .filter_map(|target| target.get("artefacts").and_then(Value::as_array))
+        .flatten()
         .find(|artefact| {
             artefact.get("source").and_then(Value::as_str)
                 == Some("target/orthohelp/{target}/release/man/man1/{bin_name}.1")
