@@ -1206,6 +1206,17 @@ messages and structured output. Enable it with:
 netsuke --diag-json build
 ```
 
+`--output-format json` is equivalent to `--diag-json` and enables JSON
+diagnostics mode. `--output-format human` explicitly disables JSON diagnostics,
+including when a config file sets `diag_json = true`. When both
+`--output-format` and `--diag-json` are supplied, `--output-format` takes
+priority.
+
+```sh
+netsuke --output-format json build
+netsuke --output-format human build
+```
+
 Or via the environment variable:
 
 ```sh
