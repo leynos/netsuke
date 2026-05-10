@@ -325,11 +325,6 @@ library, and CLI ergonomics.
   - [ ] Include examples of consuming JSON diagnostics.
   - [ ] Document configuring quiet/verbose modes for automation.
 
-**Success criterion:** Netsuke ships a localizable, accessible, and fully
-configurable CLI that delivers real-time feedback, machine-readable
-diagnostics, and the onboarding experience defined in the Netsuke CLI design
-document.
-
 ### 3.14. Conditional action planning
 
 - [ ] 3.14.1. Record manifest-time condition semantics for actions and targets.
