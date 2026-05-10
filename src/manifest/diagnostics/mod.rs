@@ -3,7 +3,7 @@
 //! This module wraps raw parser outputs in domain-friendly types:
 //! [`ManifestSource`] retains the YAML content, [`ManifestName`] labels the
 //! origin, and mapping helpers (e.g. [`map_yaml_error`], [`map_data_error`])
-//! convert parser and deserialisation failures into rich [`miette`]
+//! convert parser and deserialization failures into rich [`miette`]
 //! diagnostics with spans, hints, and stable diagnostic codes.
 //
 // Module-level suppression for version-dependent lint false positives from

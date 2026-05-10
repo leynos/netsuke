@@ -11,14 +11,15 @@ use tracing::debug;
 /// # Errors
 ///
 /// Returns an error when evaluating `foreach` or `when` expressions, when
-/// iteration values fail to serialise, or when target metadata is malformed.
+/// iteration values fail to serialize, or when target metadata is malformed.
 pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> {
     let filtered_targets = expand_section(doc, "targets", env)?;
     let filtered_actions = expand_section(doc, "actions", env)?;
     debug!(
+        manifest_filtering_stage = "expand_foreach",
         filtered_targets,
         filtered_actions,
-        filtered_total = filtered_targets + filtered_actions,
+        filtered_entry_count = filtered_targets + filtered_actions,
         "expanded manifest foreach and when directives"
     );
     Ok(())

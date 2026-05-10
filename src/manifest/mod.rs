@@ -13,7 +13,7 @@
 //! [`ManifestSource`] so callers pass domain-specific types instead of raw
 //! strings.
 //!
-//! The optional `vars` section must deserialise into a JSON object with string
+//! The optional `vars` section must deserialize into a JSON object with string
 //! keys. YAML manifests that use non-string keys (for example integers) now
 //! fail with a [`ManifestError::Parse`] diagnostic, matching the Jinja context
 //! semantics and preventing ambiguous variable lookup.

@@ -176,6 +176,10 @@ Observable success means:
       setting `pipefail` once for the validation shell block, and asserting
       that kept `foreach` plus `when` entries do not retain loader-only
       control fields.
+- [x] 2026-05-10: Normalized remaining repository `deserialization` spelling
+      and nearby touched `serialization` spelling in Rust docs, comments, and
+      tests, and made the manifest filtering debug summary count field
+      explicit.
 
 ## Surprises & Discoveries
 

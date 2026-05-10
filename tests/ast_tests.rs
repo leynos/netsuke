@@ -1,4 +1,4 @@
-//! Unit tests for Netsuke manifest AST deserialisation.
+//! Unit tests for Netsuke manifest AST deserialization.
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::localization::keys;
@@ -355,14 +355,14 @@ fn parses_macro_definitions() -> Result<()> {
         macro_def.body
     );
 
-    let serialised = serde_saphyr::to_string(&manifest.macros)?;
+    let serialized = serde_saphyr::to_string(&manifest.macros)?;
     ensure!(
-        serialised.contains("greet(name)"),
-        "serialised macros missing signature: {serialised}"
+        serialized.contains("greet(name)"),
+        "serialized macros missing signature: {serialized}"
     );
     ensure!(
-        serialised.contains("Hello {{ name }}"),
-        "serialised macros missing body: {serialised}"
+        serialized.contains("Hello {{ name }}"),
+        "serialized macros missing body: {serialized}"
     );
     Ok(())
 }
@@ -377,19 +377,19 @@ fn macro_serialization_with_special_characters_round_trips() -> Result<()> {
         body: special_body.to_owned(),
     };
 
-    let serialised = serde_saphyr::to_string(&vec![macro_def.clone()])?;
+    let serialized = serde_saphyr::to_string(&vec![macro_def.clone()])?;
     ensure!(
-        serialised.contains("greet_special"),
-        "serialised macros missing signature: {serialised}"
+        serialized.contains("greet_special"),
+        "serialized macros missing signature: {serialized}"
     );
     ensure!(
-        serialised.contains("unicode 😀"),
-        "serialised macros missing unicode glyph: {serialised}"
+        serialized.contains("unicode 😀"),
+        "serialized macros missing unicode glyph: {serialized}"
     );
 
-    let deserialised: Vec<MacroDefinition> = serde_saphyr::from_str(&serialised)?;
-    ensure!(deserialised.len() == 1, "expected single macro entry");
-    let recovered = deserialised
+    let deserialized: Vec<MacroDefinition> = serde_saphyr::from_str(&serialized)?;
+    ensure!(deserialized.len() == 1, "expected single macro entry");
+    let recovered = deserialized
         .first()
         .context("expected macro entry after round trip")?;
     ensure!(
