@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT (awaiting approval)
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -135,9 +135,17 @@ job and substantive proof harnesses.
       machine-specific.
 - [x] 2026-05-10T20:26:51Z: Validated the draft with `make check-fmt`,
       `make lint`, `make test`, `make markdownlint`, and `make nixie`.
-- [ ] Stage A: review the draft plan with the user and obtain explicit
+- [x] 2026-05-11T00:00:00Z: User explicitly approved implementation by asking
+      to proceed with the planned functionality.
+- [x] Stage A: review the draft plan with the user and obtain explicit
       approval before implementation.
-- [ ] Stage B: add the Kani version pin and installer script.
+- [x] 2026-05-11T00:00:00Z: Rechecked current public release information and
+      confirmed `kani-verifier` `0.67.0` remains the latest visible release.
+- [x] Stage B: add the Kani version pin and installer script.
+- [x] 2026-05-11T00:00:00Z: Ran `coderabbit review --agent` for the staged
+      Kani version pin and installer milestone; it returned zero findings.
+- [x] 2026-05-11T00:00:00Z: Validated the first milestone with
+      `make markdownlint` and `make check-fmt`.
 - [ ] Stage C: add Makefile formal-verification targets.
 - [ ] Stage D: document developer-facing usage and validate the local
       workflow.
@@ -162,6 +170,13 @@ job and substantive proof harnesses.
 - Firecrawl found the latest visible upstream GitHub release as `kani-0.67.0`,
   published on 2026-01-16. Treat this as the candidate pin during
   implementation, and verify it with `cargo install` before finalizing.
+- A fresh release check on 2026-05-11 still showed `kani-verifier` `0.67.0`
+  as the current version. The implementation pins `tools/kani/VERSION` to
+  `0.67.0`.
+- `shellcheck` is documented as available in `AGENTS.md`, but it is not
+  installed in this worktree environment (`shellcheck: command not found`).
+  Shell validation for this item relies on review, Bash strict mode, and
+  direct command execution.
 - `make fmt` currently fails on pre-existing Markdown line-length violations
   across unrelated repository documentation. The formatter's unrelated edits
   were restored, and the new ExecPlan passes `make markdownlint`.
@@ -194,6 +209,12 @@ job and substantive proof harnesses.
 - Decision: Do not change Netsuke's CLI or OrthoConfig schema for this item.
   Rationale: These targets are repository developer tools, not end-user runtime
   behaviour. Date/Author: 2026-05-10 / planning agent with Wyvern input.
+
+- Decision: Validate `tools/kani/VERSION` as a bare `MAJOR.MINOR.PATCH`
+  version in `scripts/install-kani.sh`. Rationale: the version file is a small
+  human-edited contract, and rejecting prefixed or empty values prevents
+  accidentally installing a moving or malformed tool version. Date/Author:
+  2026-05-11 / implementation agent.
 
 ## Outcomes & Retrospective
 
