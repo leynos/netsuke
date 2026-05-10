@@ -458,7 +458,7 @@ flowchart TD
     F --> G[Add generated target to expanded targets list]
     E -->|guard false| H[Skip this generated target]
     C --> I[Replace targets with expanded concrete target list]
-    I --> J[Downstream deserialisation and rendering consume ManifestValue without foreach or when keys]
+    I --> J[Downstream deserialization and rendering consume ManifestValue without foreach or when keys]
     J --> K[On any error, propagate failure with context instead of partially expanded manifest]
 ```
 
