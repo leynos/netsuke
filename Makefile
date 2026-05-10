@@ -1,9 +1,12 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie
+.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie kani kani-full formal-pr
 
 APP ?= netsuke
 CARGO ?= cargo
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
+KANI ?= cargo kani
+KANI_FLAGS ?=
+KANI_SMOKE_FLAGS ?= --version
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
@@ -40,6 +43,15 @@ markdownlint: ## Lint Markdown files
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
+
+kani: ## Run the Kani local smoke check
+	$(KANI) $(KANI_SMOKE_FLAGS)
+
+kani-full: ## Run the full Kani verification suite
+	$(KANI) $(KANI_FLAGS)
+
+formal-pr: ## Run pull-request formal-verification checks
+	$(MAKE) kani
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

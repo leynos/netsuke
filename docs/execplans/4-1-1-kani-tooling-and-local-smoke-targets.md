@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -146,10 +146,30 @@ job and substantive proof harnesses.
       Kani version pin and installer milestone; it returned zero findings.
 - [x] 2026-05-11T00:00:00Z: Validated the first milestone with
       `make markdownlint` and `make check-fmt`.
-- [ ] Stage C: add Makefile formal-verification targets.
-- [ ] Stage D: document developer-facing usage and validate the local
+- [x] 2026-05-11T00:00:00Z: Committed the version pin and installer milestone
+      as `6d17699`.
+- [x] Stage C: add Makefile formal-verification targets.
+- [x] Stage D: document developer-facing usage and validate the local
       workflow.
-- [ ] Stage E: run review, quality gates, commit, and update the roadmap.
+- [x] 2026-05-11T00:00:00Z: Ran `scripts/install-kani.sh`; it installed
+      `kani-verifier` `0.67.0`, ran `cargo kani setup`, and reported
+      `cargo-kani 0.67.0`.
+- [x] 2026-05-11T00:00:00Z: Ran `make kani`, `make formal-pr`, and
+      `make kani-full`; all exited successfully.
+- [x] 2026-05-11T00:00:00Z: Ran `coderabbit review --agent` for the staged
+      Makefile and developer-documentation milestone; it returned zero
+      findings.
+- [x] 2026-05-11T00:00:00Z: Validated the implementation with
+      `mbake validate Makefile`, `make check-fmt`, `make markdownlint`,
+      `make nixie`, `make lint`, and `make test`.
+- [x] 2026-05-11T00:00:00Z: Attempted `make fmt`; it still fails on
+      pre-existing Markdown line-length and table issues in unrelated files.
+      Formatter-only edits outside the planned scope were restored.
+- [x] 2026-05-11T00:00:00Z: Marked roadmap item `4.1.1` and its three
+      subitems done after validation passed.
+- [x] 2026-05-11T00:00:00Z: Ran final `coderabbit review --agent` after the
+      roadmap and completion updates; it returned zero findings.
+- [x] Stage E: run review, quality gates, commit, and update the roadmap.
 
 ## Surprises & Discoveries
 
@@ -177,6 +197,16 @@ job and substantive proof harnesses.
   installed in this worktree environment (`shellcheck: command not found`).
   Shell validation for this item relies on review, Bash strict mode, and
   direct command execution.
+- `make kani` is implemented as `cargo kani --version` for `4.1.1` because no
+  substantive proof harnesses exist yet. `make kani-full` already invokes the
+  full `cargo kani` path so later `4.2.*` harness work can populate it without
+  changing the target name.
+- `make kani-full` exits successfully before proof harnesses exist and reports
+  "No proof harnesses (functions with #[kani::proof]) were found to verify."
+  This confirms the full target can already be wired without adding a dummy
+  proof. During Kani's build path, existing `src/stdlib/path/hash_utils.rs`
+  code emits an unused-variable warning for `err`; this is not introduced by
+  this tooling change and will be judged by the normal lint gate.
 - `make fmt` currently fails on pre-existing Markdown line-length violations
   across unrelated repository documentation. The formatter's unrelated edits
   were restored, and the new ExecPlan passes `make markdownlint`.
@@ -216,11 +246,30 @@ job and substantive proof harnesses.
   accidentally installing a moving or malformed tool version. Date/Author:
   2026-05-11 / implementation agent.
 
+- Decision: Make `make kani` a Kani command smoke check using `cargo kani
+  --version` until real harnesses land. Rationale: this keeps `4.1.1` honest
+  as a tooling item, avoids adding a vacuous proof, and leaves `make
+  kani-full` as the future full-suite entry point. Date/Author: 2026-05-11 /
+  implementation agent.
+
 ## Outcomes & Retrospective
 
 This section is intentionally empty while the plan is in draft. During
 implementation, update it after each milestone with what was achieved, what
 changed from the plan, and what later formal-verification work should inherit.
+
+Implementation completed on 2026-05-11. Netsuke now has a pinned Kani version
+in `tools/kani/VERSION`, an idempotent `scripts/install-kani.sh` installer,
+and local `make kani`, `make kani-full`, and `make formal-pr` targets. The
+developer guide documents how to install and run the pinned tool without
+folding Kani into the ordinary `make test`, `make lint`, `make check-fmt`, or
+`make all` workflow.
+
+The main deviation from the draft plan is deliberate: `make kani` is a command
+smoke target using `cargo kani --version`, while `make kani-full` runs the full
+`cargo kani` command. This avoids introducing a non-substantive proof harness
+before roadmap item `4.2.*`. Actual execution confirmed that `make kani-full`
+exits successfully today and reports that no `#[kani::proof]` harnesses exist.
 
 ## Context and orientation
 

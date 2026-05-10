@@ -434,11 +434,11 @@ and test workflow intact. See
 
 ### 4.1. Verification tooling and gating
 
-- [ ] 4.1.1. Add Kani tooling and local smoke targets. See
+- [x] 4.1.1. Add Kani tooling and local smoke targets. See
   [formal-verification-methods-in-netsuke.md §Repository integration plan](formal-verification-methods-in-netsuke.md#repository-integration-plan).
-  - [ ] Pin the supported Kani version under `tools/kani/`.
-  - [ ] Add `scripts/install-kani.sh`.
-  - [ ] Add `make kani`, `make kani-full`, and `make formal-pr`.
+  - [x] Pin the supported Kani version under `tools/kani/`.
+  - [x] Add `scripts/install-kani.sh`.
+  - [x] Add `make kani`, `make kani-full`, and `make formal-pr`.
 - [ ] 4.1.2. Add a dedicated `kani-smoke` continuous integration (CI) job.
   Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Continuous integration (CI)](formal-verification-methods-in-netsuke.md#continuous-integration-ci).
