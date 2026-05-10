@@ -429,21 +429,25 @@ runtime conditions.
   sources: "{{ item }}"
 ```
 
-The expansion flow is:
+The target expansion flow is:
 
-Figure: Foreach/When expansion flow
+Figure: The `foreach` and `when` target expansion flow, from mutable
+`ManifestValue` input through concrete target generation, skipped guarded
+items, and contextual error propagation.
 
 ```mermaid
 flowchart TD
-    A[Iterate over entries in YAML] --> B{Has foreach?}
-    B -- Yes --> C[Evaluate foreach expression]
-    C --> D[For each item:]
-    D --> E{Has when?}
-    E -- Yes --> F[Evaluate when expression]
-    F -- True --> G[Expand entry with item/index]
-    F -- False --> H[Skip entry]
-    E -- No --> G
-    B -- No --> I[Evaluate static when, then keep or skip entry]
+    A[Manifest parsing produces mutable ManifestValue] --> B
+    B[Expansion stage calls expand_foreach with ManifestValue and MiniJinja Environment]
+    B --> C[expand_foreach iterates targets sequence]
+    C --> D[For each target, evaluate foreach expression or literal sequence]
+    D --> E[For each item, evaluate when guard if present]
+    E -->|guard true| F[Inject vars.item and vars.index into generated target]
+    F --> G[Add generated target to expanded targets list]
+    E -->|guard false| H[Skip this generated target]
+    C --> I[Replace targets with expanded concrete target list]
+    I --> J[Downstream deserialization and rendering consume ManifestValue without foreach or when keys]
+    J --> K[On any error, propagate failure with context instead of partially expanded manifest]
 ```
 
 Each element in the sequence produces a separate entry. The iteration context:
