@@ -52,7 +52,10 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(&parsed_cli, &matches));
+    let mode = match resolve_diag_mode_or_exit(&parsed_cli, &matches, startup_mode) {
+        Ok(mode) => mode,
+        Err(code) => return code,
+    };
 
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
@@ -114,25 +117,34 @@ fn parse_cli_or_exit(
     }
 }
 
+fn handle_config_load_error(err: &(dyn std::error::Error + 'static), mode: DiagMode) -> ExitCode {
+    if mode.is_json() {
+        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
+    } else {
+        init_tracing(Level::ERROR);
+        tracing::error!(error = %err, "configuration load failed");
+        ExitCode::FAILURE
+    }
+}
+
+fn resolve_diag_mode_or_exit(
+    parsed_cli: &cli::Cli,
+    matches: &ArgMatches,
+    startup_mode: DiagMode,
+) -> Result<DiagMode, ExitCode> {
+    cli::resolve_merged_diag_json(parsed_cli, matches)
+        .map(DiagMode::from_json_enabled)
+        .map_err(|err| handle_config_load_error(err.as_ref(), startup_mode))
+}
+
 fn merge_cli_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     mode: DiagMode,
 ) -> Result<cli::Cli, ExitCode> {
-    match cli::merge_with_config(parsed_cli, matches) {
-        Ok(merged) => Ok(merged.with_default_command()),
-        Err(err) => {
-            if mode.is_json() {
-                Err(diagnostic_json::emit_or_fallback(
-                    diagnostic_json::render_error_json(err.as_ref()),
-                ))
-            } else {
-                init_tracing(Level::ERROR);
-                tracing::error!(error = %err, "configuration load failed");
-                Err(ExitCode::FAILURE)
-            }
-        }
-    }
+    cli::merge_with_config(parsed_cli, matches)
+        .map(cli::Cli::with_default_command)
+        .map_err(|err| handle_config_load_error(err.as_ref(), mode))
 }
 
 fn configure_runtime(

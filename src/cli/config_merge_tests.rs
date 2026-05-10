@@ -5,13 +5,31 @@ use anyhow::ensure;
 use clap::CommandFactory;
 use rstest::{fixture, rstest};
 use serde_json::json;
+use std::collections::HashMap;
+use std::ffi::OsString;
 use tempfile::tempdir;
-use test_support::{CwdGuard, EnvVarGuard, env_lock::EnvLock};
+use test_support::{CwdGuard, EnvVarGuard};
 
 fn cli_with_directory(directory: &std::path::Path) -> Cli {
     Cli {
         directory: Some(directory.to_path_buf()),
         ..Cli::default()
+    }
+}
+
+#[derive(Default)]
+struct TestEnv {
+    values: HashMap<&'static str, OsString>,
+}
+
+impl TestEnv {
+    fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
+        self.values.insert(name, value.into());
+        self
+    }
+
+    fn var_os(&self, name: &str) -> Option<OsString> {
+        self.values.get(name).cloned()
     }
 }
 
@@ -218,7 +236,7 @@ fn collect_diag_file_layers_handles_project_file_presence(
     }
 
     let cli = cli_with_directory(dir.path());
-    let layers = collect_diag_file_layers(&cli);
+    let layers = collect_diag_file_layers(&cli)?;
 
     if expect_empty {
         ensure!(layers.is_empty(), "expected no layers when file absent");
@@ -297,26 +315,20 @@ fn push_file_layers_pushes_expected_layer_count(
 
 #[test]
 fn env_config_path_returns_none_when_var_unset() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let _guard = EnvVarGuard::remove("__NETSUKE_TEST_VAR");
-    assert!(env_config_path("__NETSUKE_TEST_VAR").is_none());
+    let env = TestEnv::default();
+    assert!(env_config_path(|name| env.var_os(name), "__NETSUKE_TEST_VAR").is_none());
 }
 
 #[test]
 fn env_config_path_returns_none_when_var_empty() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let _guard = EnvVarGuard::set("__NETSUKE_TEST_VAR", std::ffi::OsStr::new(""));
-    assert!(env_config_path("__NETSUKE_TEST_VAR").is_none());
+    let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "");
+    assert!(env_config_path(|name| env.var_os(name), "__NETSUKE_TEST_VAR").is_none());
 }
 
 #[test]
 fn env_config_path_returns_path_when_var_set() {
-    use test_support::env_lock::EnvLock;
-    let _lock = EnvLock::acquire();
-    let _guard = EnvVarGuard::set("__NETSUKE_TEST_VAR", std::ffi::OsStr::new("/tmp/foo.toml"));
-    let result = env_config_path("__NETSUKE_TEST_VAR");
+    let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "/tmp/foo.toml");
+    let result = env_config_path(|name| env.var_os(name), "__NETSUKE_TEST_VAR");
     assert_eq!(result, Some(std::path::PathBuf::from("/tmp/foo.toml")));
 }
 
@@ -355,21 +367,19 @@ fn resolve_config_path_precedence(
     #[case] expected: Option<&'static str>,
     #[case] msg: &'static str,
 ) {
-    let _lock = EnvLock::acquire();
-    let _env_guard = env_vars.0.map_or_else(
-        || EnvVarGuard::remove(CONFIG_ENV_VAR),
-        |v| EnvVarGuard::set(CONFIG_ENV_VAR, std::ffi::OsStr::new(v)),
-    );
-    let _legacy_guard = env_vars.1.map_or_else(
-        || EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
-        |v| EnvVarGuard::set(CONFIG_ENV_VAR_LEGACY, std::ffi::OsStr::new(v)),
-    );
+    let mut env = TestEnv::default();
+    if let Some(value) = env_vars.0 {
+        env = env.with_var(CONFIG_ENV_VAR, value);
+    }
+    if let Some(value) = env_vars.1 {
+        env = env.with_var(CONFIG_ENV_VAR_LEGACY, value);
+    }
     let cli = Cli {
         config: cli_config.map(std::path::PathBuf::from),
         ..Cli::default()
     };
     assert_eq!(
-        resolve_config_path(&cli),
+        resolve_config_path(&cli, |name| env.var_os(name)),
         expected.map(std::path::PathBuf::from),
         "{msg}",
     );
@@ -377,12 +387,9 @@ fn resolve_config_path_precedence(
 
 #[test]
 fn resolve_config_path_returns_none_when_all_absent() {
-    let _lock = EnvLock::acquire();
-    let _env_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
     let cli = Cli::default();
     assert!(
-        resolve_config_path(&cli).is_none(),
+        resolve_config_path(&cli, |name| TestEnv::default().var_os(name)).is_none(),
         "should return None when no selector is active"
     );
 }

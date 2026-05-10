@@ -143,9 +143,10 @@ pub fn resolve_startup_locale(
 
 /// Resolve whether JSON diagnostics were requested before full CLI parsing.
 ///
-/// Precedence is `--diag-json` followed by `NETSUKE_DIAG_JSON`. Unlike the
-/// merged runtime configuration, configuration files are not considered here
-/// because this helper is used before config discovery and loading succeed.
+/// Precedence is CLI diagnostic format hints (`--output-format` and
+/// `--diag-json`) followed by `NETSUKE_DIAG_JSON`. Unlike the merged runtime
+/// configuration, configuration files are not considered here because this
+/// helper is used before config discovery and loading succeed.
 #[must_use]
 pub fn resolve_startup_diag_json(args: &[OsString], env: &impl EnvProvider) -> bool {
     cli::diag_json_hint_from_args(args).unwrap_or_else(|| {

@@ -41,8 +41,11 @@ fn config_discovery(directory: Option<&Path>) -> ConfigDiscovery {
     builder.build()
 }
 
-fn env_config_path(var_name: &str) -> Option<PathBuf> {
-    std::env::var_os(var_name)
+fn env_config_path<F>(var_os: F, var_name: &str) -> Option<PathBuf>
+where
+    F: Fn(&str) -> Option<std::ffi::OsString>,
+{
+    var_os(var_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
@@ -51,12 +54,15 @@ fn env_config_path(var_name: &str) -> Option<PathBuf> {
     clippy::option_as_ref_cloned,
     reason = "make cloning the selected config path explicit"
 )]
-fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
+fn resolve_config_path<F>(cli: &Cli, var_os: F) -> Option<PathBuf>
+where
+    F: Fn(&str) -> Option<std::ffi::OsString>,
+{
     cli.config
         .as_ref()
         .cloned()
-        .or_else(|| env_config_path(CONFIG_ENV_VAR))
-        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
+        .or_else(|| env_config_path(&var_os, CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(var_os, CONFIG_ENV_VAR_LEGACY))
 }
 
 fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'static>>> {
@@ -138,13 +144,12 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 ///
 /// Mirrors the two-pass logic of [`push_file_layers`] without a `MergeComposer`.
 ///
-/// If project-scope layer loading fails, this function falls back to the
-/// first-pass layers (global and user configs) rather than propagating an
-/// error. An explicit config path returns the selected file's layers, or an
-/// empty set when the selected file cannot be loaded.
-fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>> {
-    if let Some(path) = resolve_config_path(cli) {
-        return load_layers_from_path(&path).unwrap_or_default();
+/// An explicit config path returns the selected file's layers and propagates
+/// load failures so startup diagnostic-mode selection reports the same
+/// configuration errors as the full merge path.
+fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    if let Some(path) = resolve_config_path(cli, |name| std::env::var_os(name)) {
+        return load_layers_from_path(&path);
     }
 
     let discovery = config_discovery(cli.directory.as_deref());
@@ -155,12 +160,10 @@ fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>> {
             .is_some_and(|p| project_file.as_deref() == Some(p.as_str()))
     });
     if first_pass_found_project {
-        file_layers
+        Ok(file_layers)
     } else {
-        match project_scope_layers(cli.directory.as_deref()) {
-            Ok(project_layers) => file_layers.into_iter().chain(project_layers).collect(),
-            Err(_) => file_layers,
-        }
+        project_scope_layers(cli.directory.as_deref())
+            .map(|project_layers| file_layers.into_iter().chain(project_layers).collect())
     }
 }
 
@@ -181,11 +184,16 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
 /// This is used before full config merging so startup and merge-time failures
 /// can still honour `diag_json` values sourced from config files or the
 /// environment.
-#[must_use]
-pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] when an explicit or discovered
+/// configuration layer required for diagnostic-mode resolution cannot be
+/// loaded.
+pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
     let mut diag_json = Cli::default().diag_json;
 
-    let layers = collect_diag_file_layers(cli);
+    let layers = collect_diag_file_layers(cli)?;
     for layer in layers {
         let layer_value = layer.into_value();
         if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
@@ -202,7 +210,7 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
         diag_json = env_diag_json;
     }
 
-    diag_json_from_matches(cli, matches, diag_json)
+    Ok(diag_json_from_matches(cli, matches, diag_json))
 }
 
 /// Drain a layer-load result onto `composer`, recording any error.
@@ -234,7 +242,7 @@ fn push_file_layers(
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
     cli: &Cli,
 ) {
-    if let Some(path) = resolve_config_path(cli) {
+    if let Some(path) = resolve_config_path(cli, |name| std::env::var_os(name)) {
         push_layers_result(composer, errors, load_layers_from_path(&path));
         return;
     }

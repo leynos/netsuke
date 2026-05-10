@@ -99,6 +99,44 @@ These points are strategy rules, not optional style guidance.
    represent distinct domain concepts.
 5. Run `cargo test --test bdd_tests` and then the full quality gates.
 
+## Manifest `foreach` expansion
+
+Manifest collection expansion is implemented by `expand_foreach` in
+`src/manifest/expand.rs`. It processes collection-valued manifest entries such
+as `targets` and `actions`: each item may define `foreach` to create one
+concrete item per value, and may define `when` to filter generated or static
+items before later manifest stages run.
+
+The pipeline is:
+
+1. Manifest parsing produces a mutable `ManifestValue` document.
+2. The manifest expansion stage passes that document and the configured
+   MiniJinja `Environment` to `expand_foreach`.
+3. `expand_foreach` reads `targets` and `actions`, evaluates each item's
+   `foreach` expression or literal sequence, evaluates any `when` guard,
+   injects `vars.item` and `vars.index` for generated items, and replaces each
+   original collection with the expanded concrete list.
+4. Downstream deserialization and rendering consume the expanded
+   `ManifestValue`; they should not see the `foreach` or `when` control keys.
+
+Callers must treat expansion as fallible. Errors can come from malformed
+item metadata, such as a non-object `vars` value, expression parse or
+evaluation failures in `foreach` or `when`, and serialization failures while
+copying the MiniJinja item value into manifest `vars`. Propagate these errors
+with context rather than defaulting to a partially expanded `ManifestValue`.
+
+Minimal target-level example:
+
+```yaml
+targets:
+  - name: "lint-{{ item }}"
+    foreach:
+      - src
+      - tests
+    when: "item != 'tests' or env.CI == 'true'"
+    command: "cargo clippy --manifest-path {{ item }}/Cargo.toml"
+```
+
 ## Test isolation utilities
 
 Environment variable mutations and working-directory changes are process-global
@@ -339,6 +377,34 @@ Table: Configuration merge helper functions
 | `diag_json_from_matches`     | Resolve final `diag_json` from CLI matches with fallback.            |
 | `cli_overrides_from_matches` | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
 | `env_provider`               | Return the `NETSUKE_` prefixed Figment environment provider.         |
+
+### Environment lookup seams
+
+`resolve_config_path` is the crate-internal seam for explicit config-file
+selection. It accepts a `var_os` closure with this shape:
+
+```rust
+Fn(&str) -> Option<std::ffi::OsString>
+```
+
+Production callers pass `std::env::var_os`, while unit tests pass a
+`HashMap`-backed closure. This keeps deterministic tests for `NETSUKE_CONFIG`
+and `NETSUKE_CONFIG_PATH` without threading an environment adapter through the
+public merge API.
+
+`collect_diag_file_layers` and `push_file_layers` call `resolve_config_path`
+with `std::env::var_os`, so both early diagnostic resolution and the full merge
+path use the same explicit config selector precedence. The public API remains
+two arguments:
+
+```rust
+pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
+pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
+```
+
+Unit tests that only need to verify explicit config path precedence should test
+`resolve_config_path` with an injected closure instead of mutating the process
+environment.
 
 #### `diag_json` contract
 

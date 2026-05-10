@@ -220,6 +220,24 @@ Implementation completed on 2026-04-20.
 
 Follow-on maintenance completed on 2026-04-21.
 
+Completion re-evaluated on 2026-05-08. The implementation still satisfies the
+planned contract: the roadmap entry is marked done, user-facing documentation
+describes `--config`, `NETSUKE_CONFIG`, and the legacy alias, the annotated
+sample config is present, and both `rstest` integration coverage and
+`rstest-bdd` behavioural coverage exercise the explicit config selection
+precedence. No roadmap change was required.
+
+Compile-time/UI testing was also evaluated on 2026-05-08. The repository has
+no `trybuild`, `compiletest`, or `ui_test` harness, and no local proc-macro
+crate or public macro API whose compile-fail diagnostics need a UI contract.
+The existing `rstest-bdd-macros` dependency already uses strict compile-time
+validation for behavioural step binding, so no additional compile-time test
+harness is required for this milestone.
+
+Testing (Overall) was evaluated on 2026-05-09. All test surfaces pass
+(`make test`): rstest unit tests, rstest-bdd BDD scenarios, and assert_cmd
+integration tests. TESTING: PASS.
+
 Validation evidence:
 
 - `make fmt`
@@ -350,9 +368,9 @@ Then, align the merge pipeline in `src/cli/config_merge.rs` with the landed
    directly. When a path is selected they load that file only, bypassing
    discovery.
 3. `merge_with_config(cli, matches)` reads selection through
-   `resolve_config_path(cli)`
-   and delegates to `push_file_layers` with the same `&Cli` pipeline, so all
-   config entry points resolve explicit selectors the same way.
+   `resolve_config_path(cli)` and delegates to `push_file_layers` with the same
+   `&Cli` pipeline, so all config entry points resolve explicit selectors the
+   same way.
 
 Acceptance for Stage A:
 

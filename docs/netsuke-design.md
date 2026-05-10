@@ -429,21 +429,37 @@ runtime conditions.
   sources: "{{ item }}"
 ```
 
-The expansion flow is:
+For screen readers: The following flowchart shows target-level `foreach` and
+`when` expansion from manifest parsing through error handling. Manifest parsing
+produces a mutable `ManifestValue`, then the expansion stage calls
+`expand_foreach`, which iterates over the `targets` sequence. For each target,
+the `foreach` expression or literal sequence is evaluated, and for each
+generated item the optional `when` guard is evaluated. When the guard is true,
+`vars.item` and `vars.index` are injected into the generated target, and the
+target is added to the expanded list. When the guard is false, the generated
+target is skipped. After expansion, the original `targets` list is replaced
+with the expanded concrete list, and downstream deserialization and rendering
+consume the `ManifestValue` without `foreach` or `when` keys. On any error,
+failure is propagated with context rather than returning a partially expanded
+manifest.
 
-Figure: Foreach/When expansion flow
+Figure: The `foreach` and `when` target expansion flow, from mutable
+`ManifestValue` input through concrete target generation, skipped guarded
+items, and contextual error propagation.
 
 ```mermaid
 flowchart TD
-    A[Iterate over entries in YAML] --> B{Has foreach?}
-    B -- Yes --> C[Evaluate foreach expression]
-    C --> D[For each item:]
-    D --> E{Has when?}
-    E -- Yes --> F[Evaluate when expression]
-    F -- True --> G[Expand entry with item/index]
-    F -- False --> H[Skip entry]
-    E -- No --> G
-    B -- No --> I[Evaluate static when, then keep or skip entry]
+    A[Manifest parsing produces mutable ManifestValue] --> B
+    B[Expansion stage calls expand_foreach with ManifestValue and MiniJinja Environment]
+    B --> C[expand_foreach iterates over the targets sequence]
+    C --> D[For each target, evaluate foreach expression or literal sequence]
+    D --> E[For each item, evaluate when guard if present]
+    E -->|guard true| F[Inject vars.item and vars.index into generated target]
+    F --> G[Add generated target to expanded targets list]
+    E -->|guard false| H[Skip this generated target]
+    C --> I[Replace targets with expanded concrete target list]
+    I --> J[Downstream deserialization and rendering consume ManifestValue without foreach or when keys]
+    J --> K[On any error, propagate failure with context instead of partially expanded manifest]
 ```
 
 Each element in the sequence produces a separate entry. The iteration context:
