@@ -29,7 +29,7 @@ impl TestEnv {
     }
 }
 
-impl EnvSource for TestEnv {
+impl TestEnv {
     fn var_os(&self, name: &str) -> Option<OsString> {
         self.values.get(name).cloned()
     }
@@ -238,7 +238,7 @@ fn collect_diag_file_layers_handles_project_file_presence(
     }
 
     let cli = cli_with_directory(dir.path());
-    let layers = collect_diag_file_layers(&cli, &TestEnv::default())?;
+    let layers = collect_diag_file_layers(&cli)?;
 
     if expect_empty {
         ensure!(layers.is_empty(), "expected no layers when file absent");
@@ -302,7 +302,7 @@ fn push_file_layers_pushes_expected_layer_count(
     let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
     let _legacy_config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
     let cli = cli_with_directory(dir.path());
-    push_file_layers(&mut composer, &mut errors, &cli, &RealEnv);
+    push_file_layers(&mut composer, &mut errors, &cli);
     assert!(errors.is_empty(), "no required errors expected");
     assert_eq!(
         composer.layers().len(),
@@ -317,19 +317,20 @@ fn push_file_layers_pushes_expected_layer_count(
 
 #[test]
 fn env_config_path_returns_none_when_var_unset() {
-    assert!(env_config_path(&TestEnv::default(), "__NETSUKE_TEST_VAR").is_none());
+    let env = TestEnv::default();
+    assert!(env_config_path(|name| env.var_os(name), "__NETSUKE_TEST_VAR").is_none());
 }
 
 #[test]
 fn env_config_path_returns_none_when_var_empty() {
     let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "");
-    assert!(env_config_path(&env, "__NETSUKE_TEST_VAR").is_none());
+    assert!(env_config_path(|name| env.var_os(name), "__NETSUKE_TEST_VAR").is_none());
 }
 
 #[test]
 fn env_config_path_returns_path_when_var_set() {
     let env = TestEnv::default().with_var("__NETSUKE_TEST_VAR", "/tmp/foo.toml");
-    let result = env_config_path(&env, "__NETSUKE_TEST_VAR");
+    let result = env_config_path(|name| env.var_os(name), "__NETSUKE_TEST_VAR");
     assert_eq!(result, Some(std::path::PathBuf::from("/tmp/foo.toml")));
 }
 
@@ -380,7 +381,7 @@ fn resolve_config_path_precedence(
         ..Cli::default()
     };
     assert_eq!(
-        resolve_config_path(&cli, &env),
+        resolve_config_path(&cli, |name| env.var_os(name)),
         expected.map(std::path::PathBuf::from),
         "{msg}",
     );
@@ -390,7 +391,7 @@ fn resolve_config_path_precedence(
 fn resolve_config_path_returns_none_when_all_absent() {
     let cli = Cli::default();
     assert!(
-        resolve_config_path(&cli, &TestEnv::default()).is_none(),
+        resolve_config_path(&cli, |name| TestEnv::default().var_os(name)).is_none(),
         "should return None when no selector is active"
     );
 }

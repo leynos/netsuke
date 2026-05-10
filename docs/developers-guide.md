@@ -378,33 +378,33 @@ Table: Configuration merge helper functions
 | `cli_overrides_from_matches` | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
 | `env_provider`               | Return the `NETSUKE_` prefixed Figment environment provider.         |
 
-### Environment abstraction
+### Environment lookup seams
 
-`EnvSource` is the crate-internal boundary for process-style environment
-lookups:
+`resolve_config_path` is the crate-internal seam for explicit config-file
+selection. It accepts a `var_os` closure with this shape:
 
 ```rust
-fn var_os(&self, name: &str) -> Option<std::ffi::OsString>;
+Fn(&str) -> Option<std::ffi::OsString>
 ```
 
-The trait removes direct `std::env` access from config-selection logic so unit
-tests can inject deterministic inputs. `RealEnv` is the concrete implementation
-used by production facades and delegates to `std::env::var_os`.
+Production callers pass `std::env::var_os`, while unit tests pass a
+`HashMap`-backed closure. This keeps deterministic tests for `NETSUKE_CONFIG`
+and `NETSUKE_CONFIG_PATH` without threading an environment adapter through the
+public merge API.
 
-`resolve_config_path` and `collect_diag_file_layers` accept
-`&impl EnvSource` rather than reading the process environment directly. The
-public API keeps that infrastructure detail hidden behind two-argument
-facades:
+`collect_diag_file_layers` and `push_file_layers` call `resolve_config_path`
+with `std::env::var_os`, so both early diagnostic resolution and the full merge
+path use the same explicit config selector precedence. The public API remains
+two argument:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
 ```
 
-The crate-internal env-parameterized variants are `merge_with_config_env` and
-`resolve_merged_diag_json_env`; they are reserved for internal tests and
-startup plumbing. Unit tests should implement a `HashMap`-backed `TestEnv`
-instead of mutating the process environment.
+Unit tests that only need to verify explicit config path precedence should test
+`resolve_config_path` with an injected closure instead of mutating the process
+environment.
 
 #### `diag_json` contract
 

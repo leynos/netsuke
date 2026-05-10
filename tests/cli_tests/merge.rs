@@ -345,6 +345,13 @@ fn resolve_merged_diag_json_handles_malformed_project_config(
         "error should mention the malformed project config"
     );
 
+    let merge_error = netsuke::cli::merge_with_config(&cli, &matches)
+        .expect_err("merge_with_config should fail for malformed project config");
+    ensure!(
+        format!("{merge_error:?}").contains(".netsuke.toml"),
+        "merge error should mention the malformed project config"
+    );
+
     Ok(())
 }
 

@@ -61,3 +61,58 @@ impl Drop for EnvLock {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assert_underlying_lock_is_held(message: &str) {
+        assert!(ENV_LOCK.try_lock().is_err(), "{message}");
+    }
+
+    fn assert_underlying_lock_is_released(message: &str) {
+        let lock = ENV_LOCK.try_lock().expect(message);
+        drop(lock);
+    }
+
+    #[test]
+    fn reentrant_env_lock_nested_acquire_and_release() {
+        {
+            let _outer = EnvLock::acquire();
+            let _inner = EnvLock::acquire();
+        }
+
+        let outer = EnvLock::acquire();
+        {
+            let _inner = EnvLock::acquire();
+            assert_underlying_lock_is_held(
+                "ENV_LOCK should remain locked while nested EnvLock guards are alive",
+            );
+        }
+
+        assert_underlying_lock_is_held(
+            "ENV_LOCK should remain locked until the outer EnvLock guard is dropped",
+        );
+
+        drop(outer);
+        assert_underlying_lock_is_released(
+            "ENV_LOCK should be unlocked after final EnvLock guard is dropped",
+        );
+    }
+
+    #[test]
+    fn reentrant_env_lock_stays_locked_when_outer_drops_first() {
+        let outer = EnvLock::acquire();
+        let inner = EnvLock::acquire();
+
+        drop(outer);
+        assert_underlying_lock_is_held(
+            "ENV_LOCK should remain locked while an inner EnvLock guard is alive",
+        );
+
+        drop(inner);
+        assert_underlying_lock_is_released(
+            "ENV_LOCK should be unlocked after the final out-of-order guard drops",
+        );
+    }
+}

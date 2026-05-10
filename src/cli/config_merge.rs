@@ -22,22 +22,6 @@ use crate::localization::{self, keys};
 use super::config::OutputFormat;
 use super::{CONFIG_ENV_VAR, CONFIG_ENV_VAR_LEGACY, Cli, ENV_PREFIX, validation_message};
 
-/// Source for process-style environment variable lookups.
-pub(crate) trait EnvSource {
-    /// Return the raw OS string value for an environment variable.
-    fn var_os(&self, name: &str) -> Option<std::ffi::OsString>;
-}
-
-/// Environment source backed by the real process environment.
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct RealEnv;
-
-impl EnvSource for RealEnv {
-    fn var_os(&self, name: &str) -> Option<std::ffi::OsString> {
-        std::env::var_os(name)
-    }
-}
-
 /// Return the default manifest filename when none is provided.
 pub(super) fn default_manifest_path() -> PathBuf {
     PathBuf::from("Netsukefile")
@@ -57,8 +41,11 @@ fn config_discovery(directory: Option<&Path>) -> ConfigDiscovery {
     builder.build()
 }
 
-fn env_config_path(env: &impl EnvSource, var_name: &str) -> Option<PathBuf> {
-    env.var_os(var_name)
+fn env_config_path<F>(var_os: F, var_name: &str) -> Option<PathBuf>
+where
+    F: Fn(&str) -> Option<std::ffi::OsString>,
+{
+    var_os(var_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
@@ -67,12 +54,15 @@ fn env_config_path(env: &impl EnvSource, var_name: &str) -> Option<PathBuf> {
     clippy::option_as_ref_cloned,
     reason = "make cloning the selected config path explicit"
 )]
-fn resolve_config_path(cli: &Cli, env: &impl EnvSource) -> Option<PathBuf> {
+fn resolve_config_path<F>(cli: &Cli, var_os: F) -> Option<PathBuf>
+where
+    F: Fn(&str) -> Option<std::ffi::OsString>,
+{
     cli.config
         .as_ref()
         .cloned()
-        .or_else(|| env_config_path(env, CONFIG_ENV_VAR))
-        .or_else(|| env_config_path(env, CONFIG_ENV_VAR_LEGACY))
+        .or_else(|| env_config_path(&var_os, CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(var_os, CONFIG_ENV_VAR_LEGACY))
 }
 
 fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'static>>> {
@@ -157,11 +147,8 @@ fn diag_json_from_layer(value: &serde_json::Value) -> Option<bool> {
 /// An explicit config path returns the selected file's layers and propagates
 /// load failures so startup diagnostic-mode selection reports the same
 /// configuration errors as the full merge path.
-fn collect_diag_file_layers(
-    cli: &Cli,
-    env: &impl EnvSource,
-) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    if let Some(path) = resolve_config_path(cli, env) {
+fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    if let Some(path) = resolve_config_path(cli, |name| std::env::var_os(name)) {
         return load_layers_from_path(&path);
     }
 
@@ -204,19 +191,9 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
 /// configuration layer required for diagnostic-mode resolution cannot be
 /// loaded.
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool> {
-    resolve_merged_diag_json_env(cli, matches, &RealEnv)
-}
-
-/// Resolve the effective diagnostic JSON preference with injected environment access.
-#[doc(hidden)]
-pub(crate) fn resolve_merged_diag_json_env(
-    cli: &Cli,
-    matches: &ArgMatches,
-    env: &impl EnvSource,
-) -> OrthoResult<bool> {
     let mut diag_json = Cli::default().diag_json;
 
-    let layers = collect_diag_file_layers(cli, env)?;
+    let layers = collect_diag_file_layers(cli)?;
     for layer in layers {
         let layer_value = layer.into_value();
         if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
@@ -264,9 +241,8 @@ fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
     cli: &Cli,
-    env: &impl EnvSource,
 ) {
-    if let Some(path) = resolve_config_path(cli, env) {
+    if let Some(path) = resolve_config_path(cli, |name| std::env::var_os(name)) {
         push_layers_result(composer, errors, load_layers_from_path(&path));
         return;
     }
@@ -351,16 +327,6 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<se
 /// Returns an [`ortho_config::OrthoError`] if layer composition or merging
 /// fails.
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
-    merge_with_config_env(cli, matches, &RealEnv)
-}
-
-/// Merge configuration layers over the parsed CLI values with injected environment access.
-#[doc(hidden)]
-pub(crate) fn merge_with_config_env(
-    cli: &Cli,
-    matches: &ArgMatches,
-    env: &impl EnvSource,
-) -> OrthoResult<Cli> {
     let command = cli.command.clone();
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
@@ -370,7 +336,7 @@ pub(crate) fn merge_with_config_env(
         Err(err) => errors.push(err),
     }
 
-    push_file_layers(&mut composer, &mut errors, cli, env);
+    push_file_layers(&mut composer, &mut errors, cli);
 
     let env_provider = env_provider()
         .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))

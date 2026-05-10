@@ -1,4 +1,4 @@
-# ADR: Keep `foreach` and `when` scoped to manifest targets
+# Architecture Decision Record (ADR): Keep `foreach` and `when` scoped to manifest targets
 
 ## Status
 
