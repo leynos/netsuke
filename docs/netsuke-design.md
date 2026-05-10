@@ -429,14 +429,19 @@ runtime conditions.
   sources: "{{ item }}"
 ```
 
-For screen readers: The following flowchart shows how target-level `foreach`
-and `when` controls are expanded before typed manifest deserialisation.
-Manifest parsing first produces a mutable `ManifestValue`, then
-`expand_foreach` iterates over the `targets` sequence. `foreach` creates one
-candidate target per item, `when` conditionally includes or skips each
-candidate, and successful candidates receive `vars.item` and `vars.index`
-before downstream rendering consumes a concrete target list without control
-keys.
+For screen readers: The following flowchart shows target-level `foreach` and
+`when` expansion from manifest parsing through error handling. Manifest parsing
+produces a mutable `ManifestValue`, then the expansion stage calls
+`expand_foreach`, which iterates over the `targets` sequence. For each target,
+the `foreach` expression or literal sequence is evaluated, and for each
+generated item the optional `when` guard is evaluated. When the guard is true,
+`vars.item` and `vars.index` are injected into the generated target, and the
+target is added to the expanded list. When the guard is false, the generated
+target is skipped. After expansion, the original `targets` list is replaced
+with the expanded concrete list, and downstream deserialization and rendering
+consume the `ManifestValue` without `foreach` or `when` keys. On any error,
+failure is propagated with context rather than returning a partially expanded
+manifest.
 
 Figure: The `foreach` and `when` target expansion flow, from mutable
 `ManifestValue` input through concrete target generation, skipped guarded
