@@ -35,9 +35,7 @@ fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Resu
     for entry in std::mem::take(entries) {
         match entry {
             ManifestValue::Object(map) => {
-                let expansion = expand_target(map, env)?;
-                filtered += expansion.filtered;
-                expanded.extend(expansion.entries);
+                expanded.extend(expand_target(map, env, key, &mut filtered)?);
             }
             other => expanded.push(other),
         }
@@ -47,67 +45,34 @@ fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Resu
     Ok(filtered)
 }
 
-struct Expansion {
-    entries: Vec<ManifestValue>,
-    filtered: usize,
-}
-
-fn expand_target(mut map: ManifestMap, env: &Environment) -> Result<Expansion> {
+fn expand_target(
+    mut map: ManifestMap,
+    env: &Environment,
+    section: &str,
+    filtered: &mut usize,
+) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, env)?;
         let mut items = Vec::new();
-        let mut filtered = 0;
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            let decision = when_allows(&mut clone, env, Some((&item, index)))?;
-            if !decision.allowed {
-                filtered += 1;
-                log_filtered_entry(&clone, decision.expression.as_deref(), Some(index));
+            if !when_allows(&mut clone, env, section, Some((&item, index)))? {
+                *filtered += 1;
                 continue;
             }
             inject_iteration_vars(&mut clone, &item, index)?;
             items.push(ManifestValue::Object(clone));
         }
-        Ok(Expansion {
-            entries: items,
-            filtered,
-        })
+        Ok(items)
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        let decision = when_allows(&mut map, env, None)?;
-        if !decision.allowed {
-            log_filtered_entry(&map, decision.expression.as_deref(), None);
-            return Ok(Expansion {
-                entries: vec![],
-                filtered: 1,
-            });
+        if !when_allows(&mut map, env, section, None)? {
+            *filtered += 1;
+            return Ok(vec![]);
         }
-        Ok(Expansion {
-            entries: vec![ManifestValue::Object(map)],
-            filtered: 0,
-        })
-    }
-}
-
-fn log_filtered_entry(map: &ManifestMap, expression: Option<&str>, iteration_index: Option<usize>) {
-    let entry_name = entry_name(map);
-    if let Some(index) = iteration_index {
-        debug!(
-            entry_name,
-            iteration_index = index,
-            when_expression = expression.unwrap_or_default(),
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
-    } else {
-        debug!(
-            entry_name,
-            when_expression = expression.unwrap_or_default(),
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
+        Ok(vec![ManifestValue::Object(map)])
     }
 }
 
@@ -171,21 +136,14 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
 ///
 /// Accepts an optional iteration context (`item`, `index`) for foreach targets;
 /// static targets pass `None`.
-struct WhenDecision {
-    allowed: bool,
-    expression: Option<String>,
-}
-
 fn when_allows(
     map: &mut ManifestMap,
     env: &Environment,
+    section: &str,
     iteration: Option<(&Value, usize)>,
-) -> Result<WhenDecision> {
+) -> Result<bool> {
     let Some(when_val) = map.remove("when") else {
-        return Ok(WhenDecision {
-            allowed: true,
-            expression: None,
-        });
+        return Ok(true);
     };
     let expr = as_str(&when_val, "when")?;
     let ctx = match iteration {
@@ -193,10 +151,19 @@ fn when_allows(
         None => context! {},
     };
     let allowed = eval_when(env, expr, ctx)?;
-    Ok(WhenDecision {
-        allowed,
-        expression: Some(expr.to_owned()),
-    })
+    if !allowed {
+        let entry_name = entry_name(map);
+        let iteration_index = iteration.map(|(_, index)| index);
+        debug!(
+            section,
+            entry_name,
+            iteration_index,
+            when_expression = expr,
+            when_result = false,
+            "filtered manifest entry by when expression"
+        );
+    }
+    Ok(allowed)
 }
 
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {

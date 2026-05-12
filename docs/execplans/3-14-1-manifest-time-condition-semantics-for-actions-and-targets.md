@@ -54,7 +54,9 @@ Observable success means:
 - If any new configuration surface or CLI help text is required, use the
   existing `ortho_config` integration and localized help path. Do not invent a
   parallel configuration mechanism.
-- Use en-GB Oxford spelling in documentation.
+- Use en-GB Oxford spelling in documentation, except where terminology is
+  already standardized in this repository, for example `serialization` and
+  `deserialization`.
 - Add or update `rstest` unit and integration tests for happy paths, unhappy
   paths, and edge cases.
 - Add `rstest-bdd` behavioural coverage where the behaviour is observable
@@ -94,9 +96,9 @@ Observable success means:
   inputs or state transitions, add a property-test or bounded-model-checking
   proposal. If the invariant is a business axiom rather than a sampled
   property, stop and propose a substantive proof approach before proceeding.
-- Behavioural tests: if the BDD harness cannot express the observable
-  generated-manifest workflow after two focused attempts, stop and document the
-  blocker rather than replacing it with only unit tests.
+- Behavioural tests: if the Behaviour-Driven Development (BDD) harness cannot
+  express the observable generated-manifest workflow after two focused attempts,
+  stop and document the blocker rather than replacing it with only unit tests.
 - Validation: if `make check-fmt`, `make lint`, or `make test` still fails
   after two focused fix attempts, stop and record the failures.
 - Documentation conflict: if `docs/users-guide.md`, `docs/netsuke-design.md`,
@@ -180,6 +182,12 @@ Observable success means:
       and nearby touched `serialization` spelling in Rust docs, comments, and
       tests, and made the manifest filtering debug summary count field
       explicit.
+- [x] 2026-05-12: Simplified manifest filtering observability by removing the
+      `Expansion` and `WhenDecision` helper structs, centralizing filtered-entry
+      debug logging in `when_allows`, logging the source section for each
+      filtered entry, and keeping expression text borrowed until it is logged.
+      Clarified repository spelling exceptions and defined Behaviour-Driven
+      Development (BDD) on first use.
 
 ## Surprises & Discoveries
 
