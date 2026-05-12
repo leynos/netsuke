@@ -47,7 +47,7 @@ pub use diagnostics::{
 };
 pub use glob::glob_paths;
 
-pub use expand::expand_foreach;
+pub(crate) use expand::expand_foreach;
 pub use render::render_manifest;
 
 use self::jinja_macros::register_manifest_macros;

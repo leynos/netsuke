@@ -526,12 +526,14 @@ that sets environment variables which could race with parallel test execution.
 #### expand_foreach
 
 `src/manifest/expand.rs` exposes
-`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()>`.
+`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats>`.
 
 **Purpose:** expands `foreach`/`when` directives in both `targets` and
 `actions` top-level arrays before the manifest is deserialized into the AST.
 This is the manifest-time boundary for conditional planning. Downstream layers
 receive only selected entries and must not reinterpret manifest condition keys.
+The returned `FilteringStats` records how many target and action entries were
+filtered during expansion.
 
 **Inputs:**
 

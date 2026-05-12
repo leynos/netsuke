@@ -188,6 +188,10 @@ Observable success means:
       filtered entry, and keeping expression text borrowed until it is logged.
       Clarified repository spelling exceptions and defined Behaviour-Driven
       Development (BDD) on first use.
+- [x] 2026-05-12: Added `FilteringStats` as the explicit expansion result,
+      introduced an injected logger boundary with a production tracing adapter,
+      and covered filtering counts plus debug observability side effects in
+      unit tests.
 
 ## Surprises & Discoveries
 
@@ -304,9 +308,10 @@ reported through `ManifestLoadStage`.
 
 `src/manifest/expand.rs` owns the `foreach` and `when` expansion policy.
 `expand_foreach` applies the same `expand_section` helper to `targets` and
-`actions`. `expand_target` evaluates `foreach`, evaluates and removes `when`,
-injects `item` and `index` into entry `vars`, and returns only the entries that
-should continue through the pipeline.
+`actions`, returning `FilteringStats` for the count of filtered target and
+action entries. `expand_target` evaluates `foreach`, evaluates and removes
+`when`, injects `item` and `index` into entry `vars`, and returns only the
+entries that should continue through the pipeline.
 
 `src/ast.rs` defines the typed manifest AST. `deserialize_actions` marks
 top-level actions as `phony`. Because `when` and `foreach` are not fields on

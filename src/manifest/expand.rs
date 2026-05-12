@@ -6,36 +6,106 @@ use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 use tracing::debug;
 
+/// Counts of manifest entries filtered during template expansion.
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+pub(crate) struct FilteringStats {
+    pub filtered_targets: usize,
+    pub filtered_actions: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FilteredEntryLog<'a> {
+    section: &'a str,
+    entry_name: &'a str,
+    iteration_index: Option<usize>,
+    when_expression: &'a str,
+    when_result: bool,
+}
+
+trait Logger {
+    fn filtering_summary(&self, stats: FilteringStats);
+
+    fn filtered_entry(&self, event: FilteredEntryLog<'_>);
+}
+
+#[derive(Debug, Default)]
+struct TracingLogger;
+
+impl Logger for TracingLogger {
+    fn filtering_summary(&self, stats: FilteringStats) {
+        debug!(
+            manifest_filtering_stage = "expand_foreach",
+            filtered_targets = stats.filtered_targets,
+            filtered_actions = stats.filtered_actions,
+            filtered_entry_count = stats.filtered_targets + stats.filtered_actions,
+            "expanded manifest foreach and when directives"
+        );
+    }
+
+    fn filtered_entry(&self, event: FilteredEntryLog<'_>) {
+        debug!(
+            section = event.section,
+            entry_name = event.entry_name,
+            iteration_index = event.iteration_index,
+            when_expression = event.when_expression,
+            when_result = event.when_result,
+            "filtered manifest entry by when expression"
+        );
+    }
+}
+
+struct ExpansionContext<'a, L: Logger> {
+    env: &'a Environment<'a>,
+    section: &'a str,
+    logger: &'a L,
+}
+
 /// Expand manifest targets and actions defined with the `foreach` key.
 ///
 /// # Errors
 ///
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialize, or when target metadata is malformed.
-pub fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()> {
-    let filtered_targets = expand_section(doc, "targets", env)?;
-    let filtered_actions = expand_section(doc, "actions", env)?;
-    debug!(
-        manifest_filtering_stage = "expand_foreach",
-        filtered_targets,
-        filtered_actions,
-        filtered_entry_count = filtered_targets + filtered_actions,
-        "expanded manifest foreach and when directives"
-    );
-    Ok(())
+pub(crate) fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats> {
+    expand_foreach_with_logger(doc, env, &TracingLogger)
 }
 
-fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<usize> {
+fn expand_foreach_with_logger(
+    doc: &mut ManifestValue,
+    env: &Environment,
+    logger: &impl Logger,
+) -> Result<FilteringStats> {
+    let filtered_targets = expand_section(doc, "targets", env, logger)?;
+    let filtered_actions = expand_section(doc, "actions", env, logger)?;
+    let stats = FilteringStats {
+        filtered_targets,
+        filtered_actions,
+    };
+    logger.filtering_summary(stats);
+    Ok(stats)
+}
+
+fn expand_section(
+    doc: &mut ManifestValue,
+    key: &str,
+    env: &Environment,
+    logger: &impl Logger,
+) -> Result<usize> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
         return Ok(0);
     };
 
     let mut expanded = Vec::new();
     let mut filtered = 0;
+    let context = ExpansionContext {
+        env,
+        section: key,
+        logger,
+    };
     for entry in std::mem::take(entries) {
         match entry {
             ManifestValue::Object(map) => {
-                expanded.extend(expand_target(map, env, key, &mut filtered)?);
+                expanded.extend(expand_target(map, &context, &mut filtered)?);
             }
             other => expanded.push(other),
         }
@@ -47,17 +117,16 @@ fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Resu
 
 fn expand_target(
     mut map: ManifestMap,
-    env: &Environment,
-    section: &str,
+    context: &ExpansionContext<'_, impl Logger>,
     filtered: &mut usize,
 ) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
-        let values = parse_foreach_values(expr_val, env)?;
+        let values = parse_foreach_values(expr_val, context.env)?;
         let mut items = Vec::new();
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            if !when_allows(&mut clone, env, section, Some((&item, index)))? {
+            if !when_allows(&mut clone, context, Some((&item, index)))? {
                 *filtered += 1;
                 continue;
             }
@@ -68,7 +137,7 @@ fn expand_target(
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        if !when_allows(&mut map, env, section, None)? {
+        if !when_allows(&mut map, context, None)? {
             *filtered += 1;
             return Ok(vec![]);
         }
@@ -138,8 +207,7 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
 /// static targets pass `None`.
 fn when_allows(
     map: &mut ManifestMap,
-    env: &Environment,
-    section: &str,
+    context: &ExpansionContext<'_, impl Logger>,
     iteration: Option<(&Value, usize)>,
 ) -> Result<bool> {
     let Some(when_val) = map.remove("when") else {
@@ -150,18 +218,17 @@ fn when_allows(
         Some((item, index)) => context! { item, index },
         None => context! {},
     };
-    let allowed = eval_when(env, expr, ctx)?;
+    let allowed = eval_when(context.env, expr, ctx)?;
     if !allowed {
         let entry_name = entry_name(map);
         let iteration_index = iteration.map(|(_, index)| index);
-        debug!(
-            section,
+        context.logger.filtered_entry(FilteredEntryLog {
+            section: context.section,
             entry_name,
             iteration_index,
-            when_expression = expr,
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
+            when_expression: expr,
+            when_result: false,
+        });
     }
     Ok(allowed)
 }

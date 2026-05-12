@@ -3,6 +3,98 @@
 use super::*;
 use minijinja::Environment;
 use rstest::rstest;
+use std::{
+    cell::RefCell,
+    sync::{Arc, Mutex, OnceLock},
+};
+use tracing::{
+    Event, Subscriber,
+    field::{Field, Visit},
+};
+use tracing_subscriber::{Layer, layer::Context as LayerContext, prelude::*, registry::LookupSpan};
+
+#[derive(Debug, Default)]
+struct RecordingLogger {
+    summaries: RefCell<Vec<FilteringStats>>,
+    entries: RefCell<Vec<RecordedEntry>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct RecordedEntry {
+    section: String,
+    entry_name: String,
+    iteration_index: Option<usize>,
+    when_expression: String,
+    when_result: bool,
+}
+
+impl Logger for RecordingLogger {
+    fn filtering_summary(&self, stats: FilteringStats) {
+        self.summaries.borrow_mut().push(stats);
+    }
+
+    fn filtered_entry(&self, event: FilteredEntryLog<'_>) {
+        self.entries.borrow_mut().push(RecordedEntry {
+            section: event.section.to_owned(),
+            entry_name: event.entry_name.to_owned(),
+            iteration_index: event.iteration_index,
+            when_expression: event.when_expression.to_owned(),
+            when_result: event.when_result,
+        });
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct CapturedEvents {
+    fields: Arc<Mutex<Vec<String>>>,
+}
+
+impl CapturedEvents {
+    fn snapshot(&self) -> Vec<String> {
+        self.fields.lock().expect("captured events lock").clone()
+    }
+}
+
+impl<S> Layer<S> for CapturedEvents
+where
+    S: Subscriber + for<'span> LookupSpan<'span>,
+{
+    fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
+        let mut visitor = FieldVisitor::default();
+        event.record(&mut visitor);
+        self.fields
+            .lock()
+            .expect("captured events lock")
+            .push(visitor.fields.join(" "));
+    }
+}
+
+#[derive(Debug, Default)]
+struct FieldVisitor {
+    fields: Vec<String>,
+}
+
+impl Visit for FieldVisitor {
+    fn record_bool(&mut self, field: &Field, value: bool) {
+        self.fields.push(format!("{}={value}", field.name()));
+    }
+
+    fn record_i64(&mut self, field: &Field, value: i64) {
+        self.fields.push(format!("{}={value}", field.name()));
+    }
+
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        self.fields.push(format!("{}={value}", field.name()));
+    }
+
+    fn record_str(&mut self, field: &Field, value: &str) {
+        self.fields.push(format!("{}={value:?}", field.name()));
+    }
+
+    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+        self.fields.push(format!("{}={value:?}", field.name()));
+    }
+}
 
 fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
     doc.get("targets")
@@ -46,6 +138,153 @@ fn indexes(entries: &[ManifestValue], section: &str) -> Result<Vec<u64>> {
                 .with_context(|| format!("{section} numeric index conversion failed"))
         })
         .collect()
+}
+
+#[test]
+fn expand_foreach_returns_filtering_stats() -> Result<()> {
+    let env = Environment::new();
+    let yaml = "targets:
+  - name: skipped-target
+    command: echo skipped
+    when: 'false'
+  - name: kept-target
+    command: echo kept
+actions:
+  - name: skipped-action
+    command: echo skipped
+    when: 'false'
+  - name: each-action
+    command: echo {{ item }}
+    foreach:
+      - skip
+      - keep
+    when: item != 'skip'";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+
+    let stats = expand_foreach(&mut doc, &env)?;
+
+    anyhow::ensure!(
+        stats
+            == FilteringStats {
+                filtered_targets: 1,
+                filtered_actions: 2,
+            },
+        "unexpected filtering stats: {stats:?}"
+    );
+    anyhow::ensure!(targets(&doc)?.len() == 1, "expected one kept target");
+    anyhow::ensure!(actions(&doc)?.len() == 1, "expected one kept action");
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_with_logger_records_filter_events() -> Result<()> {
+    let env = Environment::new();
+    let yaml = "targets:
+  - name: skipped-target
+    command: echo skipped
+    when: 'false'
+actions:
+  - name: each-action
+    command: echo {{ item }}
+    foreach:
+      - skip
+      - keep
+    when: item != 'skip'";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    let logger = RecordingLogger::default();
+
+    let stats = expand_foreach_with_logger(&mut doc, &env, &logger)?;
+
+    anyhow::ensure!(
+        stats
+            == FilteringStats {
+                filtered_targets: 1,
+                filtered_actions: 1,
+            },
+        "unexpected filtering stats: {stats:?}"
+    );
+    anyhow::ensure!(
+        logger.summaries.borrow().as_slice() == [stats],
+        "summary event should include final stats"
+    );
+    anyhow::ensure!(
+        logger.entries.borrow().as_slice()
+            == [
+                RecordedEntry {
+                    section: "targets".to_owned(),
+                    entry_name: "skipped-target".to_owned(),
+                    iteration_index: None,
+                    when_expression: "false".to_owned(),
+                    when_result: false,
+                },
+                RecordedEntry {
+                    section: "actions".to_owned(),
+                    entry_name: "each-action".to_owned(),
+                    iteration_index: Some(0),
+                    when_expression: "item != 'skip'".to_owned(),
+                    when_result: false,
+                },
+            ],
+        "filtered entry log events should include section, name, expression, and result"
+    );
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
+    let env = Environment::new();
+    let yaml = "targets:
+  - name: skipped-target
+    command: echo skipped
+    when: 'false'";
+    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    let captured = installed_test_subscriber();
+    let start_index = captured.snapshot().len();
+    tracing::callsite::rebuild_interest_cache();
+
+    let stats = expand_foreach(&mut doc, &env)?;
+    let snapshot = captured.snapshot();
+    let events = snapshot
+        .get(start_index..)
+        .context("captured event start index")?
+        .to_vec();
+
+    anyhow::ensure!(
+        stats.filtered_targets == 1,
+        "expected one filtered target: {stats:?}"
+    );
+    let event = events
+        .iter()
+        .find(|event| {
+            event.contains("filtered manifest entry by when expression")
+                && event.contains("entry_name=\"skipped-target\"")
+        })
+        .with_context(|| format!("expected filtered-entry debug event in {events:?}"))?;
+    anyhow::ensure!(
+        event.contains("section=\"targets\""),
+        "debug event should include section field: {event}"
+    );
+    anyhow::ensure!(
+        event.contains("entry_name=\"skipped-target\""),
+        "debug event should include entry name field: {event}"
+    );
+    anyhow::ensure!(
+        event.contains("when_result=false"),
+        "debug event should include false when result: {event}"
+    );
+    Ok(())
+}
+
+fn installed_test_subscriber() -> CapturedEvents {
+    static CAPTURED: OnceLock<CapturedEvents> = OnceLock::new();
+    CAPTURED
+        .get_or_init(|| {
+            let captured = CapturedEvents::default();
+            let subscriber = tracing_subscriber::registry().with(captured.clone());
+            drop(tracing::subscriber::set_global_default(subscriber));
+            captured
+        })
+        .clone()
 }
 
 #[rstest]
