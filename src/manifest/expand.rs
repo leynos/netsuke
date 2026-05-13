@@ -191,10 +191,7 @@ fn when_allows(
         return Ok(true);
     };
     let expr = as_str(&when_val, "when")?;
-    let ctx = match iteration {
-        Some((item, index)) => context! { item, index },
-        None => context! {},
-    };
+    let ctx = when_context(map, iteration)?;
     let allowed = eval_when(context.env, expr, ctx)?;
     if !allowed {
         let entry_name = entry_name(map);
@@ -210,10 +207,30 @@ fn when_allows(
         );
         trace!(
             section = context.section,
-            entry_name, iteration_index, "filtered manifest entry raw name"
+            iteration_index, "filtered manifest entry raw name"
         );
     }
     Ok(allowed)
+}
+
+fn when_context(map: &ManifestMap, iteration: Option<(&Value, usize)>) -> Result<Value> {
+    let mut vars = map
+        .get("vars")
+        .and_then(ManifestValue::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if let Some((item, index)) = iteration {
+        vars.insert(
+            "item".into(),
+            serde_json::to_value(item)
+                .context(localization::message(keys::MANIFEST_FOREACH_SERIALISE_ITEM))?,
+        );
+        vars.insert(
+            "index".into(),
+            ManifestValue::Number(JsonNumber::from(index as u64)),
+        );
+    }
+    Ok(Value::from_serialize(vars))
 }
 
 fn inject_iteration_vars(map: &mut ManifestMap, item: &Value, index: usize) -> Result<()> {
