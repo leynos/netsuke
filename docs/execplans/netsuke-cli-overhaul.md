@@ -226,7 +226,7 @@ Observable success means:
       Restored unrelated formatter churn and kept the passing project gates
       recorded above.
 - [x] Commit the roadmap-fidelity revision.
-- [ ] Push the roadmap-fidelity revision.
+- [x] Push the roadmap-fidelity revision.
 - [ ] Stage A: create the governing ADR and update the core design doctrine.
 - [ ] Stage B: rewrite the CLI design document around the canonical contract.
 - [x] Stage C: rewrite the roadmap around the scorched-earth pre-0.1.0 reset.
