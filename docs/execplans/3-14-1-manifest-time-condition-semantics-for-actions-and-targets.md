@@ -59,8 +59,9 @@ Observable success means:
   `deserialization`.
 - Add or update `rstest` unit and integration tests for happy paths, unhappy
   paths, and edge cases.
-- Add `rstest-bdd` behavioural coverage where the behaviour is observable
-  through the CLI or generated manifest output.
+- Add `rstest-bdd` Behaviour-Driven Development (BDD) behavioural coverage
+  where the behaviour is observable through the CLI or generated manifest
+  output.
 - Use dependency injection for any new environment, clock, process, or
   filesystem dependency introduced by tests or code. Avoid hidden mutable
   global state.
