@@ -45,22 +45,22 @@ bin_ext = ".exe"
 
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psm1"
-destination = "powershell/Netsuke/Netsuke.psm1"
+destination = "Netsuke/Netsuke.psm1"
 required = false
 
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1"
-destination = "powershell/Netsuke/Netsuke.psd1"
+destination = "Netsuke/Netsuke.psd1"
 required = false
 
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml"
-destination = "powershell/Netsuke/en-US/Netsuke-help.xml"
+destination = "Netsuke/en-US/Netsuke-help.xml"
 required = false
 
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt"
-destination = "powershell/Netsuke/en-US/about_Netsuke.help.txt"
+destination = "Netsuke/en-US/about_Netsuke.help.txt"
 required = false
 
 [targets.windows-aarch64]
@@ -71,22 +71,22 @@ bin_ext = ".exe"
 
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psm1"
-destination = "powershell/Netsuke/Netsuke.psm1"
+destination = "Netsuke/Netsuke.psm1"
 required = false
 
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1"
-destination = "powershell/Netsuke/Netsuke.psd1"
+destination = "Netsuke/Netsuke.psd1"
 required = false
 
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml"
-destination = "powershell/Netsuke/en-US/Netsuke-help.xml"
+destination = "Netsuke/en-US/Netsuke-help.xml"
 required = false
 
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt"
-destination = "powershell/Netsuke/en-US/about_Netsuke.help.txt"
+destination = "Netsuke/en-US/about_Netsuke.help.txt"
 required = false
 
 [targets.macos-x86_64]

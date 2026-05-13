@@ -83,7 +83,7 @@ jobs:
         run: cargo install cargo-orthohelp --version 0.8.0 --locked
 
       - name: Build release binary
-        uses: leynos/shared-actions/.github/actions/rust-build-release@67025f53e79b821327d2f4d48a2af488cca42803
+        uses: leynos/shared-actions/.github/actions/rust-build-release@faef3aad9cce0df666263613734211046bed4d33
         with:
           target: ${{ inputs.target }}
           bin-name: ${{ inputs['bin-name'] }}
@@ -100,10 +100,11 @@ jobs:
       - name: Stage artefacts
         id: stage
         uses: >-
-          leynos/shared-actions/.github/actions/stage-release-artefacts@67025f53e79b821327d2f4d48a2af488cca42803
+          leynos/shared-actions/.github/actions/stage-release-artefacts@faef3aad9cce0df666263613734211046bed4d33
         with:
           config-file: .github/release-staging.toml
           target: ${{ inputs['stage-target'] }}
+          ps-module-name: ${{ inputs.platform == 'windows' && 'Netsuke' || '' }}
           normalize-windows-paths: ${{ inputs.platform == 'windows' }}
 
       - name: Capture staged paths
@@ -116,11 +117,12 @@ jobs:
             echo "man_path=${{ steps.stage.outputs['man-path'] }}"
             echo "license_path=${{ steps.stage.outputs['license-path'] }}"
             echo "artifact_dir=${{ steps.stage.outputs['artifact-dir'] }}"
+            echo "powershell_help_dir=${{ steps.stage.outputs.powershell_help_dir }}"
           } >>"$GITHUB_OUTPUT"
 
       - name: Package Linux artefacts with dependencies
         if: inputs.platform == 'linux'
-        uses: leynos/shared-actions/.github/actions/linux-packages@67025f53e79b821327d2f4d48a2af488cca42803
+        uses: leynos/shared-actions/.github/actions/linux-packages@faef3aad9cce0df666263613734211046bed4d33
         with:
           project-dir: .
           package-name: ${{ inputs['bin-name'] }}
@@ -141,7 +143,7 @@ jobs:
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
-        uses: leynos/shared-actions/.github/actions/windows-package@67025f53e79b821327d2f4d48a2af488cca42803
+        uses: leynos/shared-actions/.github/actions/windows-package@faef3aad9cce0df666263613734211046bed4d33
         with:
           product-name: ${{ inputs['bin-name'] }}
           manufacturer: Leynos
@@ -159,7 +161,7 @@ jobs:
       - name: Build macOS installer package
         if: inputs.platform == 'macos'
         id: package_macos
-        uses: leynos/shared-actions/.github/actions/macos-package@67025f53e79b821327d2f4d48a2af488cca42803
+        uses: leynos/shared-actions/.github/actions/macos-package@faef3aad9cce0df666263613734211046bed4d33
         with:
           name: ${{ inputs['bin-name'] }}
           identifier: com.leynos.${{ inputs['bin-name'] }}
