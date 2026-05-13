@@ -24,7 +24,7 @@ struct RecordedEntry {
     section: String,
     entry_name: String,
     iteration_index: Option<usize>,
-    when_expression: String,
+    when_expression_len: usize,
     when_result: bool,
 }
 
@@ -38,7 +38,7 @@ impl Logger for RecordingLogger {
             section: event.section.to_owned(),
             entry_name: event.entry_name.to_owned(),
             iteration_index: event.iteration_index,
-            when_expression: event.when_expression.to_owned(),
+            when_expression_len: event.when_expression_len,
             when_result: event.when_result,
         });
     }
@@ -214,18 +214,18 @@ actions:
                     section: "targets".to_owned(),
                     entry_name: "skipped-target".to_owned(),
                     iteration_index: None,
-                    when_expression: "false".to_owned(),
+                    when_expression_len: "false".len(),
                     when_result: false,
                 },
                 RecordedEntry {
                     section: "actions".to_owned(),
                     entry_name: "each-action".to_owned(),
                     iteration_index: Some(0),
-                    when_expression: "item != 'skip'".to_owned(),
+                    when_expression_len: "item != 'skip'".len(),
                     when_result: false,
                 },
             ],
-        "filtered entry log events should include section, name, expression, and result"
+        "filtered entry log events should include section, name, expression length, and result"
     );
     Ok(())
 }
@@ -233,11 +233,14 @@ actions:
 #[test]
 fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
     let env = Environment::new();
-    let yaml = "targets:
-  - name: skipped-target
+    let when_expr = "secret_token == 'literal-secret'";
+    let yaml = format!(
+        "targets:
+  - name: skipped-target-secret
     command: echo skipped
-    when: 'false'";
-    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
+    when: {when_expr}"
+    );
+    let mut doc: ManifestValue = serde_saphyr::from_str(&yaml)?;
     let captured = installed_test_subscriber();
     let start_index = captured.snapshot().len();
     tracing::callsite::rebuild_interest_cache();
@@ -253,11 +256,13 @@ fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
         stats.filtered_targets == 1,
         "expected one filtered target: {stats:?}"
     );
+    let expected_hash = entry_name_hash("skipped-target-secret");
     let event = events
         .iter()
         .find(|event| {
             event.contains("filtered manifest entry by when expression")
-                && event.contains("entry_name=\"skipped-target\"")
+                && event.contains("section=\"targets\"")
+                && event.contains(&format!("entry_name_hash=\"{expected_hash}\""))
         })
         .with_context(|| format!("expected filtered-entry debug event in {events:?}"))?;
     anyhow::ensure!(
@@ -265,12 +270,24 @@ fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
         "debug event should include section field: {event}"
     );
     anyhow::ensure!(
-        event.contains("entry_name=\"skipped-target\""),
-        "debug event should include entry name field: {event}"
+        event.contains(&format!("entry_name_hash=\"{expected_hash}\"")),
+        "debug event should include bounded entry name hash: {event}"
+    );
+    anyhow::ensure!(
+        event.contains(&format!("when_expression_len={}", when_expr.len())),
+        "debug event should include expression length: {event}"
     );
     anyhow::ensure!(
         event.contains("when_result=false"),
         "debug event should include false when result: {event}"
+    );
+    anyhow::ensure!(
+        !event.contains("skipped-target-secret"),
+        "debug event should not include raw entry name: {event}"
+    );
+    anyhow::ensure!(
+        !event.contains("secret_token") && !event.contains("literal-secret"),
+        "debug event should not include raw when expression: {event}"
     );
     Ok(())
 }

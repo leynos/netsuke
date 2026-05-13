@@ -97,8 +97,9 @@ Observable success means:
   proposal. If the invariant is a business axiom rather than a sampled
   property, stop and propose a substantive proof approach before proceeding.
 - Behavioural tests: if the Behaviour-Driven Development (BDD) harness cannot
-  express the observable generated-manifest workflow after two focused attempts,
-  stop and document the blocker rather than replacing it with only unit tests.
+  express the observable generated-manifest workflow after two focused
+  attempts, stop and document the blocker rather than replacing it with only
+  unit tests.
 - Validation: if `make check-fmt`, `make lint`, or `make test` still fails
   after two focused fix attempts, stop and record the failures.
 - Documentation conflict: if `docs/users-guide.md`, `docs/netsuke-design.md`,
@@ -192,6 +193,10 @@ Observable success means:
       introduced an injected logger boundary with a production tracing adapter,
       and covered filtering counts plus debug observability side effects in
       unit tests.
+- [x] 2026-05-13: Bounded manifest filtering debug fields by replacing raw
+      entry names with eight-character SHA-256 hashes and raw `when`
+      expressions with expression lengths. Added regression coverage proving
+      the debug event does not expose the raw entry name or expression text.
 
 ## Surprises & Discoveries
 
@@ -262,10 +267,17 @@ Observable success means:
 
 - Decision: use structured `debug!` tracing rather than user-facing output for
   conditional filtering decisions. Rationale: filtering is a manifest-loading
-  diagnostic concern, not normal CLI output. Debug-level fields preserve entry
-  name, `when` expression text, iteration index where present, the false
-  decision, and section-level filtered counts without changing generated
-  manifests or command output. Date/Author: 2026-05-10 / implementation agent.
+  diagnostic concern, not normal CLI output. Debug-level fields preserve the
+  section, bounded entry-name hash, `when` expression length, iteration index
+  where present, the false decision, and section-level filtered counts without
+  changing generated manifests or command output. Date/Author: 2026-05-10,
+  updated 2026-05-13 / implementation agent.
+
+- Decision: do not emit raw `when` expressions at debug level and keep raw
+  entry names only on a trace event. Rationale: manifest names have unbounded
+  cardinality in structured back ends, and Jinja condition text may contain
+  sensitive variable names or literal values. Date/Author: 2026-05-13 /
+  implementation agent.
 
 ## Skills and references
 
@@ -434,10 +446,12 @@ commands or scripts until a future runtime-condition feature is designed. The
 roadmap entry `3.14.1` is marked done.
 
 Review follow-up changed `src/manifest/expand.rs` to emit debug observability
-for conditional filtering. Each skipped entry logs its manifest entry name, the
-`when` expression text, `when_result = false`, and the iteration index for
-`foreach` entries. The top-level expansion pass also logs filtered target,
-filtered action, and total filtered counts.
+for conditional filtering. Each skipped entry logs its manifest section, an
+eight-character SHA-256 entry-name hash, the `when` expression length,
+`when_result = false`, and the iteration index for `foreach` entries. The
+top-level expansion pass also logs filtered target, filtered action, and total
+filtered counts. Raw entry names are trace-only diagnostics, and raw `when`
+expressions are not logged.
 
 Tests changed in `src/manifest/expand_tests.rs`,
 `tests/ir_from_manifest_tests.rs`,
@@ -474,6 +488,24 @@ exit status 0
 
 make nixie
 exit status 0
+
+cargo test -p netsuke manifest::expand
+29 passed; 0 failed
+
+make check-fmt
+exit status 0
+
+make lint
+exit status 0
+
+make test
+exit status 0
+
+make markdownlint
+exit status 0
+
+make nixie
+exit status 0
 ```
 
 `make fmt` was attempted and logged to
@@ -483,5 +515,10 @@ reports pre-existing issues in unrelated documents. No follow-up work is needed
 for this roadmap item, but cleaning those repository-wide Markdown formatter
 findings would make the formatter gate less noisy for future documentation
 changes.
+
+`make fmt` was attempted again on 2026-05-13 and logged to
+`/tmp/fmt-netsuke-redact-condition-logs.out`. It failed for the same
+repository-wide Markdown line-length backlog after applying `cargo fmt`.
+Unrelated formatter churn was restored before validation continued.
 
 Commit hash: see the branch head for the committed implementation.

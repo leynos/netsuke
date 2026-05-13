@@ -4,7 +4,9 @@ use crate::localization::{self, keys};
 use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
-use tracing::debug;
+use sha2::{Digest, Sha256};
+use std::fmt::Write as _;
+use tracing::{debug, trace};
 
 /// Counts of manifest entries filtered during template expansion.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -18,7 +20,7 @@ struct FilteredEntryLog<'a> {
     section: &'a str,
     entry_name: &'a str,
     iteration_index: Option<usize>,
-    when_expression: &'a str,
+    when_expression_len: usize,
     when_result: bool,
 }
 
@@ -43,13 +45,20 @@ impl Logger for TracingLogger {
     }
 
     fn filtered_entry(&self, event: FilteredEntryLog<'_>) {
+        let entry_name_hash = entry_name_hash(event.entry_name);
         debug!(
+            section = event.section,
+            entry_name_hash,
+            iteration_index = event.iteration_index,
+            when_expression_len = event.when_expression_len,
+            when_result = event.when_result,
+            "filtered manifest entry by when expression"
+        );
+        trace!(
             section = event.section,
             entry_name = event.entry_name,
             iteration_index = event.iteration_index,
-            when_expression = event.when_expression,
-            when_result = event.when_result,
-            "filtered manifest entry by when expression"
+            "filtered manifest entry raw name"
         );
     }
 }
@@ -151,6 +160,19 @@ fn entry_name(map: &ManifestMap) -> &str {
         .unwrap_or("<unnamed>")
 }
 
+fn entry_name_hash(entry_name: &str) -> String {
+    let digest = Sha256::digest(entry_name.as_bytes());
+    digest
+        .iter()
+        .take(4)
+        .fold(String::with_capacity(8), |mut hash, byte| {
+            if write!(&mut hash, "{byte:02x}").is_err() {
+                return hash;
+            }
+            hash
+        })
+}
+
 fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {
     if let Some(seq) = expr_val.as_array() {
         return Ok(seq.iter().cloned().map(Value::from_serialize).collect());
@@ -226,7 +248,7 @@ fn when_allows(
             section: context.section,
             entry_name,
             iteration_index,
-            when_expression: expr,
+            when_expression_len: expr.len(),
             when_result: false,
         });
     }
