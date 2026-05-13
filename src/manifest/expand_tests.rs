@@ -210,7 +210,8 @@ fn installed_test_subscriber() -> CapturedEvents {
         .get_or_init(|| {
             let captured = CapturedEvents::default();
             let subscriber = tracing_subscriber::registry().with(captured.clone());
-            drop(tracing::subscriber::set_global_default(subscriber));
+            tracing::subscriber::set_global_default(subscriber)
+                .expect("install manifest expansion test subscriber");
             captured
         })
         .clone()

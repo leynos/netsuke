@@ -5,16 +5,25 @@ use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 use sha2::{Digest, Sha256};
-use std::fmt::Write as _;
 use tracing::{debug, trace};
 
-/// Counts of manifest entries filtered during template expansion.
+/// Counts of manifest entries excluded during template expansion.
+///
+/// `filtered_targets` records how many target entries were skipped because a
+/// `when` condition evaluated to false. `filtered_actions` records the same
+/// count for action entries, allowing callers to report or assert how much
+/// manifest filtering occurred.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub(crate) struct FilteringStats {
     pub filtered_targets: usize,
     pub filtered_actions: usize,
 }
 
+/// Context shared by expansion operations.
+///
+/// `env` is the Jinja environment used to render templates. `section` is the
+/// name of the manifest section currently being expanded, such as `targets` or
+/// `actions`.
 struct ExpansionContext<'a> {
     env: &'a Environment<'a>,
     section: &'a str,
@@ -34,7 +43,6 @@ pub(crate) fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Resu
         filtered_actions,
     };
     debug!(
-        manifest_filtering_stage = "expand_foreach",
         filtered_targets = stats.filtered_targets,
         filtered_actions = stats.filtered_actions,
         filtered_entry_count = stats.filtered_targets + stats.filtered_actions,
@@ -106,11 +114,18 @@ fn entry_name_hash(entry_name: &str) -> String {
         .iter()
         .take(4)
         .fold(String::with_capacity(8), |mut hash, byte| {
-            if write!(&mut hash, "{byte:02x}").is_err() {
-                return hash;
-            }
+            push_hex_byte(&mut hash, *byte);
             hash
         })
+}
+
+fn push_hex_byte(output: &mut String, byte: u8) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    for nybble in [byte >> 4, byte & 0x0f] {
+        if let Some(digit) = HEX.get(usize::from(nybble)).copied() {
+            output.push(char::from(digit));
+        }
+    }
 }
 
 fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<Vec<Value>> {
