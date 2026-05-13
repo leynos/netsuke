@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT (awaiting approval)
+Status: IN PROGRESS (roadmap fidelity review)
 
 ## Purpose / big picture
 
@@ -34,10 +34,9 @@ Observable success means:
    history, delivery, feedback, and mechanical drift checks.
 2. `docs/netsuke-cli-design-document.md` is rewritten around the same contract
    instead of treating automation as a diagnostics-only add-on.
-3. `docs/roadmap.md` replaces the legacy pre-0.1.0 command and flag work with
-   a scorched-earth overhaul, keeps the existing conditional action planning
-   work under `3.14`, and adds later roadmap phases for the agent-consistent
-   compounding layer.
+3. `docs/roadmap.md` tracks unfinished and future work only, while
+   `docs/archive/roadmap-completed-foundations.md` preserves completed
+   historical work with relevance classifications and traceability notes.
 4. `docs/users-guide.md`, `README.md`, `docs/contents.md`, and any affected
    configuration documentation stop presenting old spellings as the desired
    future interface.
@@ -46,8 +45,10 @@ Observable success means:
 
 ## Constraints
 
-- This plan is a draft. Do not implement the overhaul until the user explicitly
-  approves this ExecPlan or asks for revisions to it.
+- This plan remains the governing design-overhaul plan. Do not implement Rust
+  source changes from the overhaul until the user explicitly approves that
+  implementation work. Documentation and roadmap revisions may proceed when the
+  user explicitly requests them.
 - Preserve the product decision from the source conversation: Netsuke is
   pre-0.1.0 and has no backwards-compatibility obligation for old CLI spellings
   or configuration names.
@@ -78,8 +79,8 @@ Observable success means:
 - Preserve existing planned work and historical completed work on the Netsuke
   roadmap. Do not delete a completed or planned Netsuke roadmap item merely
   because the CLI surface is being redesigned. Mark items as "superseded",
-  "renamed", "moved", or "still relevant" unless the UI redesign makes the
-  work genuinely irrelevant to the future product.
+  "renamed", "moved", or "still relevant" unless the UI redesign makes the work
+  genuinely irrelevant to the future product.
 - Prefer Makefile targets for validation. For documentation-only changes,
   run `make fmt`, `make markdownlint`, and `make nixie`; run `make check-fmt`
   if formatting touches Rust or if the implementation phase includes code.
@@ -196,10 +197,39 @@ Observable success means:
       dependencies, prevent duplicated shared configuration work, and preserve
       existing Netsuke roadmap history unless an item is no longer relevant
       after the UI redesign.
-- [ ] Await user approval or requested revisions.
+- [x] 2026-05-14: Reviewed the active Netsuke roadmap, contents index,
+      design-doc anchors, ADRs, and this ExecPlan for the roadmap-fidelity
+      guidance.
+- [x] 2026-05-14: Confirmed there was no existing roadmap archive and created
+      `docs/archive/roadmap-completed-foundations.md` for completed historical
+      foundations.
+- [x] 2026-05-14: Rewrote `docs/roadmap.md` so completed work is archived,
+      partial and planned work remains live, OrthoConfig dependencies are
+      explicit, and new CLI work starts at `3.15` and Phase 5.
+- [x] 2026-05-14: Updated `docs/contents.md` to expose the roadmap archive.
+- [x] 2026-05-14: Restored detailed Phase 4 formal-verification tasks after
+      noticing the first rewrite compressed the planned verification workload
+      too aggressively.
+- [x] 2026-05-14: Restored detailed `3.14` conditional-action tasks after
+      noticing the first rewrite compressed manifest dependency, executable
+      probing, recipe environment, and structured `exec` work into broader
+      conditional-semantics tasks.
+- [x] 2026-05-14: Replaced the archive paraphrase with the exact completed
+      task text from the previous roadmap so historical implementation
+      obligations remain reviewable.
+- [x] 2026-05-14: Validated the roadmap-fidelity revision with targeted
+      Markdown lint, full `make markdownlint`, `make nixie`, `make check-fmt`,
+      and `git diff --check`.
+- [x] 2026-05-14: Re-ran `make fmt`; it still fails inside `mdformat-all`
+      because that helper invokes a different `markdownlint` binary that
+      reports pre-existing repository-wide line-length and table findings.
+      Restored unrelated formatter churn and kept the passing project gates
+      recorded above.
+- [x] Commit the roadmap-fidelity revision.
+- [ ] Push the roadmap-fidelity revision.
 - [ ] Stage A: create the governing ADR and update the core design doctrine.
 - [ ] Stage B: rewrite the CLI design document around the canonical contract.
-- [ ] Stage C: rewrite the roadmap around the scorched-earth pre-0.1.0 reset.
+- [x] Stage C: rewrite the roadmap around the scorched-earth pre-0.1.0 reset.
 - [ ] Stage D: update user-facing documentation and navigation.
 - [ ] Stage E: add follow-on ExecPlans for implementation slices.
 - [ ] Stage F: validate, commit, and record outcomes.
@@ -234,26 +264,42 @@ Observable success means:
   after the design and roadmap are aligned.
 
 - Observation: repo-wide Markdown formatting currently fails on existing
-  documents unrelated to this plan.
-  Evidence: `make fmt` reached `markdownlint --fix` and reported many MD013
-  line-length violations plus existing table issues in files such as
+  documents unrelated to this plan. Evidence: `make fmt` reached
+  `markdownlint --fix` and reported many MD013 line-length violations plus
+  existing table issues in files such as
   `docs/adr-002-replace-cucumber-with-rstest-bdd.md`,
   `docs/behavioural-testing-in-rust-with-cucumber.md`,
-  `docs/developers-guide.md`, and `docs/netsuke-design.md`.
-  Impact: this draft can be checked with targeted Markdown lint and `make
-  nixie`, but a full gated commit requires either fixing those pre-existing
-  documentation lint issues or agreeing that the gate is out of scope for this
-  plan-only change.
+  `docs/developers-guide.md`, and `docs/netsuke-design.md`. Impact: this draft
+  can be checked with targeted Markdown lint and `make nixie`, but a full gated
+  commit requires either fixing those pre-existing documentation lint issues or
+  agreeing that the gate is out of scope for this plan-only change.
 
 - Observation: the active OrthoConfig roadmap already plans reusable
-  agent-native contracts for downstream consumers including Netsuke.
-  Evidence: OrthoConfig roadmap tasks `5.2.3`, `6.1`, `6.2`, `6.3`, `7.1`,
-  `7.2`, `8.1`, `9.1`, `9.2`, and `9.3` cover consumer boundaries,
-  recursive command metadata, agent-context output, skill manifest validation,
-  vocabulary policy, behavioural semantics, JSON command results, profile
-  contracts, delivery and feedback contracts, and execution ledger contracts.
-  Impact: Netsuke's revised roadmap must depend on those tasks instead of
-  planning independent generic implementations.
+  agent-native contracts for downstream consumers including Netsuke. Evidence:
+  OrthoConfig roadmap tasks `5.2.3`, `6.1`, `6.2`, `6.3`, `7.1`, `7.2`, `8.1`,
+  `9.1`, `9.2`, and `9.3` cover consumer boundaries, recursive command
+  metadata, agent-context output, skill manifest validation, vocabulary policy,
+  behavioural semantics, JSON command results, profile contracts, delivery and
+  feedback contracts, and execution ledger contracts. Impact: Netsuke's revised
+  roadmap must depend on those tasks instead of planning independent generic
+  implementations.
+
+- Observation: the repository did not have an archived roadmap file before the
+  fidelity review. Evidence: searching `docs/` found the active roadmap but no
+  `docs/archive/` roadmap material. Impact: completed historical work needed a
+  new archive rather than being compressed or deleted.
+
+- Observation: roadmap item `3.14.2` was marked complete while one of its
+  subtasks was still unchecked. Evidence: the previous `docs/roadmap.md` marked
+  the heading as `[x]` and still included an unchecked complementary branch
+  subtask. Impact: `3.14.2` stays in the active roadmap and is marked
+  incomplete until every subtask is done.
+
+- Observation: the first archive draft preserved task identities but softened
+  implementation-level wording. Evidence: completed tasks were summarised as
+  broad foundations rather than copied from the previous roadmap. Impact: the
+  archive now keeps exact completed task text and uses phase-level relevance
+  assessments to avoid erasing historical implementation risk.
 
 ## Decision log
 
@@ -285,21 +331,30 @@ Observable success means:
   success and failure. Date/Author: 2026-05-09 / planning agent.
 
 - Decision: commit and open a draft PR for this pre-implementation plan after
-  the user explicitly requested PR creation.
-  Rationale: the PR carries the draft for review, not permission to implement
-  it. This plan passes targeted Markdown lint and Mermaid validation, but
-  `make fmt` currently fails on unrelated existing Markdown issues, so the PR
-  must disclose that gate limitation.
-  Date/Author: 2026-05-09 / planning agent.
+  the user explicitly requested PR creation. Rationale: the PR carries the
+  draft for review, not permission to implement it. This plan passes targeted
+  Markdown lint and Mermaid validation, but `make fmt` currently fails on
+  unrelated existing Markdown issues, so the PR must disclose that gate
+  limitation. Date/Author: 2026-05-09 / planning agent.
 
 - Decision: make OrthoConfig the owner of reusable command-contract machinery
-  and make Netsuke the owner of build-domain semantics.
-  Rationale: the OrthoConfig roadmap explicitly says it should absorb reusable
-  contracts before Weaver and Netsuke fossilize divergent local schemas. Netsuke
-  should depend on that work for generic metadata, policy, and parser contracts
-  while still owning manifest, build graph, Ninja, run-record, and artefact
-  behaviour.
-  Date/Author: 2026-05-11 / planning agent.
+  and make Netsuke the owner of build-domain semantics. Rationale: the
+  OrthoConfig roadmap explicitly says it should absorb reusable contracts
+  before Weaver and Netsuke fossilize divergent local schemas. Netsuke should
+  depend on that work for generic metadata, policy, and parser contracts while
+  still owning manifest, build graph, Ninja, run-record, and artefact
+  behaviour. Date/Author: 2026-05-11 / planning agent.
+
+- Decision: move only fully completed historical roadmap tasks to
+  `docs/archive/roadmap-completed-foundations.md`. Rationale: this preserves
+  implementation fidelity while keeping the active roadmap focused on
+  unfinished hypotheses. Partial work, including `3.14.2`, remains live under
+  its original number. Date/Author: 2026-05-14 / planning agent.
+
+- Decision: keep archived task numbers unchanged and avoid repeating them in
+  the active roadmap. Rationale: globally unique task identifiers across
+  current and archived roadmap files let reviewers trace historical work
+  without ambiguity. Date/Author: 2026-05-14 / planning agent.
 
 ## Context and orientation
 
@@ -336,7 +391,7 @@ Principles for Agent-Native CLIs" blog post:
 
 The active OrthoConfig roadmap at
 `https://raw.githubusercontent.com/leynos/ortho-config/refs/heads/main/docs/roadmap.md`
-is an additional planning input. It states that Weaver and Netsuke are the
+ is an additional planning input. It states that Weaver and Netsuke are the
 first downstream consumers for the expanded agent-native contract, and that
 OrthoConfig should absorb reusable contracts before downstream applications
 fossilize divergent local schemas. That roadmap makes the following dependency
@@ -383,8 +438,8 @@ reports.
 The revised Netsuke design and roadmap must therefore avoid duplicated
 OrthoConfig scope. The correct shape is dependency-first: document the shared
 contract dependency, use temporary Netsuke-local adapters only when explicitly
-permitted, and keep every adapter easy to remove when the upstream
-OrthoConfig task lands.
+permitted, and keep every adapter easy to remove when the upstream OrthoConfig
+task lands.
 
 ## Target product contract
 
@@ -634,127 +689,24 @@ Stage C validation is `make fmt`, `make markdownlint`, and `make nixie`.
 
 ### Stage D: rewrite the roadmap
 
-Update `docs/roadmap.md` without renumbering existing completed phases. Keep
-the current `3.14. Conditional action planning` section intact unless the
-documentation overhaul exposes direct contradictions. Add a new Phase 3 step
-after it:
+This stage is complete for the current roadmap-fidelity revision. It changed
+the planning model without deleting historical obligations:
 
-Before editing the roadmap, perform a relevance audit of the existing Phase 3
-and Phase 4 items. Preserve every completed and planned item by default. When a
-task conflicts with the new UI contract, mark it as superseded by a `3.15`
-task or move it to background context; delete it only when it no longer
-supports the future Netsuke product after the redesign. Record every deletion
-in the Decision Log with a concrete reason.
+- `docs/archive/roadmap-completed-foundations.md` now preserves completed
+  roadmap items under their original numbers with relevance classifications.
+- `docs/roadmap.md` now contains only unfinished and future work.
+- Partial and planned tasks remain live under their original numbers, including
+  `3.4.5`, `3.4.6`, `3.8.3`, `3.11.4`, `3.12.3`, `3.13.3`, `3.14.1`, and
+  `3.14.2` through `3.14.11`.
+- New CLI-foundation work starts at `3.15`; compounding features start at
+  Phase 5.
+- Every roadmap item that relies on reusable command/configuration/schema
+  machinery cites the relevant OrthoConfig dependency.
+- The active roadmap includes a canonical public vocabulary section so planned
+  examples cannot drift away from the future CLI grammar.
 
-```markdown
-### 3.15. Agent-consistent CLI foundations
-
-- [ ] 3.15.1. Replace the command surface with canonical pre-0.1.0 names.
-  Requires OrthoConfig 5.2.3, 6.2.3, and 7.1.3 for final shared
-  consumer-boundary, `context --json`, and global-option vocabulary contracts.
-  - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional shorthand.
-  - [ ] Rename `manifest` to `generate`.
-  - [ ] Remove `build --emit`; use `generate --output`.
-  - [ ] Add `check`, `context`, `skill-path`, `runs`, `profile`, and `feedback`.
-  - [ ] Update README, user guide, CLI help snapshots, localization keys, and
-        configuration examples.
-
-- [ ] 3.15.2. Replace diagnostics-only JSON with canonical `--json` result mode.
-  Requires OrthoConfig 7.2.3, 7.2.4, 7.2.5, and 8.1.1 for shared structured-output,
-  JSON stream, exit-class, and reference-CLI contracts.
-  - [ ] Remove `--diag-json` and `--output-format`.
-  - [ ] Emit exactly one JSON result document on successful JSON-mode commands.
-  - [ ] Emit exactly one JSON diagnostic document on failing JSON-mode commands.
-  - [ ] Suppress progress, colour, emoji, tracing, and timing text in JSON mode.
-  - [ ] Capture bounded subprocess output in JSON results and referenced logs.
-  - [ ] Snapshot every v1 JSON schema.
-
-- [ ] 3.15.3. Replace legacy output preferences with canonical policy flags.
-  Requires OrthoConfig 7.1.3 and 7.2.2 for the canonical global-option glossary
-  and dual-renderer metadata.
-  - [ ] Replace `--colour-policy` with `--color auto|always|never`.
-  - [ ] Replace `--spinner-mode` and boolean `--progress` with
-        `--progress auto|always|never`.
-  - [ ] Replace `--no-emoji` with `--emoji auto|always|never`.
-  - [ ] Replace boolean `--accessible` with `--accessibility auto|on|off`.
-  - [ ] Update OrthoConfig fields, environment names, config examples,
-        localization keys, and tests.
-
-- [ ] 3.15.4. Add non-interactive and mutation-safety guarantees.
-  Requires OrthoConfig 7.2.1 for shared non-interactive and mutation-boundary
-  metadata. Netsuke still owns build and clean semantics.
-  - [ ] Add root `--no-input`.
-  - [ ] Make prompts impossible unless an explicit interactive mode is added.
-  - [ ] Require `--force` for destructive operations.
-  - [ ] Require or support `--dry-run` for consequential operations.
-  - [ ] Make bare `clean` fail with a corrective hint.
-
-- [ ] 3.15.5. Add stable exit codes and enumerable errors.
-  Requires OrthoConfig 7.2.3, 7.2.5, 7.3.1, and 8.1.2 for shared exit-class and
-  enumerable-remediation contracts.
-  - [ ] Define the exit-code taxonomy in design docs, user docs, and tests.
-  - [ ] Ensure every enum-like failure lists valid values and a corrective example.
-  - [ ] Cover CLI enums, config enums, manifest enums, stdlib options, delivery
-        schemes, profile names, and run states.
-
-- [ ] 3.15.6. Bound every large response.
-  Requires OrthoConfig 7.2.6 for shared bounded-list metadata and generated
-  agent-description budgets.
-  - [ ] Add `--limit` and `--cursor` where lists can grow.
-  - [ ] Add `--target` and `--depth` to graph inspection.
-  - [ ] Add truncation hints to JSON and human output.
-  - [ ] Bound build-log previews in JSON mode and reference log files.
-
-- [ ] 3.15.7. Add CLI vocabulary linting.
-  Requires OrthoConfig 7.1.1, 7.1.2, 7.1.3, and 7.2.1 through 7.2.7. Netsuke
-  should configure OrthoConfig policy rather than implementing a parallel
-  generic policy engine.
-  - [ ] Generate a command inventory from Clap.
-  - [ ] Fail CI on banned verbs and flags.
-  - [ ] Snapshot the canonical command surface.
-```
-
-Also add a new Phase 5:
-
-```markdown
-## 5. Agent-consistent compounding features
-
-Objective: To make Netsuke easier to invoke repeatedly by humans, agents,
-editors, and CI systems through introspection, profiles, run history,
-delivery, and feedback.
-```
-
-Phase 5 should include:
-
-- `5.1. Context and schema generation`, covering `netsuke context`, compact and
-  detailed metadata, command/schema/configuration/stdlib metadata, description
-  budgets, and `netsuke skill-path`. Requires OrthoConfig `5.2.1`, `6.1.1`,
-  `6.1.2`, `6.2.1`, `6.2.2`, `6.2.3`, `6.3.1`, and `6.3.2`.
-- `5.2. Run ledger`, covering durable `.netsuke/runs/` records,
-  `runs list`, `runs get`, `runs prune --force`, interruption recovery, log
-  references, and bounded list output. Requires OrthoConfig `9.3.1`, `9.3.2`,
-  and `9.3.3`. Netsuke owns run-record contents and the public noun `runs`.
-- `5.3. Profiles`, covering `profile save`, `profile list`, `profile get`,
-  `profile delete --force`, root `--profile`, secret handling, OrthoConfig
-  precedence, and profile names in `context`. Requires OrthoConfig `9.1.1`,
-  `9.1.2`, and `9.1.3`. Netsuke owns build-specific profile values and storage
-  only if no shared helper is available.
-- `5.4. Delivery and feedback`, covering
-  `--deliver=stdout|file:<path>|webhook:<url>`, atomic file delivery, webhook
-  status, valid-scheme enumeration, `feedback add`, `feedback list`,
-  `feedback send --force`, local JSON Lines storage, and explicit upstream
-  configuration. Requires OrthoConfig `9.2.1` and `9.2.2`; Netsuke owns the
-  generated artefact and build-summary payload semantics.
-- `5.5. Agent-facing validation`, covering stream-purity integration tests,
-  closed-stdin tests, context snapshots, schema snapshots, vocabulary linting,
-  and documentation workflow tests. Requires OrthoConfig `7.1`, `7.2`, and
-  `8.1` for generic policy and reference-CLI contracts.
-
-Roadmap items `3.10.3`, `3.11.1`, and `3.13.3` should gain notes or revised
-success criteria explaining that their shipped pre-0.1.0 forms are superseded
-by `3.15`. Do not silently leave them as final-state commitments.
-
-Stage D validation is `make fmt`, `make markdownlint`, and `make nixie`.
+Stage D validation is `make fmt`, targeted or full Markdown lint, `make nixie`,
+and `git diff --check`.
 
 ### Stage E: update user-facing documentation
 
@@ -897,6 +849,8 @@ The documentation overhaul is accepted when:
   same canonical command names, flags, stream contract, and JSON doctrine.
 - `docs/roadmap.md` adds `3.15` for table-stakes foundations and Phase 5 for
   compounding features without colliding with the existing `3.14`.
+- `docs/archive/roadmap-completed-foundations.md` preserves completed
+  historical work under original numbers with relevance classifications.
 - Every revised Netsuke roadmap item that relies on reusable command-contract
   machinery cites the relevant OrthoConfig roadmap dependency.
 - The revised design states that OrthoConfig owns generic command metadata,
@@ -906,7 +860,8 @@ The documentation overhaul is accepted when:
 - Existing Netsuke roadmap work is preserved unless a recorded relevance audit
   shows that the redesigned UI makes the item obsolete.
 - Existing completed roadmap items that conflict with the new doctrine are
-  explicitly marked as superseded or revised.
+  archived as foundations and the replacement work is expressed as new live
+  roadmap tasks.
 - User-facing docs distinguish planned behaviour from shipped behaviour.
 - Follow-on ExecPlans exist for the major implementation slices.
 - `make fmt`, `make markdownlint`, and `make nixie` pass for documentation-only
@@ -935,9 +890,9 @@ design-doctrine commit and a roadmap-structure commit. If user-facing docs
 accidentally imply a planned command is already shipped, correct the wording
 before committing.
 
-If a future implementation step starts changing Rust source while this
-documentation plan is still in draft status, stop and ask for approval. This
-plan intentionally separates planning from execution.
+If a future implementation step starts changing Rust source while this plan is
+still documentation-only, stop and ask for approval. This plan intentionally
+separates planning from execution.
 
 ## Interfaces and dependencies
 
@@ -984,3 +939,7 @@ implemented and validated.
   requires explicit OrthoConfig task dependencies, avoids duplicated shared
   command-contract work, and preserves existing Netsuke roadmap items unless a
   relevance audit proves they no longer matter after the UI redesign.
+- 2026-05-14: Added the completed-foundations roadmap archive, rewrote the
+  active roadmap around unfinished work and future hypotheses, retained partial
+  work under its original numbers, and made OrthoConfig dependencies explicit
+  in the live roadmap.

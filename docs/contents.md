@@ -11,6 +11,9 @@ operational, and contributor references are easier to find.
   interface design and user-experience requirements.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
+- [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
+  Archived completed roadmap foundations with relevance assessments and
+  traceability notes.
 - [formal-verification-methods-in-netsuke.md](formal-verification-methods-in-netsuke.md):
   Recommended scope and delivery order for Kani, Proptest, and optional Verus
   checks.
