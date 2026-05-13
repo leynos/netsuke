@@ -191,13 +191,18 @@ Observable success means:
       Clarified repository spelling exceptions and defined Behaviour-Driven
       Development (BDD) on first use.
 - [x] 2026-05-12: Added `FilteringStats` as the explicit expansion result,
-      introduced an injected logger boundary with a production tracing adapter,
-      and covered filtering counts plus debug observability side effects in
-      unit tests.
+      initially introduced an injected logger boundary with a production
+      tracing adapter, and covered filtering counts plus debug observability
+      side effects in unit tests.
 - [x] 2026-05-13: Bounded manifest filtering debug fields by replacing raw
       entry names with eight-character SHA-256 hashes and raw `when`
       expressions with expression lengths. Added regression coverage proving
       the debug event does not expose the raw entry name or expression text.
+- [x] 2026-05-13: Removed the injected logger boundary from
+      `src/manifest/expand.rs` after review requested direct tracing.
+      `expand_foreach` still returns `FilteringStats`, `expand_section` still
+      returns per-section counts, and tests now exercise the real `debug!`
+      event path.
 
 ## Surprises & Discoveries
 
@@ -272,7 +277,9 @@ Observable success means:
   section, bounded entry-name hash, `when` expression length, iteration index
   where present, the false decision, and section-level filtered counts without
   changing generated manifests or command output. Date/Author: 2026-05-10,
-  updated 2026-05-13 / implementation agent.
+  updated 2026-05-13 / implementation agent. The final implementation calls
+  `tracing::debug!` directly rather than routing events through an injected
+  logger trait.
 
 - Decision: do not emit raw `when` expressions at debug level and keep raw
   entry names only on a trace event. Rationale: manifest names have unbounded

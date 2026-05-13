@@ -3,46 +3,12 @@
 use super::*;
 use minijinja::Environment;
 use rstest::rstest;
-use std::{
-    cell::RefCell,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::sync::{Arc, Mutex, OnceLock};
 use tracing::{
     Event, Subscriber,
     field::{Field, Visit},
 };
 use tracing_subscriber::{Layer, layer::Context as LayerContext, prelude::*, registry::LookupSpan};
-
-#[derive(Debug, Default)]
-struct RecordingLogger {
-    summaries: RefCell<Vec<FilteringStats>>,
-    entries: RefCell<Vec<RecordedEntry>>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct RecordedEntry {
-    section: String,
-    entry_name: String,
-    iteration_index: Option<usize>,
-    when_expression_len: usize,
-    when_result: bool,
-}
-
-impl Logger for RecordingLogger {
-    fn filtering_summary(&self, stats: FilteringStats) {
-        self.summaries.borrow_mut().push(stats);
-    }
-
-    fn filtered_entry(&self, event: FilteredEntryLog<'_>) {
-        self.entries.borrow_mut().push(RecordedEntry {
-            section: event.section.to_owned(),
-            entry_name: event.entry_name.to_owned(),
-            iteration_index: event.iteration_index,
-            when_expression_len: event.when_expression_len,
-            when_result: event.when_result,
-        });
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 struct CapturedEvents {
@@ -173,60 +139,6 @@ actions:
     );
     anyhow::ensure!(targets(&doc)?.len() == 1, "expected one kept target");
     anyhow::ensure!(actions(&doc)?.len() == 1, "expected one kept action");
-    Ok(())
-}
-
-#[test]
-fn expand_foreach_with_logger_records_filter_events() -> Result<()> {
-    let env = Environment::new();
-    let yaml = "targets:
-  - name: skipped-target
-    command: echo skipped
-    when: 'false'
-actions:
-  - name: each-action
-    command: echo {{ item }}
-    foreach:
-      - skip
-      - keep
-    when: item != 'skip'";
-    let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
-    let logger = RecordingLogger::default();
-
-    let stats = expand_foreach_with_logger(&mut doc, &env, &logger)?;
-
-    anyhow::ensure!(
-        stats
-            == FilteringStats {
-                filtered_targets: 1,
-                filtered_actions: 1,
-            },
-        "unexpected filtering stats: {stats:?}"
-    );
-    anyhow::ensure!(
-        logger.summaries.borrow().as_slice() == [stats],
-        "summary event should include final stats"
-    );
-    anyhow::ensure!(
-        logger.entries.borrow().as_slice()
-            == [
-                RecordedEntry {
-                    section: "targets".to_owned(),
-                    entry_name: "skipped-target".to_owned(),
-                    iteration_index: None,
-                    when_expression_len: "false".len(),
-                    when_result: false,
-                },
-                RecordedEntry {
-                    section: "actions".to_owned(),
-                    entry_name: "each-action".to_owned(),
-                    iteration_index: Some(0),
-                    when_expression_len: "item != 'skip'".len(),
-                    when_result: false,
-                },
-            ],
-        "filtered entry log events should include section, name, expression length, and result"
-    );
     Ok(())
 }
 

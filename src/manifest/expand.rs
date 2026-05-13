@@ -15,58 +15,9 @@ pub(crate) struct FilteringStats {
     pub filtered_actions: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct FilteredEntryLog<'a> {
-    section: &'a str,
-    entry_name: &'a str,
-    iteration_index: Option<usize>,
-    when_expression_len: usize,
-    when_result: bool,
-}
-
-trait Logger {
-    fn filtering_summary(&self, stats: FilteringStats);
-
-    fn filtered_entry(&self, event: FilteredEntryLog<'_>);
-}
-
-#[derive(Debug, Default)]
-struct TracingLogger;
-
-impl Logger for TracingLogger {
-    fn filtering_summary(&self, stats: FilteringStats) {
-        debug!(
-            manifest_filtering_stage = "expand_foreach",
-            filtered_targets = stats.filtered_targets,
-            filtered_actions = stats.filtered_actions,
-            filtered_entry_count = stats.filtered_targets + stats.filtered_actions,
-            "expanded manifest foreach and when directives"
-        );
-    }
-
-    fn filtered_entry(&self, event: FilteredEntryLog<'_>) {
-        let entry_name_hash = entry_name_hash(event.entry_name);
-        debug!(
-            section = event.section,
-            entry_name_hash,
-            iteration_index = event.iteration_index,
-            when_expression_len = event.when_expression_len,
-            when_result = event.when_result,
-            "filtered manifest entry by when expression"
-        );
-        trace!(
-            section = event.section,
-            entry_name = event.entry_name,
-            iteration_index = event.iteration_index,
-            "filtered manifest entry raw name"
-        );
-    }
-}
-
-struct ExpansionContext<'a, L: Logger> {
+struct ExpansionContext<'a> {
     env: &'a Environment<'a>,
     section: &'a str,
-    logger: &'a L,
 }
 
 /// Expand manifest targets and actions defined with the `foreach` key.
@@ -76,41 +27,30 @@ struct ExpansionContext<'a, L: Logger> {
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialize, or when target metadata is malformed.
 pub(crate) fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats> {
-    expand_foreach_with_logger(doc, env, &TracingLogger)
-}
-
-fn expand_foreach_with_logger(
-    doc: &mut ManifestValue,
-    env: &Environment,
-    logger: &impl Logger,
-) -> Result<FilteringStats> {
-    let filtered_targets = expand_section(doc, "targets", env, logger)?;
-    let filtered_actions = expand_section(doc, "actions", env, logger)?;
+    let filtered_targets = expand_section(doc, "targets", env)?;
+    let filtered_actions = expand_section(doc, "actions", env)?;
     let stats = FilteringStats {
         filtered_targets,
         filtered_actions,
     };
-    logger.filtering_summary(stats);
+    debug!(
+        manifest_filtering_stage = "expand_foreach",
+        filtered_targets = stats.filtered_targets,
+        filtered_actions = stats.filtered_actions,
+        filtered_entry_count = stats.filtered_targets + stats.filtered_actions,
+        "expanded manifest foreach and when directives"
+    );
     Ok(stats)
 }
 
-fn expand_section(
-    doc: &mut ManifestValue,
-    key: &str,
-    env: &Environment,
-    logger: &impl Logger,
-) -> Result<usize> {
+fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<usize> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
         return Ok(0);
     };
 
     let mut expanded = Vec::new();
     let mut filtered = 0;
-    let context = ExpansionContext {
-        env,
-        section: key,
-        logger,
-    };
+    let context = ExpansionContext { env, section: key };
     for entry in std::mem::take(entries) {
         match entry {
             ManifestValue::Object(map) => {
@@ -126,7 +66,7 @@ fn expand_section(
 
 fn expand_target(
     mut map: ManifestMap,
-    context: &ExpansionContext<'_, impl Logger>,
+    context: &ExpansionContext<'_>,
     filtered: &mut usize,
 ) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
@@ -229,7 +169,7 @@ fn eval_when(env: &Environment, expr: &str, ctx: Value) -> Result<bool> {
 /// static targets pass `None`.
 fn when_allows(
     map: &mut ManifestMap,
-    context: &ExpansionContext<'_, impl Logger>,
+    context: &ExpansionContext<'_>,
     iteration: Option<(&Value, usize)>,
 ) -> Result<bool> {
     let Some(when_val) = map.remove("when") else {
@@ -244,13 +184,19 @@ fn when_allows(
     if !allowed {
         let entry_name = entry_name(map);
         let iteration_index = iteration.map(|(_, index)| index);
-        context.logger.filtered_entry(FilteredEntryLog {
-            section: context.section,
-            entry_name,
+        let entry_name_hash = entry_name_hash(entry_name);
+        debug!(
+            section = context.section,
+            entry_name_hash,
             iteration_index,
-            when_expression_len: expr.len(),
-            when_result: false,
-        });
+            when_expression_len = expr.len(),
+            when_result = false,
+            "filtered manifest entry by when expression"
+        );
+        trace!(
+            section = context.section,
+            entry_name, iteration_index, "filtered manifest entry raw name"
+        );
     }
     Ok(allowed)
 }
