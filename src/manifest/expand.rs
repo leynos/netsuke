@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 use sha2::{Digest, Sha256};
-use tracing::{debug, trace};
+use tracing::{debug, dispatcher, subscriber::NoSubscriber};
 
 /// Counts of manifest entries excluded during template expansion.
 ///
@@ -193,7 +193,7 @@ fn when_allows(
     let expr = as_str(&when_val, "when")?;
     let ctx = when_context(map, iteration)?;
     let allowed = eval_when(context.env, expr, ctx)?;
-    if !allowed {
+    if !allowed && has_subscriber() {
         let entry_name = entry_name(map);
         let iteration_index = iteration.map(|(_, index)| index);
         let entry_name_hash = entry_name_hash(entry_name);
@@ -205,13 +205,12 @@ fn when_allows(
             when_result = false,
             "filtered manifest entry by when expression"
         );
-        trace!(
-            section = context.section,
-            iteration_index,
-            "filtered manifest entry (raw name withheld; see entry_name_hash in debug event)"
-        );
     }
     Ok(allowed)
+}
+
+fn has_subscriber() -> bool {
+    dispatcher::get_default(|current| !current.is::<NoSubscriber>())
 }
 
 fn when_context(map: &ManifestMap, iteration: Option<(&Value, usize)>) -> Result<Value> {

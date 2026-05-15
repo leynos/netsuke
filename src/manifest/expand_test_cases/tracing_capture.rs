@@ -3,19 +3,14 @@
 use super::*;
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use std::{
-    cell::RefCell,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::sync::{Arc, Mutex};
 use tracing::{
     Event, Subscriber,
     field::{Field, Visit},
 };
-use tracing_subscriber::{Layer, layer::Context as LayerContext, prelude::*, registry::LookupSpan};
-
-thread_local! {
-    static CURRENT_CAPTURE: RefCell<Option<CapturedEvents>> = const { RefCell::new(None) };
-}
+use tracing_subscriber::{
+    Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*, registry::LookupSpan,
+};
 
 #[derive(Debug, Clone, Default)]
 struct CapturedEvents {
@@ -28,26 +23,22 @@ impl CapturedEvents {
     }
 }
 
-#[derive(Debug, Default)]
-struct CapturedEventsLayer;
+#[derive(Debug, Clone, Default)]
+struct CapturedEventsLayer {
+    events: Arc<Mutex<Vec<String>>>,
+}
 
 impl<S> Layer<S> for CapturedEventsLayer
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
     fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
-        CURRENT_CAPTURE.with_borrow(|current_capture| {
-            let Some(captured_events) = current_capture else {
-                return;
-            };
-            let mut visitor = FieldVisitor::default();
-            event.record(&mut visitor);
-            captured_events
-                .fields
-                .lock()
-                .expect("captured events lock")
-                .push(visitor.fields.join(" "));
-        });
+        let mut visitor = FieldVisitor::default();
+        event.record(&mut visitor);
+        self.events
+            .lock()
+            .expect("captured events lock")
+            .push(visitor.fields.join(" "));
     }
 }
 
@@ -79,26 +70,12 @@ impl Visit for FieldVisitor {
 }
 
 fn with_test_subscriber<T>(test: impl FnOnce(CapturedEvents) -> T) -> T {
-    static INSTALLED: OnceLock<()> = OnceLock::new();
-    INSTALLED.get_or_init(|| {
-        // Tracing callsite interest is cached process-wide, so the test
-        // subscriber must be global. Captured events stay thread-local below
-        // so parallel tests do not share a `CapturedEvents` buffer.
-        let subscriber = tracing_subscriber::registry().with(CapturedEventsLayer);
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("install manifest expansion test subscriber");
-    });
-
-    let captured = CapturedEvents::default();
-    CURRENT_CAPTURE.with_borrow_mut(|capture| {
-        *capture = Some(captured.clone());
-    });
-    tracing::callsite::rebuild_interest_cache();
-    let result = test(captured);
-    CURRENT_CAPTURE.with_borrow_mut(|capture| {
-        *capture = None;
-    });
-    result
+    let layer = CapturedEventsLayer::default();
+    let captured = CapturedEvents {
+        fields: Arc::clone(&layer.events),
+    };
+    let subscriber = tracing_subscriber::registry().with(layer.with_filter(LevelFilter::DEBUG));
+    tracing::subscriber::with_default(subscriber, || test(captured))
 }
 
 #[test]
