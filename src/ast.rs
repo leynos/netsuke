@@ -2,7 +2,7 @@
 //!
 //! This module defines the data structures used to represent a parsed
 //! `Netsukefile`. They mirror the YAML schema described in the design
-//! document and are deserialised with `serde_saphyr`.
+//! document and are deserialized with `serde_saphyr`.
 //!
 //! The following example shows how to parse a minimal manifest string:
 //!
@@ -61,7 +61,7 @@ pub struct MacroDefinition {
 /// Top-level manifest structure parsed from a `Netsukefile`.
 ///
 /// Each field mirrors a key in the YAML manifest. Optional collections default
-/// to empty to simplify deserialisation.
+/// to empty to simplify deserialization.
 ///
 /// ```yaml
 /// netsuke_version: "1.0.0"
@@ -98,7 +98,7 @@ pub struct NetsukeManifest {
     pub rules: Vec<Rule>,
 
     /// Optional setup actions executed before normal targets. Each action is
-    /// implicitly marked as `phony` during deserialisation.
+    /// implicitly marked as `phony` during deserialization.
     #[serde(default, deserialize_with = "deserialize_actions")]
     pub actions: Vec<Target>,
 

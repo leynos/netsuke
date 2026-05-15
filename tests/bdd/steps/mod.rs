@@ -19,6 +19,7 @@ mod advanced_usage;
 mod cli;
 mod cli_config;
 mod cli_parsing;
+mod conditional_manifest;
 mod configuration_discovery;
 #[cfg(unix)]
 mod fs;

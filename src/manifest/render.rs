@@ -9,7 +9,7 @@ use minijinja::Environment;
 /// # Errors
 ///
 /// Returns an error when a template evaluation fails or when rendered
-/// values cannot be serialised back into the manifest structure.
+/// values cannot be serialized back into the manifest structure.
 pub fn render_manifest(
     mut manifest: NetsukeManifest,
     env: &Environment,

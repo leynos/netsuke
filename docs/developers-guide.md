@@ -592,10 +592,14 @@ that sets environment variables which could race with parallel test execution.
 #### expand_foreach
 
 `src/manifest/expand.rs` exposes
-`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<()>`.
+`expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats>`.
 
 **Purpose:** expands `foreach`/`when` directives in both `targets` and
-`actions` top-level arrays before the manifest is deserialised into the AST.
+`actions` top-level arrays before the manifest is deserialized into the AST.
+This is the manifest-time boundary for conditional planning. Downstream layers
+receive only selected entries and must not reinterpret manifest condition keys.
+The returned `FilteringStats` records how many target and action entries were
+filtered during expansion.
 
 **Inputs:**
 
@@ -616,6 +620,9 @@ that sets environment variables which could race with parallel test execution.
 - Non-object entries and entries without `foreach` are passed through
   unchanged.
 - Action entries retain their implicit `phony: true` default after expansion.
+- Filtered entries are absent before IR generation, Ninja generation, and
+  process execution. Build-time branching belongs inside the recipe command or
+  script until a separately designed runtime-condition feature exists.
 
 **Error conditions:** returns `Err` on malformed Jinja expressions,
 whitespace-only `when` values, or type mismatches in the iterable.

@@ -87,3 +87,45 @@ fn touch_manifest_ninja_validation() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn conditional_manifest_ninja_snapshot() -> Result<()> {
+    let manifest_yaml = r#"
+        netsuke_version: "1.0.0"
+        rules:
+          - name: touch
+            command: "touch $out"
+        targets:
+          - name: out/{{ item }}
+            sources: in/{{ item }}
+            rule: touch
+            foreach:
+              - kept
+              - skipped
+            when: item != 'skipped'
+    "#;
+
+    let manifest = manifest::from_str(manifest_yaml)?;
+    let ir = BuildGraph::from_manifest(&manifest)?;
+    let ninja_content = ninja_gen::generate(&ir)?;
+
+    ensure!(
+        ninja_content.contains("build out/kept:") && ninja_content.contains(" in/kept"),
+        "expected kept target build rule in Ninja output:\n{ninja_content}"
+    );
+    ensure!(
+        !ninja_content.contains("skipped"),
+        "skipped target should not appear in Ninja output:\n{ninja_content}"
+    );
+
+    let mut settings = Settings::new();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/ninja"
+    ));
+    settings.bind(|| {
+        assert_snapshot!("conditional_manifest_ninja", ninja_content);
+    });
+
+    Ok(())
+}

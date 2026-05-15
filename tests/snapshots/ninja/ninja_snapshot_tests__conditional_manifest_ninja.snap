@@ -1,0 +1,8 @@
+---
+source: tests/ninja_snapshot_tests.rs
+expression: ninja_content
+---
+rule dcab2835877d9796019feb6d5530f167de99da1da4098e92c26ad033ea73319a
+  command = touch out/kept
+
+build out/kept: dcab2835877d9796019feb6d5530f167de99da1da4098e92c26ad033ea73319a in/kept
