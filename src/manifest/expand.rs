@@ -197,6 +197,10 @@ fn when_allows(
         let entry_name = entry_name(map);
         let iteration_index = iteration.map(|(_, index)| index);
         let entry_name_hash = entry_name_hash(entry_name);
+        // Keep filtering logs useful without leaking manifest contents. The raw
+        // entry name has unbounded cardinality and may carry PII, so log only a
+        // short stable hash for correlation. The raw `when` expression may
+        // contain secret literals from the manifest, so expose only its length.
         debug!(
             section = context.section,
             entry_name_hash,

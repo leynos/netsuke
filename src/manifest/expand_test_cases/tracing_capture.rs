@@ -134,8 +134,9 @@ fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
         anyhow::ensure!(
             events
                 .iter()
-                .all(|captured_event| !captured_event.contains("entry_name=")),
-            "structured logs should not include raw entry_name fields: {events:?}"
+                .all(|captured_event| !captured_event.contains("entry_name=")
+                    && !captured_event.contains("when_expression=")),
+            "structured logs should not include raw entry_name or when_expression fields: {events:?}"
         );
         Ok(())
     })
