@@ -154,6 +154,12 @@ fn expand_foreach_emits_debug_event_for_filtered_entry() -> Result<()> {
             !event.contains("secret_token") && !event.contains("literal-secret"),
             "debug event should not include raw when expression: {event}"
         );
+        anyhow::ensure!(
+            events
+                .iter()
+                .all(|captured_event| !captured_event.contains("entry_name=")),
+            "structured logs should not include raw entry_name fields: {events:?}"
+        );
         Ok(())
     })
 }

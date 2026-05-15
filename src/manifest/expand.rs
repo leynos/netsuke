@@ -207,7 +207,8 @@ fn when_allows(
         );
         trace!(
             section = context.section,
-            iteration_index, "filtered manifest entry raw name"
+            iteration_index,
+            "filtered manifest entry (raw name withheld; see entry_name_hash in debug event)"
         );
     }
     Ok(allowed)
