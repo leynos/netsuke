@@ -48,7 +48,7 @@ Use the Make targets for day-to-day formal-verification checks:
 
 - `make kani` runs the fast local smoke check used by `formal-pr`. Until
   roadmap item `4.2.*` adds substantive proof harnesses, this smoke check
-  verifies the pinned `cargo kani` command is installed and callable.
+  verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
 - `make kani-full` is reserved for the full Kani proof suite once harnesses
   exist. Today it invokes `cargo kani` without additional smoke flags.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.

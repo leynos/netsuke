@@ -41,7 +41,7 @@ job and substantive proof harnesses.
 - Keep Makefile additions consistent with the current target style: variables
   near the top, `.PHONY` declarations, target descriptions using `##`, and
   recipes that honour overrideable variables.
-- Preserve the existing OrthoConfig and localized CLI help surfaces. This
+- Preserve the existing OrthoConfig and localised CLI help surfaces. This
   item adds developer tooling, not a user-facing Netsuke subcommand or flag.
 - If any Kani-specific Rust source is introduced later during implementation,
   it must be gated with `#[cfg(kani)]` and `Cargo.toml` must declare
@@ -170,6 +170,15 @@ job and substantive proof harnesses.
 - [x] 2026-05-11T00:00:00Z: Ran final `coderabbit review --agent` after the
       roadmap and completion updates; it returned zero findings.
 - [x] Stage E: run review, quality gates, commit, and update the roadmap.
+- [x] 2026-05-16T00:00:00Z: Addressed review feedback by routing
+      `make kani` through `scripts/check-kani-version.sh`, which compares the
+      installed `cargo-kani` version with `tools/kani/VERSION`; corrected
+      `localized` to `localised`; and expanded YAML on first use.
+- [x] 2026-05-16T00:00:00Z: Validated the review fix with `make kani`,
+      `make formal-pr`, `mbake validate Makefile`, `make check-fmt`,
+      `make markdownlint`, `make nixie`, `make lint`, `make test`, and a
+      negative smoke check using a fake mismatched Kani command. `make fmt`
+      still fails on pre-existing repository-wide Markdown line-length issues.
 
 ## Surprises & Discoveries
 
@@ -181,7 +190,7 @@ job and substantive proof harnesses.
 - The current `Makefile` is intentionally small and uses `##` comments to
   populate `make help`; the new targets should remain visible through that
   convention.
-- OrthoConfig and localized help are important to the project, but this item
+- OrthoConfig and localised help are important to the project, but this item
   does not need a CLI change. The correct boundary is developer tooling and
   developer documentation.
 - Official Kani documentation recommends `cargo kani` for Cargo package
@@ -195,8 +204,8 @@ job and substantive proof harnesses.
   `0.67.0`.
 - `shellcheck` is documented as available in `AGENTS.md`, but it is not
   installed in this worktree environment (`shellcheck: command not found`).
-  Shell validation for this item relies on review, Bash strict mode, and
-  direct command execution.
+  Shell validation for this item relies on review, Bash strict mode, and direct
+  command execution.
 - `make kani` is implemented as `cargo kani --version` for `4.1.1` because no
   substantive proof harnesses exist yet. `make kani-full` already invokes the
   full `cargo kani` path so later `4.2.*` harness work can populate it without
@@ -210,6 +219,10 @@ job and substantive proof harnesses.
 - `make fmt` currently fails on pre-existing Markdown line-length violations
   across unrelated repository documentation. The formatter's unrelated edits
   were restored, and the new ExecPlan passes `make markdownlint`.
+- The original smoke target only executed `cargo kani --version`, which proved
+  that some Kani command was callable but did not enforce the repository pin.
+  The smoke path now reads `tools/kani/VERSION` and fails when the installed
+  `cargo-kani` version differs.
 
 ## Decision Log
 
@@ -252,6 +265,11 @@ job and substantive proof harnesses.
   kani-full` as the future full-suite entry point. Date/Author: 2026-05-11 /
   implementation agent.
 
+- Decision: Route `make kani` through `scripts/check-kani-version.sh` rather
+  than calling `cargo kani --version` directly. Rationale: the smoke path must
+  enforce the pinned Kani contract, not merely prove that any installed Kani
+  binary is callable. Date/Author: 2026-05-16 / review-fix agent.
+
 ## Outcomes & Retrospective
 
 This section is intentionally empty while the plan is in draft. During
@@ -259,26 +277,27 @@ implementation, update it after each milestone with what was achieved, what
 changed from the plan, and what later formal-verification work should inherit.
 
 Implementation completed on 2026-05-11. Netsuke now has a pinned Kani version
-in `tools/kani/VERSION`, an idempotent `scripts/install-kani.sh` installer,
-and local `make kani`, `make kani-full`, and `make formal-pr` targets. The
+in `tools/kani/VERSION`, an idempotent `scripts/install-kani.sh` installer, and
+local `make kani`, `make kani-full`, and `make formal-pr` targets. The
 developer guide documents how to install and run the pinned tool without
 folding Kani into the ordinary `make test`, `make lint`, `make check-fmt`, or
 `make all` workflow.
 
 The main deviation from the draft plan is deliberate: `make kani` is a command
-smoke target using `cargo kani --version`, while `make kani-full` runs the full
-`cargo kani` command. This avoids introducing a non-substantive proof harness
-before roadmap item `4.2.*`. Actual execution confirmed that `make kani-full`
-exits successfully today and reports that no `#[kani::proof]` harnesses exist.
+smoke target that compares the installed `cargo-kani` version with
+`tools/kani/VERSION`, while `make kani-full` runs the full `cargo kani`
+command. This avoids introducing a non-substantive proof harness before roadmap
+item `4.2.*`. Actual execution confirmed that `make kani-full` exits
+successfully today and reports that no `#[kani::proof]` harnesses exist.
 
 ## Context and orientation
 
-Netsuke is a Rust build-system compiler. It reads a YAML `Netsukefile`, expands
-MiniJinja-controlled manifest logic, validates a static Intermediate
-Representation (IR), emits a deterministic Ninja file, and delegates execution
-to the Ninja subprocess. The formal-verification design identifies the IR and
-command-interpolation code as high-value proof targets, but those proof
-harnesses are not part of this item.
+Netsuke is a Rust build-system compiler. It reads a YAML Ain't Markup Language
+(YAML) `Netsukefile`, expands MiniJinja-controlled manifest logic, validates a
+static Intermediate Representation (IR), emits a deterministic Ninja file, and
+delegates execution to the Ninja subprocess. The formal-verification design
+identifies the IR and command-interpolation code as high-value proof targets,
+but those proof harnesses are not part of this item.
 
 The relevant repository files are:
 
@@ -471,7 +490,8 @@ Inspect and commit with the file-based commit-message workflow:
 git diff --stat
 git diff
 git status --short
-git add Makefile scripts/install-kani.sh tools/kani/VERSION docs/developers-guide.md docs/roadmap.md
+git add Makefile scripts/install-kani.sh scripts/check-kani-version.sh \
+  tools/kani/VERSION docs/developers-guide.md docs/roadmap.md
 COMMIT_MSG_DIR="$(mktemp -d)"
 $EDITOR "$COMMIT_MSG_DIR/COMMIT_MSG.md"
 git commit -F "$COMMIT_MSG_DIR/COMMIT_MSG.md"
@@ -511,7 +531,7 @@ The expected successful summaries are:
 make check-fmt: exits 0
 make lint: exits 0
 make test: exits 0
-make kani: exits 0
+make kani: exits 0 and reports the pinned Kani version
 make formal-pr: exits 0
 ```
 
@@ -536,6 +556,9 @@ The new file interfaces are:
   `0.67.0`.
 - `scripts/install-kani.sh`: executable Bash script, invoked from any working
   directory, resolving the repository root relative to its own path.
+- `scripts/check-kani-version.sh`: executable Bash script, invoked by the
+  smoke target, that verifies the installed Kani command matches
+  `tools/kani/VERSION`.
 - `Makefile` targets:
   - `kani`: fast Kani smoke path.
   - `kani-full`: full Kani verification path.

@@ -6,7 +6,7 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
-KANI_SMOKE_FLAGS ?= --version
+KANI_VERSION_CHECK ?= scripts/check-kani-version.sh
 MDLINT ?= markdownlint-cli2
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
@@ -45,7 +45,7 @@ nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
 
 kani: ## Run the Kani local smoke check
-	$(KANI) $(KANI_SMOKE_FLAGS)
+	KANI="$(KANI)" $(KANI_VERSION_CHECK)
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI) $(KANI_FLAGS)
