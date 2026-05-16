@@ -107,7 +107,7 @@ Observable success means:
 - Truthfulness: if current implementation behaviour cannot be described without
   making the docs sound contradictory, mark it as existing behaviour scheduled
   for removal and add an explicit roadmap task.
-- Validation: if markdown formatting or linting fails twice after focused
+- Validation: if Markdown formatting or linting fails twice after focused
   fixes, stop and record the failing rule, file, and options in the Decision
   Log.
 - File size: if any edited Markdown file grows by more than roughly 400 lines,
@@ -296,7 +296,7 @@ Observable success means:
   incomplete until every subtask is done.
 
 - Observation: the first archive draft preserved task identities but softened
-  implementation-level wording. Evidence: completed tasks were summarised as
+  implementation-level wording. Evidence: completed tasks were summarized as
   broad foundations rather than copied from the previous roadmap. Impact: the
   archive now keeps exact completed task text and uses phase-level relevance
   assessments to avoid erasing historical implementation risk.
