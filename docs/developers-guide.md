@@ -25,6 +25,38 @@ For documentation changes, also run:
 - `make markdownlint`
 - `make nixie`
 
+## Formal-verification tooling
+
+Kani is the repository-supported bounded model checker for local
+formal-verification smoke checks. The supported version is pinned in
+`tools/kani/VERSION`; do not install an unpinned `latest` Kani when validating
+repository work.
+
+Install or refresh the pinned Kani tool with:
+
+```bash
+scripts/install-kani.sh
+```
+
+The installer reads `tools/kani/VERSION`, runs
+`cargo install --locked kani-verifier --version <version>`, runs
+`cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
+its own supporting Rust nightly toolchain during setup. That toolchain must not
+replace the repository's ordinary stable Rust workflow.
+
+Use the Make targets for day-to-day formal-verification checks:
+
+- `make kani` runs the fast local smoke check used by `formal-pr`. Until
+  roadmap item `4.2.*` adds substantive proof harnesses, this smoke check
+  verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
+- `make kani-full` is reserved for the full Kani proof suite once harnesses
+  exist. Today it invokes `cargo kani` without additional smoke flags.
+- `make formal-pr` aliases the pull-request formal-verification smoke path.
+
+Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`,
+or `make all`. Formal verification remains opt-in until the dedicated Kani CI
+job is added by roadmap item `4.1.2`.
+
 ## Test suite map
 
 Netsuke uses a mixed strategy:
