@@ -272,10 +272,6 @@ job and substantive proof harnesses.
 
 ## Outcomes & Retrospective
 
-This section is intentionally empty while the plan is in draft. During
-implementation, update it after each milestone with what was achieved, what
-changed from the plan, and what later formal-verification work should inherit.
-
 Implementation completed on 2026-05-11. Netsuke now has a pinned Kani version
 in `tools/kani/VERSION`, an idempotent `scripts/install-kani.sh` installer, and
 local `make kani`, `make kani-full`, and `make formal-pr` targets. The
@@ -592,7 +588,7 @@ Rollback is straightforward before commit:
 
 ```bash
 git restore Makefile docs/developers-guide.md docs/roadmap.md
-rm -rf tools/kani scripts/install-kani.sh
+rm -rf tools/kani scripts/install-kani.sh scripts/check-kani-version.sh
 ```
 
 Do not use destructive rollback commands after user or other-agent edits appear
