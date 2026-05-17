@@ -150,11 +150,11 @@ Observable success means:
   Mitigation: cite OrthoConfig roadmap tasks directly and distinguish hard
   dependencies, soft dependencies, and Netsuke-owned application semantics.
 
-- Risk: a scorched-earth roadmap rewrite could erase useful Netsuke history or
-  planned work that still matters after the UI redesign. Severity: high.
-  Likelihood: medium. Mitigation: require a relevance audit for existing
-  roadmap items and preserve history through supersession notes rather than
-  deletion by default.
+- Risk: a roadmap rewrite could lose useful Netsuke history or planned work
+  that still matters after the UI redesign. Severity: high. Likelihood:
+  medium. Mitigation: preserve completed work in an archive, keep still-valid
+  planned work live, and record relevance decisions rather than deleting by
+  default.
 
 - Risk: updating user-facing docs before implementation could make planned
   commands appear shipped. Severity: medium. Likelihood: high. Mitigation: use
@@ -229,7 +229,8 @@ Observable success means:
 - [x] Push the roadmap-fidelity revision.
 - [ ] Stage A: create the governing ADR and update the core design doctrine.
 - [ ] Stage B: rewrite the CLI design document around the canonical contract.
-- [x] Stage C: rewrite the roadmap around the scorched-earth pre-0.1.0 reset.
+- [x] Stage C: rewrite the roadmap while preserving and archiving historical
+      roadmap artefacts.
 - [ ] Stage D: update user-facing documentation and navigation.
 - [ ] Stage E: add follow-on ExecPlans for implementation slices.
 - [ ] Stage F: validate, commit, and record outcomes.
