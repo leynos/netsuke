@@ -41,7 +41,7 @@ job and substantive proof harnesses.
 - Keep Makefile additions consistent with the current target style: variables
   near the top, `.PHONY` declarations, target descriptions using `##`, and
   recipes that honour overrideable variables.
-- Preserve the existing OrthoConfig and localised CLI help surfaces. This
+- Preserve the existing OrthoConfig and localized CLI help surfaces. This
   item adds developer tooling, not a user-facing Netsuke subcommand or flag.
 - If any Kani-specific Rust source is introduced later during implementation,
   it must be gated with `#[cfg(kani)]` and `Cargo.toml` must declare
@@ -173,7 +173,7 @@ job and substantive proof harnesses.
 - [x] 2026-05-16T00:00:00Z: Addressed review feedback by routing
       `make kani` through `scripts/check-kani-version.sh`, which compares the
       installed `cargo-kani` version with `tools/kani/VERSION`; corrected
-      `localized` to `localised`; and expanded YAML on first use.
+      localized spelling; and expanded YAML on first use.
 - [x] 2026-05-16T00:00:00Z: Validated the review fix with `make kani`,
       `make formal-pr`, `mbake validate Makefile`, `make check-fmt`,
       `make markdownlint`, `make nixie`, `make lint`, `make test`, and a
@@ -190,7 +190,7 @@ job and substantive proof harnesses.
 - The current `Makefile` is intentionally small and uses `##` comments to
   populate `make help`; the new targets should remain visible through that
   convention.
-- OrthoConfig and localised help are important to the project, but this item
+- OrthoConfig and localized help are important to the project, but this item
   does not need a CLI change. The correct boundary is developer tooling and
   developer documentation.
 - Official Kani documentation recommends `cargo kani` for Cargo package
