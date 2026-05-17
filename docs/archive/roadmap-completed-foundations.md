@@ -250,7 +250,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Demonstrate running Netsuke end-to-end.
   - [x] Exercise via documentation test or example build fixture.
 
-### 3.7. Localization With Fluent
+### 3.7. Localization with Fluent
 
 - [x] 3.7.1. Externalize user-facing strings into Fluent `.ftl` bundles.
   - [x] Implement compile-time audit that fails CI on missing message keys.
@@ -275,7 +275,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Honour `NO_COLOR`, `NETSUKE_NO_EMOJI`, and ASCII-only preferences.
   - [x] Keep semantic prefixes (Error, Warning, Success) in all modes.
 
-### 3.9. Real-Time Feedback and Progress
+### 3.9. Real-time feedback and progress
 
 - [x] 3.9.1. Integrate `indicatif::MultiProgress`.
   - [x] Surface the six pipeline stages with persistent summaries.
