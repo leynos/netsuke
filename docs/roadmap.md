@@ -8,8 +8,8 @@ implementation detail.
 
 Task identifiers are globally unique across the active roadmap and the archive.
 When a completed task moves to the archive, it keeps its original number and is
-not repeated here. When a historical task is renamed under the CLI redesign,
-the active task states the mapping explicitly.
+not repeated here. When a historical task is renamed under the command-line
+interface (CLI) redesign, the active task states the mapping explicitly.
 
 ## How to read this roadmap
 
@@ -19,8 +19,9 @@ Each phase validates a product hypothesis:
   while becoming predictable for automation and agents.
 - Phase 4 validates that the build compiler and its cross-platform behaviour
   can be specified and checked rigorously.
-- Phase 5 validates that repeated human, CI, editor, and agent usage improves
-  through introspection, profiles, run history, delivery, and feedback.
+- Phase 5 validates that repeated human, Continuous Integration (CI), editor,
+  and agent usage improves through introspection, profiles, run history,
+  delivery, and feedback.
 
 The roadmap keeps user-facing product grammar separate from implementation
 detail. Public tasks name Netsuke capabilities first. Implementation adapters,

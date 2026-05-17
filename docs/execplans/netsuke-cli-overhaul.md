@@ -1,4 +1,4 @@
-# Plan the Netsuke CLI and documentation overhaul
+# Plan the Netsuke command-line interface (CLI) and documentation overhaul
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
