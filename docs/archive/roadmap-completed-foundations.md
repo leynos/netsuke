@@ -1,4 +1,4 @@
-# Archived Netsuke Roadmap Foundations
+# Archived Netsuke roadmap foundations
 
 This archive preserves completed Netsuke roadmap work that remains relevant to
 the future product but no longer belongs in the active delivery roadmap.
@@ -7,7 +7,7 @@ Task numbers are intentionally retained. The active roadmap does not repeat
 these completed task identifiers as live work. Partial and planned tasks remain
 in [`docs/roadmap.md`](../roadmap.md) under their existing numbers.
 
-## Relevance Assessment Method
+## Relevance assessment method
 
 Archived work is classified before migration so completed obligations do not
 disappear during roadmap rewrites.
@@ -26,7 +26,7 @@ disappear during roadmap rewrites.
 This archive currently contains completed foundations only. No archived task is
 classified as no longer relevant.
 
-## Migration Summary
+## Migration summary
 
 - Completed `1.1.1` to `1.3.3` moved here as static-core foundations.
 - Completed `2.1.1` to `2.3.2` moved here as dynamic-engine foundations.
@@ -35,7 +35,7 @@ classified as no longer relevant.
 - `3.14.2` remains active because the previous roadmap marked the heading
   complete while one subtask was still unchecked.
 
-## 1. The Static Core
+## 1. The static core
 
 Classification for every task in this phase: completed foundation.
 
@@ -43,7 +43,7 @@ Reason: these tasks created the original static compiler pipeline. The CLI
 redesign changes public grammar, not the need for parsing, IR generation,
 Ninja generation, and process execution.
 
-### 1.1. CLI and Manifest Parsing
+### 1.1. CLI and manifest parsing
 
 - [x] 1.1.1. Implement initial clap CLI structure for build command and global
   options. See [netsuke-design.md §8.2](../netsuke-design.md).
@@ -61,7 +61,7 @@ Ninja generation, and process execution.
 - [x] 1.1.7. Implement YAML parsing logic to deserialize static Netsukefile into
   NetsukeManifest AST.
 
-### 1.2. Intermediate Representation and Validation
+### 1.2. Intermediate representation and validation
 
 - [x] 1.2.1. Define IR data structures in `src/ir.rs`. See
   [netsuke-design.md §5.2](../netsuke-design.md).
@@ -78,7 +78,7 @@ Ninja generation, and process execution.
   [netsuke-design.md §5.3](../netsuke-design.md).
   - [x] Fail compilation on circular dependency detection.
 
-### 1.3. Code Generation and Execution
+### 1.3. Code generation and execution
 
 - [x] 1.3.1. Implement Ninja file synthesizer in `src/ninja_gen.rs`. See
   [netsuke-design.md §5.4](../netsuke-design.md).
@@ -89,7 +89,7 @@ Ninja generation, and process execution.
 - [x] 1.3.3. Implement process management in `main.rs`.
   - [x] Invoke ninja executable as subprocess using `std::process::Command`.
 
-## 2. The Dynamic Engine
+## 2. The dynamic engine
 
 Classification for every task in this phase: completed foundation.
 
@@ -97,7 +97,7 @@ Reason: dynamic manifest expansion remains core Netsuke functionality. The
 future `context` and validation surfaces should expose this capability rather
 than reimplement it.
 
-### 2.1. Jinja Integration
+### 2.1. Jinja integration
 
 - [x] 2.1.1. Integrate the `minijinja` crate into the build pipeline. See
   [netsuke-design.md §4.1](../netsuke-design.md).
@@ -110,7 +110,7 @@ than reimplement it.
 - [x] 2.1.3. Create minijinja::Environment and populate with global vars from
   manifest. See [netsuke-design.md §4.2](../netsuke-design.md).
 
-### 2.2. Dynamic Features and Custom Functions
+### 2.2. Dynamic features and custom functions
 
 - [x] 2.2.1. Remove global first-pass Jinja parsing.
   - [x] Ensure manifests are valid YAML before any templating occurs.
@@ -130,7 +130,7 @@ than reimplement it.
   list. See [netsuke-design.md §4.3](../netsuke-design.md).
   - [x] Register macros with environment before rendering.
 
-### 2.3. YAML Parser Migration
+### 2.3. YAML parser migration
 
 - [x] 2.3.1. Draft ADR evaluating maintained replacements for `serde_yml`.
   - [x] Evaluate `serde_yaml_ng` and alternatives.
@@ -139,7 +139,7 @@ than reimplement it.
   - [x] Exercise manifest fixtures to capture compatibility notes.
   - [x] Document required mitigations.
 
-## 3. The "Friendly" Polish
+## 3. The "friendly" polish
 
 Classification for every task in this phase: completed foundation.
 
@@ -147,7 +147,7 @@ Reason: these tasks built the existing human-facing quality bar. Future
 automation and agent work must preserve, not replace, diagnostics,
 localization, accessibility, configuration, and feedback quality.
 
-### 3.1. Security and Shell Escaping
+### 3.1. Security and shell escaping
 
 - [x] 3.1.1. Integrate the `shell-quote` crate.
 - [x] 3.1.2. Mandate shell-quote use for variable substitutions. See
@@ -162,7 +162,7 @@ localization, accessibility, configuration, and feedback quality.
 - [x] 3.1.4. Validate final command string is parsable using shlex crate after
   interpolation.
 
-### 3.2. Actionable Error Reporting
+### 3.2. Actionable error reporting
 
 - [x] 3.2.1. Adopt `anyhow` and `thiserror` error handling strategy. See
   [netsuke-design.md §7.2](../netsuke-design.md).
@@ -177,7 +177,7 @@ localization, accessibility, configuration, and feedback quality.
 - [x] 3.2.5. Refactor all error-producing code to provide clear, contextual, and
   actionable error messages. See [netsuke-design.md §7](../netsuke-design.md).
 
-### 3.3. Template Standard Library
+### 3.3. Template standard library
 
 - [x] 3.3.1. Implement basic file-system tests. See
   [netsuke-design.md §4.7](../netsuke-design.md).
@@ -198,7 +198,7 @@ localization, accessibility, configuration, and feedback quality.
   [netsuke-design.md §4.7](../netsuke-design.md).
   - [x] Implement `now` and `timedelta`.
 
-### 3.4. CLI and Feature Completeness
+### 3.4. CLI and feature completeness
 
 - [x] 3.4.1. Implement `clean` subcommand. See
   [netsuke-design.md §8.3](../netsuke-design.md).
@@ -215,7 +215,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Persist generated Ninja file without executing.
   - [x] Include integration tests for writing to disk and streaming to stdout.
 
-### 3.5. Executable Discovery Filter
+### 3.5. Executable discovery filter
 
 - [x] 3.5.1. Implement cross-platform `which` MiniJinja filter and function
   alias. See [netsuke-design.md §4.7](../netsuke-design.md).
@@ -237,7 +237,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Add MiniJinja fixtures asserting deterministic renders across repeated
     invocations.
 
-### 3.6. Onboarding and Defaults
+### 3.6. Onboarding and defaults
 
 - [x] 3.6.1. Ensure default subcommand builds manifest defaults.
   - [x] Emit guided error and hint for missing-manifest scenarios. See CLI
@@ -265,7 +265,7 @@ localization, accessibility, configuration, and feedback quality.
     added to en-US and es-ES FTL files with corresponding key constants.
   - [x] Localization smoke tests verify en-US and es-ES message resolution.
 
-### 3.8. Accessibility and Section 508 Compliance
+### 3.8. Accessibility and Section 508 compliance
 
 - [x] 3.8.1. Add accessible output mode.
   - [x] Auto-enable for `TERM=dumb`, `NO_COLOR`, or explicit config.
@@ -287,7 +287,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Include metrics in completion summary.
   - [x] Avoid noise in default output.
 
-### 3.10. Output Channels and Diagnostics
+### 3.10. Output channels and diagnostics
 
 - [x] 3.10.1. Guarantee status message and subprocess output ordering.
   - [x] Stream Netsuke status messages to stderr.
@@ -300,7 +300,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Document schema.
   - [x] Add snapshot tests to guard compatibility.
 
-### 3.11. Configuration and Preferences
+### 3.11. Configuration and preferences
 
 - [x] 3.11.1. Introduce `CliConfig` struct derived with `OrthoConfig`. See
   [ortho-config-users-guide.md](../ortho-config-users-guide.md).
@@ -317,7 +317,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Select alternative config files.
   - [x] Ship annotated sample configs in documentation.
 
-### 3.12. Visual Design Validation
+### 3.12. Visual design validation
 
 - [x] 3.12.1. Define design tokens for colours, symbols, and spacing.
   - [x] Route reporter prefixes and spacing through resolved theme tokens.
@@ -327,7 +327,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Cover unicode and ascii themes.
   - [x] Guard alignment and wrapping against regressions.
 
-### 3.13. User Journey Support
+### 3.13. User journey support
 
 - [x] 3.13.1. Add smoke tests for novice flows.
   - [x] Test first run success, missing manifest, and help output.
