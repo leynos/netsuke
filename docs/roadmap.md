@@ -460,13 +460,14 @@ configuration, inspect run history, route artefacts, and report friction.
   - [ ] Treat run persistence as product state, not generic configuration.
   - [ ] Depend on OrthoConfig `9.3.3` where its helper APIs are available.
 
-- [ ] 5.2.3. Implement `runs list`, `runs get`, and `runs prune`.
+- [ ] 5.2.3. Implement `runs list`, `runs get`, and `runs prune`. Requires:
+  5.2.1, 5.2.2.
   - [ ] Support `--json` on all run commands.
   - [ ] Bound list output with `--limit` and `--cursor`.
   - [ ] Require `--force` for pruning.
   - [ ] Include recovery hints for interrupted builds.
 
-- [ ] 5.2.4. Add run-ledger validation and documentation.
+- [ ] 5.2.4. Add run-ledger validation and documentation. Requires: 5.2.3.
   - [ ] Test interrupted writes and corrupted record recovery.
   - [ ] Test human and JSON rendering.
   - [ ] Document run history for local users, CI, and agents.
