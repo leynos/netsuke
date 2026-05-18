@@ -39,9 +39,9 @@ classified as no longer relevant.
 
 Classification for every task in this phase: completed foundation.
 
-Reason: these tasks created the original static compiler pipeline. The CLI
-redesign changes public grammar, not the need for parsing, IR generation,
-Ninja generation, and process execution.
+Reason: these tasks created the original static compiler pipeline. The
+command-line interface (CLI) redesign changes public grammar, not the need for
+parsing, IR generation, Ninja generation, and process execution.
 
 ### 1.1. CLI and manifest parsing
 
@@ -63,8 +63,8 @@ Ninja generation, and process execution.
 
 ### 1.2. Intermediate representation and validation
 
-- [x] 1.2.1. Define IR data structures in `src/ir.rs`. See
-  [netsuke-design.md §5.2](../netsuke-design.md).
+- [x] 1.2.1. Define intermediate representation (IR) data structures in
+  `src/ir.rs`. See [netsuke-design.md §5.2](../netsuke-design.md).
   - [x] Implement BuildGraph, Action, and BuildEdge structs.
   - [x] Keep IR backend-agnostic per design.
 - [x] 1.2.2. Implement ir::from_manifest transformation logic. See
@@ -253,7 +253,8 @@ localization, accessibility, configuration, and feedback quality.
 ### 3.7. Localization with Fluent
 
 - [x] 3.7.1. Externalize user-facing strings into Fluent `.ftl` bundles.
-  - [x] Implement compile-time audit that fails CI on missing message keys.
+  - [x] Implement compile-time audit that fails Continuous Integration (CI)
+    on missing message keys.
 - [x] 3.7.2. Implement locale resolution.
   - [x] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
     defaults.
