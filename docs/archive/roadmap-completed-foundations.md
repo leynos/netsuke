@@ -252,7 +252,8 @@ localization, accessibility, configuration, and feedback quality.
 
 ### 3.7. Localization with Fluent
 
-- [x] 3.7.1. Externalize user-facing strings into Fluent `.ftl` bundles.
+- [x] 3.7.1. Externalize user-facing strings into Fluent Translation List
+  (`.ftl`) bundles.
   - [x] Implement compile-time audit that fails Continuous Integration (CI)
     on missing message keys.
 - [x] 3.7.2. Implement locale resolution.
