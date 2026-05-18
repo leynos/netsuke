@@ -4,8 +4,8 @@ This archive preserves completed Netsuke roadmap work that remains relevant to
 the future product but no longer belongs in the active delivery roadmap.
 
 Task numbers are intentionally retained. The active roadmap does not repeat
-these completed task identifiers as live work. Partial and planned tasks remain
-in [`docs/roadmap.md`](../roadmap.md) under their existing numbers.
+these completed task identifiers as live work. Partial and planned tasks
+remain in [`docs/roadmap.md`](../roadmap.md) under their existing numbers.
 
 ## Relevance assessment method
 
@@ -48,7 +48,8 @@ parsing, IR generation, Ninja generation, and process execution.
 - [x] 1.1.1. Implement initial clap CLI structure for build command and global
   options. See [netsuke-design.md §8.2](../netsuke-design.md).
   - [x] Define --file, --directory, and --jobs options.
-- [x] 1.1.2. Define core Abstract Syntax Tree data structures in `src/ast.rs`.
+- [x] 1.1.2. Define core Abstract Syntax Tree (AST) data structures in
+  `src/ast.rs`.
   - [x] Implement NetsukeManifest, Rule, Target, StringOrList, and Recipe
     structs.
 - [x] 1.1.3. Annotate AST structs with serde attributes.
@@ -58,8 +59,8 @@ parsing, IR generation, Ninja generation, and process execution.
 - [x] 1.1.5. Support `phony` and `always` boolean flags on targets.
 - [x] 1.1.6. Parse actions list, treating each entry as a target with
   `phony: true`.
-- [x] 1.1.7. Implement YAML parsing logic to deserialize static Netsukefile into
-  NetsukeManifest AST.
+- [x] 1.1.7. Implement YAML (YAML Ain't Markup Language) parsing logic to
+  deserialize static Netsukefile into NetsukeManifest AST.
 
 ### 1.2. Intermediate representation and validation
 
@@ -132,7 +133,8 @@ than reimplement it.
 
 ### 2.3. YAML parser migration
 
-- [x] 2.3.1. Draft ADR evaluating maintained replacements for `serde_yml`.
+- [x] 2.3.1. Draft Architecture Decision Record (ADR) evaluating maintained
+  replacements for `serde_yml`.
   - [x] Evaluate `serde_yaml_ng` and alternatives.
   - [x] Record migration decision.
 - [x] 2.3.2. Migrate parser to `serde_saphyr`.
@@ -154,7 +156,8 @@ localization, accessibility, configuration, and feedback quality.
   [netsuke-design.md §6.2](../netsuke-design.md).
   - [x] Prevent command injection during IR generation.
   - [x] Validate final command string with shlex.
-- [x] 3.1.3. Emit POSIX-sh-compatible quoting. See
+- [x] 3.1.3. Emit Portable Operating System Interface (POSIX)-sh-compatible
+  quoting. See
   [netsuke-design.md §6.3](../netsuke-design.md).
   - [x] Use portable single-quote style rather than Bash-only forms.
   - [x] Document and enforce bash execution if Bash-specific quoting is
@@ -224,7 +227,8 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Include `PATH`, optional `PATHEXT`, current directory, and option flags
     in memoization key.
   - [x] Keep helper pure by default.
-- [x] 3.5.3. Provide LRU cache with metadata self-healing.
+- [x] 3.5.3. Provide Least Recently Used (LRU) cache with metadata
+  self-healing.
   - [x] Avoid stale hits.
   - [x] Honour `fresh=true` without discarding cached entries.
 - [x] 3.5.4. Emit actionable diagnostics.
@@ -283,8 +287,8 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Surface the six pipeline stages with persistent summaries.
   - [x] Apply localization-aware labelling.
 - [x] 3.9.2. Parse Ninja status lines to drive task progress.
-  - [x] Emit fallback textual updates when stdout is not a TTY or accessible
-    mode is active.
+  - [x] Emit fallback textual updates when stdout is not a teletype (TTY) or
+    accessible mode is active.
 - [x] 3.9.3. Capture per-stage timing metrics in verbose mode.
   - [x] Include metrics in completion summary.
   - [x] Avoid noise in default output.
