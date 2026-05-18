@@ -1,339 +1,157 @@
-# Netsuke implementation roadmap
+# Netsuke roadmap
 
-This roadmap translates the [netsuke-design.md](netsuke-design.md) document
-into a phased, actionable implementation plan. Each phase has a clear objective
-and a checklist of tasks that must be completed to meet the success criteria.
+This roadmap tracks unfinished and future Netsuke work. Completed historical
+foundations live in
+[`docs/archive/roadmap-completed-foundations.md`](archive/roadmap-completed-foundations.md)
+so the active roadmap can focus on remaining hypotheses without erasing prior
+implementation detail.
 
-## 1. The Static Core
+Task identifiers are globally unique across the active roadmap and the archive.
+When a completed task moves to the archive, it keeps its original number and is
+not repeated here. When a historical task is renamed under the command-line
+interface (CLI) redesign, the active task states the mapping explicitly.
 
-Objective: To create a minimal, working build compiler capable of handling
-static manifests without any templating. This phase validates the entire static
-compilation pipeline from parsing to execution.
+## How to read this roadmap
 
-### 1.1. CLI and manifest parsing
+Each phase validates a product hypothesis:
 
-- [x] 1.1.1. Implement initial clap CLI structure for build command and global
-  options. See [netsuke-design.md §8.2](netsuke-design.md).
-  - [x] Define --file, --directory, and --jobs options.
-- [x] 1.1.2. Define core Abstract Syntax Tree data structures in `src/ast.rs`.
-  - [x] Implement NetsukeManifest, Rule, Target, StringOrList, and Recipe
-    structs.
-- [x] 1.1.3. Annotate AST structs with serde attributes.
-  - [x] Add `#[derive(Deserialize)]` and `#[serde(deny_unknown_fields)]` to
-    enable serde_saphyr parsing.
-- [x] 1.1.4. Implement netsuke_version field parsing with semver validation.
-- [x] 1.1.5. Support `phony` and `always` boolean flags on targets.
-- [x] 1.1.6. Parse actions list, treating each entry as a target with
-  `phony: true`.
-- [x] 1.1.7. Implement YAML parsing logic to deserialize static Netsukefile into
-  NetsukeManifest AST.
+- Phase 3 validates that Netsuke can stay friendly for local human workflows
+  while becoming predictable for automation and agents.
+- Phase 4 validates that the build compiler and its cross-platform behaviour
+  can be specified and checked rigorously.
+- Phase 5 validates that repeated human, Continuous Integration (CI), editor,
+  and agent usage improves through introspection, profiles, run history,
+  delivery, and feedback.
 
-### 1.2. Intermediate Representation and validation
+The roadmap keeps user-facing product grammar separate from implementation
+detail. Public tasks name Netsuke capabilities first. Implementation adapters,
+including OrthoConfig, appear only when they define ownership, dependency, or
+validation boundaries.
 
-- [x] 1.2.1. Define IR data structures in `src/ir.rs`. See
-  [netsuke-design.md §5.2](netsuke-design.md).
-  - [x] Implement BuildGraph, Action, and BuildEdge structs.
-  - [x] Keep IR backend-agnostic per design.
-- [x] 1.2.2. Implement ir::from_manifest transformation logic. See
-  [netsuke-design.md §5.3](netsuke-design.md).
-  - [x] Convert AST to BuildGraph IR.
-- [x] 1.2.3. Consolidate and deduplicate rules into ir::Action structs based on
-  property hash during transformation.
-- [x] 1.2.4. Implement validation for rule, command, and script references.
-  - [x] Ensure references are valid and mutually exclusive.
-- [x] 1.2.5. Implement cycle detection algorithm using depth-first search. See
-  [netsuke-design.md §5.3](netsuke-design.md).
-  - [x] Fail compilation on circular dependency detection.
+## External dependencies
 
-### 1.3. Code generation and execution
+Netsuke depends on OrthoConfig for generic command/configuration/schema
+machinery. Netsuke tasks cover integration, product policy, validation, and
+local build-tool adaptation. They must not duplicate the shared infrastructure
+owned by OrthoConfig.
 
-- [x] 1.3.1. Implement Ninja file synthesizer in `src/ninja_gen.rs`. See
-  [netsuke-design.md §5.4](netsuke-design.md).
-  - [x] Traverse BuildGraph IR.
-- [x] 1.3.2. Generate Ninja rule and build statements.
-  - [x] Write rule statements from ir::Action structs.
-  - [x] Write build statements from ir::BuildEdge structs.
-- [x] 1.3.3. Implement process management in `main.rs`.
-  - [x] Invoke ninja executable as subprocess using `std::process::Command`.
+Relevant OrthoConfig roadmap dependencies:
 
-**Success criterion:** Netsuke can successfully take a Netsukefile without
-Jinja syntax, compile it to a `build.ninja` file, and execute it via the ninja
-subprocess to produce the correct build artefacts. Validated via CI workflow.
+- OrthoConfig `5.2.3`: consumer dependency boundaries for Netsuke and Weaver.
+- OrthoConfig `6.1.1` and `6.1.2`: recursive command metadata extraction.
+- OrthoConfig `6.2.1` to `6.2.3`: `<tool> context --json` schema, emission,
+  and downstream command naming.
+- OrthoConfig `6.3.1` and `6.3.2`: skill manifest metadata and validation.
+- OrthoConfig `7.1.1` to `7.1.3`: vocabulary policy and canonical global
+  option glossary.
+- OrthoConfig `7.2.1` to `7.2.7`: non-interactive metadata, mutation metadata,
+  dual-renderer output metadata, structured result classes, stream contracts,
+  bounded-list metadata, and capability provenance.
+- OrthoConfig `7.3.1`: shared exit-code and error-remediation metadata.
+- OrthoConfig `8.1.1` and `8.1.2`: reference CLI structured result and
+  enumerable-error behaviour.
+- OrthoConfig `9.1.1` to `9.1.3`: profile metadata, redaction, and profile
+  store helpers.
+- OrthoConfig `9.2.1` and `9.2.2`: delivery-target parsing and feedback
+  storage helpers.
+- OrthoConfig `9.3.1` to `9.3.3`: execution-ledger metadata, run-ledger nouns,
+  and run-ledger helper APIs.
 
-## 2. The Dynamic Engine
+## Canonical public vocabulary
 
-Objective: To integrate the minijinja templating engine, enabling dynamic build
-configurations with variables, control flow, and custom functions.
+These command and flag spellings are the public grammar assumed by this
+roadmap. Examples must use this list unless a task explicitly extends it.
 
-### 2.1. Jinja integration
+- Top-level commands: `build`, `check`, `clean`, `generate`, `graph`,
+  `context`, `skill-path`, `runs`, `profile`, and `feedback`.
+- Resource verbs: `list`, `get`, `save`, `delete`, `add`, `send`, and `prune`.
+- Structured output: `--json`.
+- Non-interactive execution: `--no-input`.
+- Destructive confirmation: `--force`.
+- Mutation preview: `--dry-run`.
+- Pagination: `--limit` and `--cursor`.
+- Output and delivery: `--output` and `--deliver`.
+- Display policy flags: `--color auto|always|never`,
+  `--emoji auto|always|never`, `--progress auto|always|never`, and
+  `--accessibility auto|on|off`.
 
-- [x] 2.1.1. Integrate the `minijinja` crate into the build pipeline. See
-  [netsuke-design.md §4.1](netsuke-design.md).
-- [x] 2.1.2. Implement data-first parsing pipeline.
-  - [x] Stage 2: Parse manifest into `serde_json::Value` (Initial YAML Parsing).
-  - [x] Stage 3: Expand `foreach` and `when` entries with Jinja environment
-    (Template Expansion).
-  - [x] Stage 4: Deserialize expanded tree into typed AST and render remaining
-    string fields (Deserialization & Final Rendering).
-- [x] 2.1.3. Create minijinja::Environment and populate with global vars from
-  manifest. See [netsuke-design.md §4.2](netsuke-design.md).
+## Historical task traceability
 
-### 2.2. Dynamic features and custom functions
+The following previous roadmap tasks were assessed during the CLI-roadmap
+rewrite:
 
-- [x] 2.2.1. Remove global first-pass Jinja parsing.
-  - [x] Ensure manifests are valid YAML before any templating occurs.
-- [x] 2.2.2. Restrict Jinja expressions to string values only.
-  - [x] Forbid structural tags such as `{% if %}` and `{% for %}`.
-- [x] 2.2.3. Implement `foreach` and `when` keys for target generation. See
-  [netsuke-design.md §2.5](netsuke-design.md).
-  - [x] Expose `item` and optional `index` variables.
-  - [x] Layer per-iteration locals over `target.vars` and manifest globals for
-    subsequent rendering phases.
-- [x] 2.2.4. Implement `env(var_name)` custom Jinja function for reading system
-  environment variables. See [netsuke-design.md §4.4](netsuke-design.md).
-- [x] 2.2.5. Implement `glob(pattern)` custom function for file path globbing.
-  See [netsuke-design.md §4.4](netsuke-design.md).
-  - [x] Sort results lexicographically.
-- [x] 2.2.6. Support user-defined Jinja macros declared in top-level macros
-  list. See [netsuke-design.md §4.3](netsuke-design.md).
-  - [x] Register macros with environment before rendering.
+- `1.1.1` to `1.3.3`, `2.1.1` to `2.3.2`, and completed `3.x` foundation
+  tasks through `3.13.2` moved to the archive as completed foundations.
+- `3.4.5`, `3.4.6`, `3.8.3`, `3.11.4`, `3.12.3`, `3.13.3`, `3.14.1`, and
+  `3.14.3` to `3.14.11` remain active under their existing numbers.
+- `3.14.2` remains active because it was previously marked complete while one
+  of its subtasks still required work.
+- Phase 4 remains active because none of its formal-verification work has been
+  delivered yet.
+- New CLI-redesign work starts at `3.15` and Phase 5 so historical numbers are
+  not reused.
 
-**Success criterion:** Netsuke can successfully build a manifest that uses
-variables, conditional logic within string values, the `foreach` and `when`
-keys, custom macros, and the `glob()` function to discover and operate on
-source files.
+## 3. Friendly polish and agent-consistent CLI foundations
 
-### 2.3. YAML parser migration
+Hypothesis: Netsuke can keep a pleasant, accessible local command-line
+experience while making every command predictable for CI, editor integrations,
+and agents.
 
-- [x] 2.3.1. Draft ADR evaluating maintained replacements for `serde_yml`.
-  - [x] Evaluate `serde_yaml_ng` and alternatives.
-  - [x] Record migration decision.
-- [x] 2.3.2. Migrate parser to `serde_saphyr`.
-  - [x] Exercise manifest fixtures to capture compatibility notes.
-  - [x] Document required mitigations.
+### 3.4. Graph and explanation work
 
-## 3. The "Friendly" polish
+- [ ] 3.4.5. Extend the graph subcommand with an optional `--html` renderer.
+  - [ ] Keep raw graph data available for automation.
+  - [ ] Add `--output <FILE>` for file-based graph artefacts.
+  - [ ] Document how `graph --html --output graph.html` differs from
+    structured graph inspection.
 
-Objective: To implement the advanced features that deliver a superior, secure,
-and robust user experience, focusing on security, error reporting, the standard
-library, and CLI ergonomics.
+- [ ] 3.4.6. Evaluate whether `netsuke explain <code>` should exist.
+  - [ ] Compare `explain` with richer diagnostics and documentation links.
+  - [ ] Avoid adding the command unless it has a clear user-facing workflow.
+  - [ ] If accepted, add `explain` to the canonical vocabulary before examples
+    use it.
 
-### 3.1. Security and shell escaping
+### 3.8. Accessibility verification
 
-- [x] 3.1.1. Integrate the `shell-quote` crate.
-- [x] 3.1.2. Mandate shell-quote use for variable substitutions. See
-  [netsuke-design.md §6.2](netsuke-design.md).
-  - [x] Prevent command injection during IR generation.
-  - [x] Validate final command string with shlex.
-- [x] 3.1.3. Emit POSIX-sh-compatible quoting. See
-  [netsuke-design.md §6.3](netsuke-design.md).
-  - [x] Use portable single-quote style rather than Bash-only forms.
-  - [x] Document and enforce bash execution if Bash-specific quoting is
-    required.
-- [x] 3.1.4. Validate final command string is parsable using shlex crate after
-  interpolation.
+- [ ] 3.8.3. Verify accessible output with assistive technology.
+  - [ ] Test screen-reader behaviour for diagnostics, progress, and summaries.
+  - [ ] Validate reduced-motion and no-colour modes.
+  - [ ] Record findings in the accessibility documentation.
 
-### 3.2. Actionable error reporting
+### 3.11. Configuration precedence verification
 
-- [x] 3.2.1. Adopt `anyhow` and `thiserror` error handling strategy. See
-  [netsuke-design.md §7.2](netsuke-design.md).
-- [x] 3.2.2. Define structured error types using thiserror in library modules.
-  See [netsuke-design.md §7.2](netsuke-design.md).
-  - [x] Implement IrGenError::RuleNotFound, IrGenError::CircularDependency, and
-    similar types.
-- [x] 3.2.3. Use anyhow in application logic for human-readable context.
-  - [x] Apply `.with_context()` for error propagation.
-- [x] 3.2.4. Use `miette` to render diagnostics with source spans and helpful
-  messages. See [netsuke-design.md §7.2](netsuke-design.md).
-- [x] 3.2.5. Refactor all error-producing code to provide clear, contextual, and
-  actionable error messages. See [netsuke-design.md §7](netsuke-design.md).
+- [ ] 3.11.4. Add OrthoConfig precedence-ladder regression tests.
+  - [ ] Depend on OrthoConfig `5.2.3` for consumer boundary guidance.
+  - [ ] Preserve Netsuke-specific precedence expectations for manifest path,
+    display policies, locale, and profile selection.
+  - [ ] Verify that CLI flags override environment, profile, project, user,
+    system, and default configuration layers.
 
-### 3.3. Template standard library
+### 3.12. Terminal rendering verification
 
-- [x] 3.3.1. Implement basic file-system tests. See
-  [netsuke-design.md §4.7](netsuke-design.md).
-  - [x] Implement `dir`, `file`, `symlink`, `pipe`, `block_device`,
-    `char_device`, and legacy `device` tests.
-- [x] 3.3.2. Implement path and file filters. See
-  [netsuke-design.md §4.7](netsuke-design.md).
-  - [x] Implement basename, dirname, with_suffix, realpath, contents, hash, and
-    similar filters.
-- [x] 3.3.3. Implement generic collection filters. See
-  [netsuke-design.md §4.7](netsuke-design.md).
-  - [x] Implement `uniq`, `flatten`, and `group_by`.
-- [x] 3.3.4. Implement network and command functions/filters. See
-  [netsuke-design.md §4.7](netsuke-design.md).
-  - [x] Implement fetch, shell, and grep.
-  - [x] Ensure shell marks templates as impure to disable caching.
-- [x] 3.3.5. Implement time helpers. See
-  [netsuke-design.md §4.7](netsuke-design.md).
-  - [x] Implement `now` and `timedelta`.
+- [ ] 3.12.3. Add terminal rendering regression tests.
+  - [ ] Verify `--color auto|always|never` policy behaviour.
+  - [ ] Verify `--emoji auto|always|never` policy behaviour.
+  - [ ] Verify `--progress auto|always|never` policy behaviour.
+  - [ ] Verify `--accessibility auto|on|off` behaviour.
 
-### 3.4. CLI and feature completeness
+### 3.13. CI guidance
 
-- [x] 3.4.1. Implement `clean` subcommand. See
-  [netsuke-design.md §8.3](netsuke-design.md).
-  - [x] Invoke `ninja -t clean`.
-- [x] 3.4.2. Implement `graph` subcommand. See
-  [netsuke-design.md §8.3](netsuke-design.md).
-  - [x] Invoke `ninja -t graph` to output DOT representation of dependency
-    graph.
-- [x] 3.4.3. Refine all CLI output for clarity.
-  - [x] Ensure help messages are descriptive.
-  - [x] Ensure command feedback is intuitive.
-- [x] 3.4.4. Implement `manifest` subcommand. See
-  [netsuke-design.md §8.3](netsuke-design.md).
-  - [x] Persist generated Ninja file without executing.
-  - [x] Include integration tests for writing to disk and streaming to stdout.
-- [ ] 3.4.5. Extend graph subcommand with optional `--html` renderer.
-  - [ ] Produce browsable graph visualization.
-  - [ ] Document text-only fallback workflow.
-- [ ] 3.4.6. Evaluate `netsuke explain <code>` command for diagnostic codes.
-  - [ ] Capture decision and rationale in architecture docs.
-
-### 3.5. Executable discovery filter
-
-- [x] 3.5.1. Implement cross-platform `which` MiniJinja filter and function
-  alias. See [netsuke-design.md §4.7](netsuke-design.md).
-  - [x] Expose `all`, `canonical`, `fresh`, and `cwd_mode` keyword arguments.
-- [x] 3.5.2. Integrate finder with Stage 3/4 render cache.
-  - [x] Include `PATH`, optional `PATHEXT`, current directory, and option flags
-    in memoization key.
-  - [x] Keep helper pure by default.
-- [x] 3.5.3. Provide LRU cache with metadata self-healing.
-  - [x] Avoid stale hits.
-  - [x] Honour `fresh=true` without discarding cached entries.
-- [x] 3.5.4. Emit actionable diagnostics.
-  - [x] Implement `netsuke::jinja::which::not_found` and
-    `netsuke::jinja::which::args` diagnostics.
-  - [x] Include PATH previews and platform-appropriate hints.
-- [x] 3.5.5. Cover POSIX and Windows behaviour with tests.
-  - [x] Test canonicalization, list-all mode, and cache validation with unit
-    tests.
-  - [x] Add MiniJinja fixtures asserting deterministic renders across repeated
-    invocations.
-
-### 3.6. Onboarding and defaults
-
-- [x] 3.6.1. Ensure default subcommand builds manifest defaults.
-  - [x] Emit guided error and hint for missing-manifest scenarios. See CLI
-    design.
-  - [x] Guard with integration tests.
-- [x] 3.6.2. Curate OrthoConfig-generated Clap help output.
-  - [x] Ensure every subcommand and flag has plain-language, localizable
-    description. See style guide.
-- [x] 3.6.3. Publish "Hello World" quick-start walkthrough.
-  - [x] Demonstrate running Netsuke end-to-end.
-  - [x] Exercise via documentation test or example build fixture.
-
-### 3.7. Localization with Fluent
-
-- [x] 3.7.1. Externalize user-facing strings into Fluent `.ftl` bundles.
-  - [x] Implement compile-time audit that fails CI on missing message keys.
-- [x] 3.7.2. Implement locale resolution.
-  - [x] Support `--locale`, `NETSUKE_LOCALE`, configuration files, and system
-    defaults.
-  - [x] Fall back to `en-US` when translations are absent.
-- [x] 3.7.3. Translator tooling and documentation published.
-  - [x] `docs/translators-guide.md` covers FTL syntax, key conventions, variable
-    catalogue, plural forms, and adding new locales.
-  - [x] Plural form examples (`example.files_processed`, `example.errors_found`)
-    added to en-US and es-ES FTL files with corresponding key constants.
-  - [x] Localization smoke tests verify en-US and es-ES message resolution.
-
-### 3.8. Accessibility and Section 508 compliance
-
-- [x] 3.8.1. Add accessible output mode.
-  - [x] Auto-enable for `TERM=dumb`, `NO_COLOR`, or explicit config.
-  - [x] Replace spinners with static status lines.
-  - [x] Guarantee textual labels for every status.
-- [x] 3.8.2. Respect accessibility preferences.
-  - [x] Honour `NO_COLOR`, `NETSUKE_NO_EMOJI`, and ASCII-only preferences.
-  - [x] Keep semantic prefixes (Error, Warning, Success) in all modes.
-- [ ] 3.8.3. Conduct assistive technology verification.
-  - [ ] Test with NVDA on Windows, VoiceOver on macOS, and a Linux screen
-    reader.
-  - [ ] Document results and corrective actions.
-
-### 3.9. Real-time feedback and progress
-
-- [x] 3.9.1. Integrate `indicatif::MultiProgress`.
-  - [x] Surface the six pipeline stages with persistent summaries.
-  - [x] Apply localization-aware labelling.
-- [x] 3.9.2. Parse Ninja status lines to drive task progress.
-  - [x] Emit fallback textual updates when stdout is not a TTY or accessible
-    mode is active.
-- [x] 3.9.3. Capture per-stage timing metrics in verbose mode.
-  - [x] Include metrics in completion summary.
-  - [x] Avoid noise in default output.
-
-### 3.10. Output channels and diagnostics
-
-- [x] 3.10.1. Guarantee status message and subprocess output ordering.
-  - [x] Stream Netsuke status messages to stderr.
-  - [x] Preserve subprocess output ordering on stdout.
-  - [x] Verify with end-to-end tests redirecting each stream.
-- [x] 3.10.2. Introduce consistent prefixes for log differentiation.
-  - [x] Use localizable prefixes or indentation rules.
-  - [x] Support ASCII and Unicode themes.
-- [x] 3.10.3. Deliver `--diag-json` machine-readable diagnostics mode.
-  - [x] Document schema.
-  - [x] Add snapshot tests to guard compatibility.
-
-### 3.11. Configuration and preferences
-
-- [x] 3.11.1. Introduce `CliConfig` struct derived with `OrthoConfig`. See
-  [ortho-config-users-guide.md](ortho-config-users-guide.md).
-  - [x] Share schema across Clap integration, configuration files, and
-    environment variables.
-  - [x] Cover verbosity, colour policy, locale, spinner mode, output format,
-    default targets, and theme.
-- [x] 3.11.2. Discover configuration files in project and user scopes.
-  - [x] Honour env overrides and CLI precedence.
-  - [x] Add integration tests for each precedence tier. See
-    [ortho-config-users-guide.md](ortho-config-users-guide.md) and
-    `tests/cli_tests/config_discovery.rs`.
-- [x] 3.11.3. Expose `--config <path>` and `NETSUKE_CONFIG`.
-  - [x] Select alternative config files.
-  - [x] Ship annotated sample configs in documentation.
-- [ ] 3.11.4. Add regression tests for OrthoConfig precedence ladder.
-  - [ ] Test defaults < file < env < CLI precedence. See
-    [ortho-config-users-guide.md](ortho-config-users-guide.md).
-
-### 3.12. Visual design validation
-
-- [x] 3.12.1. Define design tokens for colours, symbols, and spacing.
-  - [x] Route reporter prefixes and spacing through resolved theme tokens.
-  - [x] Add end-to-end theme coverage and documentation for ASCII/Unicode
-        consistency.
-- [x] 3.12.2. Snapshot progress and status output for themes.
-  - [x] Cover unicode and ascii themes.
-  - [x] Guard alignment and wrapping against regressions.
-- [ ] 3.12.3. Test output renderings across common terminals.
-  - [ ] Test Windows Console, PowerShell, and xterm-compatible shells.
-  - [ ] Document any conditional handling.
-
-### 3.13. User journey support
-
-- [x] 3.13.1. Add smoke tests for novice flows.
-  - [x] Test first run success, missing manifest, and help output.
-  - [x] Confirm UX matches documented journey.
-- [x] 3.13.2. Extend user documentation with advanced usage chapter.
-  - [x] Cover `clean`, `graph`, `manifest`, configuration layering, and JSON
-    diagnostics.
-- [ ] 3.13.3. Provide CI-focused guidance.
-  - [ ] Include examples of consuming JSON diagnostics.
-  - [ ] Document configuring quiet/verbose modes for automation.
+- [ ] 3.13.3. Revise CI-focused guidance for the canonical CLI.
+  - [ ] Replace legacy diagnostics-only examples with `--json --no-input`.
+  - [ ] Include `check --json --no-input` and `build --json --no-input`.
+  - [ ] Keep examples friendly for humans who maintain CI scripts.
 
 ### 3.14. Conditional action planning
 
 - [x] 3.14.1. Record manifest-time condition semantics for actions and targets.
   See [netsuke-design.md §2.5](netsuke-design.md).
-  - [x] State that `foreach` and `when` are evaluated before typed AST
-    deserialization, IR generation, and Ninja execution.
+  - [x] State that `foreach` and `when` are evaluated before typed Abstract
+    Syntax Tree (AST) deserialization, intermediate representation (IR)
+    generation, and Ninja execution.
   - [x] Document that build-time branching belongs in recipes unless a future
     runtime-condition feature is designed.
-- [x] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
+- [ ] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
   Requires 2.2.3. See [netsuke-design.md §2.5](netsuke-design.md).
   - [x] Preserve the existing implicit `phony: true` action behaviour after
     expansion.
@@ -420,12 +238,77 @@ library, and CLI ergonomics.
   - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a
     later diagnostics design defines severity semantics.
 
-**Success criterion:** Netsuke ships a localizable, accessible, and fully
-configurable CLI that delivers real-time feedback, machine-readable
-diagnostics, and the onboarding experience defined in the Netsuke CLI design
-document.
+### 3.15. Canonical CLI redesign
+
+- [ ] 3.15.1. Replace the pre-0.1.0 command surface with canonical names.
+  - [ ] Rename `manifest` to `generate`.
+  - [ ] Remove `build --emit`; use `generate --output`.
+  - [ ] Add `check`, `context`, `skill-path`, `runs`, `profile`, and
+    `feedback`.
+  - [ ] Rename `--file` to `--manifest`, keeping `-f` as an intentional
+    shorthand.
+  - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3` for shared vocabulary policy
+    and global option glossary.
+
+- [ ] 3.15.2. Add non-interactive and mutation-safety guarantees.
+  - [ ] Add root `--no-input`.
+  - [ ] Make prompts impossible unless a future explicit interactive mode is
+    added.
+  - [ ] Require `--force` for destructive operations.
+  - [ ] Require or support `--dry-run` for consequential operations.
+  - [ ] Make bare `clean` fail fast with a corrective hint.
+  - [ ] Depend on OrthoConfig `7.2.1`, `7.2.2`, and `8.1.1` for shared
+    non-interactive and mutation metadata.
+
+- [ ] 3.15.3. Replace diagnostics-only JSON with canonical structured output.
+  - [ ] Remove `--diag-json` and `--output-format`.
+  - [ ] Add root `--json`.
+  - [ ] Emit exactly one JSON result document on successful JSON-mode commands.
+  - [ ] Emit exactly one JSON diagnostic document on failing JSON-mode commands.
+  - [ ] Suppress progress, colour, emoji, tracing, and timing text in JSON mode.
+  - [ ] Snapshot every v1 JSON schema.
+  - [ ] Depend on OrthoConfig `7.2.3` to `7.2.5`, `7.3.1`, `8.1.1`, and
+    `8.1.2` for shared result, stream, exit-code, and enumerable-error
+    metadata.
+
+- [ ] 3.15.4. Replace legacy output preferences with canonical policy flags.
+  - [ ] Replace `--colour-policy` with `--color auto|always|never`.
+  - [ ] Replace `--spinner-mode` and boolean `--progress` with
+    `--progress auto|always|never`.
+  - [ ] Replace `--no-emoji` with `--emoji auto|always|never`.
+  - [ ] Add `--accessibility auto|on|off`.
+  - [ ] Update OrthoConfig field integration, environment names, config
+    examples, localization keys, and tests.
+  - [ ] Depend on OrthoConfig `7.1.2`, `7.1.3`, and `7.2.3` for shared flag
+    vocabulary and dual-renderer metadata.
+
+- [ ] 3.15.5. Add stable exit codes and enumerable errors.
+  - [ ] Define the Netsuke exit-code taxonomy in the design docs.
+  - [ ] Ensure every enum-like failure lists valid values.
+  - [ ] Add tests for CLI enums, config enums, manifest enums, stdlib options,
+    delivery schemes, profile names, and run states.
+  - [ ] Depend on OrthoConfig `7.3.1` and `8.1.2` for shared exit-code and
+    enumerable-error metadata.
+
+- [ ] 3.15.6. Bound every large response.
+  - [ ] Add `--limit` and `--cursor` where lists can grow.
+  - [ ] Add `--target` and `--depth` to graph inspection.
+  - [ ] Add truncation hints to JSON and human output.
+  - [ ] Bound build-log previews in JSON mode and reference log files.
+  - [ ] Depend on OrthoConfig `7.2.6` for bounded-list metadata.
+
+- [ ] 3.15.7. Add CLI vocabulary linting.
+  - [ ] Generate a command inventory from the real command surface.
+  - [ ] Fail CI on banned verbs and flags.
+  - [ ] Snapshot the canonical command surface.
+  - [ ] Keep the lint aligned with OrthoConfig `7.1.1` to `7.1.3`.
 
 ## 4. Formal verification and property testing
+
+Hypothesis: Netsuke can state and check its core compiler invariants strongly
+enough that future features do not erode deterministic build behaviour. This
+phase preserves the detailed formal-verification workload from the previous
+roadmap rather than compressing it into broad strategy items.
 
 Objective: To add bounded formal verification and generated testing where the
 repository's semantic risk is highest, while keeping the existing build, lint,
@@ -447,13 +330,13 @@ and test workflow intact. See
   - [ ] Cache Kani tool downloads separately from ordinary Cargo artefacts.
 - [ ] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel)
-   and
+  and
   [formal-verification-methods-in-netsuke.md §Stateright remains deferred](formal-verification-methods-in-netsuke.md#stateright-remains-deferred).
   - [ ] Document Verus as optional and proof-kernel-only.
   - [ ] Document Stateright as deferred until Netsuke gains a stateful
     concurrent subsystem.
 
-### 4.2. Intermediate Representation verification
+### 4.2. Intermediate representation verification
 
 - [ ] 4.2.1. Add Kani harnesses for manifest-to-IR safety checks. Requires
   4.1.1. See
@@ -532,3 +415,156 @@ and test workflow intact. See
 generated property tests for deterministic emission and manifest semantics, and
 documented verification contracts that keep optional Verus work narrow and
 defer Stateright until the architecture justifies model checking.
+
+## 5. Agent-consistent compounding features
+
+Hypothesis: Netsuke becomes more valuable across repeated invocations when
+humans, CI systems, editors, and agents can discover its surface, reuse local
+configuration, inspect run history, route artefacts, and report friction.
+
+### 5.1. Context and schema generation
+
+- [ ] 5.1.1. Implement `netsuke context --json`.
+  - [ ] Emit compact versioned JSON by default.
+  - [ ] Include commands, flags, enums, exit codes, result schemas,
+    diagnostics schema, config schema, manifest schema, and stdlib metadata.
+  - [ ] Add `--detail` for expanded descriptions.
+  - [ ] Depend on OrthoConfig `5.2.3`, `6.1.1`, `6.1.2`, `6.2.1`,
+    `6.2.2`, `6.2.3`, and `7.2.7`.
+
+- [ ] 5.1.2. Add Netsuke-specific manifest and build-plan context.
+  - [ ] Include bounded target, default-target, graph, and stdlib previews.
+  - [ ] Include truncation hints for omitted manifest-derived detail.
+  - [ ] Keep implementation-adapter names out of public command examples.
+
+- [ ] 5.1.3. Implement `netsuke skill-path`.
+  - [ ] Add `docs/skills/netsuke/SKILL.md`.
+  - [ ] Validate the skill manifest against `netsuke context --json`.
+  - [ ] Depend on OrthoConfig `6.3.1` and `6.3.2`.
+
+- [ ] 5.1.4. Add schema and description-budget validation.
+  - [ ] Snapshot compact and detailed context output.
+  - [ ] Enforce description-size budgets in CI.
+  - [ ] Fail validation when the command surface and context drift.
+
+### 5.2. Run ledger
+
+- [ ] 5.2.1. Define the Netsuke run record model.
+  - [ ] Record run ID, command, targets, manifest fingerprint, status,
+    exit code, timings, artefacts, and log paths.
+  - [ ] Keep `runs` as the public noun to avoid collision with build-job
+    parallelism.
+  - [ ] Depend on OrthoConfig `9.3.1` and `9.3.2`.
+
+- [ ] 5.2.2. Persist Netsuke run records.
+  - [ ] Store project-local records under `.netsuke/runs/`.
+  - [ ] Recover cleanly from interrupted runs.
+  - [ ] Treat run persistence as product state, not generic configuration.
+  - [ ] Depend on OrthoConfig `9.3.3` where its helper APIs are available.
+
+- [ ] 5.2.3. Implement `runs list`, `runs get`, and `runs prune`. Requires:
+  5.2.1, 5.2.2.
+  - [ ] Support `--json` on all run commands.
+  - [ ] Bound list output with `--limit` and `--cursor`.
+  - [ ] Require `--force` for pruning.
+  - [ ] Include recovery hints for interrupted builds.
+
+- [ ] 5.2.4. Add run-ledger validation and documentation. Requires: 5.2.3.
+  - [ ] Test interrupted writes and corrupted record recovery.
+  - [ ] Test human and JSON rendering.
+  - [ ] Document run history for local users, CI, and agents.
+
+### 5.3. Profiles
+
+- [ ] 5.3.1. Integrate named profiles with Netsuke configuration.
+  - [ ] Add root `--profile <name>`.
+  - [ ] Apply precedence:
+    defaults < system config < user config < project config < profile <
+    environment < CLI.
+  - [ ] Surface available profiles in `context --json`.
+  - [ ] Depend on OrthoConfig `9.1.1`.
+
+- [ ] 5.3.2. Define profile redaction and secret handling.
+  - [ ] Avoid storing secrets by default.
+  - [ ] Redact sensitive values from human output and `context --json`.
+  - [ ] Depend on OrthoConfig `9.1.2`.
+
+- [ ] 5.3.3. Implement profile commands.
+  - [ ] Add `profile save`, `profile list`, `profile get`, and
+    `profile delete`.
+  - [ ] Require `--force` for destructive profile deletion.
+  - [ ] Depend on OrthoConfig `9.1.3`; if unavailable, implement only the
+    Netsuke-local adapter and mark the helper dependency as outstanding.
+
+- [ ] 5.3.4. Add profile validation and documentation.
+  - [ ] Test every precedence boundary.
+  - [ ] Test missing, invalid, and redacted profile values.
+  - [ ] Document local and CI profile workflows.
+
+### 5.4. Delivery and feedback
+
+- [ ] 5.4.1. Add structured delivery for Netsuke-owned artefacts.
+  - [ ] Support `--deliver=stdout`, `--deliver=file:<path>`, and
+    `--deliver=webhook:<url>` where applicable.
+  - [ ] Write file deliveries atomically.
+  - [ ] Surface webhook HTTP status in JSON results.
+  - [ ] Require explicit authenticated endpoint configuration for
+    `deliver:webhook`, including supported authentication schemes and required
+    configuration fields.
+  - [ ] Bound webhook timeouts and retry behaviour with documented maximum
+    retry counts, backoff strategy, and backoff limits.
+  - [ ] Enforce strict TLS and certificate authority validation by default,
+    document any override options, and specify certificate pinning behaviour.
+  - [ ] Redact webhook secrets from logs and JSON diagnostics, including
+    headers, tokens, credentials, and query parameters.
+  - [ ] Link implementation acceptance to
+    [`security-network-command-audit.md`](security-network-command-audit.md)
+    so `deliver:webhook` code paths cannot ship before meeting these
+    requirements.
+  - [ ] Depend on OrthoConfig `9.2.1` for generic delivery-target parsing.
+
+- [ ] 5.4.2. Keep delivery scoped to product-owned artefacts.
+  - [ ] Support generated manifests, graph output, reports, and JSON result
+    envelopes.
+  - [ ] Do not promise arbitrary build-output delivery until manifest artefact
+    ownership is modelled.
+  - [ ] Enumerate valid delivery schemes on error.
+
+- [ ] 5.4.3. Implement local-first feedback.
+  - [ ] Add `feedback add`, `feedback list`, and `feedback send`.
+  - [ ] Store feedback as JSON Lines locally by default.
+  - [ ] Require explicit upstream configuration and `feedback send --force`
+    for network submission.
+  - [ ] Depend on OrthoConfig `9.2.2` for generic feedback storage helpers.
+
+- [ ] 5.4.4. Add delivery and feedback validation.
+  - [ ] Test atomic file writes, webhook status reporting, and invalid schemes.
+  - [ ] Test local feedback storage and upstream-disabled behaviour.
+  - [ ] Surface delivery and feedback capabilities in `context --json`.
+
+### 5.5. Agent-facing validation and documentation
+
+- [ ] 5.5.1. Integrate the CLI vocabulary lint.
+  - [ ] Fail CI on banned verbs and flags.
+  - [ ] Check examples in docs as well as the command inventory.
+  - [ ] Depend on OrthoConfig `7.1.1` to `7.1.3`.
+
+- [ ] 5.5.2. Add non-interactive and stream-purity tests.
+  - [ ] Verify commands do not wait for stdin.
+  - [ ] Verify successful JSON mode writes exactly one stdout document and
+    empty stderr.
+  - [ ] Verify failing JSON mode writes empty stdout and exactly one stderr
+    diagnostic document.
+  - [ ] Depend on OrthoConfig `7.2.1`, `7.2.5`, and `8.1.1`.
+
+- [ ] 5.5.3. Add error-remediation and exit-code tests.
+  - [ ] Verify enum-like failures enumerate valid values.
+  - [ ] Verify stable exit classes for usage, manifest, not-found, external
+    tool, delivery, and interruption failures.
+  - [ ] Depend on OrthoConfig `7.3.1` and `8.1.2`.
+
+- [ ] 5.5.4. Update user and contributor documentation.
+  - [ ] Add automation examples that use only canonical vocabulary.
+  - [ ] Keep human-first local examples beside automation examples.
+  - [ ] Cross-link the archive so reviewers can trace where historical work
+    moved.

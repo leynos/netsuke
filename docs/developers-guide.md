@@ -4,6 +4,28 @@ This guide describes the day-to-day engineering workflow for Netsuke, with a
 focus on writing and maintaining tests. It is the source of truth for how the
 test suite is expected to be used by contributors.
 
+## Command-line interface architecture
+
+The governing command-line interface (CLI) architecture record is ADR-003,
+[`Agent-consistent human-first CLI`][adr-003-cli]. It defines the pre-0.1.0
+contract: keep the terminal experience human-first, make names and outputs
+consistent enough for agents and automation, remove legacy aliases instead of
+preserving inconsistent vocabulary, use `--json` as the only structured result
+mode, keep subprocess output out of JSON stdout, and require explicit `--force`
+or `--dry-run` controls for consequential operations.
+
+The architectural source of truth for CLI behaviour is
+[`docs/netsuke-cli-design-document.md`](netsuke-cli-design-document.md). Use
+that document when changing command grammar, output modes, diagnostics,
+localization, accessibility behaviour, configuration precedence, or planned
+product surfaces such as `context`, `skill-path`, `runs`, `profile`, delivery,
+and feedback commands. The overhaul execution plan in
+[`docs/execplans/netsuke-cli-overhaul.md`](execplans/netsuke-cli-overhaul.md)
+tracks sequencing only; it must not replace ADR-003 or the CLI design document
+as the durable architecture record.
+
+[adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
+
 ## Quality gates
 
 Run these commands before finalizing any change:

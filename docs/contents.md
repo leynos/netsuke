@@ -11,6 +11,9 @@ operational, and contributor references are easier to find.
   interface design and user-experience requirements.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
+- [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
+  Archived completed roadmap foundations with relevance assessments and
+  traceability notes.
 - [formal-verification-methods-in-netsuke.md](formal-verification-methods-in-netsuke.md):
   Recommended scope and delivery order for Kani, Proptest, and optional Verus
   checks.
@@ -18,6 +21,10 @@ operational, and contributor references are easier to find.
   YAML parser migration decision record.
 - [adr-002-replace-cucumber-with-rstest-bdd.md](adr-002-replace-cucumber-with-rstest-bdd.md):
   Behavioural-testing framework migration decision record.
+- [adr-003-agent-consistent-human-first-cli.md](adr-003-agent-consistent-human-first-cli.md):
+  Human-first, agent-consistent CLI doctrine decision record.
+- [adr-003-actions-foreach-when-scope.md](adr-003-actions-foreach-when-scope.md):
+  Manifest control-key scoping decision record.
 
 ## User and operator guides
 
