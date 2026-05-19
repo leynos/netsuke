@@ -49,7 +49,7 @@ For documentation changes, also run:
 
 ## Release help tooling
 
-Release builds generate help artefacts explicitly with `cargo orthohelp`,
+Release builds generate help artefacts explicitly with `cargo-orthohelp`,
 rather than from `build.rs`. The build script remains responsible for the
 localization key audit only. Release automation installs the pinned tool with:
 

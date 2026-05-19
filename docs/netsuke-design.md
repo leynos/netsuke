@@ -2703,7 +2703,7 @@ manual flag repetition.
 ### 8.5 Manual Pages
 
 The CLI definition doubles as the source for user documentation. Release
-automation now calls `cargo orthohelp` explicitly through
+automation now calls `cargo-orthohelp` explicitly through
 `scripts/generate-release-help.sh`; ordinary Cargo builds no longer write help
 artefacts. The build script remains in place only for the localization key
 audit against Fluent bundles.

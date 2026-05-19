@@ -115,6 +115,11 @@ jobs:
 
   build-linux:
     needs: metadata
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: write
     strategy:
       matrix:
         include:
@@ -140,6 +145,11 @@ jobs:
 
   build-windows:
     needs: metadata
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: write
     strategy:
       matrix:
         include:
@@ -166,6 +176,11 @@ jobs:
 
   build-macos:
     needs: metadata
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: write
     strategy:
       matrix:
         include:
