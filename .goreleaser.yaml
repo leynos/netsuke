@@ -8,7 +8,18 @@ before:
         set -euo pipefail
         # Accept a pre-staged gzip (legacy) or produce one from the orthohelp output.
         if [ ! -s dist/netsuke.1.gz ]; then
-          SRC="target/orthohelp/${GOOS}-${GOARCH}/release/man/man1/netsuke.1"
+          case "${GOOS}/${GOARCH}" in
+            linux/amd64) RUST_TARGET="x86_64-unknown-linux-gnu" ;;
+            linux/arm64) RUST_TARGET="aarch64-unknown-linux-gnu" ;;
+            darwin/amd64) RUST_TARGET="x86_64-apple-darwin" ;;
+            darwin/arm64) RUST_TARGET="aarch64-apple-darwin" ;;
+            freebsd/amd64) RUST_TARGET="x86_64-unknown-freebsd" ;;
+            *)
+              echo "::error title=Unsupported manpage target::No Rust target mapping for ${GOOS}/${GOARCH}."
+              exit 1
+              ;;
+          esac
+          SRC="target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"
           if [ ! -f "$SRC" ]; then
             echo "::error title=Manpage missing::Neither dist/netsuke.1.gz nor $SRC found."
             exit 1

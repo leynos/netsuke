@@ -17,6 +17,12 @@ fn release_staging_contents() -> Result<String> {
         .with_context(|| format!("read release staging config from {}", path.display()))
 }
 
+fn goreleaser_contents() -> Result<String> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".goreleaser.yaml");
+    fs::read_to_string(&path)
+        .with_context(|| format!("read GoReleaser config from {}", path.display()))
+}
+
 fn staging_config() -> Result<Value> {
     release_staging_contents()?
         .parse::<Value>()
@@ -80,6 +86,29 @@ fn release_staging_omits_build_script_help_sources(#[case] removed: &str) -> Res
     ensure!(
         !contents.contains(removed),
         "release staging config should not reference {removed}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("x86_64-unknown-linux-gnu")]
+#[case("aarch64-unknown-linux-gnu")]
+#[case("x86_64-apple-darwin")]
+#[case("aarch64-apple-darwin")]
+#[case("x86_64-unknown-freebsd")]
+fn goreleaser_manpage_fallback_uses_rust_target_triples(#[case] target: &str) -> Result<()> {
+    let contents = goreleaser_contents()?;
+    ensure!(
+        contents.contains(target),
+        "GoReleaser manpage fallback should include Rust target triple {target}"
+    );
+    ensure!(
+        contents.contains("target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"),
+        "GoReleaser manpage fallback should resolve orthohelp output by Rust target"
+    );
+    ensure!(
+        !contents.contains("target/orthohelp/${GOOS}-${GOARCH}"),
+        "GoReleaser manpage fallback must not use Go OS/architecture paths"
     );
     Ok(())
 }
