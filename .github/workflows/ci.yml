@@ -61,3 +61,31 @@ jobs:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}
           installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+
+  kani-smoke:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTUP_TOOLCHAIN: stable
+      CARGO_HOME: ${{ github.workspace }}/.kani-cargo
+      KANI_HOME: ${{ github.workspace }}/.kani-home
+    steps:
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+      - name: Setup Rust
+        uses: leynos/shared-actions/.github/actions/setup-rust@6b13b519f99c5b461be8cc21ecf19c2ec5907b9c
+        with:
+          toolchain: stable
+      - name: Cache Kani tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            .kani-cargo
+            .kani-home
+          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION') }}
+      - name: Install Kani
+        run: scripts/install-kani.sh
+      - name: Kani smoke
+        run: make kani

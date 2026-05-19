@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -148,14 +148,33 @@ implementation begins.
 - [x] 2026-05-18T18:50:55Z: Validated the draft with `make check-fmt`,
       `make lint`, `make test`, `make markdownlint`, `make nixie`, and
       `make kani`.
-- [ ] Stage A: review the draft plan with the user and obtain explicit
+- [x] 2026-05-19T23:32:10Z: The user explicitly approved implementation by
+      asking to proceed with the planned functionality.
+- [x] 2026-05-19T23:33:03Z: Added a sibling `kani-smoke` job to
+      `.github/workflows/ci.yml`; the workflow diff shows only an appended job
+      and no edits to `build-test`.
+- [x] 2026-05-19T23:33:03Z: Updated `docs/developers-guide.md` with the new
+      pull-request Kani CI lane and Kani-specific cache convention.
+- [x] 2026-05-19T23:35:00Z: Ran `coderabbit review --agent` after the
+      CI/documentation milestone; it returned zero findings.
+- [x] 2026-05-19T23:36:00Z: Ran `make fmt`; it failed on pre-existing Markdown
+      lint findings across unrelated documentation and rewrote unrelated files
+      before failing, so the unrelated formatter churn was restored.
+- [x] Stage A: review the draft plan with the user and obtain explicit
       approval before implementation.
-- [ ] Stage B: discover and finalize isolated Kani cache paths.
-- [ ] Stage C: add the dedicated `kani-smoke` CI job.
-- [ ] Stage D: document the new CI lane and cache convention for developers.
+- [x] Stage B: discover and finalize isolated Kani cache paths.
+- [x] Stage C: add the dedicated `kani-smoke` CI job.
+- [x] Stage D: document the new CI lane and cache convention for developers.
+- [x] 2026-05-19T23:38:48Z: Passed `make check-fmt`, `make lint`,
+      `make test`, `make kani`, `make markdownlint`, and `make nixie`.
+- [x] 2026-05-19T23:38:48Z: Marked roadmap item `4.1.2` and its three
+      subitems done in `docs/roadmap.md`.
+- [x] 2026-05-19T23:41:00Z: Reran `make markdownlint`, `make nixie`, and
+      `coderabbit review --agent` after the roadmap and ExecPlan updates;
+      CodeRabbit again returned zero findings.
 - [ ] Stage E: run review, quality gates, commit, push, and open a draft pull
       request for the implementation.
-- [ ] Stage F: after implementation approval and validation, mark roadmap item
+- [x] Stage F: after implementation approval and validation, mark roadmap item
       `4.1.2` and its subitems done.
 
 ## Surprises & Discoveries
@@ -180,6 +199,15 @@ implementation begins.
   tests, and end-to-end CLI tests are not applicable to this CI-only change.
   The correct validation is workflow review, `make kani`, the normal gates,
   documentation checks, and CodeRabbit review.
+- During implementation, the local probe command that set `CARGO_HOME` inside
+  the worktree was skipped because the repository instructions say not to
+  create an isolated Cargo cache in this environment. The CI design can still
+  use explicit Kani cache paths because the roadmap requirement is about CI
+  cache separation, not local developer cache isolation.
+- `make fmt` currently reports pre-existing Markdown lint findings in unrelated
+  documentation. This change avoids committing the broad formatter churn from
+  that failed run and relies on the required focused gates below for the files
+  actually changed by this task.
 
 ## Decision Log
 
@@ -215,11 +243,25 @@ implementation begins.
   home make that separation explicit and auditable. Date/Author: 2026-05-18 /
   planning agent.
 
+- Decision: Do not run the local isolated-`CARGO_HOME` probe from this plan.
+  Rationale: repository instructions for this environment prohibit creating an
+  isolated Cargo cache and prefer the shared default Cargo cache. The
+  implementation will keep the CI cache paths explicit and auditable without
+  creating local worktree cache directories. Date/Author: 2026-05-19 /
+  implementation agent.
+
 ## Outcomes & Retrospective
 
-This section is intentionally empty while the plan is in draft. During
-implementation, record what changed, what validation proved, any deviations
-from this plan, and whether `4.1.2` was marked done in `docs/roadmap.md`.
+Implementation added a dedicated `kani-smoke` job to `.github/workflows/ci.yml`
+without changing the existing `build-test` job. The job runs only for pull
+request events, installs the pinned Kani toolchain through
+`scripts/install-kani.sh`, caches `.kani-cargo` and `.kani-home` using a
+Kani-specific key derived from `tools/kani/VERSION`, and runs `make kani`.
+
+Developer-facing documentation now records the CI lane and cache convention in
+`docs/developers-guide.md`. No user-facing Netsuke behaviour changed, so
+`docs/users-guide.md` stayed unchanged. The roadmap entry `4.1.2` and its
+subitems are marked done after validation passed.
 
 ## Context and orientation
 
