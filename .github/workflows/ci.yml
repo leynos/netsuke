@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@faef3aad9cce0df666263613734211046bed4d33
+        uses: leynos/shared-actions/.github/actions/setup-rust@e4c6b0e200a057edf927c45c298e7ddf229b3934
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
@@ -48,7 +48,7 @@ jobs:
         run: make test
       - name: Test and Measure Coverage
         if: matrix.rust == 'stable'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@faef3aad9cce0df666263613734211046bed4d33
+        uses: leynos/shared-actions/.github/actions/generate-coverage@e4c6b0e200a057edf927c45c298e7ddf229b3934
         with:
           output-path: lcov.info
           format: lcov
@@ -56,7 +56,7 @@ jobs:
         env:
           CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
         if: matrix.rust == 'stable' && env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@faef3aad9cce0df666263613734211046bed4d33
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@e4c6b0e200a057edf927c45c298e7ddf229b3934
         with:
           format: lcov
           access-token: ${{ env.CS_ACCESS_TOKEN }}

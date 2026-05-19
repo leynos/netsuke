@@ -47,7 +47,6 @@ For documentation changes, also run:
 - `make markdownlint`
 - `make nixie`
 
-
 ## Release help tooling
 
 Release builds generate help artefacts explicitly with `cargo orthohelp`,

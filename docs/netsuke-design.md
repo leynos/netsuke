@@ -400,22 +400,6 @@ The cleaner model is:
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
-
-### 2.7 Table: Netsuke Manifest vs. Makefile
-
-To illustrate the ergonomic advantages of the Netsuke schema, the following
-table compares a simple C compilation project defined in both a traditional
-`Makefile` and a `Netsukefile` file. The comparison highlights Netsuke's
-explicit, structured, and self-documenting nature.
-
-| Feature         | Makefile Example                                                                   | Netsukefile Example                                                                                               |
-| --------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Variables       | CC=gcc                                                                             | { vars: { cc: gcc } }                                                                                             |
-| Macros          | define greet\\t@echo Hello $$1endef                                                | { macros: { signature: "greet(name)", body: "Hello {{ name }}" } }                                                |
-| Rule Definition | %.o: %.c\\n\\t$(CC) -c $< -o $@                                                    | { rules: { name: compile, command: "{{ cc }} -c {{ ins }} -o {{ outs }}", description: "Compiling {{ outs }}" } } |
-| Target Build    | my_program: main.o utils.o\\t$(CC) $^ -o $@                                        | { targets: { name: my_program, rule: link, sources: [main.o, utils.o] }                                           |
-| Readability     | Relies on cryptic automatic variables ($@, $\<, $^) and implicit pattern matching. | Uses explicit, descriptive keys (name, rule, sources) and standard YAML list/map syntax.                          |
-
 ### 2.5 Generated Targets and Actions with `foreach`
 
 Large sets of similar outputs or setup actions can clutter a manifest when
