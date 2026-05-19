@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -172,7 +172,10 @@ implementation begins.
 - [x] 2026-05-19T23:41:00Z: Reran `make markdownlint`, `make nixie`, and
       `coderabbit review --agent` after the roadmap and ExecPlan updates;
       CodeRabbit again returned zero findings.
-- [ ] Stage E: run review, quality gates, commit, push, and open a draft pull
+- [x] 2026-05-19T23:44:02Z: Committed the implementation, pushed
+      `4-1-2-kani-smoke-ci-job` to origin, and updated draft pull request
+      #308 with implementation details and validation evidence.
+- [x] Stage E: run review, quality gates, commit, push, and open a draft pull
       request for the implementation.
 - [x] Stage F: after implementation approval and validation, mark roadmap item
       `4.1.2` and its subitems done.
@@ -262,6 +265,10 @@ Developer-facing documentation now records the CI lane and cache convention in
 `docs/developers-guide.md`. No user-facing Netsuke behaviour changed, so
 `docs/users-guide.md` stayed unchanged. The roadmap entry `4.1.2` and its
 subitems are marked done after validation passed.
+
+The implementation branch was pushed to
+`origin/4-1-2-kani-smoke-ci-job`, and draft pull request #308 now describes
+the implemented CI job rather than only the pre-implementation plan.
 
 ## Context and orientation
 
