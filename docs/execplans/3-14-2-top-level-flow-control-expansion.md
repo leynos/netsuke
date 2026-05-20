@@ -566,6 +566,13 @@ All long-running validation commands must run sequentially and tee output to
       pull request #309 with the implementation summary, validation evidence,
       execplan link, and Lody session reference.
 - [x] Milestone 5: full validation, commit, push, and pull request.
+- [x] 2026-05-20: Addressed Windows `PATHEXT` review feedback by writing
+      `.cmd` fixture commands for bare-name command lookup on Windows in both
+      the direct stdlib test and BDD preferred-command workspace. Re-ran
+      `cargo test --all-targets --all-features command_available`,
+      `cargo test --all-targets --all-features --test bdd_tests manifest_subcommand_command_availability_selects_the_preferred_top_level_action`,
+      `make check-fmt`, and `make lint`; all passed. Logs are in
+      `/tmp/*-pathext-netsuke-3-14-2-top-level-flow-control-expansion.out`.
 
 ## Surprises & Discoveries
 

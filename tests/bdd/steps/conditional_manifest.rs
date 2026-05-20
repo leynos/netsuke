@@ -52,6 +52,14 @@ fn write_executable(path: &Path) -> Result<()> {
     mark_executable(path)
 }
 
+fn fixture_command_path(bin: &Path, name: &str) -> std::path::PathBuf {
+    if cfg!(windows) {
+        bin.join(format!("{name}.cmd"))
+    } else {
+        bin.join(name)
+    }
+}
+
 const fn executable_script() -> &'static [u8] {
     #[cfg(windows)]
     {
@@ -108,7 +116,7 @@ fn command_available_actions_workspace(world: &TestWorld) -> Result<()> {
     fs::write(&netsukefile, COMMAND_AVAILABLE_MANIFEST)
         .with_context(|| format!("write manifest to {}", netsukefile.display()))?;
     let bin = temp.path().join("bin");
-    let tool = bin.join("preferred-tool");
+    let tool = fixture_command_path(&bin, "preferred-tool");
     write_executable(&tool)?;
     prepend_path_for_child(world, &bin)?;
     *world.temp_dir.borrow_mut() = Some(temp);

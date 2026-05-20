@@ -47,12 +47,20 @@ fn path_override(entries: &[Utf8PathBuf]) -> Result<OsString> {
 }
 
 fn write_tool(dir: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
-    let path = dir.join(name);
+    let path = dir.join(tool_filename(name));
     std::fs::create_dir_all(dir.as_std_path()).with_context(|| format!("create {dir}"))?;
     std::fs::write(path.as_std_path(), script_contents())
         .with_context(|| format!("write fixture tool {path}"))?;
     mark_executable(&path)?;
     Ok(path)
+}
+
+fn tool_filename(name: &str) -> String {
+    if cfg!(windows) {
+        format!("{name}.cmd")
+    } else {
+        name.to_owned()
+    }
 }
 
 const fn script_contents() -> &'static [u8] {
