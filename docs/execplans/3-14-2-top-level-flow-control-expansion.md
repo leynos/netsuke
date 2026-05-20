@@ -631,9 +631,9 @@ All long-running validation commands must run sequentially and tee output to
 
 Implementation landed the smallest boundary change described in this plan:
 `command_available` is registered beside `which`, reuses the executable
-resolver/cache adapter, maps only the existing not-found diagnostic to
-`false`, and keeps invalid arguments or other resolver failures as hard
-manifest-time errors.
+resolver/cache adapter, maps only the existing not-found diagnostic to `false`,
+and keeps invalid arguments or other resolver failures as hard manifest-time
+errors.
 
 Top-level `actions` already participated in `foreach` and `when` expansion, so
 the implementation preserved that path and added regression coverage around
@@ -647,11 +647,10 @@ in `docs/users-guide.md`, the internal stdlib boundary convention in
 `docs/roadmap.md`. Roadmap item `3.14.4` remains open because it is tracked as
 a broader executable-probe task.
 
-[ansible]:
-https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_conditionals.html
- [bazel]: <https://bazel.build/docs/configurable-attributes> [cargo-make]:
-<https://sagiegurari.github.io/cargo-make/> [github-actions]:
-<https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow>
- [gnu-make]: <https://web.mit.edu/gnu/doc/html/make_7.html> [just]:
-<https://just.systems/man/en/conditional-expressions.html> [taskfile]:
-<https://taskfile.dev/docs/guide>
+[ansible]: <https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_conditionals.html>
+[bazel]: <https://bazel.build/docs/configurable-attributes>
+[cargo-make]: <https://sagiegurari.github.io/cargo-make/>
+[github-actions]: <https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow>
+[gnu-make]: <https://web.mit.edu/gnu/doc/html/make_7.html>
+[just]: <https://just.systems/man/en/conditional-expressions.html>
+[taskfile]: <https://taskfile.dev/docs/guide>
