@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
  `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -24,8 +24,8 @@ Abstract Syntax Tree (AST), Intermediate Representation (IR), generated
 generated action set contains exactly the branch selected by the host
 environment, while top-level `actions` still deserialize as phony targets.
 
-This plan is pre-implementation. Do not implement it until the user explicitly
-approves the plan.
+This plan was approved on 2026-05-20 and implemented on the
+`3-14-2-top-level-flow-control-expansion` branch.
 
 ## Constraints
 
@@ -560,7 +560,12 @@ All long-running validation commands must run sequentially and tee output to
       validation results. Both attempts were rate-limited before producing
       findings, with requested waits of 47 seconds and 5 minutes 49 seconds.
       There were no reported concerns to clear.
-- [ ] Milestone 5: full validation, commit, push, and pull request.
+- [x] 2026-05-20: Committed the implementation as
+      `e11f343 Add command availability action branching`, pushed
+      `3-14-2-top-level-flow-control-expansion` to origin, and updated draft
+      pull request #309 with the implementation summary, validation evidence,
+      execplan link, and Lody session reference.
+- [x] Milestone 5: full validation, commit, push, and pull request.
 
 ## Surprises & Discoveries
 
