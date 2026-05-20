@@ -15,6 +15,13 @@ fn release_staging_contents() -> Result<String> {
         .with_context(|| format!("read release staging contents from {}", path.display()))
 }
 
+fn goreleaser_contents() -> Result<String> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let path = root.join(".goreleaser.yaml");
+    fs::read_to_string(&path)
+        .with_context(|| format!("read GoReleaser contents from {}", path.display()))
+}
+
 fn staging_config() -> Result<Value> {
     release_staging_contents()?
         .parse::<Value>()
@@ -195,6 +202,26 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
         contents.contains("\"${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}\""),
         "workflow should pass the PowerShell module name explicitly"
     );
+}
+
+#[test]
+fn goreleaser_fallback_uses_rust_target_triple_orthohelp_paths() -> Result<()> {
+    let contents = goreleaser_contents()?;
+
+    ensure!(
+        !contents.contains("target/orthohelp/${{GOOS}-${GOARCH}}")
+            && !contents.contains("target/orthohelp/${GOOS}-${GOARCH}"),
+        "GoReleaser fallback must not use raw GOOS/GOARCH orthohelp paths"
+    );
+    ensure!(
+        contents.contains("x86_64-unknown-linux-gnu"),
+        "GoReleaser fallback should map linux/amd64 to the Rust target triple"
+    );
+    ensure!(
+        contents.contains("target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"),
+        "GoReleaser fallback should resolve orthohelp output through RUST_TARGET"
+    );
+    Ok(())
 }
 
 #[test]
