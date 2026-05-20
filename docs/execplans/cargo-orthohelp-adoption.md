@@ -224,11 +224,11 @@ itself does not change.
   resolution was required; validation remains the primary risk control.
 
 - Observation: `cargo-orthohelp` does not accept Cargo's injected subcommand
-  token when invoked as `cargo orthohelp`. Evidence: Cargo external subcommand
-  dispatch executes `cargo-orthohelp orthohelp ...`, but the tool exposes a
-  top-level `cargo-orthohelp [OPTIONS]` interface with no `orthohelp`
-  subcommand. Impact: the release-help script must invoke `cargo-orthohelp`
-  directly and tests must fake that binary on `PATH`.
+  token when invoked through Cargo subcommand dispatch. Evidence: Cargo
+  external subcommand dispatch executes `cargo-orthohelp orthohelp ...`, but
+  the tool exposes a top-level `cargo-orthohelp [OPTIONS]` interface with no
+  `orthohelp` subcommand. Impact: the release-help script must invoke
+  `cargo-orthohelp` directly and tests must fake that binary on `PATH`.
 
 - Observation: `stage-release-artefacts` composes artefacts from both
   `[[common.artefacts]]` and target-specific `[[targets.<key>.artefacts]]`.
@@ -631,7 +631,7 @@ scripts/generate-release-help.sh <target> <bin-name> <out-dir>
 ```
 
 The script must call `cargo-orthohelp` directly rather than using Cargo
-external subcommand dispatch because `cargo orthohelp` injects `orthohelp` as a
+external subcommand dispatch because that form injects `orthohelp` as a
 positional argument:
 
 ```bash
