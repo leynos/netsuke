@@ -120,24 +120,36 @@ fn command_available_returns_false_for_missing_command(
     Ok(())
 }
 
+fn assert_render_error_contains(
+    env: &Environment<'_>,
+    template: &str,
+    context_msg: &str,
+    expected_fragment: &str,
+) -> Result<()> {
+    let err = env
+        .render_str(template, context! {})
+        .err()
+        .with_context(|| context_msg.to_string())?;
+    let message = err.to_string();
+    ensure!(
+        message.contains(expected_fragment),
+        "expected {expected_fragment:?} in error message, got {message}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn command_available_rejects_empty_command(
     stdlib_workspace: Result<StdlibWorkspace>,
 ) -> Result<()> {
     let workspace_fixture = stdlib_workspace?;
     let env = env_without_path(&workspace_fixture)?;
-
-    let err = env
-        .render_str("{{ command_available('') }}", context! {})
-        .err()
-        .context("empty command should fail")?;
-
-    let message = err.to_string();
-    ensure!(
-        message.contains("netsuke::jinja::which::args"),
-        "expected args error, got {message}"
-    );
-    Ok(())
+    assert_render_error_contains(
+        &env,
+        "{{ command_available('') }}",
+        "empty command should fail",
+        "netsuke::jinja::which::args",
+    )
 }
 
 #[rstest]
@@ -146,37 +158,22 @@ fn command_available_rejects_unknown_keyword(
 ) -> Result<()> {
     let workspace_fixture = stdlib_workspace?;
     let env = env_without_path(&workspace_fixture)?;
-
-    let err = env
-        .render_str(
-            "{{ command_available('absent', unexpected=true) }}",
-            context! {},
-        )
-        .err()
-        .context("unknown keyword should fail")?;
-
-    let message = err.to_string();
-    ensure!(
-        message.contains("unknown keyword argument"),
-        "expected unknown keyword error, got {message}"
-    );
-    Ok(())
+    assert_render_error_contains(
+        &env,
+        "{{ command_available('absent', unexpected=true) }}",
+        "unknown keyword should fail",
+        "unknown keyword argument",
+    )
 }
 
 #[rstest]
 fn which_filter_reports_missing_command(stdlib_workspace: Result<StdlibWorkspace>) -> Result<()> {
     let workspace_fixture = stdlib_workspace?;
     let env = env_without_path(&workspace_fixture)?;
-
-    let err = env
-        .render_str("{{ 'absent' | which }}", context! {})
-        .err()
-        .context("render should fail for missing command")?;
-
-    let message = err.to_string();
-    ensure!(
-        message.contains("netsuke::jinja::which::not_found"),
-        "expected not_found error, got {message}"
-    );
-    Ok(())
+    assert_render_error_contains(
+        &env,
+        "{{ 'absent' | which }}",
+        "render should fail for missing command",
+        "netsuke::jinja::which::not_found",
+    )
 }
