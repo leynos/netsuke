@@ -278,8 +278,8 @@ serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4", features = ["derive"] }    # required for CLI support
 ```
 
-By default, only TOML configuration files are supported. To enable JSON5
-(`.json` and `.json5`) and YAML (`.yaml` and `.yml`) support, enable the
+By default, only TOML configuration files are supported. To enable JSON5 (
+`.json` and `.json5`) and YAML (`.yaml` and `.yml`) support, enable the
 corresponding cargo features:
 
 ```toml
@@ -896,11 +896,11 @@ and environment variables before applying CLI overrides. When callers pass
 replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
-combines switches and optional arguments (`--wave`, `--gift`,
-`--channel email`, `--remind-in 15`) alongside greeting adjustments
-(`--preamble "Until next time"`, `--punctuation ?`) to describe how the
-farewell should unfold. Each subcommand struct derives `OrthoConfig` so
-defaults from `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
+combines switches and optional arguments (`--wave`, `--gift`, `--channel email`,
+ `--remind-in 15`) alongside greeting adjustments (
+`--preamble "Until next time"`, `--punctuation ?`) to describe how the farewell
+should unfold. Each subcommand struct derives `OrthoConfig` so defaults from
+`[cmds.greet]` or `[cmds.take-leave]` merge automatically when
 `load_and_merge_selected()` is invoked on the derived `Commands` enum.
 
 Behavioural tests in `examples/hello_world/tests` exercise scenarios such as
@@ -988,17 +988,16 @@ for a complete example.
 
 ## Error handling
 
-`load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias
-for `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file
-I/O and `figment`. Failures during the final merge of CLI values over
-configuration sources surface as the `Merge` variant, providing clearer
-diagnostics when the combined data is invalid. When multiple sources fail, the
-errors are collected into the `Aggregate` variant so callers can inspect each
-individual failure. Consumers should handle these errors appropriately, for
-example by printing them to stderr and exiting. If required fields are missing
-after merging, the crate returns `OrthoError::MissingRequiredValues` with a
-user‑friendly list of missing paths and hints on how to provide them. For
-example:
+`load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias for
+ `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file I/O
+and `figment`. Failures during the final merge of CLI values over configuration
+sources surface as the `Merge` variant, providing clearer diagnostics when the
+combined data is invalid. When multiple sources fail, the errors are collected
+into the `Aggregate` variant so callers can inspect each individual failure.
+Consumers should handle these errors appropriately, for example by printing
+them to stderr and exiting. If required fields are missing after merging, the
+crate returns `OrthoError::MissingRequiredValues` with a user‑friendly list of
+missing paths and hints on how to provide them. For example:
 
 ```plaintext
 Missing required values:
@@ -1161,7 +1160,7 @@ locales = ["en-US", "ja"]
 Run the tool from the project root:
 
 ```bash
-cargo orthohelp --out-dir target/orthohelp --locale en-US
+cargo-orthohelp --out-dir target/orthohelp --locale en-US
 ```
 
 `--cache` reuses any previously generated IR cached under
@@ -1176,7 +1175,7 @@ Use `--format man` to produce `man/man<N>/<name>.<N>` files suitable for
 installation via `make install` or packaging:
 
 ```bash
-cargo orthohelp --format man --out-dir target/man --locale en-US
+cargo-orthohelp --format man --out-dir target/man --locale en-US
 ```
 
 The generator produces standard man page sections in the canonical order:
@@ -1210,7 +1209,7 @@ surfaces the same configuration metadata as the man page generator. Use the
 `ps` format to emit the module layout under `powershell/<ModuleName>`:
 
 ```bash
-cargo orthohelp --format ps --out-dir target/orthohelp --locale en-US
+cargo-orthohelp --format ps --out-dir target/orthohelp --locale en-US
 ```
 
 The generator produces:
