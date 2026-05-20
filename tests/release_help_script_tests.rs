@@ -8,6 +8,7 @@
 #![cfg(unix)]
 
 use anyhow::{Context, Result, ensure};
+use insta::{Settings, assert_snapshot};
 use rstest::{fixture, rstest};
 use std::{
     ffi::OsString,
@@ -95,15 +96,30 @@ fi
 case "$format" in
   man)
     mkdir -p "$out_dir/man/man1"
-    printf '.TH netsuke 1\n' >"$out_dir/man/man1/netsuke.1"
+    cat >"$out_dir/man/man1/netsuke.1" <<'MAN'
+.TH NETSUKE 1 "1970-01-01"
+.SH NAME
+netsuke \- dependency-aware build orchestration
+.SH SYNOPSIS
+.B netsuke
+[OPTIONS]
+MAN
     ;;
   ps)
     help_dir="$out_dir/powershell/$module_name/en-US"
     mkdir -p "$help_dir"
-    printf '# module\n' >"$out_dir/powershell/$module_name/$module_name.psm1"
-    printf '@{}\n' >"$out_dir/powershell/$module_name/$module_name.psd1"
-    printf '<helpItems />\n' >"$help_dir/$module_name-help.xml"
-    printf 'about help\n' >"$help_dir/about_$module_name.help.txt"
+    printf 'function Invoke-%s { param() }\n' "$module_name" >"$out_dir/powershell/$module_name/$module_name.psm1"
+    printf '@{\n  RootModule = "%s.psm1"\n  ModuleVersion = "0.1.0"\n}\n' "$module_name" >"$out_dir/powershell/$module_name/$module_name.psd1"
+    cat >"$help_dir/$module_name-help.xml" <<MAML
+<helpItems schema="maml">
+  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>$module_name</command:name>
+    </command:details>
+  </command:command>
+</helpItems>
+MAML
+    printf 'TOPIC\n    about_%s\n' "$module_name" >"$help_dir/about_$module_name.help.txt"
     ;;
 esac
 "#
@@ -119,6 +135,7 @@ fn path_with_fake_cargo_orthohelp(fixture: &ScriptFixture) -> Result<OsString> {
 #[derive(Clone, Copy)]
 struct ReleaseHelpRun<'a> {
     target: &'a str,
+    module_name: &'a str,
     source_date_epoch: Option<&'a str>,
     fail_cargo: bool,
     skip_output: Option<&'a str>,
@@ -128,10 +145,16 @@ impl<'a> ReleaseHelpRun<'a> {
     const fn for_target(target: &'a str) -> Self {
         Self {
             target,
+            module_name: "Netsuke",
             source_date_epoch: None,
             fail_cargo: false,
             skip_output: None,
         }
+    }
+
+    const fn module_name(mut self, value: &'a str) -> Self {
+        self.module_name = value;
+        self
     }
 
     const fn source_date_epoch(mut self, value: &'a str) -> Self {
@@ -158,6 +181,7 @@ fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<
         .arg(run.target)
         .arg("netsuke")
         .arg(&fixture.out_dir)
+        .arg(run.module_name)
         .current_dir(repo_root)
         .env("PATH", path_with_fake_cargo_orthohelp(fixture)?)
         .env("ORTHOHELP_FAKE_LOG", &fixture.log_path)
@@ -176,6 +200,15 @@ fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Result<
     }
 
     command.output().context("run release help script")
+}
+
+fn snapshot_settings() -> Settings {
+    let mut settings = Settings::clone_current();
+    settings.set_snapshot_path(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/snapshots/release_help"
+    ));
+    settings
 }
 
 fn logged_args(fixture: &ScriptFixture) -> Result<String> {
@@ -202,6 +235,11 @@ fn generates_manual_page_for_non_windows_target(
         fixture.out_dir.join("man/man1/netsuke.1").is_file(),
         "manual page should be generated"
     );
+    let man_page = fs::read_to_string(fixture.out_dir.join("man/man1/netsuke.1"))
+        .context("read generated man page")?;
+    snapshot_settings().bind(|| {
+        assert_snapshot!("generated_man_page", man_page);
+    });
     let log = logged_args(&fixture)?;
     ensure!(
         log.contains("--format man"),
@@ -215,6 +253,11 @@ fn generates_manual_page_for_non_windows_target(
         !log.contains("--format ps"),
         "non-Windows targets should not generate PowerShell help"
     );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("target=x86_64-unknown-linux-gnu format=man locale=en-US"),
+        "script should log cargo-orthohelp invocation context, got {stderr}"
+    );
     Ok(())
 }
 
@@ -225,15 +268,17 @@ fn generates_powershell_help_for_windows_target(
     let fixture = script_fixture?;
     let output = run_release_help(
         &fixture,
-        ReleaseHelpRun::for_target("x86_64-pc-windows-msvc").source_date_epoch("1"),
+        ReleaseHelpRun::for_target("x86_64-pc-windows-msvc")
+            .module_name("CustomNetsuke")
+            .source_date_epoch("1"),
     )?;
 
     ensure!(output.status.success(), "script failed: {output:?}");
     for path in [
-        "powershell/Netsuke/Netsuke.psm1",
-        "powershell/Netsuke/Netsuke.psd1",
-        "powershell/Netsuke/en-US/Netsuke-help.xml",
-        "powershell/Netsuke/en-US/about_Netsuke.help.txt",
+        "powershell/CustomNetsuke/CustomNetsuke.psm1",
+        "powershell/CustomNetsuke/CustomNetsuke.psd1",
+        "powershell/CustomNetsuke/en-US/CustomNetsuke-help.xml",
+        "powershell/CustomNetsuke/en-US/about_CustomNetsuke.help.txt",
     ] {
         ensure!(
             fixture.out_dir.join(path).is_file(),
@@ -246,9 +291,39 @@ fn generates_powershell_help_for_windows_target(
         "Windows targets should generate PowerShell help, got {log}"
     );
     ensure!(
-        log.contains("--ps-module-name Netsuke"),
+        log.contains("--ps-module-name CustomNetsuke"),
         "PowerShell module name should be pinned, got {log}"
     );
+    let ps_module = fs::read_to_string(
+        fixture
+            .out_dir
+            .join("powershell/CustomNetsuke/CustomNetsuke.psm1"),
+    )
+    .context("read generated PowerShell module")?;
+    let ps_manifest = fs::read_to_string(
+        fixture
+            .out_dir
+            .join("powershell/CustomNetsuke/CustomNetsuke.psd1"),
+    )
+    .context("read generated PowerShell module manifest")?;
+    let maml = fs::read_to_string(
+        fixture
+            .out_dir
+            .join("powershell/CustomNetsuke/en-US/CustomNetsuke-help.xml"),
+    )
+    .context("read generated PowerShell MAML help")?;
+    let about_help = fs::read_to_string(
+        fixture
+            .out_dir
+            .join("powershell/CustomNetsuke/en-US/about_CustomNetsuke.help.txt"),
+    )
+    .context("read generated PowerShell about help")?;
+    snapshot_settings().bind(|| {
+        assert_snapshot!(
+            "generated_powershell_help",
+            format!("{ps_module}\n---\n{ps_manifest}\n---\n{maml}\n---\n{about_help}")
+        );
+    });
     Ok(())
 }
 
@@ -302,6 +377,14 @@ fn propagates_cargo_orthohelp_failures(script_fixture: Result<ScriptFixture>) ->
     ensure!(
         stderr.contains("fake cargo-orthohelp failure"),
         "expected cargo-orthohelp failure to be visible, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("cargo-orthohelp failed"),
+        "expected contextual failure annotation, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("target=x86_64-unknown-linux-gnu format=man locale=en-US"),
+        "expected target, format, and locale in failure context, got {stderr}"
     );
     Ok(())
 }

@@ -60,7 +60,7 @@ cargo install cargo-orthohelp --version 0.8.0 --locked
 The workflow then calls:
 
 ```bash
-scripts/generate-release-help.sh <target> <bin-name> <out-dir>
+scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>
 ```
 
 The script writes manual pages under

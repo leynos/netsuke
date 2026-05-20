@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
+# Generate release help artefacts with `cargo-orthohelp`.
+#
+# This script is the release-time boundary for user help generation. It writes
+# Unix manual pages for every target and, for Windows targets, PowerShell module
+# help assets using the caller-provided module name. It deliberately invokes
+# `cargo-orthohelp` directly so release automation does not rely on build.rs
+# side effects or Cargo external subcommand dispatch.
 set -euo pipefail
 
 fallback_date="1970-01-01"
-module_name="Netsuke"
+locale="en-US"
 
 usage() {
-  echo "usage: scripts/generate-release-help.sh <target> <bin-name> <out-dir>" >&2
+  echo "usage: scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>" >&2
 }
 
 warn_source_date_epoch() {
@@ -76,7 +83,37 @@ target_is_windows() {
   [[ "$target" == *windows* ]]
 }
 
-if [[ $# -ne 3 ]]; then
+annotation_escape() {
+  local value="$1"
+  value="${value//'%'/'%25'}"
+  value="${value//$'\r'/'%0D'}"
+  value="${value//$'\n'/'%0A'}"
+  echo "$value"
+}
+
+run_cargo_orthohelp() {
+  local format="$1"
+  shift
+
+  echo "::notice title=cargo-orthohelp invocation::target=${target} format=${format} locale=${locale} out_dir=${out_dir}" >&2
+
+  local output
+  if ! output="$(cargo-orthohelp "$@" 2>&1)"; then
+    if [[ -n "$output" ]]; then
+      echo "$output" >&2
+    fi
+    local escaped_output
+    escaped_output="$(annotation_escape "$output")"
+    echo "::error title=cargo-orthohelp failed::target=${target} format=${format} locale=${locale} out_dir=${out_dir} stderr=${escaped_output}" >&2
+    exit 1
+  fi
+
+  if [[ -n "$output" ]]; then
+    echo "$output" >&2
+  fi
+}
+
+if [[ $# -ne 4 ]]; then
   usage
   exit 2
 fi
@@ -84,22 +121,23 @@ fi
 target="$1"
 bin_name="$2"
 out_dir="$3"
+module_name="$4"
 man_date="$(manual_date)"
 
-cargo-orthohelp \
+run_cargo_orthohelp "man" \
   --format man \
   --out-dir "$out_dir" \
-  --locale en-US \
+  --locale "$locale" \
   --man-section 1 \
   --man-date "$man_date"
 
 require_file "$out_dir/man/man1/${bin_name}.1" "manual page was not generated"
 
 if target_is_windows "$target"; then
-  cargo-orthohelp \
+  run_cargo_orthohelp "ps" \
     --format ps \
     --out-dir "$out_dir" \
-    --locale en-US \
+    --locale "$locale" \
     --ps-module-name "$module_name" \
     --ensure-en-us true
 

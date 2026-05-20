@@ -380,12 +380,12 @@ the branch is still `cargo-orthohelp-adoption`.
 
 Stage B adds a small release-help boundary before changing workflows. Create
 `scripts/generate-release-help.sh`. The script accepts the target triple,
-binary name, and output root, computes a reproducible manual date from
-`SOURCE_DATE_EPOCH`, runs `cargo-orthohelp --format man`, and verifies that
-`<out>/man/man1/<bin>.1` exists. When the target triple contains `windows`, it
-also runs `cargo-orthohelp --format ps --ps-module-name Netsuke` and verifies
-that the four expected PowerShell files exist under
-`<out>/powershell/Netsuke/en-US`. Invalid `SOURCE_DATE_EPOCH` values should
+binary name, output root, and PowerShell module name, computes a reproducible
+manual date from `SOURCE_DATE_EPOCH`, runs `cargo-orthohelp --format man`, and
+verifies that `<out>/man/man1/<bin>.1` exists. When the target triple contains
+`windows`, it also runs `cargo-orthohelp --format ps` with the injected module
+name and verifies that the four expected PowerShell files exist under
+`<out>/powershell/<module>/en-US`. Invalid `SOURCE_DATE_EPOCH` values should
 warn and fall back to `1970-01-01`. The script must not use `--cache` or
 `--no-build`.
 
@@ -451,15 +451,13 @@ macOS package inputs from staged outputs. Extend staging tests or add
 `target/generated-man`, `OUT_DIR`, and `clap_mangen` fallbacks are absent, the
 new man source is present, and all PowerShell help files are declared.
 
-Add `tests/features/release_help_generation.feature` and
-`tests/bdd/steps/release_help_generation.rs`, registered from
-`tests/bdd/steps/mod.rs`. Use `rstest-bdd` v0.5.0 scenarios to describe
-observable release behaviour:
+Use `tests/release_help_script_tests.rs` for executable release-help boundary
+tests instead of BDD steps that only inspect repository text. The tests should
+fake `cargo-orthohelp`, run `scripts/generate-release-help.sh`, verify staged
+manual-page and PowerShell outputs, snapshot representative generated content,
+and assert clear failure context for invalid `SOURCE_DATE_EPOCH`, missing
+outputs, and `cargo-orthohelp` failures.
 
-- A release build generates and stages a manual page from `cargo-orthohelp`.
-- A Windows release build generates and stages PowerShell MAML help.
-- Invalid `SOURCE_DATE_EPOCH` falls back to `1970-01-01` with a warning.
-- Missing generated help files fail the release-help step with a clear error.
 - The release workflow no longer relies on `build.rs`, `target/generated-man`,
   or Cargo `OUT_DIR` for help artefacts.
 
@@ -627,7 +625,7 @@ target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.tx
 The release-help script interface should be stable and simple:
 
 ```bash
-scripts/generate-release-help.sh <target> <bin-name> <out-dir>
+scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>
 ```
 
 The script must call `cargo-orthohelp` directly rather than using Cargo

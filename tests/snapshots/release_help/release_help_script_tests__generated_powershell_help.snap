@@ -1,0 +1,25 @@
+---
+source: tests/release_help_script_tests.rs
+assertion_line: 316
+expression: "format!(\"{ps_module}\\n---\\n{ps_manifest}\\n---\\n{maml}\\n---\\n{about_help}\")"
+---
+function Invoke-CustomNetsuke { param() }
+
+---
+@{
+  RootModule = "CustomNetsuke.psm1"
+  ModuleVersion = "0.1.0"
+}
+
+---
+<helpItems schema="maml">
+  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
+      <command:name>CustomNetsuke</command:name>
+    </command:details>
+  </command:command>
+</helpItems>
+
+---
+TOPIC
+    about_CustomNetsuke

@@ -1,0 +1,11 @@
+---
+source: tests/release_help_script_tests.rs
+assertion_line: 241
+expression: man_page
+---
+.TH NETSUKE 1 "1970-01-01"
+.SH NAME
+netsuke \- dependency-aware build orchestration
+.SH SYNOPSIS
+.B netsuke
+[OPTIONS]

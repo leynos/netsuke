@@ -183,6 +183,21 @@ fn build_and_package_wires_staged_release_outputs(#[case] expected: &str) {
 }
 
 #[test]
+fn behavioural_build_and_package_validates_release_help_tooling() {
+    let contents = workflow_contents("build-and-package.yml")
+        .expect("build-and-package workflow should be readable");
+
+    assert!(
+        contents.contains("cargo-orthohelp --version | grep '0\\.8\\.0'"),
+        "workflow should validate the installed cargo-orthohelp version"
+    );
+    assert!(
+        contents.contains("\"${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}\""),
+        "workflow should pass the PowerShell module name explicitly"
+    );
+}
+
+#[test]
 fn windows_upload_includes_staged_artifact_dir() {
     let contents = workflow_contents("build-and-package.yml")
         .expect("build-and-package workflow should be readable");

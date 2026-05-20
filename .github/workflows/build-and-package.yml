@@ -81,6 +81,11 @@ jobs:
       - name: Install cargo-orthohelp
         run: cargo install cargo-orthohelp --version 0.8.0 --locked
 
+      - name: Validate cargo-orthohelp version
+        run: |
+          set -euo pipefail
+          cargo-orthohelp --version | grep '0\.8\.0'
+
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@e4c6b0e200a057edf927c45c298e7ddf229b3934
         with:
@@ -96,7 +101,8 @@ jobs:
           bash scripts/generate-release-help.sh \
             "${{ inputs.target }}" \
             "${{ env.BIN_NAME }}" \
-            "target/orthohelp/${{ inputs.target }}/release"
+            "target/orthohelp/${{ inputs.target }}/release" \
+            "${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}"
 
       - name: Stage artefacts
         id: stage
