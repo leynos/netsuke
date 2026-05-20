@@ -32,7 +32,7 @@ arch = "aarch64"
 target = "aarch64-unknown-linux-gnu"
 
 [[targets.linux-aarch64.artefacts]]
-source = "target/orthohelp/aarch64-unknown-linux-gnu/release/man/man1/{bin_name}.1"
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
 destination = "man/man1/{bin_name}.1"
 output = "man_path"
 required = true
@@ -95,7 +95,7 @@ arch = "x86_64"
 target = "x86_64-apple-darwin"
 
 [[targets.macos-x86_64.artefacts]]
-source = "target/orthohelp/x86_64-apple-darwin/release/man/man1/{bin_name}.1"
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
 destination = "man/man1/{bin_name}.1"
 output = "man_path"
 required = true
@@ -106,7 +106,7 @@ arch = "aarch64"
 target = "aarch64-apple-darwin"
 
 [[targets.macos-aarch64.artefacts]]
-source = "target/orthohelp/aarch64-apple-darwin/release/man/man1/{bin_name}.1"
+source = "target/orthohelp/{target}/release/man/man1/{bin_name}.1"
 destination = "man/man1/{bin_name}.1"
 output = "man_path"
 required = true

@@ -50,7 +50,8 @@ targets:
 ```
 
 Yes, it’s just YAML. Yes, that’s a Jinja `foreach`. No, you don’t need to define
- `.PHONY` or remember what `$@` means. This is 2025. You deserve better.
+ `.PHONY` or remember what `$@` means. This is the present day. You deserve
+better.
 
 ## Key Concepts
 

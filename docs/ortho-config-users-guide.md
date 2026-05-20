@@ -993,7 +993,7 @@ for a complete example.
 and `figment`. Failures during the final merge of CLI values over configuration
 sources surface as the `Merge` variant, providing clearer diagnostics when the
 combined data is invalid. When multiple sources fail, the errors are collected
-into the `Aggregate` variant so callers can inspect each individual failure.
+into the `Aggregate` variant, so callers can inspect each individual failure.
 Consumers should handle these errors appropriately, for example by printing
 them to stderr and exiting. If required fields are missing after merging, the
 crate returns `OrthoError::MissingRequiredValues` with a user‑friendly list of

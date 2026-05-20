@@ -1,34 +1,5 @@
 project_name: netsuke
 
-# Ensure man pages exist before packaging. GoReleaser only archives files and
-# fails later if they're missing, so fail fast with a helpful message instead.
-before:
-  hooks:
-    - |
-        set -euo pipefail
-        # Accept a pre-staged gzip (legacy) or produce one from the orthohelp output.
-        if [ ! -s dist/netsuke.1.gz ]; then
-          case "${GOOS}/${GOARCH}" in
-            linux/amd64) RUST_TARGET="x86_64-unknown-linux-gnu" ;;
-            linux/arm64) RUST_TARGET="aarch64-unknown-linux-gnu" ;;
-            darwin/amd64) RUST_TARGET="x86_64-apple-darwin" ;;
-            darwin/arm64) RUST_TARGET="aarch64-apple-darwin" ;;
-            freebsd/amd64) RUST_TARGET="x86_64-unknown-freebsd" ;;
-            *)
-              echo "::error title=Unsupported manpage target::No Rust target mapping for ${GOOS}/${GOARCH}."
-              exit 1
-              ;;
-          esac
-          SRC="target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"
-          if [ ! -f "$SRC" ]; then
-            echo "::error title=Manpage missing::Neither dist/netsuke.1.gz nor $SRC found."
-            exit 1
-          fi
-          mkdir -p dist
-          gzip -kn -9 "$SRC"
-          mv "${SRC}.gz" dist/netsuke.1.gz
-        fi
-
 builds:
   # GoReleaser packages prebuilt Rust binaries. `skip_build: true` avoids
   # rebuilding and the `goos`/`goarch` matrix must mirror the CI build job
@@ -53,6 +24,32 @@ builds:
     ignore:
       - goos: freebsd
         goarch: arm64
+    hooks:
+      pre:
+        - |
+          set -euo pipefail
+          # Accept a pre-staged gzip (legacy) or produce one from the orthohelp output.
+          if [ ! -s dist/netsuke.1.gz ]; then
+            case "${GOOS}/${GOARCH}" in
+              linux/amd64) RUST_TARGET="x86_64-unknown-linux-gnu" ;;
+              linux/arm64) RUST_TARGET="aarch64-unknown-linux-gnu" ;;
+              darwin/amd64) RUST_TARGET="x86_64-apple-darwin" ;;
+              darwin/arm64) RUST_TARGET="aarch64-apple-darwin" ;;
+              freebsd/amd64) RUST_TARGET="x86_64-unknown-freebsd" ;;
+              *)
+                echo "::error title=Unsupported manpage target::No Rust target mapping for ${GOOS}/${GOARCH}."
+                exit 1
+                ;;
+            esac
+            SRC="target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"
+            if [ ! -f "$SRC" ]; then
+              echo "::error title=Manpage missing::Neither dist/netsuke.1.gz nor $SRC found."
+              exit 1
+            fi
+            mkdir -p dist
+            gzip -kn -9 "$SRC"
+            mv "${SRC}.gz" dist/netsuke.1.gz
+          fi
 
 
 archives:
@@ -121,16 +118,16 @@ hooks:
           fi
 
           cat > manifest.ucl <<UCL
-name: "${BIN}"
-version: "${VERSION}"
-origin: "local/${BIN}"
-comment: "Netsuke build system"
-www: "https://github.com/leynos/netsuke"
-maintainer: "Payton McIntosh <pmcintosh@df12.net>"
-arch: "${ABI}"
-desc: "Friendly build system that compiles structured manifests into a Ninja build graph."
-licenses: ["ISC"]
-UCL
+          name: "${BIN}"
+          version: "${VERSION}"
+          origin: "local/${BIN}"
+          comment: "Netsuke build system"
+          www: "https://github.com/leynos/netsuke"
+          maintainer: "Payton McIntosh <pmcintosh@df12.net>"
+          arch: "${ABI}"
+          desc: "Friendly build system that compiles structured manifests into a Ninja build graph."
+          licenses: ["ISC"]
+          UCL
 
           mkdir -p dist
           pkg create -r "$STAGE" -M manifest.ucl -o dist

@@ -221,6 +221,10 @@ fn goreleaser_fallback_uses_rust_target_triple_orthohelp_paths() -> Result<()> {
         contents.contains("target/orthohelp/${RUST_TARGET}/release/man/man1/netsuke.1"),
         "GoReleaser fallback should resolve orthohelp output through RUST_TARGET"
     );
+    ensure!(
+        contents.contains("    hooks:\n      pre:") && !contents.contains("\nbefore:\n  hooks:"),
+        "GoReleaser fallback should run where GOOS and GOARCH are defined"
+    );
     Ok(())
 }
 
