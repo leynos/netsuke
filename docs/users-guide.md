@@ -480,6 +480,10 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   without marking the template as impure. Example: `{{ 'clang++' | which }}`
   returns the first matching binary; the function alias
   `{{ which('clang++') }}` is available if piping would be awkward.
+- `command_available` function: Uses the same resolver and options as `which`,
+  but returns a boolean. It returns `true` when at least one matching
+  executable is found and `false` when the command is absent. Absence is not an
+  error for this helper.
 - Keyword arguments:
   - `all` (default `false`): Return every match, ordered by `PATH`.
   - `canonical` (default `false`): Resolve symlinks and deduplicate entries by
@@ -494,6 +498,23 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   `netsuke::jinja::which::not_found` along with a preview of the scanned
   `PATH`. Supplying unknown keyword arguments or invalid values raises
   `netsuke::jinja::which::args`.
+
+Use `command_available` in manifest-time `when` clauses when optional tooling
+selects between actions:
+
+```yaml
+actions:
+  - name: test-fast
+    command: cargo nextest run
+    when: command_available("cargo-nextest")
+  - name: test-fast
+    command: cargo test
+    when: not command_available("cargo-nextest")
+```
+
+Only the selected action reaches the typed manifest and generated Ninja file.
+Top-level actions selected this way still keep the normal implicit
+`phony: true` behaviour.
 
 **Impurity:** Filters like `shell` and functions like `fetch` interact with the
 outside world. Netsuke tracks this "impurity". Impure templates might affect

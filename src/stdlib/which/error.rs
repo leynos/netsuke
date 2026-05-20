@@ -9,6 +9,12 @@ use crate::localization::{self, LocalizedMessage, keys};
 
 use super::{format_path_for_output, options::CwdMode};
 
+const NOT_FOUND_CODE: &str = "netsuke::jinja::which::not_found";
+
+pub(super) fn is_not_found_error(error: &Error) -> bool {
+    error.to_string().contains(NOT_FOUND_CODE)
+}
+
 pub(super) fn not_found_error(command: &str, dirs: &[Utf8PathBuf], mode: CwdMode) -> Error {
     let count = dirs.len();
     let preview = path_preview(dirs);

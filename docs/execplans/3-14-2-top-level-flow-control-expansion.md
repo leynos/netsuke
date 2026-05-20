@@ -1,11 +1,10 @@
 # 3.14.2. Expand top-level action flow control
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+ `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -63,8 +62,8 @@ approves the plan.
 - Behavioural tests that describe externally observable manifest or CLI output
   must use `rstest-bdd`.
 - If the implementation introduces a new invariant over a range of inputs,
-  states, orderings, or transitions, add property testing or a Kani harness.
-  If it introduces a contractual business axiom that requires exhaustive
+  states, orderings, or transitions, add property testing or a Kani harness. If
+  it introduces a contractual business axiom that requires exhaustive
   reasoning, stop and propose a substantive Verus proof before implementation
   continues.
 - Do not mark roadmap item `3.14.2` done until the implementation, tests,
@@ -195,8 +194,8 @@ phase boundary between structural selection and command execution.
   should keep `item`/`index` as expansion context and ensure generated
   manifests contain selected entries only.
 - Taskfile.dev separates `for` iteration, `if` soft skips, and `preconditions`
-  hard failures. Source: [taskfile]. Planning implication: `when` should stay
-  a soft inclusion guard, while invalid `command_available` arguments should
+  hard failures. Source: [taskfile]. Planning implication: `when` should stay a
+  soft inclusion guard, while invalid `command_available` arguments should
   remain hard authoring errors.
 - Just supports conditional expressions for values, while recipe execution
   conditionals are normally shell-level constructs. Source: [just]. Planning
@@ -477,11 +476,90 @@ All long-running validation commands must run sequentially and tee output to
 - [x] 2026-05-18: Drafted this pre-implementation ExecPlan.
 - [x] 2026-05-18: Ran CodeRabbit review on the draft plan and addressed its
       grammar, Oxford comma, wrapping, and link-style concerns.
-- [ ] Await user approval before implementation begins.
-- [ ] Milestone 1: baseline and red tests.
-- [ ] Milestone 2: stdlib `command_available` predicate.
-- [ ] Milestone 3: end-to-end action branch coverage.
-- [ ] Milestone 4: documentation and roadmap update.
+- [x] 2026-05-20: User approved implementation of this ExecPlan and requested
+      that work proceed with frequent commits and CodeRabbit review after major
+      milestones.
+- [x] 2026-05-20: Confirmed the active branch is
+      `3-14-2-top-level-flow-control-expansion` and the worktree was clean
+      before implementation.
+- [x] 2026-05-20: Ran the focused baseline suites before editing:
+      `cargo test --all-targets --all-features manifest::expand` passed with
+      30 selected tests, and
+      `cargo test --all-targets --all-features --test bdd_tests manifest`
+      passed with the selected manifest-related coverage. Logs are in
+      `/tmp/baseline-expand-netsuke-3-14-2-top-level-flow-control-expansion.out`
+      and
+      `/tmp/baseline-bdd-manifest-netsuke-3-14-2-top-level-flow-control-expansion.out`.
+- [x] 2026-05-20: Added failing coverage for complementary
+      `command_available(...)` / `not command_available(...)` action branches
+      and stdlib predicate semantics. The first red run showed the stdlib
+      helper was unregistered; the manifest expansion unit case used a local
+      deterministic MiniJinja function and already proved the generic `when`
+      evaluator could handle both branches.
+- [x] 2026-05-20: Implemented the stdlib `command_available` function beside
+      `which`, reusing `WhichResolver`, `WhichOptions`, and the resolver cache.
+      Absence maps to `false`; empty command values and unknown keyword
+      arguments remain hard errors.
+- [x] 2026-05-20: Ran
+      `cargo test --all-targets --all-features command_available`, which passed
+      with the four selected stdlib predicate tests and two manifest expansion
+      branch tests. Log:
+      `/tmp/command-available-netsuke-3-14-2-top-level-flow-control-expansion.out`.
+- [x] 2026-05-20: Ran
+      `cargo test --all-targets --all-features manifest::expand`, which passed
+      with 32 selected manifest expansion tests. Log:
+      `/tmp/expand-after-command-available-netsuke-3-14-2-top-level-flow-control-expansion.out`.
+- [x] Milestone 1: baseline and red tests.
+- [x] Milestone 2: stdlib `command_available` predicate.
+- [x] 2026-05-20: Ran CodeRabbit after the stdlib predicate milestone. It
+      raised fixture duplication and fallible fixture concerns in
+      `tests/stdlib_which_tests.rs`; both were addressed, and the final
+      milestone-2 review pass reported zero findings.
+- [x] 2026-05-20: Added BDD coverage for the absent-command fallback branch,
+      invalid `command_available` options, and a `netsuke manifest -` workflow
+      where a scenario-local fake executable selects the preferred action and
+      omits the fallback from generated Ninja output.
+- [x] 2026-05-20: Ran focused BDD validation:
+      `manifest_selecting_a_fallback_action_when_a_command_is_unavailable`,
+      `manifest_parsing_fails_when_command_availability_receives_invalid_options`,
+      `manifest_subcommand_command_availability_selects_the_preferred_top_level_action`,
+      and `manifest_subcommand_manifest_time_conditions_select_generated_actions_and_targets`
+      all passed. Logs are in `/tmp/bdd-command-available-fallback-*`,
+      `/tmp/bdd-command-available-invalid-*`,
+      `/tmp/bdd-command-available-preferred-*`, and `/tmp/bdd-manifest-time-*`.
+- [x] 2026-05-20: Attempted CodeRabbit review after Milestone 3 three times.
+      The service returned recoverable rate-limit errors before producing
+      findings, with requested waits of 3 minutes 54 seconds, 5 minutes
+      35 seconds, and 5 minutes 33 seconds. There were no reported concerns to
+      clear. Continue to documentation and retry CodeRabbit after the next
+      milestone.
+- [x] Milestone 3: end-to-end action branch coverage.
+- [x] 2026-05-20: Updated `docs/users-guide.md` with
+      `command_available` behaviour and a complementary action-branch example.
+      Updated `docs/developers-guide.md` with the internal resolver-boundary
+      convention. Marked roadmap item `3.14.2` and its complementary-branch
+      subtask done while leaving `3.14.4` open.
+- [x] 2026-05-20: Ran `make fmt`; it still fails in the older `markdownlint`
+      fixer path on broad pre-existing Markdown line-length issues. Restored
+      unrelated formatter churn and kept only task-scoped documentation
+      changes. Targeted `markdownlint-cli2` over the changed Markdown files
+      passes with zero errors. `make markdownlint` and `make nixie` both pass.
+- [x] 2026-05-20: Retried CodeRabbit after documentation updates. The first
+      attempt was rate-limited; the retry completed and reported zero
+      findings.
+- [x] Milestone 4: documentation and roadmap update.
+- [x] 2026-05-20: Ran `make check-fmt`, which passed. Log:
+      `/tmp/check-fmt-netsuke-3-14-2-top-level-flow-control-expansion.out`.
+- [x] 2026-05-20: Ran `make lint`; after tightening the new Rust tests to
+      satisfy Clippy's `unnecessary_wraps`, `manual_assert`, `assertions_on_result_states`,
+      and shadowing checks, the target passed. Log:
+      `/tmp/lint-netsuke-3-14-2-top-level-flow-control-expansion.out`.
+- [x] 2026-05-20: Ran `make test`, which passed the full workspace suite. Log:
+      `/tmp/test-netsuke-3-14-2-top-level-flow-control-expansion.out`.
+- [x] 2026-05-20: Attempted a final CodeRabbit review after recording full
+      validation results. Both attempts were rate-limited before producing
+      findings, with requested waits of 47 seconds and 5 minutes 49 seconds.
+      There were no reported concerns to clear.
 - [ ] Milestone 5: full validation, commit, push, and pull request.
 
 ## Surprises & Discoveries
@@ -491,14 +569,18 @@ All long-running validation commands must run sequentially and tee output to
   task; it is a completion task around complementary command-availability
   branches and proof that existing action expansion remains correct.
 - `docs/netsuke-design.md` already says top-level `actions` use the same
-  manifest-time expansion pass as `targets`, while `docs/roadmap.md` still
-  marks `3.14.2` open because the complementary branch subtask remains undone.
+  manifest-time expansion pass as `targets`, while `docs/roadmap.md` still marks
+   `3.14.2` open because the complementary branch subtask remains undone.
 - The user guide explains `which`, but does not yet describe
   `command_available` as the non-throwing predicate for manifest-time branch
   selection.
 - The existing `which` implementation already has the right resolver and cache
   boundary. The missing piece should be a small helper registered beside
   `which`, not a new discovery adapter.
+- The old `tests/std_filter_tests/mod.rs` tree is not compiled as a direct
+  Cargo integration-test target. New `command_available` integration coverage
+  therefore lives in `tests/stdlib_which_tests.rs`, a direct test binary with
+  self-contained fixtures.
 
 ## Decision Log
 
@@ -526,16 +608,38 @@ All long-running validation commands must run sequentially and tee output to
   that assessment, the formal-methods tolerance requires escalation.
   Date/Author: 2026-05-18 / planning agent.
 
+- Decision: Use a private `is_not_found_error` helper around the stable
+  `netsuke::jinja::which::not_found` diagnostic code to distinguish absence
+  from other resolver failures for `command_available`. Rationale: MiniJinja's
+  error type is the existing stdlib helper boundary, and this keeps the public
+  API unchanged while preserving hard errors for invalid arguments.
+  Date/Author: 2026-05-20 / implementation agent.
+
 ## Outcomes & Retrospective
 
-This section is intentionally empty while the plan is in draft. During
-implementation, record what landed, what changed from the plan, validation
-evidence, review outcomes, and any follow-up work left open.
+Implementation landed the smallest boundary change described in this plan:
+`command_available` is registered beside `which`, reuses the executable
+resolver/cache adapter, maps only the existing not-found diagnostic to
+`false`, and keeps invalid arguments or other resolver failures as hard
+manifest-time errors.
 
-[ansible]: https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_conditionals.html
-[bazel]: https://bazel.build/docs/configurable-attributes
-[cargo-make]: https://sagiegurari.github.io/cargo-make/
-[github-actions]: https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow
-[gnu-make]: https://web.mit.edu/gnu/doc/html/make_7.html
-[just]: https://just.systems/man/en/conditional-expressions.html
-[taskfile]: https://taskfile.dev/docs/guide
+Top-level `actions` already participated in `foreach` and `when` expansion, so
+the implementation preserved that path and added regression coverage around
+complementary `command_available(...)` and `not command_available(...)`
+branches. The existing implicit `phony: true` behaviour remains covered by the
+pre-existing action expansion tests.
+
+The documentation updates describe user-visible command-availability branching
+in `docs/users-guide.md`, the internal stdlib boundary convention in
+`docs/developers-guide.md`, and the completed roadmap item in
+`docs/roadmap.md`. Roadmap item `3.14.4` remains open because it is tracked as
+a broader executable-probe task.
+
+[ansible]:
+https://docs.ansible.com/projects/ansible/latest/playbook_guide/playbooks_conditionals.html
+ [bazel]: <https://bazel.build/docs/configurable-attributes> [cargo-make]:
+<https://sagiegurari.github.io/cargo-make/> [github-actions]:
+<https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/running-variations-of-jobs-in-a-workflow>
+ [gnu-make]: <https://web.mit.edu/gnu/doc/html/make_7.html> [just]:
+<https://just.systems/man/en/conditional-expressions.html> [taskfile]:
+<https://taskfile.dev/docs/guide>

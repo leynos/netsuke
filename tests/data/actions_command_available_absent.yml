@@ -1,0 +1,11 @@
+netsuke_version: "1.0.0"
+actions:
+  - name: preferred-action
+    command: echo preferred
+    when: command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
+  - name: fallback-action
+    command: echo fallback
+    when: not command_available("netsuke-command-that-should-not-exist", cwd_mode="never")
+targets:
+  - name: done
+    command: "true"

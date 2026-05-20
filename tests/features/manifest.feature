@@ -129,6 +129,20 @@ Feature: Manifest Parsing
     And the action 2 command is "echo 'test'"
     And the action 2 index is 2
 
+  Scenario: Selecting a fallback action when a command is unavailable
+    Given the manifest file "tests/data/actions_command_available_absent.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 1 actions
+    And the action 1 name is "fallback-action"
+    And the action 1 command is "echo fallback"
+    And the first action is phony
+
+  Scenario: Parsing fails when command availability receives invalid options
+    Given the manifest file "tests/data/actions_command_available_invalid.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "unknown keyword argument"
+
   Scenario: Generating targets with glob
     Given the manifest file "tests/data/glob.yml" is parsed
     When the manifest is checked
