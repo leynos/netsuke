@@ -4,8 +4,8 @@
 
 Netsuke is a modern, declarative build system designed to be intuitive, fast,
 and safe. Think of it not just as a `make` replacement, but as a **build system
-compiler**. You describe your build process in a human-readable YAML manifest (
-`Netsukefile`), leveraging the power of Jinja templating for dynamic logic.
+compiler**. You describe your build process in a human-readable YAML manifest
+(`Netsukefile`), leveraging the power of Jinja templating for dynamic logic.
 Netsuke then compiles this high-level description into an optimized build plan
 executed by the high-performance [Ninja](https://ninja-build.org/ "null") build
 system.
@@ -410,8 +410,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
 - `dirname`: `{{ 'path/to/file.txt' | dirname }}` -> `"path/to"`
 
 - `with_suffix(new_suffix, count=1, sep='.')`: Replaces the last `count`
-  dot-separated extensions. `{{ 'archive.tar.gz' | with_suffix('.zip', 2) }}` ->
-   `"archive.zip"`
+  dot-separated extensions. `{{ 'archive.tar.gz' | with_suffix('.zip', 2) }}`
+  -> `"archive.zip"`
 
 - `relative_to(base_path)`: Makes a path relative.
   `{{ '/a/b/c' | relative_to('/a/b') }}` -> `"c"`
