@@ -113,6 +113,10 @@ run_cargo_orthohelp() {
   fi
 }
 
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  return 0
+fi
+
 if [[ $# -ne 4 ]]; then
   usage
   exit 2

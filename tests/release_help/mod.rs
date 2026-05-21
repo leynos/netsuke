@@ -14,6 +14,10 @@ use tempfile::TempDir;
 
 const SCRIPT_PATH: &str = "scripts/generate-release-help.sh";
 
+pub fn script_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(SCRIPT_PATH)
+}
+
 pub struct ScriptFixture {
     _temp_dir: TempDir,
     fake_bin_dir: PathBuf,
@@ -170,7 +174,7 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let mut command = Command::new("bash");
     command
-        .arg(repo_root.join(SCRIPT_PATH))
+        .arg(script_path())
         .arg(run.target)
         .arg("netsuke")
         .arg(&fixture.out_dir)
