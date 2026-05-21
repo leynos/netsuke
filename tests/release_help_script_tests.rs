@@ -18,21 +18,6 @@ use release_help::{
 use rstest::rstest;
 use std::{fs, process::Command};
 
-fn shell_quote_path(path: &std::path::Path) -> String {
-    format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
-}
-
-fn run_script_function(command: &str) -> Result<std::process::Output> {
-    Command::new("bash")
-        .arg("-c")
-        .arg(format!(
-            "source {}; {command}",
-            shell_quote_path(&script_path())
-        ))
-        .output()
-        .context("run sourced release help script function")
-}
-
 #[rstest]
 fn generates_manual_page_for_non_windows_target(
     script_fixture: Result<ScriptFixture>,
@@ -70,6 +55,14 @@ fn generates_manual_page_for_non_windows_target(
     ensure!(
         stderr.contains("target=x86_64-unknown-linux-gnu format=man locale=en-US"),
         "script should log cargo-orthohelp invocation context, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("build_id=local-0 correlation_id=local-0-x86_64-unknown-linux-gnu-netsuke"),
+        "script should correlate release-help annotations, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("size_bytes="),
+        "script should log generated output sizes, got {stderr}"
     );
     Ok(())
 }
@@ -199,6 +192,10 @@ fn propagates_cargo_orthohelp_failures(script_fixture: Result<ScriptFixture>) ->
         stderr.contains("target=x86_64-unknown-linux-gnu format=man locale=en-US"),
         "expected target, format, and locale in failure context, got {stderr}"
     );
+    ensure!(
+        stderr.contains("build_id=local-0 correlation_id=local-0-x86_64-unknown-linux-gnu-netsuke"),
+        "expected correlation fields in failure context, got {stderr}"
+    );
     Ok(())
 }
 
@@ -232,6 +229,38 @@ fn fails_when_expected_help_output_is_missing(
         stderr.contains(expected_error),
         "expected missing output error {expected_error:?}, got {stderr}"
     );
+    ensure!(
+        stderr.contains("build_id=local-0"),
+        "missing output annotation should include build id, got {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn fails_before_generation_when_cargo_orthohelp_is_missing() -> Result<()> {
+    let output = Command::new("/usr/bin/bash")
+        .arg(script_path())
+        .arg("x86_64-unknown-linux-gnu")
+        .arg("netsuke")
+        .arg("target/orthohelp/x86_64-unknown-linux-gnu/release")
+        .arg("Netsuke")
+        .env("PATH", "/no-cargo-orthohelp-here")
+        .output()
+        .context("run release help script without cargo-orthohelp")?;
+
+    ensure!(
+        output.status.code() == Some(127),
+        "missing cargo-orthohelp should exit 127, got {output:?}"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("cargo-orthohelp missing"),
+        "missing cargo-orthohelp should be annotation formatted, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("build_id=local-0 correlation_id=local-0-x86_64-unknown-linux-gnu-netsuke"),
+        "missing cargo-orthohelp annotation should be correlated, got {stderr}"
+    );
     Ok(())
 }
 
@@ -254,75 +283,6 @@ fn rejects_invalid_argument_counts(#[case] args: &[&str]) -> Result<()> {
     ensure!(
         stderr.contains("usage: scripts/generate-release-help.sh"),
         "usage should be printed for invalid argument counts, got {stderr}"
-    );
-    Ok(())
-}
-
-#[rstest]
-#[case(
-    "PATH=/no-python-here SOURCE_DATE_EPOCH=1 manual_date",
-    "1970-01-01",
-    "Python is unavailable"
-)]
-#[case(
-    "SOURCE_DATE_EPOCH=999999999999999999999999999999999999999999 manual_date",
-    "1970-01-01",
-    "is not a valid Unix timestamp"
-)]
-fn manual_date_falls_back_for_unconvertible_timestamps(
-    #[case] command: &str,
-    #[case] expected_stdout: &str,
-    #[case] expected_warning: &str,
-) -> Result<()> {
-    let output = run_script_function(command)?;
-
-    ensure!(
-        output.status.success(),
-        "manual_date should fall back: {output:?}"
-    );
-    let stdout = String::from_utf8(output.stdout).context("stdout should be UTF-8")?;
-    ensure!(
-        stdout.trim() == expected_stdout,
-        "expected fallback date {expected_stdout}, got {stdout}"
-    );
-    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
-    ensure!(
-        stderr.contains(expected_warning),
-        "expected warning {expected_warning:?}, got {stderr}"
-    );
-    Ok(())
-}
-
-#[test]
-fn annotation_escape_escapes_github_annotation_control_characters() -> Result<()> {
-    let output = run_script_function("annotation_escape $'a%b\\r\\nc'")?;
-
-    ensure!(
-        output.status.success(),
-        "annotation_escape failed: {output:?}"
-    );
-    let stdout = String::from_utf8(output.stdout).context("stdout should be UTF-8")?;
-    ensure!(
-        stdout.trim() == "a%25b%0D%0Ac",
-        "annotation escaping should preserve GitHub annotation syntax, got {stdout}"
-    );
-    Ok(())
-}
-
-#[test]
-fn require_file_formats_missing_file_errors() -> Result<()> {
-    let output = run_script_function(
-        "require_file /tmp/netsuke-release-help-missing-file 'manual page was not generated'",
-    )?;
-
-    ensure!(
-        output.status.code() == Some(1),
-        "missing file should exit 1, got {output:?}"
-    );
-    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
-    ensure!(
-        stderr.contains("::error title=Release help missing::manual page was not generated: /tmp/netsuke-release-help-missing-file"),
-        "missing file error should be annotation formatted, got {stderr}"
     );
     Ok(())
 }

@@ -1,5 +1,8 @@
 //! Shared fixtures for release-help generation script tests.
 
+#[cfg(test)]
+mod script_functions;
+
 use anyhow::{Context, Result};
 use insta::Settings;
 use rstest::fixture;

@@ -10,6 +10,8 @@ set -euo pipefail
 
 fallback_date="1970-01-01"
 locale="en-US"
+build_id="${RELEASE_HELP_BUILD_ID:-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}}"
+correlation_id="${RELEASE_HELP_CORRELATION_ID:-${build_id}-release-help}"
 
 usage() {
   echo "usage: scripts/generate-release-help.sh <target> <bin-name> <out-dir> <ps-module-name>" >&2
@@ -18,7 +20,7 @@ usage() {
 warn_source_date_epoch() {
   local raw="$1"
   local reason="$2"
-  echo "::warning title=Invalid SOURCE_DATE_EPOCH::${raw} ${reason}; falling back to ${fallback_date}" >&2
+  echo "::warning title=Invalid SOURCE_DATE_EPOCH::$(annotation_context setup) ${raw} ${reason}; falling back to ${fallback_date}" >&2
 }
 
 manual_date() {
@@ -73,9 +75,18 @@ require_file() {
   local path="$1"
   local message="$2"
   if [[ ! -f "$path" ]]; then
-    echo "::error title=Release help missing::${message}: ${path}" >&2
+    echo "::error title=Release help missing::$(annotation_context output) ${message}: ${path}" >&2
     exit 1
   fi
+
+  local size
+  size="$(file_size_bytes "$path")"
+  if [[ "$size" == "0" ]]; then
+    echo "::error title=Release help empty::$(annotation_context output) ${message}: ${path} size_bytes=${size}" >&2
+    exit 1
+  fi
+
+  echo "::notice title=Release help output::$(annotation_context output) path=${path} size_bytes=${size}" >&2
 }
 
 target_is_windows() {
@@ -91,11 +102,28 @@ annotation_escape() {
   echo "$value"
 }
 
+annotation_context() {
+  local format="${1:-unknown}"
+  echo "build_id=${build_id} correlation_id=${correlation_id} target=${target:-unknown} format=${format} locale=${locale} out_dir=${out_dir:-unknown}"
+}
+
+file_size_bytes() {
+  local path="$1"
+  wc -c <"$path" | tr -d '[:space:]'
+}
+
+require_cargo_orthohelp() {
+  if ! command -v cargo-orthohelp >/dev/null 2>&1; then
+    echo "::error title=cargo-orthohelp missing::$(annotation_context setup) cargo-orthohelp was not found on PATH" >&2
+    exit 127
+  fi
+}
+
 run_cargo_orthohelp() {
   local format="$1"
   shift
 
-  echo "::notice title=cargo-orthohelp invocation::target=${target} format=${format} locale=${locale} out_dir=${out_dir}" >&2
+  echo "::notice title=cargo-orthohelp invocation::$(annotation_context "$format")" >&2
 
   local output
   if ! output="$(cargo-orthohelp "$@" 2>&1)"; then
@@ -104,7 +132,7 @@ run_cargo_orthohelp() {
     fi
     local escaped_output
     escaped_output="$(annotation_escape "$output")"
-    echo "::error title=cargo-orthohelp failed::target=${target} format=${format} locale=${locale} out_dir=${out_dir} stderr=${escaped_output}" >&2
+    echo "::error title=cargo-orthohelp failed::$(annotation_context "$format") stderr=${escaped_output}" >&2
     exit 1
   fi
 
@@ -126,6 +154,9 @@ target="$1"
 bin_name="$2"
 out_dir="$3"
 module_name="$4"
+correlation_id="${RELEASE_HELP_CORRELATION_ID:-${build_id}-${target}-${bin_name}}"
+
+require_cargo_orthohelp
 man_date="$(manual_date)"
 
 run_cargo_orthohelp "man" \
