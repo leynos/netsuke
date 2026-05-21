@@ -202,6 +202,13 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
         contents.contains("\"${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}\""),
         "workflow should pass the PowerShell module name explicitly"
     );
+    for step_name in ["Validate cargo-orthohelp version", "Generate release help"] {
+        let step_body = workflow_step_body(&contents, step_name).join("\n");
+        assert!(
+            step_body.contains("shell: bash"),
+            "{step_name} should use Bash explicitly"
+        );
+    }
 }
 
 #[test]

@@ -82,6 +82,7 @@ jobs:
         run: cargo install cargo-orthohelp --version 0.8.0 --locked
 
       - name: Validate cargo-orthohelp version
+        shell: bash
         run: |
           set -euo pipefail
           cargo-orthohelp --version | grep '0\.8\.0'
@@ -96,6 +97,7 @@ jobs:
           skip-man-page-discovery: 'true'
 
       - name: Generate release help
+        shell: bash
         run: |
           set -euo pipefail
           bash scripts/generate-release-help.sh \
