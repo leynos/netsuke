@@ -185,6 +185,10 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
         .current_dir(repo_root)
         .env("PATH", path_with_fake_cargo_orthohelp(fixture)?)
         .env("ORTHOHELP_FAKE_LOG", &fixture.log_path)
+        .env_remove("GITHUB_RUN_ID")
+        .env_remove("GITHUB_RUN_ATTEMPT")
+        .env_remove("RELEASE_HELP_BUILD_ID")
+        .env_remove("RELEASE_HELP_CORRELATION_ID")
         .env_remove("SOURCE_DATE_EPOCH")
         .env_remove("ORTHOHELP_FAKE_FAIL")
         .env_remove("ORTHOHELP_FAKE_SKIP_OUTPUT");

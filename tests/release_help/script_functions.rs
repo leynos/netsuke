@@ -16,6 +16,10 @@ fn run_script_function(command: &str) -> Result<std::process::Output> {
             "source {}; {command}",
             shell_quote_path(&script_path())
         ))
+        .env_remove("GITHUB_RUN_ID")
+        .env_remove("GITHUB_RUN_ATTEMPT")
+        .env_remove("RELEASE_HELP_BUILD_ID")
+        .env_remove("RELEASE_HELP_CORRELATION_ID")
         .output()
         .context("run sourced release help script function")
 }

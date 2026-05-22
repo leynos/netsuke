@@ -245,6 +245,10 @@ fn fails_before_generation_when_cargo_orthohelp_is_missing() -> Result<()> {
         .arg("target/orthohelp/x86_64-unknown-linux-gnu/release")
         .arg("Netsuke")
         .env("PATH", "/no-cargo-orthohelp-here")
+        .env_remove("GITHUB_RUN_ID")
+        .env_remove("GITHUB_RUN_ATTEMPT")
+        .env_remove("RELEASE_HELP_BUILD_ID")
+        .env_remove("RELEASE_HELP_CORRELATION_ID")
         .output()
         .context("run release help script without cargo-orthohelp")?;
 
