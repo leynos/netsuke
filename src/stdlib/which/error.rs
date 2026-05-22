@@ -16,7 +16,7 @@ pub(super) fn is_not_found_error(error: &Error) -> bool {
 }
 
 fn with_not_found_code(message: String) -> String {
-    let details = message.into_boxed_str();
+    let details = std::borrow::Cow::<'_, str>::Owned(message);
     format!("{NOT_FOUND_CODE}: {details}")
 }
 

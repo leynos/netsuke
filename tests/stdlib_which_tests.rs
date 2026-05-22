@@ -129,7 +129,7 @@ fn assert_render_error_contains(
     let err = env
         .render_str(template, context! {})
         .err()
-        .with_context(|| context_msg.to_string())?;
+        .with_context(|| context_msg.to_owned())?;
     let message = err.to_string();
     ensure!(
         message.contains(expected_fragment),
