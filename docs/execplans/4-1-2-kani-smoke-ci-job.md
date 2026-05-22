@@ -1,4 +1,4 @@
-# 4.1.2. Add a Kani smoke CI job
+# 4.1.2. Add a Kani smoke Continuous Integration (CI) job
 
 This ExecPlan (execution plan) is a living document. The sections
 `Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
@@ -46,9 +46,9 @@ implementation begins.
 - Reuse the repository pin in `tools/kani/VERSION` and the existing
   `scripts/install-kani.sh` and `scripts/check-kani-version.sh` paths where
   possible.
-- Keep OrthoConfig unchanged. This is CI wiring, not a new CLI flag, runtime
-  configuration field, localized help string, or configuration precedence
-  rule.
+- Keep OrthoConfig unchanged. This is CI wiring, not a new command-line
+  interface (CLI) flag, runtime configuration field, localized help string, or
+  configuration precedence rule.
 - Keep `docs/users-guide.md` unchanged unless implementation unexpectedly
   changes externally observable Netsuke behaviour.
 - Documentation prose must follow `docs/documentation-style-guide.md` and use

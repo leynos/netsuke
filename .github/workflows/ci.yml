@@ -86,7 +86,7 @@ jobs:
           path: |
             .kani-cargo
             .kani-home
-          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION') }}
+          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'scripts/install-kani.sh') }}
       - name: Install Kani
         run: scripts/install-kani.sh
       - name: Kani smoke
