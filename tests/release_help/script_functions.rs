@@ -2,8 +2,10 @@
 
 use super::script_path;
 use anyhow::{Context, Result, ensure};
+use proptest::prelude::*;
 use rstest::rstest;
 use std::{path::Path, process::Command};
+use time::OffsetDateTime;
 
 fn shell_quote_path(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
@@ -57,6 +59,27 @@ fn manual_date_falls_back_for_unconvertible_timestamps(
         "expected warning {expected_warning:?}, got {stderr}"
     );
     Ok(())
+}
+
+proptest! {
+    #[test]
+    fn manual_date_matches_utc_calendar_date_for_i32_epoch_range(epoch in any::<i32>()) {
+        let output = run_script_function(&format!("SOURCE_DATE_EPOCH={epoch} manual_date"))
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+
+        prop_assert!(
+            output.status.success(),
+            "manual_date should accept i32 Unix timestamps: {output:?}"
+        );
+        let stdout = std::str::from_utf8(&output.stdout)
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+        let expected = OffsetDateTime::from_unix_timestamp(i64::from(epoch))
+            .map_err(|err| TestCaseError::fail(err.to_string()))?
+            .date()
+            .to_string();
+
+        prop_assert_eq!(stdout.trim(), expected);
+    }
 }
 
 #[test]

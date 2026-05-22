@@ -35,6 +35,7 @@ fn generates_manual_page_for_non_windows_target(
     );
     let man_page = fs::read_to_string(fixture.out_dir.join("man/man1/netsuke.1"))
         .context("read generated man page")?;
+    assert_man_page_structure(&man_page)?;
     snapshot_settings().bind(|| {
         assert_snapshot!("generated_man_page", man_page);
     });
@@ -124,12 +125,58 @@ fn generates_powershell_help_for_windows_target(
             .join("powershell/CustomNetsuke/en-US/about_CustomNetsuke.help.txt"),
     )
     .context("read generated PowerShell about help")?;
+    assert_powershell_help_structure(&ps_module, &ps_manifest, &maml, &about_help)?;
     snapshot_settings().bind(|| {
         assert_snapshot!(
             "generated_powershell_help",
             format!("{ps_module}\n---\n{ps_manifest}\n---\n{maml}\n---\n{about_help}")
         );
     });
+    Ok(())
+}
+
+fn assert_man_page_structure(man_page: &str) -> Result<()> {
+    ensure!(
+        man_page.contains(".TH NETSUKE 1 \"1970-01-01\""),
+        "man page should declare title, section, and reproducible date: {man_page}"
+    );
+    ensure!(
+        man_page.contains(".SH NAME"),
+        "man page should include NAME section: {man_page}"
+    );
+    ensure!(
+        man_page.contains("netsuke \\- dependency-aware build orchestration"),
+        "man page should include the binary synopsis name: {man_page}"
+    );
+    ensure!(
+        man_page.contains(".SH SYNOPSIS") && man_page.contains(".B netsuke"),
+        "man page should include SYNOPSIS for the binary: {man_page}"
+    );
+    Ok(())
+}
+
+fn assert_powershell_help_structure(
+    ps_module: &str,
+    ps_manifest: &str,
+    maml: &str,
+    about_help: &str,
+) -> Result<()> {
+    ensure!(
+        ps_module.contains("function Invoke-CustomNetsuke"),
+        "PowerShell module should expose the requested module command: {ps_module}"
+    );
+    ensure!(
+        ps_manifest.contains("RootModule = \"CustomNetsuke.psm1\""),
+        "PowerShell manifest should point at the requested module: {ps_manifest}"
+    );
+    ensure!(
+        maml.contains("<command:name>CustomNetsuke</command:name>"),
+        "MAML help should name the requested module: {maml}"
+    );
+    ensure!(
+        about_help.contains("about_CustomNetsuke"),
+        "about help should name the requested module: {about_help}"
+    );
     Ok(())
 }
 
