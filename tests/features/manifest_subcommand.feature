@@ -22,6 +22,13 @@ Feature: Manifest subcommand
     And stdout should not contain "action-skipped"
     And stdout should not contain "target-skipped"
 
+  Scenario: Command availability selects the preferred top-level action
+    Given a Netsuke workspace with a preferred command available
+    When the netsuke manifest subcommand is run with "-"
+    Then the command should succeed
+    And stdout should contain "build preferred-action:"
+    And stdout should not contain "fallback-action"
+
   Scenario: Manifest subcommand fails when output path is a directory
     Given a minimal Netsuke workspace
     And a directory named "out.ninja" exists

@@ -684,6 +684,11 @@ filtered during expansion.
 - Filtered entries are absent before IR generation, Ninja generation, and
   process execution. Build-time branching belongs inside the recipe command or
   script until a separately designed runtime-condition feature exists.
+- `command_available(...)` is a stdlib predicate registered beside the `which`
+  filter/function. It must stay at that resolver boundary, reuse
+  `WhichResolver` and `WhichOptions`, and return `false` only for
+  `netsuke::jinja::which::not_found` absence. Invalid arguments remain hard
+  manifest errors.
 
 **Error conditions:** returns `Err` on malformed Jinja expressions,
 whitespace-only `when` values, or type mismatches in the iterable.

@@ -24,7 +24,7 @@ pub(crate) use cache::WhichResolver;
 pub(crate) use options::WhichOptions;
 
 use crate::localization::{self, keys};
-use error::args_error;
+use error::{args_error, is_not_found_error};
 
 #[derive(Clone, Debug)]
 pub(crate) struct WhichConfig {
@@ -75,6 +75,15 @@ pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
             })
         });
     }
+    {
+        let predicate_resolver = Arc::clone(&resolver);
+        env.add_function("command_available", move |value: Value, kwargs: Kwargs| {
+            command_available_with(&predicate_resolver, &value, &kwargs).and_then(|output| {
+                kwargs.assert_all_used()?;
+                Ok(output)
+            })
+        });
+    }
 }
 
 fn resolve_with(
@@ -90,6 +99,25 @@ fn resolve_with(
     let options = WhichOptions::from_kwargs(kwargs)?;
     let matches = resolver.resolve(name, &options)?;
     Ok(render_value(&matches, &options))
+}
+
+fn command_available_with(
+    resolver: &WhichResolver,
+    command: &Value,
+    kwargs: &Kwargs,
+) -> Result<Value, Error> {
+    let name = command
+        .as_str()
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+        .ok_or_else(|| args_error(localization::message(keys::STDLIB_WHICH_COMMAND_EMPTY)))?;
+    let options = WhichOptions::from_kwargs(kwargs)?;
+    kwargs.assert_all_used()?;
+    match resolver.resolve(name, &options) {
+        Ok(matches) => Ok(Value::from(!matches.is_empty())),
+        Err(err) if is_not_found_error(&err) => Ok(Value::from(false)),
+        Err(err) => Err(err),
+    }
 }
 
 fn render_value(matches: &[Utf8PathBuf], options: &WhichOptions) -> Value {

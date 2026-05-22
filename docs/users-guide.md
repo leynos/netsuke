@@ -196,7 +196,8 @@ targets:
   - name: build/utils.o         # Output file(s). Can be a string or list.
     rule: compile               # Rule to use (mutually exclusive with command/script)
     sources: src/utils.c        # Input file(s). String or list.
-    deps:                       # Explicit dependencies (targets built before this one)
+    deps:                       # Explicit dependencies
+      # targets built before this one
       - build/utils.h
     vars:                       # Target-local variables, override globals
       cflags: "-O0 -g"
@@ -204,10 +205,12 @@ targets:
   # Example 2: Linking an executable using an inline command
   - name: my_app
     command: "{{ cc }} build/main.o build/utils.o -o my_app"
-    sources:                    # Implicit dependencies derived from command/rule usage
+    sources:                    # Implicit dependencies
+      # derived from command/rule usage
       - build/main.o
       - build/utils.o
-    order_only_deps:            # Dependencies built before, but changes don't trigger rebuild
+    order_only_deps:            # Dependencies built before, but changes
+      # do not trigger rebuild
       - build_directory         # e.g., Ensure 'build/' exists
 
   # Example 3: A phony action (can also be in top-level 'actions:')
@@ -359,7 +362,8 @@ Define reusable Jinja logic in the top-level `macros` section.
 macros:
   - signature: "cc_cmd(src, obj, flags='')" # Jinja macro signature
     body: |                                # Multi-line body
-      {{ cc }} {{ flags }} -c {{ src | shell_escape }} -o {{ obj | shell_escape }}
+      {{ cc }} {{ flags }} -c {{ src | shell_escape }} \
+        -o {{ obj | shell_escape }}
 
 targets:
   - name: build/main.o
@@ -480,6 +484,9 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   without marking the template as impure. Example: `{{ 'clang++' | which }}`
   returns the first matching binary; the function alias
   `{{ which('clang++') }}` is available if piping would be awkward.
+- `command_available` function: Uses the same resolver and options as `which`,
+  returning `true` when a matching executable is found and `false` when it is
+  absent. Absence is not an error.
 - Keyword arguments:
   - `all` (default `false`): Return every match, ordered by `PATH`.
   - `canonical` (default `false`): Resolve symlinks and deduplicate entries by
@@ -494,6 +501,24 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   `netsuke::jinja::which::not_found` along with a preview of the scanned
   `PATH`. Supplying unknown keyword arguments or invalid values raises
   `netsuke::jinja::which::args`.
+
+Use `command_available` in manifest-time `when` clauses when optional
+tooling selects between actions:
+
+```yaml
+actions:
+  - name: test-fast
+    command: cargo nextest run
+    when: command_available("cargo-nextest")
+  - name: test-fast
+    command: cargo test
+    when: not command_available("cargo-nextest")
+```
+
+Only the selected action reaches the typed manifest and generated Ninja
+file.
+Top-level actions selected this way still keep the normal implicit
+`phony: true` behaviour.
 
 **Impurity:** Filters like `shell` and functions like `fetch` interact with the
 outside world. Netsuke tracks this "impurity". Impure templates might affect
@@ -760,7 +785,8 @@ Example:
       "url": null,
       "causes": [
         "YAML parse error at line 2, column 2: tabs disallowed within this context",
-        "tabs disallowed within this context (block indentation) at line 2, column 2"
+        "tabs disallowed within this context (block indentation)",
+        "at line 2, column 2"
       ],
       "source": {
         "name": "Netsukefile"
@@ -1292,7 +1318,13 @@ report structured failures:
 ```sh
 netsuke --diag-json build 2>diagnostics.json
 if [ $? -ne 0 ]; then
-  jq '.schema_version, .generator.name, .generator.version, .diagnostics[0].code, .diagnostics[0].message' diagnostics.json
+  jq '
+    .schema_version,
+    .generator.name,
+    .generator.version,
+    .diagnostics[0].code,
+    .diagnostics[0].message
+  ' diagnostics.json
 fi
 ```
 

@@ -1,0 +1,8 @@
+netsuke_version: "1.0.0"
+actions:
+  - name: invalid-action
+    command: echo invalid
+    when: command_available("anything", unexpected=true)
+targets:
+  - name: done
+    command: "true"

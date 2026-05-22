@@ -9,6 +9,16 @@ use crate::localization::{self, LocalizedMessage, keys};
 
 use super::{format_path_for_output, options::CwdMode};
 
+const NOT_FOUND_CODE: &str = "netsuke::jinja::which::not_found";
+
+pub(super) fn is_not_found_error(error: &Error) -> bool {
+    error.to_string().contains(NOT_FOUND_CODE)
+}
+
+fn with_not_found_code(message: &str) -> String {
+    format!("{NOT_FOUND_CODE}: {message}")
+}
+
 pub(super) fn not_found_error(command: &str, dirs: &[Utf8PathBuf], mode: CwdMode) -> Error {
     let count = dirs.len();
     let preview = path_preview(dirs);
@@ -21,16 +31,18 @@ pub(super) fn not_found_error(command: &str, dirs: &[Utf8PathBuf], mode: CwdMode
         message.push_str(". ");
         message.push_str(&hint.to_string());
     }
-    Error::new(ErrorKind::InvalidOperation, message)
+    Error::new(ErrorKind::InvalidOperation, with_not_found_code(&message))
 }
 
 pub(super) fn direct_not_found(command: &str, path: &Utf8Path) -> Error {
     Error::new(
         ErrorKind::InvalidOperation,
-        localization::message(keys::STDLIB_WHICH_DIRECT_NOT_FOUND)
-            .with_arg("command", command)
-            .with_arg("path", path.as_str())
-            .to_string(),
+        with_not_found_code(
+            &localization::message(keys::STDLIB_WHICH_DIRECT_NOT_FOUND)
+                .with_arg("command", command)
+                .with_arg("path", path.as_str())
+                .to_string(),
+        ),
     )
 }
 

@@ -3,7 +3,7 @@
 This roadmap tracks unfinished and future Netsuke work. Completed historical
 foundations live in
 [`docs/archive/roadmap-completed-foundations.md`](archive/roadmap-completed-foundations.md)
-so the active roadmap can focus on remaining hypotheses without erasing prior
+ so the active roadmap can focus on remaining hypotheses without erasing prior
 implementation detail.
 
 Task identifiers are globally unique across the active roadmap and the archive.
@@ -84,8 +84,10 @@ rewrite:
   tasks through `3.13.2` moved to the archive as completed foundations.
 - `3.4.5`, `3.4.6`, `3.8.3`, `3.11.4`, `3.12.3`, `3.13.3`, `3.14.1`, and
   `3.14.3` to `3.14.11` remain active under their existing numbers.
-- `3.14.2` remains active because it was previously marked complete while one
-  of its subtasks still required work.
+- `3.14.2` was completed after restoring coverage for top-level action
+  expansion and complementary `command_available(...)` branches.
+- `3.14.4` remains open per this pull request's `3.14.2` objective, even
+  though this branch introduces supporting `command_available(...)` behaviour.
 - Phase 4 remains active because none of its formal-verification work has been
   delivered yet.
 - New CLI-redesign work starts at `3.15` and Phase 5 so historical numbers are
@@ -151,11 +153,11 @@ and agents.
     generation, and Ninja execution.
   - [x] Document that build-time branching belongs in recipes unless a future
     runtime-condition feature is designed.
-- [ ] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
+- [x] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
   Requires 2.2.3. See [netsuke-design.md §2.5](netsuke-design.md).
   - [x] Preserve the existing implicit `phony: true` action behaviour after
     expansion.
-  - [ ] Support complementary branches such as `when: command_available(...)`
+  - [x] Support complementary branches such as `when: command_available(...)`
     and `when: not command_available(...)`.
 - [ ] 3.14.3. Lower target and action `deps` into implicit IR and Ninja
   dependency edges. Requires 1.2.2 and 1.3.2. See
@@ -330,7 +332,7 @@ and test workflow intact. See
   - [x] Cache Kani tool downloads separately from ordinary Cargo artefacts.
 - [ ] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel)
-  and
+   and
   [formal-verification-methods-in-netsuke.md §Stateright remains deferred](formal-verification-methods-in-netsuke.md#stateright-remains-deferred).
   - [ ] Document Verus as optional and proof-kernel-only.
   - [ ] Document Stateright as deferred until Netsuke gains a stateful
