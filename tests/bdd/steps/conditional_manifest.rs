@@ -1,4 +1,14 @@
 //! Step definitions for conditional manifest planning scenarios.
+//!
+//! These BDD steps build temporary manifests that exercise conditional
+//! `foreach` and `when` handling at manifest time. The scenarios verify both
+//! branch selection for actions and targets and the `command_available(...)`
+//! predicate used by complementary branches.
+//!
+//! Each step stores its temporary workspace, manifest, and command-path
+//! changes through [`TestWorld`]. That keeps the scenario state isolated while
+//! still letting later assertions inspect the command outputs and environment
+//! mutations created by the manifest under test.
 
 use crate::bdd::fixtures::TestWorld;
 use anyhow::{Context, Result};
