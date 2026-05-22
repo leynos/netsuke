@@ -76,8 +76,15 @@ Use the Make targets for day-to-day formal-verification checks:
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`,
-or `make all`. Formal verification remains opt-in until the dedicated Kani CI
-job is added by roadmap item `4.1.2`.
+or `make all`.
+
+Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
+`build-test` job. The job installs the pinned Kani version with
+`scripts/install-kani.sh` and runs only `make kani`; it does not run
+`make kani-full`, coverage, CodeScene upload, or the normal build matrix. Its
+cache is intentionally separate from ordinary Cargo build artefacts: the job
+uses a Kani-specific cache key derived from `tools/kani/VERSION` and caches the
+job-local Kani Cargo home plus Kani support-file home.
 
 ## Test suite map
 
