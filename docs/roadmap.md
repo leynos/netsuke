@@ -83,12 +83,11 @@ rewrite:
 - `1.1.1` to `1.3.3`, `2.1.1` to `2.3.2`, and completed `3.x` foundation
   tasks through `3.13.2` moved to the archive as completed foundations.
 - `3.4.5`, `3.4.6`, `3.8.3`, `3.11.4`, `3.12.3`, `3.13.3`, `3.14.1`, and
-  `3.14.3` plus `3.14.5` to `3.14.11` remain active under their existing
-  numbers.
+  `3.14.3` to `3.14.11` remain active under their existing numbers.
 - `3.14.2` was completed after restoring coverage for top-level action
   expansion and complementary `command_available(...)` branches.
-- `3.14.4` was completed after implementing the non-throwing
-  `command_available(...)` executable probe.
+- `3.14.4` remains open per this pull request's `3.14.2` objective, even
+  though this branch introduces supporting `command_available(...)` behaviour.
 - Phase 4 remains active because none of its formal-verification work has been
   delivered yet.
 - New CLI-redesign work starts at `3.15` and Phase 5 so historical numbers are
@@ -169,13 +168,13 @@ and agents.
     ordering and rebuild decisions without appearing in recipe arguments.
   - [ ] Align cycle detection, generated Ninja output, and user-facing
     dependency documentation.
-- [x] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
+- [ ] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
   executable probe. Requires 3.5.1. See
   [executable discovery](netsuke-design.md#executable-discovery-filter-which).
-  - [x] Reuse the `which` resolver and cache.
-  - [x] Return `false` for absent commands instead of raising
+  - [ ] Reuse the `which` resolver and cache.
+  - [ ] Return `false` for absent commands instead of raising
     `netsuke::jinja::which::not_found`.
-  - [x] Preserve argument validation diagnostics for invalid options.
+  - [ ] Preserve argument validation diagnostics for invalid options.
 - [ ] 3.14.5. Add regression coverage for conditional action dependency
   manifests.
   - [ ] Test action-level `when` and action-level `foreach`.
