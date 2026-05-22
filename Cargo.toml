@@ -163,7 +163,7 @@ camino = "1.2.0"
 test_support = { path = "test_support" }
 strip-ansi-escapes = "0.2"
 toml = "0.8"
-proptest = "1"
+proptest = "1.11.0"
 
 # Target-specific dev-deps
 [target.'cfg(unix)'.dev-dependencies]
