@@ -149,13 +149,14 @@ fn call_macro_value_supports_kwargs(mut strict_env: Environment<'static>) -> Any
     let template = strict_env
         .get_template("macro")
         .context("missing template")?;
-    let state = template.eval_to_state(())?;
+    let captured = template.render_captured(())?;
+    let state = captured.state();
     let value = state
         .lookup("greet")
         .context("macro value missing")?
         .clone();
     let kwargs = Kwargs::from_iter([("name".to_owned(), Value::from("Ada"))]);
-    let rendered = call_macro_value(&state, &value, &[], Some(kwargs))?;
+    let rendered = call_macro_value(state, &value, &[], Some(kwargs))?;
     ensure!(
         rendered.to_string() == "hi Ada",
         "unexpected rendered output"

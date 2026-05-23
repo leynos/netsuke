@@ -1,13 +1,13 @@
-.PHONY: help all clean test build release lint fmt check-fmt markdownlint nixie kani kani-full formal-pr
+.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie kani kani-full formal-pr
 
 APP ?= netsuke
-CARGO ?= cargo
+CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
 BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
 KANI_VERSION_CHECK ?= scripts/check-kani-version.sh
-MDLINT ?= markdownlint-cli2
+MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 
@@ -37,6 +37,9 @@ fmt: ## Format Rust and Markdown sources
 
 check-fmt: ## Verify formatting
 	$(CARGO) fmt --all -- --check
+
+typecheck: ## Typecheck all targets and features
+	RUSTFLAGS="-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
 markdownlint: ## Lint Markdown files
 	$(MDLINT) "**/*.md"

@@ -3,6 +3,7 @@
 mod common;
 
 use common::workflow_contents;
+use rstest::rstest;
 
 #[test]
 fn behavioural_release_workflow_uses_shared_actions() {
@@ -60,5 +61,21 @@ fn behavioural_release_workflow_wires_release_modes_outputs() {
     assert!(
         contents.contains("should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}"),
         "release workflow should capture workflow artefact upload output"
+    );
+}
+
+#[rstest]
+#[case("linux-x86_64")]
+#[case("linux-aarch64")]
+fn behavioural_release_workflow_passes_linux_stage_targets(#[case] target_key: &str) {
+    let contents = workflow_contents("release.yml").expect("release workflow should be readable");
+
+    assert!(
+        contents.contains(&format!("target_key: {target_key}")),
+        "release workflow should declare Linux stage target {target_key}"
+    );
+    assert!(
+        contents.contains("stage-target: ${{ matrix.target_key }}"),
+        "release workflow should pass matrix stage targets to build-and-package"
     );
 }
