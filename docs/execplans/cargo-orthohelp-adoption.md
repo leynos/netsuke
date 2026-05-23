@@ -299,7 +299,6 @@ itself does not change.
 
 ## Outcomes & retrospective
 
-The plan is drafted and awaiting approval. No implementation has started.
 Implementation approval was received and the approved migration has been
 completed. Release help generation now runs through
 `scripts/generate-release-help.sh`, which invokes `cargo-orthohelp` for man

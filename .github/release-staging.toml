@@ -51,17 +51,17 @@ required = false
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1"
 destination = "Netsuke/Netsuke.psd1"
-required = false
+required = true
 
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml"
 destination = "Netsuke/en-US/Netsuke-help.xml"
-required = false
+required = true
 
 [[targets.windows-x86_64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt"
 destination = "Netsuke/en-US/about_Netsuke.help.txt"
-required = false
+required = true
 
 [targets.windows-aarch64]
 platform = "windows"
@@ -77,17 +77,17 @@ required = false
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/Netsuke.psd1"
 destination = "Netsuke/Netsuke.psd1"
-required = false
+required = true
 
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/Netsuke-help.xml"
 destination = "Netsuke/en-US/Netsuke-help.xml"
-required = false
+required = true
 
 [[targets.windows-aarch64.artefacts]]
 source = "target/orthohelp/{target}/release/powershell/Netsuke/en-US/about_Netsuke.help.txt"
 destination = "Netsuke/en-US/about_Netsuke.help.txt"
-required = false
+required = true
 
 [targets.macos-x86_64]
 platform = "macos"

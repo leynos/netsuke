@@ -54,7 +54,7 @@ inspected with:
 Get-Help Netsuke -Full
 ```
 
-This changes release packaging only. The Netsuke command-line flags,
+This change affects release packaging only. The Netsuke command-line flags,
 subcommands, output, and exit statuses are unchanged.
 
 ### Basic Usage
