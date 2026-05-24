@@ -59,6 +59,7 @@ impl BuildGraph {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
             let inputs = to_paths(&target.sources);
+            let implicit_deps = to_paths(&target.deps);
             let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
@@ -90,7 +91,7 @@ impl BuildGraph {
             let edge = BuildEdge {
                 action_id,
                 inputs: inputs.clone(),
-                implicit_deps: Vec::new(),
+                implicit_deps,
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),

@@ -34,7 +34,7 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
     render_string_or_list(&mut rule.deps, env, vars)?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command = render_str_with(env, command, vars, || "render rule command".into())?;
+            *command = render_recipe_str_with(env, command, vars, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
             *script = render_str_with(env, script, vars, || "render rule script".into())?;
@@ -52,7 +52,7 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
     match &mut target.recipe {
         Recipe::Command { command } => {
-            *command = render_str_with(env, command, &target.vars, || {
+            *command = render_recipe_str_with(env, command, &target.vars, || {
                 "render target command".into()
             })?;
         }
@@ -96,6 +96,22 @@ fn render_str_with(
     what: impl FnOnce() -> String,
 ) -> Result<String> {
     env.render_str(tpl, ctx).with_context(what)
+}
+
+fn render_recipe_str_with(
+    env: &Environment,
+    tpl: &str,
+    ctx: &Vars,
+    what: impl FnOnce() -> String,
+) -> Result<String> {
+    let mut recipe_ctx = ctx.clone();
+    recipe_ctx
+        .entry("ins".into())
+        .or_insert_with(|| ManifestValue::String("{{ ins }}".into()));
+    recipe_ctx
+        .entry("outs".into())
+        .or_insert_with(|| ManifestValue::String("{{ outs }}".into()));
+    render_str_with(env, tpl, &recipe_ctx, what)
 }
 
 #[cfg(test)]

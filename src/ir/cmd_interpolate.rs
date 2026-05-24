@@ -137,10 +137,13 @@ fn find_substitution<'a>(
 }
 
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
-    let chars: Vec<char> = template.chars().collect();
     let ins_joined = ins.join(" ");
     let outs_joined = outs.join(" ");
-    let mut out = String::with_capacity(template.len());
+    let placeholder_template = template
+        .replace("{{ ins }}", &ins_joined)
+        .replace("{{ outs }}", &outs_joined);
+    let chars: Vec<char> = placeholder_template.chars().collect();
+    let mut out = String::with_capacity(placeholder_template.len());
     let mut in_backticks = false;
     let mut i = 0;
     while let Some(&ch) = chars.get(i) {

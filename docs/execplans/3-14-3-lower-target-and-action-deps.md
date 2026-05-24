@@ -347,10 +347,16 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       `BuildEdge.implicit_deps` with empty initialisers at all current
       construction sites. `cargo test --workspace` passed and logged to
       `/tmp/stage-b-netsuke-3-14-3-lower-target-and-action-deps.out`.
-- [ ] Stage B follow-up: commit the behaviour-neutral IR field addition.
-- [ ] Stage C: populate `implicit_deps` from `target.deps` in
-      `from_manifest::process_targets` and add `rstest` coverage that
-      asserts the IR field is populated for targets and actions alike.
+- [x] (2026-05-24T00:00Z) Stage B follow-up committed the
+      behaviour-neutral IR field addition as `3dc71f5`.
+- [x] (2026-05-24T00:00Z) Stage C populated `implicit_deps` from
+      `target.deps`, added target/action IR coverage, and preserved
+      documented `{{ ins }}` / `{{ outs }}` placeholders through manifest
+      rendering so IR interpolation can substitute them from explicit
+      sources and outputs. `make check-fmt`, `make lint`, and `make test`
+      passed with logs under `/tmp/*stage-c-netsuke-3-14-3-*`.
+- [ ] Stage C follow-up: commit manifest lowering and placeholder
+      preservation.
 - [ ] Stage D: extend `ir::cycle::CycleDetector` to traverse implicit deps
       and add a cycle-through-implicit-deps regression test, including a
       `proptest`-driven check that any cycle introduced through implicit
@@ -392,6 +398,19 @@ and do not invent a Netsuke-specific term that diverges from the backend.
   formatter touched many unrelated Markdown files before failing; those
   unrelated changes were restored, and Rust formatting was applied with
   `cargo fmt --all`.
+
+- (2026-05-24T00:00Z) The planned Stage C command
+  `cargo test --workspace ir_from_manifest_tests` has the same filter
+  problem as the Stage A baseline: it compiles but selects zero tests.
+  The meaningful command is `cargo test --test ir_from_manifest_tests`,
+  which executed all 15 tests after the Stage C fixes.
+
+- (2026-05-24T00:00Z) The user-guide-documented `{{ ins }}` and
+  `{{ outs }}` placeholders were not surviving manifest rendering in
+  recipe command strings when no user variable named `ins` or `outs`
+  existed. Stage C now preserves those placeholders through manifest
+  rendering and lets IR interpolation substitute them alongside `$in` and
+  `$out`.
 
 ## Decision Log
 

@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use netsuke::{
+    ast::Recipe,
     ir::{BuildGraph, IrGenError},
     manifest,
 };
@@ -114,6 +115,118 @@ fn skipped_manifest_conditions_do_not_contribute_to_ir(
         graph.targets.len() == 1,
         "filtered entries should be absent from IR targets: {:?}",
         graph.targets.keys().collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::target_deps(
+    concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: out/app\n",
+        "    deps: [include/config.h, generated/stamp]\n",
+        "    command: echo $out\n",
+    ),
+    "out/app",
+    false,
+)]
+#[case::action_deps(
+    concat!(
+        "netsuke_version: '1.0.0'\n",
+        "actions:\n",
+        "  - name: regenerate\n",
+        "    deps: [schemas/user.yml, tools/generator]\n",
+        "    command: echo $out\n",
+        "targets: []\n",
+    ),
+    "regenerate",
+    true,
+)]
+fn manifest_deps_populate_implicit_deps(
+    #[case] yaml: &str,
+    #[case] output: &str,
+    #[case] expected_phony: bool,
+) -> Result<()> {
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let edge = graph
+        .targets
+        .get(&Utf8PathBuf::from(output))
+        .with_context(|| format!("expected edge for {output}"))?;
+
+    ensure!(
+        edge.implicit_deps
+            == vec![
+                Utf8PathBuf::from(if expected_phony {
+                    "schemas/user.yml"
+                } else {
+                    "include/config.h"
+                }),
+                Utf8PathBuf::from(if expected_phony {
+                    "tools/generator"
+                } else {
+                    "generated/stamp"
+                }),
+            ],
+        "unexpected implicit deps for {output}: {:?}",
+        edge.implicit_deps
+    );
+    ensure!(
+        edge.inputs.is_empty(),
+        "deps must not be explicit recipe inputs: {:?}",
+        edge.inputs
+    );
+    ensure!(
+        edge.phony == expected_phony,
+        "unexpected phony flag for {output}: {}",
+        edge.phony
+    );
+    Ok(())
+}
+
+#[rstest]
+fn manifest_deps_do_not_contribute_to_recipe_inputs() -> Result<()> {
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "rules:\n",
+        "  - name: compile\n",
+        "    command: echo $in {{ ins }} > $out\n",
+        "targets:\n",
+        "  - name: out/app\n",
+        "    sources: src/main.c\n",
+        "    deps: [include/config.h, generated/stamp]\n",
+        "    rule: compile\n",
+    );
+    let manifest = manifest::from_str(yaml)?;
+    let graph = BuildGraph::from_manifest(&manifest).context("expected graph generation")?;
+    let edge = graph
+        .targets
+        .get(&Utf8PathBuf::from("out/app"))
+        .context("expected edge for out/app")?;
+    let action = graph
+        .actions
+        .get(&edge.action_id)
+        .context("expected action for out/app")?;
+    let Recipe::Command { command } = &action.recipe else {
+        bail!("expected command recipe");
+    };
+
+    ensure!(
+        command == "echo src/main.c src/main.c > out/app",
+        "deps should not appear in recipe interpolation: {command}"
+    );
+    ensure!(
+        edge.inputs == vec![Utf8PathBuf::from("src/main.c")],
+        "sources should remain the explicit inputs"
+    );
+    ensure!(
+        edge.implicit_deps
+            == vec![
+                Utf8PathBuf::from("include/config.h"),
+                Utf8PathBuf::from("generated/stamp"),
+            ],
+        "deps should populate only implicit deps"
     );
     Ok(())
 }
