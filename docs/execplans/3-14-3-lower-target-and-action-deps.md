@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: ACTIVE
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -404,8 +404,9 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       execplan completion updates: `make check-fmt`, `make lint`,
       `make test`, `make markdownlint`, and `make nixie`. Logs are under
       `/tmp/*final-netsuke-3-14-3-lower-target-and-action-deps.out`.
-- [ ] Stage H: commit closure updates, push, and open the draft pull
-      request.
+- [x] (2026-05-24T00:00Z) Pushed the branch and refreshed draft pull
+      request [#315](https://github.com/leynos/netsuke/pull/315) with
+      full branch context, validation evidence, and review entrypoints.
 
 ## Surprises & Discoveries
 
@@ -832,7 +833,21 @@ environment variables are introduced.
 
 ## Outcomes & Retrospective
 
-(populate at completion)
+Roadmap item `3.14.3` is implemented. Target-level and action-level `deps`
+now lower into `BuildEdge.implicit_deps`, participate in cycle detection,
+and render as Ninja implicit dependencies between explicit inputs and
+order-only dependencies. Recipe interpolation continues to use explicit
+`sources` only for `$in` and `{{ ins }}`.
+
+The work also fixed a related placeholder-preservation bug: documented
+`{{ ins }}` and `{{ outs }}` recipe placeholders now survive manifest
+rendering so IR command interpolation can substitute them.
+
+Validation passed for the Rust formatting check, lint/doc checks, full
+test suite, Markdown linting, Mermaid validation, and CodeRabbit review.
+`make fmt` remains blocked by unrelated repository-wide Markdown formatting
+backlog; the branch restored that unrelated churn and relied on
+non-mutating gates for completion.
 
 ## Revision note
 
