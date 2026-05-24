@@ -394,9 +394,18 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       passed for `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`, and `make nixie` with logs under
       `/tmp/*netsuke-3-14-3-lower-target-and-action-deps.out`.
-- [ ] Stage H: run `coderabbit review --agent` and resolve concerns; run
-      final gates, mark roadmap item `3.14.3` done, commit, push, and
-      open the draft pull request.
+- [x] (2026-05-24T00:00Z) `coderabbit review --agent` completed with
+      zero findings. Review output is logged at
+      `/tmp/coderabbit-netsuke-3-14-3-lower-target-and-action-deps.out`.
+- [x] (2026-05-24T00:00Z) Marked roadmap item `3.14.3` and its
+      subitems complete after implementation, deterministic gates, and
+      CodeRabbit review all passed.
+- [x] (2026-05-24T00:00Z) Closing gates passed after the roadmap and
+      execplan completion updates: `make check-fmt`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`. Logs are under
+      `/tmp/*final-netsuke-3-14-3-lower-target-and-action-deps.out`.
+- [ ] Stage H: commit closure updates, push, and open the draft pull
+      request.
 
 ## Surprises & Discoveries
 
