@@ -355,12 +355,14 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       rendering so IR interpolation can substitute them from explicit
       sources and outputs. `make check-fmt`, `make lint`, and `make test`
       passed with logs under `/tmp/*stage-c-netsuke-3-14-3-*`.
-- [ ] Stage C follow-up: commit manifest lowering and placeholder
-      preservation.
-- [ ] Stage D: extend `ir::cycle::CycleDetector` to traverse implicit deps
-      and add a cycle-through-implicit-deps regression test, including a
-      `proptest`-driven check that any cycle introduced through implicit
-      deps is detected.
+- [x] (2026-05-24T00:00Z) Stage C follow-up committed manifest lowering
+      and placeholder preservation as `9b8d030`.
+- [x] (2026-05-24T00:00Z) Stage D extended
+      `ir::cycle::CycleDetector` to traverse implicit deps, added
+      implicit-only, mixed, missing-implicit, and bounded small-cycle
+      regression tests, and passed `make check-fmt`, `make lint`, and
+      `make test` with logs under `/tmp/*stage-d-netsuke-3-14-3-*`.
+- [ ] Stage D follow-up: commit cycle detection changes.
 - [ ] Stage E: update `ninja_gen::DisplayEdge::fmt` to emit
       `| <implicit_deps>` between the explicit-input block and the
       order-only block, with `rstest` coverage for the empty-input case.
@@ -411,6 +413,11 @@ and do not invent a Netsuke-specific term that diverges from the backend.
   existed. Stage C now preserves those placeholders through manifest
   rendering and lets IR interpolation substitute them alongside `$in` and
   `$out`.
+
+- (2026-05-24T00:00Z) `proptest` is not present in `Cargo.toml` or
+  `Cargo.lock`. Because the plan prohibits adding a dependency without
+  explicit approval, Stage D used deterministic bounded coverage over
+  small generated cycles instead of adding `proptest`.
 
 ## Decision Log
 
@@ -472,6 +479,14 @@ and do not invent a Netsuke-specific term that diverges from the backend.
   Kani harness under `tools/kani/` per the existing repository
   integration plan.
   Date/Author: 2026-05-23 / planning agent.
+
+- Decision: do not add `proptest` for `3.14.3`; use deterministic
+  bounded cycle coverage instead.
+  Rationale: `proptest` is not already wired into this crate, and adding a
+  new dependency requires explicit approval under this plan. The bounded
+  test still exercises mixed explicit/implicit cycles without widening
+  the dependency surface.
+  Date/Author: 2026-05-24 / implementation agent.
 
 - Decision: emit the new `| <implicit_deps>` block between explicit
   inputs and the `||` block in `ninja_gen.rs`, conditional on a
