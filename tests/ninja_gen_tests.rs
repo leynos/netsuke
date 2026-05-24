@@ -124,6 +124,110 @@ fn ninja_integration_setup() -> Option<TempDir> {
         "build out log | out.d: b in || stamp\n\n",
     ),
 )]
+#[case::explicit_inputs_plus_implicit_deps(
+    Action {
+        recipe: Recipe::Command { command: "true".into() },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    },
+    BuildEdge {
+        action_id: "b".into(),
+        inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: vec![Utf8PathBuf::from("dep")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    },
+    Utf8PathBuf::from("out"),
+    concat!(
+        "rule b\n",
+        "  command = true\n\n",
+        "build out: b in | dep\n\n",
+    ),
+)]
+#[case::implicit_deps_without_explicit_inputs(
+    Action {
+        recipe: Recipe::Command { command: "true".into() },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    },
+    BuildEdge {
+        action_id: "b".into(),
+        inputs: Vec::new(),
+        implicit_deps: vec![Utf8PathBuf::from("dep")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    },
+    Utf8PathBuf::from("out"),
+    concat!(
+        "rule b\n",
+        "  command = true\n\n",
+        "build out: b | dep\n\n",
+    ),
+)]
+#[case::all_dependency_classes(
+    Action {
+        recipe: Recipe::Command { command: "true".into() },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    },
+    BuildEdge {
+        action_id: "b".into(),
+        inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: vec![Utf8PathBuf::from("dep")],
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: vec![Utf8PathBuf::from("stamp")],
+        phony: false,
+        always: false,
+    },
+    Utf8PathBuf::from("out"),
+    concat!(
+        "rule b\n",
+        "  command = true\n\n",
+        "build out: b in | dep || stamp\n\n",
+    ),
+)]
+#[case::phony_action_with_implicit_deps(
+    Action {
+        recipe: Recipe::Command { command: "true".into() },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    },
+    BuildEdge {
+        action_id: "phony".into(),
+        inputs: Vec::new(),
+        implicit_deps: vec![Utf8PathBuf::from("dep")],
+        explicit_outputs: vec![Utf8PathBuf::from("phony_action")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: true,
+        always: false,
+    },
+    Utf8PathBuf::from("phony_action"),
+    concat!(
+        "rule phony\n",
+        "  command = true\n\n",
+        "build phony_action: phony | dep\n\n",
+    ),
+)]
 fn generate_ninja_scenarios(
     #[case] action: Action,
     #[case] edge: BuildEdge,

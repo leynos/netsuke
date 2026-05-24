@@ -362,10 +362,16 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       implicit-only, mixed, missing-implicit, and bounded small-cycle
       regression tests, and passed `make check-fmt`, `make lint`, and
       `make test` with logs under `/tmp/*stage-d-netsuke-3-14-3-*`.
-- [ ] Stage D follow-up: commit cycle detection changes.
-- [ ] Stage E: update `ninja_gen::DisplayEdge::fmt` to emit
-      `| <implicit_deps>` between the explicit-input block and the
-      order-only block, with `rstest` coverage for the empty-input case.
+- [x] (2026-05-24T00:00Z) Stage D follow-up committed cycle detection
+      changes as `06a3c6f`.
+- [x] (2026-05-24T00:00Z) Stage E updated
+      `ninja_gen::DisplayEdge::fmt` to emit `| <implicit_deps>` between
+      explicit inputs and order-only deps. Added `rstest` edge-shape
+      coverage for explicit-plus-implicit, implicit-only,
+      explicit-plus-implicit-plus-order-only, and phony action cases.
+      `cargo test --test ninja_gen_tests`, `make lint`, and `make test`
+      passed with logs under `/tmp/*stage-e-netsuke-3-14-3-*`.
+- [ ] Stage E follow-up: commit Ninja emission changes.
 - [ ] Stage F: add a manifest-then-Ninja `rstest-bdd` scenario asserting
       the generated `build.ninja` contains the implicit-dep separator and
       that recipe interpolation sees only `sources`.
@@ -418,6 +424,13 @@ and do not invent a Netsuke-specific term that diverges from the backend.
   `Cargo.lock`. Because the plan prohibits adding a dependency without
   explicit approval, Stage D used deterministic bounded coverage over
   small generated cycles instead of adding `proptest`.
+
+- (2026-05-24T00:00Z) `BuildEdge.phony` does not make
+  `ninja_gen::DisplayEdge` emit Ninja's built-in `phony` rule by itself;
+  the generator still renders the edge's `action_id`. The Stage E phony
+  test therefore registers an action named `phony` and verifies
+  `build phony_action: phony | dep` in the build line while preserving
+  the existing rule-emission behaviour.
 
 ## Decision Log
 

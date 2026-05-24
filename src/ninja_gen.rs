@@ -290,6 +290,9 @@ impl Display for DisplayEdge<'_> {
         if !self.edge.inputs.is_empty() {
             write!(f, " {}", join(&self.edge.inputs))?;
         }
+        if !self.edge.implicit_deps.is_empty() {
+            write!(f, " | {}", join(&self.edge.implicit_deps))?;
+        }
         if !self.edge.order_only_deps.is_empty() {
             write!(f, " || {}", join(&self.edge.order_only_deps))?;
         }
