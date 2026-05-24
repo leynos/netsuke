@@ -379,11 +379,16 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       `{{ ins }}` interpolation excluding implicit deps. `cargo test
       --test bdd_tests implicit`, `make lint`, and `make test` passed
       with logs under `/tmp/*stage-f-netsuke-3-14-3-*`.
-- [ ] Stage F follow-up: commit behavioural coverage.
-- [ ] Stage G: update `docs/users-guide.md`, `docs/developers-guide.md`,
-      `docs/netsuke-design.md` cross-references, and
-      `docs/formal-verification-methods-in-netsuke.md` to record the
-      chosen cycle-participation contract.
+- [x] (2026-05-24T00:00Z) Stage F follow-up committed behavioural
+      coverage as `1a2c686`.
+- [x] (2026-05-24T00:00Z) Stage G updated
+      `docs/users-guide.md`, `docs/developers-guide.md`,
+      `docs/netsuke-design.md`, and
+      `docs/formal-verification-methods-in-netsuke.md` with the
+      dependency-class and cycle-participation contract. `git diff
+      --check`, touched-file markdownlint, `make markdownlint`, and
+      `make nixie` passed; logs are under `/tmp/*stage-g-netsuke-3-14-3-*`.
+- [ ] Stage G follow-up: commit documentation updates.
 - [ ] Stage H: run `coderabbit review --agent` and resolve concerns; run
       final gates, mark roadmap item `3.14.3` done, commit, push, and
       open the draft pull request.

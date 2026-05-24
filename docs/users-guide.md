@@ -231,14 +231,20 @@ targets:
 - `recipe`: How to build the target. Defined by one of `rule`, `command`, or
   `script` (mutually exclusive).
 
-- `sources`: Input file path(s) (`StringOrList`). If a source matches another
-  target's `name`, an implicit dependency is created.
+- `sources`: Input file path(s) (`StringOrList`). Sources are explicit recipe
+  inputs: they are passed to `$in` and `{{ ins }}` and trigger rebuilds when
+  changed.
 
-- `deps` (Optional): Explicit target dependencies (`StringOrList`). Changes
-  trigger rebuilds.
+- `deps` (Optional): Implicit target dependencies (`StringOrList`). Changes
+  trigger rebuilds, but these paths are not passed to `$in` or `{{ ins }}`.
+  Maps to Ninja `|`.
 
 - `order_only_deps` (Optional): Dependencies that must run first but whose
   changes don't trigger rebuilds (`StringOrList`). Maps to Ninja `||`.
+
+Cycle detection traverses `sources` and `deps`, because both classes affect
+the build graph and rebuild freshness. `order_only_deps` only enforce build
+ordering and do not participate in Netsuke's cycle detection.
 
 - `vars` (Optional): Target-specific variables that override global `vars`.
 

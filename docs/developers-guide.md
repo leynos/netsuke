@@ -96,6 +96,20 @@ Netsuke uses a mixed strategy:
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 
+## IR dependency classes
+
+`src/ir/from_manifest.rs` lowers manifest `sources` into
+`BuildEdge.inputs`, manifest `deps` into `BuildEdge.implicit_deps`, and
+manifest `order_only_deps` into `BuildEdge.order_only_deps`. Keep those classes
+separate: recipe interpolation (`$in` and `{{ ins }}`) receives only
+`BuildEdge.inputs`, while `src/ninja_gen.rs` renders implicit deps with
+Ninja's single-pipe separator.
+
+`src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and
+`implicit_deps` when detecting cycles. It intentionally does not traverse
+`order_only_deps`, because order-only dependencies express scheduling order
+rather than rebuild freshness.
+
 ## Behavioural testing strategy
 
 Behavioural tests run through `cargo test` using `rstest-bdd`, not a bespoke
