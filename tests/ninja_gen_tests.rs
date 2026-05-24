@@ -58,6 +58,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
     BuildEdge {
         action_id: "a".into(),
         inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -83,6 +84,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
     BuildEdge {
         action_id: "compile".into(),
         inputs: vec![Utf8PathBuf::from("a.c"), Utf8PathBuf::from("b.c")],
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("ab.o")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -108,6 +110,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
     BuildEdge {
         action_id: "b".into(),
         inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out"), Utf8PathBuf::from("log")],
         implicit_outputs: vec![Utf8PathBuf::from("out.d")],
         order_only_deps: vec![Utf8PathBuf::from("stamp")],
@@ -168,6 +171,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
         BuildEdge {
             action_id: "script".into(),
             inputs: Vec::new(),
+            implicit_deps: Vec::new(),
             explicit_outputs: vec![Utf8PathBuf::from("out")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
@@ -207,6 +211,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "script".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -229,6 +234,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "percent".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -251,6 +257,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "tick".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -273,6 +280,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "hello".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("say-hello")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -367,6 +375,7 @@ fn errors_when_action_missing() -> Result<()> {
     let edge = BuildEdge {
         action_id: "missing".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -408,6 +417,7 @@ fn generate_format_error() -> Result<()> {
     let edge = BuildEdge {
         action_id: "a".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

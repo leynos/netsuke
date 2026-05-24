@@ -166,6 +166,7 @@ mod tests {
         BuildEdge {
             action_id: "id".into(),
             inputs: inputs.iter().map(|name| path(name)).collect(),
+            implicit_deps: Vec::new(),
             explicit_outputs: vec![path(output)],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),

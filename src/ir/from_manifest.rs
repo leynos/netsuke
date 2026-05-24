@@ -90,6 +90,7 @@ impl BuildGraph {
             let edge = BuildEdge {
                 action_id,
                 inputs: inputs.clone(),
+                implicit_deps: Vec::new(),
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),

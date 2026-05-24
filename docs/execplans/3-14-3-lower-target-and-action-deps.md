@@ -332,11 +332,22 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       snapshot touched by `Target.deps`, `BuildEdge`, or the generated
       Ninja edge shape.
 - [x] (2026-05-23T00:00Z) Drafted this pre-implementation ExecPlan.
-- [ ] User approval of this ExecPlan.
-- [ ] Stage A: confirm the AST-to-IR gap and snapshot baselines before
-      changing behaviour.
-- [ ] Stage B: add `BuildEdge.implicit_deps` and update every literal
-      construction site, doctest, and fixture initialiser.
+- [x] (2026-05-24T00:00Z) User approved implementation of this ExecPlan
+      and explicitly requested the `leta`, `rust-router`, and
+      `hexagonal-architecture` skills plus a leta workspace.
+- [x] (2026-05-24T00:00Z) Stage A confirmed the AST-to-IR gap and ran
+      the planned baseline command. The command exited successfully and
+      logged to
+      `/tmp/baseline-netsuke-3-14-3-lower-target-and-action-deps.out`.
+- [x] (2026-05-24T00:00Z) Stage A follow-up identified the meaningful
+      snapshot tests: `touch_manifest_ninja_validation`,
+      `conditional_manifest_ninja_snapshot`, and
+      `generate_multiline_script_snapshot`.
+- [x] (2026-05-24T00:00Z) Stage B added
+      `BuildEdge.implicit_deps` with empty initialisers at all current
+      construction sites. `cargo test --workspace` passed and logged to
+      `/tmp/stage-b-netsuke-3-14-3-lower-target-and-action-deps.out`.
+- [ ] Stage B follow-up: commit the behaviour-neutral IR field addition.
 - [ ] Stage C: populate `implicit_deps` from `target.deps` in
       `from_manifest::process_targets` and add `rstest` coverage that
       asserts the IR field is populated for targets and actions alike.
@@ -360,7 +371,27 @@ and do not invent a Netsuke-specific term that diverges from the backend.
 
 ## Surprises & Discoveries
 
-(populate during implementation)
+- (2026-05-24T00:00Z) `leta workspace add` reported that the worktree was
+  already registered. No workspace repair was required.
+
+- (2026-05-24T00:00Z) Live code still matches the planned gap:
+  `BuildGraph::process_targets` constructs `inputs` from `target.sources`
+  and `order_only_deps` from `target.order_only_deps`, but never reads
+  `target.deps`; `CycleDetector::visit` traverses only `edge.inputs`; and
+  `DisplayEdge::fmt` renders explicit inputs followed directly by
+  `order_only_deps`.
+
+- (2026-05-24T00:00Z) The planned baseline command
+  `cargo test --workspace ninja_snapshot_tests` is green but selects zero
+  tests in this repository state. Treat it as a compile/filter smoke test
+  only, and find the actual snapshot test names before relying on snapshot
+  coverage.
+
+- (2026-05-24T00:00Z) `make fmt` still triggers the pre-existing
+  repository-wide Markdown backlog noted in the validation plan. The
+  formatter touched many unrelated Markdown files before failing; those
+  unrelated changes were restored, and Rust formatting was applied with
+  `cargo fmt --all`.
 
 ## Decision Log
 
