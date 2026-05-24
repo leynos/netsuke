@@ -106,9 +106,17 @@ should lock down these invariants:
 
 ### Optional Verus proof kernel
 
+Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is
+a small proof-specific model for one mathematical contract; it is not a
+production subsystem, a replacement implementation, or a normal developer
+workflow gate. Netsuke should not add Verus installer scripts, Verus Make
+targets, Verus Continuous Integration (CI), or Verus files under ordinary Cargo
+as part of the phase-1 boundary.
+
 Verus is not the correct first tool for the manifest or command-interpolation
-layers. The code that is most suitable for a later proof is
-`canonicalize_cycle`, because the function exposes a clear mathematical
+layers. The only current entry point worth preserving for later evaluation is a
+cycle canonicalization model related to `src/ir/cycle.rs`. That model is
+appropriate because `canonicalize_cycle` exposes a clear mathematical
 contract:
 
 - output length is preserved,
@@ -116,9 +124,13 @@ contract:
 - the interior node multiset is preserved, and
 - the chosen start node is stable under the repository's ordering rule.[^7]
 
-If Verus is introduced, it should prove only that narrow normalization model at
-first. Production `HashMap` structures, MiniJinja values, filesystem helpers,
-and subprocess orchestration should remain outside the first proof boundary.
+If Verus is introduced by a later approved roadmap item, it should prove only
+that narrow normalization model at first. Production `HashMap` structures,
+MiniJinja values, filesystem helpers, and subprocess orchestration should
+remain outside the first proof boundary. Until the proof kernel is stable and
+reviewed, Verus should remain outside pull-request gates, `make test`,
+`make lint`, `make check-fmt`, `make all`, `make kani`, `make kani-full`, and
+`make formal-pr`.
 
 ### Stateright remains deferred
 
@@ -127,9 +139,14 @@ and orchestrator that emits a static Ninja file and delegates execution to the
 Ninja subprocess.[^4][^10] There is no actor protocol, distributed state
 machine, or internal concurrent scheduler to model check today.
 
-Reconsidering Stateright would make sense only after a future daemon mode,
-watch service, remote-execution coordinator, or another long-lived concurrent
-subsystem exists.
+Stateright is therefore deferred for phase 1. The project should not add a
+Stateright dependency, model directory, Make target, CI job, or documentation
+that implies Stateright is part of the active verification workflow.
+Reconsidering Stateright would make sense only after an accepted design
+introduces a stateful concurrent subsystem: for example a daemon mode, watch
+service, remote-execution coordinator, actor protocol, or internal scheduler
+with long-lived mutable control-plane state. Batch-oriented manifest
+compilation and static Ninja emission are not enough to reopen that decision.
 
 ## Repository integration plan
 

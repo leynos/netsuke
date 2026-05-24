@@ -106,6 +106,17 @@ Use the Make targets for day-to-day formal-verification checks:
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`,
 or `make all`.
 
+Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
+Kani is the only supported and gated formal-verification tool today. Verus is
+optional, proof-kernel-only, and not installed or run by default; any first
+Verus work must stay outside ordinary Cargo and focus on a small cycle
+canonicalization model. Stateright is deferred entirely until Netsuke gains an
+accepted stateful concurrent subsystem such as a daemon, watch service,
+remote-execution coordinator, actor protocol, or internal scheduler with
+long-lived mutable control-plane state. See
+[`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
+for the design rationale and re-entry criteria.
+
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. The job installs the pinned Kani version with
 `scripts/install-kani.sh` and runs only `make kani`; it does not run

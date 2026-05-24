@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -163,18 +163,43 @@ implementation begins.
 - [x] 2026-05-22T19:01:43Z: Attempted `coderabbit review --agent` three
       times; all attempts returned a recoverable account rate-limit response
       before producing review findings.
-- [ ] Stage A: review the draft plan with the user and obtain explicit
+- [x] 2026-05-24T15:43:39Z: The user explicitly approved proceeding with
+      implementation from this ExecPlan.
+- [x] 2026-05-24T15:43:39Z: Confirmed the branch is
+      `4-1-3-record-phase-1-scope-boundary-for-verus-and-stateright` and the
+      working tree is clean before implementation.
+- [x] Stage A: review the draft plan with the user and obtain explicit
       approval before implementing roadmap item `4.1.3`.
-- [ ] Stage B: update the formal-verification design document with the
+- [x] 2026-05-24T15:43:39Z: Updated
+      `docs/formal-verification-methods-in-netsuke.md` to define the Verus
+      proof-kernel boundary, exclude Verus from phase-1 build and CI surfaces,
+      and record concrete Stateright re-entry criteria.
+- [x] 2026-05-24T15:43:39Z: Updated `docs/developers-guide.md` with the
+      phase-1 support boundary: Kani supported and gated, Verus optional and
+      not installed by default, and Stateright deferred.
+- [x] Stage B: update the formal-verification design document with the
       phase-1 boundary, Verus proof-kernel definition, and Stateright re-entry
       criteria.
-- [ ] Stage C: update the developers' guide with the phase-1 support matrix:
+- [x] Stage C: update the developers' guide with the phase-1 support matrix:
       Kani supported and gated, Verus optional and not installed by default,
       Stateright deferred.
-- [ ] Stage D: run CodeRabbit review, quality gates, and documentation gates.
-- [ ] Stage E: mark roadmap item `4.1.3` and its subitems done only after the
+- [x] 2026-05-24T15:43:39Z: Ran `make check-fmt`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`; all passed before
+      requesting CodeRabbit review.
+- [x] 2026-05-24T15:43:39Z: Ran `coderabbit review --agent`; it completed with
+      zero findings.
+- [x] 2026-05-24T15:43:39Z: Marked `docs/roadmap.md` item `4.1.3` and its two
+      subitems done after documentation and review passed.
+- [x] 2026-05-24T15:59:07Z: Reran the full validation set after the roadmap
+      and ExecPlan updates; all checks passed.
+- [x] 2026-05-24T15:59:07Z: Reran `coderabbit review --agent` on the final
+      documentation diff; it completed with zero findings.
+- [x] Stage D: run CodeRabbit review, quality gates, and documentation gates.
+- [x] Stage E: mark roadmap item `4.1.3` and its subitems done only after the
       approved implementation lands and passes validation.
-- [ ] Stage F: commit, push, and update the pull request for the implemented
+- [x] 2026-05-24T16:00:33Z: Committed and pushed the implementation branch for
+      review.
+- [x] Stage F: commit, push, and update the pull request for the implemented
       feature.
 
 ## Surprises & Discoveries
@@ -205,6 +230,18 @@ implementation begins.
 - `coderabbit review --agent` was available locally but blocked by an
   account-level rate limit during all three draft validation attempts. No
   CodeRabbit findings were produced to clear.
+- Implementation approval arrived on 2026-05-24, so the approval gate is
+  satisfied and the roadmap item can now be implemented within the documented
+  tolerances.
+- The documentation changes stayed inside the expected scope. No user-facing
+  CLI behaviour changed, so `docs/users-guide.md` does not need an update. No
+  new architecture decision beyond the existing roadmap policy was introduced,
+  so no Architecture Decision Record (ADR) is needed.
+- `make fmt` runs `mdformat-all`, which attempted to rewrite many unrelated
+  Markdown files and then failed on pre-existing line-length findings outside
+  this task. The formatter churn was restored because the working tree was
+  clean before the command and those changes exceeded this plan's scope. The
+  required checking gates, including `make markdownlint`, passed afterwards.
 
 ## Decision Log
 
@@ -231,6 +268,24 @@ implementation begins.
   obligation. If implementation changes CLI/configuration/code, this decision
   is invalid and the plan must be revised before proceeding.
   Date/Author: 2026-05-22 / planning agent.
+
+- Decision: Proceed with a documentation-only implementation after approval.
+  Rationale: The user approved implementation of this ExecPlan, and the
+  pre-change review found no need to change code, configuration, CI, locale
+  files, OrthoConfig surfaces, or tool dependencies.
+  Date/Author: 2026-05-24 / implementing agent.
+
+- Decision: Leave `docs/users-guide.md` unchanged.
+  Rationale: This implementation records contributor-facing tool boundaries and
+  does not change command-line behaviour, configuration, output, persistence,
+  or any other user-visible workflow.
+  Date/Author: 2026-05-24 / implementing agent.
+
+- Decision: Do not create an ADR for this item.
+  Rationale: The implementation records the phase-1 boundary already requested
+  by the roadmap and design document. It does not introduce a new substantive
+  architecture decision.
+  Date/Author: 2026-05-24 / implementing agent.
 
 ## Implementation plan
 
@@ -380,5 +435,25 @@ The validation evidence for the expected implementation is:
 
 ## Outcomes & Retrospective
 
-No implementation work has been performed yet. This section must be completed
-after the approved implementation lands and validation passes.
+The approved documentation-only implementation is complete. The formal
+verification design now states that Verus is optional in phase 1,
+proof-kernel-only, outside ordinary Cargo, and outside the normal Make and CI
+gates. It defines the proof kernel as a small proof-specific model and keeps
+the only current Verus entry point to a possible future
+`src/ir/cycle.rs` cycle canonicalization proof.
+
+The Stateright section now records the phase-1 deferral explicitly. Netsuke
+currently compiles manifests into a static Ninja file and delegates execution
+to Ninja, so Stateright remains out of the dependency, model, Make, and CI
+surface until an accepted design introduces a stateful concurrent subsystem.
+
+The developers' guide now gives contributors the same support boundary in
+workflow terms: Kani is supported and gated today, Verus is optional and not
+installed by default, and Stateright is deferred. The users' guide remains
+unchanged because no user-facing behaviour changed, and no ADR was created
+because no new architecture decision was introduced beyond recording the
+roadmap boundary.
+
+Validation passed before the final review with `make check-fmt`, `make lint`,
+`make test`, `make markdownlint`, and `make nixie`. CodeRabbit was run twice
+during implementation and returned zero findings both times.

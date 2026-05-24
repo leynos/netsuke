@@ -330,12 +330,12 @@ and test workflow intact. See
   - [x] Keep the existing `build-test` job unchanged.
   - [x] Run only the bounded smoke harness set on pull requests.
   - [x] Cache Kani tool downloads separately from ordinary Cargo artefacts.
-- [ ] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
+- [x] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel)
-   and
+  and
   [formal-verification-methods-in-netsuke.md §Stateright remains deferred](formal-verification-methods-in-netsuke.md#stateright-remains-deferred).
-  - [ ] Document Verus as optional and proof-kernel-only.
-  - [ ] Document Stateright as deferred until Netsuke gains a stateful
+  - [x] Document Verus as optional and proof-kernel-only.
+  - [x] Document Stateright as deferred until Netsuke gains a stateful
     concurrent subsystem.
 
 ### 4.2. Intermediate representation verification
