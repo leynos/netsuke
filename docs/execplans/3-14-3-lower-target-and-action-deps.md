@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: ACTIVE
 
 ## Purpose / big picture
 
@@ -388,7 +388,12 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       dependency-class and cycle-participation contract. `git diff
       --check`, touched-file markdownlint, `make markdownlint`, and
       `make nixie` passed; logs are under `/tmp/*stage-g-netsuke-3-14-3-*`.
-- [ ] Stage G follow-up: commit documentation updates.
+- [x] (2026-05-24T00:00Z) Stage G follow-up committed documentation
+      updates as `f875e69`.
+- [x] (2026-05-24T00:00Z) Final deterministic gates before CodeRabbit
+      passed for `make check-fmt`, `make lint`, `make test`,
+      `make markdownlint`, and `make nixie` with logs under
+      `/tmp/*netsuke-3-14-3-lower-target-and-action-deps.out`.
 - [ ] Stage H: run `coderabbit review --agent` and resolve concerns; run
       final gates, mark roadmap item `3.14.3` done, commit, push, and
       open the draft pull request.
@@ -446,6 +451,12 @@ and do not invent a Netsuke-specific term that diverges from the backend.
   to rebuild the `rstest-bdd` generated test binary. Stage F made a
   comment-only touch to `tests/bdd_tests.rs` so the macro expansion picks
   up the new scenario.
+
+- (2026-05-24T00:00Z) The final `make fmt` attempt repeated the
+  pre-existing Markdown formatting backlog and rewrote unrelated
+  documentation before failing. The unrelated churn was restored, and the
+  deterministic validation gates that do not rewrite unrelated files all
+  passed before CodeRabbit review.
 
 ## Decision Log
 
