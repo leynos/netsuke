@@ -371,10 +371,15 @@ and do not invent a Netsuke-specific term that diverges from the backend.
       explicit-plus-implicit-plus-order-only, and phony action cases.
       `cargo test --test ninja_gen_tests`, `make lint`, and `make test`
       passed with logs under `/tmp/*stage-e-netsuke-3-14-3-*`.
-- [ ] Stage E follow-up: commit Ninja emission changes.
-- [ ] Stage F: add a manifest-then-Ninja `rstest-bdd` scenario asserting
-      the generated `build.ninja` contains the implicit-dep separator and
-      that recipe interpolation sees only `sources`.
+- [x] (2026-05-24T00:00Z) Stage E follow-up committed Ninja emission
+      changes as `f6faba3`.
+- [x] (2026-05-24T00:00Z) Stage F added a manifest-then-Ninja
+      `rstest-bdd` scenario and fixture covering target/action implicit
+      deps, explicit recipe inputs, generated Ninja separators, and
+      `{{ ins }}` interpolation excluding implicit deps. `cargo test
+      --test bdd_tests implicit`, `make lint`, and `make test` passed
+      with logs under `/tmp/*stage-f-netsuke-3-14-3-*`.
+- [ ] Stage F follow-up: commit behavioural coverage.
 - [ ] Stage G: update `docs/users-guide.md`, `docs/developers-guide.md`,
       `docs/netsuke-design.md` cross-references, and
       `docs/formal-verification-methods-in-netsuke.md` to record the
@@ -431,6 +436,11 @@ and do not invent a Netsuke-specific term that diverges from the backend.
   test therefore registers an action named `phony` and verifies
   `build phony_action: phony | dep` in the build line while preserving
   the existing rule-emission behaviour.
+
+- (2026-05-24T00:00Z) Editing only a `.feature` file did not cause Cargo
+  to rebuild the `rstest-bdd` generated test binary. Stage F made a
+  comment-only touch to `tests/bdd_tests.rs` so the macro expansion picks
+  up the new scenario.
 
 ## Decision Log
 

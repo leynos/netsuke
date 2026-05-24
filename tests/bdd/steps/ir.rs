@@ -3,6 +3,7 @@
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use anyhow::{Context, Result, anyhow, ensure};
+use camino::Utf8PathBuf;
 use netsuke::ir::BuildGraph;
 use rstest_bdd_macros::{given, then, when};
 
@@ -39,6 +40,64 @@ where
     ensure!(
         actual == expected,
         "expected {expected} {field_name}, found {actual}"
+    );
+    Ok(())
+}
+
+fn parse_path_list(paths: &str) -> Vec<Utf8PathBuf> {
+    paths
+        .split(',')
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(Utf8PathBuf::from)
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+enum TargetPathField {
+    Inputs,
+    ImplicitDeps,
+}
+
+impl TargetPathField {
+    fn paths(self, edge: &netsuke::ir::BuildEdge) -> &[Utf8PathBuf] {
+        match self {
+            Self::Inputs => &edge.inputs,
+            Self::ImplicitDeps => &edge.implicit_deps,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Inputs => "inputs",
+            Self::ImplicitDeps => "implicit deps",
+        }
+    }
+}
+
+fn assert_target_paths(
+    world: &TestWorld,
+    target: &str,
+    expected: &str,
+    field: TargetPathField,
+) -> Result<()> {
+    let expected_paths = parse_path_list(expected);
+    let actual_paths = world
+        .build_graph
+        .with_ref(|graph| {
+            graph
+                .targets
+                .get(&Utf8PathBuf::from(target))
+                .map(|edge| field.paths(edge).to_vec())
+        })
+        .context("build graph should be available")?
+        .with_context(|| format!("target {target} should be present"))?;
+    ensure!(
+        actual_paths == expected_paths,
+        "expected {} {:?} for {target}, got {:?}",
+        field.label(),
+        expected_paths,
+        actual_paths
     );
     Ok(())
 }
@@ -129,6 +188,16 @@ fn ir_generation_fails(world: &TestWorld) -> Result<()> {
         "expected IR generation error, but none present"
     );
     Ok(())
+}
+
+#[then("the graph target {target:string} has inputs {paths:string}")]
+fn graph_target_inputs(world: &TestWorld, target: &str, paths: &str) -> Result<()> {
+    assert_target_paths(world, target, paths, TargetPathField::Inputs)
+}
+
+#[then("the graph target {target:string} has implicit deps {paths:string}")]
+fn graph_target_implicit_deps(world: &TestWorld, target: &str, paths: &str) -> Result<()> {
+    assert_target_paths(world, target, paths, TargetPathField::ImplicitDeps)
 }
 
 // ---------------------------------------------------------------------------
