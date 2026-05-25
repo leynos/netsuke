@@ -175,6 +175,15 @@ mod tests {
         }
     }
 
+    fn assert_missing_deps(
+        targets: HashMap<Utf8PathBuf, BuildEdge>,
+        expected: &[(Utf8PathBuf, Utf8PathBuf)],
+    ) {
+        let mut detector = CycleDetector::new(&targets);
+        assert!(detector.visit(path("a")).is_none());
+        assert_eq!(detector.missing_dependencies(), expected);
+    }
+
     fn next_cycle_index(index: usize, cycle_len: usize) -> usize {
         if index + 1 == cycle_len { 0 } else { index + 1 }
     }
@@ -238,11 +247,7 @@ mod tests {
     fn cycle_detector_records_missing_dependencies() {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&["b"], &[], "a"));
-
-        let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(path("a")).is_none());
-
-        assert_eq!(detector.missing_dependencies(), &[(path("a"), path("b"))],);
+        assert_missing_deps(targets, &[(path("a"), path("b"))]);
     }
 
     #[test]
@@ -281,14 +286,7 @@ mod tests {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&["b"], &["missing"], "a"));
         targets.insert(path("b"), build_edge(&[], &[], "b"));
-
-        let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(path("a")).is_none());
-
-        assert_eq!(
-            detector.missing_dependencies(),
-            &[(path("a"), path("missing"))],
-        );
+        assert_missing_deps(targets, &[(path("a"), path("missing"))]);
     }
 
     #[test]
