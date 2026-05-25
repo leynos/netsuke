@@ -85,14 +85,15 @@ repository work.
 Install or refresh the pinned Kani tool with:
 
 ```bash
-scripts/install-kani.sh
+make install-kani
 ```
 
-The installer reads `tools/kani/VERSION`, runs
-`cargo install --locked kani-verifier --version <version>`, runs
-`cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
-its own supporting Rust nightly toolchain during setup. That toolchain must not
-replace the repository's ordinary stable Rust workflow.
+`make install-kani` delegates to the pinned `rust-prover-tools` CLI through
+`uv tool run`. The prover tool reads `tools/kani/VERSION`, runs
+`cargo install --locked kani-verifier --version <version>`, runs `cargo kani
+setup`, and verifies that `cargo kani` is callable. Kani may manage its own
+supporting Rust nightly toolchain during setup. That toolchain must not replace
+the repository's ordinary stable Rust workflow.
 
 Use the Make targets for day-to-day formal-verification checks:
 
@@ -102,6 +103,9 @@ Use the Make targets for day-to-day formal-verification checks:
 - `make kani-full` is reserved for the full Kani proof suite once harnesses
   exist. Today it invokes `cargo kani` without additional smoke flags.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
+- `make install-verus` and `make verus` delegate to `rust-prover-tools` for
+  the optional Verus installer and proof runner. These targets are not part of
+  the ordinary pull-request gate.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`,
 or `make all`.
@@ -118,12 +122,13 @@ long-lived mutable control-plane state. See
 for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
-`build-test` job. The job installs the pinned Kani version with
-`scripts/install-kani.sh` and runs only `make kani`; it does not run
-`make kani-full`, coverage, CodeScene upload, or the normal build matrix. Its
-cache is intentionally separate from ordinary Cargo build artefacts: the job
-uses a Kani-specific cache key derived from `tools/kani/VERSION` and caches the
-job-local Kani Cargo home plus Kani support-file home.
+`build-test` job. The job installs `uv`, installs the pinned Kani version
+through `make install-kani`, and runs only `make kani`; it does not run
+`make kani-full`, `make verus`, coverage, CodeScene upload, or the normal build
+matrix. Its cache is intentionally separate from ordinary Cargo build
+artefacts: the job uses a Kani-specific cache key derived from
+`tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
+home plus Kani support-file home.
 
 ## Test suite map
 

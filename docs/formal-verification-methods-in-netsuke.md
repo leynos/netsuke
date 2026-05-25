@@ -158,10 +158,6 @@ The preferred first layout is intentionally lightweight:
 .
 ├── Cargo.toml
 ├── Makefile
-├── scripts/
-│   ├── install-kani.sh
-│   ├── install-verus.sh
-│   └── run-verus.sh
 ├── tools/
 │   ├── kani/
 │   │   └── VERSION        # Update when new stable releases ship
@@ -182,6 +178,12 @@ The preferred first layout is intentionally lightweight:
 This layout keeps Kani harnesses close to the internal helpers they exercise,
 which avoids widening the public API solely for proofs. Verus can remain
 outside Cargo until it proves its value.
+
+Kani and Verus installation and execution should be delegated to the
+`rust-prover-tools` CLI rather than repository-local shell scripts. Netsuke
+pins the prover CLI in the Makefile and invokes it through `uv tool run`, so
+the verifier workflows have one maintained implementation while the Rust
+package remains free of Python runtime dependencies.
 
 #### Tool version pinning and updates
 
@@ -212,6 +214,10 @@ without disturbing the current developer workflow.[^2]
 
 - `make kani` should run a small smoke-harness set suitable for pull requests.
 - `make kani-full` should run the full Kani suite.
+- `make install-kani` should install the pinned Kani version through
+  `rust-prover-tools`.
+- `make install-verus` and `make verus` should delegate optional Verus
+  installation and proof execution to `rust-prover-tools`.
 - `make formal-pr` should alias the fast pull-request checks.
 - `make formal-nightly` should combine deeper Kani runs with any later Verus
   proofs.
@@ -227,7 +233,8 @@ coverage, and those checks should remain intact.[^3]
 
 The first additional job should be a dedicated `kani-smoke` job that:
 
-- installs the pinned Kani toolchain,
+- installs `uv` and then installs the pinned Kani toolchain through
+  `make install-kani`,
 - runs `make kani`, and
 - caches tool downloads separately from the ordinary Rust build artefacts.
 

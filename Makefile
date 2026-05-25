@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie kani kani-full formal-pr
+.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani kani-full install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -6,10 +6,15 @@ BUILD_JOBS ?=
 CLIPPY_FLAGS ?= --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
-KANI_VERSION_CHECK ?= scripts/check-kani-version.sh
+KANI_INSTALL_FLAGS ?=
+KANI_CHECK_FLAGS ?=
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
+PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
+PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
+VERUS_FLAGS ?=
+VERUS_INSTALL_FLAGS ?=
 
 export PATH := $(HOME)/.cargo/bin:$(HOME)/.bun/bin:$(PATH)
 
@@ -47,11 +52,20 @@ markdownlint: ## Lint Markdown files
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
 
+install-kani: ## Install the pinned Kani verifier
+	$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS)
+
 kani: ## Run the Kani local smoke check
-	KANI="$(KANI)" $(KANI_VERSION_CHECK)
+	$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS)
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI) $(KANI_FLAGS)
+
+install-verus: ## Install the pinned Verus verifier
+	$(PROVER_TOOLS) verus install $(VERUS_INSTALL_FLAGS)
+
+verus: ## Run the Verus proof entry point
+	$(PROVER_TOOLS) verus run $(VERUS_FLAGS)
 
 formal-pr: ## Run pull-request formal-verification checks
 	$(MAKE) kani

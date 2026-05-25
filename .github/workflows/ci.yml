@@ -80,14 +80,18 @@ jobs:
         uses: leynos/shared-actions/.github/actions/setup-rust@e4c6b0e200a057edf927c45c298e7ddf229b3934
         with:
           toolchain: stable
+      - name: Install uv
+        uses: astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7  # v3.1.2
+        with:
+          enable-cache: true
       - name: Cache Kani tools
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: |
             .kani-cargo
             .kani-home
-          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'scripts/install-kani.sh') }}
+          key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'Makefile') }}
       - name: Install Kani
-        run: scripts/install-kani.sh
+        run: make install-kani
       - name: Kani smoke
         run: make kani
