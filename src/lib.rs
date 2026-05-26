@@ -10,6 +10,7 @@ pub mod cli_localization;
 mod cli_policy;
 pub mod diagnostic_json;
 pub(crate) mod diagnostics;
+pub mod graph_view;
 pub mod hasher;
 pub mod host_pattern;
 pub mod ir;

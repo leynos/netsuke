@@ -233,9 +233,9 @@ proceeds.
 Tick items as work completes. Each transition between stages must include
 a timestamp.
 
-- [ ] Plan approved by the user.
-- [ ] Stage A: `GraphView` domain projection landed with order-independence
-      proptest.
+- [x] Plan approved by the user.
+- [x] Stage A: `GraphView` domain projection landed with order-independence
+      proptest. (2026-05-26)
 - [ ] Stage B: `Commands::Graph(GraphArgs)`, `--output` flag, in-process
       DOT renderer, fixture-update sweep for the runner-tool-subcommands
       integration tests.
@@ -252,7 +252,20 @@ a timestamp.
 
 ## Surprises & discoveries
 
-(empty — populate as work proceeds)
+- 2026-05-26 (Stage A): the first proptest formulation generated `BuildGraph`
+  instances with output paths colliding across distinct edges. Such graphs
+  cannot occur in practice because `from_manifest` raises
+  `IrGenError::DuplicateOutput` before the IR reaches the projection layer.
+  The shrunk failing case exposed this as a `last-insert-wins` divergence
+  between two non-deterministic `HashMap` orderings of `targets`. Filtered
+  the generator to enforce globally-disjoint outputs and re-shaped the
+  property to insert each edge set in forward and reversed order — the
+  `RandomState` per `HashMap` already varies iteration order, so the
+  reversal is belt-and-braces evidence that `from_build_graph` does not
+  leak `HashMap` order.
+- 2026-05-26 (Stage A): `proptest` was not previously a workspace dev-
+  dependency. Added `proptest = "1.5"` to `[dev-dependencies]`. No
+  production-side dependency added.
 
 ## Decision log
 
