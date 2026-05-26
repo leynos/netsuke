@@ -360,6 +360,14 @@ status.tool.graph = Graph
 status.tool.graph_html = Graph (HTML)
 status.tool.manifest = Manifest
 
+# Graph HTML renderer strings.
+graph.html.title = Netsuke build graph
+graph.html.heading = Netsuke build graph
+graph.html.description = Build graph rendered by Netsuke
+graph.html.outline.summary = Targets and dependencies (text outline)
+graph.html.outline.no_inputs = No inputs
+graph.html.noscript.notice = JavaScript is disabled. The text outline above is the full graph; the DOT source follows.
+
 # Accessibility preferences.
 cli.flag.no_emoji.help = Suppress emoji glyphs in output.
 

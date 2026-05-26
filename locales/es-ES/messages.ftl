@@ -360,6 +360,14 @@ status.tool.graph = Grafo
 status.tool.graph_html = Grafo (HTML)
 status.tool.manifest = Manifiesto
 
+# Cadenas del renderizador HTML del grafo.
+graph.html.title = Grafo de compilación de Netsuke
+graph.html.heading = Grafo de compilación de Netsuke
+graph.html.description = Grafo de compilación renderizado por Netsuke
+graph.html.outline.summary = Objetivos y dependencias (esquema textual)
+graph.html.outline.no_inputs = Sin entradas
+graph.html.noscript.notice = JavaScript está desactivado. El esquema textual anterior contiene el grafo completo; el código DOT figura a continuación.
+
 # Preferencias de accesibilidad.
 cli.flag.no_emoji.help = Suprimir glifos emoji en la salida.
 

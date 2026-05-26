@@ -12,6 +12,7 @@ use crate::cli::{BuildArgs, Cli, Commands, GraphArgs};
 use crate::graph_view::GraphView;
 use crate::graph_view::render::GraphRenderer;
 use crate::graph_view::render_dot::DotRenderer;
+use crate::graph_view::render_html::HtmlRenderer;
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
 use crate::output_prefs::OutputPrefs;
@@ -215,11 +216,15 @@ fn handle_graph(cli: &Cli, args: &GraphArgs, reporter: &dyn StatusReporter) -> R
     );
 
     let mut buffer: Vec<u8> = Vec::new();
-    // Stage C will swap in `HtmlRenderer` when `args.html` is set; until that
-    // lands, both branches share the same DOT renderer.
-    DotRenderer::new()
-        .render(&view, &mut buffer)
-        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+    if args.html {
+        HtmlRenderer::new(cli.locale.as_deref())
+            .render(&view, &mut buffer)
+            .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+    } else {
+        DotRenderer::new()
+            .render(&view, &mut buffer)
+            .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+    }
     let rendered = String::from_utf8(buffer)
         .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
 

@@ -5,3 +5,5 @@ target/
 .claude/
 build.ninja
 *:Zone.Identifier
+/graph.dot
+/graph.html

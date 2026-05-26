@@ -68,6 +68,31 @@ fn graph_with_invalid_manifest_reports_error() -> Result<()> {
 }
 
 #[rstest]
+fn graph_html_writes_self_contained_document() -> Result<()> {
+    let (temp, manifest_path) = create_test_manifest()?;
+    let html_path = temp.path().join("graph.html");
+    let cli = Cli {
+        file: manifest_path,
+        directory: Some(temp.path().to_path_buf()),
+        command: Some(Commands::Graph(GraphArgs {
+            html: true,
+            output: Some("graph.html".into()),
+        })),
+        ..Cli::default()
+    };
+    run_graph(&cli)?;
+    let html = std::fs::read_to_string(&html_path).context("read graph.html")?;
+    ensure!(html.starts_with("<!doctype html>"), "should be HTML doc");
+    ensure!(html.contains("<svg"), "should contain SVG");
+    ensure!(html.contains("<noscript>"), "should contain noscript fallback");
+    ensure!(
+        !html.contains("href=\"http") && !html.contains("src=\"http"),
+        "no external references"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn graph_is_deterministic_across_repeated_runs() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let mut outputs: Vec<String> = Vec::new();

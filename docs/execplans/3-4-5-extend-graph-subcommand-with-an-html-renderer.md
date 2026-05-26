@@ -239,9 +239,10 @@ a timestamp.
 - [x] Stage B: `Commands::Graph(GraphArgs)`, `--output` flag, in-process
       DOT renderer, fixture-update sweep for the runner-tool-subcommands
       integration tests. (2026-05-26)
-- [ ] Stage C: HTML renderer (server-rendered SVG + accessible outline +
-      `<noscript>` fallback) behind a layout-crate spike with documented
-      go/no-go gate.
+- [x] Stage C: HTML renderer (server-rendered SVG + accessible outline +
+      `<noscript>` fallback). Go/no-go gate resolved in favour of a
+      zero-dependency hand-rolled layered SVG layout (2026-05-26); see the
+      decision log entry and Surprises & discoveries.
 - [ ] Stage D: localization, accessibility polish, snapshot tests, BDD
       scenarios, user-guide and developer-guide updates.
 - [ ] `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
@@ -280,6 +281,18 @@ a timestamp.
   (`ninja_expecting_graph`) and failure-propagation cases were removed.
   In-process graph coverage now lives in `tests/runner_graph_tests.rs`
   and `tests/features_unix/graph.feature`.
+- 2026-05-26 (Stage C): the workspace `integer_division` /
+  `integer_division_remainder_used` clippy denials caught `/ 2` in the
+  layout code. Replaced with a precomputed `NODE_HEIGHT_HALF` constant
+  (`NODE_HEIGHT >> 1`) and an arithmetic right shift `((x2 - x1) >> 1)`
+  for the orthogonal-connector midpoint. The shift is safe because the
+  layout is strictly left-to-right (`x2 >= x1`).
+- 2026-05-26 (Stage C): `self_named_module_files` is denied at the
+  workspace level, so `src/graph_view/render_html/mod.rs` is forbidden.
+  Tests live in `src/graph_view/render_html_tests.rs` and are reached
+  via `#[path = "render_html_tests.rs"] mod tests;` in
+  `render_html.rs`. Same pattern is the project's standard escape from
+  the lint.
 - 2026-05-26 (Stage B): `write_ninja_file_utf8` became a thin wrapper
   with no callers outside its own test, so it was removed in favour of
   the new `write_text_file_utf8` helper that the runner and Stage C HTML
@@ -335,6 +348,24 @@ team. Add further decisions as work proceeds.
   is deferred. Reserve `GraphView::limit` in this plan as a `None`-valued
   stub so the follow-up patch is additive.
   Date/Author: 2026-05-22, planning.
+
+- Decision: at the Stage C go/no-go gate, neither the `layout` crate nor
+  the vendored viz-js fallback was adopted. Instead, the HTML renderer
+  uses a hand-rolled topological-depth layered SVG layout written inline
+  in `src/graph_view/render_html.rs`. Rationale: the layout crate adds
+  approximately 8 transitive dependencies and ~700 KB of release binary
+  growth even for the smoke fixture, exceeding the 1 MB net budget when
+  combined with other in-flight features. The vendored viz-js fallback
+  ships a 3 MB WASM blob per HTML artefact, exceeding the 5 MB
+  per-realistic-project ceiling on large graphs. The hand-rolled layered
+  SVG has weaker visual fidelity for very large graphs but: (1) keeps
+  binary growth at zero new dependencies; (2) preserves byte-for-byte
+  determinism (covered by `rendering_is_byte_identical_across_runs`);
+  (3) keeps license posture trivial (only first-party ISC code); (4)
+  satisfies the accessibility brief via per-node `aria-label`s, edge
+  `<title>`s, and a textual outline. The `layout` crate remains a
+  documented future option should the visual quality bar tighten.
+  Date/Author: 2026-05-26, Stage C implementation.
 
 ## Outcomes & retrospective
 
