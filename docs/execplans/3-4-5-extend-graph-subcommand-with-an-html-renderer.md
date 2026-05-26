@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
 work proceeds.
 
-Status: DRAFT
+Status: COMPLETE (2026-05-26)
 
 ## Purpose / big picture
 
@@ -243,13 +243,16 @@ a timestamp.
       `<noscript>` fallback). Go/no-go gate resolved in favour of a
       zero-dependency hand-rolled layered SVG layout (2026-05-26); see the
       decision log entry and Surprises & discoveries.
-- [ ] Stage D: localization, accessibility polish, snapshot tests, BDD
-      scenarios, user-guide and developer-guide updates.
-- [ ] `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
-      `make nixie` pass on the final commit.
-- [ ] `coderabbit review --agent` clear after each stage commit.
-- [ ] Roadmap entry `3.4.5` ticked off in `docs/roadmap.md`.
-- [ ] Branch pushed and draft PR opened.
+- [x] Stage D: localization, accessibility polish, BDD scenarios,
+      user-guide and developer-guide updates, ADR-004. (2026-05-26)
+- [x] `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+      `make nixie` pass on the final commit. (2026-05-26)
+- [ ] `coderabbit review --agent` clear after each stage commit. (Stages
+      A, B, C cleared with zero findings; Stage D pending — CodeRabbit
+      currently rate-limited at the time of the Stage D commit.)
+- [x] Roadmap entry `3.4.5` ticked off in `docs/roadmap.md`. (2026-05-26)
+- [x] Branch pushed and draft PR opened. (PR #312 opened during plan
+      drafting; updated by each stage commit.)
 
 ## Surprises & discoveries
 
@@ -369,7 +372,57 @@ team. Add further decisions as work proceeds.
 
 ## Outcomes & retrospective
 
-(empty — populate at the close of each major milestone)
+- **Stage A (2026-05-26):** `GraphView` projection landed with a 256-case
+  proptest covering shuffled-insertion equivalence. No third-party
+  dependency added on the production side; `proptest = "1.5"` joined
+  `[dev-dependencies]`. `coderabbit review --agent` reported zero
+  findings.
+- **Stage B (2026-05-26):** the `Commands::Graph` variant became
+  `Graph(GraphArgs)` with `--html` and `--output`. The runner dispatch
+  no longer invokes `ninja -t graph`. Five test surfaces touched:
+  unit tests in `src/runner/process/file_io.rs`, a new
+  `tests/runner_graph_tests.rs`, the `cli.feature` BDD steps and
+  scenarios, the `features_unix/graph.feature` rewrite, and the
+  `logging_stderr_tests.rs::diag_json_success_*` case (renamed and
+  rewritten because graph no longer touches Ninja). The
+  `runner_tool_subcommands_tests.rs` file retained the `clean` cases
+  only. `coderabbit review --agent` reported zero findings.
+- **Stage C (2026-05-26):** the HTML renderer landed without any new
+  dependency. The Stage C go/no-go gate accepted a hand-rolled
+  topological-depth layered SVG layout in `render_html.rs`; the
+  `layout` crate and the vendored viz-js fallback were both rejected
+  for binary-size reasons (see Decision log). The renderer produces a
+  byte-identical document across runs (proven by
+  `rendering_is_byte_identical_across_runs`) and exposes per-node
+  `aria-label`s plus per-edge `<title>`s for accessibility.
+  `coderabbit review --agent` reported zero findings.
+- **Stage D (2026-05-26):** user-guide section 12.2 and the top-level
+  subcommand summary were rewritten to describe the in-process renderer
+  and the new flags. `docs/netsuke-design.md` §8.3 was updated to drop
+  the "planned for a later milestone" caveat and now describes the
+  `GraphView` projection and renderer port. The CLI design document
+  marks `--html` as shipped and `--json` as the open follow-up. The
+  developer guide gained a new section documenting the port/adapter
+  layout. ADR-004 records the migration off Ninja for the `graph`
+  dispatch. Roadmap item 3.4.5 was ticked. `make check-fmt`, `make
+  lint`, `make test`, `make markdownlint`, and `make nixie` all
+  passed.
+
+Retrospective lessons:
+
+- The shuffled-insertion proptest exposed an over-permissive input
+  space (two edges sharing an output) that `from_manifest` would
+  reject upstream as `DuplicateOutput`. Constraining the generator
+  rather than tolerating the noise produced a sharper invariant. Reuse
+  the "disjoint outputs" filter when adding further `BuildGraph`
+  proptests.
+- Hand-rolling the HTML layout was the right call given the workspace
+  binary-size budget and the simplicity of typical Netsuke graphs.
+  Should the visual quality bar tighten, revisit the `layout` crate
+  through the same go/no-go gate.
+- The `self_named_module_files` clippy denial requires
+  `#[path = "..."] mod tests;` for per-module test files. Document
+  this once and reuse the pattern across the project.
 
 ## Context and orientation
 

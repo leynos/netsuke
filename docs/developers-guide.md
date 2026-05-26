@@ -26,6 +26,43 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
+
+## Graph view projection and renderer adapters
+
+The `graph` subcommand renders the build dependency graph in-process. Its
+domain projection lives in [`src/graph_view`](../src/graph_view) and follows
+the hexagonal port/adapter pattern:
+
+- [`GraphView`](../src/graph_view/mod.rs) is the deterministic projection of
+  [`BuildGraph`](../src/ir/graph.rs). It is constructed once, sorts every
+  collection (nodes, edges, default targets), and is invariant under
+  `HashMap` insertion order. The shuffled-insertion proptest in
+  [`src/graph_view/tests.rs`](../src/graph_view/tests.rs) covers this
+  invariant.
+- [`GraphRenderer`](../src/graph_view/render.rs) is the trait every renderer
+  adapter implements. The contract is intentionally minimal:
+  `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(),
+  GraphRenderError>`. Adapters consume `GraphView` only — they never touch
+  `BuildGraph` directly.
+- [`DotRenderer`](../src/graph_view/render_dot.rs) emits Graphviz DOT.
+- [`HtmlRenderer`](../src/graph_view/render_html.rs) emits a self-contained
+  HTML page (server-rendered SVG, accessible textual outline, and a
+  `<noscript>` fallback containing the DOT source verbatim).
+
+A new renderer — for example the `--json` view planned for roadmap item
+`3.15.6` — should be added as a sibling module under `src/graph_view/` that
+implements `GraphRenderer`. The runner dispatch in
+[`src/runner/mod.rs`](../src/runner/mod.rs) picks the appropriate renderer
+based on `GraphArgs` and writes through the shared
+`write_text_file`/`write_text_stdout` sink helpers. The `-` sentinel for
+`--output` is recognised by `process::is_stdout_path`.
+
+`--html` and `--output` are explicitly excluded from `OrthoConfig` layering:
+they are per-invocation arguments tagged `#[serde(skip)]` on
+[`GraphArgs`](../src/cli/mod.rs). Layering `--output` through a config file
+would silently change the artefact destination — a footgun the design avoids
+by construction.
+
 ## Quality gates
 
 Run these commands before finalizing any change:

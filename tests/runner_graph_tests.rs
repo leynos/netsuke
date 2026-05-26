@@ -84,7 +84,10 @@ fn graph_html_writes_self_contained_document() -> Result<()> {
     let html = std::fs::read_to_string(&html_path).context("read graph.html")?;
     ensure!(html.starts_with("<!doctype html>"), "should be HTML doc");
     ensure!(html.contains("<svg"), "should contain SVG");
-    ensure!(html.contains("<noscript>"), "should contain noscript fallback");
+    ensure!(
+        html.contains("<noscript>"),
+        "should contain noscript fallback"
+    );
     ensure!(
         !html.contains("href=\"http") && !html.contains("src=\"http"),
         "no external references"
