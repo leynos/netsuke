@@ -247,9 +247,9 @@ a timestamp.
       user-guide and developer-guide updates, ADR-004. (2026-05-26)
 - [x] `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
       `make nixie` pass on the final commit. (2026-05-26)
-- [ ] `coderabbit review --agent` clear after each stage commit. (Stages
-      A, B, C cleared with zero findings; Stage D pending — CodeRabbit
-      currently rate-limited at the time of the Stage D commit.)
+- [x] `coderabbit review --agent` clear after each stage commit. All four
+      stages cleared with zero findings (Stage D cleared 2026-05-26 after
+      the rate-limit window).
 - [x] Roadmap entry `3.4.5` ticked off in `docs/roadmap.md`. (2026-05-26)
 - [x] Branch pushed and draft PR opened. (PR #312 opened during plan
       drafting; updated by each stage commit.)

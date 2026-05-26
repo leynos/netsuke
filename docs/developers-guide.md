@@ -26,7 +26,6 @@ as the durable architecture record.
 
 [adr-003-cli]: adr-003-agent-consistent-human-first-cli.md
 
-
 ## Graph view projection and renderer adapters
 
 The `graph` subcommand renders the build dependency graph in-process. Its
