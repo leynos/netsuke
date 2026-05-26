@@ -8,7 +8,10 @@ mod error;
 
 pub use error::RunnerError;
 
-use crate::cli::{BuildArgs, Cli, Commands};
+use crate::cli::{BuildArgs, Cli, Commands, GraphArgs};
+use crate::graph_view::GraphView;
+use crate::graph_view::render::GraphRenderer;
+use crate::graph_view::render_dot::DotRenderer;
 use crate::localization::{self, keys};
 use crate::output_mode::{self, OutputMode};
 use crate::output_prefs::OutputPrefs;
@@ -172,18 +175,69 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
             reporter.as_ref(),
             progress_enabled,
         ),
-        Commands::Graph => handle_ninja_tool(
-            cli,
-            NinjaToolSpec {
-                name: "graph",
-                key: keys::STATUS_TOOL_GRAPH.into(),
-            },
-            reporter.as_ref(),
-            progress_enabled,
-        ),
+        Commands::Graph(args) => handle_graph(cli, &args, reporter.as_ref()),
     }
 }
 
+/// Project the build graph and render it as DOT (or, in Stage C, HTML).
+///
+/// # Errors
+///
+/// Returns an error if manifest loading, IR generation, rendering, or the
+/// final file/stdout write fails.
+fn handle_graph(cli: &Cli, args: &GraphArgs, reporter: &dyn StatusReporter) -> Result<()> {
+    info!(
+        target: "netsuke::subcommand",
+        subcommand = "graph",
+        html = args.html,
+        "Rendering build graph in-process"
+    );
+    let manifest_path = resolve_manifest_path(cli)?;
+    ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
+    let policy = cli
+        .network_policy()
+        .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
+    let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
+    report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
+    let graph = BuildGraph::from_manifest(&manifest)
+        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
+    let view = GraphView::from_build_graph(&graph);
+
+    let status_key: LocalizationKey = if args.html {
+        keys::STATUS_TOOL_GRAPH_HTML.into()
+    } else {
+        keys::STATUS_TOOL_GRAPH.into()
+    };
+    report_pipeline_stage(
+        reporter,
+        PipelineStage::NinjaSynthesisAndExecution,
+        Some(status_key),
+    );
+
+    let mut buffer: Vec<u8> = Vec::new();
+    // Stage C will swap in `HtmlRenderer` when `args.html` is set; until that
+    // lands, both branches share the same DOT renderer.
+    DotRenderer::new()
+        .render(&view, &mut buffer)
+        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+    let rendered = String::from_utf8(buffer)
+        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+
+    write_graph_artefact(cli, args.output.as_deref(), &rendered)?;
+    reporter.report_complete(status_key);
+    Ok(())
+}
+
+fn write_graph_artefact(cli: &Cli, output: Option<&Path>, content: &str) -> Result<()> {
+    match output {
+        None => process::write_text_stdout(content),
+        Some(path) if process::is_stdout_path(path) => process::write_text_stdout(content),
+        Some(path) => {
+            let resolved = resolve_output_path(cli, path);
+            process::write_text_file(resolved.as_ref(), content)
+        }
+    }
+}
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
     move |current: u32, total: u32, description: &str| {
         reporter.report_task_progress(current, total, description);

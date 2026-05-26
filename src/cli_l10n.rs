@@ -148,6 +148,11 @@ fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static
             "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
             _ => None,
         },
+        Some("graph") => match arg_id {
+            "html" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP),
+            "output" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_OUTPUT_HELP),
+            _ => None,
+        },
         Some("manifest") => match arg_id {
             "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
             _ => None,

@@ -142,7 +142,7 @@ impl ExpectedCommand {
             (self, actual),
             (Self::Build, Commands::Build(_))
                 | (Self::Clean, Commands::Clean)
-                | (Self::Graph, Commands::Graph)
+                | (Self::Graph, Commands::Graph(_))
                 | (Self::Manifest, Commands::Manifest { .. })
         )
     }
@@ -276,6 +276,34 @@ fn verify_cli_policy_rejects(
     Ok(())
 }
 
+fn verify_graph_output_path(world: &TestWorld, path: &PathString) -> Result<()> {
+    let command = get_command(world)?;
+    match command {
+        Commands::Graph(args) => {
+            let actual = args.output;
+            ensure!(
+                actual.as_deref() == Some(path.as_path()),
+                "expected graph output path {}, got {:?}",
+                path,
+                actual
+            );
+            Ok(())
+        }
+        other => bail!("expected graph command, got {other:?}"),
+    }
+}
+
+fn verify_graph_html_set(world: &TestWorld) -> Result<()> {
+    let command = get_command(world)?;
+    match command {
+        Commands::Graph(args) => {
+            ensure!(args.html, "expected graph --html to be set");
+            Ok(())
+        }
+        other => bail!("expected graph command, got {other:?}"),
+    }
+}
+
 fn verify_manifest_command_path(world: &TestWorld, path: &PathString) -> Result<()> {
     let command = get_command(world)?;
     match command {
@@ -378,6 +406,16 @@ fn cli_policy_rejects(world: &TestWorld, url: UrlString, message: ErrorFragment)
 #[then("the manifest command path is {path:string}")]
 fn manifest_command_path(world: &TestWorld, path: PathString) -> Result<()> {
     verify_manifest_command_path(world, &path)
+}
+
+#[then("the graph output path is {path:string}")]
+fn graph_output_path(world: &TestWorld, path: PathString) -> Result<()> {
+    verify_graph_output_path(world, &path)
+}
+
+#[then("the graph html flag is set")]
+fn graph_html_flag_is_set(world: &TestWorld) -> Result<()> {
+    verify_graph_html_set(world)
 }
 
 #[then]

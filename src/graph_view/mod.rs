@@ -13,6 +13,7 @@ use camino::Utf8PathBuf;
 use crate::ir::{BuildEdge, BuildGraph};
 
 pub mod render;
+pub mod render_dot;
 
 /// Deterministic projection of [`BuildGraph`] consumed by renderer adapters.
 #[derive(Debug, Clone, PartialEq, Eq)]

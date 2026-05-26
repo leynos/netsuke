@@ -44,7 +44,7 @@ pub mod doc {
     };
     pub use super::{
         create_temp_ninja_file, resolve_ninja_program, resolve_ninja_program_utf8,
-        write_ninja_file, write_ninja_file_utf8,
+        write_ninja_file, write_text_file_utf8,
     };
 }
 

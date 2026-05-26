@@ -236,9 +236,9 @@ a timestamp.
 - [x] Plan approved by the user.
 - [x] Stage A: `GraphView` domain projection landed with order-independence
       proptest. (2026-05-26)
-- [ ] Stage B: `Commands::Graph(GraphArgs)`, `--output` flag, in-process
+- [x] Stage B: `Commands::Graph(GraphArgs)`, `--output` flag, in-process
       DOT renderer, fixture-update sweep for the runner-tool-subcommands
-      integration tests.
+      integration tests. (2026-05-26)
 - [ ] Stage C: HTML renderer (server-rendered SVG + accessible outline +
       `<noscript>` fallback) behind a layout-crate spike with documented
       go/no-go gate.
@@ -266,6 +266,26 @@ a timestamp.
 - 2026-05-26 (Stage A): `proptest` was not previously a workspace dev-
   dependency. Added `proptest = "1.5"` to `[dev-dependencies]`. No
   production-side dependency added.
+- 2026-05-26 (Stage B): the existing `tests/logging_stderr_tests.rs`
+  `diag_json_success_discards_child_stderr` case asserted that ninja's
+  stderr (via a fake ninja script) was suppressed under `--diag-json
+  graph`. Since `graph` no longer spawns ninja, the test name and
+  rationale are now stale. Renamed to `diag_json_success_graph_keeps_
+  clean_stderr` and rewritten to assert the in-process graph dispatch
+  produces a `digraph netsuke` document on stdout with clean stderr. The
+  associated `write_fake_ninja_script` / `make_script_executable`
+  helpers were removed.
+- 2026-05-26 (Stage B): `tests/runner_tool_subcommands_tests.rs` retained
+  the `clean` scenarios as planned; graph-specific fixtures
+  (`ninja_expecting_graph`) and failure-propagation cases were removed.
+  In-process graph coverage now lives in `tests/runner_graph_tests.rs`
+  and `tests/features_unix/graph.feature`.
+- 2026-05-26 (Stage B): `write_ninja_file_utf8` became a thin wrapper
+  with no callers outside its own test, so it was removed in favour of
+  the new `write_text_file_utf8` helper that the runner and Stage C HTML
+  renderer will share. `write_ninja_file` and `write_ninja_stdout`
+  remain as `NinjaContent`-typed wrappers around `write_text_file` and
+  `write_text_stdout` per the plan.
 
 ## Decision log
 
