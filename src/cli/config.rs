@@ -7,7 +7,9 @@
 use clap::ValueEnum;
 use ortho_config::{OrthoConfig, OrthoResult, PostMergeContext, PostMergeHook};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use super::validation_error;
 use crate::host_pattern::HostPattern;
@@ -26,6 +28,24 @@ pub enum ColourPolicy {
     Never,
 }
 
+impl fmt::Display for ColourPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::Always => write!(f, "always"),
+            Self::Never => write!(f, "never"),
+        }
+    }
+}
+
+impl FromStr for ColourPolicy {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid colour policy '{s}'"))
+    }
+}
+
 /// Spinner and progress rendering policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -39,6 +59,24 @@ pub enum SpinnerMode {
     Disabled,
 }
 
+impl fmt::Display for SpinnerMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Auto => write!(f, "auto"),
+            Self::Enabled => write!(f, "enabled"),
+            Self::Disabled => write!(f, "disabled"),
+        }
+    }
+}
+
+impl FromStr for SpinnerMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid spinner mode '{s}'"))
+    }
+}
+
 /// Top-level diagnostics and output format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -48,6 +86,23 @@ pub enum OutputFormat {
     Human,
     /// Machine-readable JSON diagnostics.
     Json,
+}
+
+impl fmt::Display for OutputFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Human => write!(f, "human"),
+            Self::Json => write!(f, "json"),
+        }
+    }
+}
+
+impl FromStr for OutputFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid output format '{s}'"))
+    }
 }
 
 /// Presentation theme for semantic prefixes and glyph choices.
@@ -70,6 +125,18 @@ impl From<Theme> for ThemePreference {
             Theme::Unicode => Self::Unicode,
             Theme::Ascii => Self::Ascii,
         }
+    }
+}
+
+impl PartialEq<ThemePreference> for Theme {
+    fn eq(&self, other: &ThemePreference) -> bool {
+        ThemePreference::from(*self) == *other
+    }
+}
+
+impl PartialEq<Theme> for ThemePreference {
+    fn eq(&self, other: &Theme) -> bool {
+        *self == Self::from(*other)
     }
 }
 
@@ -157,6 +224,11 @@ pub struct CliConfig {
     #[ortho_config(skip_cli)]
     pub theme: Option<Theme>,
 
+    /// Compatibility alias for default build targets at the config root.
+    #[ortho_config(merge_strategy = "append")]
+    #[serde(default)]
+    pub default_targets: Vec<String>,
+
     /// Per-subcommand defaults.
     #[ortho_config(skip_cli)]
     #[serde(default)]
@@ -182,6 +254,7 @@ impl Default for CliConfig {
             spinner_mode: None,
             output_format: None,
             theme: None,
+            default_targets: Vec::new(),
             cmds: CommandConfigs::default(),
         }
     }
@@ -196,7 +269,6 @@ impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         validate_theme_compatibility(self)?;
         validate_spinner_mode_compatibility(self)?;
-        validate_output_format_support(self)?;
         Ok(())
     }
 }
@@ -231,14 +303,4 @@ fn validate_spinner_mode_compatibility(config: &CliConfig) -> OrthoResult<()> {
         )),
         _ => Ok(()),
     }
-}
-
-fn validate_output_format_support(config: &CliConfig) -> OrthoResult<()> {
-    if matches!(config.output_format, Some(OutputFormat::Json)) {
-        return Err(validation_error(
-            "output_format",
-            "output_format = \"json\" is not supported yet; use \"human\" for this milestone",
-        ));
-    }
-    Ok(())
 }

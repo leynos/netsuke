@@ -11,11 +11,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::config::CliConfig;
-use super::parsing::{parse_host_pattern, parse_jobs, parse_locale, parse_scheme};
-use super::{ColourPolicy, OutputFormat, SpinnerMode, Theme};
+use super::parsing::{
+    parse_colour_policy, parse_host_pattern, parse_jobs, parse_locale, parse_output_format,
+    parse_scheme, parse_spinner_mode, parse_theme,
+};
+use super::{ColourPolicy, OutputFormat, SpinnerMode};
 use crate::cli_l10n::localize_command;
 pub use crate::cli_l10n::{diag_json_hint_from_args, locale_hint_from_args};
 use crate::host_pattern::HostPattern;
+use crate::theme::ThemePreference;
 
 #[derive(Clone)]
 struct LocalizedValueParser<F> {
@@ -78,6 +82,11 @@ pub struct Cli {
     /// This affects manifest lookup, output paths, and config discovery.
     #[arg(short = 'C', long, value_name = "DIR")]
     pub directory: Option<PathBuf>,
+
+    /// Path to a configuration file, bypassing automatic discovery.
+    #[arg(long, value_name = "FILE")]
+    #[serde(skip)]
+    pub config: Option<PathBuf>,
 
     /// Set the number of parallel build jobs.
     ///
@@ -145,7 +154,11 @@ pub struct Cli {
 
     /// Override presentation theme.
     #[arg(long, value_name = "THEME")]
-    pub theme: Option<Theme>,
+    pub theme: Option<ThemePreference>,
+
+    /// Default build targets used when none are specified on the CLI.
+    #[arg(long = "default-target", value_name = "TARGET")]
+    pub default_targets: Vec<String>,
 
     /// Optional subcommand to execute; defaults to `build` when omitted.
     #[serde(skip)]
@@ -167,8 +180,8 @@ impl Cli {
     #[must_use]
     pub const fn no_emoji_override(&self) -> Option<bool> {
         match self.theme {
-            Some(Theme::Ascii) => Some(true),
-            Some(Theme::Unicode) => Some(false),
+            Some(ThemePreference::Ascii) => Some(true),
+            Some(ThemePreference::Unicode) => Some(false),
             _ => {
                 if matches!(self.no_emoji, Some(true)) {
                     Some(true)
@@ -188,6 +201,21 @@ impl Cli {
             _ => true,
         }
     }
+
+    /// Compatibility alias for callers that predate `progress_enabled`.
+    #[must_use]
+    pub const fn resolved_progress(&self) -> bool {
+        self.progress_enabled()
+    }
+
+    /// Return whether JSON diagnostics should be enabled.
+    #[must_use]
+    pub const fn resolved_diag_json(&self) -> bool {
+        match self.output_format {
+            Some(OutputFormat::Json) => true,
+            _ => self.diag_json,
+        }
+    }
 }
 
 impl Default for Cli {
@@ -195,6 +223,7 @@ impl Default for Cli {
         Self {
             file: CliConfig::default_manifest_path(),
             directory: None,
+            config: None,
             jobs: None,
             verbose: false,
             locale: None,
@@ -210,6 +239,7 @@ impl Default for Cli {
             spinner_mode: None,
             output_format: None,
             theme: None,
+            default_targets: Vec::new(),
             command: None,
         }
         .with_default_command()
@@ -289,6 +319,12 @@ fn configure_validation_parsers(
     let locale_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_locale);
     let scheme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_scheme);
     let host_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_host_pattern);
+    let colour_policy_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), parse_colour_policy);
+    let spinner_mode_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_spinner_mode);
+    let output_format_parser =
+        LocalizedValueParser::new(Arc::clone(localizer), parse_output_format);
+    let theme_parser = LocalizedValueParser::new(Arc::clone(localizer), parse_theme);
 
     command = command.mut_arg("jobs", |arg| {
         arg.value_parser(ValueParser::new(jobs_parser))
@@ -304,6 +340,18 @@ fn configure_validation_parsers(
     });
     command = command.mut_arg("fetch_block_host", |arg| {
         arg.value_parser(ValueParser::new(host_parser))
+    });
+    command = command.mut_arg("colour_policy", |arg| {
+        arg.value_parser(ValueParser::new(colour_policy_parser))
+    });
+    command = command.mut_arg("spinner_mode", |arg| {
+        arg.value_parser(ValueParser::new(spinner_mode_parser))
+    });
+    command = command.mut_arg("output_format", |arg| {
+        arg.value_parser(ValueParser::new(output_format_parser))
+    });
+    command = command.mut_arg("theme", |arg| {
+        arg.value_parser(ValueParser::new(theme_parser))
     });
     command
 }

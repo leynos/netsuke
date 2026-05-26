@@ -5,11 +5,11 @@
 use clap::ArgMatches;
 use clap::error::ErrorKind;
 use miette::Report;
-use netsuke::{
-    cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest,
-    output_mode, output_prefs, runner,
-};
 use netsuke::theme::ThemeContext;
+use netsuke::{
+    cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
+    output_prefs, runner,
+};
 use ortho_config::Localizer;
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -63,7 +63,7 @@ fn run_with_args(
     configure_runtime(&merged_cli, system_locale, runtime_mode);
     let output_mode = output_mode::resolve(merged_cli.accessible, merged_cli.colour_policy);
     let prefs = output_prefs::resolve_from_theme(
-        merged_cli.theme.map(Into::into),
+        merged_cli.theme,
         ThemeContext::new(merged_cli.no_emoji, merged_cli.colour_policy, output_mode),
     );
     match runner::run(&merged_cli, prefs) {

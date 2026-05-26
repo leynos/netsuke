@@ -6,14 +6,21 @@ use ortho_config::declarative::LayerComposition;
 use ortho_config::figment::{Figment, providers::Env};
 use ortho_config::uncased::Uncased;
 use ortho_config::{ConfigDiscovery, MergeComposer, OrthoMergeExt, OrthoResult, sanitize_value};
+use ortho_config::{MergeLayer, load_config_file_as_chain};
 use serde::Serialize;
+use std::borrow::Cow;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use serde_json::{Map, Value, json};
-use std::path::PathBuf;
 
 use super::config::{BuildConfig, CliConfig, Theme};
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
-const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
+use crate::theme::ThemePreference;
+const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
+const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
 const ENV_PREFIX: &str = "NETSUKE_";
 
 /// Merge discovered configuration layers over parsed CLI input.
@@ -31,15 +38,7 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
         Err(err) => errors.push(err),
     }
 
-    let discovery = config_discovery(cli.directory.as_ref());
-    let mut file_layers = discovery.compose_layers();
-    errors.append(&mut file_layers.required_errors);
-    if file_layers.value.is_empty() {
-        errors.append(&mut file_layers.optional_errors);
-    }
-    for layer in file_layers.value {
-        composer.push_layer(layer);
-    }
+    push_file_layers(cli, &mut composer, &mut errors);
 
     let env_provider = env_provider()
         .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
@@ -60,7 +59,33 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
 
     let composition = LayerComposition::new(composer.layers(), errors);
     let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
+    validate_output_format_source(&merged, matches)?;
     Ok(apply_config(cli, merged))
+}
+
+fn push_file_layers(
+    cli: &Cli,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<Arc<ortho_config::OrthoError>>,
+) {
+    match explicit_config_path(cli) {
+        Some(path) => match load_layers_from_path(&path) {
+            Ok(layers) => {
+                for layer in layers {
+                    composer.push_layer(layer);
+                }
+            }
+            Err(err) => errors.push(err),
+        },
+        None => match collect_file_layers(cli.directory.as_deref()) {
+            Ok(layers) => {
+                for layer in layers {
+                    composer.push_layer(layer);
+                }
+            }
+            Err(err) => errors.push(err),
+        },
+    }
 }
 
 fn env_provider() -> Env {
@@ -68,11 +93,96 @@ fn env_provider() -> Env {
 }
 
 fn config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery {
-    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR);
+    let mut builder = ConfigDiscovery::builder("netsuke").env_var(CONFIG_ENV_VAR_LEGACY);
     if let Some(dir) = directory {
         builder = builder.clear_project_roots().add_project_root(dir);
     }
     builder.build()
+}
+
+fn collect_file_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let discovery = config_discovery(directory.map(PathBuf::from).as_ref());
+    let mut file_layers = discovery.compose_layers();
+    let mut errors = file_layers.required_errors;
+    if file_layers.value.is_empty() {
+        errors.append(&mut file_layers.optional_errors);
+    }
+    if let Some(err) = errors.into_iter().next() {
+        return Err(err);
+    }
+
+    let project_file = project_scope_file_str(directory);
+    let has_project_layer = file_layers.value.iter().any(|layer| {
+        layer
+            .path()
+            .is_some_and(|path| project_file.as_deref() == Some(path.as_str()))
+    });
+    if has_project_layer {
+        return Ok(file_layers.value);
+    }
+
+    let project_layers = project_scope_layers(directory)?;
+    Ok(file_layers
+        .value
+        .into_iter()
+        .chain(project_layers)
+        .collect())
+}
+
+fn project_scope_file_str(directory: Option<&Path>) -> Option<String> {
+    let root = directory
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())?;
+    root.join(".netsuke.toml").to_str().map(String::from)
+}
+
+fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    let root = directory
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok());
+    let Some(project_file) = root.map(|dir| dir.join(".netsuke.toml")) else {
+        return Ok(Vec::new());
+    };
+    match load_config_file_as_chain(&project_file) {
+        Ok(Some(chain)) => Ok(chain
+            .values
+            .into_iter()
+            .map(|(value, path)| MergeLayer::file(Cow::Owned(value), Some(path)))
+            .collect()),
+        Ok(None) => Ok(Vec::new()),
+        Err(err) => Err(err),
+    }
+}
+
+fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
+    cli.config
+        .clone()
+        .or_else(|| env_config_path(CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
+}
+
+fn env_config_path(var_name: &str) -> Option<PathBuf> {
+    std::env::var_os(var_name)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+fn load_layers_from_path(path: &std::path::Path) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    match load_config_file_as_chain(path) {
+        Ok(Some(chain)) => Ok(chain
+            .values
+            .into_iter()
+            .map(|(value, layer_path)| MergeLayer::file(Cow::Owned(value), Some(layer_path)))
+            .collect()),
+        Ok(None) => Err(Arc::new(ortho_config::OrthoError::File {
+            path: path.to_path_buf(),
+            source: Box::new(io::Error::new(
+                io::ErrorKind::NotFound,
+                "explicit configuration file not found",
+            )),
+        })),
+        Err(err) => Err(err),
+    }
 }
 
 fn is_empty_value(value: &Value) -> bool {
@@ -86,6 +196,18 @@ fn diag_json_from_layer(value: &Value) -> Option<bool> {
         .and_then(Value::as_bool)
 }
 
+fn validate_output_format_source(config: &CliConfig, matches: &ArgMatches) -> OrthoResult<()> {
+    if matches!(config.output_format, Some(super::OutputFormat::Json))
+        && matches.value_source("output_format") != Some(ValueSource::CommandLine)
+    {
+        return Err(validation_error(
+            "output_format",
+            "output_format = \"json\" is not supported yet; pass --output-format json explicitly",
+        ));
+    }
+    Ok(())
+}
+
 /// Resolve the effective diagnostic JSON preference from the raw config layers.
 ///
 /// This is used before full config merging so startup and merge-time failures
@@ -95,12 +217,16 @@ fn diag_json_from_layer(value: &Value) -> Option<bool> {
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
     let mut diag_json = CliConfig::default().diag_json;
 
-    let discovery = config_discovery(cli.directory.as_ref());
-    let file_layers = discovery.compose_layers();
-    for layer in file_layers.value {
-        let layer_value = layer.into_value();
-        if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
-            diag_json = layer_diag_json;
+    let file_layers = explicit_config_path(cli).map_or_else(
+        || collect_file_layers(cli.directory.as_deref()),
+        |path| load_layers_from_path(&path),
+    );
+    if let Ok(layers) = file_layers {
+        for layer in layers {
+            let layer_value = layer.into_value();
+            if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
+                diag_json = layer_diag_json;
+            }
         }
     }
 
@@ -113,7 +239,9 @@ pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
         diag_json = env_diag_json;
     }
 
-    if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
+    if matches.value_source("output_format") == Some(ValueSource::CommandLine) {
+        cli.resolved_diag_json()
+    } else if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
         cli.diag_json
     } else {
         diag_json
@@ -159,6 +287,7 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     maybe_insert_explicit(matches, "spinner_mode", &cli.spinner_mode, &mut root)?;
     maybe_insert_explicit(matches, "output_format", &cli.output_format, &mut root)?;
     maybe_insert_explicit(matches, "theme", &cli.theme, &mut root)?;
+    maybe_insert_default_targets(cli, matches, &mut root)?;
 
     if let Some(Commands::Build(args)) = cli.command.as_ref()
         && let Some(build_matches) = matches.subcommand_matches("build")
@@ -177,6 +306,20 @@ fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Ma
     maybe_insert_explicit(matches, "emit", &args.emit, &mut build)?;
     maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
     Ok(build)
+}
+
+fn maybe_insert_default_targets(
+    cli: &Cli,
+    matches: &ArgMatches,
+    root: &mut Map<String, Value>,
+) -> OrthoResult<()> {
+    if matches.value_source("default_targets") == Some(ValueSource::CommandLine) {
+        root.insert(
+            "cmds".to_owned(),
+            json!({ "build": { "targets": serialize_value("default_targets", &cli.default_targets)? } }),
+        );
+    }
+    Ok(())
 }
 
 fn maybe_insert_explicit<T>(
@@ -202,9 +345,11 @@ where
 }
 
 fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
+    let build_defaults = resolved_build_config(&config);
     Cli {
         file: config.file,
         directory: parsed.directory.clone(),
+        config: parsed.config.clone(),
         jobs: config.jobs,
         verbose: config.verbose,
         locale: config.locale,
@@ -220,8 +365,21 @@ fn apply_config(parsed: &Cli, config: CliConfig) -> Cli {
         spinner_mode: config.spinner_mode,
         output_format: config.output_format,
         theme: canonical_theme(config.theme, config.no_emoji),
-        command: Some(resolve_command(parsed.command.as_ref(), &config.cmds.build)),
+        default_targets: build_defaults.targets.clone(),
+        command: Some(resolve_command(parsed.command.as_ref(), &build_defaults)),
     }
+}
+
+fn resolved_build_config(config: &CliConfig) -> BuildConfig {
+    let mut build = config.cmds.build.clone();
+    if build.targets.is_empty() {
+        build.targets.clone_from(&config.default_targets);
+    } else if !config.default_targets.is_empty() {
+        let mut targets = config.default_targets.clone();
+        targets.extend(build.targets);
+        build.targets = targets;
+    }
+    build
 }
 
 fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> Commands {
@@ -242,10 +400,10 @@ fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> C
     }
 }
 
-const fn canonical_theme(theme: Option<Theme>, no_emoji: Option<bool>) -> Option<Theme> {
+fn canonical_theme(theme: Option<Theme>, no_emoji: Option<bool>) -> Option<ThemePreference> {
     match (theme, no_emoji) {
-        (Some(value), _) => Some(value),
-        (None, Some(true)) => Some(Theme::Ascii),
+        (Some(value), _) => Some(value.into()),
+        (None, Some(true)) => Some(ThemePreference::Ascii),
         _ => None,
     }
 }

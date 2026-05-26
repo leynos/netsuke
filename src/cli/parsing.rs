@@ -1,10 +1,13 @@
 //! CLI parsing helpers for clap value parsers.
 
+use clap::ValueEnum;
 use ortho_config::{LanguageIdentifier, LocalizationArgs, Localizer};
 use std::str::FromStr;
 
+use super::{ColourPolicy, OutputFormat, SpinnerMode};
 use crate::host_pattern::HostPattern;
 use crate::localization::keys;
+use crate::theme::ThemePreference;
 
 pub(super) fn parse_jobs(localizer: &dyn Localizer, s: &str) -> Result<usize, String> {
     let value: usize = s.parse().map_err(|_| {
@@ -92,6 +95,56 @@ pub(super) fn parse_locale(localizer: &dyn Localizer, s: &str) -> Result<String,
                 &format!("invalid locale '{trimmed}'"),
             )
         })
+}
+
+pub(super) fn parse_colour_policy(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<ColourPolicy, String> {
+    parse_value_enum(localizer, s, keys::CLI_COLOUR_POLICY_INVALID, "value")
+}
+
+pub(super) fn parse_spinner_mode(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<SpinnerMode, String> {
+    parse_value_enum(localizer, s, keys::CLI_SPINNER_MODE_INVALID, "value")
+}
+
+pub(super) fn parse_output_format(
+    localizer: &dyn Localizer,
+    s: &str,
+) -> Result<OutputFormat, String> {
+    parse_value_enum(localizer, s, keys::CLI_OUTPUT_FORMAT_INVALID, "value")
+}
+
+pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePreference, String> {
+    ThemePreference::parse_raw(s).map_err(|_| {
+        let mut args = LocalizationArgs::default();
+        args.insert("theme", s.to_owned().into());
+        super::parser::validation_message(
+            localizer,
+            keys::CLI_THEME_INVALID,
+            Some(&args),
+            &format!("Invalid theme '{s}'"),
+        )
+    })
+}
+
+fn parse_value_enum<T>(
+    localizer: &dyn Localizer,
+    s: &str,
+    key: &'static str,
+    arg_name: &'static str,
+) -> Result<T, String>
+where
+    T: ValueEnum,
+{
+    T::from_str(s, true).map_err(|_| {
+        let mut args = LocalizationArgs::default();
+        args.insert(arg_name, s.to_owned().into());
+        super::parser::validation_message(localizer, key, Some(&args), &format!("Invalid '{s}'"))
+    })
 }
 
 /// Parse a host pattern supplied via CLI flags.

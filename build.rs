@@ -19,6 +19,12 @@ use time::{OffsetDateTime, format_description::well_known::Iso8601};
 
 const FALLBACK_DATE: &str = "1970-01-01";
 
+type OutputModeResolveWith = fn(
+    Option<bool>,
+    Option<cli::ColourPolicy>,
+    fn(&str) -> Option<String>,
+) -> output_mode::OutputMode;
+
 #[path = "src/cli/mod.rs"]
 mod cli;
 
@@ -34,6 +40,12 @@ mod host_pattern;
 #[path = "src/localization/mod.rs"]
 mod localization;
 
+#[path = "src/output_mode.rs"]
+mod output_mode;
+
+#[path = "src/theme.rs"]
+mod theme;
+
 mod build_l10n_audit;
 
 use host_pattern::{HostPattern, HostPatternError};
@@ -42,6 +54,12 @@ type LocalizedParseFn = fn(
     Vec<OsString>,
     &Arc<dyn ortho_config::Localizer>,
 ) -> Result<(cli::Cli, ArgMatches), clap::Error>;
+
+type ResolveThemeFn = fn(
+    Option<theme::ThemePreference>,
+    theme::ThemeContext,
+    fn(&str) -> Option<String>,
+) -> theme::ResolvedTheme;
 
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
@@ -95,6 +113,7 @@ const fn verify_public_api_symbols() {
     const _: usize = std::mem::size_of::<cli::BuildArgs>();
     const _: usize = std::mem::size_of::<cli::CliConfig>();
     const _: usize = std::mem::size_of::<cli::Commands>();
+    const _: usize = std::mem::size_of::<cli::Theme>();
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
@@ -105,8 +124,19 @@ const fn verify_public_api_symbols() {
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
     const _: fn(&cli::Cli) -> Option<bool> = cli::Cli::no_emoji_override;
     const _: fn(&cli::Cli) -> bool = cli::Cli::progress_enabled;
+    const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_progress;
+    const _: fn(&cli::Cli) -> bool = cli::Cli::resolved_diag_json;
     const _: fn(&str) -> Result<HostPattern, HostPatternError> = HostPattern::parse;
     const _: fn(&HostPattern, host_pattern::HostCandidate<'_>) -> bool = HostPattern::matches;
+    const _: fn(Option<bool>, Option<cli::ColourPolicy>) -> output_mode::OutputMode =
+        output_mode::resolve;
+    const _: OutputModeResolveWith = output_mode::resolve_with;
+    const _: fn(
+        Option<bool>,
+        Option<cli::ColourPolicy>,
+        output_mode::OutputMode,
+    ) -> theme::ThemeContext = theme::ThemeContext::new;
+    const _: ResolveThemeFn = theme::resolve_theme;
 }
 
 fn emit_rerun_directives() {

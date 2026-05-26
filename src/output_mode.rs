@@ -5,7 +5,7 @@
 //! is auto-detected from the `NO_COLOR` and `TERM` environment variables, or
 //! forced via explicit configuration.
 
-use crate::cli::config::ColourPolicy;
+use crate::cli::ColourPolicy;
 use std::env;
 
 /// Whether terminal output should use accessible (static text) or standard

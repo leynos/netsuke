@@ -202,7 +202,11 @@ fn handle_build(
     progress_enabled: bool,
 ) -> Result<()> {
     let ninja = generate_ninja(cli, reporter, Some(keys::STATUS_TOOL_BUILD.into()))?;
-    let targets = BuildTargets::new(&args.targets);
+    let targets = if args.targets.is_empty() {
+        BuildTargets::new(&cli.default_targets)
+    } else {
+        BuildTargets::new(&args.targets)
+    };
 
     // Normalize the build file path and keep the temporary file alive for the
     // duration of the Ninja invocation. Borrow the emitted path when provided

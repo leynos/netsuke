@@ -26,7 +26,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::PathGuard;
-use test_support::env::{NinjaEnvGuard, restore_many};
+use test_support::env::{NinjaEnvGuard, restore_many_locked};
 use test_support::env_lock::EnvLock;
 use test_support::http::HttpServer;
 
@@ -149,22 +149,49 @@ pub struct TestWorld {
     // Environment state
     /// Snapshot of pre-scenario values for environment variables that were overridden.
     pub env_vars: RefCell<HashMap<String, Option<OsString>>>,
+    /// Values to forward to child netsuke processes for scenario-tracked variables.
+    pub env_vars_forward: RefCell<HashMap<String, OsString>>,
     /// Scenario-scoped guard that serialises environment mutations when needed.
     pub env_lock: RefCell<Option<EnvLock>>,
+    /// Original working directory before any scenario-level chdir.
+    pub original_cwd: RefCell<Option<PathBuf>>,
 }
 
 impl TestWorld {
+    /// Acquire the scenario environment lock and capture the starting CWD.
+    pub fn ensure_env_lock(&self) {
+        if self.env_lock.borrow().is_some() {
+            return;
+        }
+        let lock = EnvLock::acquire();
+        let cwd = std::env::current_dir().ok();
+        *self.original_cwd.borrow_mut() = cwd;
+        *self.env_lock.borrow_mut() = Some(lock);
+    }
+
     /// Track an environment variable for later restoration.
-    pub fn track_env_var(&self, key: String, previous: Option<OsString>) {
+    pub fn track_env_var(
+        &self,
+        key: String,
+        previous: Option<OsString>,
+        forward_value: Option<OsString>,
+    ) {
+        if let Some(value) = forward_value {
+            self.env_vars_forward
+                .borrow_mut()
+                .insert(key.clone(), value);
+        }
         self.env_vars.borrow_mut().entry(key).or_insert(previous);
     }
 
     /// Restore any environment variables overridden during the scenario.
-    fn restore_environment(&self) {
+    unsafe fn restore_environment_locked(&self) {
         let vars = std::mem::take(&mut *self.env_vars.borrow_mut());
         if !vars.is_empty() {
-            restore_many(vars);
+            // SAFETY: The caller holds EnvLock.
+            unsafe { restore_many_locked(vars) };
         }
+        self.env_vars_forward.borrow_mut().clear();
     }
 
     /// Shut down the active HTTP server fixture.
@@ -193,8 +220,14 @@ impl Drop for TestWorld {
         self.ninja_env_guard.borrow_mut().take();
         self.localization_guard.borrow_mut().take();
         self.localization_lock.borrow_mut().take();
+        if self.env_lock.borrow().is_some() {
+            if let Some(original_cwd) = self.original_cwd.borrow_mut().take() {
+                drop(std::env::set_current_dir(original_cwd));
+            }
+            // SAFETY: EnvLock is still held.
+            unsafe { self.restore_environment_locked() };
+        }
         self.env_lock.borrow_mut().take();
-        self.restore_environment();
         self.stdlib_text.clear();
     }
 }

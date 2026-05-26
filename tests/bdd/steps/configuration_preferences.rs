@@ -8,6 +8,7 @@ use clap::ValueEnum as _;
 use netsuke::cli::{Cli, ColourPolicy, Commands, OutputFormat, SpinnerMode, Theme};
 use netsuke::cli_localization;
 use netsuke::output_prefs;
+use netsuke::theme::ThemePreference;
 use rstest_bdd_macros::{given, then, when};
 use std::ffi::OsStr;
 use std::fs;
@@ -41,7 +42,7 @@ fn write_config(world: &TestWorld, contents: &str) -> Result<()> {
     let previous = std::env::var_os(CONFIG_ENV_VAR);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
     unsafe { std::env::set_var(CONFIG_ENV_VAR, path.as_os_str()) };
-    world.track_env_var(CONFIG_ENV_VAR.to_owned(), previous);
+    world.track_env_var(CONFIG_ENV_VAR.to_owned(), previous, None);
     Ok(())
 }
 
@@ -109,7 +110,7 @@ fn set_env_theme(world: &TestWorld, theme: Theme) {
     let value = enum_name(&theme);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
     unsafe { std::env::set_var("NETSUKE_THEME", OsStr::new(&value)) };
-    world.track_env_var("NETSUKE_THEME".to_owned(), previous);
+    world.track_env_var("NETSUKE_THEME".to_owned(), previous, None);
 }
 
 /// Set the `NETSUKE_COLOUR_POLICY` environment variable.
@@ -119,7 +120,7 @@ fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) {
     let value = enum_name(&policy);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
     unsafe { std::env::set_var("NETSUKE_COLOUR_POLICY", OsStr::new(&value)) };
-    world.track_env_var("NETSUKE_COLOUR_POLICY".to_owned(), previous);
+    world.track_env_var("NETSUKE_COLOUR_POLICY".to_owned(), previous, None);
 }
 
 /// Set the `NETSUKE_SPINNER_MODE` environment variable.
@@ -129,7 +130,7 @@ fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) {
     let value = enum_name(&mode);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
     unsafe { std::env::set_var("NETSUKE_SPINNER_MODE", OsStr::new(&value)) };
-    world.track_env_var("NETSUKE_SPINNER_MODE".to_owned(), previous);
+    world.track_env_var("NETSUKE_SPINNER_MODE".to_owned(), previous, None);
 }
 
 /// Assert a merged CLI field value matches the expected value.
@@ -169,7 +170,7 @@ fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()
     let previous = std::env::var_os(LOCALE_ENV_VAR);
     // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
     unsafe { std::env::set_var(LOCALE_ENV_VAR, OsStr::new(locale)) };
-    world.track_env_var(LOCALE_ENV_VAR.to_owned(), previous);
+    world.track_env_var(LOCALE_ENV_VAR.to_owned(), previous, None);
     Ok(())
 }
 
@@ -293,7 +294,7 @@ fn merged_verbose_enabled(world: &TestWorld) -> Result<()> {
 
 #[then("the merged theme is ascii")]
 fn merged_theme_is_ascii(world: &TestWorld) -> Result<()> {
-    assert_merged_field(world, |cli| cli.theme, Theme::Ascii, "theme")
+    assert_merged_field(world, |cli| cli.theme, ThemePreference::Ascii, "theme")
 }
 
 #[then("the merge error should contain {fragment:string}")]
@@ -311,7 +312,7 @@ fn merge_error_contains(world: &TestWorld, fragment: &str) -> Result<()> {
 
 #[then("the merged theme is unicode")]
 fn merged_theme_is_unicode(world: &TestWorld) -> Result<()> {
-    assert_merged_field(world, |cli| cli.theme, Theme::Unicode, "theme")
+    assert_merged_field(world, |cli| cli.theme, ThemePreference::Unicode, "theme")
 }
 
 #[then("the merged colour policy is always")]

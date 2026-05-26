@@ -1,6 +1,6 @@
 //! Configuration merge tests.
 //!
-//! These tests validate OrthoConfig layer precedence (defaults, file, env,
+//! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
 
 use anyhow::{Context, Result, ensure};
@@ -18,7 +18,7 @@ use test_support::{EnvVarGuard, env_lock::EnvLock};
 
 #[fixture]
 fn default_cli_json() -> Result<serde_json::Value> {
-    sanitize_value(&CliConfig::default())
+    Ok(sanitize_value(&CliConfig::default())?)
 }
 
 fn with_config_file<F, T>(toml_content: &str, cli_args: &[&str], f: F) -> anyhow::Result<T>
@@ -58,33 +58,21 @@ fn assert_build_targets(
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum ExpectedValidationError {
-    ThemeUnicodeAliasConflict,
-    ThemeAsciiAliasConflict,
-    SpinnerDisabledConflict,
-    SpinnerEnabledConflict,
-    UnsupportedOutputFormat,
+    UnicodeThemeAlias,
+    AsciiThemeAlias,
+    DisabledSpinner,
+    EnabledSpinner,
 }
 
 impl ExpectedValidationError {
-    fn expected_fragment(&self) -> &'static str {
+    const fn expected_fragment(self) -> &'static str {
         match self {
-            Self::ThemeUnicodeAliasConflict => {
-                "theme = \"unicode\" conflicts with no_emoji = true"
-            }
-            Self::ThemeAsciiAliasConflict => {
-                "no_emoji = false conflicts with theme = \"ascii\""
-            }
-            Self::SpinnerDisabledConflict => {
-                "spinner_mode = \"disabled\" conflicts with progress = true"
-            }
-            Self::SpinnerEnabledConflict => {
-                "progress = false conflicts with spinner_mode = \"enabled\""
-            }
-            Self::UnsupportedOutputFormat => {
-                "output_format = \"json\" is not supported yet"
-            }
+            Self::UnicodeThemeAlias => "theme = \"unicode\" conflicts with no_emoji = true",
+            Self::AsciiThemeAlias => "no_emoji = false conflicts with theme = \"ascii\"",
+            Self::DisabledSpinner => "spinner_mode = \"disabled\" conflicts with progress = true",
+            Self::EnabledSpinner => "progress = false conflicts with spinner_mode = \"enabled\"",
         }
     }
 }
@@ -293,23 +281,19 @@ targets = ["all"]
 #[rstest]
 #[case(
     json!({ "theme": "unicode", "no_emoji": true }),
-    ExpectedValidationError::ThemeUnicodeAliasConflict,
+    ExpectedValidationError::UnicodeThemeAlias,
 )]
 #[case(
     json!({ "theme": "ascii", "no_emoji": false }),
-    ExpectedValidationError::ThemeAsciiAliasConflict,
+    ExpectedValidationError::AsciiThemeAlias,
 )]
 #[case(
     json!({ "spinner_mode": "disabled", "progress": true }),
-    ExpectedValidationError::SpinnerDisabledConflict,
+    ExpectedValidationError::DisabledSpinner,
 )]
 #[case(
     json!({ "spinner_mode": "enabled", "progress": false }),
-    ExpectedValidationError::SpinnerEnabledConflict,
-)]
-#[case(
-    json!({ "output_format": "json" }),
-    ExpectedValidationError::UnsupportedOutputFormat,
+    ExpectedValidationError::EnabledSpinner,
 )]
 fn cli_config_rejects_conflicting_or_unsupported_settings(
     default_cli_json: Result<serde_json::Value>,
@@ -323,7 +307,7 @@ fn cli_config_rejects_conflicting_or_unsupported_settings(
 fn cli_runtime_canonicalizes_ascii_theme_from_no_emoji_alias() -> Result<()> {
     with_config_file("no_emoji = true\n", &["netsuke"], |merged| {
         ensure!(
-            merged.theme == Some(Theme::Ascii),
+            merged.theme == Some(Theme::Ascii.into()),
             "no_emoji compatibility alias should canonicalize to the ASCII theme",
         );
         ensure!(
