@@ -1,10 +1,21 @@
 //! Cycle detection utilities for the IR target graph.
 //!
-//! Implements [`CycleDetector`], which performs a depth-first traversal of
-//! [`BuildEdge`] `inputs` and `implicit_deps` to detect circular dependencies
-//! and record missing dependency references.  `order_only_deps` are
-//! intentionally excluded from traversal.  Consumed by
-//! [`super::from_manifest`] after the full target map is constructed.
+//! The public entry point is [`analyse`], which accepts the target map
+//! (`HashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
+//! returns a [`CycleDetectionReport`].  The report carries an optional
+//! detected cycle — an ordered, canonicalised list of paths — together
+//! with any dependencies referenced by a target but absent from the map.
+//! `order_only_deps` are intentionally excluded from traversal.
+//!
+//! Traversal state is managed by the private [`CycleDetector`] struct,
+//! which owns the DFS recursion stack and per-node visitation map.
+//! Callers drive detection through [`CycleDetector::detect`], which
+//! iterates over every node in the target map and delegates depth-first
+//! visiting to `visit` and `visit_dependency`.  Detected cycles are
+//! normalised by [`canonicalize_cycle`] to produce deterministic error
+//! messages regardless of traversal order.
+//! Consumed by [`super::from_manifest`] after the full target map is
+//! constructed.
 
 use std::collections::HashMap;
 
