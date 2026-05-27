@@ -19,7 +19,7 @@
 
 use std::collections::HashMap;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 use super::BuildEdge;
 
@@ -71,14 +71,105 @@ struct CycleDetector<'targets> {
 }
 
 impl CycleDetector<'_> {
+    /// Create a new detector borrowing `targets` for the duration of the
+    /// traversal.
+    fn new(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
+        CycleDetector {
+            targets,
+            stack: Vec::new(),
+            states: HashMap::new(),
+            missing_dependencies: Vec::new(),
+        }
+    }
+
+    /// Walk every node in the target map and return the first cycle found,
+    /// or `None` if the graph is acyclic.
+    fn detect(&mut self) -> Option<Vec<Utf8PathBuf>> {
+        let mut nodes: Vec<Utf8PathBuf> = self.targets.keys().cloned().collect();
+        nodes.sort();
+        for node in nodes {
+            if self.is_visited(node.as_path()) {
+                continue;
+            }
+            if let Some(cycle) = self.visit(node.as_path()) {
+                return Some(cycle);
+            }
+        }
+        None
+    }
+
+    /// Return `true` if `node` has been fully visited.
+    fn is_visited(&self, node: &Utf8Path) -> bool {
+        matches!(self.states.get(node), Some(VisitState::Visited))
+    }
+
+    /// Visit `node` depth-first.
+    ///
+    /// Returns `Some(cycle)` if a back-edge to an in-progress node is
+    /// discovered, `None` otherwise.
+    fn visit(&mut self, node: &Utf8Path) -> Option<Vec<Utf8PathBuf>> {
+        match self.states.get(node) {
+            Some(VisitState::Visited) => return None,
+            Some(VisitState::Visiting) => {
+                let idx = self
+                    .stack
+                    .iter()
+                    .position(|n| n.as_path() == node)
+                    .unwrap_or_else(|| {
+                        debug_assert!(false, "visiting node must be on the stack");
+                        0
+                    });
+                let mut cycle: Vec<Utf8PathBuf> = self.stack.iter().skip(idx).cloned().collect();
+                cycle.push(node.to_path_buf());
+                return Some(canonicalize_cycle(cycle));
+            }
+            None => {
+                self.states.insert(node.to_path_buf(), VisitState::Visiting);
+            }
+        }
+
+        self.stack.push(node.to_path_buf());
+
+        let cycle = self
+            .targets
+            .get(node)
+            .into_iter()
+            .flat_map(|edge| edge.inputs.iter().chain(&edge.implicit_deps))
+            .find_map(|dep| self.visit_dependency(node, dep));
+
+        self.stack.pop();
+
+        if cycle.is_none() {
+            self.states.insert(node.to_path_buf(), VisitState::Visited);
+        }
+
+        cycle
+    }
+
+    #[cfg(test)]
+    fn missing_dependencies(&self) -> &[(Utf8PathBuf, Utf8PathBuf)] {
+        &self.missing_dependencies
+    }
+
+    #[cfg(test)]
+    fn find_cycle(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
+        analyse(targets).cycle
+    }
+
     /// Record `dep` as missing and return `true` if `dep` is absent from the
     /// target map; return `false` if it is present.
-    fn record_missing_dependency(&mut self, node: &Utf8PathBuf, dep: &Utf8PathBuf) -> bool {
+    fn record_missing_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) -> bool {
         if self.targets.contains_key(dep) {
             return false;
         }
 
-        self.missing_dependencies.push((node.clone(), dep.clone()));
+        tracing::debug!(
+            missing = %dep,
+            dependent = %node,
+            "skipping dependency missing from targets during cycle detection",
+        );
+        self.missing_dependencies
+            .push((node.to_path_buf(), dep.to_path_buf()));
         true
     }
 
@@ -88,43 +179,14 @@ impl CycleDetector<'_> {
     /// map.
     fn visit_dependency(
         &mut self,
-        node: &Utf8PathBuf,
-        dep: &Utf8PathBuf,
+        node: &Utf8Path,
+        dep: &Utf8Path,
     ) -> Option<Vec<Utf8PathBuf>> {
         if self.record_missing_dependency(node, dep) {
             return None;
         }
 
-        self.visit(dep.clone())
-    }
-}
-
-impl CycleDetector<'_> {
-    /// Record `dep` as missing and return `true` if `dep` is absent from the
-    /// target map; return `false` if it is present.
-    fn record_missing_dependency(&mut self, node: &Utf8PathBuf, dep: &Utf8PathBuf) -> bool {
-        if self.targets.contains_key(dep) {
-            return false;
-        }
-
-        self.missing_dependencies.push((node.clone(), dep.clone()));
-        true
-    }
-
-    /// Optionally record `dep` as missing, then visit it.
-    ///
-    /// Returns early with `None` when the dependency is absent from the target
-    /// map.
-    fn visit_dependency(
-        &mut self,
-        node: &Utf8PathBuf,
-        dep: &Utf8PathBuf,
-    ) -> Option<Vec<Utf8PathBuf>> {
-        if self.record_missing_dependency(node, dep) {
-            return None;
-        }
-
-        self.visit(dep.clone())
+        self.visit(dep)
     }
 }
 
@@ -197,7 +259,7 @@ mod tests {
             .map(|(dependent, missing)| (path(dependent), path(missing)))
             .collect();
         let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(path("a")).is_none());
+        assert!(detector.visit(path("a").as_path()).is_none());
         assert_eq!(detector.missing_dependencies(), expected.as_slice());
     }
 
@@ -252,8 +314,8 @@ mod tests {
 
         let mut detector = CycleDetector::new(&targets);
         assert!(detector.detect().is_none());
-        assert!(detector.is_visited(&a));
-        assert!(detector.is_visited(&b));
+        assert!(detector.is_visited(a.as_path()));
+        assert!(detector.is_visited(b.as_path()));
         assert!(
             detector.stack.is_empty(),
             "stack should be empty after complete traversal",
@@ -300,8 +362,8 @@ mod tests {
     #[test]
     fn cycle_detector_stack_is_empty_after_cycle_detected() {
         let mut targets = HashMap::new();
-        targets.insert(path("a"), build_edge(&["b"], "a"));
-        targets.insert(path("b"), build_edge(&["a"], "b"));
+        targets.insert(path("a"), build_edge(&["b"], &[], "a"));
+        targets.insert(path("b"), build_edge(&["a"], &[], "b"));
 
         let mut detector = CycleDetector::new(&targets);
         assert!(detector.detect().is_some(), "expected a cycle");
@@ -416,5 +478,38 @@ mod tests {
                 prop_assert_eq!(canonical.first(), canonical.last());
             }
         }
+    }
+
+    #[test]
+    fn find_cycle_is_deterministic() {
+        let mut targets = HashMap::new();
+        targets.insert(path("p"), build_edge(&["q"], &[], "p"));
+        targets.insert(path("q"), build_edge(&["p"], &[], "q"));
+        targets.insert(path("x"), build_edge(&["y"], &[], "x"));
+        targets.insert(path("y"), build_edge(&["x"], &[], "y"));
+
+        let first = CycleDetector::find_cycle(&targets).expect("cycle");
+        for _ in 1..100 {
+            let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+            if cycle != first {
+                panic!(
+                    "find_cycle returned inconsistent results across runs: \
+                     first={first:?}, got={cycle:?}",
+                );
+            }
+        }
+        // Probabilistic guard: 100 runs; `detect` sorts keys for stable traversal.
+        tracing::info!("find_cycle returned the same cycle across 100 runs");
+    }
+
+    #[test]
+    fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
+        let mut targets = HashMap::new();
+        targets.insert(path("p"), build_edge(&["q"], &[], "p"));
+        targets.insert(path("q"), build_edge(&["p"], &[], "q"));
+        targets.insert(path("x"), build_edge(&["y"], &[], "x"));
+        targets.insert(path("y"), build_edge(&["x"], &[], "y"));
+
+        assert!(CycleDetector::find_cycle(&targets).is_some());
     }
 }
