@@ -58,6 +58,25 @@ fn assert_build_targets(
     })
 }
 
+#[derive(Debug, Copy, Clone)]
+enum ExpectedValidationError {
+    ThemeUnicodeWithNoEmoji,
+    SpinnerDisabledWithProgress,
+    UnsupportedOutputFormat,
+}
+
+impl ExpectedValidationError {
+    const fn expected_fragment(self) -> &'static str {
+        match self {
+            Self::ThemeUnicodeWithNoEmoji => "theme = \"unicode\" conflicts with no_emoji = true",
+            Self::SpinnerDisabledWithProgress => {
+                "spinner_mode = \"disabled\" conflicts with progress = true"
+            }
+            Self::UnsupportedOutputFormat => "output_format = \"json\" is not supported yet",
+        }
+    }
+}
+
 fn merge_defaults_with_file_layer(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
@@ -71,13 +90,12 @@ fn merge_defaults_with_file_layer(
 fn assert_merge_rejects(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
-    expected_msg: &str,
+    expected_error: ExpectedValidationError,
 ) -> anyhow::Result<()> {
-    let err = if file_layer
-        .get("output_format")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|format| format == "json")
-    {
+    let err = if matches!(
+        expected_error,
+        ExpectedValidationError::UnsupportedOutputFormat
+    ) {
         match with_config_file("output_format = \"json\"\n", &["netsuke"], |_| Ok(())) {
             Ok(()) => anyhow::bail!("merge should have returned an error"),
             Err(err) => err,
@@ -89,8 +107,9 @@ fn assert_merge_rejects(
         }
     };
     ensure!(
-        err.chain()
-            .any(|cause| cause.to_string().contains(expected_msg)),
+        err.chain().any(|cause| cause
+            .to_string()
+            .contains(expected_error.expected_fragment())),
         "unexpected error text: {err:#}",
     );
     Ok(())
@@ -274,22 +293,22 @@ targets = ["all"]
 #[rstest]
 #[case(
     json!({ "theme": "unicode", "no_emoji": true }),
-    "theme = \"unicode\" conflicts with no_emoji = true",
+    ExpectedValidationError::ThemeUnicodeWithNoEmoji,
 )]
 #[case(
     json!({ "spinner_mode": "disabled", "progress": true }),
-    "spinner_mode = \"disabled\" conflicts with progress = true",
+    ExpectedValidationError::SpinnerDisabledWithProgress,
 )]
 #[case(
     json!({ "output_format": "json" }),
-    "output_format = \"json\" is not supported yet",
+    ExpectedValidationError::UnsupportedOutputFormat,
 )]
 fn cli_config_rejects_conflicting_or_unsupported_settings(
     default_cli_json: Result<serde_json::Value>,
     #[case] file_layer: serde_json::Value,
-    #[case] expected_msg: &str,
+    #[case] expected_error: ExpectedValidationError,
 ) -> Result<()> {
-    assert_merge_rejects(default_cli_json?, file_layer, expected_msg)
+    assert_merge_rejects(default_cli_json?, file_layer, expected_error)
 }
 
 #[rstest]
