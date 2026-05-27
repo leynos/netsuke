@@ -259,6 +259,20 @@ mod tests {
         assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
     }
 
+    #[test]
+    fn cycle_detector_stack_is_empty_after_cycle_detected() {
+        let mut targets = HashMap::new();
+        targets.insert(path("a"), build_edge(&["b"], "a"));
+        targets.insert(path("b"), build_edge(&["a"], "b"));
+
+        let mut detector = CycleDetector::new(&targets);
+        assert!(detector.detect().is_some(), "expected a cycle");
+        assert!(
+            detector.stack.is_empty(),
+            "stack must be empty after cycle detection",
+        );
+    }
+
     fn check_canonicalize_cycle(input: &[&str], expected: &[&str]) {
         let cycle: Vec<Utf8PathBuf> = input.iter().map(|&s| path(s)).collect();
         let canonical = canonicalize_cycle(cycle);
