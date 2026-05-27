@@ -196,6 +196,46 @@ fn diag_json_from_layer(value: &Value) -> Option<bool> {
         .and_then(Value::as_bool)
 }
 
+fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
+    explicit_config_path(cli).map_or_else(
+        || collect_file_layers(cli.directory.as_deref()),
+        |path| load_layers_from_path(&path),
+    )
+}
+
+fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> bool {
+    if matches.value_source("output_format") == Some(ValueSource::CommandLine) {
+        cli.resolved_diag_json()
+    } else if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
+        cli.diag_json
+    } else {
+        discovered
+    }
+}
+
+fn diag_json_from_file_layers(cli: &Cli) -> OrthoResult<bool> {
+    let default = Cli::default().diag_json;
+    let layers = collect_diag_file_layers(cli)?;
+    let mut diag_json = default;
+    for layer in layers {
+        if let Some(layer_diag_json) = diag_json_from_layer(&layer.into_value()) {
+            diag_json = layer_diag_json;
+        }
+    }
+    Ok(diag_json)
+}
+
+fn diag_json_from_env(fallback: bool) -> bool {
+    let env_provider = env_provider()
+        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
+        .split("__");
+    Figment::from(env_provider)
+        .extract::<serde_json::Value>()
+        .ok()
+        .and_then(|value| diag_json_from_layer(&value))
+        .unwrap_or(fallback)
+}
+
 fn validate_output_format_source(config: &CliConfig, matches: &ArgMatches) -> OrthoResult<()> {
     if matches!(config.output_format, Some(super::OutputFormat::Json))
         && matches.value_source("output_format") != Some(ValueSource::CommandLine)
@@ -215,37 +255,10 @@ fn validate_output_format_source(config: &CliConfig, matches: &ArgMatches) -> Or
 /// environment.
 #[must_use]
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
-    let mut diag_json = CliConfig::default().diag_json;
-
-    let file_layers = explicit_config_path(cli).map_or_else(
-        || collect_file_layers(cli.directory.as_deref()),
-        |path| load_layers_from_path(&path),
-    );
-    if let Ok(layers) = file_layers {
-        for layer in layers {
-            let layer_value = layer.into_value();
-            if let Some(layer_diag_json) = diag_json_from_layer(&layer_value) {
-                diag_json = layer_diag_json;
-            }
-        }
-    }
-
-    let env_provider = env_provider()
-        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
-        .split("__");
-    if let Ok(value) = Figment::from(env_provider).extract::<Value>()
-        && let Some(env_diag_json) = diag_json_from_layer(&value)
-    {
-        diag_json = env_diag_json;
-    }
-
-    if matches.value_source("output_format") == Some(ValueSource::CommandLine) {
-        cli.resolved_diag_json()
-    } else if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
-        cli.diag_json
-    } else {
-        diag_json
-    }
+    let mut diag_json =
+        diag_json_from_file_layers(cli).unwrap_or_else(|_| Cli::default().diag_json);
+    diag_json = diag_json_from_env(diag_json);
+    diag_json_from_matches(cli, matches, diag_json)
 }
 
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Value> {
