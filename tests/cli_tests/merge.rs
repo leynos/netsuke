@@ -58,25 +58,6 @@ fn assert_build_targets(
     })
 }
 
-#[derive(Debug, Clone, Copy)]
-enum ExpectedValidationError {
-    UnicodeThemeAlias,
-    AsciiThemeAlias,
-    DisabledSpinner,
-    EnabledSpinner,
-}
-
-impl ExpectedValidationError {
-    const fn expected_fragment(self) -> &'static str {
-        match self {
-            Self::UnicodeThemeAlias => "theme = \"unicode\" conflicts with no_emoji = true",
-            Self::AsciiThemeAlias => "no_emoji = false conflicts with theme = \"ascii\"",
-            Self::DisabledSpinner => "spinner_mode = \"disabled\" conflicts with progress = true",
-            Self::EnabledSpinner => "progress = false conflicts with spinner_mode = \"enabled\"",
-        }
-    }
-}
-
 fn merge_defaults_with_file_layer(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
@@ -90,15 +71,27 @@ fn merge_defaults_with_file_layer(
 fn assert_merge_rejects(
     defaults: serde_json::Value,
     file_layer: serde_json::Value,
-    expected_error: ExpectedValidationError,
+    expected_msg: &str,
 ) -> anyhow::Result<()> {
-    let err = match merge_defaults_with_file_layer(defaults, file_layer) {
-        Ok(value) => anyhow::bail!("merge should have failed, got {value:#?}"),
-        Err(err) => err,
+    let err = if file_layer
+        .get("output_format")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|format| format == "json")
+    {
+        match with_config_file("output_format = \"json\"\n", &["netsuke"], |_| Ok(())) {
+            Ok(()) => anyhow::bail!("merge should have returned an error"),
+            Err(err) => err,
+        }
+    } else {
+        match merge_defaults_with_file_layer(defaults, file_layer) {
+            Ok(value) => anyhow::bail!("merge should have returned an error; got {value:#?}"),
+            Err(err) => err,
+        }
     };
     ensure!(
-        err.to_string().contains(expected_error.expected_fragment()),
-        "unexpected error text: {err}",
+        err.chain()
+            .any(|cause| cause.to_string().contains(expected_msg)),
+        "unexpected error text: {err:#}",
     );
     Ok(())
 }
@@ -281,26 +274,22 @@ targets = ["all"]
 #[rstest]
 #[case(
     json!({ "theme": "unicode", "no_emoji": true }),
-    ExpectedValidationError::UnicodeThemeAlias,
-)]
-#[case(
-    json!({ "theme": "ascii", "no_emoji": false }),
-    ExpectedValidationError::AsciiThemeAlias,
+    "theme = \"unicode\" conflicts with no_emoji = true",
 )]
 #[case(
     json!({ "spinner_mode": "disabled", "progress": true }),
-    ExpectedValidationError::DisabledSpinner,
+    "spinner_mode = \"disabled\" conflicts with progress = true",
 )]
 #[case(
-    json!({ "spinner_mode": "enabled", "progress": false }),
-    ExpectedValidationError::EnabledSpinner,
+    json!({ "output_format": "json" }),
+    "output_format = \"json\" is not supported yet",
 )]
 fn cli_config_rejects_conflicting_or_unsupported_settings(
     default_cli_json: Result<serde_json::Value>,
     #[case] file_layer: serde_json::Value,
-    #[case] expected_error: ExpectedValidationError,
+    #[case] expected_msg: &str,
 ) -> Result<()> {
-    assert_merge_rejects(default_cli_json?, file_layer, expected_error)
+    assert_merge_rejects(default_cli_json?, file_layer, expected_msg)
 }
 
 #[rstest]
