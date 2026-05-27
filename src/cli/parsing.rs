@@ -101,21 +101,42 @@ pub(super) fn parse_colour_policy(
     localizer: &dyn Localizer,
     s: &str,
 ) -> Result<ColourPolicy, String> {
-    parse_value_enum(localizer, s, keys::CLI_COLOUR_POLICY_INVALID, "value")
+    parse_value_enum(
+        localizer,
+        s,
+        ParseEnumSpec {
+            key: keys::CLI_COLOUR_POLICY_INVALID,
+            arg_name: "value",
+        },
+    )
 }
 
 pub(super) fn parse_spinner_mode(
     localizer: &dyn Localizer,
     s: &str,
 ) -> Result<SpinnerMode, String> {
-    parse_value_enum(localizer, s, keys::CLI_SPINNER_MODE_INVALID, "value")
+    parse_value_enum(
+        localizer,
+        s,
+        ParseEnumSpec {
+            key: keys::CLI_SPINNER_MODE_INVALID,
+            arg_name: "value",
+        },
+    )
 }
 
 pub(super) fn parse_output_format(
     localizer: &dyn Localizer,
     s: &str,
 ) -> Result<OutputFormat, String> {
-    parse_value_enum(localizer, s, keys::CLI_OUTPUT_FORMAT_INVALID, "value")
+    parse_value_enum(
+        localizer,
+        s,
+        ParseEnumSpec {
+            key: keys::CLI_OUTPUT_FORMAT_INVALID,
+            arg_name: "value",
+        },
+    )
 }
 
 pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePreference, String> {
@@ -131,19 +152,26 @@ pub(super) fn parse_theme(localizer: &dyn Localizer, s: &str) -> Result<ThemePre
     })
 }
 
-fn parse_value_enum<T>(
-    localizer: &dyn Localizer,
-    s: &str,
+/// Bundles the static localisation metadata needed by [`parse_value_enum`].
+#[derive(Copy, Clone)]
+struct ParseEnumSpec {
     key: &'static str,
     arg_name: &'static str,
-) -> Result<T, String>
+}
+
+fn parse_value_enum<T>(localizer: &dyn Localizer, s: &str, spec: ParseEnumSpec) -> Result<T, String>
 where
     T: ValueEnum,
 {
     T::from_str(s, true).map_err(|_| {
         let mut args = LocalizationArgs::default();
-        args.insert(arg_name, s.to_owned().into());
-        super::parser::validation_message(localizer, key, Some(&args), &format!("Invalid '{s}'"))
+        args.insert(spec.arg_name, s.to_owned().into());
+        super::parser::validation_message(
+            localizer,
+            spec.key,
+            Some(&args),
+            &format!("Invalid '{s}'"),
+        )
     })
 }
 
