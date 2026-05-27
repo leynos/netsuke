@@ -68,23 +68,17 @@ fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
 ) {
-    match explicit_config_path(cli) {
-        Some(path) => match load_layers_from_path(&path) {
-            Ok(layers) => {
-                for layer in layers {
-                    composer.push_layer(layer);
-                }
+    let layers_result = explicit_config_path(cli).map_or_else(
+        || collect_file_layers(cli.directory.as_deref()),
+        |path| load_layers_from_path(&path),
+    );
+    match layers_result {
+        Ok(layers) => {
+            for layer in layers {
+                composer.push_layer(layer);
             }
-            Err(err) => errors.push(err),
-        },
-        None => match collect_file_layers(cli.directory.as_deref()) {
-            Ok(layers) => {
-                for layer in layers {
-                    composer.push_layer(layer);
-                }
-            }
-            Err(err) => errors.push(err),
-        },
+        }
+        Err(err) => errors.push(err),
     }
 }
 
