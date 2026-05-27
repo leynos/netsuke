@@ -259,6 +259,13 @@ mod tests {
         assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
     }
 
+    fn check_canonicalize_cycle(input: &[&str], expected: &[&str]) {
+        let cycle: Vec<Utf8PathBuf> = input.iter().map(|&s| path(s)).collect();
+        let canonical = canonicalize_cycle(cycle);
+        let want: Vec<Utf8PathBuf> = expected.iter().map(|&s| path(s)).collect();
+        assert_eq!(canonical, want);
+    }
+
     #[test]
     fn find_cycle_identifies_mixed_input_and_implicit_dependency_cycle() {
         let mut targets = HashMap::new();
@@ -282,17 +289,11 @@ mod tests {
 
     #[test]
     fn canonicalize_cycle_rotates_smallest_node() {
-        let cycle = vec![path("c"), path("a"), path("b"), path("c")];
-        let canonical = canonicalize_cycle(cycle);
-        let expected = vec![path("a"), path("b"), path("c"), path("a")];
-        assert_eq!(canonical, expected);
+        check_canonicalize_cycle(&["c", "a", "b", "c"], &["a", "b", "c", "a"]);
     }
 
     #[test]
     fn canonicalize_cycle_handles_reverse_direction() {
-        let cycle = vec![path("c"), path("b"), path("a"), path("c")];
-        let canonical = canonicalize_cycle(cycle);
-        let expected = vec![path("a"), path("c"), path("b"), path("a")];
-        assert_eq!(canonical, expected);
+        check_canonicalize_cycle(&["c", "b", "a", "c"], &["a", "c", "b", "a"]);
     }
 }
