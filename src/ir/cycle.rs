@@ -30,6 +30,12 @@ enum VisitState {
     Visited,
 }
 
+/// The result of a cycle-detection pass over the target graph.
+///
+/// `cycle` is `Some` when a dependency cycle was found; the vec holds the
+/// cycle's nodes in canonical order, with the first node repeated as the
+/// last element.  `missing_dependencies` lists every `(dependent, dep)`
+/// pair where `dep` is referenced but absent from the target map.
 pub(crate) struct CycleDetectionReport {
     pub(crate) cycle: Option<Vec<Utf8PathBuf>>,
     pub(crate) missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
@@ -53,6 +59,10 @@ pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetecti
     }
 }
 
+/// Depth-first cycle detector that owns its traversal state.
+///
+/// Create with [`CycleDetector::new`] and drive detection with
+/// [`CycleDetector::detect`].
 struct CycleDetector<'targets> {
     targets: &'targets HashMap<Utf8PathBuf, BuildEdge>,
     stack: Vec<Utf8PathBuf>,
@@ -61,6 +71,8 @@ struct CycleDetector<'targets> {
 }
 
 impl CycleDetector<'_> {
+    /// Record `dep` as missing and return `true` if `dep` is absent from the
+    /// target map; return `false` if it is present.
     fn record_missing_dependency(&mut self, node: &Utf8PathBuf, dep: &Utf8PathBuf) -> bool {
         if self.targets.contains_key(dep) {
             return false;
@@ -70,6 +82,10 @@ impl CycleDetector<'_> {
         true
     }
 
+    /// Optionally record `dep` as missing, then visit it.
+    ///
+    /// Returns early with `None` when the dependency is absent from the target
+    /// map.
     fn visit_dependency(
         &mut self,
         node: &Utf8PathBuf,
@@ -84,6 +100,8 @@ impl CycleDetector<'_> {
 }
 
 impl CycleDetector<'_> {
+    /// Record `dep` as missing and return `true` if `dep` is absent from the
+    /// target map; return `false` if it is present.
     fn record_missing_dependency(&mut self, node: &Utf8PathBuf, dep: &Utf8PathBuf) -> bool {
         if self.targets.contains_key(dep) {
             return false;
@@ -93,6 +111,10 @@ impl CycleDetector<'_> {
         true
     }
 
+    /// Optionally record `dep` as missing, then visit it.
+    ///
+    /// Returns early with `None` when the dependency is absent from the target
+    /// map.
     fn visit_dependency(
         &mut self,
         node: &Utf8PathBuf,
@@ -106,6 +128,11 @@ impl CycleDetector<'_> {
     }
 }
 
+/// Rotate `cycle` so that the lexicographically smallest node appears
+/// first, then re-close it by appending the first node.
+///
+/// The input must contain at least two nodes; the first and last node are
+/// expected to be identical (the standard DFS cycle representation).
 fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
     debug_assert!(
         cycle.len() >= 2,
