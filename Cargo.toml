@@ -13,6 +13,10 @@ include = [
 ]
 license = "ISC"
 description = "A YAML-powered Ninja/Jinja hybrid build system."
+
+[package.metadata.ortho_config]
+root_type = "netsuke::cli::CliConfig"
+locales   = ["en-US", "es-ES"]
 [features]
 default = []
 legacy-digests = ["sha1", "md5"]
