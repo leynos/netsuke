@@ -177,11 +177,7 @@ impl CycleDetector<'_> {
     ///
     /// Returns early with `None` when the dependency is absent from the target
     /// map.
-    fn visit_dependency(
-        &mut self,
-        node: &Utf8Path,
-        dep: &Utf8Path,
-    ) -> Option<Vec<Utf8PathBuf>> {
+    fn visit_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) -> Option<Vec<Utf8PathBuf>> {
         if self.record_missing_dependency(node, dep) {
             return None;
         }
@@ -217,9 +213,6 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use rstest::rstest;
-
     fn path(name: &str) -> Utf8PathBuf {
         Utf8PathBuf::from(name)
     }
@@ -322,19 +315,6 @@ mod tests {
         );
     }
 
-    #[rstest]
-    #[case::explicit_dependency(MissingDepsCase {
-        primary_inputs: &["b"],
-        primary_implicit_deps: &[],
-        extra_targets: &[],
-        expected: &[("a", "b")],
-    })]
-    #[case::implicit_dependency(MissingDepsCase {
-        primary_inputs: &["b"],
-        primary_implicit_deps: &["missing"],
-        extra_targets: &[("b", &[], &[])],
-        expected: &[("a", "missing")],
-    })]
     fn cycle_detector_records_missing_dependencies(#[case] case: MissingDepsCase<'_>) {
         assert_missing_deps(&case);
     }
@@ -419,19 +399,20 @@ mod tests {
 
         /// Generate a non-empty list of distinct single-character node names.
         fn node_names(min: usize, max: usize) -> impl Strategy<Value = Vec<String>> {
-            proptest::collection::vec("[a-z]", min..=max).prop_filter(
-                "nodes must be unique",
-                |v| {
-                    let set: std::collections::HashSet<_> = v.iter().collect();
-                    set.len() == v.len()
-                },
-            )
+            proptest::collection::vec("[a-z]", min..=max).prop_filter("nodes must be unique", |v| {
+                let set: std::collections::HashSet<_> = v.iter().collect();
+                set.len() == v.len()
+            })
         }
 
         /// Build a closed cycle from `nodes`: [...nodes, nodes[0]].
         fn make_cycle(nodes: &[String]) -> Vec<camino::Utf8PathBuf> {
             let mut cycle: Vec<_> = nodes.iter().map(|s| path(s)).collect();
-            cycle.push(path(&nodes[0]));
+            cycle.push(path(
+                nodes
+                    .first()
+                    .expect("node_names generates at least two nodes"),
+            ));
             cycle
         }
 
@@ -463,8 +444,12 @@ mod tests {
             #[test]
             fn canonical_first_node_is_smallest(nodes in node_names(2, 10)) {
                 let canonical = canonicalize_cycle(make_cycle(&nodes));
-                let interior = &canonical[..canonical.len() - 1];
-                let first = &canonical[0];
+                let interior = canonical
+                    .get(..canonical.len().saturating_sub(1))
+                    .expect("canonicalize_cycle produces at least two nodes");
+                let first = canonical
+                    .first()
+                    .expect("canonicalize_cycle produces at least one node");
                 for node in interior {
                     prop_assert!(first <= node);
                 }
@@ -491,12 +476,11 @@ mod tests {
         let first = CycleDetector::find_cycle(&targets).expect("cycle");
         for _ in 1..100 {
             let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
-            if cycle != first {
-                panic!(
-                    "find_cycle returned inconsistent results across runs: \
-                     first={first:?}, got={cycle:?}",
-                );
-            }
+            assert!(
+                cycle == first,
+                "find_cycle returned inconsistent results across runs: \
+                 first={first:?}, got={cycle:?}",
+            );
         }
         // Probabilistic guard: 100 runs; `detect` sorts keys for stable traversal.
         tracing::info!("find_cycle returned the same cycle across 100 runs");
