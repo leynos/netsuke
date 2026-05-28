@@ -400,7 +400,6 @@ The cleaner model is:
 - `always`: When set to `true`, the target runs on every invocation regardless
   of timestamps or dependencies. The default value is `false`.
 
-
 ### 2.5 Generated Targets and Actions with `foreach`
 
 Large sets of similar outputs or setup actions can clutter a manifest when
@@ -625,7 +624,7 @@ data structures are crucial for the robustness and maintainability of Netsuke.
 
 ### 3.1 Crate Selection: `serde_saphyr`
 
-Netsuke now relies on `serde_saphyr` for YAML parsing and serialisation. The
+Netsuke now relies on `serde_saphyr` for YAML parsing and serialization. The
 crate wraps the actively maintained `saphyr` parser while preserving the
 familiar `serde_yaml`-style API: helpers such as `from_str`, `from_reader`, and
 `to_string` integrate cleanly with `serde` derives, and the error type exposes
@@ -1234,11 +1233,11 @@ Semantics honour platform conventions while enforcing predictable behaviour:
   bit. Empty `PATH` segments (leading, trailing, or `::`) map to the working
   directory when `cwd_mode` is `"auto"` or `"always"`.
 - On Windows, the lookup respects `PATHEXT` when the command lacks an
-  extension. Comparisons are case-insensitive, results normalise both slash
+  extension. Comparisons are case-insensitive, results normalize both slash
   styles, and `cwd_mode` defaults to skipping the working directory to avoid
   the platform’s surprise "search CWD first" rule. Opting in via `"always"`
   restores that behaviour.
-- Canonicalisation happens after discovery and only when requested so that
+- Canonicalization happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
 
 The resolver keeps a small LRU cache keyed by the command, a fingerprint of
@@ -1707,7 +1706,7 @@ use camino::Utf8PathBuf;
 /// The complete, static build graph.
 pub struct BuildGraph {
     /// A map of all unique actions (rules) in the build.
-    /// The key is a hash of a canonical JSON serialisation of the action's
+    /// The key is a hash of a canonical JSON serialization of the action's
     /// properties to enable deduplication.
     pub actions: HashMap<String, Action>,
 
@@ -1969,7 +1968,7 @@ manifest. No Ninja specific placeholders are stored in the IR to keep the
 representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
-  serialisation of their recipe, inputs, and outputs. Because commands embed
+  serialization of their recipe, inputs, and outputs. Because commands embed
   shell-quoted file paths, two targets share an identifier only when both the
   command text and file sets match exactly.
 - Multiple rule references in a single target are not yet supported. The IR
@@ -2239,7 +2238,7 @@ enrichment:
    `.with_context(|| "Failed to build the internal build graph from the manifest")?`
     .
 
-4. This process of propagation and contextualisation repeats as the error
+4. This process of propagation and contextualization repeats as the error
    bubbles up towards `main`. Use `anyhow::Context` to add detail, but never
    convert a `miette::Diagnostic` into a plain `anyhow::Error`--doing so would
    discard spans and help text.
@@ -2339,7 +2338,7 @@ given). /// This is the default subcommand. Build(BuildArgs),
 
     /// Remove build artefacts and intermediate files. Clean,
 
-    /// Display the build dependency graph in DOT format for visualisation.
+    /// Display the build dependency graph in DOT format for visualization.
     Graph,
 
     /// Write the Ninja manifest to `FILE` without invoking Ninja.
