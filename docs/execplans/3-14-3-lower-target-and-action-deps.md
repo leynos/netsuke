@@ -10,8 +10,9 @@ Status: COMPLETE
 ## Purpose / big picture
 
 Roadmap item `3.14.3` closes a long-standing gap in Netsuke's manifest contract.
-Today the Abstract Syntax Tree (AST) `Target` struct accepts a `deps` field, documentation already
-describes it as Ninja's implicit-dependency class, and the user guide shows
+Today the Abstract Syntax Tree (AST) `Target` struct accepts a `deps` field,
+documentation already describes it as Ninja's implicit-dependency class, and
+the user guide shows
 authors writing `deps: my_app` and `deps: [build/utils.h]`. None of that flows
 through. `Target.deps` is parsed, rendered through Jinja, and then silently
 discarded during Intermediate Representation (IR) generation. The generated
@@ -92,8 +93,9 @@ until the user explicitly approves the plan.
   `deserialization`.
 - Use `rstest` for unit and integration tests, with shared fixtures and
   parameterized cases where they remove duplication.
-- Use `rstest-bdd` (behaviour-driven development) for behavioural coverage that is externally observable
-  through generated `build.ninja` output. Reuse the manifest-then-Ninja
+- Use `rstest-bdd` (behaviour-driven development) for behavioural coverage
+  that is externally observable through generated `build.ninja` output.
+  Reuse the manifest-then-Ninja
   pipeline already exercised by `tests/features/ir.feature` and
   `tests/features/ninja.feature` rather than inventing a new harness.
 - If implementation introduces a new invariant over a range of inputs
@@ -281,7 +283,8 @@ Use these repository documents:
   including the IR/Ninja module boundary.
 - `docs/ortho-config-users-guide.md`: configuration layering and localized
   help support if any config or CLI surface changes are required.
-- `docs/rstest-bdd-users-guide.md`: behaviour-driven development feature and step guidance.
+- `docs/rstest-bdd-users-guide.md`: behaviour-driven development feature and
+  step guidance.
 - `docs/rust-testing-with-rstest-fixtures.md`: fixture and parameterization
   patterns for unit tests.
 - `docs/rust-doctest-dry-guide.md`: doctest guidance because the
