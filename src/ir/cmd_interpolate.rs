@@ -154,12 +154,20 @@ fn try_match_token<'a>(
     token: &str,
     replacement: &'a str,
 ) -> Option<(&'a str, usize)> {
-    let token_chars: Vec<char> = token.chars().collect();
-    if chars.get(pos..pos + token_chars.len()) == Some(token_chars.as_slice()) {
-        Some((replacement, token_chars.len()))
-    } else {
-        None
+    let token_len = token.chars().count();
+    if pos + token_len > chars.len() {
+        return None;
     }
+
+    let mut matched_len = 0;
+    for (i, token_ch) in token.chars().enumerate() {
+        if chars.get(pos + i) != Some(&token_ch) {
+            return None;
+        }
+        matched_len += 1;
+    }
+
+    Some((replacement, matched_len))
 }
 
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {

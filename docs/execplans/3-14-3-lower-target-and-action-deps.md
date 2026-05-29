@@ -92,7 +92,7 @@ until the user explicitly approves the plan.
   `deserialization`.
 - Use `rstest` for unit and integration tests, with shared fixtures and
   parameterized cases where they remove duplication.
-- Use `rstest-bdd` for behavioural coverage that is externally observable
+- Use `rstest-bdd` (behaviour-driven development) for behavioural coverage that is externally observable
   through generated `build.ninja` output. Reuse the manifest-then-Ninja
   pipeline already exercised by `tests/features/ir.feature` and
   `tests/features/ninja.feature` rather than inventing a new harness.
@@ -281,7 +281,7 @@ Use these repository documents:
   including the IR/Ninja module boundary.
 - `docs/ortho-config-users-guide.md`: configuration layering and localized
   help support if any config or CLI surface changes are required.
-- `docs/rstest-bdd-users-guide.md`: behaviour-driven development (BDD) feature and step guidance.
+- `docs/rstest-bdd-users-guide.md`: behaviour-driven development feature and step guidance.
 - `docs/rust-testing-with-rstest-fixtures.md`: fixture and parameterization
   patterns for unit tests.
 - `docs/rust-doctest-dry-guide.md`: doctest guidance because the
