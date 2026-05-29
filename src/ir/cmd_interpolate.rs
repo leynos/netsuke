@@ -131,22 +131,42 @@ fn find_substitution<'a>(
     ins: &'a str,
     outs: &'a str,
 ) -> Option<(&'a str, usize)> {
-    try_match_placeholder(chars, pos, &['i', 'n'])
-        .map(|skip| (ins, skip))
-        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip)))
+    (chars
+        .get(pos)
+        .is_some_and(|ch| *ch == '$')
+        .then_some(())
+        .and_then(|()| {
+            try_match_placeholder(chars, pos, &['i', 'n'])
+                .map(|skip| (ins, skip))
+                .or_else(|| {
+                    try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip))
+                })
+        }))
+    .or_else(|| {
+        try_match_token(chars, pos, "__NETSUKE_INS_PLACEHOLDER__", ins)
+            .or_else(|| try_match_token(chars, pos, "__NETSUKE_OUTS_PLACEHOLDER__", outs))
+    })
+}
+
+fn try_match_token<'a>(
+    chars: &[char],
+    pos: usize,
+    token: &str,
+    replacement: &'a str,
+) -> Option<(&'a str, usize)> {
+    let token_chars: Vec<char> = token.chars().collect();
+    if chars.get(pos..pos + token_chars.len()) == Some(token_chars.as_slice()) {
+        Some((replacement, token_chars.len()))
+    } else {
+        None
+    }
 }
 
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
     let ins_joined = ins.join(" ");
     let outs_joined = outs.join(" ");
-    // Stage 1: replace legacy template placeholders before any backtick-aware parsing.
-    // `{{ ins }}` and `{{ outs }}` are interpolated first into a single string,
-    // then Stage 2 performs backtick-aware `$in` / `$out` substitution.
-    let placeholder_template = template
-        .replace("{{ ins }}", &ins_joined)
-        .replace("{{ outs }}", &outs_joined);
-    let chars: Vec<char> = placeholder_template.chars().collect();
-    let mut out = String::with_capacity(placeholder_template.len());
+    let chars: Vec<char> = template.chars().collect();
+    let mut out = String::with_capacity(template.len());
     let mut in_backticks = false;
     let mut i = 0;
     while let Some(&ch) = chars.get(i) {
@@ -163,10 +183,7 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
             continue;
         }
 
-        if ch == '$'
-            && let Some((replacement, skip)) =
-                find_substitution(&chars, i, &ins_joined, &outs_joined)
-        {
+        if let Some((replacement, skip)) = find_substitution(&chars, i, &ins_joined, &outs_joined) {
             out.push_str(replacement);
             i += skip;
         } else {
@@ -215,5 +232,24 @@ mod tests {
         let command =
             interpolate_command("echo `cat $in` && echo $out", &ins, &outs).expect("command");
         assert_eq!(command, "echo `cat $in` && echo out");
+    }
+
+    #[test]
+    fn interpolate_command_preserves_braced_placeholders_in_backticks() {
+        let command =
+            interpolate_command("echo `{{ ins }}` $out", &[], &[Utf8PathBuf::from("out")])
+                .expect("command");
+        assert_eq!(command, "echo `{{ ins }}` out");
+    }
+
+    #[test]
+    fn interpolate_command_replaces_template_placeholders() {
+        let command = interpolate_command(
+            "__NETSUKE_INS_PLACEHOLDER__ $out __NETSUKE_OUTS_PLACEHOLDER__",
+            &[Utf8PathBuf::from("in")],
+            &[Utf8PathBuf::from("out")],
+        )
+        .expect("command");
+        assert_eq!(command, "in out out");
     }
 }

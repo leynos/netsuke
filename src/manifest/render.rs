@@ -102,8 +102,9 @@ fn render_str_with(
 /// entries exist before invoking `MiniJinja` rendering.
 ///
 /// If `ins` or `outs` are absent, they are populated with the placeholders
-/// `{{ ins }}` and `{{ outs }}` so downstream logic can rely on those variables
-/// being present before later `Ninja` substitution. Rendering is performed by
+/// `__NETSUKE_INS_PLACEHOLDER__` and `__NETSUKE_OUTS_PLACEHOLDER__` so
+/// downstream logic can rely on those variables being present before later
+/// `Ninja` substitution. Rendering is performed by
 /// calling `render_str_with`.
 fn render_recipe_str_with(
     env: &Environment,
@@ -114,10 +115,10 @@ fn render_recipe_str_with(
     let mut recipe_ctx = ctx.clone();
     recipe_ctx
         .entry("ins".into())
-        .or_insert_with(|| ManifestValue::String("{{ ins }}".into()));
+        .or_insert_with(|| ManifestValue::String("__NETSUKE_INS_PLACEHOLDER__".into()));
     recipe_ctx
         .entry("outs".into())
-        .or_insert_with(|| ManifestValue::String("{{ outs }}".into()));
+        .or_insert_with(|| ManifestValue::String("__NETSUKE_OUTS_PLACEHOLDER__".into()));
     render_str_with(env, tpl, &recipe_ctx, what)
 }
 
