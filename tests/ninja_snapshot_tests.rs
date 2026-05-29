@@ -139,6 +139,11 @@ fn implicit_deps_manifest_ninja_snapshot() -> Result<()> {
     let ir = BuildGraph::from_manifest(&manifest)?;
     let ninja_content = ninja_gen::generate(&ir)?;
 
+    ensure!(
+        ninja_content.contains(" | "),
+        "expected implicit deps (Ninja `|` syntax) in output:\n{ninja_content}"
+    );
+
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),
