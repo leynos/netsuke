@@ -139,6 +139,9 @@ fn find_substitution<'a>(
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
     let ins_joined = ins.join(" ");
     let outs_joined = outs.join(" ");
+    // Stage 1: replace legacy template placeholders before any backtick-aware parsing.
+    // `{{ ins }}` and `{{ outs }}` are interpolated first into a single string,
+    // then Stage 2 performs backtick-aware `$in` / `$out` substitution.
     let placeholder_template = template
         .replace("{{ ins }}", &ins_joined)
         .replace("{{ outs }}", &outs_joined);

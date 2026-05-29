@@ -98,6 +98,13 @@ fn render_str_with(
     env.render_str(tpl, ctx).with_context(what)
 }
 
+/// Clones the supplied template context (`Vars`) and guarantees `ins` and `outs`
+/// entries exist before invoking `MiniJinja` rendering.
+///
+/// If `ins` or `outs` are absent, they are populated with the placeholders
+/// `{{ ins }}` and `{{ outs }}` so downstream logic can rely on those variables
+/// being present before later `Ninja` substitution. Rendering is performed by
+/// calling `render_str_with`.
 fn render_recipe_str_with(
     env: &Environment,
     tpl: &str,
