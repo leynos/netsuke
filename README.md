@@ -81,7 +81,8 @@ Targets are things you want to build.
 
 Targets can also define:
 
-- `deps`: explicit dependencies
+- `deps`: implicit dependencies — trigger rebuilds but are not passed to
+  `$in`/`{{ ins }}`; map to Ninja `|`
 - `order_only_deps`: e.g. `mkdir -p build`
 - `vars`: per-target variables
 
