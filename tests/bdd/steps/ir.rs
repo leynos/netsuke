@@ -1,4 +1,10 @@
 //! Step definitions for `BuildGraph` (IR) scenarios.
+//!
+//! Implements `given`/`when`/`then` steps that drive IR generation from YAML
+//! manifests and assert properties of the resulting [`netsuke::ir::BuildGraph`].
+//! Includes helpers for asserting `inputs` and `implicit_deps` path lists on
+//! named target edges, used by the BDD (behaviour-driven development) feature
+//! files under `tests/features/`.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
 use crate::bdd::helpers::parse_store::store_parse_outcome;

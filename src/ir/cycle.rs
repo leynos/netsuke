@@ -1,4 +1,10 @@
 //! Cycle detection utilities for the IR target graph.
+//!
+//! Implements [`CycleDetector`], which performs a depth-first traversal of
+//! [`BuildEdge`] `inputs` and `implicit_deps` to detect circular dependencies
+//! and record missing dependency references.  `order_only_deps` are
+//! intentionally excluded from traversal.  Consumed by
+//! [`super::from_manifest`] after the full target map is constructed.
 
 use std::collections::HashMap;
 

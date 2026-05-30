@@ -1,4 +1,9 @@
 //! Command interpolation utilities for IR actions.
+//!
+//! Provides [`interpolate_command`], which substitutes `$in`, `$out`,
+//! `__NETSUKE_INS_PLACEHOLDER__`, and `__NETSUKE_OUTS_PLACEHOLDER__` tokens
+//! in recipe command strings while preserving backtick-delimited regions from
+//! interpolation.  Called by [`super::from_manifest`] during IR lowering.
 
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;

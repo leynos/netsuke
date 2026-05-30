@@ -1,4 +1,11 @@
 //! Tests for generating `BuildGraph` from a manifest.
+//!
+//! Validates the full manifest-to-IR pipeline: that `sources` populate
+//! `edge.inputs`, that `deps` populate `edge.implicit_deps` (and are excluded
+//! from `edge.inputs`), that recipe command interpolation excludes implicit
+//! deps from `$in`/`{{ ins }}`, and that `phony` and error-path cases are
+//! handled correctly.  Uses `rstest` parameterisation and reads fixture files
+//! from `tests/data/`.
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;

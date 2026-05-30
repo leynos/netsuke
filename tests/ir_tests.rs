@@ -1,4 +1,9 @@
 //! Unit tests for IR structures.
+//!
+//! Directly constructs [`netsuke::ir::BuildGraph`], [`BuildEdge`], and
+//! [`Action`] values and asserts their default state, field semantics, and
+//! behaviour under duplicate-target insertion.  Does not exercise manifest
+//! parsing or Ninja generation.
 
 use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;

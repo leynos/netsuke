@@ -1,4 +1,10 @@
-//! Renders manifest templates using `MiniJinja` before execution.
+//! Renders manifest templates using `MiniJinja` before IR lowering.
+//!
+//! Provides [`render_manifest`], which evaluates Jinja2-style template
+//! expressions in target and rule fields.  [`render_recipe_str_with`] ensures
+//! `ins`/`outs` context keys are always present, inserting
+//! `__NETSUKE_INS_PLACEHOLDER__`/`__NETSUKE_OUTS_PLACEHOLDER__` when absent
+//! so that [`crate::ir::cmd_interpolate`] can substitute them later.
 use super::ManifestValue;
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result};

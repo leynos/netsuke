@@ -1,4 +1,10 @@
 //! Manifest-to-IR conversion helpers.
+//!
+//! Implements [`BuildGraph::from_manifest`], which lowers a parsed
+//! [`crate::ast::NetsukeManifest`] into a [`BuildGraph`].  Delegates
+//! template rendering to [`crate::manifest::render`], command interpolation
+//! to [`super::cmd_interpolate`], and cycle/missing-dependency detection to
+//! [`super::cycle`].
 
 use std::collections::HashMap;
 use std::sync::Arc;
