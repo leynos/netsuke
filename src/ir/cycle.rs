@@ -118,10 +118,10 @@ impl CycleDetector<'_> {
             return false;
         }
 
-        tracing::debug!(
+        tracing::info!(
             missing = %dep,
             dependent = %node,
-            "skipping dependency missing from targets during cycle detection",
+            "dependency not found among build targets; treating as external",
         );
         self.missing_dependencies.push((node.clone(), dep.clone()));
         true
