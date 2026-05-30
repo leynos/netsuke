@@ -196,7 +196,7 @@ targets:
   - name: build/utils.o         # Output file(s). Can be a string or list.
     rule: compile               # Rule to use (mutually exclusive with command/script)
     sources: src/utils.c        # Input file(s). String or list.
-    deps:                       # Explicit dependencies
+    deps:                       # Implicit dependencies
       # targets built before this one
       - build/utils.h
     vars:                       # Target-local variables, override globals
@@ -205,7 +205,7 @@ targets:
   # Example 2: Linking an executable using an inline command
   - name: my_app
     command: "{{ cc }} build/main.o build/utils.o -o my_app"
-    sources:                    # Implicit dependencies
+    sources:                    # Explicit recipe inputs
       # derived from command/rule usage
       - build/main.o
       - build/utils.o
