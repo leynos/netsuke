@@ -1,4 +1,9 @@
 //! Unit tests for IR structures.
+//!
+//! Directly constructs [`netsuke::ir::BuildGraph`], [`BuildEdge`], and
+//! [`Action`] values and asserts their default state, field semantics, and
+//! behaviour under duplicate-target insertion.  Does not exercise manifest
+//! parsing or Ninja generation.
 
 use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;
@@ -28,6 +33,7 @@ fn create_action_and_edge() {
     let edge = BuildEdge {
         action_id: "id".into(),
         inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -85,6 +91,7 @@ fn build_graph_duplicate_targets() {
     let edge1 = BuildEdge {
         action_id: "a".into(),
         inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -94,6 +101,7 @@ fn build_graph_duplicate_targets() {
     let edge2 = BuildEdge {
         action_id: "a".into(),
         inputs: vec![Utf8PathBuf::from("in")],
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

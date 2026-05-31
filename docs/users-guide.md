@@ -211,8 +211,8 @@ targets:
   - name: build/utils.o         # Output file(s). Can be a string or list.
     rule: compile               # Rule to use (mutually exclusive with command/script)
     sources: src/utils.c        # Input file(s). String or list.
-    deps:                       # Explicit dependencies
-      # targets built before this one
+    deps:                       # Implicit dependencies: trigger rebuilds but
+      # not passed to $in/{{ ins }}
       - build/utils.h
     vars:                       # Target-local variables, override globals
       cflags: "-O0 -g"
@@ -220,8 +220,8 @@ targets:
   # Example 2: Linking an executable using an inline command
   - name: my_app
     command: "{{ cc }} build/main.o build/utils.o -o my_app"
-    sources:                    # Implicit dependencies
-      # derived from command/rule usage
+    sources:                    # Explicit recipe inputs: passed to
+      # $in/{{ ins }} and trigger rebuilds
       - build/main.o
       - build/utils.o
     order_only_deps:            # Dependencies built before, but changes
@@ -246,14 +246,20 @@ targets:
 - `recipe`: How to build the target. Defined by one of `rule`, `command`, or
   `script` (mutually exclusive).
 
-- `sources`: Input file path(s) (`StringOrList`). If a source matches another
-  target's `name`, an implicit dependency is created.
+- `sources`: Input file path(s) (`StringOrList`). Sources are explicit recipe
+  inputs: they are passed to `$in` and `{{ ins }}` and trigger rebuilds when
+  changed.
 
-- `deps` (Optional): Explicit target dependencies (`StringOrList`). Changes
-  trigger rebuilds.
+- `deps` (Optional): Implicit target dependencies (`StringOrList`). Changes
+  trigger rebuilds, but these paths are not passed to `$in` or `{{ ins }}`.
+  Maps to Ninja `|`.
 
 - `order_only_deps` (Optional): Dependencies that must run first but whose
   changes don't trigger rebuilds (`StringOrList`). Maps to Ninja `||`.
+
+Cycle detection traverses `sources` and `deps`, because both classes affect
+the build graph and rebuild freshness. `order_only_deps` only enforce build
+ordering and do not participate in Netsuke's cycle detection.
 
 - `vars` (Optional): Target-specific variables that override global `vars`.
 

@@ -28,3 +28,15 @@ Feature: Ninja file generation
     And the ninja file is generated
     Then ninja generation fails mentioning the removed action id
 
+  Scenario: Target and action deps become implicit Ninja dependencies
+    When the manifest file "tests/data/implicit_deps.yml" is compiled to IR
+    Then the graph target "out/app" has inputs "src/main.c"
+    And the graph target "out/app" has implicit deps "include/config.h, generated/stamp"
+    And the graph target "regenerate" has inputs ""
+    And the graph target "regenerate" has implicit deps "schemas/user.yml, tools/generator"
+    When the ninja file is generated
+    Then the ninja file contains "build out/app: "
+    And the ninja file contains " src/main.c | include/config.h generated/stamp"
+    And the ninja file contains "build regenerate: "
+    And the ninja file contains " | schemas/user.yml tools/generator"
+    And the ninja file contains "command = echo src/main.c src/main.c > out/app"

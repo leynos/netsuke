@@ -1,0 +1,14 @@
+---
+source: tests/ninja_snapshot_tests.rs
+assertion_line: 149
+expression: ninja_content
+---
+rule 12b0c24527a7d0c0aa178eecbf0b5b31c05b745b89b21d8cbdf1b159065e166f
+  command = echo src/main.c src/main.c > out/app
+
+rule 637c69a545fa49c8f91fad7bf1be9221c433100da96a8cac5fcdab9d9902a6c6
+  command = echo regenerate
+
+build out/app: 12b0c24527a7d0c0aa178eecbf0b5b31c05b745b89b21d8cbdf1b159065e166f src/main.c | include/config.h generated/stamp
+
+build regenerate: 637c69a545fa49c8f91fad7bf1be9221c433100da96a8cac5fcdab9d9902a6c6 | schemas/user.yml tools/generator

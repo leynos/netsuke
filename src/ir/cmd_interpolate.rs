@@ -1,4 +1,9 @@
 //! Command interpolation utilities for IR actions.
+//!
+//! Provides [`interpolate_command`], which substitutes `$in`, `$out`,
+//! `__NETSUKE_INS_PLACEHOLDER__`, and `__NETSUKE_OUTS_PLACEHOLDER__` tokens
+//! in recipe command strings while preserving backtick-delimited regions from
+//! interpolation.  Called by [`super::from_manifest`] during IR lowering.
 
 use crate::localization::{self, keys};
 use camino::Utf8PathBuf;
@@ -131,15 +136,49 @@ fn find_substitution<'a>(
     ins: &'a str,
     outs: &'a str,
 ) -> Option<(&'a str, usize)> {
-    try_match_placeholder(chars, pos, &['i', 'n'])
-        .map(|skip| (ins, skip))
-        .or_else(|| try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip)))
+    (chars
+        .get(pos)
+        .is_some_and(|ch| *ch == '$')
+        .then_some(())
+        .and_then(|()| {
+            try_match_placeholder(chars, pos, &['i', 'n'])
+                .map(|skip| (ins, skip))
+                .or_else(|| {
+                    try_match_placeholder(chars, pos, &['o', 'u', 't']).map(|skip| (outs, skip))
+                })
+        }))
+    .or_else(|| {
+        try_match_token(chars, pos, "__NETSUKE_INS_PLACEHOLDER__", ins)
+            .or_else(|| try_match_token(chars, pos, "__NETSUKE_OUTS_PLACEHOLDER__", outs))
+    })
+}
+
+fn try_match_token<'a>(
+    chars: &[char],
+    pos: usize,
+    token: &str,
+    replacement: &'a str,
+) -> Option<(&'a str, usize)> {
+    let token_len = token.chars().count();
+    if pos + token_len > chars.len() {
+        return None;
+    }
+
+    let mut matched_len = 0;
+    for (i, token_ch) in token.chars().enumerate() {
+        if chars.get(pos + i) != Some(&token_ch) {
+            return None;
+        }
+        matched_len += 1;
+    }
+
+    Some((replacement, matched_len))
 }
 
 fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
-    let chars: Vec<char> = template.chars().collect();
     let ins_joined = ins.join(" ");
     let outs_joined = outs.join(" ");
+    let chars: Vec<char> = template.chars().collect();
     let mut out = String::with_capacity(template.len());
     let mut in_backticks = false;
     let mut i = 0;
@@ -157,10 +196,7 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
             continue;
         }
 
-        if ch == '$'
-            && let Some((replacement, skip)) =
-                find_substitution(&chars, i, &ins_joined, &outs_joined)
-        {
+        if let Some((replacement, skip)) = find_substitution(&chars, i, &ins_joined, &outs_joined) {
             out.push_str(replacement);
             i += skip;
         } else {
@@ -209,5 +245,24 @@ mod tests {
         let command =
             interpolate_command("echo `cat $in` && echo $out", &ins, &outs).expect("command");
         assert_eq!(command, "echo `cat $in` && echo out");
+    }
+
+    #[test]
+    fn interpolate_command_preserves_braced_placeholders_in_backticks() {
+        let command =
+            interpolate_command("echo `{{ ins }}` $out", &[], &[Utf8PathBuf::from("out")])
+                .expect("command");
+        assert_eq!(command, "echo `{{ ins }}` out");
+    }
+
+    #[test]
+    fn interpolate_command_replaces_template_placeholders() {
+        let command = interpolate_command(
+            "__NETSUKE_INS_PLACEHOLDER__ $out __NETSUKE_OUTS_PLACEHOLDER__",
+            &[Utf8PathBuf::from("in")],
+            &[Utf8PathBuf::from("out")],
+        )
+        .expect("command");
+        assert_eq!(command, "in out out");
     }
 }

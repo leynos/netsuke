@@ -2,7 +2,9 @@
 //!
 //! This module converts a [`crate::ir::BuildGraph`] into the textual
 //! representation expected by the Ninja build system. The generator sorts
-//! actions and edges to ensure deterministic output for snapshot tests.
+//! actions and edges to ensure deterministic output for snapshot tests. The
+//! generated Ninja file is written by the runner and manifest subcommands for
+//! downstream execution by the Ninja build system.
 
 use crate::ast::Recipe;
 use crate::ir::{BuildEdge, BuildGraph};
@@ -75,6 +77,7 @@ macro_rules! write_flag {
 /// });
 /// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
+///     implicit_deps: Vec::new(),
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
@@ -112,6 +115,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// });
 /// graph.targets.insert(Utf8PathBuf::from("out"), BuildEdge {
 ///     action_id: "a".into(), inputs: Vec::new(),
+///     implicit_deps: Vec::new(),
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
 ///     phony: false, always: false
@@ -288,6 +292,9 @@ impl Display for DisplayEdge<'_> {
         if !self.edge.inputs.is_empty() {
             write!(f, " {}", join(&self.edge.inputs))?;
         }
+        if !self.edge.implicit_deps.is_empty() {
+            write!(f, " | {}", join(&self.edge.implicit_deps))?;
+        }
         if !self.edge.order_only_deps.is_empty() {
             write!(f, " || {}", join(&self.edge.order_only_deps))?;
         }
@@ -319,6 +326,7 @@ mod tests {
         let edge = BuildEdge {
             action_id: "a".into(),
             inputs: vec![Utf8PathBuf::from("in")],
+            implicit_deps: Vec::new(),
             explicit_outputs: vec![Utf8PathBuf::from("out")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
@@ -360,6 +368,7 @@ mod tests {
         let edge = BuildEdge {
             action_id: "a".into(),
             inputs: Vec::new(),
+            implicit_deps: Vec::new(),
             explicit_outputs: vec![Utf8PathBuf::from("out")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),

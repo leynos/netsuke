@@ -1,4 +1,10 @@
 //! Manifest-to-IR conversion helpers.
+//!
+//! Implements [`BuildGraph::from_manifest`], which lowers a parsed
+//! [`crate::ast::NetsukeManifest`] into a [`BuildGraph`].  Delegates
+//! template rendering to [`crate::manifest::render`], command interpolation
+//! to [`super::cmd_interpolate`], and cycle/missing-dependency detection to
+//! [`super::cycle`].
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -59,6 +65,12 @@ impl BuildGraph {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
             let inputs = to_paths(&target.sources);
+            let implicit_deps = to_paths(&target.deps);
+            tracing::debug!(
+                target = ?target.name,
+                implicit_deps_count = implicit_deps.len(),
+                "populating implicit dependencies for target",
+            );
             let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
@@ -90,6 +102,7 @@ impl BuildGraph {
             let edge = BuildEdge {
                 action_id,
                 inputs: inputs.clone(),
+                implicit_deps,
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
@@ -120,6 +133,15 @@ impl BuildGraph {
             cycle,
             missing_dependencies,
         } = cycle::analyse(&self.targets);
+
+        for (dependent, missing) in &missing_dependencies {
+            tracing::info!(
+                dependent = %dependent,
+                missing = %missing,
+                "unresolved dependency: not a build target; assuming it is an external file",
+            );
+        }
+
         if let Some(detected_cycle) = cycle {
             let message = localization::message(keys::IR_CIRCULAR_DEPENDENCY)
                 .with_arg("cycle", format!("{detected_cycle:?}"));
@@ -129,6 +151,11 @@ impl BuildGraph {
                 message,
             });
         }
+
+        tracing::info!(
+            count = missing_dependencies.len(),
+            "cycle detection complete; unresolved dependencies treated as external files",
+        );
         Ok(())
     }
 }

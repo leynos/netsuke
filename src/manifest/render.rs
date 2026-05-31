@@ -1,4 +1,10 @@
-//! Renders manifest templates using `MiniJinja` before execution.
+//! Renders manifest templates using `MiniJinja` before IR lowering.
+//!
+//! Provides [`render_manifest`], which evaluates Jinja2-style template
+//! expressions in target and rule fields.  [`render_recipe_str_with`] ensures
+//! `ins`/`outs` context keys are always present, inserting
+//! `__NETSUKE_INS_PLACEHOLDER__`/`__NETSUKE_OUTS_PLACEHOLDER__` when absent
+//! so that [`crate::ir::cmd_interpolate`] can substitute them later.
 use super::ManifestValue;
 use crate::ast::{NetsukeManifest, Recipe, StringOrList, Target, Vars};
 use anyhow::{Context, Result};
@@ -34,7 +40,7 @@ fn render_rule(rule: &mut crate::ast::Rule, env: &Environment, vars: &Vars) -> R
     render_string_or_list(&mut rule.deps, env, vars)?;
     match &mut rule.recipe {
         Recipe::Command { command } => {
-            *command = render_str_with(env, command, vars, || "render rule command".into())?;
+            *command = render_recipe_str_with(env, command, vars, || "render rule command".into())?;
         }
         Recipe::Script { script } => {
             *script = render_str_with(env, script, vars, || "render rule script".into())?;
@@ -52,7 +58,7 @@ fn render_target(target: &mut Target, env: &Environment) -> Result<()> {
     render_string_or_list(&mut target.order_only_deps, env, &target.vars)?;
     match &mut target.recipe {
         Recipe::Command { command } => {
-            *command = render_str_with(env, command, &target.vars, || {
+            *command = render_recipe_str_with(env, command, &target.vars, || {
                 "render target command".into()
             })?;
         }
@@ -96,6 +102,30 @@ fn render_str_with(
     what: impl FnOnce() -> String,
 ) -> Result<String> {
     env.render_str(tpl, ctx).with_context(what)
+}
+
+/// Clones the supplied template context (`Vars`) and guarantees `ins` and `outs`
+/// entries exist before invoking `MiniJinja` rendering.
+///
+/// If `ins` or `outs` are absent, they are populated with the placeholders
+/// `__NETSUKE_INS_PLACEHOLDER__` and `__NETSUKE_OUTS_PLACEHOLDER__` so
+/// downstream logic can rely on those variables being present before later
+/// `Ninja` substitution. Rendering is performed by
+/// calling `render_str_with`.
+fn render_recipe_str_with(
+    env: &Environment,
+    tpl: &str,
+    ctx: &Vars,
+    what: impl FnOnce() -> String,
+) -> Result<String> {
+    let mut recipe_ctx = ctx.clone();
+    recipe_ctx
+        .entry("ins".into())
+        .or_insert_with(|| ManifestValue::String("__NETSUKE_INS_PLACEHOLDER__".into()));
+    recipe_ctx
+        .entry("outs".into())
+        .or_insert_with(|| ManifestValue::String("__NETSUKE_OUTS_PLACEHOLDER__".into()));
+    render_str_with(env, tpl, &recipe_ctx, what)
 }
 
 #[cfg(test)]

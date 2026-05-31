@@ -159,14 +159,14 @@ and agents.
     expansion.
   - [x] Support complementary branches such as `when: command_available(...)`
     and `when: not command_available(...)`.
-- [ ] 3.14.3. Lower target and action `deps` into implicit IR and Ninja
+- [x] 3.14.3. Lower target and action `deps` into implicit IR and Ninja
   dependency edges. Requires 1.2.2 and 1.3.2. See
   [netsuke-design.md §§2.4 and 5.3](netsuke-design.md).
-  - [ ] Keep `sources` in the explicit recipe-input class used for `ins` and
+  - [x] Keep `sources` in the explicit recipe-input class used for `ins` and
     `$in`.
-  - [ ] Add a separate implicit dependency class for `deps` so they affect
+  - [x] Add a separate implicit dependency class for `deps` so they affect
     ordering and rebuild decisions without appearing in recipe arguments.
-  - [ ] Align cycle detection, generated Ninja output, and user-facing
+  - [x] Align cycle detection, generated Ninja output, and user-facing
     dependency documentation.
 - [ ] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
   executable probe. Requires 3.5.1. See

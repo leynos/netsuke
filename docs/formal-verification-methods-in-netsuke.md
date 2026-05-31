@@ -236,16 +236,12 @@ that affects manifest authoring. The project documentation should state whether:
 
 ### Cycle-participation contract
 
-`BuildEdge` records explicit inputs, explicit outputs, implicit outputs, and
-order-only dependencies, but the current cycle detector walks `edge.inputs`
-only.[^5][^7] This contract should be documented in the user guide under the
-dependency and build-graph semantics chapter, as it defines the behaviour users
-observe when circular dependencies are detected. Before proofs are written, the
-intended scope of cycle detection should be recorded explicitly:
-
-- explicit inputs only,
-- explicit inputs plus order-only dependencies, or
-- explicit, implicit, and order-only dependencies together.
+`BuildEdge` records explicit inputs, implicit dependencies, explicit outputs,
+implicit outputs, and order-only dependencies.[^5][^7] Cycle detection walks
+explicit inputs and implicit dependencies: in manifest terms, `sources` and
+`deps` participate. Order-only dependencies do not participate, because they
+only enforce build ordering and do not affect rebuild freshness. The user guide
+documents the same contract in its target dependency-field section.
 
 ### Determinism contract
 

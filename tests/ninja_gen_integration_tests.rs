@@ -1,196 +1,24 @@
-//! Unit tests for Ninja file generation.
+//! Integration and error-path tests for [`netsuke::ninja_gen`].
 //!
-//! Snapshot tests use `insta` to ensure the emitted manifest remains stable.
-//! Tests cover various scenarios including phony targets, standard builds with
-//! multiple inputs and outputs, complex dependency relationships, and edge
-//! cases like empty build graphs.
+//! Exercises [`netsuke::ninja_gen::generate`] and
+//! [`netsuke::ninja_gen::generate_into`] error handling alongside scenarios
+//! that drive a real `ninja` binary against generated files.
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 use rstest::{fixture, rstest};
 use std::process::Command;
 use tempfile::TempDir;
-use test_support::ninja;
-
-/// Define how the integration test should assert Ninja's behaviour.
-#[derive(Debug)]
-enum AssertionType {
-    FileContent(String),
-    FileExists,
-    StatusSuccess,
-}
-
-struct NinjaIntegrationCase {
-    action: Action,
-    edge: BuildEdge,
-    target_name: Utf8PathBuf,
-    ninja_args: Vec<&'static str>,
-    assertion: AssertionType,
-}
+use test_support::ninja_gen::{self, AssertionType, NinjaIntegrationCase};
 
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
 #[fixture]
 fn ninja_integration_setup() -> Option<TempDir> {
-    match ninja::ninja_integration_workspace() {
-        Ok(dir) => Some(dir),
-        Err(err) => {
-            tracing::warn!("skipping test: {err}");
-            None
-        }
-    }
-}
-
-#[rstest]
-#[case::phony_target_runs_command(
-    Action {
-        recipe: Recipe::Command { command: "true".into() },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    },
-    BuildEdge {
-        action_id: "a".into(),
-        inputs: vec![Utf8PathBuf::from("in")],
-        explicit_outputs: vec![Utf8PathBuf::from("out")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: true,
-        always: false,
-    },
-    Utf8PathBuf::from("out"),
-    concat!(
-        "rule a\n",
-        "  command = true\n\n",
-        "build out: a in\n\n",
-    ),
-)]
-#[case::standard_build(
-    Action {
-        recipe: Recipe::Command { command: "cc -c 'a.c' 'b.c' -o 'ab.o'".into() },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    },
-    BuildEdge {
-        action_id: "compile".into(),
-        inputs: vec![Utf8PathBuf::from("a.c"), Utf8PathBuf::from("b.c")],
-        explicit_outputs: vec![Utf8PathBuf::from("ab.o")],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    },
-    Utf8PathBuf::from("ab.o"),
-    concat!(
-        "rule compile\n",
-        "  command = cc -c 'a.c' 'b.c' -o 'ab.o'\n\n",
-        "build ab.o: compile a.c b.c\n\n",
-    ),
-)]
-#[case::complex_dependencies(
-    Action {
-        recipe: Recipe::Command { command: "true".into() },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    },
-    BuildEdge {
-        action_id: "b".into(),
-        inputs: vec![Utf8PathBuf::from("in")],
-        explicit_outputs: vec![Utf8PathBuf::from("out"), Utf8PathBuf::from("log")],
-        implicit_outputs: vec![Utf8PathBuf::from("out.d")],
-        order_only_deps: vec![Utf8PathBuf::from("stamp")],
-        phony: false,
-        always: false,
-    },
-    Utf8PathBuf::from("out"),
-    concat!(
-        "rule b\n",
-        "  command = true\n\n",
-        "build out log | out.d: b in || stamp\n\n",
-    ),
-)]
-fn generate_ninja_scenarios(
-    #[case] action: Action,
-    #[case] edge: BuildEdge,
-    #[case] target_path: Utf8PathBuf,
-    #[case] expected: &str,
-) -> Result<()> {
-    let mut graph = BuildGraph::default();
-    graph.actions.insert(edge.action_id.clone(), action);
-    graph.targets.insert(target_path, edge);
-
-    let ninja = generate(&graph)?;
-    ensure!(
-        ninja == expected,
-        "generated ninja manifest did not match expectation"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn generate_empty_graph() -> Result<()> {
-    let graph = BuildGraph::default();
-    let ninja = generate(&graph)?;
-    ensure!(ninja.is_empty(), "expected empty ninja manifest");
-    Ok(())
-}
-
-#[rstest]
-fn generate_multiline_script_snapshot() -> Result<()> {
-    let mut graph = BuildGraph::default();
-    graph.actions.insert(
-        "script".into(),
-        Action {
-            recipe: Recipe::Script {
-                script: "echo one\necho two".into(),
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        },
-    );
-    graph.targets.insert(
-        Utf8PathBuf::from("out"),
-        BuildEdge {
-            action_id: "script".into(),
-            inputs: Vec::new(),
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-        },
-    );
-    graph.default_targets.push(Utf8PathBuf::from("out"));
-
-    let ninja = generate(&graph)?;
-    let mut settings = Settings::new();
-    settings.set_snapshot_path(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/snapshots/ninja",
-    ));
-    settings.bind(|| {
-        assert_snapshot!("multiline_script_ninja", &ninja);
-    });
-    ensure!(
-        ninja.contains("printf %b") && ninja.contains("\\n"),
-        "script should use printf %b with encoded newlines"
-    );
-    Ok(())
+    ninja_gen::ninja_integration_setup()
 }
 
 /// Integration scenarios to confirm Ninja executes commands correctly.
@@ -207,6 +35,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "script".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -229,6 +58,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "percent".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -251,6 +81,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "tick".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -273,6 +104,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     edge: BuildEdge {
         action_id: "hello".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("say-hello")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -367,6 +199,7 @@ fn errors_when_action_missing() -> Result<()> {
     let edge = BuildEdge {
         action_id: "missing".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
@@ -408,6 +241,7 @@ fn generate_format_error() -> Result<()> {
     let edge = BuildEdge {
         action_id: "a".into(),
         inputs: Vec::new(),
+        implicit_deps: Vec::new(),
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),

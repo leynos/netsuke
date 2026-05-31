@@ -14,7 +14,7 @@ pub use bdd::fixtures::*;
 
 use rstest_bdd_macros::scenarios;
 
-// Autodiscover all cross-platform scenarios from feature files
+// Autodiscover all cross-platform scenarios from feature files.
 // The fixtures parameter ensures TestWorld is injected into each generated test
 scenarios!("tests/features", fixtures = [world: TestWorld]);
 
