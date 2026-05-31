@@ -29,4 +29,5 @@ mod cycle;
 mod from_manifest;
 mod graph;
 
+pub(crate) use cmd_interpolate::{INS_TOKEN, OUTS_TOKEN};
 pub use graph::{Action, BuildEdge, BuildGraph, IrGenError};

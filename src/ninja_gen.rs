@@ -303,7 +303,9 @@ impl Display for DisplayEdge<'_> {
         writeln!(f)
     }
 }
-
+#[cfg(test)]
+#[path = "ninja_gen_property_tests.rs"]
+mod property_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
