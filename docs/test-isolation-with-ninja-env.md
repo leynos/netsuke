@@ -1,23 +1,23 @@
-# Test isolation with `NINJA_ENV`
+# Test isolation with `NETSUKE_NINJA`
 
-Netsuke resolves the Ninja binary from the `NINJA_ENV` environment variable
-before falling back to `ninja` on `PATH`. Tests should override `NINJA_ENV`
-instead of mutating `PATH` so they can execute in parallel without stepping on
-each other's environment.
+Netsuke resolves the Ninja binary from the `NETSUKE_NINJA` environment variable
+before falling back to `ninja` on `PATH`. Tests should override
+`NETSUKE_NINJA` instead of mutating `PATH` so they can execute in parallel
+without stepping on each other's environment.
 
-## Why prefer `NINJA_ENV`
+## Why prefer `NETSUKE_NINJA`
 
 - Mutating `PATH` is global and risks races when tests run concurrently.
 - `override_ninja_env` scopes changes via an `EnvGuard`, restoring the previous
   value even if the test fails.
 - Keeping `PATH` untouched avoids coupling to the developer's shell setup.
 - `override_ninja_env` also holds a process-wide lock for the guard's lifetime,
-  preventing parallel tests from interleaving `NINJA_ENV` mutations.
+  preventing parallel tests from interleaving `NETSUKE_NINJA` mutations.
 
 ## Fixture pattern
 
-Use a fixture to create a fake Ninja executable and point `NINJA_ENV` at it.
-The fixture keeps the temporary directory alive for the test duration and
+Use a fixture to create a fake Ninja executable and point `NETSUKE_NINJA` at
+it. The fixture keeps the temporary directory alive for the test duration and
 automatically restores the environment on drop.
 
 ```rust
@@ -41,15 +41,15 @@ Inject the fixture into tests that need a controlled Ninja binary:
 fn run_build_uses_fake_ninja(
     (_, _guard): (tempfile::TempDir, NinjaEnvGuard),
 ) {
-    // run the command-line interface (CLI) here; the guard restores NINJA_ENV
-    // on drop
+    // run the command-line interface (CLI) here; the guard restores
+    // NETSUKE_NINJA on drop
 }
 ```
 
 ## Dos and don'ts
 
-- Do keep the guard alive until after the CLI invocation so `NINJA_ENV` stays
-  set.
+- Do keep the guard alive until after the CLI invocation so `NETSUKE_NINJA`
+  stays set.
 - Do avoid explicit `drop` calls for `PathBuf` values; they do not own external
   resources.
 - Don't add `#[serial]` purely to protect `PATH` mutations; prefer the fixture
@@ -57,7 +57,7 @@ fn run_build_uses_fake_ninja(
 
 ## Precedence over `PATH`
 
-`NINJA_ENV` should override any `ninja` found on `PATH`. When asserting this in
-tests, place a failing fake Ninja on `PATH` with `prepend_dir_to_path` and set
-`NINJA_ENV` to a working fake Ninja via `override_ninja_env`. The test should
-pass only if `NINJA_ENV` is respected.
+`NETSUKE_NINJA` should override any `ninja` found on `PATH`. When asserting
+this in tests, place a failing fake Ninja on `PATH` with `prepend_dir_to_path`
+and set `NETSUKE_NINJA` to a working fake Ninja via `override_ninja_env`. The
+test should pass only if `NETSUKE_NINJA` is respected.

@@ -1,5 +1,8 @@
-//! Process helpers for Ninja file lifecycle, argument redaction, and subprocess I/O.
-//! Internal to `runner`; public API is defined in `runner.rs`.
+//! Process helpers for Ninja file lifecycle, argument redaction, and subprocess
+//! I/O. Internal to `runner`; public API is defined in `runner.rs`.
+//!
+//! Ninja executable resolution checks `NETSUKE_NINJA` first, then falls back to
+//! `ninja` on `PATH` so existing installations keep their default behaviour.
 
 use super::{BuildTargets, NINJA_PROGRAM};
 use crate::cli::Cli;
