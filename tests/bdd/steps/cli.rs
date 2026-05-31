@@ -100,6 +100,22 @@ fn extract_build(world: &TestWorld) -> Result<(Vec<String>, Option<PathBuf>)> {
         .context("expected build command")
 }
 
+/// Extract graph command args.
+fn extract_graph_args(world: &TestWorld) -> Result<netsuke::cli::GraphArgs> {
+    match get_command(world)? {
+        Commands::Graph(args) => Ok(args),
+        other => bail!("expected graph command, got {other:?}"),
+    }
+}
+
+/// Extract manifest command file path.
+fn extract_manifest_command_file(world: &TestWorld) -> Result<PathBuf> {
+    match get_command(world)? {
+        Commands::Manifest { file } => Ok(file),
+        other => bail!("expected manifest command, got {other:?}"),
+    }
+}
+
 /// Get the parsed CLI command.
 fn get_command(world: &TestWorld) -> Result<Commands> {
     world
@@ -277,47 +293,31 @@ fn verify_cli_policy_rejects(
 }
 
 fn verify_graph_output_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let command = get_command(world)?;
-    match command {
-        Commands::Graph(args) => {
-            let actual = args.output;
-            ensure!(
-                actual.as_deref() == Some(path.as_path()),
-                "expected graph output path {}, got {:?}",
-                path,
-                actual
-            );
-            Ok(())
-        }
-        other => bail!("expected graph command, got {other:?}"),
-    }
+    let actual = extract_graph_args(world)?.output;
+    ensure!(
+        actual.as_deref() == Some(path.as_path()),
+        "expected graph output path {}, got {:?}",
+        path,
+        actual
+    );
+    Ok(())
 }
 
 fn verify_graph_html_set(world: &TestWorld) -> Result<()> {
-    let command = get_command(world)?;
-    match command {
-        Commands::Graph(args) => {
-            ensure!(args.html, "expected graph --html to be set");
-            Ok(())
-        }
-        other => bail!("expected graph command, got {other:?}"),
-    }
+    let args = extract_graph_args(world)?;
+    ensure!(args.html, "expected graph --html to be set");
+    Ok(())
 }
 
 fn verify_manifest_command_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let command = get_command(world)?;
-    match command {
-        Commands::Manifest { file } => {
-            ensure!(
-                file == path.to_path_buf(),
-                "expected manifest output {}, got {}",
-                path,
-                file.display()
-            );
-            Ok(())
-        }
-        other => bail!("expected manifest command, got {other:?}"),
-    }
+    let file = extract_manifest_command_file(world)?;
+    ensure!(
+        file == path.to_path_buf(),
+        "expected manifest output {}, got {}",
+        path,
+        file.display()
+    );
+    Ok(())
 }
 
 fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<()> {
