@@ -139,3 +139,7 @@ pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<
         |path| load_layers_from_path(&path),
     )
 }
+
+#[cfg(test)]
+#[path = "config_path_precedence_tests.rs"]
+mod config_path_precedence_tests;

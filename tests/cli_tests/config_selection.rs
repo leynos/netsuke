@@ -260,6 +260,23 @@ fn write_optional_config(
     .with_cli_config(ConfigFile::new("cli.toml", "theme = \"unicode\"\n"))
     .with_env_config(ConfigFile::new("env.toml", "theme = \"ascii\"\n")),
 )]
+#[case::config_flag_takes_precedence_over_legacy_env(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "--config should win over NETSUKE_CONFIG_PATH",
+    )
+    .with_cli_config(ConfigFile::new("cli.toml", "theme = \"unicode\"\n"))
+    .with_legacy_config(ConfigFile::new("legacy.toml", "theme = \"ascii\"\n")),
+)]
+#[case::config_flag_takes_precedence_over_both_env_vars(
+    ConfigSelectionCase::new(
+        ThemePreference::Unicode,
+        "--config should win over both config environment variables",
+    )
+    .with_cli_config(ConfigFile::new("cli.toml", "theme = \"unicode\"\n"))
+    .with_env_config(ConfigFile::new("env.toml", "theme = \"ascii\"\n"))
+    .with_legacy_config(ConfigFile::new("legacy.toml", "theme = \"ascii\"\n")),
+)]
 #[case::config_flag_values_still_overridden_by_cli_preferences(
     ConfigSelectionCase::new(
         ThemePreference::Ascii,
