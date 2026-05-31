@@ -24,6 +24,15 @@ pub(crate) struct CycleDetectionReport {
     pub(crate) missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
 }
 
+/// Detect cycles and collect missing dependencies in `targets`.
+///
+/// Performs a depth-first traversal of each [`BuildEdge`]'s `inputs` and
+/// `implicit_deps`.  `order_only_deps` are intentionally excluded.
+///
+/// Returns a [`CycleDetectionReport`] containing any detected cycle path and
+/// all dependency references that could not be resolved to a build target.
+/// This function does **not** emit any log events; the caller is responsible
+/// for logging the reported data.
 pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
     let mut detector = CycleDetector::new(targets);
     let mut cycle = None;
@@ -118,11 +127,6 @@ impl CycleDetector<'_> {
             return false;
         }
 
-        tracing::info!(
-            missing = %dep,
-            dependent = %node,
-            "dependency not found among build targets; treating as external",
-        );
         self.missing_dependencies.push((node.clone(), dep.clone()));
         true
     }

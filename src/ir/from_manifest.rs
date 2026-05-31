@@ -66,6 +66,11 @@ impl BuildGraph {
             let outputs = to_paths(&target.name);
             let inputs = to_paths(&target.sources);
             let implicit_deps = to_paths(&target.deps);
+            tracing::debug!(
+                target = ?target.name,
+                implicit_deps_count = implicit_deps.len(),
+                "populating implicit dependencies for target",
+            );
             let target_name = get_target_display_name(&outputs);
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
@@ -146,6 +151,11 @@ impl BuildGraph {
                 message,
             });
         }
+
+        tracing::info!(
+            count = missing_dependencies.len(),
+            "cycle detection complete; unresolved dependencies treated as external files",
+        );
         Ok(())
     }
 }
