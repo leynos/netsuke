@@ -1,4 +1,26 @@
 //! Layer-composition and conversion helpers for CLI configuration.
+//!
+//! This module bridges the Clap-facing [`Cli`] type from [`super::parser`]
+//! and the OrthoConfig-derived [`CliConfig`] schema from [`super::config`].
+//! It implements the full four-layer merge pipeline:
+//!
+//! 1. **Defaults** — `CliConfig::default()` serialised to JSON.
+//! 2. **File layers** — discovered via `NETSUKE_CONFIG_PATH`, `NETSUKE_CONFIG`,
+//!    or directory walk; loaded through `OrthoConfig`'s `ConfigDiscovery`.
+//! 3. **Environment layer** — `NETSUKE_`-prefixed variables normalised via
+//!    `Uncased` and merged through Figment.
+//! 4. **CLI override layer** — fields explicitly supplied on the command line
+//!    (as determined by `ArgMatches::value_source`) serialised to JSON.
+//!
+//! **Pipeline position:** merge layer.
+//!
+//! - Consumes `(Cli, ArgMatches)` from [`super::parser`].
+//! - Applies `CliConfig`'s `PostMergeHook` for cross-field validation.
+//! - Produces a fully resolved `Cli` for the runner.
+//!
+//! The secondary entry point, [`resolve_merged_diag_json`], performs a
+//! lightweight pre-merge pass to determine diagnostic-output mode before the
+//! full merge runs.
 
 use clap::ArgMatches;
 use clap::parser::ValueSource;
@@ -294,15 +316,29 @@ fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Va
     maybe_insert_explicit(matches, "spinner_mode", &cli.spinner_mode, &mut root)?;
     maybe_insert_explicit(matches, "output_format", &cli.output_format, &mut root)?;
     maybe_insert_explicit(matches, "theme", &cli.theme, &mut root)?;
-    maybe_insert_default_targets(cli, matches, &mut root)?;
+
+    let mut cmds_build: Map<String, Value> = Map::new();
+
+    if matches.value_source("default_targets") == Some(ValueSource::CommandLine) {
+        cmds_build.insert(
+            "targets".to_owned(),
+            serialize_value("default_targets", &cli.default_targets)?,
+        );
+    }
 
     if let Some(Commands::Build(args)) = cli.command.as_ref()
         && let Some(build_matches) = matches.subcommand_matches("build")
     {
-        let build = build_cli_overrides(args, build_matches)?;
-        if !build.is_empty() {
-            root.insert("cmds".to_owned(), json!({ "build": Value::Object(build) }));
+        for (k, v) in build_cli_overrides(args, build_matches)? {
+            cmds_build.insert(k, v);
         }
+    }
+
+    if !cmds_build.is_empty() {
+        root.insert(
+            "cmds".to_owned(),
+            json!({ "build": Value::Object(cmds_build) }),
+        );
     }
 
     Ok(Value::Object(root))
@@ -313,20 +349,6 @@ fn build_cli_overrides(args: &BuildArgs, matches: &ArgMatches) -> OrthoResult<Ma
     maybe_insert_explicit(matches, "emit", &args.emit, &mut build)?;
     maybe_insert_explicit(matches, "targets", &args.targets, &mut build)?;
     Ok(build)
-}
-
-fn maybe_insert_default_targets(
-    cli: &Cli,
-    matches: &ArgMatches,
-    root: &mut Map<String, Value>,
-) -> OrthoResult<()> {
-    if matches.value_source("default_targets") == Some(ValueSource::CommandLine) {
-        root.insert(
-            "cmds".to_owned(),
-            json!({ "build": { "targets": serialize_value("default_targets", &cli.default_targets)? } }),
-        );
-    }
-    Ok(())
 }
 
 fn maybe_insert_explicit<T>(

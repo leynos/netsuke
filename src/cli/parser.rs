@@ -1,4 +1,18 @@
-//! Clap-facing parser types and localized parsing helpers.
+//! Clap-facing parser types and localisation helpers.
+//!
+//! This module owns the runtime-visible [`Cli`] struct and all associated
+//! Clap definitions ([`BuildArgs`], [`Commands`]).  It also provides
+//! [`parse_with_localizer_from`], which localises the Clap command, installs
+//! localisation-aware [`LocalizedValueParser`] instances for every typed
+//! argument, and returns `(Cli, ArgMatches)` for downstream processing.
+//!
+//! **Pipeline position:** parsing layer.
+//!
+//! - Receives raw `OsStr` arguments from the process entry point.
+//! - Delegates value validation to [`super::parsing`] helpers.
+//! - Returns a `Cli`/`ArgMatches` pair consumed by [`super::merge`].
+//!
+//! [`LocalizedValueParser`]: self::LocalizedValueParser
 
 use clap::builder::{TypedValueParser, ValueParser};
 use clap::error::ErrorKind;

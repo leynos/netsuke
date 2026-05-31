@@ -265,10 +265,21 @@ impl CliConfig {
         default_manifest_path()
     }
 }
+
+const MAX_JOBS: usize = super::parser::MAX_JOBS;
+
 impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         validate_theme_compatibility(self)?;
         validate_spinner_mode_compatibility(self)?;
+        if let Some(jobs) = self.jobs
+            && (jobs == 0 || jobs > MAX_JOBS)
+        {
+            return Err(super::validation_error(
+                "jobs",
+                &format!("jobs = {jobs} is out of range; must be between 1 and {MAX_JOBS}"),
+            ));
+        }
         Ok(())
     }
 }
@@ -285,7 +296,7 @@ fn validate_theme_compatibility(config: &CliConfig) -> OrthoResult<()> {
         )),
         (Some(Theme::Ascii), Some(false)) => Err(validation_error(
             "no_emoji",
-            "no_emoji = false conflicts with theme = \"ascii\"; remove the alias or choose theme = \"unicode\"",
+            "theme = \"ascii\" conflicts with no_emoji = false; remove the alias or choose theme = \"unicode\"",
         )),
         _ => Ok(()),
     }
@@ -299,7 +310,7 @@ fn validate_spinner_mode_compatibility(config: &CliConfig) -> OrthoResult<()> {
         )),
         (Some(SpinnerMode::Enabled), Some(false)) => Err(validation_error(
             "progress",
-            "progress = false conflicts with spinner_mode = \"enabled\"",
+            "spinner_mode = \"enabled\" conflicts with progress = false",
         )),
         _ => Ok(()),
     }

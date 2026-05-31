@@ -61,18 +61,28 @@ fn assert_build_targets(
 #[derive(Debug, Copy, Clone)]
 enum ExpectedValidationError {
     ThemeUnicodeWithNoEmoji,
+    ThemeAsciiWithNoEmojiDisabled,
     SpinnerDisabledWithProgress,
+    SpinnerEnabledWithProgressDisabled,
     UnsupportedOutputFormat,
+    JobsOutOfRange,
 }
 
 impl ExpectedValidationError {
     const fn expected_fragment(self) -> &'static str {
         match self {
             Self::ThemeUnicodeWithNoEmoji => "theme = \"unicode\" conflicts with no_emoji = true",
+            Self::ThemeAsciiWithNoEmojiDisabled => {
+                "theme = \"ascii\" conflicts with no_emoji = false"
+            }
             Self::SpinnerDisabledWithProgress => {
                 "spinner_mode = \"disabled\" conflicts with progress = true"
             }
+            Self::SpinnerEnabledWithProgressDisabled => {
+                "spinner_mode = \"enabled\" conflicts with progress = false"
+            }
             Self::UnsupportedOutputFormat => "output_format = \"json\" is not supported yet",
+            Self::JobsOutOfRange => "jobs = 65 is out of range",
         }
     }
 }
@@ -291,17 +301,58 @@ targets = ["all"]
 }
 
 #[rstest]
+fn cli_default_target_and_build_emit_are_merged_not_overwritten() -> Result<()> {
+    with_config_file(
+        "",
+        &[
+            "netsuke",
+            "--default-target",
+            "all",
+            "build",
+            "--emit",
+            "out.ninja",
+        ],
+        |merged| {
+            let Some(netsuke::cli::Commands::Build(args)) = merged.command else {
+                anyhow::bail!("expected merged command to be build");
+            };
+            ensure!(
+                !args.targets.is_empty(),
+                "--default-target should survive when build --emit is also supplied; got empty targets",
+            );
+            ensure!(
+                args.emit.as_deref() == Some(std::path::Path::new("out.ninja")),
+                "--emit should be present alongside --default-target",
+            );
+            Ok(())
+        },
+    )
+}
+
+#[rstest]
 #[case(
     json!({ "theme": "unicode", "no_emoji": true }),
     ExpectedValidationError::ThemeUnicodeWithNoEmoji,
+)]
+#[case(
+    json!({ "theme": "ascii", "no_emoji": false }),
+    ExpectedValidationError::ThemeAsciiWithNoEmojiDisabled,
 )]
 #[case(
     json!({ "spinner_mode": "disabled", "progress": true }),
     ExpectedValidationError::SpinnerDisabledWithProgress,
 )]
 #[case(
+    json!({ "spinner_mode": "enabled", "progress": false }),
+    ExpectedValidationError::SpinnerEnabledWithProgressDisabled,
+)]
+#[case(
     json!({ "output_format": "json" }),
     ExpectedValidationError::UnsupportedOutputFormat,
+)]
+#[case(
+    json!({ "jobs": 65 }),
+    ExpectedValidationError::JobsOutOfRange,
 )]
 fn cli_config_rejects_conflicting_or_unsupported_settings(
     default_cli_json: Result<serde_json::Value>,

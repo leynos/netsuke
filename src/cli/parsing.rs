@@ -1,4 +1,16 @@
-//! CLI parsing helpers for clap value parsers.
+//! Clap value-parser helpers, invoked exclusively from [`super::parser`].
+//!
+//! Each `parse_*` function implements a localisation-aware validator for one
+//! typed CLI argument.  They are registered as [`super::parser::LocalizedValueParser`]
+//! instances inside `parse_with_localizer_from` and are never called directly
+//! from outside the `cli` module tree.
+//!
+//! **Pipeline position:** argument-validation layer, below [`super::parser`].
+//!
+//! - Receives raw `&str` slices from Clap's argument machinery.
+//! - Emits localised error strings via [`super::parser::validation_message`].
+//! - Shared dispatch logic lives in [`parse_value_enum`] (called by the three
+//!   enum-valued parsers via [`ParseEnumSpec`]).
 
 use clap::ValueEnum;
 use ortho_config::{LanguageIdentifier, LocalizationArgs, Localizer};
