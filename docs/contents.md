@@ -1,7 +1,13 @@
 # Documentation contents
 
 This index groups the primary Netsuke documentation by purpose so design,
-operational, and contributor references are easier to find.
+operator, user, and contributor references are easier to find.
+
+## Documentation index
+
+- [contents.md](contents.md): This index for the Netsuke documentation set.
+- [repository-layout.md](repository-layout.md): Path ownership and repository
+  structure guide for contributors.
 
 ## Core design and planning
 
@@ -17,6 +23,9 @@ operational, and contributor references are easier to find.
 - [formal-verification-methods-in-netsuke.md](formal-verification-methods-in-netsuke.md):
   Recommended scope and delivery order for Kani, Proptest, and optional Verus
   checks.
+
+## Decision records
+
 - [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md):
   YAML parser migration decision record.
 - [adr-002-replace-cucumber-with-rstest-bdd.md](adr-002-replace-cucumber-with-rstest-bdd.md):
