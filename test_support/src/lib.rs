@@ -28,6 +28,7 @@ pub mod localizer;
 pub mod manifest;
 pub mod netsuke;
 pub mod ninja;
+pub mod ninja_gen;
 pub mod path_guard;
 pub mod stdlib_assert;
 /// Re-export the SHA-256 helper for concise call sites.

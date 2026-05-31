@@ -1,6 +1,6 @@
 ---
-source: tests/ninja_gen_tests.rs
-assertion_line: 176
+source: tests/ninja_gen_unit_tests.rs
+assertion_line: 262
 expression: "&ninja"
 ---
 rule script
