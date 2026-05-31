@@ -36,8 +36,9 @@ implementation begins.
   expands the scope.
 - Preserve the existing Kani phase-1 contract from roadmap items `4.1.1` and
   `4.1.2`: `make kani`, `make kani-full`, `make formal-pr`,
-  `tools/kani/VERSION`, `scripts/install-kani.sh`, and the `kani-smoke` CI job
-  remain the supported formal-verification tooling and gating surface.
+  `tools/kani/VERSION`, delegated `rust-prover-tools` installation through
+  `make install-kani`, and the `kani-smoke` CI job remain the supported
+  formal-verification tooling and gating surface.
 - Do not add Verus or Stateright to `make test`, `make lint`,
   `make check-fmt`, `make all`, `make kani`, `make kani-full`,
   `make formal-pr`, or CI in this task.
