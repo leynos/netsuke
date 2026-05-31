@@ -163,6 +163,7 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
     fn path(name: &str) -> Utf8PathBuf {
         Utf8PathBuf::from(name)
@@ -181,13 +182,30 @@ mod tests {
         }
     }
 
-    fn assert_missing_deps(
-        targets: &HashMap<Utf8PathBuf, BuildEdge>,
-        expected: &[(Utf8PathBuf, Utf8PathBuf)],
-    ) {
-        let mut detector = CycleDetector::new(targets);
+    struct MissingDepsCase<'a> {
+        primary_inputs: &'a [&'a str],
+        primary_implicit_deps: &'a [&'a str],
+        extra_targets: &'a [(&'a str, &'a [&'a str], &'a [&'a str])],
+        expected: &'a [(&'a str, &'a str)],
+    }
+
+    fn assert_missing_deps(case: &MissingDepsCase<'_>) {
+        let mut targets = HashMap::new();
+        targets.insert(
+            path("a"),
+            build_edge(case.primary_inputs, case.primary_implicit_deps, "a"),
+        );
+        for (output, inputs, implicit_deps) in case.extra_targets {
+            targets.insert(path(output), build_edge(inputs, implicit_deps, output));
+        }
+        let expected: Vec<_> = case
+            .expected
+            .iter()
+            .map(|(dependent, missing)| (path(dependent), path(missing)))
+            .collect();
+        let mut detector = CycleDetector::new(&targets);
         assert!(detector.visit(path("a")).is_none());
-        assert_eq!(detector.missing_dependencies(), expected);
+        assert_eq!(detector.missing_dependencies(), expected.as_slice());
     }
 
     fn next_cycle_index(index: usize, cycle_len: usize) -> usize {
@@ -249,11 +267,21 @@ mod tests {
         );
     }
 
-    #[test]
-    fn cycle_detector_records_missing_dependencies() {
-        let mut targets = HashMap::new();
-        targets.insert(path("a"), build_edge(&["b"], &[], "a"));
-        assert_missing_deps(&targets, &[(path("a"), path("b"))]);
+    #[rstest]
+    #[case::explicit_dependency(MissingDepsCase {
+        primary_inputs: &["b"],
+        primary_implicit_deps: &[],
+        extra_targets: &[],
+        expected: &[("a", "b")],
+    })]
+    #[case::implicit_dependency(MissingDepsCase {
+        primary_inputs: &["b"],
+        primary_implicit_deps: &["missing"],
+        extra_targets: &[("b", &[], &[])],
+        expected: &[("a", "missing")],
+    })]
+    fn cycle_detector_records_missing_dependencies(#[case] case: MissingDepsCase<'_>) {
+        assert_missing_deps(&case);
     }
 
     #[test]
@@ -285,14 +313,6 @@ mod tests {
 
         let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
         assert_eq!(cycle, vec![path("a"), path("b"), path("c"), path("a")]);
-    }
-
-    #[test]
-    fn cycle_detector_records_missing_implicit_dependencies() {
-        let mut targets = HashMap::new();
-        targets.insert(path("a"), build_edge(&["b"], &["missing"], "a"));
-        targets.insert(path("b"), build_edge(&[], &[], "b"));
-        assert_missing_deps(&targets, &[(path("a"), path("missing"))]);
     }
 
     #[test]
