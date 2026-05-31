@@ -2,7 +2,9 @@
 //!
 //! This module converts a [`crate::ir::BuildGraph`] into the textual
 //! representation expected by the Ninja build system. The generator sorts
-//! actions and edges to ensure deterministic output for snapshot tests.
+//! actions and edges to ensure deterministic output for snapshot tests. The
+//! generated Ninja file is written by the runner and manifest subcommands for
+//! downstream execution by the Ninja build system.
 
 use crate::ast::Recipe;
 use crate::ir::{BuildEdge, BuildGraph};
