@@ -195,14 +195,13 @@ fn layout_positions(view: &GraphView) -> BTreeMap<&Utf8Path, Position> {
 }
 
 fn collect_predecessors(edges: &[EdgeView]) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
-    let mut preds: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
+    let mut map: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
     for edge in edges {
-        preds
-            .entry(edge.to.as_path())
+        map.entry(edge.to.as_path())
             .or_default()
             .push(edge.from.as_path());
     }
-    preds
+    map
 }
 
 fn compute_depth<'a>(
@@ -374,7 +373,7 @@ fn write_outline(
     summary: &str,
 ) -> Result<(), GraphRenderError> {
     let no_inputs = localized(keys::GRAPH_HTML_OUTLINE_NO_INPUTS);
-    let inputs_by_target = collect_inputs_by_target(view);
+    let inputs_by_target = collect_predecessors(&view.edges);
     writeln!(sink, "  <details open>")?;
     writeln!(sink, "    <summary>{}</summary>", escape_text(summary))?;
     writeln!(sink, "    <ul>")?;
@@ -427,17 +426,6 @@ fn write_outline_inputs(
     Ok(())
 }
 
-fn collect_inputs_by_target(view: &GraphView) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
-    let mut by_target: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
-    for edge in &view.edges {
-        by_target
-            .entry(edge.to.as_path())
-            .or_default()
-            .push(edge.from.as_path());
-    }
-    by_target
-}
-
 fn write_noscript(
     sink: &mut dyn Write,
     view: &GraphView,
@@ -455,32 +443,27 @@ fn write_noscript(
     Ok(())
 }
 
-fn escape_text(input: &str) -> String {
+fn escape_xml_chars(input: &str, escape_quotes: bool) -> String {
     let mut out = String::with_capacity(input.len());
     for ch in input.chars() {
         match ch {
             '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
+            '"' if escape_quotes => out.push_str("&quot;"),
+            '\'' if escape_quotes => out.push_str("&#39;"),
             other => out.push(other),
         }
     }
     out
 }
 
+fn escape_text(input: &str) -> String {
+    escape_xml_chars(input, false)
+}
+
 fn escape_attr(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    for ch in input.chars() {
-        match ch {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            other => out.push(other),
-        }
-    }
-    out
+    escape_xml_chars(input, true)
 }
 
 #[cfg(test)]
