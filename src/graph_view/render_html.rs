@@ -195,13 +195,14 @@ fn layout_positions(view: &GraphView) -> BTreeMap<&Utf8Path, Position> {
 }
 
 fn collect_predecessors(edges: &[EdgeView]) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
-    let mut map: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
+    let mut preds: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
     for edge in edges {
-        map.entry(edge.to.as_path())
+        preds
+            .entry(edge.to.as_path())
             .or_default()
             .push(edge.from.as_path());
     }
-    map
+    preds
 }
 
 fn compute_depth<'a>(
@@ -373,7 +374,7 @@ fn write_outline(
     summary: &str,
 ) -> Result<(), GraphRenderError> {
     let no_inputs = localized(keys::GRAPH_HTML_OUTLINE_NO_INPUTS);
-    let inputs_by_target = collect_predecessors(&view.edges);
+    let inputs_by_target = collect_inputs_by_target(view);
     writeln!(sink, "  <details open>")?;
     writeln!(sink, "    <summary>{}</summary>", escape_text(summary))?;
     writeln!(sink, "    <ul>")?;
@@ -426,6 +427,10 @@ fn write_outline_inputs(
     Ok(())
 }
 
+fn collect_inputs_by_target(view: &GraphView) -> BTreeMap<&Utf8Path, Vec<&Utf8Path>> {
+    collect_predecessors(&view.edges)
+}
+
 fn write_noscript(
     sink: &mut dyn Write,
     view: &GraphView,
@@ -443,15 +448,15 @@ fn write_noscript(
     Ok(())
 }
 
-fn escape_xml_chars(input: &str, escape_quotes: bool) -> String {
+fn escape_html(input: &str, attr: bool) -> String {
     let mut out = String::with_capacity(input.len());
     for ch in input.chars() {
         match ch {
             '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
-            '"' if escape_quotes => out.push_str("&quot;"),
-            '\'' if escape_quotes => out.push_str("&#39;"),
+            '"' if attr => out.push_str("&quot;"),
+            '\'' if attr => out.push_str("&#39;"),
             other => out.push(other),
         }
     }
@@ -459,11 +464,11 @@ fn escape_xml_chars(input: &str, escape_quotes: bool) -> String {
 }
 
 fn escape_text(input: &str) -> String {
-    escape_xml_chars(input, false)
+    escape_html(input, false)
 }
 
 fn escape_attr(input: &str) -> String {
-    escape_xml_chars(input, true)
+    escape_html(input, true)
 }
 
 #[cfg(test)]
