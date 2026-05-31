@@ -2654,6 +2654,7 @@ dependencies = [
  "cap-std",
  "mockable",
  "netsuke",
+ "proptest",
  "rstest",
  "sha2",
  "tempfile",

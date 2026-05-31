@@ -303,8 +303,7 @@ impl Display for DisplayEdge<'_> {
         writeln!(f)
     }
 }
-
-#[cfg(test)]
+mod property_tests;
 mod tests {
     //! Unit tests for Ninja file generation and rule synthesis.
 

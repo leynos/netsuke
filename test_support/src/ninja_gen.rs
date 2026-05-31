@@ -44,6 +44,8 @@
 
 use camino::Utf8PathBuf;
 use netsuke::ir::{Action, BuildEdge};
+use proptest::prelude::*;
+use std::ops::Range;
 use tempfile::TempDir;
 
 use crate::ninja;
@@ -76,4 +78,16 @@ pub struct NinjaIntegrationCase {
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
 pub fn ninja_integration_setup() -> Option<TempDir> {
     ninja::ninja_integration_workspace().ok()
+}
+
+fn path_strategy(prefix: &'static str) -> impl Strategy<Value = Utf8PathBuf> {
+    (0usize..100).prop_map(move |index| Utf8PathBuf::from(format!("{prefix}{index}")))
+}
+
+/// Generate UTF-8 paths with the supplied prefix and vector size range.
+pub fn paths_strategy(
+    prefix: &'static str,
+    size_range: Range<usize>,
+) -> impl Strategy<Value = Vec<Utf8PathBuf>> {
+    prop::collection::vec(path_strategy(prefix), size_range)
 }
