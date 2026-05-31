@@ -4,7 +4,6 @@
 //! [`netsuke::ir::BuildGraph`] values directly and asserting the emitted Ninja
 //! syntax. Snapshot tests use `insta` to guard output stability.
 
-use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use insta::{Settings, assert_snapshot};
 use netsuke::ast::Recipe;
@@ -200,29 +199,27 @@ fn generate_ninja_scenarios(
     #[case] edge: BuildEdge,
     #[case] target_path: Utf8PathBuf,
     #[case] expected: &str,
-) -> Result<()> {
+) {
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);
     graph.targets.insert(target_path, edge);
 
-    let ninja = generate(&graph)?;
-    ensure!(
-        ninja == expected,
-        "generated ninja manifest did not match expectation"
+    let ninja = generate(&graph).expect("generate ninja manifest");
+    assert_eq!(
+        ninja, expected,
+        "generated ninja manifest did not match expectation",
     );
-    Ok(())
 }
 
 #[rstest]
-fn generate_empty_graph() -> Result<()> {
+fn generate_empty_graph() {
     let graph = BuildGraph::default();
-    let ninja = generate(&graph)?;
-    ensure!(ninja.is_empty(), "expected empty ninja manifest");
-    Ok(())
+    let ninja = generate(&graph).expect("generate empty ninja manifest");
+    assert_eq!(ninja, "", "expected empty ninja manifest");
 }
 
 #[rstest]
-fn generate_multiline_script_snapshot() -> Result<()> {
+fn generate_multiline_script_snapshot() {
     let mut graph = BuildGraph::default();
     graph.actions.insert(
         "script".into(),
@@ -252,7 +249,7 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     );
     graph.default_targets.push(Utf8PathBuf::from("out"));
 
-    let ninja = generate(&graph)?;
+    let ninja = generate(&graph).expect("generate script ninja manifest");
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -261,9 +258,8 @@ fn generate_multiline_script_snapshot() -> Result<()> {
     settings.bind(|| {
         assert_snapshot!("multiline_script_ninja", &ninja);
     });
-    ensure!(
+    assert!(
         ninja.contains("printf %b") && ninja.contains("\\n"),
-        "script should use printf %b with encoded newlines"
+        "script should use printf %b with encoded newlines",
     );
-    Ok(())
 }
