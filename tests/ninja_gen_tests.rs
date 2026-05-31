@@ -1,9 +1,11 @@
-//! Unit tests for Ninja file generation.
+//! Unit tests for [`netsuke::ninja_gen`] Ninja file generation.
 //!
-//! Snapshot tests use `insta` to ensure the emitted manifest remains stable.
-//! Tests cover various scenarios including phony targets, standard builds with
-//! multiple inputs and outputs, complex dependency relationships, and edge
-//! cases like empty build graphs.
+//! Exercises [`netsuke::ninja_gen::generate`] and
+//! [`netsuke::ninja_gen::generate_into`] by constructing
+//! [`netsuke::ir::BuildGraph`] values directly and asserting the emitted
+//! Ninja syntax.  Snapshot tests use `insta` to guard output stability.
+//! Integration cases drive a real `ninja` binary against the generated
+//! file to verify build semantics end-to-end.
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
