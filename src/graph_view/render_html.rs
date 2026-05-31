@@ -379,33 +379,52 @@ fn write_outline(
     writeln!(sink, "    <summary>{}</summary>", escape_text(summary))?;
     writeln!(sink, "    <ul>")?;
     for node in &view.nodes {
-        if !matches!(node.kind, NodeKind::Target { .. }) {
-            continue;
+        if let NodeKind::Target { .. } = node.kind {
+            let empty: &[&Utf8Path] = &[];
+            let inputs = inputs_by_target
+                .get(node.path.as_path())
+                .map_or(empty, Vec::as_slice);
+            write_outline_item(sink, node.path.as_str(), inputs, &no_inputs)?;
         }
-        writeln!(sink, "      <li>")?;
-        writeln!(
-            sink,
-            "        <code>{}</code>",
-            escape_text(node.path.as_str())
-        )?;
-        match inputs_by_target.get(node.path.as_path()) {
-            Some(inputs) if !inputs.is_empty() => {
-                writeln!(sink, "        <ul>")?;
-                for input in inputs {
-                    writeln!(
-                        sink,
-                        "          <li><code>{}</code></li>",
-                        escape_text(input.as_str())
-                    )?;
-                }
-                writeln!(sink, "        </ul>")?;
-            }
-            _ => writeln!(sink, "        <p>{}</p>", escape_text(&no_inputs))?,
-        }
-        writeln!(sink, "      </li>")?;
     }
     writeln!(sink, "    </ul>")?;
     writeln!(sink, "  </details>")?;
+    Ok(())
+}
+
+/// Write the `<li>` block for a single target node in the outline.
+fn write_outline_item(
+    sink: &mut dyn Write,
+    target: &str,
+    inputs: &[&Utf8Path],
+    no_inputs_msg: &str,
+) -> Result<(), GraphRenderError> {
+    writeln!(sink, "      <li>")?;
+    writeln!(sink, "        <code>{}</code>", escape_text(target))?;
+    write_outline_inputs(sink, inputs, no_inputs_msg)?;
+    writeln!(sink, "      </li>")?;
+    Ok(())
+}
+
+/// Write the inputs sub-list, or a "no inputs" notice if the slice is empty.
+fn write_outline_inputs(
+    sink: &mut dyn Write,
+    inputs: &[&Utf8Path],
+    no_inputs_msg: &str,
+) -> Result<(), GraphRenderError> {
+    if inputs.is_empty() {
+        writeln!(sink, "        <p>{}</p>", escape_text(no_inputs_msg))?;
+        return Ok(());
+    }
+    writeln!(sink, "        <ul>")?;
+    for input in inputs {
+        writeln!(
+            sink,
+            "          <li><code>{}</code></li>",
+            escape_text(input.as_str())
+        )?;
+    }
+    writeln!(sink, "        </ul>")?;
     Ok(())
 }
 
