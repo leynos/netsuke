@@ -380,10 +380,9 @@ fn write_outline(
     writeln!(sink, "    <ul>")?;
     for node in &view.nodes {
         if let NodeKind::Target { .. } = node.kind {
-            let empty: &[&Utf8Path] = &[];
             let inputs = inputs_by_target
                 .get(node.path.as_path())
-                .map_or(empty, Vec::as_slice);
+                .map_or(&[] as &[&Utf8Path], Vec::as_slice);
             write_outline_item(sink, node.path.as_str(), inputs, &no_inputs)?;
         }
     }
