@@ -91,5 +91,5 @@ jobs:
           key: ${{ runner.os }}-kani-${{ hashFiles('tools/kani/VERSION', 'Makefile') }}
       - name: Install Kani
         run: make install-kani
-      - name: Kani smoke
-        run: make kani
+      - name: Kani version check
+        run: make kani-check

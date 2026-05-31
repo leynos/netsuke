@@ -95,10 +95,15 @@ setup`, and verifies that `cargo kani` is callable. Kani may manage its own
 supporting Rust nightly toolchain during setup. That toolchain must not replace
 the repository's ordinary stable Rust workflow.
 
+Delegated prover targets print maintainer diagnostics to standard error before
+invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
+pinned source, Make target, command, relevant Kani version, and non-zero exit
+status on failure.
+
 Use the Make targets for day-to-day formal-verification checks:
 
-- `make kani` runs the fast local smoke check used by `formal-pr`. Until
-  roadmap item `4.2.*` adds substantive proof harnesses, this smoke check
+- `make kani-check` runs the fast local version check used by `formal-pr`.
+  Until roadmap item `4.2.*` adds substantive proof harnesses, this check
   verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
 - `make kani-full` is reserved for the full Kani proof suite once harnesses
   exist. Today it invokes `cargo kani` without additional smoke flags.
@@ -123,7 +128,7 @@ for the design rationale and re-entry criteria.
 
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. The job installs `uv`, installs the pinned Kani version
-through `make install-kani`, and runs only `make kani`; it does not run
+through `make install-kani`, and runs only `make kani-check`; it does not run
 `make kani-full`, `make verus`, coverage, CodeScene upload, or the normal build
 matrix. Its cache is intentionally separate from ordinary Cargo build
 artefacts: the job uses a Kani-specific cache key derived from

@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani kani-full install-verus verus formal-pr
+.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani-check kani-full install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -8,6 +8,7 @@ KANI ?= cargo kani
 KANI_FLAGS ?=
 KANI_INSTALL_FLAGS ?=
 KANI_CHECK_FLAGS ?=
+KANI_VERSION_FILE ?= tools/kani/VERSION
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
@@ -53,22 +54,34 @@ nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox
 
 install-kani: ## Install the pinned Kani verifier
-	$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS)
+	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
+	@printf 'prover-tools: target=install-kani kani-version=%s\n' "$$(cat '$(KANI_VERSION_FILE)')" >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS)' >&2
+	@$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
-kani: ## Run the Kani local smoke check
-	$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS)
+kani-check: ## Check the installed Kani verifier version
+	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
+	@printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI)' "$$(cat '$(KANI_VERSION_FILE)')" >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS)' >&2
+	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI) $(KANI_FLAGS)
 
 install-verus: ## Install the pinned Verus verifier
-	$(PROVER_TOOLS) verus install $(VERUS_INSTALL_FLAGS)
+	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
+	@printf 'prover-tools: target=install-verus\n' >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) verus install $(VERUS_INSTALL_FLAGS)' >&2
+	@$(PROVER_TOOLS) verus install $(VERUS_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-verus failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 verus: ## Run the Verus proof entry point
-	$(PROVER_TOOLS) verus run $(VERUS_FLAGS)
+	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
+	@printf 'prover-tools: target=verus\n' >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) verus run $(VERUS_FLAGS)' >&2
+	@$(PROVER_TOOLS) verus run $(VERUS_FLAGS) || { status=$$?; printf 'prover-tools: target=verus failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 formal-pr: ## Run pull-request formal-verification checks
-	$(MAKE) kani
+	$(MAKE) kani-check
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | \

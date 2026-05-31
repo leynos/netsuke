@@ -35,12 +35,12 @@ implementation begins.
   keys, or new Continuous Integration (CI) jobs unless the user explicitly
   expands the scope.
 - Preserve the existing Kani phase-1 contract from roadmap items `4.1.1` and
-  `4.1.2`: `make kani`, `make kani-full`, `make formal-pr`,
+  `4.1.2`: `make kani-check`, `make kani-full`, `make formal-pr`,
   `tools/kani/VERSION`, delegated `rust-prover-tools` installation through
   `make install-kani`, and the `kani-smoke` CI job remain the supported
   formal-verification tooling and gating surface.
 - Do not add Verus or Stateright to `make test`, `make lint`,
-  `make check-fmt`, `make all`, `make kani`, `make kani-full`,
+  `make check-fmt`, `make all`, `make kani-check`, `make kani-full`,
   `make formal-pr`, or CI in this task.
 - Keep Stateright out of scope until Netsuke has an accepted design for a
   stateful concurrent subsystem such as a daemon, watch service,
@@ -212,9 +212,10 @@ implementation begins.
   complex scheduler than the current Ninja hand-off.
 - `docs/roadmap.md` task `4.4.3` depends on `4.1.3`, so this boundary is a
   prerequisite for any later evaluation of a minimal Verus proof kernel.
-- The current `Makefile` already exposes `make kani`, `make kani-full`, and
-  `make formal-pr`. There are no Verus or Stateright Make targets today, which
-  supports keeping this task documentation-only.
+- The current `Makefile` already exposes `make kani-check`, `make kani-full`,
+  and `make formal-pr`. Verus targets are optional delegated tooling, and
+  Stateright has no Make target, which supports keeping Stateright out of
+  scope.
 - `Cargo.toml` includes `rstest`, `rstest-bdd`, and `rstest-bdd-macros`, but
   no direct `proptest`, `verus`, or Stateright dependencies at the time this
   plan was drafted.
@@ -458,3 +459,9 @@ roadmap boundary.
 Validation passed before the final review with `make check-fmt`, `make lint`,
 `make test`, `make markdownlint`, and `make nixie`. CodeRabbit was run twice
 during implementation and returned zero findings both times.
+
+Follow-up review fixes renamed the version-only Kani smoke target to
+`make kani-check` so the Make target name reflects its responsibility. The
+delegated `rust-prover-tools` Make targets now print maintainer diagnostics to
+standard error before invocation, including the pinned prover source, target
+name, command, relevant Kani version, and failure exit status.

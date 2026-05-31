@@ -323,7 +323,7 @@ and test workflow intact. See
   [formal-verification-methods-in-netsuke.md §Repository integration plan](formal-verification-methods-in-netsuke.md#repository-integration-plan).
   - [x] Pin the supported Kani version under `tools/kani/`.
   - [x] Add `rust-prover-tools` backed Kani installation.
-  - [x] Add `make kani`, `make kani-full`, and `make formal-pr`.
+  - [x] Add `make kani-check`, `make kani-full`, and `make formal-pr`.
 - [x] 4.1.2. Add a dedicated `kani-smoke` continuous integration (CI) job.
   Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Continuous integration (CI)](formal-verification-methods-in-netsuke.md#continuous-integration-ci).

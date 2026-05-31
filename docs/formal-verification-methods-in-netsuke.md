@@ -129,8 +129,8 @@ that narrow normalization model at first. Production `HashMap` structures,
 MiniJinja values, filesystem helpers, and subprocess orchestration should
 remain outside the first proof boundary. Until the proof kernel is stable and
 reviewed, Verus should remain outside pull-request gates, `make test`,
-`make lint`, `make check-fmt`, `make all`, `make kani`, `make kani-full`, and
-`make formal-pr`.
+`make lint`, `make check-fmt`, `make all`, `make kani-check`,
+`make kani-full`, and `make formal-pr`.
 
 ### Stateright remains deferred
 
@@ -185,6 +185,10 @@ pins the prover CLI in the Makefile and invokes it through `uv tool run`, so
 the verifier workflows have one maintained implementation while the Rust
 package remains free of Python runtime dependencies.
 
+The delegated Make targets should emit concise maintainer diagnostics to
+standard error before invoking `rust-prover-tools`: the pinned prover-tool
+source, target name, command, relevant version pin, and failure exit status.
+
 #### Tool version pinning and updates
 
 The `tools/*/VERSION` files define the exact tool versions used in local
@@ -212,7 +216,8 @@ development and continuous integration. These pins serve several purposes:
 The first formal-verification commands should extend the existing `Makefile`
 without disturbing the current developer workflow.[^2]
 
-- `make kani` should run a small smoke-harness set suitable for pull requests.
+- `make kani-check` should run the fast installed-version check suitable for
+  pull requests until substantive Kani harnesses exist.
 - `make kani-full` should run the full Kani suite.
 - `make install-kani` should install the pinned Kani version through
   `rust-prover-tools`.
@@ -235,7 +240,7 @@ The first additional job should be a dedicated `kani-smoke` job that:
 
 - installs `uv` and then installs the pinned Kani toolchain through
   `make install-kani`,
-- runs `make kani`, and
+- runs `make kani-check`, and
 - caches tool downloads separately from the ordinary Rust build artefacts.
 
 Any later Verus job should be added only after a stable proof kernel exists.
@@ -282,7 +287,8 @@ existing reproducibility statement.
 
 The delivery sequence should stay narrow:
 
-1. Add Kani tooling, local scripts, and pull-request smoke targets.
+1. Add Kani tooling, delegated prover-tool installation, and pull-request
+   smoke targets.
 2. Add Kani harnesses for IR generation, cycle handling, and command
    interpolation.
 3. Add Proptest coverage for deterministic emission and manifest semantics.
