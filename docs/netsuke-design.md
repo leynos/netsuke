@@ -887,7 +887,7 @@ presenting a stable public API surface. The `serde_json` library is built with
 the `preserve_order` feature so the backing `ManifestMap` retains the insertion
 order observed in the YAML manifest. This guarantees that downstream consumers
 see keys in a stable sequence after foreach expansion, matching the authoring
-intent and keeping diagnostics and serialised output predictable. Targets also
+intent and keeping diagnostics and serialized output predictable. Targets also
 accept optional `phony` and `always` booleans. They default to `false`, making
 it explicit when an action should run regardless of file timestamps. Targets
 listed in the `actions` section are deserialized using a custom helper so they
@@ -2152,7 +2152,7 @@ pub enum IrGenError {
         missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
     },
 
-    #[error("failed to serialise action: {0}")]
+    #[error("failed to serialize action: {0}")]
     ActionSerialisation(#[from] serde_json::Error), }
 ```
 
