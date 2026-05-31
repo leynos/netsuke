@@ -129,14 +129,6 @@ impl BuildGraph {
             missing_dependencies,
         } = cycle::analyse(&self.targets);
 
-        for (dependent, missing) in &missing_dependencies {
-            tracing::info!(
-                dependent = %dependent,
-                missing = %missing,
-                "unresolved dependency: not a build target; assuming it is an external file",
-            );
-        }
-
         if let Some(detected_cycle) = cycle {
             let message = localization::message(keys::IR_CIRCULAR_DEPENDENCY)
                 .with_arg("cycle", format!("{detected_cycle:?}"));
