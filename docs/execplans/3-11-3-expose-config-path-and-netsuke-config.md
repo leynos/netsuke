@@ -645,12 +645,15 @@ the JSON value that feeds the merge pipeline.
 ///
 /// Precedence: `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
 /// Empty environment values are ignored.
-fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
+fn resolve_config_path<F>(cli: &Cli, var_os: F) -> Option<PathBuf>
+where
+    F: Fn(&str) -> Option<std::ffi::OsString>,
+{
     cli.config
         .as_ref()
-        .map(PathBuf::from)
-        .or_else(|| env_config_path(CONFIG_ENV_VAR))
-        .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
+        .cloned()
+        .or_else(|| env_config_path(&var_os, CONFIG_ENV_VAR))
+        .or_else(|| env_config_path(var_os, CONFIG_ENV_VAR_LEGACY))
 }
 ```
 
@@ -683,20 +686,20 @@ error from that direct load is appended to `errors`.
 ### Updated `collect_diag_file_layers` signature
 
 ```rust
-fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>>
+fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>>
 ```
 
 This mirrors the same resolution order for early diag-JSON evaluation. An
 explicit config path is resolved first and, when `load_layers_from_path()`
 succeeds, its layers are returned immediately. If that explicit load fails, the
-helper returns an empty vector and does not continue into automatic discovery,
-so an invalid explicit selector cannot inherit a discovered diagnostic
-preference. Without an explicit selector, the helper uses the same
+helper propagates the `OrthoError` and does not continue into automatic
+discovery, so an invalid explicit selector cannot inherit a discovered
+diagnostic preference. Without an explicit selector, the helper uses the same
 `config_discovery(cli.directory.as_deref())` path as `push_file_layers()`,
 returns the first-pass file layers when the project file was already
 discovered, and only falls back to `project_scope_layers()` when the first pass
-missed the project `.netsuke.toml`. If the direct project load fails, the
-helper returns the first-pass layers instead of propagating the error.
+missed the project `.netsuke.toml`. If the direct project load fails, that
+error is propagated to the diagnostic merge caller.
 
 ### Fluent key (`src/localization/keys.rs`)
 
