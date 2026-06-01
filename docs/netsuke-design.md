@@ -2702,6 +2702,16 @@ manual flag repetition.
   project, and user file layers, merges them with defaults, adds environment
   variables via Figment, and finally applies CLI overrides extracted from
   `ArgMatches`.
+- The `config_discovery()` function uses OrthoConfig's builder API without
+  further customisation beyond the application name and environment variable
+  override, relying on OrthoConfig's platform-specific defaults for standard
+  directory resolution.
+- Netsuke-owned environment reads for explicit config selection and early
+  diagnostic-JSON resolution go through the `EnvProvider` port in
+  `src/cli/discovery.rs`. Production code uses `StdEnvProvider`; tests can
+  inject a map-backed provider instead of mutating the process environment.
+  OrthoConfig discovery remains an external boundary and may still read
+  platform environment variables directly.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.
