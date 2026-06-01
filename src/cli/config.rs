@@ -272,14 +272,7 @@ impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         validate_theme_compatibility(self)?;
         validate_spinner_mode_compatibility(self)?;
-        if let Some(jobs) = self.jobs
-            && (jobs == 0 || jobs > MAX_JOBS)
-        {
-            return Err(super::validation_error(
-                "jobs",
-                &format!("jobs = {jobs} is out of range; must be between 1 and {MAX_JOBS}"),
-            ));
-        }
+        validate_jobs(self)?;
         Ok(())
     }
 }
@@ -314,4 +307,17 @@ fn validate_spinner_mode_compatibility(config: &CliConfig) -> OrthoResult<()> {
         )),
         _ => Ok(()),
     }
+}
+
+fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
+    let Some(jobs) = config.jobs else {
+        return Ok(());
+    };
+    if jobs == 0 || jobs > MAX_JOBS {
+        return Err(validation_error(
+            "jobs",
+            &format!("jobs = {jobs} is out of range; must be between 1 and {MAX_JOBS}"),
+        ));
+    }
+    Ok(())
 }
