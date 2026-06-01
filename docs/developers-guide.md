@@ -545,38 +545,55 @@ Table: Configuration merge helper functions
 | `push_file_layers`           | Push all file layers onto a `MergeComposer` in precedence order.     |
 | `collect_diag_file_layers`   | Mirror of `push_file_layers` for early `diag_json` resolution.       |
 | `is_empty_value`             | Return `true` for an empty JSON object (no CLI overrides).           |
-| `diag_json_from_layer`       | Extract `diag_json` from a config layer, preferring `output_format`. |
+| `diag_json_from_layer`       | Extract `diag_json` from a config layer.                             |
 | `diag_json_from_matches`     | Resolve final `diag_json` from CLI matches with fallback.            |
 | `cli_overrides_from_matches` | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
 | `env_provider`               | Return the `NETSUKE_` prefixed Figment environment provider.         |
 
 ### Environment lookup seams
 
-`resolve_config_path` is the crate-internal seam for explicit config-file
-selection. It accepts a `var_os` closure with this shape:
+`EnvProvider` is the crate-internal port for raw environment access during CLI
+configuration resolution. The production adapter delegates to
+`std::env::var_os`; unit tests use map-backed providers so they do not mutate
+process-wide environment variables when exercising explicit config selection
+or early diagnostic-mode resolution.
 
 ```rust
-Fn(&str) -> Option<std::ffi::OsString>
+pub trait EnvProvider {
+    fn get(&self, key: &str) -> Option<std::ffi::OsString>;
+}
 ```
 
-Production callers pass `std::env::var_os`, while unit tests pass a
-`HashMap`-backed closure. This keeps deterministic tests for `NETSUKE_CONFIG`
-and `NETSUKE_CONFIG_PATH` without threading an environment adapter through the
-public merge API.
+`explicit_config_path_with_env`, `collect_diag_file_layers_with_env`, and the
+provider-injected diagnostic resolver all accept this port. This keeps
+deterministic tests for `NETSUKE_CONFIG`, `NETSUKE_CONFIG_PATH`, and
+`NETSUKE_DIAG_JSON` without coupling those tests to the global process
+environment.
 
-`collect_diag_file_layers` and `push_file_layers` call `resolve_config_path`
-with `std::env::var_os`, so both early diagnostic resolution and the full merge
-path use the same explicit config selector precedence. The public API remains
-two arguments:
+Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
+`EnvLock` because the external discovery implementation reads platform
+environment variables directly. Tests for Netsuke's own environment port should
+avoid `EnvLock`.
+
+`collect_diag_file_layers_with_env` and `push_file_layers_with_env` call
+`explicit_config_path_with_env` with the same provider, so both early diagnostic
+resolution and the full merge path use the same explicit config selector
+precedence. The production public API remains two arguments, with an injected
+variant for tests and composition code:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
+pub fn resolve_merged_diag_json_with_env(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+) -> OrthoResult<bool>;
 ```
 
 Unit tests that only need to verify explicit config path precedence should test
-`resolve_config_path` with an injected closure instead of mutating the process
-environment.
+`explicit_config_path_with_env` with an injected provider instead of mutating
+the process environment.
 
 #### `diag_json` contract
 

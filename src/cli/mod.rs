@@ -16,7 +16,8 @@ mod parser;
 mod parsing;
 
 pub use config::{CliConfig, ColourPolicy, OutputFormat, SpinnerMode, Theme};
-pub use diag::resolve_merged_diag_json;
+pub use diag::{resolve_merged_diag_json, resolve_merged_diag_json_with_env};
+pub use discovery::{EnvProvider as ConfigEnvProvider, StdEnvProvider as ConfigStdEnvProvider};
 pub use merge::merge_with_config;
 pub use parser::{
     BuildArgs, Cli, Commands, GraphArgs, diag_json_hint_from_args, locale_hint_from_args,
