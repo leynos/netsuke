@@ -202,6 +202,47 @@ implementation begins.
       review.
 - [x] Stage F: commit, push, and update the pull request for the implemented
       feature.
+- [x] 2026-06-01T00:00:00Z: Verified the latest review findings against the
+      current branch. The `canonicalisation` spelling and redacted Makefile
+      diagnostic findings were already fixed. The missing test coverage finding
+      was still valid, so focused Makefile and CI workflow tests were added.
+- [x] 2026-06-01T00:00:00Z: Added `tests/prover_tools_make_tests.rs` to run
+      `install-kani`, `kani-check`, `install-verus`, and `verus` against a
+      fake `prover-tools` executable, proving delegation, redacted stderr, and
+      failure diagnostics without installing real prover tooling.
+- [x] 2026-06-01T00:00:00Z: Added `tests/workflow_ci.rs` to validate that the
+      `kani-smoke` job installs uv without lockfile caching and delegates to
+      `make install-kani` and `make kani-check`.
+- [x] 2026-06-01T00:00:00Z: Ran the targeted new tests with
+      `cargo test --test prover_tools_make_tests --test workflow_ci`; all
+      passed after correcting the failure test to assert Make's non-zero
+      status and the explicit prover-tools failure diagnostic rather than a
+      propagated process exit code.
+- [x] 2026-06-01T00:00:00Z: Ran `make check-fmt`, `make lint`, `make test`,
+      and `make markdownlint` after adding the coverage; all passed.
+- [x] 2026-06-01T00:00:00Z: Ran `coderabbit review --agent`; it reported
+      three valid test-quality findings. The fixes gated the Unix-only
+      Makefile test with `#![cfg(unix)]`, made the fake Kani version file read
+      the real `tools/kani/VERSION` pin, and changed the CI workflow test to
+      parse YAML through `serde_yaml` before asserting `kani-smoke` fields.
+- [x] 2026-06-01T00:00:00Z: Reran
+      `cargo test --test prover_tools_make_tests --test workflow_ci` after the
+      CodeRabbit fixes; all targeted tests passed.
+- [x] 2026-06-01T00:00:00Z: Reran `make check-fmt`, `make lint`,
+      `make test`, and `make markdownlint` after the CodeRabbit fixes; all
+      passed.
+- [x] 2026-06-01T00:00:00Z: Reran `coderabbit review --agent`; it reported
+      three valid trivial test cleanups. The fixes clarified the `Install uv`
+      assertion message, added an `rstest` fixture for fake prover tools, and
+      shared Make command construction between the success and failure tests.
+- [x] 2026-06-01T00:00:00Z: Reran
+      `cargo test --test prover_tools_make_tests --test workflow_ci` after the
+      final review cleanups; all targeted tests passed.
+- [x] 2026-06-01T00:00:00Z: Fixed a strict Clippy shadowing finding introduced
+      by the new fixture name, then reran `make check-fmt`, `make lint`,
+      `make test`, and `make markdownlint`; all passed.
+- [x] 2026-06-01T00:00:00Z: Reran `coderabbit review --agent` for final
+      confirmation after all review cleanups; it completed with zero findings.
 
 ## Surprises & Discoveries
 
@@ -244,6 +285,15 @@ implementation begins.
   this task. The formatter churn was restored because the working tree was
   clean before the command and those changes exceeded this plan's scope. The
   required checking gates, including `make markdownlint`, passed afterwards.
+- GNU Make reports the failed build as a non-zero Make process status rather
+  than preserving the exact recipe command status as the process exit code.
+  The prover-tool targets already print `failed exit=<status>` diagnostics, so
+  the new failure test asserts that explicit diagnostic instead of assuming
+  Make exits with the prover-tool command's numeric status.
+- `tests/prover_tools_make_tests.rs` uses a shell script and Unix permission
+  bits to create a fake `prover-tools` executable, so it must be compiled only
+  on Unix platforms. Windows CI still receives coverage for the YAML workflow
+  wiring through `tests/workflow_ci.rs`.
 
 ## Decision Log
 
@@ -288,6 +338,21 @@ implementation begins.
   by the roadmap and design document. It does not introduce a new substantive
   architecture decision.
   Date/Author: 2026-05-24 / implementing agent.
+
+- Decision: Add behavioural tests for the delegated prover-tool Make targets
+  and CI smoke job.
+  Rationale: The branch now contains Makefile and CI workflow behaviour beyond
+  the original documentation-only plan. That behaviour is externally
+  observable through `make` and GitHub Actions, so focused tests are applicable
+  and keep the redaction and delegation contracts from regressing.
+  Date/Author: 2026-06-01 / implementing agent.
+
+- Decision: Parse `.github/workflows/ci.yml` with `serde_yaml` in the workflow
+  test.
+  Rationale: The CI smoke-job contract is structured YAML. Parsing the workflow
+  avoids brittle whole-file string assertions and lets the test check the
+  `kani-smoke` job, steps, `with` mappings, and run commands directly.
+  Date/Author: 2026-06-01 / implementing agent.
 
 ## Implementation plan
 
@@ -465,3 +530,7 @@ Follow-up review fixes renamed the version-only Kani smoke target to
 delegated `rust-prover-tools` Make targets now print maintainer diagnostics to
 standard error before invocation, including the pinned prover source, target
 name, redacted command shape, relevant Kani version, and failure exit status.
+Follow-up test coverage now exercises those Make targets with a fake
+`prover-tools` executable and validates the `kani-smoke` CI workflow wiring, so
+the prover-tool delegation and redacted diagnostics are covered without
+installing external verifier toolchains during ordinary tests.
