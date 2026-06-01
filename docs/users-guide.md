@@ -774,7 +774,8 @@ The newer typed preference aliases use the same precedence chain:
 - `spinner_mode = "enabled" | "disabled"`
 - `--output-format human|json`
 - `NETSUKE_OUTPUT_FORMAT=human|json`
-- `output_format = "human" | "json"`
+- `output_format = "human"` (config file; `"json"` is rejected — use
+  `--diag-json` instead)
 - `--default-target <TARGET>` (repeatable)
 - `NETSUKE_DEFAULT_TARGETS__0=<TARGET>` style environment entries
 - `default_targets = ["lint", "test"]`

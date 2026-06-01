@@ -334,7 +334,7 @@ available when the guard is no longer needed after the read.
 
 Tests that call `std::env::set_current_dir` must restore the original working
 directory after the test. `CwdGuard` is available from `test_support`, and is
-used in `src/cli/config_merge_tests.rs`; local copies also remain in
+used in `tests/cli_tests/merge.rs`; local copies also remain in
 `tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
 captures the current directory on construction and restores it on drop:
 
@@ -448,7 +448,7 @@ Table: Scenario state groups and fields
 
 ## Configuration merge architecture
 
-Configuration merging lives in `src/cli/config_merge.rs`. The module keeps
+Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
 ### Two-pass file discovery

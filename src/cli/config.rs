@@ -268,6 +268,10 @@ impl CliConfig {
 
 const MAX_JOBS: usize = super::parser::MAX_JOBS;
 
+const fn jobs_out_of_bounds(jobs: usize) -> bool {
+    jobs == 0 || jobs > MAX_JOBS
+}
+
 impl PostMergeHook for CliConfig {
     fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
         validate_theme_compatibility(self)?;
@@ -313,7 +317,7 @@ fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
     let Some(jobs) = config.jobs else {
         return Ok(());
     };
-    if jobs == 0 || jobs > MAX_JOBS {
+    if jobs_out_of_bounds(jobs) {
         return Err(validation_error(
             "jobs",
             &format!("jobs = {jobs} is out of range; must be between 1 and {MAX_JOBS}"),
