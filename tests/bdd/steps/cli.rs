@@ -236,29 +236,27 @@ fn verify_first_target(world: &TestWorld, target: &TargetName) -> Result<()> {
     Ok(())
 }
 
+/// Assert that an optional path equals the expected value.
+fn ensure_optional_path(actual: Option<PathBuf>, expected: &PathString, label: &str) -> Result<()> {
+    ensure!(
+        actual.as_deref() == Some(expected.as_path()),
+        "expected {label} {expected}, got {actual:?}",
+    );
+    drop(actual);
+    Ok(())
+}
+
 fn verify_working_directory(world: &TestWorld, directory: &PathString) -> Result<()> {
     let actual = world
         .cli
         .with_ref(|cli| cli.directory.clone())
         .context("CLI has not been parsed")?;
-    ensure!(
-        actual.as_deref() == Some(directory.as_path()),
-        "expected working directory {}, got {:?}",
-        directory,
-        actual
-    );
-    Ok(())
+    ensure_optional_path(actual, directory, "working directory")
 }
 
 fn verify_emit_path(world: &TestWorld, path: &PathString) -> Result<()> {
     let (_, emit) = extract_build(world)?;
-    ensure!(
-        emit.as_deref() == Some(path.as_path()),
-        "expected emit path {}, got {:?}",
-        path,
-        emit
-    );
-    Ok(())
+    ensure_optional_path(emit, path, "emit path")
 }
 
 fn verify_cli_policy_allows(world: &TestWorld, url: &UrlString) -> Result<()> {
@@ -293,14 +291,8 @@ fn verify_cli_policy_rejects(
 }
 
 fn verify_graph_output_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let actual = extract_graph_args(world)?.output;
-    ensure!(
-        actual.as_deref() == Some(path.as_path()),
-        "expected graph output path {}, got {:?}",
-        path,
-        actual
-    );
-    Ok(())
+    let output = extract_graph_args(world)?.output;
+    ensure_optional_path(output, path, "graph output path")
 }
 
 fn verify_graph_html_set(world: &TestWorld) -> Result<()> {
