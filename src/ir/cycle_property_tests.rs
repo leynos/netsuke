@@ -118,3 +118,74 @@ fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
 
     assert!(CycleDetector::find_cycle(&targets).is_some());
 }
+
+/// Generate a list of `count` distinct node names "n0", "n1", …
+fn sequential_nodes(count: usize) -> Vec<String> {
+    (0..count).map(|i| format!("n{i}")).collect()
+}
+
+/// Build an acyclic chain: n0 → n1 → … → n(count-1) (no back-edges).
+fn make_acyclic_chain(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
+    let mut targets = HashMap::new();
+    for (i, name) in nodes.iter().enumerate() {
+        let inputs: Vec<&str> = if i + 1 < nodes.len() {
+            vec![nodes[i + 1].as_str()]
+        } else {
+            vec![]
+        };
+        targets.insert(path(name), build_edge(&inputs, &[], name));
+    }
+    targets
+}
+
+/// Build a cycle of length `cycle_len` starting at node index 0.
+fn make_cycle_graph(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
+    let len = nodes.len();
+    let mut targets = HashMap::new();
+    for (i, name) in nodes.iter().enumerate() {
+        let dep = &nodes[(i + 1) % len];
+        targets.insert(path(name), build_edge(&[dep.as_str()], &[], name));
+    }
+    targets
+}
+
+proptest! {
+    /// detect() returns None for acyclic chains and leaves the stack empty.
+    #[test]
+    fn detect_acyclic_graph_leaves_stack_empty(count in 2usize..=8) {
+        let nodes = sequential_nodes(count);
+        let targets = make_acyclic_chain(&nodes);
+        let mut detector = CycleDetector::new(&targets);
+        prop_assert!(detector.detect().is_none());
+        prop_assert!(
+            detector.stack.is_empty(),
+            "stack must be empty after acyclic traversal",
+        );
+    }
+
+    /// detect() returns Some for cyclic graphs and leaves the stack empty.
+    #[test]
+    fn detect_cyclic_graph_leaves_stack_empty(count in 2usize..=8) {
+        let nodes = sequential_nodes(count);
+        let targets = make_cycle_graph(&nodes);
+        let mut detector = CycleDetector::new(&targets);
+        prop_assert!(detector.detect().is_some());
+        prop_assert!(
+            detector.stack.is_empty(),
+            "stack must be empty after cycle detection",
+        );
+    }
+
+    /// detect() is deterministic: all invocations on the same graph return
+    /// the same canonical cycle.
+    #[test]
+    fn detect_is_deterministic_on_cyclic_graphs(count in 2usize..=6) {
+        let nodes = sequential_nodes(count);
+        let targets = make_cycle_graph(&nodes);
+        let first = CycleDetector::find_cycle(&targets);
+        for _ in 1..20 {
+            let next = CycleDetector::find_cycle(&targets);
+            prop_assert_eq!(&first, &next);
+        }
+    }
+}

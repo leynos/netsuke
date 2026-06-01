@@ -86,6 +86,10 @@ impl CycleDetector<'_> {
     /// or `None` if the graph is acyclic.
     fn detect(&mut self) -> Option<Vec<Utf8PathBuf>> {
         let mut nodes: Vec<Utf8PathBuf> = self.targets.keys().cloned().collect();
+        // Sort keys to guarantee deterministic traversal order.  The
+        // O(n log n) cost is negligible for typical build graphs
+        // (100–10 000 targets) and is outweighed by the benefit of
+        // stable, reproducible error messages.
         nodes.sort();
         for node in nodes {
             if self.is_visited(node.as_path()) {
