@@ -53,7 +53,10 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    let mode = DiagMode::from_json_enabled(cli::resolve_merged_json(&parsed_cli, &matches));
+    let mode = match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
+        Ok(mode) => mode,
+        Err(code) => return code,
+    };
 
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
@@ -116,6 +119,26 @@ fn parse_cli_or_exit(
     }
 }
 
+fn resolve_json_mode_or_exit(
+    parsed_cli: &cli::Cli,
+    matches: &ArgMatches,
+    fallback_mode: DiagMode,
+) -> Result<DiagMode, ExitCode> {
+    match cli::resolve_merged_json(parsed_cli, matches) {
+        Ok(enabled) => Ok(DiagMode::from_json_enabled(enabled)),
+        Err(err) => {
+            if fallback_mode.is_json() {
+                Err(diagnostic_json::emit_or_fallback(
+                    diagnostic_json::render_error_json(err.as_ref()),
+                ))
+            } else {
+                init_tracing(Level::ERROR);
+                tracing::error!(error = %err, "configuration load failed");
+                Err(ExitCode::FAILURE)
+            }
+        }
+    }
+}
 fn merge_cli_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,

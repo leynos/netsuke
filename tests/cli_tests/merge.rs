@@ -2,14 +2,14 @@
 //!
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
 //! CLI) and list-value appending.
-
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, ProgressPolicy};
 use netsuke::cli_localization;
 use ortho_config::{MergeComposer, sanitize_value};
 use rstest::{fixture, rstest};
 use serde_json::json;
-use std::ffi::OsStr;
+use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -186,7 +186,7 @@ json = true
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
         .context("parse CLI args for merge")?;
     ensure!(
-        netsuke::cli::resolve_merged_json(&cli, &matches),
+        netsuke::cli::resolve_merged_json(&cli, &matches)?,
         "pre-merge JSON mode should honour config json",
     );
     let merged = netsuke::cli::merge_with_config(&cli, &matches)
@@ -249,6 +249,26 @@ fn cli_merge_layers_prefers_cli_then_env_then_file_for_locale(
 }
 
 #[rstest]
+fn resolve_merged_json_honours_injected_env() -> Result<()> {
+    let temp_dir = tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    fs::write(&config_path, "json = false\n").context("write netsuke.toml")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let config_arg = config_path.to_string_lossy().into_owned();
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
+            .context("parse CLI args for injected JSON env")?;
+    let env = TestEnv::default().with_var("NETSUKE_JSON", "1");
+
+    ensure!(
+        netsuke::cli::resolve_merged_json_with_env(&cli, &matches, &env)?,
+        "injected NETSUKE_JSON should override file config",
+    );
+
+    Ok(())
+}
+#[rstest]
 fn cli_config_build_defaults_apply_when_cli_targets_are_absent() -> Result<()> {
     assert_build_targets(
         r#"
@@ -302,4 +322,21 @@ fn cli_config_rejects_conflicting_or_unsupported_settings(
     #[case] expected_error: ExpectedValidationError,
 ) -> Result<()> {
     assert_merge_rejects(default_cli_json?, file_layer, expected_error)
+}
+
+struct TestEnv {
+    values: HashMap<&'static str, OsString>,
+}
+
+impl TestEnv {
+    fn with_var(mut self, name: &'static str, value: impl Into<OsString>) -> Self {
+        self.values.insert(name, value.into());
+        self
+    }
+}
+
+impl netsuke::cli::ConfigEnvProvider for TestEnv {
+    fn get(&self, key: &str) -> Option<OsString> {
+        self.values.get(key).cloned()
+    }
 }

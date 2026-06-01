@@ -889,6 +889,9 @@ a two-pass approach when no explicit config path is provided:
 Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
 
+Early JSON resolution reuses this logic through
+`collect_diag_file_layers_with_env`, before full configuration merging.
+
 ### Layer precedence
 
 The final merge order is:
@@ -914,15 +917,17 @@ Configuration merge helpers:
 - `project_scope_layers(directory)` loads the project-scope config directly,
   bypassing automatic discovery, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
-- `env_config_path(var_name: &str) -> Option<PathBuf>` reads one config
+- `env_config_path(env, var_name) -> Option<PathBuf>` reads one config
   environment variable, ignores empty values, and converts the value into a
   `PathBuf`.
-- `explicit_config_path(cli: &Cli) -> Option<PathBuf>` resolves explicit config
-  selection from `--config` and `NETSUKE_CONFIG`.
+- `explicit_config_path_with_env(cli, env) -> Option<PathBuf>` resolves explicit
+  config selection from `--config` and `NETSUKE_CONFIG`.
 - `push_file_layers(cli, composer, errors) -> ()` pushes explicit or discovered
   file layers onto a `MergeComposer`. Explicit load errors are pushed into
   `errors`, and automatic discovery is not attempted after an explicit selector
   fails.
+- `collect_diag_file_layers_with_env(cli, env)` reuses the same file-layer
+  precedence for early JSON resolution.
 - `collect_file_layers(directory)` builds the fallback discovery layer chain,
   applies the project-layer second pass, and returns
   `OrthoResult<Vec<MergeLayer<'static>>>`.
@@ -939,37 +944,49 @@ Configuration merge helpers:
 
 ### Environment lookup seams
 
-`explicit_config_path` is the crate-internal seam for explicit config-file
-selection. It evaluates the precedence chain in this order:
+`EnvProvider` is the port for raw environment access during early CLI
+configuration resolution. The production `StdEnvProvider` adapter delegates
+to `std::env::var_os`; tests can inject map-backed providers without mutating
+process-global state.
+
+`explicit_config_path_with_env` is the crate-internal seam for explicit
+config-file selection. It evaluates the precedence chain in this order:
 
 1. `cli.config`
 2. `NETSUKE_CONFIG`
 
-`env_config_path(var_name)` is the helper that reads `std::env::var_os`,
-discarding empty values and converting the value into `PathBuf`. For `merge` and
-`resolve_merged_json`, `src/cli/discovery.rs` resolves only `NETSUKE_CONFIG`;
-no other environment variable can select a configuration file.
+`env_config_path(env, var_name)` discards empty values and converts a provided
+environment value into `PathBuf`. Both full merging and early JSON resolution
+use the same injected selector and file-layer implementation.
 
 The public API remains two arguments:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
-pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> bool;
+pub fn resolve_merged_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
+pub fn resolve_merged_json_with_env(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+) -> OrthoResult<bool>;
 ```
 
-Unit tests that need to verify explicit config path precedence should exercise
-the public merge or JSON-output APIs with guarded environment variables. The
-explicit selector helper reads the process environment directly and remains
-private to `src/cli/discovery.rs`.
+Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
+`EnvLock` because the external discovery implementation reads platform
+environment variables directly. Tests for Netsuke's own environment port should
+avoid `EnvLock`.
 
+Unit tests that only need to verify explicit config path precedence should test
+`explicit_config_path_with_env` with an injected provider instead of mutating
+the process environment.
 #### `json` contract
 
 Early JSON resolution reads only the boolean `json` field from each
 configuration layer. File layers are applied in merge order, followed by
 `NETSUKE_JSON`; an explicit root `--json` flag has the highest precedence.
-Invalid or unavailable early layers fall back to the built-in `false` default,
-allowing startup and merge failures to use the same output policy as normal
-runtime diagnostics.
+Selected file-load errors and malformed `NETSUKE_JSON` values are returned to
+the caller. Accepted environment values are `true`, `false`, `1`, and `0`.
+An explicit root `--json` flag bypasses environment parsing.
 
 ## BDD command helpers and environment handling
 
