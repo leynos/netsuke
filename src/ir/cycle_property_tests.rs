@@ -1,7 +1,8 @@
 use proptest::prelude::*;
+use std::collections::HashMap;
 
-use super::super::canonicalize_cycle;
-use super::path;
+use super::super::{canonicalize_cycle, CycleDetector};
+use super::{build_edge, path};
 
 /// Generate a non-empty list of distinct single-character node names.
 fn node_names(min: usize, max: usize) -> impl Strategy<Value = Vec<String>> {
@@ -20,6 +21,13 @@ fn make_cycle(nodes: &[String]) -> Vec<camino::Utf8PathBuf> {
             .expect("node_names generates at least two nodes"),
     ));
     cycle
+}
+
+fn check_canonicalize_cycle(input: &[&str], expected: &[&str]) {
+    let cycle: Vec<camino::Utf8PathBuf> = input.iter().map(|&s| path(s)).collect();
+    let canonical = canonicalize_cycle(cycle);
+    let want: Vec<camino::Utf8PathBuf> = expected.iter().map(|&s| path(s)).collect();
+    assert_eq!(canonical, want);
 }
 
 proptest! {
@@ -67,4 +75,46 @@ proptest! {
         let canonical = canonicalize_cycle(make_cycle(&nodes));
         prop_assert_eq!(canonical.first(), canonical.last());
     }
+}
+
+#[test]
+fn find_cycle_is_deterministic() {
+    let mut targets = HashMap::new();
+    targets.insert(path("p"), build_edge(&["q"], &[], "p"));
+    targets.insert(path("q"), build_edge(&["p"], &[], "q"));
+    targets.insert(path("x"), build_edge(&["y"], &[], "x"));
+    targets.insert(path("y"), build_edge(&["x"], &[], "y"));
+
+    let first = CycleDetector::find_cycle(&targets).expect("cycle");
+    for _ in 1..100 {
+        let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
+        assert!(
+            cycle == first,
+            "find_cycle returned inconsistent results across runs: \
+             first={first:?}, got={cycle:?}",
+        );
+    }
+    // Probabilistic guard: 100 runs; `detect` sorts keys for stable traversal.
+    tracing::info!("find_cycle returned the same cycle across 100 runs");
+}
+
+#[test]
+fn canonicalize_cycle_rotates_smallest_node() {
+    check_canonicalize_cycle(&["c", "a", "b", "c"], &["a", "b", "c", "a"]);
+}
+
+#[test]
+fn canonicalize_cycle_handles_reverse_direction() {
+    check_canonicalize_cycle(&["c", "b", "a", "c"], &["a", "c", "b", "a"]);
+}
+
+#[test]
+fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
+    let mut targets = HashMap::new();
+    targets.insert(path("p"), build_edge(&["q"], &[], "p"));
+    targets.insert(path("q"), build_edge(&["p"], &[], "q"));
+    targets.insert(path("x"), build_edge(&["y"], &[], "x"));
+    targets.insert(path("y"), build_edge(&["x"], &[], "y"));
+
+    assert!(CycleDetector::find_cycle(&targets).is_some());
 }

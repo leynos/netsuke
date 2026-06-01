@@ -213,6 +213,9 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use rstest::rstest;
+
     fn path(name: &str) -> Utf8PathBuf {
         Utf8PathBuf::from(name)
     }
@@ -315,6 +318,19 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::explicit_dependency(MissingDepsCase {
+        primary_inputs: &["b"],
+        primary_implicit_deps: &[],
+        extra_targets: &[],
+        expected: &[("a", "b")],
+    })]
+    #[case::implicit_dependency(MissingDepsCase {
+        primary_inputs: &["b"],
+        primary_implicit_deps: &["missing"],
+        extra_targets: &[("b", &[], &[])],
+        expected: &[("a", "missing")],
+    })]
     fn cycle_detector_records_missing_dependencies(#[case] case: MissingDepsCase<'_>) {
         assert_missing_deps(&case);
     }
@@ -353,13 +369,6 @@ mod tests {
         );
     }
 
-    fn check_canonicalize_cycle(input: &[&str], expected: &[&str]) {
-        let cycle: Vec<Utf8PathBuf> = input.iter().map(|&s| path(s)).collect();
-        let canonical = canonicalize_cycle(cycle);
-        let want: Vec<Utf8PathBuf> = expected.iter().map(|&s| path(s)).collect();
-        assert_eq!(canonical, want);
-    }
-
     #[test]
     fn find_cycle_identifies_mixed_input_and_implicit_dependency_cycle() {
         let mut targets = HashMap::new();
@@ -381,49 +390,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn canonicalize_cycle_rotates_smallest_node() {
-        check_canonicalize_cycle(&["c", "a", "b", "c"], &["a", "b", "c", "a"]);
-    }
-
-    #[test]
-    fn canonicalize_cycle_handles_reverse_direction() {
-        check_canonicalize_cycle(&["c", "b", "a", "c"], &["a", "c", "b", "a"]);
-    }
-
     mod property_tests {
         include!("cycle_property_tests.rs");
-    }
-
-    #[test]
-    fn find_cycle_is_deterministic() {
-        let mut targets = HashMap::new();
-        targets.insert(path("p"), build_edge(&["q"], &[], "p"));
-        targets.insert(path("q"), build_edge(&["p"], &[], "q"));
-        targets.insert(path("x"), build_edge(&["y"], &[], "x"));
-        targets.insert(path("y"), build_edge(&["x"], &[], "y"));
-
-        let first = CycleDetector::find_cycle(&targets).expect("cycle");
-        for _ in 1..100 {
-            let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
-            assert!(
-                cycle == first,
-                "find_cycle returned inconsistent results across runs: \
-                 first={first:?}, got={cycle:?}",
-            );
-        }
-        // Probabilistic guard: 100 runs; `detect` sorts keys for stable traversal.
-        tracing::info!("find_cycle returned the same cycle across 100 runs");
-    }
-
-    #[test]
-    fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
-        let mut targets = HashMap::new();
-        targets.insert(path("p"), build_edge(&["q"], &[], "p"));
-        targets.insert(path("q"), build_edge(&["p"], &[], "q"));
-        targets.insert(path("x"), build_edge(&["y"], &[], "x"));
-        targets.insert(path("y"), build_edge(&["x"], &[], "y"));
-
-        assert!(CycleDetector::find_cycle(&targets).is_some());
     }
 }
