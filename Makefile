@@ -56,13 +56,13 @@ nixie: ## Validate Mermaid diagrams
 install-kani: ## Install the pinned Kani verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
 	@printf 'prover-tools: target=install-kani kani-version=%s\n' "$$(cat '$(KANI_VERSION_FILE)')" >&2
-	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS)' >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani install <redacted-flags>' >&2
 	@$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-check: ## Check the installed Kani verifier version
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
 	@printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI)' "$$(cat '$(KANI_VERSION_FILE)')" >&2
-	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS)' >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani check-version --kani-command <redacted-command> <redacted-flags>' >&2
 	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
@@ -71,13 +71,13 @@ kani-full: ## Run the full Kani verification suite
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
 	@printf 'prover-tools: target=install-verus\n' >&2
-	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) verus install $(VERUS_INSTALL_FLAGS)' >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) verus install <redacted-flags>' >&2
 	@$(PROVER_TOOLS) verus install $(VERUS_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-verus failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 verus: ## Run the Verus proof entry point
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
 	@printf 'prover-tools: target=verus\n' >&2
-	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) verus run $(VERUS_FLAGS)' >&2
+	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) verus run <redacted-flags>' >&2
 	@$(PROVER_TOOLS) verus run $(VERUS_FLAGS) || { status=$$?; printf 'prover-tools: target=verus failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 formal-pr: ## Run pull-request formal-verification checks

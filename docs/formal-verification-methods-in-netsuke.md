@@ -187,7 +187,8 @@ package remains free of Python runtime dependencies.
 
 The delegated Make targets should emit concise maintainer diagnostics to
 standard error before invoking `rust-prover-tools`: the pinned prover-tool
-source, target name, command, relevant version pin, and failure exit status.
+source, target name, redacted command shape, relevant version pin, and failure
+exit status.
 
 #### Tool version pinning and updates
 

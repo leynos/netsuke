@@ -464,4 +464,4 @@ Follow-up review fixes renamed the version-only Kani smoke target to
 `make kani-check` so the Make target name reflects its responsibility. The
 delegated `rust-prover-tools` Make targets now print maintainer diagnostics to
 standard error before invocation, including the pinned prover source, target
-name, command, relevant Kani version, and failure exit status.
+name, redacted command shape, relevant Kani version, and failure exit status.

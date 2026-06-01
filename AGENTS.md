@@ -57,37 +57,6 @@
 - **Style:** All documentation must adhere to the
   [documentation style guide](docs/documentation-style-guide.md).
 
-
-## Change quality & committing
-
-- **Atomicity:** Aim for small, focused, atomic changes. Each change (and
-  subsequent commit) should represent a single logical unit of work.
-- **Quality Gates:** Before considering a change complete or proposing a commit,
-  ensure it meets the following criteria:
-  - New functionality or changes in behaviour are fully validated by relevant
-    unit tests and behavioural tests.
-  - Where a bug is being fixed, a unittest has been provided demonstrating the
-    behaviour being corrected both to validate the fix and to guard against
-    regression.
-  - Passes all relevant unit and behavioural tests according to the guidelines
-    above.
-  - Passes lint checks
-  - Adheres to formatting standards tested using a formatting validator.
-- **Committing:**
-  - Only changes that meet all the quality gates above should be committed.
-  - Write clear, descriptive commit messages summarizing the change, following
-    these formatting guidelines:
-    - **Imperative Mood:** Use the imperative mood in the subject line (e.g.,
-      "Fix bug", "Add feature" instead of "Fixed bug", "Added feature").
-    - **Subject Line:** The first line should be a concise summary of the change
-      (ideally 50 characters or fewer).
-    - **Body:** Separate the subject from the body with a blank line. Subsequent
-      lines should explain the *what* and *why* of the change in more detail,
-      including rationale, goals, and scope. Wrap the body at 72 characters.
-    - **Formatting:** Use Markdown for any formatted text (like bullet points or
-      code snippets) within the commit message body.
-  - Do not commit changes that fail any of the quality gates.
-
 ## Change quality & committing
 
 - **Atomicity:** Aim for small, focused, atomic changes. Each change (and

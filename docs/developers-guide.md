@@ -97,8 +97,8 @@ the repository's ordinary stable Rust workflow.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
-pinned source, Make target, command, relevant Kani version, and non-zero exit
-status on failure.
+pinned source, Make target, redacted command shape, relevant Kani version, and
+non-zero exit status on failure.
 
 Use the Make targets for day-to-day formal-verification checks:
 
@@ -119,7 +119,7 @@ Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any first
 Verus work must stay outside ordinary Cargo and focus on a small cycle
-canonicalization model. Stateright is deferred entirely until Netsuke gains an
+canonicalisation model. Stateright is deferred entirely until Netsuke gains an
 accepted stateful concurrent subsystem such as a daemon, watch service,
 remote-execution coordinator, actor protocol, or internal scheduler with
 long-lived mutable control-plane state. See
