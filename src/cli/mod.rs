@@ -9,12 +9,15 @@ use ortho_config::OrthoError;
 use std::sync::Arc;
 
 pub mod config;
+mod diag;
+mod discovery;
 mod merge;
 mod parser;
 mod parsing;
 
 pub use config::{CliConfig, ColourPolicy, OutputFormat, SpinnerMode, Theme};
-pub use merge::{merge_with_config, resolve_merged_diag_json};
+pub use diag::resolve_merged_diag_json;
+pub use merge::merge_with_config;
 pub use parser::{
     BuildArgs, Cli, Commands, diag_json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,
