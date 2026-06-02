@@ -127,12 +127,9 @@ fn sequential_nodes(count: usize) -> Vec<String> {
 /// Build an acyclic chain: n0 → n1 → … → n(count-1) (no back-edges).
 fn make_acyclic_chain(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
     let mut targets = HashMap::new();
-    for (i, name) in nodes.iter().enumerate() {
-        let inputs: Vec<&str> = if i + 1 < nodes.len() {
-            vec![nodes[i + 1].as_str()]
-        } else {
-            vec![]
-        };
+    let mut iter = nodes.iter().peekable();
+    while let Some(name) = iter.next() {
+        let inputs: Vec<&str> = iter.peek().map(|n| n.as_str()).into_iter().collect();
         targets.insert(path(name), build_edge(&inputs, &[], name));
     }
     targets
@@ -140,10 +137,9 @@ fn make_acyclic_chain(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::s
 
 /// Build a cycle of length `cycle_len` starting at node index 0.
 fn make_cycle_graph(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
-    let len = nodes.len();
     let mut targets = HashMap::new();
-    for (i, name) in nodes.iter().enumerate() {
-        let dep = &nodes[(i + 1) % len];
+    let deps = nodes.iter().cycle().skip(1).take(nodes.len());
+    for (name, dep) in nodes.iter().zip(deps) {
         targets.insert(path(name), build_edge(&[dep.as_str()], &[], name));
     }
     targets
