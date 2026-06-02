@@ -1,9 +1,8 @@
 # 4.1.3. Record the phase-1 Verus and Stateright boundary
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -47,8 +46,8 @@ implementation begins.
   remote-execution coordinator, actor protocol, or internal scheduler with
   long-lived mutable control-plane state.
 - Keep Verus out of production Cargo. If future work introduces a proof, it
-  must remain outside the ordinary Cargo build and focus first on a small
-  proof model for `src/ir/cycle.rs` cycle canonicalization.
+  must remain outside the ordinary Cargo build and focus first on a small proof
+  model for `src/ir/cycle.rs` cycle canonicalization.
 - Use `docs/formal-verification-methods-in-netsuke.md` as the design document
   for this decision. Create an Architecture Decision Record (ADR) only if
   implementation uncovers a new substantive decision beyond the existing
@@ -79,8 +78,8 @@ implementation begins.
 
 - Scope: if implementation requires more than 4 changed files beyond this
   ExecPlan, stop and escalate. The expected implementation files are
-  `docs/formal-verification-methods-in-netsuke.md`,
-  `docs/developers-guide.md`, and `docs/roadmap.md`.
+  `docs/formal-verification-methods-in-netsuke.md`, `docs/developers-guide.md`,
+  and `docs/roadmap.md`.
 - Code: if any Rust production file, test file, Cargo manifest, Makefile, CI
   workflow, script, locale file, or OrthoConfig surface must change, stop and
   get explicit approval before continuing.
@@ -107,16 +106,16 @@ implementation begins.
 
 - Risk: The existing formal-verification design document already states most
   of the intended policy, so the implementation could become redundant prose.
-  Severity: medium. Likelihood: high. Mitigation: make the change about
-  phase-1 boundary traceability, re-entry criteria, and developer workflow
-  expectations rather than repeating the executive summary.
+  Severity: medium. Likelihood: high. Mitigation: make the change about phase-1
+  boundary traceability, re-entry criteria, and developer workflow expectations
+  rather than repeating the executive summary.
 
 - Risk: The planned Verus layout in
   `docs/formal-verification-methods-in-netsuke.md` mentions future
-  `scripts/install-verus.sh`, `scripts/run-verus.sh`, and `tools/verus/`
-  paths, which could be misread as immediate implementation work. Severity:
-  medium. Likelihood: medium. Mitigation: clarify that phase 1 records the
-  optional proof-kernel boundary and does not create those paths.
+  `scripts/install-verus.sh`, `scripts/run-verus.sh`, and `tools/verus/` paths,
+  which could be misread as immediate implementation work. Severity: medium.
+  Likelihood: medium. Mitigation: clarify that phase 1 records the optional
+  proof-kernel boundary and does not create those paths.
 
 - Risk: "Proof kernel" can sound like a new production component. Severity:
   medium. Likelihood: medium. Mitigation: define it plainly as a small
@@ -255,8 +254,7 @@ implementation begins.
   prerequisite for any later evaluation of a minimal Verus proof kernel.
 - The current `Makefile` already exposes `make kani-check`, `make kani-full`,
   and `make formal-pr`. Verus targets are optional delegated tooling, and
-  Stateright has no Make target, which supports keeping Stateright out of
-  scope.
+  Stateright has no Make target, which supports keeping Stateright out of scope.
 - `Cargo.toml` includes `rstest`, `rstest-bdd`, and `rstest-bdd-macros`, but
   no direct `proptest`, `verus`, or Stateright dependencies at the time this
   plan was drafted.
@@ -286,10 +284,10 @@ implementation begins.
   clean before the command and those changes exceeded this plan's scope. The
   required checking gates, including `make markdownlint`, passed afterwards.
 - GNU Make reports the failed build as a non-zero Make process status rather
-  than preserving the exact recipe command status as the process exit code.
-  The prover-tool targets already print `failed exit=<status>` diagnostics, so
-  the new failure test asserts that explicit diagnostic instead of assuming
-  Make exits with the prover-tool command's numeric status.
+  than preserving the exact recipe command status as the process exit code. The
+  prover-tool targets already print `failed exit=<status>` diagnostics, so the
+  new failure test asserts that explicit diagnostic instead of assuming Make
+  exits with the prover-tool command's numeric status.
 - `tests/prover_tools_make_tests.rs` uses a shell script and Unix permission
   bits to create a fake `prover-tools` executable, so it must be compiled only
   on Unix platforms. Windows CI still receives coverage for the YAML workflow
@@ -308,50 +306,47 @@ implementation begins.
 
 - Decision: Record the boundary primarily in
   `docs/formal-verification-methods-in-netsuke.md`, with developer workflow
-  implications in `docs/developers-guide.md`.
-  Rationale: The formal-verification document is the design source for Phase 4,
-  while the developers' guide already explains the Kani toolchain and local
-  gate policy. Date/Author: 2026-05-22 / planning agent.
+  implications in `docs/developers-guide.md`. Rationale: The
+  formal-verification document is the design source for Phase 4, while the
+  developers' guide already explains the Kani toolchain and local gate policy.
+  Date/Author: 2026-05-22 / planning agent.
 
 - Decision: Do not plan new unit, behavioural, property, Kani, Verus, or
-  Stateright tests for the expected implementation.
-  Rationale: A documentation-only boundary record has no runtime behaviour,
-  externally observable workflow, invariant over program state, or proof
-  obligation. If implementation changes CLI/configuration/code, this decision
-  is invalid and the plan must be revised before proceeding.
-  Date/Author: 2026-05-22 / planning agent.
+  Stateright tests for the expected implementation. Rationale: A
+  documentation-only boundary record has no runtime behaviour, externally
+  observable workflow, invariant over program state, or proof obligation. If
+  implementation changes CLI/configuration/code, this decision is invalid and
+  the plan must be revised before proceeding. Date/Author: 2026-05-22 /
+  planning agent.
 
 - Decision: Proceed with a documentation-only implementation after approval.
   Rationale: The user approved implementation of this ExecPlan, and the
   pre-change review found no need to change code, configuration, CI, locale
-  files, OrthoConfig surfaces, or tool dependencies.
-  Date/Author: 2026-05-24 / implementing agent.
+  files, OrthoConfig surfaces, or tool dependencies. Date/Author: 2026-05-24 /
+  implementing agent.
 
 - Decision: Leave `docs/users-guide.md` unchanged.
   Rationale: This implementation records contributor-facing tool boundaries and
   does not change command-line behaviour, configuration, output, persistence,
-  or any other user-visible workflow.
-  Date/Author: 2026-05-24 / implementing agent.
+  or any other user-visible workflow. Date/Author: 2026-05-24 / implementing
+  agent.
 
 - Decision: Do not create an ADR for this item.
   Rationale: The implementation records the phase-1 boundary already requested
   by the roadmap and design document. It does not introduce a new substantive
-  architecture decision.
-  Date/Author: 2026-05-24 / implementing agent.
+  architecture decision. Date/Author: 2026-05-24 / implementing agent.
 
 - Decision: Add behavioural tests for the delegated prover-tool Make targets
-  and CI smoke job.
-  Rationale: The branch now contains Makefile and CI workflow behaviour beyond
-  the original documentation-only plan. That behaviour is externally
-  observable through `make` and GitHub Actions, so focused tests are applicable
-  and keep the redaction and delegation contracts from regressing.
+  and CI smoke job. Rationale: The branch now contains Makefile and CI workflow
+  behaviour beyond the original documentation-only plan. That behaviour is
+  externally observable through `make` and GitHub Actions, so focused tests are
+  applicable and keep the redaction and delegation contracts from regressing.
   Date/Author: 2026-06-01 / implementing agent.
 
 - Decision: Parse `.github/workflows/ci.yml` with `serde_yaml` in the workflow
-  test.
-  Rationale: The CI smoke-job contract is structured YAML. Parsing the workflow
-  avoids brittle whole-file string assertions and lets the test check the
-  `kani-smoke` job, steps, `with` mappings, and run commands directly.
+  test. Rationale: The CI smoke-job contract is structured YAML. Parsing the
+  workflow avoids brittle whole-file string assertions and lets the test check
+  the `kani-smoke` job, steps, `with` mappings, and run commands directly.
   Date/Author: 2026-06-01 / implementing agent.
 
 ## Implementation plan
@@ -368,14 +363,14 @@ The branch should be
 rename it before continuing. Confirm that the working tree contains only
 expected plan changes or user-authored changes that must be preserved.
 
-Next, update `docs/formal-verification-methods-in-netsuke.md`. Keep the
-current conclusion intact, but make the phase-1 boundary explicit. The
-implementation should define "proof kernel" in plain language as a small,
-proof-specific model for one mathematical contract, not a production subsystem.
-It should say that any first Verus work is limited to a cycle canonicalization
-model related to `src/ir/cycle.rs`, kept outside ordinary Cargo and CI until a
-later approved task makes it stable. It should also clarify that phase 1 does
-not create Verus installer scripts, Verus Make targets, or Verus CI.
+Next, update `docs/formal-verification-methods-in-netsuke.md`. Keep the current
+conclusion intact, but make the phase-1 boundary explicit. The implementation
+should define "proof kernel" in plain language as a small, proof-specific model
+for one mathematical contract, not a production subsystem. It should say that
+any first Verus work is limited to a cycle canonicalization model related to
+`src/ir/cycle.rs`, kept outside ordinary Cargo and CI until a later approved
+task makes it stable. It should also clarify that phase 1 does not create Verus
+installer scripts, Verus Make targets, or Verus CI.
 
 In the same file, strengthen the Stateright deferral section. The text should
 say that Stateright is deferred because Netsuke currently compiles manifests
@@ -495,8 +490,7 @@ The validation evidence for the expected implementation is:
   OrthoConfig code only if the scope unexpectedly grows a configuration or
   localized CLI help surface.
 - Use `docs/rust-testing-with-rstest-fixtures.md`,
-  `docs/rstest-bdd-users-guide.md`,
-  `docs/rust-doctest-dry-guide.md`, and
+  `docs/rstest-bdd-users-guide.md`, `docs/rust-doctest-dry-guide.md`, and
   `docs/reliable-testing-in-rust-via-dependency-injection.md` only if code
   changes make tests applicable.
 
@@ -506,8 +500,8 @@ The approved documentation-only implementation is complete. The formal
 verification design now states that Verus is optional in phase 1,
 proof-kernel-only, outside ordinary Cargo, and outside the normal Make and CI
 gates. It defines the proof kernel as a small proof-specific model and keeps
-the only current Verus entry point to a possible future
-`src/ir/cycle.rs` cycle canonicalization proof.
+the only current Verus entry point to a possible future `src/ir/cycle.rs` cycle
+canonicalization proof.
 
 The Stateright section now records the phase-1 deferral explicitly. Netsuke
 currently compiles manifests into a static Ninja file and delegates execution

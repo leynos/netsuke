@@ -896,7 +896,7 @@ replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
 combines switches and optional arguments (`--wave`, `--gift`, `--channel email`,
- `--remind-in 15`) alongside greeting adjustments (
+`--remind-in 15`) alongside greeting adjustments (
 `--preamble "Until next time"`, `--punctuation ?`) to describe how the farewell
 should unfold. Each subcommand struct derives `OrthoConfig` so defaults from
 `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
@@ -988,7 +988,7 @@ for a complete example.
 ## Error handling
 
 `load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias for
- `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file I/O
+`Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file I/O
 and `figment`. Failures during the final merge of CLI values over configuration
 sources surface as the `Merge` variant, providing clearer diagnostics when the
 combined data is invalid. When multiple sources fail, the errors are collected

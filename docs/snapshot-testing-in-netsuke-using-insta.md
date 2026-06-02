@@ -114,9 +114,9 @@ This test involves:
 
 - Use `Settings::new().set_snapshot_path("tests/snapshots/ir")` to direct the
   snapshot file to the IR snapshot directory. Call `assert_snapshot!` with a
-  snapshot name (`"simple_manifest_ir"`) and the IR output string. On first
-  run, `insta` will record this output as the reference snapshot. **Determinism
-  in IR Output:** To ensure consistent snapshots, the IR output must be
+  snapshot name (`"simple_manifest_ir"`) and the IR output string. On first run,
+  `insta` will record this output as the reference snapshot. **Determinism in
+  IR Output:** To ensure consistent snapshots, the IR output must be
   **deterministic**. This means that given the same manifest input, the IR’s
   printed form should not vary between test runs or across machines. Pay
   attention to ordering and ephemeral data:
@@ -264,8 +264,8 @@ accept these new snapshots:
   the `.snap.new` files to replace the old snapshots or create the `.snap`
   files if they did not exist.
 
-- As an alternative, when confident in the outputs, run `cargo insta accept
-  --all` to accept all changes in one go.
+- As an alternative, when confident in the outputs, run
+  `cargo insta accept --all` to accept all changes in one go.
 
 Once accepted, re-run `cargo test` - it should pass because the recorded
 snapshots now match the output. Commit the new/updated `.snap` files to version
@@ -335,9 +335,9 @@ jobs:
 **Notes:**
 
 - Setting `INSTA_UPDATE: no` in CI disables automatic snapshot creation or
-  updating. If a snapshot is missing or differs, the tests **fail**. The
-  default `auto` mode already treats CI specially (it will not auto-accept in
-  CI), but setting `no` is an explicit safeguard.
+  updating. If a snapshot is missing or differs, the tests **fail**. The default
+  `auto` mode already treats CI specially (it will not auto-accept in CI), but
+  setting `no` is an explicit safeguard.
 
 - Install `cargo-insta` mainly for completeness - running `cargo test` does not
   strictly require the CLI tool, but its presence enables `cargo insta`

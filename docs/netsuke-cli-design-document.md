@@ -383,8 +383,8 @@ message updates as the build advances. However, this approach prints multiple
 lines persistently, which might clutter the screen. An alternative approach is
 to have a **single progress bar that represents overall progress** (0% to 100%
 through all stages), and simply update the message as each stage is reached.
-For example, a single progress bar might display “Stage 4/6: IR Generation…
-[===_______] 60%”. This reduces vertical space usage. But one drawback is that
+For example, a single progress bar might display “Stage 4/6: IR Generation… [
+===_______] 60%”. This reduces vertical space usage. But one drawback is that
 the history of stages is not shown; users only see the current stage. Given
 builds are usually quick through early stages and slower in execution, it might
 suffice to show one line for current stage plus perhaps a second line for
@@ -456,8 +456,8 @@ spinner might be read as “vertical bar, slash, dash…” each frame), accessi
 mode falls back to simpler characters. The CLI also respects user preferences:
 for instance, if the environment variable `NETSUKE_NO_EMOJI` is set (an example
 feature that can be supported), plain text “OK”/“FAIL” replaces check/cross.
-Similarly, if `NO_COLOR` is set, coloured bars or coloured symbols are
-omitted[^2].
+Similarly, if `NO_COLOR` is set, coloured bars or coloured symbols are omitted
+[^2].
 
 Animations are disabled or simplified in **non-interactive contexts**. If
 output is being piped to a file or a continuous integration (CI) system
@@ -629,8 +629,8 @@ the user remains the human-friendly one defined in the error’s
 surfaced errors implement `miette::Diagnostic` so that spans and suggestions
 can be presented – this requirement is followed strictly. It means even if an
 error is caught via `anyhow`, if it started as a `Diagnostic` (like the YAML or
-IR errors), that diagnostic metadata is preserved through the error chain
-(using `anyhow::Error`’s ability to carry sources that implement
+IR errors), that diagnostic metadata is preserved through the error chain (using
+`anyhow::Error`’s ability to carry sources that implement
 `Error + Diagnostic`). Care is taken never to lose the diagnostic info when
 propagating (the design notes never to convert a `miette::Diagnostic` into a
 plain error without preserving the diagnostic, otherwise spans and help text
@@ -748,11 +748,11 @@ a CLI flag, an env var, and a config file entry. For example, `verbose: bool`
 can map to a `--verbose` flag (already in Clap), an env var like
 `NETSUKE_VERBOSE=true`, and a config file entry `verbose = true`. OrthoConfig’s
 **orthographic naming** feature will handle the naming conventions (so
-`--no-color` flag might correspond to env `NETSUKE_NO_COLOR` and config file
-key `color = "never"` etc.) without a lot of manual wiring[^3][^3]. A prefix
-like `NETSUKE_` is used for environment variables to avoid conflicts (the
-OrthoConfig derive allows specifying a prefix for env vars and file
-sections[^3][^3]).
+`--no-color` flag might correspond to env `NETSUKE_NO_COLOR` and config file key
+`color = "never"` etc.) without a lot of manual wiring[^3][^3]. A prefix like
+`NETSUKE_` is used for environment variables to avoid conflicts (the
+OrthoConfig derive allows specifying a prefix for env vars and file sections
+[^3] [^3]).
 
 **Configuration File:** By default, Netsuke will look for a config file in
 standard locations. Thanks to OrthoConfig’s discovery mechanism, the

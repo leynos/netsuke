@@ -3,7 +3,7 @@
 This roadmap tracks unfinished and future Netsuke work. Completed historical
 foundations live in
 [`docs/archive/roadmap-completed-foundations.md`](archive/roadmap-completed-foundations.md)
- so the active roadmap can focus on remaining hypotheses without erasing prior
+so the active roadmap can focus on remaining hypotheses without erasing prior
 implementation detail.
 
 Task identifiers are globally unique across the active roadmap and the archive.

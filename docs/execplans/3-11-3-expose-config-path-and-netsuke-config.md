@@ -1,9 +1,8 @@
 # 3.11.3. Expose `--config <path>` and `NETSUKE_CONFIG`
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -227,10 +226,10 @@ sample config is present, and both `rstest` integration coverage and
 `rstest-bdd` behavioural coverage exercise the explicit config selection
 precedence. No roadmap change was required.
 
-Compile-time/UI testing was also evaluated on 2026-05-08. The repository has
-no `trybuild`, `compiletest`, or `ui_test` harness, and no local proc-macro
-crate or public macro API whose compile-fail diagnostics need a UI contract.
-The existing `rstest-bdd-macros` dependency already uses strict compile-time
+Compile-time/UI testing was also evaluated on 2026-05-08. The repository has no
+`trybuild`, `compiletest`, or `ui_test` harness, and no local proc-macro crate
+or public macro API whose compile-fail diagnostics need a UI contract. The
+existing `rstest-bdd-macros` dependency already uses strict compile-time
 validation for behavioural step binding, so no additional compile-time test
 harness is required for this milestone.
 
@@ -264,7 +263,7 @@ Key outcomes:
   setup while preserving the existing test names, assertions, and merge calls.
 - Fixed a separate cwd teardown hazard in
   `tests/cli_tests/merge.rs::resolve_merged_diag_json_handles_malformed_project_config`
-   so the full integration suite remains stable after the harness refactor.
+  so the full integration suite remains stable after the harness refactor.
 - Extended the configuration-discovery BDD feature with scenarios for
   `--config`, `NETSUKE_CONFIG`, and precedence over the legacy alias.
 - Added `docs/sample-netsuke.toml` and updated the user guide, design
@@ -668,8 +667,8 @@ fn push_file_layers(
 The helper resolves an explicit config path internally with
 `resolve_config_path(cli)`. When a path is present, it loads that file via
 `load_layers_from_path()`, pushes every layer in the returned chain, and stops.
-If the file does not exist or fails to parse, the resulting error is appended
-to `errors` and discovery does not continue.
+If the file does not exist or fails to parse, the resulting error is appended to
+`errors` and discovery does not continue.
 
 Without an explicit path, `push_file_layers()` runs `config_discovery()` using
 `cli.directory.as_deref()` to anchor project-root discovery. It appends

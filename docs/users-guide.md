@@ -257,8 +257,8 @@ targets:
 - `order_only_deps` (Optional): Dependencies that must run first but whose
   changes don't trigger rebuilds (`StringOrList`). Maps to Ninja `||`.
 
-Cycle detection traverses `sources` and `deps`, because both classes affect
-the build graph and rebuild freshness. `order_only_deps` only enforce build
+Cycle detection traverses `sources` and `deps`, because both classes affect the
+build graph and rebuild freshness. `order_only_deps` only enforce build
 ordering and do not participate in Netsuke's cycle detection.
 
 - `vars` (Optional): Target-specific variables that override global `vars`.
@@ -435,8 +435,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
 - `dirname`: `{{ 'path/to/file.txt' | dirname }}` -> `"path/to"`
 
 - `with_suffix(new_suffix, count=1, sep='.')`: Replaces the last `count`
-  dot-separated extensions. `{{ 'archive.tar.gz' | with_suffix('.zip', 2) }}`
-  -> `"archive.zip"`
+  dot-separated extensions. `{{ 'archive.tar.gz' | with_suffix('.zip', 2) }}` ->
+  `"archive.zip"`
 
 - `relative_to(base_path)`: Makes a path relative.
   `{{ '/a/b/c' | relative_to('/a/b') }}` -> `"c"`
@@ -523,8 +523,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   `PATH`. Supplying unknown keyword arguments or invalid values raises
   `netsuke::jinja::which::args`.
 
-Use `command_available` in manifest-time `when` clauses when optional
-tooling selects between actions:
+Use `command_available` in manifest-time `when` clauses when optional tooling
+selects between actions:
 
 ```yaml
 actions:
@@ -536,8 +536,7 @@ actions:
     when: not command_available("cargo-nextest")
 ```
 
-Only the selected action reaches the typed manifest and generated Ninja
-file.
+Only the selected action reaches the typed manifest and generated Ninja file.
 Top-level actions selected this way still keep the normal implicit
 `phony: true` behaviour.
 

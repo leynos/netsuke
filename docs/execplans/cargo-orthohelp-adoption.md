@@ -1,9 +1,8 @@
 # Adopt `cargo-orthohelp` for release help artefacts
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -464,9 +463,9 @@ Stage F updates documentation. In `docs/netsuke-design.md`, replace the
 `clap_mangen` manual-page section with the `cargo-orthohelp` release-help
 design and record the decision that `build.rs` remains only for the
 localization audit. In `docs/users-guide.md`, document that release artefacts
-include a Unix manual page and Windows PowerShell help, and describe the
-Windows `Get-Help Netsuke -Full` entry point without implying a CLI behaviour
-change. In `docs/developers-guide.md`, document the release-help tooling,
+include a Unix manual page and Windows PowerShell help, and describe the Windows
+`Get-Help Netsuke -Full` entry point without implying a CLI behaviour change.
+In `docs/developers-guide.md`, document the release-help tooling,
 `cargo install cargo-orthohelp --version 0.8.0 --locked`, the script boundary,
 and the rule that CLI documentation metadata must be kept current when CLI
 fields change. Update `README.md` and `docs/netsuke-cli-design-document.md` to

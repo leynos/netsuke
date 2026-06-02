@@ -1,9 +1,8 @@
 # Deliver `--diag-json` machine-readable diagnostics mode
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: DONE
 
@@ -306,8 +305,7 @@ The current diagnostics path is split across a small number of files:
 - [src/runner/error.rs](../../src/runner/error.rs) contains
   `RunnerError`, which already implements `miette::Diagnostic`.
 - [src/manifest/diagnostics/mod.rs](../../src/manifest/diagnostics/mod.rs)
-  and
-  [src/manifest/diagnostics/yaml.rs](../../src/manifest/diagnostics/yaml.rs)
+  and [src/manifest/diagnostics/yaml.rs](../../src/manifest/diagnostics/yaml.rs)
   create `miette` diagnostics for manifest and YAML failures.
 
 The current output-channel contract is already strong enough to build on:
@@ -333,7 +331,7 @@ The existing test surfaces that should be extended are:
 - [tests/features/missing_manifest.feature](../../tests/features/missing_manifest.feature)
   and
   [tests/features/progress_output.feature](../../tests/features/progress_output.feature)
-   as likely behavioural coverage anchors.
+  as likely behavioural coverage anchors.
 
 ## Supported JSON schema
 

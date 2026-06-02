@@ -1,9 +1,8 @@
 # 3.12.1. Define design tokens for colours, symbols, and spacing
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -27,9 +26,9 @@ the meaning, spacing policy, or status hierarchy.
 
 Observable success means:
 
-1. Users can select a CLI theme via layered configuration (`CLI >
-   environment > config file >
-   defaults`) using OrthoConfig-backed parsing and localized help text.
+1. Users can select a CLI theme via layered configuration
+   (`CLI > environment > config file > defaults`) using OrthoConfig-backed
+   parsing and localized help text.
 2. Standard, accessible, and verbose timing output all draw prefixes and
    indentation from one resolved token set.
 3. ASCII and Unicode modes produce the same status structure and wrapping

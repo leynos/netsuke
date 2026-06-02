@@ -1,7 +1,7 @@
 # 3.14.2. Expand top-level action flow control
 
 This ExecPlan (execution plan) is a living document. The sections `Constraints`,
- `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
@@ -582,7 +582,7 @@ All long-running validation commands must run sequentially and tee output to
   branches and proof that existing action expansion remains correct.
 - `docs/netsuke-design.md` already says top-level `actions` use the same
   manifest-time expansion pass as `targets`, while `docs/roadmap.md` still marks
-   `3.14.2` open because the complementary branch subtask remains undone.
+  `3.14.2` open because the complementary branch subtask remains undone.
 - The user guide explains `which`, but does not yet describe
   `command_available` as the non-throwing predicate for manifest-time branch
   selection.

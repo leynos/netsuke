@@ -1,9 +1,8 @@
 # 3.11.1. Introduce `CliConfig` struct derived with OrthoConfig v0.8.0
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IMPLEMENTED
 
@@ -59,8 +58,8 @@ overridden by `NETSUKE_COLOUR_POLICY=auto`, and further overridden by
   files, `NETSUKE_*` environment variables, and CLI invocations must continue
   to work without modification.
 - Keep the CLI localizable. Every new flag or validation error must be wired
-  through `src/cli_l10n.rs`, `src/localization/keys.rs`, and both Fluent
-  bundles (`locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`).
+  through `src/cli_l10n.rs`, `src/localization/keys.rs`, and both Fluent bundles
+  (`locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl`).
 - Use `ortho_config` v0.8.0 for the configuration surface. Do not introduce
   ad-hoc parsers or a separate precedence ladder.
 - No single source file may exceed 400 lines (per `AGENTS.md`).
