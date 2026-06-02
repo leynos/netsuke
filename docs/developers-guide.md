@@ -760,7 +760,6 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 ## IR cycle detection
 
-
 ### Module: `ir::cycle`
 
 `src/ir/cycle.rs` provides cycle detection for the IR target graph.
