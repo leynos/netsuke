@@ -1,5 +1,5 @@
 //! Integration tests for the `which` filter/function covering PATH resolution,
-//! canonicalisation, cwd behaviour, workspace fallback, and diagnostic output.
+//! canonicalization, cwd behaviour, workspace fallback, and diagnostic output.
 
 use anyhow::{Context, Result};
 use netsuke::stdlib::StdlibConfig;

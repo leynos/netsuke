@@ -322,20 +322,20 @@ and test workflow intact. See
 - [x] 4.1.1. Add Kani tooling and local smoke targets. See
   [formal-verification-methods-in-netsuke.md §Repository integration plan](formal-verification-methods-in-netsuke.md#repository-integration-plan).
   - [x] Pin the supported Kani version under `tools/kani/`.
-  - [x] Add `scripts/install-kani.sh`.
-  - [x] Add `make kani`, `make kani-full`, and `make formal-pr`.
+  - [x] Add `rust-prover-tools` backed Kani installation.
+  - [x] Add `make kani-check`, `make kani-full`, and `make formal-pr`.
 - [x] 4.1.2. Add a dedicated `kani-smoke` continuous integration (CI) job.
   Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Continuous integration (CI)](formal-verification-methods-in-netsuke.md#continuous-integration-ci).
   - [x] Keep the existing `build-test` job unchanged.
   - [x] Run only the bounded smoke harness set on pull requests.
   - [x] Cache Kani tool downloads separately from ordinary Cargo artefacts.
-- [ ] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
+- [x] 4.1.3. Record the phase-1 scope boundary for Verus and Stateright. See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel)
-   and
+  and
   [formal-verification-methods-in-netsuke.md §Stateright remains deferred](formal-verification-methods-in-netsuke.md#stateright-remains-deferred).
-  - [ ] Document Verus as optional and proof-kernel-only.
-  - [ ] Document Stateright as deferred until Netsuke gains a stateful
+  - [x] Document Verus as optional and proof-kernel-only.
+  - [x] Document Stateright as deferred until Netsuke gains a stateful
     concurrent subsystem.
 
 ### 4.2. Intermediate representation verification

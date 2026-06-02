@@ -85,34 +85,55 @@ repository work.
 Install or refresh the pinned Kani tool with:
 
 ```bash
-scripts/install-kani.sh
+make install-kani
 ```
 
-The installer reads `tools/kani/VERSION`, runs
-`cargo install --locked kani-verifier --version <version>`, runs
-`cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
-its own supporting Rust nightly toolchain during setup. That toolchain must not
-replace the repository's ordinary stable Rust workflow.
+`make install-kani` delegates to the pinned `rust-prover-tools` CLI through
+`uv tool run`. The prover tool reads `tools/kani/VERSION`, runs
+`cargo install --locked kani-verifier --version <version>`, runs `cargo kani
+setup`, and verifies that `cargo kani` is callable. Kani may manage its own
+supporting Rust nightly toolchain during setup. That toolchain must not replace
+the repository's ordinary stable Rust workflow.
+
+Delegated prover targets print maintainer diagnostics to standard error before
+invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
+pinned source, Make target, redacted command shape, relevant Kani version, and
+non-zero exit status on failure.
 
 Use the Make targets for day-to-day formal-verification checks:
 
-- `make kani` runs the fast local smoke check used by `formal-pr`. Until
-  roadmap item `4.2.*` adds substantive proof harnesses, this smoke check
+- `make kani-check` runs the fast local version check used by `formal-pr`.
+  Until roadmap item `4.2.*` adds substantive proof harnesses, this check
   verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
 - `make kani-full` is reserved for the full Kani proof suite once harnesses
   exist. Today it invokes `cargo kani` without additional smoke flags.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
+- `make install-verus` and `make verus` delegate to `rust-prover-tools` for
+  the optional Verus installer and proof runner. These targets are not part of
+  the ordinary pull-request gate.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`,
 or `make all`.
 
+Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
+Kani is the only supported and gated formal-verification tool today. Verus is
+optional, proof-kernel-only, and not installed or run by default; any first
+Verus work must stay outside ordinary Cargo and focus on a small cycle
+canonicalization model. Stateright is deferred entirely until Netsuke gains an
+accepted stateful concurrent subsystem such as a daemon, watch service,
+remote-execution coordinator, actor protocol, or internal scheduler with
+long-lived mutable control-plane state. See
+[`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
+for the design rationale and re-entry criteria.
+
 Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
-`build-test` job. The job installs the pinned Kani version with
-`scripts/install-kani.sh` and runs only `make kani`; it does not run
-`make kani-full`, coverage, CodeScene upload, or the normal build matrix. Its
-cache is intentionally separate from ordinary Cargo build artefacts: the job
-uses a Kani-specific cache key derived from `tools/kani/VERSION` and caches the
-job-local Kani Cargo home plus Kani support-file home.
+`build-test` job. The job installs `uv`, installs the pinned Kani version
+through `make install-kani`, and runs only `make kani-check`; it does not run
+`make kani-full`, `make verus`, coverage, CodeScene upload, or the normal build
+matrix. Its cache is intentionally separate from ordinary Cargo build
+artefacts: the job uses a Kani-specific cache key derived from
+`tools/kani/VERSION` and the Makefile, then caches the job-local Kani Cargo
+home plus Kani support-file home.
 
 ## Test suite map
 
