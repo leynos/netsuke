@@ -72,10 +72,10 @@ for unit tests.
 
 ### Phase 1 – Harness foundation
 
-- Add `rstest-bdd = "0.3.2"` and `rstest-bdd-macros = { version = "0.3.2",
-  features = ["strict-compile-time-validation"]
-  }` to the workspace `dev-dependencies`. Keep `rstest
-  ` as the shared fixture provider.
+- Add `rstest-bdd = "0.3.2"` and
+  `rstest-bdd-macros = { version = "0.3.2",
+  features = ["strict-compile-time-validation"] }` to the workspace
+  `dev-dependencies`. Keep `rstest` as the shared fixture provider.
 - Introduce a `tests/bdd` module tree that will own scenario functions,
   feature-specific fixtures, and utilities for inserting values into the
   `StepContext`.

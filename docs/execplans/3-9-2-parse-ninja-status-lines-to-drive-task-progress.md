@@ -398,21 +398,25 @@ Acceptance requires all of the following:
 
 ## Artefacts and notes
 
-- Parser unit test
+- Parser unit test — PASSED.
+
   `runner::process::ninja_status::tests::parse_ninja_status_line_parses_expected::case_1`
-  — PASSED.
-- Parser unit test
+
+- Parser unit test — PASSED.
+
   `runner::process::ninja_status::tests::tracker_accepts_only_monotonic_updates::case_1`
-  — PASSED.
-- Parser unit test
+
+- Parser unit test — PASSED.
+
   `runner::process::streaming::tests::forward_output_with_ninja_status_parses_monotonic_updates`
-  — PASSED.
-- BDD scenario
+
+- BDD scenario — PASSED.
+
   `features_scenarios::progress_output_standard_mode_reports_task_updates_from_ninja_status_lines`
-  — PASSED.
-- BDD scenario
+
+- BDD scenario — PASSED.
+
   `features_scenarios::progress_output_accessible_mode_emits_textual_task_updates`
-  — PASSED.
 - Non-TTY stderr excerpt (stdout redirected):
 
   ```text
