@@ -203,7 +203,7 @@ implementation begins.
 - [x] Stage F: commit, push, and update the pull request for the implemented
       feature.
 - [x] 2026-06-01T00:00:00Z: Verified the latest review findings against the
-      current branch. The `canonicalisation` spelling and redacted Makefile
+      current branch. The `canonicalization` spelling and redacted Makefile
       diagnostic findings were already fixed. The missing test coverage finding
       was still valid, so focused Makefile and CI workflow tests were added.
 - [x] 2026-06-01T00:00:00Z: Added `tests/prover_tools_make_tests.rs` to run

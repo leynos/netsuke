@@ -1,5 +1,5 @@
 //! Tests for the which lookup helpers, covering PATH search, workspace
-//! fallback, canonicalisation, and platform-specific PATHEXT behaviour.
+//! fallback, canonicalization, and platform-specific PATHEXT behaviour.
 
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};

@@ -119,7 +119,7 @@ Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any first
 Verus work must stay outside ordinary Cargo and focus on a small cycle
-canonicalisation model. Stateright is deferred entirely until Netsuke gains an
+canonicalization model. Stateright is deferred entirely until Netsuke gains an
 accepted stateful concurrent subsystem such as a daemon, watch service,
 remote-execution coordinator, actor protocol, or internal scheduler with
 long-lived mutable control-plane state. See

@@ -32,7 +32,7 @@ pub(crate) use workspace::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 ///
 /// # Errors
 ///
-/// Propagates filesystem errors during lookup and canonicalisation, and
+/// Propagates filesystem errors during lookup and canonicalization, and
 /// returns `netsuke::jinja::which::not_found` when no candidate is discovered.
 pub(super) fn lookup(
     command: &str,
@@ -241,7 +241,7 @@ fn has_execute_permission(metadata: &fs::Metadata) -> bool {
 
 /// Canonicalise, de-duplicate, and UTF-8 validate discovered paths.
 ///
-/// Returns an error when canonicalisation fails or when any canonical path
+/// Returns an error when canonicalization fails or when any canonical path
 /// cannot be represented as UTF-8.
 pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, Error> {
     let mut unique = IndexSet::new();
