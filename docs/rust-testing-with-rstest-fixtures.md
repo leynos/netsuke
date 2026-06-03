@@ -1346,7 +1346,7 @@ provided by `rstest`:
 
 | Attribute                  | Core Purpose                                                                                 |
 | -------------------------- | -------------------------------------------------------------------------------------------- |
-| #[rstest]                  | Marks a function as an rstest test; enables fixture injection and parameterization.          |
+| #[rstest]                  | Marks a function as a rstest test; enables fixture injection and parameterization.           |
 | #[fixture]                 | Defines a function that provides a test fixture (setup data or services).                    |
 | #[case(…)]                 | Defines a single parameterized test case with specific input values.                         |
 | #[values(…)]               | Defines a list of values for an argument, generating tests for each value or combination.    |

@@ -27,9 +27,9 @@ Feature: Configuration preferences
     Given a minimal Netsuke workspace
     And the Netsuke config file sets no_emoji to true
     When the CLI is parsed and merged with ""
+    Then parsing succeeds
     And merged output preferences are resolved
     And the success prefix is rendered
-    Then parsing succeeds
     And the merged theme is ascii
     And the prefix contains no non-ASCII characters
 

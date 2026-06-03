@@ -122,6 +122,7 @@ fn render_warning_prefix(world: &TestWorld) -> Result<()> {
 }
 
 #[when("the success prefix is rendered")]
+#[then("the success prefix is rendered")]
 fn render_success_prefix(world: &TestWorld) -> Result<()> {
     render_prefix_with(world, |prefs| prefs.success_prefix())
 }

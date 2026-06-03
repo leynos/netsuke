@@ -15,7 +15,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use test_support::display_error_chain;
-use test_support::env_lock::EnvLock;
+use test_support::env::set_var_locked;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
 const LOCALE_ENV_VAR: &str = "NETSUKE_LOCALE";
@@ -28,20 +28,16 @@ fn workspace_path(world: &TestWorld) -> Result<PathBuf> {
     Ok(dir.path().to_path_buf())
 }
 
-fn ensure_env_lock(world: &TestWorld) {
-    if world.env_lock.borrow().is_none() {
-        *world.env_lock.borrow_mut() = Some(EnvLock::acquire());
-    }
-}
-
 fn write_config(world: &TestWorld, contents: &str) -> Result<()> {
-    ensure_env_lock(world);
+    world.ensure_env_lock();
     let workspace = workspace_path(world)?;
     let path = workspace.join("netsuke.toml");
     fs::write(&path, contents).with_context(|| format!("write {}", path.display()))?;
-    let previous = std::env::var_os(CONFIG_ENV_VAR);
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var(CONFIG_ENV_VAR, path.as_os_str()) };
+    let lock = world.env_lock.borrow();
+    let lock_ref = lock
+        .as_ref()
+        .context("env_lock must be held before setting config path")?;
+    let previous = set_var_locked(lock_ref, CONFIG_ENV_VAR, path.as_os_str());
     world.track_env_var(CONFIG_ENV_VAR.to_owned(), previous, None);
     Ok(())
 }
@@ -104,33 +100,42 @@ fn write_output_format_config(world: &TestWorld, format: OutputFormat) -> Result
 }
 
 /// Set the `NETSUKE_THEME` environment variable.
-fn set_env_theme(world: &TestWorld, theme: Theme) {
-    ensure_env_lock(world);
-    let previous = std::env::var_os("NETSUKE_THEME");
+fn set_env_theme(world: &TestWorld, theme: Theme) -> Result<()> {
+    world.ensure_env_lock();
     let value = enum_name(&theme);
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var("NETSUKE_THEME", OsStr::new(&value)) };
+    let lock = world.env_lock.borrow();
+    let lock_ref = lock
+        .as_ref()
+        .context("env_lock must be held before setting NETSUKE_THEME")?;
+    let previous = set_var_locked(lock_ref, "NETSUKE_THEME", OsStr::new(&value));
     world.track_env_var("NETSUKE_THEME".to_owned(), previous, None);
+    Ok(())
 }
 
 /// Set the `NETSUKE_COLOUR_POLICY` environment variable.
-fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) {
-    ensure_env_lock(world);
-    let previous = std::env::var_os("NETSUKE_COLOUR_POLICY");
+fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
+    world.ensure_env_lock();
     let value = enum_name(&policy);
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var("NETSUKE_COLOUR_POLICY", OsStr::new(&value)) };
+    let lock = world.env_lock.borrow();
+    let lock_ref = lock
+        .as_ref()
+        .context("env_lock must be held before setting NETSUKE_COLOUR_POLICY")?;
+    let previous = set_var_locked(lock_ref, "NETSUKE_COLOUR_POLICY", OsStr::new(&value));
     world.track_env_var("NETSUKE_COLOUR_POLICY".to_owned(), previous, None);
+    Ok(())
 }
 
 /// Set the `NETSUKE_SPINNER_MODE` environment variable.
-fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) {
-    ensure_env_lock(world);
-    let previous = std::env::var_os("NETSUKE_SPINNER_MODE");
+fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
+    world.ensure_env_lock();
     let value = enum_name(&mode);
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var("NETSUKE_SPINNER_MODE", OsStr::new(&value)) };
+    let lock = world.env_lock.borrow();
+    let lock_ref = lock
+        .as_ref()
+        .context("env_lock must be held before setting NETSUKE_SPINNER_MODE")?;
+    let previous = set_var_locked(lock_ref, "NETSUKE_SPINNER_MODE", OsStr::new(&value));
     world.track_env_var("NETSUKE_SPINNER_MODE".to_owned(), previous, None);
+    Ok(())
 }
 
 /// Assert a merged CLI field value matches the expected value.
@@ -161,15 +166,13 @@ fn config_sets_locale(world: &TestWorld, locale: &str) -> Result<()> {
 }
 
 #[given("the NETSUKE_LOCALE environment variable is {locale:string}")]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "rstest-bdd macro generates Result wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"
-)]
 fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()> {
-    ensure_env_lock(world);
-    let previous = std::env::var_os(LOCALE_ENV_VAR);
-    // SAFETY: `EnvLock` is held in `world.env_lock` for the lifetime of the scenario.
-    unsafe { std::env::set_var(LOCALE_ENV_VAR, OsStr::new(locale)) };
+    world.ensure_env_lock();
+    let lock = world.env_lock.borrow();
+    let lock_ref = lock
+        .as_ref()
+        .context("env_lock must be held before setting locale override")?;
+    let previous = set_var_locked(lock_ref, LOCALE_ENV_VAR, OsStr::new(locale));
     world.track_env_var(LOCALE_ENV_VAR.to_owned(), previous, None);
     Ok(())
 }
@@ -211,24 +214,21 @@ fn config_sets_spinner_mode(world: &TestWorld, mode: &str) -> Result<()> {
 fn set_environment_theme_override(world: &TestWorld, theme: &str) -> Result<()> {
     let typed =
         Theme::from_str(theme, true).map_err(|err| anyhow!("invalid theme '{theme}': {err}"))?;
-    set_env_theme(world, typed);
-    Ok(())
+    set_env_theme(world, typed)
 }
 
 #[given("the NETSUKE_COLOUR_POLICY environment variable is {policy:string}")]
 fn set_environment_colour_policy_override(world: &TestWorld, policy: &str) -> Result<()> {
     let typed = ColourPolicy::from_str(policy, true)
         .map_err(|err| anyhow!("invalid colour policy '{policy}': {err}"))?;
-    set_env_colour_policy(world, typed);
-    Ok(())
+    set_env_colour_policy(world, typed)
 }
 
 #[given("the NETSUKE_SPINNER_MODE environment variable is {mode:string}")]
 fn set_environment_spinner_mode_override(world: &TestWorld, mode: &str) -> Result<()> {
     let typed = SpinnerMode::from_str(mode, true)
         .map_err(|err| anyhow!("invalid spinner mode '{mode}': {err}"))?;
-    set_env_spinner_mode(world, typed);
-    Ok(())
+    set_env_spinner_mode(world, typed)
 }
 
 #[expect(
@@ -242,6 +242,7 @@ fn parse_and_merge_cli(world: &TestWorld, args: &str) -> Result<()> {
 }
 
 #[when("merged output preferences are resolved")]
+#[then("merged output preferences are resolved")]
 fn resolve_merged_output_prefs(world: &TestWorld) -> Result<()> {
     let prefs = world
         .cli

@@ -238,7 +238,7 @@ pub struct CliConfig {
 impl Default for CliConfig {
     fn default() -> Self {
         Self {
-            file: default_manifest_path(),
+            file: Self::default_manifest_path(),
             jobs: None,
             verbose: false,
             locale: None,

@@ -738,9 +738,11 @@ merge.
 the user explicitly sets `progress = true`, which is treated as a conflict.
 Likewise, `spinner_mode = "enabled"` conflicts with `progress = false`.
 
-`output_format = "json"` is intentionally rejected for now. Roadmap item
-`3.10.3` will add JSON diagnostics; until then, the only supported value is
-`"human"`.
+JSON diagnostics are implemented through `--diag-json` and the layered
+`diag_json` preference. The `--output-format json` flag and
+`NETSUKE_OUTPUT_FORMAT=json` environment variable are accepted for diagnostic
+mode, but configuration files intentionally reject `output_format = "json"`.
+Use `output_format = "human"` in configuration files.
 
 `colour_policy` is accepted and layered today, so users can standardize their
 preferred setting, but Netsuke does not yet emit coloured terminal output, so

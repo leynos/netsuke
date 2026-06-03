@@ -2435,8 +2435,8 @@ directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
 runs Ninja with a configured working directory and resolves relative output
 paths (for example `build --emit` and `manifest`) under the same directory so
 behaviour matches a real directory change. Error scenarios are validated using
-clap's `ErrorKind` enumeration in unit tests and via Cucumber steps for
-behavioural coverage.
+clap's `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
+steps/scenarios.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
@@ -2553,13 +2553,11 @@ flowchart LR
   L --> M[Run Netsuke with final behaviour]
 ```
 
-Netsuke configuration discovery is implemented through OrthoConfig's
-`ConfigDiscovery` builder in `src/cli/config_merge.rs`. The
-`config_discovery()` helper constructs a discovery instance rooted at
-application name `"netsuke"` and adjusts project-root discovery when the
-`-C/--directory` flag is supplied. Explicit file selection is handled before
-discovery by `resolve_config_path()`, which applies the precedence `--config` >
-`NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
+Explicit file selection is handled by `explicit_config_path(...)`, which
+applies the precedence `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+Layer loading and automatic discovery are handled by `push_file_layers(...)`,
+which also applies the `-C/--directory` flag as the project-discovery root.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
 Netsuke chooses the configuration file before automatic discovery. Netsuke
@@ -2684,15 +2682,14 @@ manual flag repetition.
 
 **Implementation notes**:
 
-- The `config_discovery()` function uses OrthoConfig's builder API without
-  further customization beyond the application name and environment variable
-  override, relying on OrthoConfig's platform-specific defaults for standard
-  directory resolution.
-- The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
-  the full layer composition: it resolves selection through
-  `resolve_config_path()`, calls `push_file_layers()` to load layers, merges
-  them with defaults, adds environment variables via Figment, and finally
-  applies CLI overrides extracted from `ArgMatches`.
+- The `explicit_config_path(...)` helper resolves explicit config selectors
+  before automatic discovery so missing or invalid explicit files remain hard
+  errors.
+- The `merge_with_config()` function in `src/cli/merge.rs` orchestrates the
+  full layer composition: it calls `push_file_layers(...)` to load explicit,
+  project, and user file layers, merges them with defaults, adds environment
+  variables via Figment, and finally applies CLI overrides extracted from
+  `ArgMatches`.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.

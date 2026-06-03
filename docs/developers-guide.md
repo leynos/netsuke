@@ -333,8 +333,7 @@ available when the guard is no longer needed after the read.
 
 Tests that call `std::env::set_current_dir` must restore the original working
 directory after the test. `CwdGuard` is available from `test_support`, and is
-used in `tests/cli_tests/merge.rs`; local copies also remain in
-`tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
+used in `tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
 captures the current directory on construction and restores it on drop:
 
 ```rust

@@ -682,7 +682,7 @@ cargo test --workspace \
   | tee /tmp/stage-b-netsuke-3-14-3-lower-target-and-action-deps.out
 ```
 
-Expected: the whole suite passes with the new field initialised to `Vec::new()`
+Expected: the whole suite passes with the new field initialized to `Vec::new()`
 everywhere; no snapshot drift.
 
 After Stage C (population from `target.deps`):

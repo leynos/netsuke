@@ -71,6 +71,15 @@ pub fn set_var(key: &str, value: &OsStr) -> Option<OsString> {
     previous
 }
 
+/// Set an environment variable while the caller already holds [`EnvLock`].
+pub fn set_var_locked(lock: &EnvLock, key: &str, value: &OsStr) -> Option<OsString> {
+    let _ = lock;
+    let previous = std::env::var_os(key);
+    // SAFETY: Caller provided the scenario-held `EnvLock`.
+    unsafe { std::env::set_var(key, value) };
+    previous
+}
+
 /// Remove an environment variable, returning its previous value.
 ///
 /// The mutation is `unsafe` in Rust 2024 as it alters process state. The
