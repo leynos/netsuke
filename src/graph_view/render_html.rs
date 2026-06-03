@@ -145,7 +145,11 @@ fn write_inline_style(sink: &mut dyn Write) -> Result<(), GraphRenderError> {
     )?;
     writeln!(
         sink,
-        "    .edge.implicit {{ stroke: #003366; stroke-dasharray: 2 2; }}"
+        "    .edge.implicit-output {{ stroke: #003366; stroke-dasharray: 2 2; }}"
+    )?;
+    writeln!(
+        sink,
+        "    .edge.implicit-dep {{ stroke: #003366; stroke-width: 2.4; }}"
     )?;
     writeln!(
         sink,
@@ -350,7 +354,8 @@ fn write_svg_edge(
     let y2 = to.y + NODE_HEIGHT_HALF;
     let class = match edge.class {
         EdgeClass::Explicit => "edge",
-        EdgeClass::ImplicitOutput => "edge implicit",
+        EdgeClass::ImplicitDep => "edge implicit-dep",
+        EdgeClass::ImplicitOutput => "edge implicit-output",
         EdgeClass::OrderOnly => "edge order-only",
     };
     let title = format!("{} → {}", edge.from, edge.to);

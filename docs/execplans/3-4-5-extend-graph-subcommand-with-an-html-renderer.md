@@ -5,7 +5,9 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
 work proceeds.
 
-Status: COMPLETE (2026-05-26)
+Status: IN PROGRESS — reopened 2026-06-03 to project
+`BuildEdge.implicit_deps` through the graph view (Stage E). Stages A–D
+remain complete.
 
 ## Purpose / big picture
 
@@ -838,6 +840,85 @@ with the new surface.
    - User guide and developer guide read coherently after the change.
    - All BDD scenarios pass.
    - Roadmap entry is ticked.
+
+### Stage E — Project `implicit_deps` through the graph view
+
+Goal: surface Ninja implicit inputs (`BuildEdge.implicit_deps`, added by
+roadmap item 3.14.3 in commit `45a7d95`) as first-class edges in every
+rendered artefact. Before this stage, `GraphView::from_build_graph`
+silently drops every `implicit_deps` entry, so manifests that use
+`deps:` for header files or schema regeneration appear in `--html` and
+DOT output with the corresponding edges missing. That is a fidelity bug:
+the rendered graph and the build graph disagree on what triggers a
+rebuild.
+
+The stage adds one new `EdgeClass` variant, threads it through the two
+renderers, and keeps the domain port's hexagonal contract intact —
+adapters continue to read `GraphView` only.
+
+1. **Extend `EdgeClass` in [`src/graph_view/mod.rs`][graph-view-mod].**
+   Add `ImplicitDep` between `Explicit` and `ImplicitOutput` so the
+   derived `Ord` keeps edges from the same source clustered visually
+   when sorted. The variant means *source is an implicit dependency*
+   regardless of destination; the implicit-output-ness of the
+   destination is already encoded in the rendered node — recording it
+   redundantly on the edge would force a 2-D class enum without a
+   commensurate user-visible payoff.
+
+2. **Project the new field in `register_inputs_and_edges`.** Iterate
+   `edge.implicit_deps` after `edge.inputs`, registering each path as
+   `NodeKind::Source` if not already a target, and emit
+   `EdgeClass::ImplicitDep` edges to every explicit and implicit
+   output. Preserve the existing `BTreeSet<EdgeView>` dedup; a path
+   that appears as both an explicit input and an implicit dep produces
+   two distinct edges (different class), which is faithful to the
+   underlying IR.
+
+3. **Update [`DotRenderer`][graph-view-dot].** Match `ImplicitDep` in
+   `write_edge` to `[style=bold]`. Bold is the remaining unused stroke
+   in the existing visual lexicon (solid, dotted, dashed) and reads as
+   "rebuild-triggering but not in `$in`" — the precise semantics of a
+   Ninja implicit input. Cover the new style with a unit test under
+   `render_dot::tests`.
+
+4. **Update [`HtmlRenderer`][graph-view-html].** Rename the existing
+   ambiguous `.edge.implicit` CSS class to `.edge.implicit-output` to
+   prevent the new class from overloading the same name. Add a new
+   `.edge.implicit-dep` rule with a thicker stroke (`stroke-width:
+   2.4`) — visually denser than the explicit case to read as
+   "rebuild-triggering hidden input." Emit the new class from
+   `write_svg_edge` for `ImplicitDep`. Add tests in
+   [`render_html_tests.rs`][graph-view-html-tests] asserting the CSS
+   rule and class attribute appear when an implicit dep is present.
+
+5. **Cover projection with unit and property tests.** Add an `rstest`
+   in [`src/graph_view/tests.rs`][graph-view-tests] that builds a
+   `BuildGraph` with `implicit_deps` populated and asserts the
+   projection emits the expected `ImplicitDep` edges. The proptest
+   generator already exercises the `implicit_deps` field after the CI
+   fix (commit `99d3067`); verify the insertion-order-invariance
+   property still holds.
+
+6. **Refresh documentation.** Extend the *Graph view projection and
+   renderer adapters* section in
+   [`docs/developers-guide.md`](../../docs/developers-guide.md) with
+   the new edge class and its rendering semantics. Update
+   [`docs/netsuke-design.md`](../../docs/netsuke-design.md) §8.3 only
+   if the class taxonomy is enumerated there.
+
+7. **Stage E acceptance**:
+
+   - `cargo check --tests`, `make check-fmt`, `make lint`, `make test`,
+     `make markdownlint`, and `make nixie` pass.
+   - A manifest with `deps:` entries renders an HTML/DOT graph where
+     every implicit dep is visible as a bold/thick edge to its target.
+   - `coderabbit review --agent` returns no open concerns.
+
+[graph-view-mod]: ../../src/graph_view/mod.rs
+[graph-view-dot]: ../../src/graph_view/render_dot.rs
+[graph-view-html]: ../../src/graph_view/render_html.rs
+[graph-view-html-tests]: ../../src/graph_view/render_html_tests.rs
+[graph-view-tests]: ../../src/graph_view/tests.rs
 
 ## Concrete steps
 

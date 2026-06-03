@@ -90,6 +90,7 @@ fn write_edge(
     let to_str = escape_dot(to.as_str());
     let attrs = match class {
         EdgeClass::Explicit => "",
+        EdgeClass::ImplicitDep => " [style=bold]",
         EdgeClass::ImplicitOutput => " [style=dotted]",
         EdgeClass::OrderOnly => " [style=dashed]",
     };
@@ -206,6 +207,27 @@ mod tests {
         let dot = render(&view);
         assert!(dot.contains("\"a\" -> \"o\" [style=dashed]"));
         assert!(dot.contains("\"b\" -> \"o\" [style=dotted]"));
+    }
+
+    #[test]
+    fn implicit_dep_edges_are_bold() {
+        let view = GraphView {
+            default_targets: Vec::new(),
+            nodes: vec![NodeView {
+                path: Utf8PathBuf::from("o"),
+                kind: NodeKind::Source,
+                action_id: None,
+                description: None,
+            }],
+            edges: vec![EdgeView {
+                from: Utf8PathBuf::from("dep"),
+                to: Utf8PathBuf::from("o"),
+                class: EdgeClass::ImplicitDep,
+            }],
+            limit: None,
+        };
+        let dot = render(&view);
+        assert!(dot.contains("\"dep\" -> \"o\" [style=bold]"));
     }
 
     #[test]

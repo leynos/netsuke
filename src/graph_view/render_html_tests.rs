@@ -103,6 +103,31 @@ fn outline_lists_targets_and_inputs() {
 }
 
 #[test]
+fn implicit_dep_edge_emits_implicit_dep_class() {
+    let mut view = small_view();
+    view.nodes.push(NodeView {
+        path: Utf8PathBuf::from("include/config.h"),
+        kind: NodeKind::Source,
+        action_id: None,
+        description: None,
+    });
+    view.edges.push(EdgeView {
+        from: Utf8PathBuf::from("include/config.h"),
+        to: Utf8PathBuf::from("out/app"),
+        class: EdgeClass::ImplicitDep,
+    });
+    let html = render(None, &view);
+    assert!(
+        html.contains(".edge.implicit-dep"),
+        "stylesheet should define .edge.implicit-dep"
+    );
+    assert!(
+        html.contains("class=\"edge implicit-dep\""),
+        "implicit-dep edge should carry the implicit-dep class"
+    );
+}
+
+#[test]
 fn paths_with_angle_brackets_are_escaped() {
     let mut view = small_view();
     view.nodes.push(NodeView {

@@ -111,6 +111,62 @@ fn target_nodes_are_classified_as_targets(#[case] edges: &[(&str, &[&str], &[&st
 }
 
 #[test]
+fn implicit_dep_yields_implicit_dep_edge() {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("a".into(), make_action(None));
+    add_edge(
+        &mut graph,
+        EdgeFixture {
+            action_id: "a",
+            inputs: &["src/a.c"],
+            implicit_deps: &["include/config.h"],
+            explicit_outputs: &["out/a.o"],
+            ..EdgeFixture::default()
+        },
+    );
+    let view = GraphView::from_build_graph(&graph);
+    let edge = view
+        .edges
+        .iter()
+        .find(|e| e.from == p("include/config.h") && e.to == p("out/a.o"))
+        .expect("implicit-dep edge");
+    assert_eq!(edge.class, EdgeClass::ImplicitDep);
+    let node = view
+        .nodes
+        .iter()
+        .find(|n| n.path == p("include/config.h"))
+        .expect("implicit-dep source node");
+    assert_eq!(node.kind, NodeKind::Source);
+}
+
+#[test]
+fn implicit_dep_emits_edge_to_every_output() {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("a".into(), make_action(None));
+    add_edge(
+        &mut graph,
+        EdgeFixture {
+            action_id: "a",
+            inputs: &["src/a.c"],
+            implicit_deps: &["include/config.h"],
+            explicit_outputs: &["out/a.o"],
+            implicit_outputs: &["out/a.d"],
+            ..EdgeFixture::default()
+        },
+    );
+    let view = GraphView::from_build_graph(&graph);
+    let dep = p("include/config.h");
+    let mut dep_targets: Vec<_> = view
+        .edges
+        .iter()
+        .filter(|e| e.from == dep && e.class == EdgeClass::ImplicitDep)
+        .map(|e| e.to.clone())
+        .collect();
+    dep_targets.sort();
+    assert_eq!(dep_targets, vec![p("out/a.d"), p("out/a.o")]);
+}
+
+#[test]
 fn order_only_dep_yields_order_only_edge() {
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), make_action(None));

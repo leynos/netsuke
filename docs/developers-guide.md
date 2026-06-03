@@ -48,6 +48,22 @@ the hexagonal port/adapter pattern:
   HTML page (server-rendered SVG, accessible textual outline, and a
   `<noscript>` fallback containing the DOT source verbatim).
 
+`EdgeView::class` mirrors the four Ninja dependency relations so that
+renderers can style each one distinctly:
+
+| Variant          | Ninja separator           | DOT style       | SVG class              |
+|------------------|---------------------------|-----------------|------------------------|
+| `Explicit`       | none (input in `$in`)     | solid (no attr) | `edge`                 |
+| `ImplicitDep`    | single pipe (`\|`)        | `style=bold`    | `edge implicit-dep`    |
+| `ImplicitOutput` | single pipe on LHS (`\|`) | `style=dotted`  | `edge implicit-output` |
+| `OrderOnly`      | double pipe (`\|\|`)      | `style=dashed`  | `edge order-only`      |
+
+`ImplicitDep` carries Ninja's single-pipe implicit inputs — header files
+or schemas that trigger a rebuild without appearing in `$in`. The bold
+stroke reads as "rebuild-triggering hidden input," distinguishing it from
+the dashed order-only stroke (no rebuild trigger) and the dotted
+implicit-output stroke (auxiliary output side).
+
 A new renderer — for example the `--json` view planned for roadmap item
 `3.15.6` — should be added as a sibling module under `src/graph_view/` that
 implements `GraphRenderer`. The runner dispatch in
