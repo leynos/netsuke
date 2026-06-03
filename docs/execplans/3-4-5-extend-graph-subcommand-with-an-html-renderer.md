@@ -5,9 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections
 `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as
 work proceeds.
 
-Status: IN PROGRESS — reopened 2026-06-03 to project
-`BuildEdge.implicit_deps` through the graph view (Stage E). Stages A–D
-remain complete.
+Status: COMPLETE (Stages A–D 2026-05-26; Stage E 2026-06-03).
 
 ## Purpose / big picture
 
@@ -247,11 +245,17 @@ a timestamp.
       decision log entry and Surprises & discoveries.
 - [x] Stage D: localization, accessibility polish, BDD scenarios,
       user-guide and developer-guide updates, ADR-004. (2026-05-26)
+- [x] Stage E: project `BuildEdge.implicit_deps` through `GraphView`
+      with a new `EdgeClass::ImplicitDep` variant. DOT renders as
+      `[style=bold]`; HTML uses `.edge.implicit-dep` (the prior
+      ambiguous `.edge.implicit` was renamed `.edge.implicit-output`).
+      Developer guide gained an edge-class taxonomy table.
+      (2026-06-03)
 - [x] `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
       `make nixie` pass on the final commit. (2026-05-26)
-- [x] `coderabbit review --agent` clear after each stage commit. All four
+- [x] `coderabbit review --agent` clear after each stage commit. All five
       stages cleared with zero findings (Stage D cleared 2026-05-26 after
-      the rate-limit window).
+      the rate-limit window; Stage E cleared 2026-06-03).
 - [x] Roadmap entry `3.4.5` ticked off in `docs/roadmap.md`. (2026-05-26)
 - [x] Branch pushed and draft PR opened. (PR #312 opened during plan
       drafting; updated by each stage commit.)
