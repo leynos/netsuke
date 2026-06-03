@@ -1,8 +1,10 @@
 //! Step definitions for layered CLI configuration preferences.
 
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
+use crate::bdd::helpers::env_mutation::mutate_env_var;
 use crate::bdd::helpers::parse_store::store_parse_outcome;
 use crate::bdd::helpers::tokens::build_tokens;
+use crate::bdd::types::EnvVarKey;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use clap::ValueEnum as _;
 use netsuke::cli::{Cli, ColourPolicy, Commands, OutputFormat, SpinnerMode, Theme};
@@ -10,12 +12,10 @@ use netsuke::cli_localization;
 use netsuke::output_prefs;
 use netsuke::theme::ThemePreference;
 use rstest_bdd_macros::{given, then, when};
-use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use test_support::display_error_chain;
-use test_support::env::set_var_locked;
 
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG_PATH";
 const LOCALE_ENV_VAR: &str = "NETSUKE_LOCALE";
@@ -29,16 +29,13 @@ fn workspace_path(world: &TestWorld) -> Result<PathBuf> {
 }
 
 fn write_config(world: &TestWorld, contents: &str) -> Result<()> {
-    world.ensure_env_lock();
     let workspace = workspace_path(world)?;
     let path = workspace.join("netsuke.toml");
     fs::write(&path, contents).with_context(|| format!("write {}", path.display()))?;
-    let lock = world.env_lock.borrow();
-    let lock_ref = lock
-        .as_ref()
-        .context("env_lock must be held before setting config path")?;
-    let previous = set_var_locked(lock_ref, CONFIG_ENV_VAR, path.as_os_str());
-    world.track_env_var(CONFIG_ENV_VAR.to_owned(), previous, None);
+    let config_path = path
+        .to_str()
+        .context("configuration path must be valid UTF-8")?;
+    mutate_env_var(world, EnvVarKey::from(CONFIG_ENV_VAR), Some(config_path))?;
     Ok(())
 }
 
@@ -101,41 +98,24 @@ fn write_output_format_config(world: &TestWorld, format: OutputFormat) -> Result
 
 /// Set the `NETSUKE_THEME` environment variable.
 fn set_env_theme(world: &TestWorld, theme: Theme) -> Result<()> {
-    world.ensure_env_lock();
     let value = enum_name(&theme);
-    let lock = world.env_lock.borrow();
-    let lock_ref = lock
-        .as_ref()
-        .context("env_lock must be held before setting NETSUKE_THEME")?;
-    let previous = set_var_locked(lock_ref, "NETSUKE_THEME", OsStr::new(&value));
-    world.track_env_var("NETSUKE_THEME".to_owned(), previous, None);
-    Ok(())
+    mutate_env_var(world, EnvVarKey::from("NETSUKE_THEME"), Some(&value))
 }
 
 /// Set the `NETSUKE_COLOUR_POLICY` environment variable.
 fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
-    world.ensure_env_lock();
     let value = enum_name(&policy);
-    let lock = world.env_lock.borrow();
-    let lock_ref = lock
-        .as_ref()
-        .context("env_lock must be held before setting NETSUKE_COLOUR_POLICY")?;
-    let previous = set_var_locked(lock_ref, "NETSUKE_COLOUR_POLICY", OsStr::new(&value));
-    world.track_env_var("NETSUKE_COLOUR_POLICY".to_owned(), previous, None);
-    Ok(())
+    mutate_env_var(
+        world,
+        EnvVarKey::from("NETSUKE_COLOUR_POLICY"),
+        Some(&value),
+    )
 }
 
 /// Set the `NETSUKE_SPINNER_MODE` environment variable.
 fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
-    world.ensure_env_lock();
     let value = enum_name(&mode);
-    let lock = world.env_lock.borrow();
-    let lock_ref = lock
-        .as_ref()
-        .context("env_lock must be held before setting NETSUKE_SPINNER_MODE")?;
-    let previous = set_var_locked(lock_ref, "NETSUKE_SPINNER_MODE", OsStr::new(&value));
-    world.track_env_var("NETSUKE_SPINNER_MODE".to_owned(), previous, None);
-    Ok(())
+    mutate_env_var(world, EnvVarKey::from("NETSUKE_SPINNER_MODE"), Some(&value))
 }
 
 /// Assert a merged CLI field value matches the expected value.
@@ -167,14 +147,7 @@ fn config_sets_locale(world: &TestWorld, locale: &str) -> Result<()> {
 
 #[given("the NETSUKE_LOCALE environment variable is {locale:string}")]
 fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()> {
-    world.ensure_env_lock();
-    let lock = world.env_lock.borrow();
-    let lock_ref = lock
-        .as_ref()
-        .context("env_lock must be held before setting locale override")?;
-    let previous = set_var_locked(lock_ref, LOCALE_ENV_VAR, OsStr::new(locale));
-    world.track_env_var(LOCALE_ENV_VAR.to_owned(), previous, None);
-    Ok(())
+    mutate_env_var(world, EnvVarKey::from(LOCALE_ENV_VAR), Some(locale))
 }
 
 #[given("the Netsuke config file sets output format to {format:string}")]
