@@ -30,6 +30,7 @@ fn p(s: &str) -> Utf8PathBuf {
 struct EdgeFixture<'a> {
     action_id: &'a str,
     inputs: &'a [&'a str],
+    implicit_deps: &'a [&'a str],
     explicit_outputs: &'a [&'a str],
     implicit_outputs: &'a [&'a str],
     order_only_deps: &'a [&'a str],
@@ -39,6 +40,7 @@ fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
     let edge = BuildEdge {
         action_id: fixture.action_id.into(),
         inputs: fixture.inputs.iter().map(|s| p(s)).collect(),
+        implicit_deps: fixture.implicit_deps.iter().map(|s| p(s)).collect(),
         explicit_outputs: fixture.explicit_outputs.iter().map(|s| p(s)).collect(),
         implicit_outputs: fixture.implicit_outputs.iter().map(|s| p(s)).collect(),
         order_only_deps: fixture.order_only_deps.iter().map(|s| p(s)).collect(),
@@ -216,6 +218,7 @@ fn build_graph_from_edge_specs(
     }
     for spec in edge_specs {
         let inputs: Vec<&str> = spec.inputs.iter().map(String::as_str).collect();
+        let implicit_deps: Vec<&str> = spec.implicit_deps.iter().map(String::as_str).collect();
         let explicit_outputs: Vec<&str> =
             spec.explicit_outputs.iter().map(String::as_str).collect();
         let implicit_outputs: Vec<&str> =
@@ -226,6 +229,7 @@ fn build_graph_from_edge_specs(
             EdgeFixture {
                 action_id: &spec.action_id,
                 inputs: &inputs,
+                implicit_deps: &implicit_deps,
                 explicit_outputs: &explicit_outputs,
                 implicit_outputs: &implicit_outputs,
                 order_only_deps: &order_only_deps,
@@ -239,6 +243,7 @@ fn build_graph_from_edge_specs(
 struct EdgeSpec {
     action_id: String,
     inputs: Vec<String>,
+    implicit_deps: Vec<String>,
     explicit_outputs: Vec<String>,
     implicit_outputs: Vec<String>,
     order_only_deps: Vec<String>,
@@ -251,17 +256,21 @@ fn arb_path() -> impl Strategy<Value = String> {
 fn arb_edge_spec(action_id: String) -> impl Strategy<Value = EdgeSpec> {
     (
         prop::collection::vec(arb_path(), 0..3),
+        prop::collection::vec(arb_path(), 0..2),
         prop::collection::vec(arb_path(), 1..3),
         prop::collection::vec(arb_path(), 0..2),
         prop::collection::vec(arb_path(), 0..2),
     )
         .prop_map(
-            move |(inputs, explicit_outputs, implicit_outputs, order_only_deps)| EdgeSpec {
-                action_id: action_id.clone(),
-                inputs,
-                explicit_outputs,
-                implicit_outputs,
-                order_only_deps,
+            move |(inputs, implicit_deps, explicit_outputs, implicit_outputs, order_only_deps)| {
+                EdgeSpec {
+                    action_id: action_id.clone(),
+                    inputs,
+                    implicit_deps,
+                    explicit_outputs,
+                    implicit_outputs,
+                    order_only_deps,
+                }
             },
         )
 }
