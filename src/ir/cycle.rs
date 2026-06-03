@@ -3,7 +3,7 @@
 //! The public entry point is [`analyse`], which accepts the target map
 //! (`HashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
 //! returns a [`CycleDetectionReport`].  The report carries an optional
-//! detected cycle — an ordered, canonicalised list of paths — together
+//! detected cycle — an ordered, canonicalized list of paths — together
 //! with any dependencies referenced by a target but absent from the map.
 //! `order_only_deps` are intentionally excluded from traversal.
 //!
@@ -12,7 +12,7 @@
 //! Callers drive detection through [`CycleDetector::detect`], which
 //! iterates over every node in the target map and delegates depth-first
 //! visiting to `visit` and `visit_dependency`.  Detected cycles are
-//! normalised by [`canonicalize_cycle`] to produce deterministic error
+//! normalized by [`canonicalize_cycle`] to produce deterministic error
 //! messages regardless of traversal order.
 //! Consumed by [`super::from_manifest`] after the full target map is
 //! constructed.
@@ -22,6 +22,10 @@ use std::collections::HashMap;
 use camino::{Utf8Path, Utf8PathBuf};
 
 use super::BuildEdge;
+
+#[cfg(test)]
+#[path = "cycle_property_tests.rs"]
+mod cycle_property_tests;
 
 /// Tracks the visitation state of a node during cycle detection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -34,8 +38,8 @@ enum VisitState {
 ///
 /// `cycle` is `Some` when a dependency cycle was found; the vec holds the
 /// cycle's nodes in canonical order, with the first node repeated as the
-/// last element.  `missing_dependencies` lists every `(dependent, dep)`
-/// pair where `dep` is referenced but absent from the target map.
+/// last element.  `missing_dependencies` lists unresolved dependencies
+/// encountered before the first detected cycle.
 pub(crate) struct CycleDetectionReport {
     pub(crate) cycle: Option<Vec<Utf8PathBuf>>,
     pub(crate) missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
@@ -46,10 +50,8 @@ pub(crate) struct CycleDetectionReport {
 /// Performs a depth-first traversal of each [`BuildEdge`]'s `inputs` and
 /// `implicit_deps`.  `order_only_deps` are intentionally excluded.
 ///
-/// Returns a [`CycleDetectionReport`] containing any detected cycle path and
-/// all dependency references that could not be resolved to a build target.
-/// This function does **not** emit any log events; the caller is responsible
-/// for logging the reported data.
+/// Returns any detected cycle path and missing dependencies encountered
+/// before that cycle.  Missing dependencies emit debug-level tracing events.
 pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
     let mut detector = CycleDetector::new(targets);
     let cycle = detector.detect();
@@ -86,10 +88,9 @@ impl CycleDetector<'_> {
     /// or `None` if the graph is acyclic.
     fn detect(&mut self) -> Option<Vec<Utf8PathBuf>> {
         let mut nodes: Vec<Utf8PathBuf> = self.targets.keys().cloned().collect();
-        // Sort keys to guarantee deterministic traversal order.  The
-        // O(n log n) cost is negligible for typical build graphs
-        // (100–10 000 targets) and is outweighed by the benefit of
-        // stable, reproducible error messages.
+        // Sort keys for deterministic traversal order.  The O(n log n) cost is
+        // negligible for typical build graphs (100–10 000 targets) and is
+        // outweighed by the benefit of stable, reproducible error messages.
         nodes.sort();
         for node in nodes {
             if self.is_visited(node.as_path()) {
@@ -162,6 +163,8 @@ impl CycleDetector<'_> {
 
     /// Record `dep` as missing and return `true` if `dep` is absent from the
     /// target map; return `false` if it is present.
+    ///
+    /// Missing dependencies are also emitted as debug-level tracing events.
     fn record_missing_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) -> bool {
         if self.targets.contains_key(dep) {
             return false;
@@ -392,9 +395,5 @@ mod tests {
         for (cycle_len, implicit_index) in cases {
             assert_bounded_cycle_detected(cycle_len, implicit_index);
         }
-    }
-
-    mod property_tests {
-        include!("cycle_property_tests.rs");
     }
 }

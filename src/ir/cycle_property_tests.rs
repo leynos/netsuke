@@ -1,8 +1,29 @@
+//! Property tests for IR cycle detection.
+//!
+//! Exercises `canonicalize_cycle` normalization and `CycleDetector` graph
+//! traversal, including cycle detection, stack cleanup, and determinism.
+
 use proptest::prelude::*;
 use std::collections::HashMap;
 
-use super::super::{canonicalize_cycle, CycleDetector};
-use super::{build_edge, path};
+use super::{BuildEdge, CycleDetector, canonicalize_cycle};
+
+fn path(name: &str) -> camino::Utf8PathBuf {
+    camino::Utf8PathBuf::from(name)
+}
+
+fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdge {
+    BuildEdge {
+        action_id: "id".into(),
+        inputs: inputs.iter().map(|name| path(name)).collect(),
+        implicit_deps: implicit_deps.iter().map(|name| path(name)).collect(),
+        explicit_outputs: vec![path(output)],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    }
+}
 
 /// Generate a non-empty list of distinct single-character node names.
 fn node_names(min: usize, max: usize) -> impl Strategy<Value = Vec<String>> {
@@ -31,7 +52,7 @@ fn check_canonicalize_cycle(input: &[&str], expected: &[&str]) {
 }
 
 proptest! {
-    /// Canonicalisation is idempotent: applying it twice yields the same
+    /// Canonicalization is idempotent: applying it twice yields the same
     /// result as applying it once.
     #[test]
     fn canonicalize_is_idempotent(nodes in node_names(2, 10)) {
@@ -41,9 +62,9 @@ proptest! {
         prop_assert_eq!(once, twice);
     }
 
-    /// All rotations of a cycle canonicalise to the same sequence.
+    /// All rotations of a cycle canonicalize to the same sequence.
     #[test]
-    fn all_rotations_canonicalise_identically(nodes in node_names(2, 8)) {
+    fn all_rotations_canonicalize_identically(nodes in node_names(2, 8)) {
         let base = canonicalize_cycle(make_cycle(&nodes));
         for i in 1..nodes.len() {
             let mut rotated = nodes.clone();
@@ -135,7 +156,10 @@ fn make_acyclic_chain(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::s
     targets
 }
 
-/// Build a cycle of length `cycle_len` starting at node index 0.
+/// Build a cycle graph from the provided node names, starting at node index 0.
+///
+/// Each node depends on the next name in the slice, and the last node depends
+/// on the first, preserving the input order as the cycle order.
 fn make_cycle_graph(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
     let mut targets = HashMap::new();
     let deps = nodes.iter().cycle().skip(1).take(nodes.len());

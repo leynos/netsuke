@@ -773,8 +773,8 @@ Accepts the target map produced by IR lowering and returns a
 - `cycle: Option<Vec<Utf8PathBuf>>` — the first dependency cycle found, in
   canonical order (smallest node first, first node repeated last), or `None`
   for acyclic graphs.
-- `missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>` — every
-  `(dependent, missing_dep)` pair encountered during traversal.
+- `missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>` —
+  `(dependent, missing_dep)` pairs encountered before the first detected cycle.
 
 **`CycleDetector`**
 
@@ -787,7 +787,7 @@ callers within the `ir` module is:
 - `CycleDetector::detect()` — iterates over all nodes in sorted order and
   returns the first detected cycle, or `None`.
 
-Detected cycles are normalised by `canonicalize_cycle` so that error messages
+Detected cycles are normalized by `canonicalize_cycle` so that error messages
 are deterministic regardless of hash-map iteration order.
 
 **Cross-references:** `docs/netsuke-design.md` §5.3.
