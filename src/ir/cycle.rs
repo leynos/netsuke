@@ -84,9 +84,12 @@ impl CycleDetector<'_> {
         }
     }
 
-    /// Walk every node in the target map and return the first cycle found,
-    /// or `None` if the graph is acyclic.
+    /// Walk every node in the target map and return the first cycle found.
     fn detect(&mut self) -> Option<Vec<Utf8PathBuf>> {
+        self.states.clear();
+        self.stack.clear();
+        self.missing_dependencies.clear();
+
         let mut nodes: Vec<Utf8PathBuf> = self.targets.keys().cloned().collect();
         // Sort keys for deterministic traversal order.  The O(n log n) cost is
         // negligible for typical build graphs (100–10 000 targets) and is
@@ -149,11 +152,6 @@ impl CycleDetector<'_> {
         }
 
         cycle
-    }
-
-    #[cfg(test)]
-    fn missing_dependencies(&self) -> &[(Utf8PathBuf, Utf8PathBuf)] {
-        &self.missing_dependencies
     }
 
     #[cfg(test)]
@@ -263,7 +261,10 @@ mod tests {
             .collect();
         let mut detector = CycleDetector::new(&targets);
         assert!(detector.visit(path("a").as_path()).is_none());
-        assert_eq!(detector.missing_dependencies(), expected.as_slice());
+        assert_eq!(
+            detector.missing_dependencies.as_slice(),
+            expected.as_slice()
+        );
     }
 
     fn next_cycle_index(index: usize, cycle_len: usize) -> usize {

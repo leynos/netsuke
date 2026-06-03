@@ -6,7 +6,7 @@
 use proptest::prelude::*;
 use std::collections::HashMap;
 
-use super::{BuildEdge, CycleDetector, canonicalize_cycle};
+use super::{BuildEdge, CycleDetector, analyse, canonicalize_cycle};
 
 fn path(name: &str) -> camino::Utf8PathBuf {
     camino::Utf8PathBuf::from(name)
@@ -138,6 +138,35 @@ fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
     targets.insert(path("y"), build_edge(&["x"], &[], "y"));
 
     assert!(CycleDetector::find_cycle(&targets).is_some());
+}
+
+#[test]
+fn cycle_detector_repeated_detect_resets_traversal_state() {
+    let mut targets = HashMap::new();
+    targets.insert(path("a"), build_edge(&["b"], &[], "a"));
+    targets.insert(path("b"), build_edge(&["a"], &[], "b"));
+
+    let expected = vec![path("a"), path("b"), path("a")];
+    let mut detector = CycleDetector::new(&targets);
+
+    assert_eq!(detector.detect(), Some(expected.clone()));
+    assert_eq!(detector.detect(), Some(expected));
+}
+
+#[test]
+fn analyse_reports_missing_dependencies_before_detected_cycle() {
+    let mut targets = HashMap::new();
+    targets.insert(path("a"), build_edge(&["missing"], &[], "a"));
+    targets.insert(path("b"), build_edge(&["c"], &[], "b"));
+    targets.insert(path("c"), build_edge(&["b"], &[], "c"));
+
+    let report = analyse(&targets);
+
+    assert_eq!(report.cycle, Some(vec![path("b"), path("c"), path("b")]));
+    assert_eq!(
+        report.missing_dependencies,
+        vec![(path("a"), path("missing"))],
+    );
 }
 
 /// Generate a list of `count` distinct node names "n0", "n1", …
