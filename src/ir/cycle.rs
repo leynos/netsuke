@@ -63,6 +63,25 @@ pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetecti
 
 /// Depth-first cycle detector that owns its traversal state.
 ///
+/// This is a deliberate struct rather than a closure or set of free
+/// functions for three reasons:
+///
+/// 1. **Reset semantics.** [`CycleDetector::detect`] clears `stack`,
+///    `states`, and `missing_dependencies` before each run, making
+///    repeated calls on the same detector safe and predictable.  A
+///    free-function design would require threading that reset contract
+///    through every call site.
+///
+/// 2. **State isolation.** The recursion stack and visitation map are
+///    owned entirely by the detector, keeping `visit` and
+///    `visit_dependency` focused on traversal logic without lengthening
+///    every parameter list.
+///
+/// 3. **Testability.** Property tests in `cycle_property_tests.rs` call
+///    `detect()` directly and inspect `stack` to verify clean unwinding;
+///    exposing that verification through `analyse`'s return type alone
+///    would widen the public API unnecessarily.
+///
 /// Create with [`CycleDetector::new`] and drive detection with
 /// [`CycleDetector::detect`].
 struct CycleDetector<'targets> {
@@ -220,11 +239,9 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
 mod tests {
     use super::*;
     use rstest::rstest;
-
     fn path(name: &str) -> Utf8PathBuf {
         Utf8PathBuf::from(name)
     }
-
     fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdge {
         BuildEdge {
             action_id: "id".into(),
@@ -237,14 +254,12 @@ mod tests {
             always: false,
         }
     }
-
     struct MissingDepsCase<'a> {
         primary_inputs: &'a [&'a str],
         primary_implicit_deps: &'a [&'a str],
         extra_targets: &'a [(&'a str, &'a [&'a str], &'a [&'a str])],
         expected: &'a [(&'a str, &'a str)],
     }
-
     fn assert_missing_deps(case: &MissingDepsCase<'_>) {
         let mut targets = HashMap::new();
         targets.insert(
@@ -266,11 +281,9 @@ mod tests {
             expected.as_slice()
         );
     }
-
     fn next_cycle_index(index: usize, cycle_len: usize) -> usize {
         if index + 1 == cycle_len { 0 } else { index + 1 }
     }
-
     fn insert_cycle_edge(
         targets: &mut HashMap<Utf8PathBuf, BuildEdge>,
         index: usize,
@@ -286,28 +299,23 @@ mod tests {
         };
         targets.insert(output.into(), edge);
     }
-
     fn assert_bounded_cycle_detected(cycle_len: usize, implicit_index: usize) {
         let mut targets = HashMap::new();
         for index in 0..cycle_len {
             insert_cycle_edge(&mut targets, index, cycle_len, implicit_index);
         }
-
         assert!(
             CycleDetector::find_cycle(&targets).is_some(),
             "expected cycle with length {cycle_len} and implicit edge at {implicit_index}",
         );
     }
-
     #[test]
     fn cycle_detector_detects_self_edge_cycle() {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&["a"], &[], "a"));
-
         let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
         assert_eq!(cycle, vec![path("a"), path("a")]);
     }
-
     #[test]
     fn cycle_detector_marks_nodes_visited_after_traversal() {
         let mut targets = HashMap::new();
@@ -315,7 +323,6 @@ mod tests {
         let b = path("b");
         targets.insert(a.clone(), build_edge(&["b"], &[], "a"));
         targets.insert(b.clone(), build_edge(&[], &[], "b"));
-
         let mut detector = CycleDetector::new(&targets);
         assert!(detector.detect().is_none());
         assert!(detector.is_visited(a.as_path()));
@@ -325,7 +332,6 @@ mod tests {
             "stack should be empty after complete traversal",
         );
     }
-
     #[rstest]
     #[case::explicit_dependency(MissingDepsCase {
         primary_inputs: &["b"],
@@ -342,33 +348,27 @@ mod tests {
     fn cycle_detector_records_missing_dependencies(#[case] case: MissingDepsCase<'_>) {
         assert_missing_deps(&case);
     }
-
     #[test]
     fn find_cycle_identifies_cycle() {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&["b"], &[], "a"));
         targets.insert(path("b"), build_edge(&["a"], &[], "b"));
-
         let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
         assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
     }
-
     #[test]
     fn find_cycle_identifies_implicit_dependency_cycle() {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&[], &["b"], "a"));
         targets.insert(path("b"), build_edge(&[], &["a"], "b"));
-
         let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
         assert_eq!(cycle, vec![path("a"), path("b"), path("a")]);
     }
-
     #[test]
     fn cycle_detector_stack_is_empty_after_cycle_detected() {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&["b"], &[], "a"));
         targets.insert(path("b"), build_edge(&["a"], &[], "b"));
-
         let mut detector = CycleDetector::new(&targets);
         assert!(detector.detect().is_some(), "expected a cycle");
         assert!(
@@ -376,18 +376,15 @@ mod tests {
             "stack must be empty after cycle detection",
         );
     }
-
     #[test]
     fn find_cycle_identifies_mixed_input_and_implicit_dependency_cycle() {
         let mut targets = HashMap::new();
         targets.insert(path("a"), build_edge(&["b"], &[], "a"));
         targets.insert(path("b"), build_edge(&[], &["c"], "b"));
         targets.insert(path("c"), build_edge(&["a"], &[], "c"));
-
         let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
         assert_eq!(cycle, vec![path("a"), path("b"), path("c"), path("a")]);
     }
-
     #[test]
     fn bounded_cycles_through_inputs_or_implicit_deps_are_detected() {
         let cases = (2..=5).flat_map(|cycle_len| {

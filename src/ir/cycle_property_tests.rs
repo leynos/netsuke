@@ -261,6 +261,52 @@ fn analyse_reports_missing_dependencies_before_detected_cycle() {
     );
 }
 
+#[test]
+fn analyse_returns_no_cycle_for_acyclic_graph() {
+    let mut targets = HashMap::new();
+    targets.insert(
+        path("a"),
+        EdgeBuilder::new(path("a")).input(path("b")).build(),
+    );
+    targets.insert(path("b"), EdgeBuilder::new(path("b")).build());
+
+    let report = analyse(&targets);
+
+    assert!(
+        report.cycle.is_none(),
+        "acyclic graph must produce no cycle"
+    );
+    assert!(
+        report.missing_dependencies.is_empty(),
+        "acyclic graph with no missing deps must report none",
+    );
+}
+
+#[test]
+fn analyse_returns_cycle_with_empty_missing_dependencies() {
+    let mut targets = HashMap::new();
+    targets.insert(
+        path("a"),
+        EdgeBuilder::new(path("a")).input(path("b")).build(),
+    );
+    targets.insert(
+        path("b"),
+        EdgeBuilder::new(path("b")).input(path("a")).build(),
+    );
+
+    let report = analyse(&targets);
+
+    assert_eq!(
+        report.cycle,
+        Some(vec![path("a"), path("b"), path("a")]),
+        "cyclic graph must report the detected cycle",
+    );
+    assert!(
+        report.missing_dependencies.is_empty(),
+        "no missing deps must be reported when all targets are present",
+    );
+}
+
 /// Generate a list of `count` distinct node names "n0", "n1", …
 fn sequential_nodes(count: usize) -> Vec<camino::Utf8PathBuf> {
     (0..count).map(|i| path(&format!("n{i}"))).collect()
