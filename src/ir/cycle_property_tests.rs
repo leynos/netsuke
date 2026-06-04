@@ -278,7 +278,7 @@ fn analyse_returns_no_cycle_for_acyclic_graph() {
     );
     assert!(
         report.missing_dependencies.is_empty(),
-        "acyclic graph with no missing deps must report none",
+        "acyclic graph with no missing dependencies must report none",
     );
 }
 
@@ -303,7 +303,7 @@ fn analyse_returns_cycle_with_empty_missing_dependencies() {
     );
     assert!(
         report.missing_dependencies.is_empty(),
-        "no missing deps must be reported when all targets are present",
+        "no missing dependencies must be reported when all targets are present",
     );
 }
 
