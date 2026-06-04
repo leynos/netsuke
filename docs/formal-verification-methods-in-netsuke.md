@@ -106,8 +106,8 @@ should lock down these invariants:
 
 ### Optional Verus proof kernel
 
-Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is
-a small proof-specific model for one mathematical contract; it is not a
+Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is a
+small proof-specific model for one mathematical contract; it is not a
 production subsystem, a replacement implementation, or a normal developer
 workflow gate. Netsuke should not add Verus installer scripts, Verus Make
 targets, Verus Continuous Integration (CI), or Verus files under ordinary Cargo
@@ -116,8 +116,7 @@ as part of the phase-1 boundary.
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. The only current entry point worth preserving for later evaluation is a
 cycle canonicalization model related to `src/ir/cycle.rs`. That model is
-appropriate because `canonicalize_cycle` exposes a clear mathematical
-contract:
+appropriate because `canonicalize_cycle` exposes a clear mathematical contract:
 
 - output length is preserved,
 - the cycle remains closed,
@@ -129,8 +128,8 @@ that narrow normalization model at first. Production `HashMap` structures,
 MiniJinja values, filesystem helpers, and subprocess orchestration should
 remain outside the first proof boundary. Until the proof kernel is stable and
 reviewed, Verus should remain outside pull-request gates, `make test`,
-`make lint`, `make check-fmt`, `make all`, `make kani-check`,
-`make kani-full`, and `make formal-pr`.
+`make lint`, `make check-fmt`, `make all`, `make kani-check`, `make kani-full`,
+and `make formal-pr`.
 
 ### Stateright remains deferred
 

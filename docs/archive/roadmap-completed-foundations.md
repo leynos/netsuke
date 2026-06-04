@@ -4,8 +4,8 @@ This archive preserves completed Netsuke roadmap work that remains relevant to
 the future product but no longer belongs in the active delivery roadmap.
 
 Task numbers are intentionally retained. The active roadmap does not repeat
-these completed task identifiers as live work. Partial and planned tasks
-remain in [`docs/roadmap.md`](../roadmap.md) under their existing numbers.
+these completed task identifiers as live work. Partial and planned tasks remain
+in [`docs/roadmap.md`](../roadmap.md) under their existing numbers.
 
 ## Relevance assessment method
 
@@ -157,8 +157,7 @@ localization, accessibility, configuration, and feedback quality.
   - [x] Prevent command injection during IR generation.
   - [x] Validate final command string with shlex.
 - [x] 3.1.3. Emit Portable Operating System Interface (POSIX)-sh-compatible
-  quoting. See
-  [netsuke-design.md §6.3](../netsuke-design.md).
+  quoting. See [netsuke-design.md §6.3](../netsuke-design.md).
   - [x] Use portable single-quote style rather than Bash-only forms.
   - [x] Document and enforce bash execution if Bash-specific quoting is
     required.

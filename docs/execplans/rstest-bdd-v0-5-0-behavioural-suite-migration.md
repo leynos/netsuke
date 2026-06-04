@@ -235,8 +235,8 @@ Apply focused refactors that use v0.5.0 capabilities to improve this suite:
   explicit text) for no-argument steps whose function names map directly to
   feature wording.
 - Replace any legacy `rstest_bdd::sync_to_async` imports with
-  `rstest_bdd::async_step::sync_to_async` and aliases (`StepCtx`,
-  `StepTextRef`, `StepDoc`, `StepTable`) where wrappers are needed.
+  `rstest_bdd::async_step::sync_to_async` and aliases (`StepCtx`, `StepTextRef`,
+  `StepDoc`, `StepTable`) where wrappers are needed.
 - Introduce async steps only in domains where asynchronous work is natural and
   improves coverage (for example, stdlib HTTP/process behaviours), using Tokio
   current-thread runtime and avoiding nested runtime creation.

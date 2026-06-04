@@ -1,9 +1,8 @@
 # Plan the Netsuke command-line interface (CLI) and documentation overhaul
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: IN PROGRESS (roadmap fidelity review)
 
@@ -151,10 +150,9 @@ Observable success means:
   dependencies, soft dependencies, and Netsuke-owned application semantics.
 
 - Risk: a roadmap rewrite could lose useful Netsuke history or planned work
-  that still matters after the UI redesign. Severity: high. Likelihood:
-  medium. Mitigation: preserve completed work in an archive, keep still-valid
-  planned work live, and record relevance decisions rather than deleting by
-  default.
+  that still matters after the UI redesign. Severity: high. Likelihood: medium.
+  Mitigation: preserve completed work in an archive, keep still-valid planned
+  work live, and record relevance decisions rather than deleting by default.
 
 - Risk: updating user-facing docs before implementation could make planned
   commands appear shipped. Severity: medium. Likelihood: high. Mitigation: use
@@ -259,8 +257,8 @@ Observable success means:
   machine-stable structure reinforce each other.
 
 - Observation: the README still documents `netsuke manifest FILE` and
-  `--file`. Evidence: the README CLI block lists `netsuke manifest FILE` and
-  the `--file` option. Impact: user-facing docs need a planned-surface update
+  `--file`. Evidence: the README CLI block lists `netsuke manifest FILE` and the
+  `--file` option. Impact: user-facing docs need a planned-surface update
   after the design and roadmap are aligned.
 
 - Observation: repo-wide Markdown formatting currently fails on existing
@@ -391,7 +389,7 @@ Principles for Agent-Native CLIs" blog post:
 
 The active OrthoConfig roadmap at
 `https://raw.githubusercontent.com/leynos/ortho-config/refs/heads/main/docs/roadmap.md`
- is an additional planning input. It states that Weaver and Netsuke are the
+is an additional planning input. It states that Weaver and Netsuke are the
 first downstream consumers for the expanded agent-native contract, and that
 OrthoConfig should absorb reusable contracts before downstream applications
 fossilize divergent local schemas. That roadmap makes the following dependency
@@ -905,15 +903,15 @@ interfaces:
   `ColourPolicy`, `SpinnerMode`, and `OutputFormat` with canonical policy types
   aligned to the new flags.
 - Output mode and theme resolution: `src/output_mode.rs`,
-  `src/output_prefs.rs`, and `src/theme.rs` should eventually resolve
-  `--color`, `--emoji`, `--progress`, and `--accessibility`.
+  `src/output_prefs.rs`, and `src/theme.rs` should eventually resolve `--color`,
+  `--emoji`, `--progress`, and `--accessibility`.
 - JSON diagnostics: `src/diagnostic_json.rs` should become part of a broader
   JSON result/diagnostic contract rather than a diagnostics-only surface.
 - Runner integration: `src/runner/mod.rs` and `src/runner/process/` will need
   explicit capture and log-reference behaviour for `build --json`.
 - Roadmap and documentation: `docs/roadmap.md`, `docs/netsuke-design.md`,
-  `docs/netsuke-cli-design-document.md`, `docs/users-guide.md`, `README.md`,
-  and `docs/contents.md` are the main documentation interfaces.
+  `docs/netsuke-cli-design-document.md`, `docs/users-guide.md`, `README.md`, and
+  `docs/contents.md` are the main documentation interfaces.
 
 No new external dependency is required for the documentation overhaul. Future
 implementation may require HTTP client decisions for webhook delivery and

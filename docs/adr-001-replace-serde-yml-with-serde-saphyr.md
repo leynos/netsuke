@@ -166,12 +166,11 @@ Several YAML+Serde libraries were evaluated against the project requirements:
   development** (it was announced in late 2025 with frequent updates)[^4] and
   is built with modern Rust idioms. The API is very similar to `serde_yaml`'s
   (providing `from_str`, `to_string`, etc., via Serde traits), so switching
-  over is straightforward. Internally, it avoids the need to handle generic
-  YAML `Value` types or represent the entire document in memory. This
-  type-driven parsing means any YAML that does not match the Rust struct
-  definitions fails fast[^22], which makes error handling simpler and
-  potentially clearer. Given that Netsuke's YAML structure is known (manifest
-  schema), this fits perfectly.
+  over is straightforward. Internally, it avoids the need to handle generic YAML
+  `Value` types or represent the entire document in memory. This type-driven
+  parsing means any YAML that does not match the Rust struct definitions fails
+  fast[^22], which makes error handling simpler and potentially clearer. Given
+  that Netsuke's YAML structure is known (manifest schema), this fits perfectly.
 
 In summary, **`serde-saphyr` addresses all the shortcomings** of the other
 options in the context of Netsuke:
@@ -248,8 +247,8 @@ downsides.
   it in release notes.
 
 - If any tests expected duplicate key handling, adjust them. For instance, if
-  previously a duplicate key in a map was silently accepted (or last-wins due
-  to `IndexMap` insertion), now it will likely throw an error during parse.
+  previously a duplicate key in a map was silently accepted (or last-wins due to
+  `IndexMap` insertion), now it will likely throw an error during parse.
   Decide whether this warrants a specific error message to the user of Netsuke
   (e.g., "duplicate key in manifest") – the `serde_saphyr` error might already
   convey that. In general, this stricter behaviour is acceptable.
@@ -381,12 +380,12 @@ YAML foundation moving forward.
 
 - **`serde_yaml_bw` crate:** *Fork with budget checks and YAML improvements.* –
   Crates.io serde_yaml_bw, GitHub: bourumir-wyngs/serde-yaml-bw. (Contains
-  design notes on safety measures like Budget and duplicate key
-  handling[^6][^7].)
+  design notes on safety measures like Budget and duplicate key handling[^6]
+  [^7].)
 
 - **Discussion – Reddit r/rust thread about the loss of serde-yaml** – Thread
-  (2025) discussing the deprecation of serde_yaml and community
-  alternatives[^3][^4].
+  (2025) discussing the deprecation of serde_yaml and community alternatives
+  [^3] [^4].
 
 - **Announcement – New Serde YAML (serde-saphyr):** – Rust Internals Forum post
   by the serde-saphyr author[^27][^17], explaining the approach and

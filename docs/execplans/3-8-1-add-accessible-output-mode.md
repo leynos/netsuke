@@ -217,9 +217,9 @@ Implementation complete. All quality gates pass (`make check-fmt`, `make lint`,
 ### Key patterns
 
 - **OrthoConfig** on `Cli`: fields get `#[arg(...)]` for clap,
-  `#[ortho_config(default = ...)]` for defaults. Boolean flags with defaults
-  use `#[ortho_config(default = false)]`. The `NETSUKE_` prefix provides
-  automatic environment variable support.
+  `#[ortho_config(default = ...)]` for defaults. Boolean flags with defaults use
+  `#[ortho_config(default = false)]`. The `NETSUKE_` prefix provides automatic
+  environment variable support.
 - **Config merge**: `cli_overrides_from_matches` removes fields not explicitly
   set on the CLI so they don't override file/env layers. New boolean fields
   must be added to the `value_source` check array.

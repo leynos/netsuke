@@ -1,17 +1,15 @@
 # 3.13.3. Provide CI-focused guidance
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: DRAFT (awaiting approval)
 
 ## Purpose / big picture
 
-Roadmap item `3.13.3` asks for CI-focused guidance under the "Friendly"
-polish phase. Netsuke already ships the core runtime behaviours that automation
-needs:
+Roadmap item `3.13.3` asks for CI-focused guidance under the "Friendly" polish
+phase. Netsuke already ships the core runtime behaviours that automation needs:
 
 - machine-readable diagnostics via `--diag-json` and
   `output_format = "json"`,
@@ -57,8 +55,8 @@ effects that the docs describe.
   "quiet".
 - Reuse the existing OrthoConfig merge root and field vocabulary in
   `src/cli/mod.rs` and `src/cli/config.rs`. The plan must document the shipped
-  knobs (`verbose`, `progress`, `spinner_mode`, `diag_json`,
-  `output_format`) instead of bypassing them.
+  knobs (`verbose`, `progress`, `spinner_mode`, `diag_json`, `output_format`)
+  instead of bypassing them.
 - Keep the CLI help/localization path authoritative. Any new user-visible
   wording about automation must remain consistent with the localized help
   surface described in `docs/ortho-config-users-guide.md` and implemented via
@@ -91,8 +89,7 @@ effects that the docs describe.
   new lines, stop and reassess before proceeding.
 - Behaviour gap: if the audit shows the current binary cannot actually express
   the roadmap's intended automation story without a new `--quiet`-style
-  surface, stop and escalate with options rather than silently expanding
-  scope.
+  surface, stop and escalate with options rather than silently expanding scope.
 - Documentation drift: if the current runtime behaviour materially disagrees
   with `docs/users-guide.md` and `docs/netsuke-design.md`, stop and decide
   which source is authoritative before pinning tests.
@@ -108,16 +105,16 @@ effects that the docs describe.
 ## Risks
 
 - Risk: roadmap wording says "quiet/verbose modes", but the current runtime
-  does not expose a dedicated `--quiet` flag. Severity: high. Likelihood:
-  high. Mitigation: start by auditing the shipped behaviour and document
-  "quiet for automation" in terms of `spinner_mode = "disabled"` and
-  `--progress false` unless the audit proves otherwise. Record that decision in
+  does not expose a dedicated `--quiet` flag. Severity: high. Likelihood: high.
+  Mitigation: start by auditing the shipped behaviour and document "quiet for
+  automation" in terms of `spinner_mode = "disabled"` and `--progress false`
+  unless the audit proves otherwise. Record that decision in
   `docs/netsuke-design.md`.
 
 - Risk: documentation examples that use `jq` or shell snippets can drift from
   the actual JSON contract. Severity: medium. Likelihood: medium. Mitigation:
-  docs may show `jq` for readability, but automated tests should parse the
-  JSON with `serde_json` and assert only the stable documented fields.
+  docs may show `jq` for readability, but automated tests should parse the JSON
+  with `serde_json` and assert only the stable documented fields.
 
 - Risk: behaviour-driven tests that mutate `NETSUKE_...` variables can become
   flaky in parallel execution. Severity: medium. Likelihood: medium.
@@ -131,8 +128,8 @@ effects that the docs describe.
 
 - Risk: JSON mode plus verbose mode is already special-cased by the runtime.
   Documentation that explains verbose mode without mentioning that suppression
-  would mislead users. Severity: medium. Likelihood: high. Mitigation: make
-  the interaction a first-class documented rule and cover it in both BDD and
+  would mislead users. Severity: medium. Likelihood: high. Mitigation: make the
+  interaction a first-class documented rule and cover it in both BDD and
   `rstest` assertions.
 
 ## Progress
@@ -155,9 +152,8 @@ effects that the docs describe.
 ## Surprises & Discoveries
 
 - The repository already documents most of the raw ingredients for this task:
-  `docs/users-guide.md` covers JSON diagnostics, progress suppression,
-  verbose timing summaries, and OrthoConfig layering, but not as one cohesive
-  CI story.
+  `docs/users-guide.md` covers JSON diagnostics, progress suppression, verbose
+  timing summaries, and OrthoConfig layering, but not as one cohesive CI story.
 - The current runtime does **not** expose a dedicated `--quiet` flag.
   Automation-friendly low-noise output currently comes from disabling progress
   with `--progress false` or `spinner_mode = "disabled"`.
@@ -166,8 +162,8 @@ effects that the docs describe.
   rather than duplicating it blindly.
 - Existing tests already cover key automation primitives:
   `tests/features/json_diagnostics.feature`,
-  `tests/features/progress_output.feature`, and
-  `tests/advanced_usage_tests.rs` can all be extended or reused.
+  `tests/features/progress_output.feature`, and `tests/advanced_usage_tests.rs`
+  can all be extended or reused.
 - The current runner behaviour already encodes the crucial automation rule:
   verbose timing output is suppressed when JSON diagnostics are active
   (`src/runner/mod.rs`).
@@ -189,9 +185,8 @@ effects that the docs describe.
 
 - Decision: validate the documentation with both `rstest` and `rstest-bdd`.
   Rationale: `rstest` is the best fit for programmatically parsing JSON and
-  asserting precedence combinations, while BDD scenarios keep the documented
-  CI workflows readable and executable. Date/Author: 2026-04-23 /
-  planning agent.
+  asserting precedence combinations, while BDD scenarios keep the documented CI
+  workflows readable and executable. Date/Author: 2026-04-23 / planning agent.
 
 ## Skills and references
 
@@ -383,9 +378,9 @@ Stage C exit criteria:
 Add or extend `rstest` integration coverage for the lower-level automation
 claims that are awkward in BDD.
 
-Recommended home: a new `tests/ci_guidance_tests.rs` module, unless the
-existing `tests/advanced_usage_tests.rs` remains comfortably under the file
-limit and the new cases fit naturally there.
+Recommended home: a new `tests/ci_guidance_tests.rs` module, unless the existing
+`tests/advanced_usage_tests.rs` remains comfortably under the file limit and
+the new cases fit naturally there.
 
 Tests should cover:
 
@@ -421,8 +416,8 @@ Finish the work by aligning the design record, updating the roadmap, and
 running the full gate suite.
 
 1. Update `docs/netsuke-design.md` with the final design decision for CI
-   guidance, especially if "quiet" is formally documented as
-   progress suppression rather than a dedicated flag.
+   guidance, especially if "quiet" is formally documented as progress
+   suppression rather than a dedicated flag.
 2. Update `docs/roadmap.md` to mark `3.13.3` done only after all tests and
    documentation changes land successfully.
 3. If any `.feature` file changed, `touch tests/bdd_tests.rs` before the final

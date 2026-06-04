@@ -1,9 +1,8 @@
 # 3.10.2. Introduce consistent prefixes for log differentiation
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -143,16 +142,16 @@ without breaking any existing functionality.
 
 ### New prefix design
 
-| Channel                    | Current output                 | After change                        |
-| -------------------------- | ------------------------------ | ----------------------------------- |
-| Stage (accessible)         | `Stage 1/6: ...`               | `ℹ Info: Stage 1/6: ...`            |
-| Stage (indicatif, hidden)  | `[pending] Stage 1/6: ...`     | unchanged (summary format)          |
-| Task progress (accessible) | `Task 1/2: ...`                | two-space indent before task label  |
-| Completion (accessible)    | `✔ Success: Build complete.`   | unchanged                           |
-| Completion (indicatif)     | `Build complete.`              | `✔ Success: Build complete.`        |
-| Timing header              | `Stage timing summary:`        | `⏱ Timing: Stage timing summary:`   |
-| Timing stage line          | `- Stage 1/6: ...`             | two-space indent before stage line  |
-| Timing total line          | `Total pipeline time: ...`     | two-space indent before total line  |
+| Channel                    | Current output               | After change                       |
+| -------------------------- | ---------------------------- | ---------------------------------- |
+| Stage (accessible)         | `Stage 1/6: ...`             | `ℹ Info: Stage 1/6: ...`           |
+| Stage (indicatif, hidden)  | `[pending] Stage 1/6: ...`   | unchanged (summary format)         |
+| Task progress (accessible) | `Task 1/2: ...`              | two-space indent before task label |
+| Completion (accessible)    | `✔ Success: Build complete.` | unchanged                          |
+| Completion (indicatif)     | `Build complete.`            | `✔ Success: Build complete.`       |
+| Timing header              | `Stage timing summary:`      | `⏱ Timing: Stage timing summary:`  |
+| Timing stage line          | `- Stage 1/6: ...`           | two-space indent before stage line |
+| Timing total line          | `Total pipeline time: ...`   | two-space indent before total line |
 
 ## Plan of work
 

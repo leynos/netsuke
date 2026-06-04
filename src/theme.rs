@@ -8,7 +8,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use crate::cli::config::ColourPolicy;
+use crate::cli::ColourPolicy;
 use crate::output_mode::{OutputMode, no_color_active_with};
 use serde::{Deserialize, Serialize};
 

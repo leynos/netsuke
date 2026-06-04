@@ -93,10 +93,9 @@ if let Some(figment) = discovery.load_first()? {
 # }
 ```
 
-The repository ships `config/overrides.toml`, which extends
-`config/baseline.toml` to set `is_excited = true`, provide a `Layered hello`
-preamble, and swap the greet punctuation for `!!!`. Behavioural tests and demo
-scripts assert the uppercase output to guard this layering.
+After parsing the relevant subcommand struct, call `load_and_merge()?` on that
+value (for example, `pr_args.load_and_merge()?`) to obtain the merged
+configuration for that subcommand.
 
 ### Declarative merging
 
@@ -897,7 +896,7 @@ replaces file or environment values. The `greet` subcommand adds optional
 behaviour like a preamble (`--preamble "Good morning"`) or custom punctuation
 while reusing the merged global configuration. The `take-leave` subcommand
 combines switches and optional arguments (`--wave`, `--gift`, `--channel email`,
- `--remind-in 15`) alongside greeting adjustments (
+`--remind-in 15`) alongside greeting adjustments (
 `--preamble "Until next time"`, `--punctuation ?`) to describe how the farewell
 should unfold. Each subcommand struct derives `OrthoConfig` so defaults from
 `[cmds.greet]` or `[cmds.take-leave]` merge automatically when
@@ -989,7 +988,7 @@ for a complete example.
 ## Error handling
 
 `load` and `load_and_merge_subcommand_for` return `OrthoResult<T>`, an alias for
- `Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file I/O
+`Result<T, Arc<OrthoError>>`. `OrthoError` wraps errors from `clap`, file I/O
 and `figment`. Failures during the final merge of CLI values over configuration
 sources surface as the `Merge` variant, providing clearer diagnostics when the
 combined data is invalid. When multiple sources fail, the errors are collected
@@ -1204,9 +1203,10 @@ Enum fields list their possible values in the OPTIONS description.
 ### Generating PowerShell help
 
 `cargo-orthohelp` can generate PowerShell external help in Microsoft Assistance
-Markup Language (MAML) alongside a wrapper module so `Get-Help {BinName} -Full`
-surfaces the same configuration metadata as the man page generator. Use the
-`ps` format to emit the module layout under `powershell/<ModuleName>`:
+Markup Language (MAML) alongside a wrapper module, so
+`Get-Help {BinName} -Full` surfaces the same configuration metadata as the man
+page generator. Use the `ps` format to emit the module layout under
+`powershell/<ModuleName>`:
 
 ```bash
 cargo-orthohelp --format ps --out-dir target/orthohelp --locale en-US

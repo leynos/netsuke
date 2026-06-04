@@ -1,9 +1,8 @@
 # 4.1.1. Add Kani tooling and local smoke targets
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -29,8 +28,8 @@ job and substantive proof harnesses.
 ## Constraints
 
 - Do not implement Kani proof harnesses, Proptest tests, Verus proofs, or a
-  CI `kani-smoke` job in this roadmap item. Those belong to later items
-  `4.1.2`, `4.2.*`, `4.3.*`, and `4.4.*`.
+  CI `kani-smoke` job in this roadmap item. Those belong to later items `4.1.2`,
+  `4.2.*`, `4.3.*`, and `4.4.*`.
 - Do not add Kani execution to `make test`, `make lint`, `make check-fmt`,
   `make all`, or the existing `.github/workflows/ci.yml` `build-test` job.
 - Use `tools/kani/VERSION` as the single repository source of truth for the
@@ -259,11 +258,11 @@ job and substantive proof harnesses.
   accidentally installing a moving or malformed tool version. Date/Author:
   2026-05-11 / implementation agent.
 
-- Decision: Make `make kani` a Kani command smoke check using `cargo kani
-  --version` until real harnesses land. Rationale: this keeps `4.1.1` honest
-  as a tooling item, avoids adding a vacuous proof, and leaves `make
-  kani-full` as the future full-suite entry point. Date/Author: 2026-05-11 /
-  implementation agent.
+- Decision: Make `make kani` a Kani command smoke check using
+  `cargo kani --version` until real harnesses land. Rationale: this keeps
+  `4.1.1` honest as a tooling item, avoids adding a vacuous proof, and leaves
+  `make kani-full` as the future full-suite entry point. Date/Author:
+  2026-05-11 / implementation agent.
 
 - Decision: Route `make kani` through `scripts/check-kani-version.sh` rather
   than calling `cargo kani --version` directly. Rationale: the smoke path must
@@ -272,8 +271,8 @@ job and substantive proof harnesses.
 
 ## Outcomes & Retrospective
 
-Implementation completed on 2026-05-11. Netsuke now has a pinned Kani version
-in `tools/kani/VERSION`, an idempotent `scripts/install-kani.sh` installer, and
+Implementation completed on 2026-05-11. Netsuke now has a pinned Kani version in
+`tools/kani/VERSION`, an idempotent `scripts/install-kani.sh` installer, and
 local `make kani`, `make kani-full`, and `make formal-pr` targets. The
 developer guide documents how to install and run the pinned tool without
 folding Kani into the ordinary `make test`, `make lint`, `make check-fmt`, or
@@ -393,8 +392,8 @@ behaviour deliberately during implementation:
 1. Prefer a `cargo kani` invocation that succeeds cleanly with zero harnesses
    if the pinned Kani version supports that behaviour.
 2. If Kani exits non-zero when no harnesses exist, make `make kani` run a
-   documented tool smoke such as `cargo kani --help` for this item and record
-   in `docs/developers-guide.md` that `4.2.*` will replace it with harness
+   documented tool smoke such as `cargo kani --help` for this item and record in
+   `docs/developers-guide.md` that `4.2.*` will replace it with harness
    execution.
 3. Do not add a trivial proof harness only to make the target pass. A proof
    that proves nothing would weaken the formal-verification story.

@@ -136,12 +136,12 @@ const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -
 /// Returns an error if manifest generation or the Ninja process fails.
 pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     let mode = output_mode::resolve(cli.accessible, cli.colour_policy);
-    let progress_enabled = cli.resolved_progress() && !cli.resolved_diag_json();
+    let progress_enabled = cli.progress_enabled() && !cli.diag_json;
     let stdout_is_tty = std::io::stdout().is_terminal();
     let reporter = make_reporter(ReporterOptions {
         mode,
         progress_enabled,
-        verbose: cli.verbose && !cli.resolved_diag_json(),
+        verbose: cli.verbose && !cli.diag_json,
         prefs,
         stdout_is_tty,
     });

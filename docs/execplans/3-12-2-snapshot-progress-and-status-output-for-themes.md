@@ -1,9 +1,8 @@
 # 3.12.2. Snapshot progress and status output for themes
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -60,8 +59,8 @@ than hunting through substring assertions.
 - All snapshot names must be descriptive and stable. Use `insta`'s canonical
   `<crate>__<module_path>__<test_name>` naming convention (e.g.,
   `netsuke__status__tests__accessible_unicode_stage_and_completion`). When a
-  test needs per-theme variants, pass a theme-specific `snapshot_name` string
-  to `assert_snapshot!` so the final file still follows that convention.
+  test needs per-theme variants, pass a theme-specific `snapshot_name` string to
+  `assert_snapshot!` so the final file still follows that convention.
 - Use en-US locale for all snapshot tests. Locale-dependent rendering is
   already validated by existing BDD scenarios; snapshot tests should pin a
   single locale to keep snapshots deterministic.
@@ -260,8 +259,8 @@ implementing the plan needs to understand each one.
 
 **Existing snapshot infrastructure:**
 
-- `Cargo.toml` dev-dependencies: `insta = { version = "1", features =
-  ["yaml"] }`.
+- `Cargo.toml` dev-dependencies:
+  `insta = { version = "1", features = ["yaml"] }`.
 - `src/diagnostic_json_tests.rs`: existing `insta` snapshot usage pattern.
   Uses `Settings::new()` with
   `set_snapshot_path(concat!(env!( "CARGO_MANIFEST_DIR"), "/src/snapshots/diagnostic_json"))`.
@@ -273,8 +272,9 @@ implementing the plan needs to understand each one.
 
 **Test support crate:**
 
-- `test_support/src/fluent.rs`: `normalize_fluent_isolates(text: &str) ->
-  String` — strips `U+2068` and `U+2069` bidi isolate markers.
+- `test_support/src/fluent.rs`:
+  `normalize_fluent_isolates(text: &str) -> String` — strips `U+2068` and
+  `U+2069` bidi isolate markers.
 - `test_support/src/localizer.rs`: `localizer_test_lock()` — returns a mutex
   guard for exclusive localizer access during tests.
 

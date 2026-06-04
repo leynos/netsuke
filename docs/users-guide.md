@@ -257,8 +257,8 @@ targets:
 - `order_only_deps` (Optional): Dependencies that must run first but whose
   changes don't trigger rebuilds (`StringOrList`). Maps to Ninja `||`.
 
-Cycle detection traverses `sources` and `deps`, because both classes affect
-the build graph and rebuild freshness. `order_only_deps` only enforce build
+Cycle detection traverses `sources` and `deps`, because both classes affect the
+build graph and rebuild freshness. `order_only_deps` only enforce build
 ordering and do not participate in Netsuke's cycle detection.
 
 - `vars` (Optional): Target-specific variables that override global `vars`.
@@ -435,8 +435,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
 - `dirname`: `{{ 'path/to/file.txt' | dirname }}` -> `"path/to"`
 
 - `with_suffix(new_suffix, count=1, sep='.')`: Replaces the last `count`
-  dot-separated extensions. `{{ 'archive.tar.gz' | with_suffix('.zip', 2) }}`
-  -> `"archive.zip"`
+  dot-separated extensions. `{{ 'archive.tar.gz' | with_suffix('.zip', 2) }}` ->
+  `"archive.zip"`
 
 - `relative_to(base_path)`: Makes a path relative.
   `{{ '/a/b/c' | relative_to('/a/b') }}` -> `"c"`
@@ -523,8 +523,8 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   `PATH`. Supplying unknown keyword arguments or invalid values raises
   `netsuke::jinja::which::args`.
 
-Use `command_available` in manifest-time `when` clauses when optional
-tooling selects between actions:
+Use `command_available` in manifest-time `when` clauses when optional tooling
+selects between actions:
 
 ```yaml
 actions:
@@ -536,8 +536,7 @@ actions:
     when: not command_available("cargo-nextest")
 ```
 
-Only the selected action reaches the typed manifest and generated Ninja
-file.
+Only the selected action reaches the typed manifest and generated Ninja file.
 Top-level actions selected this way still keep the normal implicit
 `phony: true` behaviour.
 
@@ -687,6 +686,68 @@ Environment variables use the `NETSUKE_` prefix (for example,
 `NETSUKE_JOBS=8`). Use `__` to separate nested keys when matching structured
 configuration.
 
+The layered schema is rooted in `CliConfig`. Netsuke currently accepts these
+top-level configuration keys:
+
+- `file = "Netsukefile"`
+- `jobs = 8`
+- `verbose = true|false`
+- `locale = "en-US"`
+- `fetch_allow_scheme = ["https"]`
+- `fetch_allow_host = ["example.com"]`
+- `fetch_block_host = ["blocked.example.com"]`
+- `fetch_default_deny = true|false`
+- `accessible = true|false`
+- `progress = true|false`
+- `theme = "auto"|"unicode"|"ascii"`
+- `no_emoji = true|false`
+- `spinner_mode = "auto"|"enabled"|"disabled"`
+- `colour_policy = "auto"|"always"|"never"`
+- `output_format = "human"`
+
+Build-only defaults live under `[cmds.build]`:
+
+- `emit = "out.ninja"`
+- `targets = ["hello"]`
+
+Example:
+
+```toml
+verbose = true
+locale = "es-ES"
+colour_policy = "auto"
+spinner_mode = "auto"
+output_format = "human"
+theme = "ascii"
+progress = true
+accessible = false
+
+[cmds.build]
+targets = ["hello"]
+```
+
+`[cmds.build].targets` is used only when the user does not pass explicit build
+targets on the command line. Explicit CLI targets always win.
+
+`theme` is the canonical presentation setting. `no_emoji = true` remains as a
+compatibility alias and resolves to the ASCII theme. Conflicting settings such
+as `theme = "unicode"` with `no_emoji = true` are rejected during configuration
+merge.
+
+`spinner_mode = "disabled"` is equivalent to disabling progress output unless
+the user explicitly sets `progress = true`, which is treated as a conflict.
+Likewise, `spinner_mode = "enabled"` conflicts with `progress = false`.
+
+JSON diagnostics are implemented through `--diag-json` and the layered
+`diag_json` preference. The `--output-format json` flag and
+`NETSUKE_OUTPUT_FORMAT=json` environment variable are accepted for diagnostic
+mode, but configuration files intentionally reject `output_format = "json"`.
+Use `output_format = "human"` in configuration files.
+
+`colour_policy` is accepted and layered today, so users can standardize their
+preferred setting, but Netsuke does not yet emit coloured terminal output, so
+this value currently has no visible effect.
+
 Use `--locale <LOCALE>`, `NETSUKE_LOCALE`, or a `locale = "..."` entry in a
 configuration file to select localized CLI copy and error messages. Locale
 precedence is: command-line flag, environment variable, configuration file,
@@ -714,7 +775,8 @@ The newer typed preference aliases use the same precedence chain:
 - `spinner_mode = "enabled" | "disabled"`
 - `--output-format human|json`
 - `NETSUKE_OUTPUT_FORMAT=human|json`
-- `output_format = "human" | "json"`
+- `output_format = "human"` (config file; `"json"` is rejected — use
+  `--diag-json` instead)
 - `--default-target <TARGET>` (repeatable)
 - `NETSUKE_DEFAULT_TARGETS__0=<TARGET>` style environment entries
 - `default_targets = ["lint", "test"]`

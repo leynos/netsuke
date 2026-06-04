@@ -1,9 +1,8 @@
 # 3.14.1. Record manifest-time condition semantics
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -517,10 +516,10 @@ exit status 0
 ```
 
 `make fmt` was attempted and logged to
-`/tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out`. It failed
-after `cargo fmt` because repository-wide Markdown formatting/linting still
-reports pre-existing issues in unrelated documents. No follow-up work is needed
-for this roadmap item, but cleaning those repository-wide Markdown formatter
+`/tmp/fmt-netsuke-3-14-1-manifest-time-condition-semantics.out`. It failed after
+`cargo fmt` because repository-wide Markdown formatting/linting still reports
+pre-existing issues in unrelated documents. No follow-up work is needed for
+this roadmap item, but cleaning those repository-wide Markdown formatter
 findings would make the formatter gate less noisy for future documentation
 changes.
 

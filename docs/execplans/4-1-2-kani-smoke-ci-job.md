@@ -1,9 +1,8 @@
 # 4.1.2. Add a Kani smoke Continuous Integration (CI) job
 
-This ExecPlan (execution plan) is a living document. The sections
-`Constraints`, `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`,
-`Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work
-proceeds.
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Status: COMPLETE
 
@@ -12,8 +11,8 @@ Status: COMPLETE
 Roadmap item `4.1.2` adds Netsuke's first formal-verification Continuous
 Integration (CI) lane. The existing `build-test` job already runs formatting,
 linting, tests, coverage generation, and optional CodeScene upload across the
-repository's supported Rust toolchains. This work must leave that job
-unchanged and add a separate `kani-smoke` job for the fast Kani smoke gate.
+repository's supported Rust toolchains. This work must leave that job unchanged
+and add a separate `kani-smoke` job for the fast Kani smoke gate.
 
 After this work is implemented and approved, pull requests will run a dedicated
 Kani job that installs the repository-pinned Kani version, runs only
@@ -64,8 +63,7 @@ implementation begins.
 
 - Scope: if implementation requires more than 4 changed files beyond this
   ExecPlan, stop and escalate. The expected implementation files are
-  `.github/workflows/ci.yml`, `docs/developers-guide.md`, and
-  `docs/roadmap.md`.
+  `.github/workflows/ci.yml`, `docs/developers-guide.md`, and `docs/roadmap.md`.
 - CI surface: if preserving `build-test` byte-for-byte becomes impossible,
   stop and present the conflict.
 - Interface: if a new Netsuke CLI flag, OrthoConfig field, Fluent message, Rust
@@ -91,10 +89,9 @@ implementation begins.
 
 - Risk: `scripts/install-kani.sh` currently uses Cargo's default installation
   locations, so a naive cache may mix Kani installer artefacts with ordinary
-  Cargo build artefacts. Severity: high. Likelihood: medium. Mitigation:
-  prefer a job-local `CARGO_HOME` for the `kani-smoke` job, cache that path
-  with a Kani-specific key, and document the chosen paths in the developer
-  guide.
+  Cargo build artefacts. Severity: high. Likelihood: medium. Mitigation: prefer
+  a job-local `CARGO_HOME` for the `kani-smoke` job, cache that path with a
+  Kani-specific key, and document the chosen paths in the developer guide.
 
 - Risk: `cargo kani setup` downloads support files into Kani's default home,
   which may not be covered by a Cargo cache. Severity: medium. Likelihood:
@@ -190,8 +187,8 @@ implementation begins.
   minimum supported Rust version (MSRV), and experimental nightly lanes. The
   new Kani job should be a sibling job, not another matrix entry.
 - Official Kani installation documentation states that `cargo kani setup`
-  places downloaded support files under `~/.kani/` by default, with
-  `KANI_HOME` available for a custom path.
+  places downloaded support files under `~/.kani/` by default, with `KANI_HOME`
+  available for a custom path.
 - Official Kani CI documentation describes a Kani GitHub Action, but this
   repository already has a pinned installer script and requires pinned action
   SHAs. Reusing the script keeps the CI and local install path aligned.
@@ -232,8 +229,8 @@ implementation begins.
 - Decision: Treat OrthoConfig as unchanged for this item. Rationale: this
   roadmap task changes CI infrastructure only; adding runtime configuration,
   localized help, or CLI surface would violate the boundary between developer
-  tooling and Netsuke's domain/runtime code. Date/Author: 2026-05-18 /
-  planning agent with `hexagonal-architecture` framing.
+  tooling and Netsuke's domain/runtime code. Date/Author: 2026-05-18 / planning
+  agent with `hexagonal-architecture` framing.
 
 - Decision: Do not plan new Rust, `rstest`, or `rstest-bdd` tests for this
   item. Rationale: no Rust production path, user-facing CLI behaviour, or
@@ -266,9 +263,9 @@ Developer-facing documentation now records the CI lane and cache convention in
 `docs/users-guide.md` stayed unchanged. The roadmap entry `4.1.2` and its
 subitems are marked done after validation passed.
 
-The implementation branch was pushed to
-`origin/4-1-2-kani-smoke-ci-job`, and draft pull request #308 now describes
-the implemented CI job rather than only the pre-implementation plan.
+The implementation branch was pushed to `origin/4-1-2-kani-smoke-ci-job`, and
+draft pull request #308 now describes the implemented CI job rather than only
+the pre-implementation plan.
 
 ## Context and orientation
 
@@ -402,11 +399,11 @@ include `workflow_dispatch` only if the user confirms that manual execution is
 desired; otherwise keep it pull-request-only to match the roadmap wording.
 
 Stage D updates developer-facing documentation. Add a concise note to
-`docs/developers-guide.md` explaining that CI now has a dedicated
-`kani-smoke` job, that it installs the pinned Kani version and runs `make kani`
-on pull requests, and that the Kani cache is intentionally separate from
-ordinary Cargo artefacts. Do not update `docs/users-guide.md` unless an
-externally observable user workflow changes.
+`docs/developers-guide.md` explaining that CI now has a dedicated `kani-smoke`
+job, that it installs the pinned Kani version and runs `make kani` on pull
+requests, and that the Kani cache is intentionally separate from ordinary Cargo
+artefacts. Do not update `docs/users-guide.md` unless an externally observable
+user workflow changes.
 
 Stage E validates, reviews, and commits. Run `coderabbit review --agent` after
 the CI and documentation milestone. Run the normal gates required by repository
@@ -417,9 +414,9 @@ evidence, mark `4.1.2` done in `docs/roadmap.md`, and commit the atomic
 implementation.
 
 Stage F pushes and opens a draft pull request. Push the branch so it tracks
-`origin/4-1-2-kani-smoke-ci-job`. Create a draft pull request with roadmap
-item `(4.1.2)` in the title, mention this ExecPlan in the summary, and include
-the Lody session link in a `## References` section.
+`origin/4-1-2-kani-smoke-ci-job`. Create a draft pull request with roadmap item
+`(4.1.2)` in the title, mention this ExecPlan in the summary, and include the
+Lody session link in a `## References` section.
 
 ## Concrete steps
 
@@ -442,8 +439,8 @@ Expected branch:
 4-1-2-kani-smoke-ci-job
 ```
 
-During implementation, confirm the existing `build-test` block before and
-after the workflow edit:
+During implementation, confirm the existing `build-test` block before and after
+the workflow edit:
 
 ```bash
 git diff -- .github/workflows/ci.yml

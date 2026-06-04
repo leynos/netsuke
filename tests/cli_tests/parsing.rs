@@ -3,10 +3,12 @@
 use anyhow::{Context, Result, ensure};
 use clap::error::ErrorKind;
 use netsuke::cli::config::{ColourPolicy, OutputFormat, SpinnerMode};
-use netsuke::cli::{BuildArgs, Commands};
+use netsuke::cli::{BuildArgs, Cli, Commands, Theme};
 use netsuke::cli_localization;
 use netsuke::host_pattern::HostPattern;
-use netsuke::theme::ThemePreference;
+use netsuke::output_mode::OutputMode;
+use netsuke::output_prefs;
+use netsuke::theme::{ThemeContext, ThemePreference};
 use rstest::rstest;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -277,6 +279,52 @@ fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) 
         "expected error kind {:?}, got {:?}",
         expected_error,
         err.kind()
+    );
+    Ok(())
+}
+
+#[test]
+fn no_emoji_override_false_defers_to_environment_suppression() -> Result<()> {
+    let cli = Cli {
+        no_emoji: Some(false),
+        ..Cli::default()
+    };
+
+    let prefs = output_prefs::resolve_from_theme_with(
+        cli.theme,
+        ThemeContext::new(cli.no_emoji, cli.colour_policy, OutputMode::Standard),
+        |key| match key {
+            "NETSUKE_NO_EMOJI" => Some(String::from("1")),
+            _ => None,
+        },
+    );
+
+    ensure!(
+        !prefs.emoji_allowed(),
+        "no_emoji = false should defer to environment suppression",
+    );
+    Ok(())
+}
+
+#[test]
+fn no_emoji_override_honours_unicode_theme_over_environment_suppression() -> Result<()> {
+    let cli = Cli {
+        theme: Some(Theme::Unicode.into()),
+        ..Cli::default()
+    };
+
+    let prefs = output_prefs::resolve_from_theme_with(
+        cli.theme,
+        ThemeContext::new(cli.no_emoji, cli.colour_policy, OutputMode::Standard),
+        |key| match key {
+            "NETSUKE_NO_EMOJI" => Some(String::from("1")),
+            _ => None,
+        },
+    );
+
+    ensure!(
+        prefs.emoji_allowed(),
+        "theme = unicode should remain authoritative over environment suppression",
     );
     Ok(())
 }

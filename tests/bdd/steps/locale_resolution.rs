@@ -6,7 +6,7 @@
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::helpers::tokens::build_tokens;
 use anyhow::{Context, Result, ensure};
-use netsuke::cli::Cli;
+use netsuke::cli::{Cli, CliConfig};
 use netsuke::cli_localization;
 use netsuke::locale_resolution;
 use netsuke::localization::keys;
@@ -17,7 +17,7 @@ use test_support::locale_stubs::{StubEnv, StubSystemLocale};
 
 fn merge_locale_layers(world: &TestWorld) -> Result<Cli> {
     let mut composer = MergeComposer::new();
-    let defaults = sanitize_value(&Cli::default())?;
+    let defaults = sanitize_value(&CliConfig::default())?;
     composer.push_defaults(defaults);
 
     if let Some(locale) = world.locale_config.get() {
@@ -32,7 +32,11 @@ fn merge_locale_layers(world: &TestWorld) -> Result<Cli> {
         composer.push_cli(json!({ "locale": locale }));
     }
 
-    Cli::merge_from_layers(composer.layers()).context("merge locale layers")
+    let merged = CliConfig::merge_from_layers(composer.layers()).context("merge locale layers")?;
+    Ok(Cli {
+        locale: merged.locale,
+        ..Cli::default()
+    })
 }
 
 fn record_resolved_locale(world: &TestWorld, resolved: Option<&str>) {

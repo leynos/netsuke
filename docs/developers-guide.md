@@ -90,10 +90,10 @@ make install-kani
 
 `make install-kani` delegates to the pinned `rust-prover-tools` CLI through
 `uv tool run`. The prover tool reads `tools/kani/VERSION`, runs
-`cargo install --locked kani-verifier --version <version>`, runs `cargo kani
-setup`, and verifies that `cargo kani` is callable. Kani may manage its own
-supporting Rust nightly toolchain during setup. That toolchain must not replace
-the repository's ordinary stable Rust workflow.
+`cargo install --locked kani-verifier --version <version>`, runs
+`cargo kani setup`, and verifies that `cargo kani` is callable. Kani may manage
+its own supporting Rust nightly toolchain during setup. That toolchain must not
+replace the repository's ordinary stable Rust workflow.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
@@ -112,8 +112,8 @@ Use the Make targets for day-to-day formal-verification checks:
   the optional Verus installer and proof runner. These targets are not part of
   the ordinary pull-request gate.
 
-Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`,
-or `make all`.
+Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
+`make all`.
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
@@ -147,17 +147,16 @@ Netsuke uses a mixed strategy:
 
 ## IR dependency classes
 
-`src/ir/from_manifest.rs` lowers manifest `sources` into
-`BuildEdge.inputs`, manifest `deps` into `BuildEdge.implicit_deps`, and
-manifest `order_only_deps` into `BuildEdge.order_only_deps`. Keep those classes
-separate: recipe interpolation (`$in` and `{{ ins }}`) receives only
-`BuildEdge.inputs`, while `src/ninja_gen.rs` renders implicit deps with
-Ninja's single-pipe separator.
+`src/ir/from_manifest.rs` lowers manifest `sources` into `BuildEdge.inputs`,
+manifest `deps` into `BuildEdge.implicit_deps`, and manifest `order_only_deps`
+into `BuildEdge.order_only_deps`. Keep those classes separate: recipe
+interpolation (`$in` and `{{ ins }}`) receives only `BuildEdge.inputs`, while
+`src/ninja_gen.rs` renders implicit deps with Ninja's single-pipe separator.
 
-`src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and
-`implicit_deps` when detecting cycles. It intentionally does not traverse
-`order_only_deps`, because order-only dependencies express scheduling order
-rather than rebuild freshness.
+`src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and `implicit_deps`
+when detecting cycles. It intentionally does not traverse `order_only_deps`,
+because order-only dependencies express scheduling order rather than rebuild
+freshness.
 
 ## Behavioural testing strategy
 
@@ -237,17 +236,17 @@ The pipeline is:
 2. The manifest expansion stage passes that document and the configured
    MiniJinja `Environment` to `expand_foreach`.
 3. `expand_foreach` reads `targets` and `actions`, evaluates each item's
-   `foreach` expression or literal sequence, evaluates any `when` guard,
-   injects `vars.item` and `vars.index` for generated items, and replaces each
+   `foreach` expression or literal sequence, evaluates any `when` guard, injects
+   `vars.item` and `vars.index` for generated items, and replaces each
    original collection with the expanded concrete list.
 4. Downstream deserialization and rendering consume the expanded
    `ManifestValue`; they should not see the `foreach` or `when` control keys.
 
-Callers must treat expansion as fallible. Errors can come from malformed
-item metadata, such as a non-object `vars` value, expression parse or
-evaluation failures in `foreach` or `when`, and serialization failures while
-copying the MiniJinja item value into manifest `vars`. Propagate these errors
-with context rather than defaulting to a partially expanded `ManifestValue`.
+Callers must treat expansion as fallible. Errors can come from malformed item
+metadata, such as a non-object `vars` value, expression parse or evaluation
+failures in `foreach` or `when`, and serialization failures while copying the
+MiniJinja item value into manifest `vars`. Propagate these errors with context
+rather than defaulting to a partially expanded `ManifestValue`.
 
 Minimal target-level example:
 
@@ -334,8 +333,7 @@ available when the guard is no longer needed after the read.
 
 Tests that call `std::env::set_current_dir` must restore the original working
 directory after the test. `CwdGuard` is available from `test_support`, and is
-used in `src/cli/config_merge_tests.rs`; local copies also remain in
-`tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
+used in `tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
 captures the current directory on construction and restores it on drop:
 
 ```rust
@@ -376,8 +374,8 @@ for the duration of the call:
 unsafe { test_support::env::restore_many_locked(vars) };
 ```
 
-Prefer `restore_many` in normal test code. Use `restore_many_locked` only
-inside `Drop` or other contexts where `EnvLock` is already acquired.
+Prefer `restore_many` in normal test code. Use `restore_many_locked` only inside
+`Drop` or other contexts where `EnvLock` is already acquired.
 
 ### `mutate_env_var` (BDD scenarios)
 
@@ -448,7 +446,7 @@ Table: Scenario state groups and fields
 
 ## Configuration merge architecture
 
-Configuration merging lives in `src/cli/config_merge.rs`. The module keeps
+Configuration merging lives in `src/cli/merge.rs`. The module keeps
 config-layer plumbing separate from the public CLI surface in `cli::mod`.
 
 ### Two-pass file discovery
@@ -697,8 +695,8 @@ feature-file-based behavioural tests, not code-level unit or integration tests.
 `test_support::netsuke::run_netsuke_in(current_dir, args)` provides a simpler
 interface for integration tests outside the BDD framework. It sets `PATH` to an
 empty string (relying on the resolved binary path) but does **not** call
-`env_clear()`, so other environment variables (including `NETSUKE_NINJA` set
-via `override_ninja_env`) are inherited normally.
+`env_clear()`, so other environment variables (including `NETSUKE_NINJA` set via
+`override_ninja_env`) are inherited normally.
 
 For tests that need **deterministic, isolated** child-process environments, use
 `test_support::netsuke::run_netsuke_in_with_env(current_dir, args, extra_env)`.

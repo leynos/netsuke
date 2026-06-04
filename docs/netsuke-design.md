@@ -51,15 +51,15 @@ before execution, a critical requirement for compatibility with Ninja.
 
 3. Stage 3: Template Expansion
 
-   Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and
-   the `foreach` and `when` keys in top-level `targets` and `actions`. Each
-   mapping containing these keys is expanded with an iteration context
-   providing `item` and optional `index`. Variable lookups respect the
-   precedence `globals` < `entry.vars` < per-iteration locals, and this
-   context is preserved for later rendering. At this stage Jinja must not
-   modify the YAML structure directly; control constructs live only within
-   these explicit keys. Structural Jinja blocks (`{% ... %}`) are not permitted
-   to reshape mappings or sequences.
+   Netsuke walks the parsed `Value`, evaluating Jinja macros, variables, and the
+   `foreach` and `when` keys in top-level `targets` and `actions`. Each
+   mapping containing these keys is expanded with an iteration context providing
+   `item` and optional `index`. Variable lookups respect the precedence
+   `globals` < `entry.vars` < per-iteration locals, and this context is
+   preserved for later rendering. At this stage Jinja must not modify the YAML
+   structure directly; control constructs live only within these explicit keys.
+   Structural Jinja blocks (`{% ... %}`) are not permitted to reshape mappings
+   or sequences.
 
 4. Stage 4: Deserialization & Final Rendering
 
@@ -185,9 +185,9 @@ level keys.
 
 - `actions`: A secondary list of build targets. Any target placed here is
   treated as `{ phony: true, always: false }` by default. The loader applies
-  the same manifest-time `foreach` and `when` expansion pass used for
-  top-level `targets`, so preparation and test actions can be selected
-  declaratively before Netsuke synthesizes the static build graph.
+  the same manifest-time `foreach` and `when` expansion pass used for top-level
+  `targets`, so preparation and test actions can be selected declaratively
+  before Netsuke synthesizes the static build graph.
 
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
@@ -370,11 +370,11 @@ are specified.
 
 Table: Dependency field lowering semantics
 
-| Field | Meaning | Passed to recipe as input? | Rebuild trigger? | Ninja mapping |
-| ----- | ------- | -------------------------- | ---------------- | ------------- |
-| `sources` | Files or target outputs the recipe materially consumes. | Yes | Yes | Explicit inputs: `build out: rule sources...` |
-| `deps` | Prerequisites that must be built and should affect freshness, but are not recipe input arguments. | No | Yes | Implicit inputs: `build out: rule sources... \| deps...` |
-| `order_only_deps` | Prerequisites needed only for sequencing or setup. | No | No | Order-only inputs: `build out: rule sources... \|\| order_only...` |
+| Field             | Meaning                                                                                           | Passed to recipe as input? | Rebuild trigger? | Ninja mapping                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------- | -------------------------- | ---------------- | ------------------------------------------------------------------ |
+| `sources`         | Files or target outputs the recipe materially consumes.                                           | Yes                        | Yes              | Explicit inputs: `build out: rule sources...`                      |
+| `deps`            | Prerequisites that must be built and should affect freshness, but are not recipe input arguments. | No                         | Yes              | Implicit inputs: `build out: rule sources... \| deps...`           |
+| `order_only_deps` | Prerequisites needed only for sequencing or setup.                                                | No                         | No               | Order-only inputs: `build out: rule sources... \|\| order_only...` |
 
 <!-- markdownlint-enable MD013 -->
 
@@ -408,8 +408,8 @@ written individually. Netsuke supports a `foreach` entry within top-level
 and optional `when` keys accept bare Jinja expressions evaluated after the
 initial YAML pass. Each resulting value becomes `item` in the entry context,
 and the optional `index` value records the zero-based iteration index. Variable
-lookups respect the precedence `globals` < `entry.vars` < per-iteration
-locals, and the per-iteration context is carried forward to later rendering.
+lookups respect the precedence `globals` < `entry.vars` < per-iteration locals,
+and the per-iteration context is carried forward to later rendering.
 Action-level `foreach` and `when` expansion is implemented by the same loader
 pass as target-level expansion; entries from top-level `actions` keep their
 implicit `phony: true` default after expansion.
@@ -515,8 +515,8 @@ host-correct so common `PATH` edits do not require shell code.
 
 The manifest `env` block affects only the execution environment Netsuke applies
 to rules, targets, and actions. It is separate from the Jinja `env()` helper in
-[§4.4](#44-essential-custom-functions), which reads from the process
-environment while the manifest is evaluated.
+[§4.4](#44-essential-custom-functions),
+which reads from the process environment while the manifest is evaluated.
 
 #### Environment layering and conflicts
 
@@ -875,8 +875,8 @@ The AST structures are implemented in `src/ast.rs` and derive `Deserialize`.
 Unknown fields are rejected to surface user errors early. `StringOrList`
 provides a default `Empty` variant, so optional lists are trivial to represent.
 The manifest version is parsed using the `semver` crate to validate that it
-follows semantic versioning rules. Global and target variable maps now share
-the `ManifestMap` alias:
+follows semantic versioning rules. Global and target variable maps now share the
+`ManifestMap` alias:
 
 ```rust
 type ManifestMap = serde_json::Map<String, serde_json::Value>;
@@ -1120,20 +1120,20 @@ network operations.
 
 #### File-system tests
 
-| Test                                                  | True when the operand…                                           |
-| ----------------------------------------------------- | ---------------------------------------------------------------- |
-| `dir` / `file` / `symlink`                            | …is that object type                                             |
-| `pipe` / `block_device` / `char_device` *(Unix-only)* | …is that object type                                             |
-| `device` (legacy, Unix-only)                          | …is a block or character device                                  |
-| `present`                                             | …exists (any type)                                               |
-| `owned`                                               | …is owned by the current UID                                     |
-| `readable` / `writable` / `executable`                | …has the corresponding permission bit for current user           |
-| `empty`                                               | …has size 0 bytes                                                |
-| `older_than(value)`                                   | …has `mtime` < given value (seconds, `timedelta`, or file)       |
-| `newer_than(value)`                                   | …has `mtime` > given value                                       |
-| `contains(substr)`                                    | …file’s text contains **substr**                                 |
-| `matches(regex)`                                      | …file’s text matches **regex**                                   |
-| `type(kind)`                                          | …is of the file-type string supplied (`"file"`, `"dir"`, etc.)   |
+| Test                                                  | True when the operand…                                         |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `dir` / `file` / `symlink`                            | …is that object type                                           |
+| `pipe` / `block_device` / `char_device` *(Unix-only)* | …is that object type                                           |
+| `device` (legacy, Unix-only)                          | …is a block or character device                                |
+| `present`                                             | …exists (any type)                                             |
+| `owned`                                               | …is owned by the current UID                                   |
+| `readable` / `writable` / `executable`                | …has the corresponding permission bit for current user         |
+| `empty`                                               | …has size 0 bytes                                              |
+| `older_than(value)`                                   | …has `mtime` < given value (seconds, `timedelta`, or file)     |
+| `newer_than(value)`                                   | …has `mtime` > given value                                     |
+| `contains(substr)`                                    | …file’s text contains **substr**                               |
+| `matches(regex)`                                      | …file’s text matches **regex**                                 |
+| `type(kind)`                                          | …is of the file-type string supplied (`"file"`, `"dir"`, etc.) |
 
 The `dir`, `file`, and `symlink` tests use `cap_std`'s UTF-8-capable
 [`Dir::symlink_metadata`][cap-symlink] with `camino` paths to inspect the
@@ -1151,29 +1151,29 @@ https://docs.rs/cap-std/latest/cap_std/fs_utf8/struct.Dir.html#method.symlink_me
 
 #### Path & file filters
 
-| Filter                                     | Purpose                                                              |
-| ------------------------------------------ | -------------------------------------------------------------------- |
-| `basename`                                 | Return last path component                                           |
-| `dirname`                                  | Return parent directory                                              |
-| `with_suffix(suffix, n=1, sep='.')`        | Replace last `n` dotted suffix components (`foo.tar.gz → foo.zip`)   |
-| `relative_to(root)`                        | Make path relative to **root**                                       |
-| `realpath`                                 | Resolve symlinks to canonical path                                   |
-| `commonpath(other)`                        | Longest common prefix with **other**                                 |
-| `expanduser`                               | Expand leading `~`                                                   |
-| `size`                                     | File size in bytes                                                   |
-| `contents(encoding='utf-8')`               | File content as text                                                 |
-| `linecount`                                | Number of text lines                                                 |
-| `head(n=10)` / `tail(n=10)`                | First / last *n* lines                                               |
-| `mtime` / `ctime`                          | Return timestamp (`datetime`)                                        |
-| `age(unit='s')`                            | Seconds (or `m`, `h`, `d`) since `mtime`                             |
-| `date(fmt='%Y-%m-%d')`                     | Format `mtime`/`ctime`                                               |
-| `owner` / `group`                          | User / group name                                                    |
-| `stat`                                     | Full `os.stat()` result as dict                                      |
-| `hash(alg='sha256')`                       | Hex digest of file (`md5`, `sha1`, …)                                |
-| `digest(n=8, alg='sha256')`                | Truncated digest (e.g. build ID)                                     |
-| `base64` / `hex`                           | Encode bytes or string                                               |
-| `slugify`                                  | Make filename-safe slug                                              |
-| `snake_case` / `camel_case` / `kebab-case` | Rename helpers                                                       |
+| Filter                                     | Purpose                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------ |
+| `basename`                                 | Return last path component                                         |
+| `dirname`                                  | Return parent directory                                            |
+| `with_suffix(suffix, n=1, sep='.')`        | Replace last `n` dotted suffix components (`foo.tar.gz → foo.zip`) |
+| `relative_to(root)`                        | Make path relative to **root**                                     |
+| `realpath`                                 | Resolve symlinks to canonical path                                 |
+| `commonpath(other)`                        | Longest common prefix with **other**                               |
+| `expanduser`                               | Expand leading `~`                                                 |
+| `size`                                     | File size in bytes                                                 |
+| `contents(encoding='utf-8')`               | File content as text                                               |
+| `linecount`                                | Number of text lines                                               |
+| `head(n=10)` / `tail(n=10)`                | First / last *n* lines                                             |
+| `mtime` / `ctime`                          | Return timestamp (`datetime`)                                      |
+| `age(unit='s')`                            | Seconds (or `m`, `h`, `d`) since `mtime`                           |
+| `date(fmt='%Y-%m-%d')`                     | Format `mtime`/`ctime`                                             |
+| `owner` / `group`                          | User / group name                                                  |
+| `stat`                                     | Full `os.stat()` result as dict                                    |
+| `hash(alg='sha256')`                       | Hex digest of file (`md5`, `sha1`, …)                              |
+| `digest(n=8, alg='sha256')`                | Truncated digest (e.g. build ID)                                   |
+| `base64` / `hex`                           | Encode bytes or string                                             |
+| `slugify`                                  | Make filename-safe slug                                            |
+| `snake_case` / `camel_case` / `kebab-case` | Rename helpers                                                     |
 
 All built-in filters use `snake_case`. The `camel_case` helper is provided in
 place of `camelCase` so naming remains consistent with `snake_case` and
@@ -1285,8 +1285,8 @@ with identical environments.
 
 Workspace fallback traversals are bounded to a depth of six, skip heavy
 directories such as `.git`, `target`, `node_modules`, `dist`, and `build`, and
-honour the `NETSUKE_WHICH_WORKSPACE` environment variable (set to
-`0`/`false`/`off` to disable) to avoid surprising latency on large trees.
+honour the `NETSUKE_WHICH_WORKSPACE` environment variable (set to `0`/`false`/
+`off` to disable) to avoid surprising latency on large trees.
 
 Sequence of the resolver when falling back to the workspace:
 
@@ -1480,13 +1480,13 @@ sequenceDiagram
 
 #### Generic collection filters
 
-| Filter                            | Purpose                                      |
-| --------------------------------- | -------------------------------------------- |
-| `uniq`                            | De-duplicate list (preserve order)           |
-| `flatten`                         | Deep flatten of arbitrarily nested lists     |
-| `group_by(attr)`                  | Dict keyed on `attr` of list items           |
-| `zip(other)`                      | Pairwise tuples of two lists                 |
-| `version_compare(other, op='>=')` | SemVer comparison (`'<'`, `'<=', '==', …`)   |
+| Filter                            | Purpose                                    |
+| --------------------------------- | ------------------------------------------ |
+| `uniq`                            | De-duplicate list (preserve order)         |
+| `flatten`                         | Deep flatten of arbitrarily nested lists   |
+| `group_by(attr)`                  | Dict keyed on `attr` of list items         |
+| `zip(other)`                      | Pairwise tuples of two lists               |
+| `version_compare(other, op='>=')` | SemVer comparison (`'<'`, `'<=', '==', …`) |
 
 Implementation notes for collection filters:
 
@@ -1550,8 +1550,8 @@ Implementation details:
   1 MiB) via `StdlibConfig::with_command_max_output_bytes`. Exceeding the limit
   raises an error that quotes the configured budget so manifests can adjust.
   Templates can request streaming by passing `{'mode': 'tempfile'}` as the
-  second filter argument. Streaming writes stdout to a temporary file guarded
-  by `StdlibConfig::with_command_max_stream_bytes`, which defaults to 64 MiB to
+  second filter argument. Streaming writes stdout to a temporary file guarded by
+  `StdlibConfig::with_command_max_stream_bytes`, which defaults to 64 MiB to
   prevent runaway disk usage while still tolerating deliberate large outputs.
 - The command helpers manage pipe budgets using a `PipeSpec`/`PipeLimit`
   tracker. Each pipe spawns a dedicated reader thread that records how many
@@ -1845,16 +1845,15 @@ This transformation involves several steps:
    For each expanded target, resolve the referenced rule template, merge
    rule-level and target-level execution metadata, interpolate its command with
    the target's input and output paths, and register the resulting `ir::Action`
-   in the `actions` map.
-   Actions are hashed on the fully resolved recipe and file set, so identical
-   rule templates yield distinct actions when their paths differ. Create a
-   corresponding `ir::BuildEdge` linking the target to the action identifier
-   and transfer the `phony` and `always` flags. `sources` are lowered into the
-   edge's explicit input list so recipe interpolation and Ninja `$in` see only
-   material inputs. `deps` are lowered into a separate `implicit_deps` list,
-   which maps to Ninja's implicit dependency syntax (`|`) so Ninja orders and
-   rebuilds them without exposing them as recipe arguments; `order_only_deps`
-   remains separate and maps to Ninja's `||` class.
+   in the `actions` map. Actions are hashed on the fully resolved recipe and
+   file set, so identical rule templates yield distinct actions when their
+   paths differ. Create a corresponding `ir::BuildEdge` linking the target to
+   the action identifier and transfer the `phony` and `always` flags. `sources`
+   are lowered into the edge's explicit input list so recipe interpolation and
+   Ninja `$in` see only material inputs. `deps` are lowered into a separate
+   `implicit_deps` list, which maps to Ninja's implicit dependency syntax (`|`)
+   so Ninja orders and rebuilds them without exposing them as recipe arguments;
+   `order_only_deps` remains separate and maps to Ninja's `||` class.
 
    FUTURE:
 
@@ -1924,8 +1923,8 @@ structures to the Ninja file syntax.
      description = CC $out
    ```
 
-   The planned `deps_from` manifest field will populate `ir::Action.depfile`
-   and `ir::Action.deps_format`, allowing this rule writer to emit Ninja's
+   The planned `deps_from` manifest field will populate `ir::Action.depfile` and
+   `ir::Action.deps_format`, allowing this rule writer to emit Ninja's
    `depfile` and `deps` attributes without overloading target prerequisites.
 
 3. **Write Build Edges:** Iterate through the `graph.targets` map. For each
@@ -2017,9 +2016,9 @@ The command construction will follow this pattern:
    streamed to the user's console, potentially with additional formatting or
    status updates from Netsuke itself.
 
-In the initial implementation a small helper wraps `Command::new` to forward
-the `-j` and `-C` flags and any explicit build targets. Standard output and
-error are piped and written back to Netsuke's own streams so users see Ninja's
+In the initial implementation a small helper wraps `Command::new` to forward the
+`-j` and `-C` flags and any explicit build targets. Standard output and error
+are piped and written back to Netsuke's own streams so users see Ninja's
 messages in order. A non-zero exit status or failure to spawn the process is
 reported as an `io::Error` for the CLI to surface.
 
@@ -2392,35 +2391,52 @@ the targets listed in the `defaults` section of the manifest are built.
 
 ### 8.4 Design Decisions
 
-The CLI is implemented using clap's derive API in `src/cli/mod.rs`. Netsuke
-applies `Cli::with_default_command` after parsing so invoking `netsuke` with no
-explicit command still triggers a build. Configuration is layered with
-OrthoConfig (defaults, configuration files, environment variables, then CLI
-overrides) while treating clap defaults as absent so file or environment values
-are not masked. Explicit config selection is resolved before discovery with
-precedence `--config` > `NETSUKE_CONFIG` > legacy `NETSUKE_CONFIG_PATH`;
-`-C/--directory` only affects project-root discovery. Environment variables use
-the `NETSUKE_` prefix with `__` as a nesting separator. CLI help and clap
-errors are localized via Fluent resources; locale resolution is handled in
-`src/locale_resolution.rs` with the precedence `--locale` -> `NETSUKE_LOCALE`
--> configuration `locale` -> system default. System locale strings are
-normalized by stripping encoding suffixes (such as `.UTF-8`), removing variant
-suffixes (such as `@latin`), and replacing underscores with hyphens before
-validation. English plus Spanish catalogues ship in `locales/`; unsupported
-locales fall back to `en-US`. Runtime diagnostics (for example manifest
-parsing, stdlib template errors, and runner failures) use the same Fluent
-localizer so the locale selection is consistent across user-facing output. A
-build-time audit in `build.rs` validates that all referenced Fluent message
-keys exist in the bundled catalogues, ensuring missing strings fail CI before
-release. CLI execution and dispatch live in `src/runner.rs`, keeping `main.rs`
-focused on parsing. Process management, Ninja invocation, argument redaction,
-and the temporary file helpers reside in `src/runner/process.rs`, allowing the
-runner entry point to delegate low-level concerns. The working directory flag
-mirrors Ninja's `-C` option but is resolved internally: Netsuke runs Ninja with
-a configured working directory and resolves relative output paths (for example
-`build --emit` and `manifest`) under the same directory so behaviour matches a
-real directory change. Error scenarios are validated using clap's `ErrorKind`
-enumeration in unit tests and via Cucumber steps for behavioural coverage.
+The parser-facing `Cli` type is now defined in `src/cli/parser.rs`, while
+layered configuration lives in a dedicated `CliConfig` struct derived with
+OrthoConfig in `src/cli/config.rs`. The top-level `src/cli/mod.rs` module
+re-exports that public CLI surface. This separation keeps parsing,
+configuration discovery, and runtime command selection as distinct concerns
+while preserving the existing command syntax. Invoking `netsuke` with no
+explicit subcommand still resolves to `build`, and the `build` command can now
+take default `emit` and `targets` values from `[cmds.build]` in configuration
+files or `NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
+`--emit` values still override those defaults.
+
+Configuration is layered in the order defaults -> configuration files ->
+environment variables -> CLI overrides. Discovery honours `NETSUKE_CONFIG_PATH`
+and the standard OrthoConfig search order; environment variables use the
+`NETSUKE_` prefix with `__` as a nesting separator. The schema now explicitly
+covers verbosity, locale, accessible mode, progress, colour policy, spinner
+mode, output format, theme selection, fetch policy, and build defaults. `theme`
+is the canonical presentation setting; the older `no_emoji` field remains as a
+compatibility alias that canonicalizes to the ASCII theme. Conflicting
+combinations such as `theme = "unicode"` together with `no_emoji = true` fail
+during merge. `spinner_mode` likewise validates against the legacy `progress`
+boolean so contradictory inputs are rejected early. `output_format` is typed
+now, but only `human` is accepted until the future JSON diagnostics milestone
+lands.
+
+CLI help and clap errors are localized via Fluent resources; locale resolution
+is handled in `src/locale_resolution.rs` with the precedence `--locale` ->
+`NETSUKE_LOCALE` -> configuration `locale` -> system default. System locale
+strings are normalized by stripping encoding suffixes (such as `.UTF-8`),
+removing variant suffixes (such as `@latin`), and replacing underscores with
+hyphens before validation. English plus Spanish catalogues ship in `locales/`;
+unsupported locales fall back to `en-US`. Runtime diagnostics (for example
+manifest parsing, stdlib template errors, and runner failures) use the same
+Fluent localizer so the locale selection is consistent across user-facing
+output. A build-time audit in `build.rs` validates that all referenced Fluent
+message keys exist in the bundled catalogues, ensuring missing strings fail CI
+before release. CLI execution and dispatch live in `src/runner.rs`, keeping
+`main.rs` focused on parsing. Process management, Ninja invocation, argument
+redaction, and the temporary file helpers reside in `src/runner/process.rs`,
+allowing the runner entry point to delegate low-level concerns. The working
+directory flag mirrors Ninja's `-C` option but is resolved internally: Netsuke
+runs Ninja with a configured working directory and resolves relative output
+paths (for example `build --emit` and `manifest`) under the same directory so
+behaviour matches a real directory change. Error scenarios are validated using
+clap's `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
+steps/scenarios.
 
 Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
 by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
@@ -2447,15 +2463,6 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
-The preference schema is now modelled explicitly in `src/cli/config.rs` as a
-shared `CliConfig` view with typed enums for `colour_policy`, `spinner_mode`,
-and `output_format`. The concrete `Cli` parser remains the OrthoConfig merge
-root for backward compatibility, but it exposes the extracted `CliConfig`
-surface so Clap parsing, configuration files, environment variables, and
-runtime resolution all reuse the same field vocabulary. `spinner_mode`
-supersedes the legacy `progress` boolean when both are present, and
-`output_format` likewise supersedes `diag_json`.
-
 Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
 resolves one theme through OrthoConfig layers (`--theme`, `NETSUKE_THEME`,
 config file, then mode defaults) and hands the resulting symbol and spacing
@@ -2466,12 +2473,12 @@ and gives later roadmap items a stable snapshot surface for validating ASCII
 and Unicode renderings without duplicating formatting rules. Colour policy is
 resolved alongside theme and output-mode detection so `--colour-policy never`
 behaves like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR`
-auto-detection. Build dispatch also consults OrthoConfig `default_targets`
-before falling back to manifest `defaults`, letting operators set user- or
-workspace-level build defaults without editing the manifest itself. Accessible
-reporter output, timing summaries, and the semantic prefix surface are guarded
-by `insta` snapshots so spacing, prefix alignment, and wrapping regressions
-fail with reviewable diffs instead of drifting silently.
+auto-detection. Build dispatch also consults OrthoConfig `[cmds.build]`
+defaults before falling back to manifest `defaults`, letting operators set
+user- or workspace-level build defaults without editing the manifest itself.
+Accessible reporter output, timing summaries, and the semantic prefix surface
+are guarded by `insta` snapshots so spacing, prefix alignment, and wrapping
+regressions fail with reviewable diffs instead of drifting silently.
 
 The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
 tests in `tests/features/advanced_usage.feature`. Netsuke treats those
@@ -2546,21 +2553,19 @@ flowchart LR
   L --> M[Run Netsuke with final behaviour]
 ```
 
-Netsuke configuration discovery is implemented through OrthoConfig's
-`ConfigDiscovery` builder in `src/cli/config_merge.rs`. The
-`config_discovery()` helper constructs a discovery instance rooted at
-application name `"netsuke"` and adjusts project-root discovery when the
-`-C/--directory` flag is supplied. Explicit file selection is handled before
-discovery by `resolve_config_path()`, which applies the precedence `--config` >
-`NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
+Explicit file selection is handled by `explicit_config_path(...)`, which
+applies the precedence `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
+Layer loading and automatic discovery are handled by `push_file_layers(...)`,
+which also applies the `-C/--directory` flag as the project-discovery root.
 
 **Figure: Explicit Config Selector Resolution** — This diagram shows how
-Netsuke chooses the configuration file before automatic discovery. Netsuke first
-checks `--config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`. The first
-explicit selector found is loaded directly; if that file is missing or invalid,
-Netsuke reports the explicit-file error instead of falling back to discovery.
-Only when no explicit selector is present does Netsuke run two-pass config
-discovery and then proceed with the merged configuration.
+Netsuke chooses the configuration file before automatic discovery. Netsuke
+first checks `--config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`. The
+first explicit selector found is loaded directly; if that file is missing or
+invalid, Netsuke reports the explicit-file error instead of falling back to
+discovery. Only when no explicit selector is present does Netsuke run two-pass
+config discovery and then proceed with the merged configuration.
 
 ```mermaid
 flowchart TD
@@ -2677,15 +2682,14 @@ manual flag repetition.
 
 **Implementation notes**:
 
-- The `config_discovery()` function uses OrthoConfig's builder API without
-  further customization beyond the application name and environment variable
-  override, relying on OrthoConfig's platform-specific defaults for standard
-  directory resolution.
-- The `merge_with_config()` function in `src/cli/config_merge.rs` orchestrates
-  the full layer composition: it resolves selection through
-  `resolve_config_path()`, calls `push_file_layers()` to load layers, merges
-  them with defaults, adds environment variables via Figment, and finally
-  applies CLI overrides extracted from `ArgMatches`.
+- The `explicit_config_path(...)` helper resolves explicit config selectors
+  before automatic discovery so missing or invalid explicit files remain hard
+  errors.
+- The `merge_with_config()` function in `src/cli/merge.rs` orchestrates the
+  full layer composition: it calls `push_file_layers(...)` to load explicit,
+  project, and user file layers, merges them with defaults, adds environment
+  variables via Figment, and finally applies CLI overrides extracted from
+  `ArgMatches`.
 - Configuration files use TOML format by default. JSON5 (`.json`, `.json5`) and
   YAML (`.yaml`, `.yml`) formats are supported when the corresponding Cargo
   features are enabled.

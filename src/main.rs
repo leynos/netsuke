@@ -5,9 +5,10 @@
 use clap::ArgMatches;
 use clap::error::ErrorKind;
 use miette::Report;
+use netsuke::theme::ThemeContext;
 use netsuke::{
     cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
-    output_prefs, runner, theme::ThemeContext,
+    output_prefs, runner,
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
@@ -52,16 +53,13 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    let mode = match resolve_diag_mode_or_exit(&parsed_cli, &matches, startup_mode) {
-        Ok(mode) => mode,
-        Err(code) => return code,
-    };
+    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(&parsed_cli, &matches));
 
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
     };
-    let runtime_mode = DiagMode::from_json_enabled(merged_cli.resolved_diag_json());
+    let runtime_mode = DiagMode::from_json_enabled(merged_cli.diag_json);
     configure_runtime(&merged_cli, system_locale, runtime_mode);
     let output_mode = output_mode::resolve(merged_cli.accessible, merged_cli.colour_policy);
     let prefs = output_prefs::resolve_from_theme(
@@ -117,34 +115,25 @@ fn parse_cli_or_exit(
     }
 }
 
-fn handle_config_load_error(err: &(dyn std::error::Error + 'static), mode: DiagMode) -> ExitCode {
-    if mode.is_json() {
-        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
-    } else {
-        init_tracing(Level::ERROR);
-        tracing::error!(error = %err, "configuration load failed");
-        ExitCode::FAILURE
-    }
-}
-
-fn resolve_diag_mode_or_exit(
-    parsed_cli: &cli::Cli,
-    matches: &ArgMatches,
-    startup_mode: DiagMode,
-) -> Result<DiagMode, ExitCode> {
-    cli::resolve_merged_diag_json(parsed_cli, matches)
-        .map(DiagMode::from_json_enabled)
-        .map_err(|err| handle_config_load_error(err.as_ref(), startup_mode))
-}
-
 fn merge_cli_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     mode: DiagMode,
 ) -> Result<cli::Cli, ExitCode> {
-    cli::merge_with_config(parsed_cli, matches)
-        .map(cli::Cli::with_default_command)
-        .map_err(|err| handle_config_load_error(err.as_ref(), mode))
+    match cli::merge_with_config(parsed_cli, matches) {
+        Ok(merged) => Ok(merged.with_default_command()),
+        Err(err) => {
+            if mode.is_json() {
+                Err(diagnostic_json::emit_or_fallback(
+                    diagnostic_json::render_error_json(err.as_ref()),
+                ))
+            } else {
+                init_tracing(Level::ERROR);
+                tracing::error!(error = %err, "configuration load failed");
+                Err(ExitCode::FAILURE)
+            }
+        }
+    }
 }
 
 fn configure_runtime(
@@ -155,7 +144,6 @@ fn configure_runtime(
     let runtime_locale = locale_resolution::resolve_runtime_locale(merged_cli, system_locale);
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
     localization::set_localizer(Arc::clone(&runtime_localizer));
-    apply_process_colour_policy(merged_cli.colour_policy);
 
     if !mode.is_json() {
         let max_level = if merged_cli.verbose {
@@ -164,24 +152,6 @@ fn configure_runtime(
             Level::ERROR
         };
         init_tracing(max_level);
-    }
-}
-
-fn apply_process_colour_policy(policy: Option<cli::config::ColourPolicy>) {
-    match policy {
-        Some(cli::config::ColourPolicy::Never) => {
-            // Align downstream human-facing libraries with the configured policy.
-            unsafe {
-                std::env::set_var("NO_COLOR", "1");
-            }
-        }
-        Some(cli::config::ColourPolicy::Always) => {
-            // Clear inherited disablement so child libraries can honour forced colour.
-            unsafe {
-                std::env::remove_var("NO_COLOR");
-            }
-        }
-        Some(cli::config::ColourPolicy::Auto) | None => {}
     }
 }
 

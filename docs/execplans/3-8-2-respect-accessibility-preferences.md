@@ -102,8 +102,8 @@ covering preference resolution, semantic prefix rendering, and edge cases.
 
 ## Outcomes & retrospective
 
-Implementation completed successfully. All quality gates pass:
-`make check-fmt`, `make lint`, `make test`.
+Implementation completed successfully. All quality gates pass: `make check-fmt`,
+`make lint`, `make test`.
 
 New tests: 18 unit tests in `output_prefs::tests` (10 parameterized resolve
 cases + 8 prefix assertion tests) and 10 BDD scenarios in

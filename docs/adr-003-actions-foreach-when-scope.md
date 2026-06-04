@@ -38,8 +38,7 @@ and error-reporting rules.
 
 Keeping the scope target-only also preserves clear diagnostics. Errors from
 `foreach` and `when` always point to target generation, not to a partially
-rendered recipe body whose surrounding target may or may not survive
-filtering.
+rendered recipe body whose surrounding target may or may not survive filtering.
 
 ## Alternatives considered
 

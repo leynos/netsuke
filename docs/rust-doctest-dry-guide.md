@@ -14,8 +14,8 @@ the power and the inherent limitations of doctests.
 ### 1.1 The "Separate Crate" Paradigm
 
 At its heart, `rustdoc` treats each documentation test not as a snippet of code
-running within the library's own context, but as an entirely separate,
-temporary crate.[^1] When a developer executes
+running within the library's own context, but as an entirely separate, temporary
+crate.[^1] When a developer executes
 
 `cargo test --doc`, `rustdoc` initiates a multi-stage process for every code
 block found in the documentation comments[^3]:
@@ -405,10 +405,10 @@ builds.[^13]
 pub struct UnixSocket;
 ```
 
-This `any` directive ensures the struct is compiled either when the target OS
-is `unix` OR when `rustdoc` is running. This correctly makes the item visible
-in the generated HTML. However, it is crucial to understand that this **does
-not** make the doctest for `UnixSocket` pass on non-Unix platforms.
+This `any` directive ensures the struct is compiled either when the target OS is
+`unix` OR when `rustdoc` is running. This correctly makes the item visible in
+the generated HTML. However, it is crucial to understand that this **does not**
+make the doctest for `UnixSocket` pass on non-Unix platforms.
 
 This distinction highlights the "cfg duality." The `#[cfg(doc)]` attribute
 controls the *table of contents* of the documentation; it determines which
@@ -583,8 +583,8 @@ real-world challenges when working with doctests.
 
   `#[test]` function in a temporary file or test module. This allows the
   developer to leverage the full power of the IDE. Once the code is working
-  correctly, it can be copied into the doc comment, and the necessary
-  formatting (`///`, `#`, etc.) can be applied.[^15]
+  correctly, it can be copied into the doc comment, and the necessary formatting
+  (`///`, `#`, etc.) can be applied.[^15]
 
 ## Conclusion and Recommendations
 
