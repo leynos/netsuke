@@ -77,10 +77,10 @@ pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetecti
 ///    `visit_dependency` focused on traversal logic without lengthening
 ///    every parameter list.
 ///
-/// 3. **Testability.** Property tests in `cycle_property_tests.rs` call
-///    `detect()` directly and inspect `stack` to verify clean unwinding;
-///    exposing that verification through `analyse`'s return type alone
-///    would widen the public API unnecessarily.
+/// 3. **Testability.** Detector property tests call `detect()` directly and
+///    inspect `stack` to verify clean unwinding; exposing that verification
+///    through `analyse`'s return type alone would widen the public API
+///    unnecessarily.
 ///
 /// Create with [`CycleDetector::new`] and drive detection with
 /// [`CycleDetector::detect`].
