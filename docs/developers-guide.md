@@ -756,6 +756,40 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 **Cross-references:** `docs/netsuke-design.md` §2.5 and roadmap task 3.14.2.
 
+## IR cycle detection
+
+### Module: `ir::cycle`
+
+`src/ir/cycle.rs` provides cycle detection for the IR target graph.
+
+**Entry point:**
+`analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport`
+
+Accepts the target map produced by IR lowering and returns a
+`CycleDetectionReport` containing:
+
+- `cycle: Option<Vec<Utf8PathBuf>>` — the first dependency cycle found, in
+  canonical order (smallest node first, first node repeated last), or `None`
+  for acyclic graphs.
+- `missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>` —
+  `(dependent, missing_dep)` pairs encountered before the first detected cycle.
+
+**`CycleDetector`**
+
+Traversal state is managed by the private `CycleDetector` struct, which owns
+the DFS recursion stack and per-node `VisitState` map. The API surface for
+callers within the `ir` module is:
+
+- `CycleDetector::new(targets)` — borrows the target map for the lifetime of
+  the traversal.
+- `CycleDetector::detect()` — iterates over all nodes in sorted order and
+  returns the first detected cycle, or `None`.
+
+Detected cycles are normalized by `canonicalize_cycle` so that error messages
+are deterministic regardless of hash-map iteration order.
+
+**Cross-references:** `docs/netsuke-design.md` §5.3.
+
 ## Documentation upkeep
 
 When test strategy or behavioural test usage changes, update this file in the

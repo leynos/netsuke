@@ -624,7 +624,7 @@ data structures are crucial for the robustness and maintainability of Netsuke.
 
 ### 3.1 Crate Selection: `serde_saphyr`
 
-Netsuke now relies on `serde_saphyr` for YAML parsing and serialisation. The
+Netsuke now relies on `serde_saphyr` for YAML parsing and serialization. The
 crate wraps the actively maintained `saphyr` parser while preserving the
 familiar `serde_yaml`-style API: helpers such as `from_str`, `from_reader`, and
 `to_string` integrate cleanly with `serde` derives, and the error type exposes
@@ -887,7 +887,7 @@ presenting a stable public API surface. The `serde_json` library is built with
 the `preserve_order` feature so the backing `ManifestMap` retains the insertion
 order observed in the YAML manifest. This guarantees that downstream consumers
 see keys in a stable sequence after foreach expansion, matching the authoring
-intent and keeping diagnostics and serialised output predictable. Targets also
+intent and keeping diagnostics and serialized output predictable. Targets also
 accept optional `phony` and `always` booleans. They default to `false`, making
 it explicit when an action should run regardless of file timestamps. Targets
 listed in the `actions` section are deserialized using a custom helper so they
@@ -1218,9 +1218,9 @@ logic in Rust.
 The filter accepts four keyword arguments:
 
 - `all` *(bool, default `false`)* — emit every match, similar to `which -a`.
-- `canonical` *(bool, default `false`)* — resolve symlinks with
-  `std::fs::canonicalize` after discovery, deduplicating on canonical paths
-  while preserving discovery order.
+- `canonical` *(bool, default `false`)* — resolve symlinks through a
+  capability-bearing `cap_std::fs::Dir` handle after discovery, deduplicating
+  on canonical paths while preserving discovery order.
 - `fresh` *(bool, default `false`)* — bypass the per-process cache for this
   lookup without flushing previous entries.
 - `cwd_mode` *("auto" | "never" | "always", default `"auto"`)* — control how
@@ -1233,11 +1233,11 @@ Semantics honour platform conventions while enforcing predictable behaviour:
   bit. Empty `PATH` segments (leading, trailing, or `::`) map to the working
   directory when `cwd_mode` is `"auto"` or `"always"`.
 - On Windows, the lookup respects `PATHEXT` when the command lacks an
-  extension. Comparisons are case-insensitive, results normalise both slash
+  extension. Comparisons are case-insensitive, results normalize both slash
   styles, and `cwd_mode` defaults to skipping the working directory to avoid
   the platform’s surprise "search CWD first" rule. Opting in via `"always"`
   restores that behaviour.
-- Canonicalisation happens after discovery and only when requested so that
+- Canonicalization happens after discovery and only when requested so that
   manifests can balance reproducibility against host-specific absolute paths.
 
 The resolver keeps a small LRU cache keyed by the command, a fingerprint of
@@ -1706,7 +1706,7 @@ use camino::Utf8PathBuf;
 /// The complete, static build graph.
 pub struct BuildGraph {
     /// A map of all unique actions (rules) in the build.
-    /// The key is a hash of a canonical JSON serialisation of the action's
+    /// The key is a hash of a canonical JSON serialization of the action's
     /// properties to enable deduplication.
     pub actions: HashMap<String, Action>,
 
@@ -1881,10 +1881,11 @@ This transformation involves several steps:
    deterministic error messages.
 
    Traversal state is implemented in the dedicated `ir::cycle` module. Its
-   `CycleDetector` helper owns the recursion stack and visitation map. Keys are
-   cloned from the `targets` map so traversal leaves the input graph untouched.
-   Missing dependencies encountered during traversal are logged, collected, and
-   returned alongside any cycle to aid diagnostics.
+   `CycleDetector` helper exposes a `detect` API and owns the recursion stack
+   and visitation map. Keys are cloned from the `targets` map so traversal
+   leaves the input graph untouched. Missing dependencies encountered during
+   traversal are logged, collected, and returned alongside any cycle to aid
+   diagnostics.
 
 ### 5.4 Ninja File Synthesis (`ninja_gen.rs`)
 
@@ -1966,7 +1967,7 @@ manifest. No Ninja specific placeholders are stored in the IR to keep the
 representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
-  serialisation of their recipe, inputs, and outputs. Because commands embed
+  serialization of their recipe, inputs, and outputs. Because commands embed
   shell-quoted file paths, two targets share an identifier only when both the
   command text and file sets match exactly.
 - Multiple rule references in a single target are not yet supported. The IR
@@ -2150,7 +2151,7 @@ pub enum IrGenError {
         missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
     },
 
-    #[error("failed to serialise action: {0}")]
+    #[error("failed to serialize action: {0}")]
     ActionSerialisation(#[from] serde_json::Error), }
 ```
 
@@ -2236,7 +2237,7 @@ enrichment:
    `.with_context(|| "Failed to build the internal build graph from the manifest")?`
     .
 
-4. This process of propagation and contextualisation repeats as the error
+4. This process of propagation and contextualization repeats as the error
    bubbles up towards `main`. Use `anyhow::Context` to add detail, but never
    convert a `miette::Diagnostic` into a plain `anyhow::Error`--doing so would
    discard spans and help text.
@@ -2336,7 +2337,7 @@ given). /// This is the default subcommand. Build(BuildArgs),
 
     /// Remove build artefacts and intermediate files. Clean,
 
-    /// Display the build dependency graph in DOT format for visualisation.
+    /// Display the build dependency graph in DOT format for visualization.
     Graph,
 
     /// Write the Ninja manifest to `FILE` without invoking Ninja.
