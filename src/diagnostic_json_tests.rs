@@ -1,10 +1,12 @@
 //! Tests for Netsuke's JSON diagnostics schema.
 
 use super::{render_diagnostic_json, render_error_json};
+use crate::ir::IrGenError;
 use crate::localization::{self, keys};
 use crate::manifest;
 use crate::runner::RunnerError;
 use anyhow::{Context, Result, ensure};
+use camino::Utf8PathBuf;
 use insta::{Settings, assert_snapshot};
 use rstest::rstest;
 use serde_json::{Map, Value};
@@ -42,6 +44,21 @@ fn manifest_not_found_error() -> RunnerError {
             .with_arg("manifest_name", "Netsukefile")
             .with_arg("directory", "the current directory"),
         help: localization::message(keys::RUNNER_MANIFEST_NOT_FOUND_HELP),
+    }
+}
+
+fn circular_dependency_error() -> IrGenError {
+    let cycle = vec![
+        Utf8PathBuf::from("a"),
+        Utf8PathBuf::from("b"),
+        Utf8PathBuf::from("a"),
+    ];
+    let message =
+        localization::message(keys::IR_CIRCULAR_DEPENDENCY).with_arg("cycle", format!("{cycle:?}"));
+    IrGenError::CircularDependency {
+        cycle,
+        missing_dependencies: Vec::new(),
+        message,
     }
 }
 
@@ -130,6 +147,33 @@ fn render_runner_diagnostic_json_records_help_without_spans() -> Result<()> {
         labels == &Value::Array(Vec::new()),
         "manifest-not-found should not include labels",
     );
+    Ok(())
+}
+
+#[rstest]
+fn render_circular_dependency_display_matches_snapshot() {
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
+    let _guard = set_en_localizer();
+    let rendered = circular_dependency_error().to_string();
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!("circular_dependency_display", rendered);
+    });
+}
+
+#[rstest]
+fn render_circular_dependency_json_matches_snapshot() -> Result<()> {
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
+    let _guard = set_en_localizer();
+    let error = circular_dependency_error();
+    let document = render_error_json(&error)?;
+    let value = parse_json_value(&document)?;
+    let rendered =
+        serde_json::to_string_pretty(&value).context("render diagnostic JSON snapshot value")?;
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!("circular_dependency_json", rendered);
+    });
     Ok(())
 }
 
