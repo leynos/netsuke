@@ -190,16 +190,16 @@ fn canonicalize_cycle_handles_reverse_direction() {
 fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
     let targets = two_disjoint_cycles();
 
-    let cycle = CycleDetector::find_cycle(&targets).expect("should detect a cycle");
-    let valid_cycles = [
+    let cycle = CycleDetector::find_cycle(&targets)
+        .expect("should detect a cycle in a graph with two disjoint cycles");
+    // Must be exactly one of the two canonical closed cycles.
+    let expected_cycles = vec![
         vec![path("p"), path("q"), path("p")],
-        vec![path("q"), path("p"), path("q")],
         vec![path("x"), path("y"), path("x")],
-        vec![path("y"), path("x"), path("y")],
     ];
     assert!(
-        valid_cycles.contains(&cycle),
-        "expected one of the two disjoint canonical cycles, got {cycle:?}",
+        expected_cycles.contains(&cycle),
+        "Expected one of {expected_cycles:?}, got {cycle:?}",
     );
 }
 
