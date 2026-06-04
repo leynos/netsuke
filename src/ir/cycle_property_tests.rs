@@ -13,36 +13,36 @@ fn path(name: &str) -> camino::Utf8PathBuf {
 }
 
 struct EdgeBuilder {
-    output: String,
-    inputs: Vec<String>,
-    implicit_deps: Vec<String>,
+    output: camino::Utf8PathBuf,
+    inputs: Vec<camino::Utf8PathBuf>,
+    implicit_deps: Vec<camino::Utf8PathBuf>,
 }
 
 impl EdgeBuilder {
-    fn new(output: &str) -> Self {
+    fn new(output: camino::Utf8PathBuf) -> Self {
         Self {
-            output: output.into(),
+            output,
             inputs: Vec::new(),
             implicit_deps: Vec::new(),
         }
     }
 
-    fn input(mut self, node: &str) -> Self {
-        self.inputs.push(node.into());
+    fn input(mut self, node: camino::Utf8PathBuf) -> Self {
+        self.inputs.push(node);
         self
     }
 
-    fn implicit_dep(mut self, node: &str) -> Self {
-        self.implicit_deps.push(node.into());
+    fn implicit_dep(mut self, node: camino::Utf8PathBuf) -> Self {
+        self.implicit_deps.push(node);
         self
     }
 
     fn build(self) -> BuildEdge {
         BuildEdge {
             action_id: "id".into(),
-            inputs: self.inputs.iter().map(|name| path(name)).collect(),
-            implicit_deps: self.implicit_deps.iter().map(|name| path(name)).collect(),
-            explicit_outputs: vec![path(&self.output)],
+            inputs: self.inputs,
+            implicit_deps: self.implicit_deps,
+            explicit_outputs: vec![self.output],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
             phony: false,
@@ -52,29 +52,30 @@ impl EdgeBuilder {
 }
 
 /// Generate a non-empty list of distinct single-character node names.
-fn node_names(min: usize, max: usize) -> impl Strategy<Value = Vec<String>> {
-    proptest::collection::vec("[a-z]", min..=max).prop_filter("nodes must be unique", |v| {
-        let set: std::collections::HashSet<_> = v.iter().collect();
-        set.len() == v.len()
-    })
+fn node_names(min: usize, max: usize) -> impl Strategy<Value = Vec<camino::Utf8PathBuf>> {
+    proptest::collection::vec("[a-z]", min..=max)
+        .prop_filter("nodes must be unique", |v| {
+            let set: std::collections::HashSet<_> = v.iter().collect();
+            set.len() == v.len()
+        })
+        .prop_map(|v| v.iter().map(|s| path(s)).collect())
 }
 
 /// Build a closed cycle from `nodes`: [...nodes, nodes[0]].
-fn make_cycle(nodes: &[String]) -> Vec<camino::Utf8PathBuf> {
-    let mut cycle: Vec<_> = nodes.iter().map(|s| path(s)).collect();
-    cycle.push(path(
+fn make_cycle(nodes: &[camino::Utf8PathBuf]) -> Vec<camino::Utf8PathBuf> {
+    let mut cycle = nodes.to_vec();
+    cycle.push(
         nodes
             .first()
-            .expect("node_names generates at least two nodes"),
-    ));
+            .expect("node_names generates at least two nodes")
+            .clone(),
+    );
     cycle
 }
 
-fn check_canonicalize_cycle(input: &[&str], expected: &[&str]) {
-    let cycle: Vec<camino::Utf8PathBuf> = input.iter().map(|&s| path(s)).collect();
-    let canonical = canonicalize_cycle(cycle);
-    let want: Vec<camino::Utf8PathBuf> = expected.iter().map(|&s| path(s)).collect();
-    assert_eq!(canonical, want);
+fn check_canonicalize_cycle(input: &[camino::Utf8PathBuf], expected: &[camino::Utf8PathBuf]) {
+    let canonical = canonicalize_cycle(input.to_vec());
+    assert_eq!(canonical, expected);
 }
 
 proptest! {
@@ -127,10 +128,22 @@ proptest! {
 #[test]
 fn find_cycle_is_deterministic() {
     let mut targets = HashMap::new();
-    targets.insert(path("p"), EdgeBuilder::new("p").input("q").build());
-    targets.insert(path("q"), EdgeBuilder::new("q").input("p").build());
-    targets.insert(path("x"), EdgeBuilder::new("x").input("y").build());
-    targets.insert(path("y"), EdgeBuilder::new("y").input("x").build());
+    targets.insert(
+        path("p"),
+        EdgeBuilder::new(path("p")).input(path("q")).build(),
+    );
+    targets.insert(
+        path("q"),
+        EdgeBuilder::new(path("q")).input(path("p")).build(),
+    );
+    targets.insert(
+        path("x"),
+        EdgeBuilder::new(path("x")).input(path("y")).build(),
+    );
+    targets.insert(
+        path("y"),
+        EdgeBuilder::new(path("y")).input(path("x")).build(),
+    );
 
     let first = CycleDetector::find_cycle(&targets).expect("cycle");
     for _ in 1..100 {
@@ -147,21 +160,39 @@ fn find_cycle_is_deterministic() {
 
 #[test]
 fn canonicalize_cycle_rotates_smallest_node() {
-    check_canonicalize_cycle(&["c", "a", "b", "c"], &["a", "b", "c", "a"]);
+    check_canonicalize_cycle(
+        &[path("c"), path("a"), path("b"), path("c")],
+        &[path("a"), path("b"), path("c"), path("a")],
+    );
 }
 
 #[test]
 fn canonicalize_cycle_handles_reverse_direction() {
-    check_canonicalize_cycle(&["c", "b", "a", "c"], &["a", "c", "b", "a"]);
+    check_canonicalize_cycle(
+        &[path("c"), path("b"), path("a"), path("c")],
+        &[path("a"), path("c"), path("b"), path("a")],
+    );
 }
 
 #[test]
 fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
     let mut targets = HashMap::new();
-    targets.insert(path("p"), EdgeBuilder::new("p").input("q").build());
-    targets.insert(path("q"), EdgeBuilder::new("q").input("p").build());
-    targets.insert(path("x"), EdgeBuilder::new("x").input("y").build());
-    targets.insert(path("y"), EdgeBuilder::new("y").input("x").build());
+    targets.insert(
+        path("p"),
+        EdgeBuilder::new(path("p")).input(path("q")).build(),
+    );
+    targets.insert(
+        path("q"),
+        EdgeBuilder::new(path("q")).input(path("p")).build(),
+    );
+    targets.insert(
+        path("x"),
+        EdgeBuilder::new(path("x")).input(path("y")).build(),
+    );
+    targets.insert(
+        path("y"),
+        EdgeBuilder::new(path("y")).input(path("x")).build(),
+    );
 
     assert!(CycleDetector::find_cycle(&targets).is_some());
 }
@@ -169,8 +200,14 @@ fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
 #[test]
 fn cycle_detector_repeated_detect_resets_traversal_state() {
     let mut targets = HashMap::new();
-    targets.insert(path("a"), EdgeBuilder::new("a").input("b").build());
-    targets.insert(path("b"), EdgeBuilder::new("b").input("a").build());
+    targets.insert(
+        path("a"),
+        EdgeBuilder::new(path("a")).input(path("b")).build(),
+    );
+    targets.insert(
+        path("b"),
+        EdgeBuilder::new(path("b")).input(path("a")).build(),
+    );
 
     let expected = vec![path("a"), path("b"), path("a")];
     let mut detector = CycleDetector::new(&targets);
@@ -184,13 +221,19 @@ fn analyse_reports_missing_dependencies_before_detected_cycle() {
     let mut targets = HashMap::new();
     targets.insert(
         path("a"),
-        EdgeBuilder::new("a")
-            .input("missing")
-            .implicit_dep("also_missing")
+        EdgeBuilder::new(path("a"))
+            .input(path("missing"))
+            .implicit_dep(path("also_missing"))
             .build(),
     );
-    targets.insert(path("b"), EdgeBuilder::new("b").input("c").build());
-    targets.insert(path("c"), EdgeBuilder::new("c").input("b").build());
+    targets.insert(
+        path("b"),
+        EdgeBuilder::new(path("b")).input(path("c")).build(),
+    );
+    targets.insert(
+        path("c"),
+        EdgeBuilder::new(path("c")).input(path("b")).build(),
+    );
 
     let report = analyse(&targets);
 
@@ -205,20 +248,22 @@ fn analyse_reports_missing_dependencies_before_detected_cycle() {
 }
 
 /// Generate a list of `count` distinct node names "n0", "n1", …
-fn sequential_nodes(count: usize) -> Vec<String> {
-    (0..count).map(|i| format!("n{i}")).collect()
+fn sequential_nodes(count: usize) -> Vec<camino::Utf8PathBuf> {
+    (0..count).map(|i| path(&format!("n{i}"))).collect()
 }
 
 /// Build an acyclic chain: n0 → n1 → … → n(count-1) (no back-edges).
-fn make_acyclic_chain(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
+fn make_acyclic_chain(
+    nodes: &[camino::Utf8PathBuf],
+) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
     let mut targets = HashMap::new();
     let mut iter = nodes.iter().peekable();
     while let Some(name) = iter.next() {
-        let mut builder = EdgeBuilder::new(name);
+        let mut builder = EdgeBuilder::new(name.clone());
         if let Some(next) = iter.peek() {
-            builder = builder.input(next);
+            builder = builder.input((*next).clone());
         }
-        targets.insert(path(name), builder.build());
+        targets.insert(name.clone(), builder.build());
     }
     targets
 }
@@ -227,11 +272,16 @@ fn make_acyclic_chain(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::s
 ///
 /// Each node depends on the next name in the slice, and the last node depends
 /// on the first, preserving the input order as the cycle order.
-fn make_cycle_graph(nodes: &[String]) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
+fn make_cycle_graph(
+    nodes: &[camino::Utf8PathBuf],
+) -> HashMap<camino::Utf8PathBuf, super::super::BuildEdge> {
     let mut targets = HashMap::new();
     let deps = nodes.iter().cycle().skip(1).take(nodes.len());
     for (name, dep) in nodes.iter().zip(deps) {
-        targets.insert(path(name), EdgeBuilder::new(name).input(dep).build());
+        targets.insert(
+            name.clone(),
+            EdgeBuilder::new(name.clone()).input(dep.clone()).build(),
+        );
     }
     targets
 }
