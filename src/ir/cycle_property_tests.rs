@@ -73,9 +73,33 @@ fn make_cycle(nodes: &[camino::Utf8PathBuf]) -> Vec<camino::Utf8PathBuf> {
     cycle
 }
 
+/// Assert that `canonicalize_cycle` converts `input` to `expected`.
 fn check_canonicalize_cycle(input: &[camino::Utf8PathBuf], expected: &[camino::Utf8PathBuf]) {
     let canonical = canonicalize_cycle(input.to_vec());
     assert_eq!(canonical, expected);
+}
+
+/// Build a target graph containing two disjoint two-node cycles:
+/// p ↔ q and x ↔ y.
+fn two_disjoint_cycles() -> HashMap<camino::Utf8PathBuf, BuildEdge> {
+    let mut targets = HashMap::new();
+    targets.insert(
+        path("p"),
+        EdgeBuilder::new(path("p")).input(path("q")).build(),
+    );
+    targets.insert(
+        path("q"),
+        EdgeBuilder::new(path("q")).input(path("p")).build(),
+    );
+    targets.insert(
+        path("x"),
+        EdgeBuilder::new(path("x")).input(path("y")).build(),
+    );
+    targets.insert(
+        path("y"),
+        EdgeBuilder::new(path("y")).input(path("x")).build(),
+    );
+    targets
 }
 
 proptest! {
@@ -127,23 +151,7 @@ proptest! {
 
 #[test]
 fn find_cycle_is_deterministic() {
-    let mut targets = HashMap::new();
-    targets.insert(
-        path("p"),
-        EdgeBuilder::new(path("p")).input(path("q")).build(),
-    );
-    targets.insert(
-        path("q"),
-        EdgeBuilder::new(path("q")).input(path("p")).build(),
-    );
-    targets.insert(
-        path("x"),
-        EdgeBuilder::new(path("x")).input(path("y")).build(),
-    );
-    targets.insert(
-        path("y"),
-        EdgeBuilder::new(path("y")).input(path("x")).build(),
-    );
+    let targets = two_disjoint_cycles();
 
     let first = CycleDetector::find_cycle(&targets).expect("cycle");
     for _ in 1..100 {
@@ -154,8 +162,8 @@ fn find_cycle_is_deterministic() {
              first={first:?}, got={cycle:?}",
         );
     }
-    // Probabilistic guard: 100 runs; `detect` sorts keys for stable traversal.
-    tracing::info!("find_cycle returned the same cycle across 100 runs");
+    // Run 100 times; `detect` sorts keys deterministically, so the result must
+    // be identical on every invocation.
 }
 
 #[test]
@@ -176,25 +184,19 @@ fn canonicalize_cycle_handles_reverse_direction() {
 
 #[test]
 fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
-    let mut targets = HashMap::new();
-    targets.insert(
-        path("p"),
-        EdgeBuilder::new(path("p")).input(path("q")).build(),
-    );
-    targets.insert(
-        path("q"),
-        EdgeBuilder::new(path("q")).input(path("p")).build(),
-    );
-    targets.insert(
-        path("x"),
-        EdgeBuilder::new(path("x")).input(path("y")).build(),
-    );
-    targets.insert(
-        path("y"),
-        EdgeBuilder::new(path("y")).input(path("x")).build(),
-    );
+    let targets = two_disjoint_cycles();
 
-    assert!(CycleDetector::find_cycle(&targets).is_some());
+    let cycle = CycleDetector::find_cycle(&targets).expect("should detect a cycle");
+    let valid_cycles = [
+        vec![path("p"), path("q"), path("p")],
+        vec![path("q"), path("p"), path("q")],
+        vec![path("x"), path("y"), path("x")],
+        vec![path("y"), path("x"), path("y")],
+    ];
+    assert!(
+        valid_cycles.contains(&cycle),
+        "expected one of the two disjoint canonical cycles, got {cycle:?}",
+    );
 }
 
 #[test]
