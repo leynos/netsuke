@@ -64,12 +64,9 @@ fn node_names(min: usize, max: usize) -> impl Strategy<Value = Vec<camino::Utf8P
 /// Build a closed cycle from `nodes`: [...nodes, nodes[0]].
 fn make_cycle(nodes: &[camino::Utf8PathBuf]) -> Vec<camino::Utf8PathBuf> {
     let mut cycle = nodes.to_vec();
-    cycle.push(
-        nodes
-            .first()
-            .expect("node_names generates at least two nodes")
-            .clone(),
-    );
+    if let Some(first) = nodes.first() {
+        cycle.push(first.clone());
+    }
     cycle
 }
 
@@ -134,12 +131,14 @@ proptest! {
     #[test]
     fn canonical_first_node_is_smallest(nodes in node_names(2, 10)) {
         let canonical = canonicalize_cycle(make_cycle(&nodes));
-        let interior = canonical
-            .get(..canonical.len().saturating_sub(1))
-            .expect("canonicalize_cycle produces at least two nodes");
-        let first = canonical
-            .first()
-            .expect("canonicalize_cycle produces at least one node");
+        let Some(interior) = canonical.get(..canonical.len().saturating_sub(1)) else {
+            prop_assert!(false, "canonicalize_cycle produces a valid cycle slice");
+            return Ok(());
+        };
+        let Some(first) = canonical.first() else {
+            prop_assert!(false, "canonicalize_cycle produces at least one node");
+            return Ok(());
+        };
         for node in interior {
             prop_assert!(first <= node);
         }
@@ -154,20 +153,26 @@ proptest! {
 }
 
 #[test]
-fn find_cycle_is_deterministic() {
+fn find_cycle_is_deterministic() -> Result<(), String> {
     let targets = two_disjoint_cycles();
 
-    let first = CycleDetector::find_cycle(&targets).expect("cycle");
+    let Some(first) = CycleDetector::find_cycle(&targets) else {
+        return Err("expected an initial cycle".into());
+    };
     for _ in 1..100 {
-        let cycle = CycleDetector::find_cycle(&targets).expect("cycle");
-        assert!(
-            cycle == first,
-            "find_cycle returned inconsistent results across runs: \
-             first={first:?}, got={cycle:?}",
-        );
+        let Some(cycle) = CycleDetector::find_cycle(&targets) else {
+            return Err("expected a cycle on every deterministic run".into());
+        };
+        if cycle != first {
+            return Err(format!(
+                "find_cycle returned inconsistent results across runs: \
+                 first={first:?}, got={cycle:?}",
+            ));
+        }
     }
     // Run 100 times; `detect` sorts keys deterministically, so the result must
     // be identical on every invocation.
+    Ok(())
 }
 
 #[test]
@@ -187,20 +192,23 @@ fn canonicalize_cycle_handles_reverse_direction() {
 }
 
 #[test]
-fn find_cycle_detects_one_of_multiple_disjoint_cycles() {
+fn find_cycle_detects_one_of_multiple_disjoint_cycles() -> Result<(), String> {
     let targets = two_disjoint_cycles();
 
-    let cycle = CycleDetector::find_cycle(&targets)
-        .expect("should detect a cycle in a graph with two disjoint cycles");
+    let Some(cycle) = CycleDetector::find_cycle(&targets) else {
+        return Err("should detect a cycle in a graph with two disjoint cycles".into());
+    };
     // Must be exactly one of the two canonical closed cycles.
     let expected_cycles = vec![
         vec![path("p"), path("q"), path("p")],
         vec![path("x"), path("y"), path("x")],
     ];
-    assert!(
-        expected_cycles.contains(&cycle),
-        "Expected one of {expected_cycles:?}, got {cycle:?}",
-    );
+    if !expected_cycles.contains(&cycle) {
+        return Err(format!(
+            "Expected one of {expected_cycles:?}, got {cycle:?}"
+        ));
+    }
+    Ok(())
 }
 
 #[test]

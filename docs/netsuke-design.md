@@ -1218,9 +1218,9 @@ logic in Rust.
 The filter accepts four keyword arguments:
 
 - `all` *(bool, default `false`)* — emit every match, similar to `which -a`.
-- `canonical` *(bool, default `false`)* — resolve symlinks with
-  `std::fs::canonicalize` after discovery, deduplicating on canonical paths
-  while preserving discovery order.
+- `canonical` *(bool, default `false`)* — resolve symlinks through a
+  capability-bearing `cap_std::fs::Dir` handle after discovery, deduplicating
+  on canonical paths while preserving discovery order.
 - `fresh` *(bool, default `false`)* — bypass the per-process cache for this
   lookup without flushing previous entries.
 - `cwd_mode` *("auto" | "never" | "always", default `"auto"`)* — control how
