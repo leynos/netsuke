@@ -73,7 +73,11 @@ fn make_cycle(nodes: &[camino::Utf8PathBuf]) -> Vec<camino::Utf8PathBuf> {
     cycle
 }
 
-/// Assert that `canonicalize_cycle` converts `input` to `expected`.
+/// Assert that `canonicalize_cycle` transforms `input` into `expected`.
+///
+/// Converts the provided `Utf8PathBuf` slices to an owned `Vec`, calls
+/// `canonicalize_cycle`, and asserts the result equals `expected` to verify
+/// correct canonicalisation of cycle rotation.
 fn check_canonicalize_cycle(input: &[camino::Utf8PathBuf], expected: &[camino::Utf8PathBuf]) {
     let canonical = canonicalize_cycle(input.to_vec());
     assert_eq!(canonical, expected);
