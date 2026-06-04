@@ -1,0 +1,5 @@
+---
+source: src/diagnostic_json_tests.rs
+expression: rendered
+---
+Circular dependency detected: ⁨["a", "b", "a"]⁩.
