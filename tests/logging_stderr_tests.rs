@@ -9,8 +9,10 @@ use predicates::prelude::*;
 use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::fs;
-#[fixture]
+use std::path::Path;
 use tempfile::{TempDir, tempdir};
+
+#[cfg(unix)]
 fn temp_with_minimal_manifest() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
     let manifest_path = temp.path().join("Netsukefile");
@@ -19,6 +21,47 @@ fn temp_with_minimal_manifest() -> Result<TempDir> {
     Ok(temp)
 }
 
+fn write_fake_ninja_script(
+    path: &Path,
+    stdout_lines: &[&str],
+    stderr_marker: Option<&str>,
+) -> Result<()> {
+    let script = if cfg!(windows) {
+        let mut script = String::from("@echo off\r\n");
+        for line in stdout_lines {
+            script.push_str("echo ");
+            script.push_str(line);
+            script.push_str("\r\n");
+        }
+        if let Some(marker) = stderr_marker {
+            script.push_str("echo ");
+            script.push_str(marker);
+            script.push_str(" 1>&2\r\n");
+        }
+        script.push_str("exit /B 0\r\n");
+        script
+    } else {
+        let mut script = String::from(
+            "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone <<'NETSUKE_OUTPUT'\n",
+        );
+        for line in stdout_lines {
+            script.push_str(line);
+            script.push('\n');
+        }
+        script.push_str("NETSUKE_OUTPUT\n");
+        if let Some(marker) = stderr_marker {
+            script.push_str("printf '%s\\n' '");
+            script.push_str(marker);
+            script.push_str("' >&2\n");
+        }
+        script.push_str("exit 0\n");
+        script
+    };
+
+    fs::write(path, script)
+        .with_context(|| format!("write fake ninja script {}", path.display()))?;
+    make_script_executable(path)
+}
 fn fake_ninja_name(stem: &str) -> String {
     if cfg!(windows) {
         format!("{stem}.cmd")
@@ -136,6 +179,33 @@ fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
     Ok(())
 }
 
+fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .arg("--diag-json")
+        .arg("manifest")
+        .arg("-")
+        .output()
+        .context("run netsuke manifest with --diag-json")?;
+
+    ensure!(output.status.success(), "expected command success");
+    ensure!(
+        output.stderr.is_empty(),
+        "stderr should remain empty on success"
+    );
+
+    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
+    ensure!(
+        stdout.contains("build hello: "),
+        "stdout should contain the generated Ninja manifest, got:\n{stdout}",
+    );
+    Ok(())
+}
+
 #[rstest]
 fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
     temp_with_minimal_manifest: Result<TempDir>,
@@ -197,43 +267,47 @@ fn diag_json_passthrough_uses_normal_clap_output(
     assert_diag_json_passthrough(flag, ctx, stdout_marker)
 }
 
-fn verbose_build_logs_default_ninja_command(
+fn run_verbose_build_and_assert_ninja_log(
     temp_with_minimal_manifest: Result<TempDir>,
+    ninja_stem: &str,
+    use_env_override: bool,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
     let ninja_temp = tempdir().context("create fake ninja dir")?;
-    let ninja_path = ninja_temp.path().join(fake_ninja_name("ninja"));
+    let ninja_path = ninja_temp.path().join(fake_ninja_name(ninja_stem));
     write_fake_ninja_script(&ninja_path, &[], None)?;
 
-    let stderr =
-        run_verbose_build_with_ninja_env(temp.path(), path_containing(ninja_temp.path())?, None)?;
-
-    ensure!(
-        stderr.contains("Executing command: ninja "),
-        "default build should log the fallback ninja program, got:\n{stderr}"
-    );
-    Ok(())
-}
-
-fn verbose_build_logs_ninja_env_override(
-    temp_with_minimal_manifest: Result<TempDir>,
-) -> Result<()> {
-    let temp = temp_with_minimal_manifest?;
-    let ninja_temp = tempdir().context("create fake ninja dir")?;
-    let ninja_path = ninja_temp.path().join(fake_ninja_name("custom-ninja"));
-    write_fake_ninja_script(&ninja_path, &[], None)?;
-
+    let ninja_env = use_env_override.then_some(ninja_path.as_path());
     let stderr = run_verbose_build_with_ninja_env(
         temp.path(),
         path_containing(ninja_temp.path())?,
-        Some(ninja_path.as_path()),
+        ninja_env,
     )?;
 
-    ensure!(
-        stderr.contains(&format!("Executing command: {} ", ninja_path.display())),
-        "override build should log the resolved ninja program, got:\n{stderr}"
-    );
+    let expected = if use_env_override {
+        format!("Executing command: {} ", ninja_path.display())
+    } else {
+        format!("Executing command: {ninja_stem} ")
+    };
+    let description = if use_env_override {
+        "override build should log the resolved ninja program"
+    } else {
+        "default build should log the fallback ninja program"
+    };
+    ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
     Ok(())
+}
+fn verbose_build_logs_default_ninja_command(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "ninja", false)
+}
+
+#[rstest]
+fn verbose_build_logs_ninja_env_override(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "custom-ninja", true)
 }
 fn config_driven_diag_json_formats_merge_failures_as_json() -> Result<()> {
     let temp = tempdir().context("create temp dir")?;
@@ -326,5 +400,9 @@ fn diag_json_success_graph_keeps_clean_stderr(
         stdout.contains("digraph netsuke"),
         "stdout should carry the DOT graph; got: {stdout}"
     );
+    Ok(())
+}
+
+fn make_script_executable(_path: &Path) -> Result<()> {
     Ok(())
 }
