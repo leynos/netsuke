@@ -785,6 +785,19 @@ callers within the `ir` module is:
 - `CycleDetector::detect()` — iterates over all nodes in sorted order and
   returns the first detected cycle, or `None`.
 
+`CycleDetector` is a deliberate struct rather than a closure or group of free
+functions:
+
+- **Reset semantics:** `detect()` clears the recursion stack, visitation map,
+  and missing-dependency buffer before each run. Repeated calls on the same
+  detector therefore behave like fresh traversals.
+- **State isolation:** the detector owns traversal state, keeping `visit` and
+  `visit_dependency` focused on graph walking without lengthening every helper
+  signature.
+- **Testability:** detector property tests can call `detect()` directly and
+  inspect the stack to verify clean unwinding without widening the public
+  `analyse` return type.
+
 Detected cycles are normalized by `canonicalize_cycle` so that error messages
 are deterministic regardless of hash-map iteration order.
 

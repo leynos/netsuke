@@ -8,6 +8,9 @@ use std::collections::HashMap;
 
 use super::{BuildEdge, CycleDetector, analyse, canonicalize_cycle};
 
+#[path = "cycle_analyse_tests.rs"]
+mod analyse_tests;
+
 fn path(name: &str) -> camino::Utf8PathBuf {
     camino::Utf8PathBuf::from(name)
 }
@@ -211,6 +214,7 @@ fn find_cycle_detects_one_of_multiple_disjoint_cycles() -> Result<(), String> {
     Ok(())
 }
 
+/// Repeated detection on the same detector resets stale traversal state.
 #[test]
 fn cycle_detector_repeated_detect_resets_traversal_state() {
     let mut targets = HashMap::new();
@@ -228,37 +232,6 @@ fn cycle_detector_repeated_detect_resets_traversal_state() {
 
     assert_eq!(detector.detect(), Some(expected.clone()));
     assert_eq!(detector.detect(), Some(expected));
-}
-
-#[test]
-fn analyse_reports_missing_dependencies_before_detected_cycle() {
-    let mut targets = HashMap::new();
-    targets.insert(
-        path("a"),
-        EdgeBuilder::new(path("a"))
-            .input(path("missing"))
-            .implicit_dep(path("also_missing"))
-            .build(),
-    );
-    targets.insert(
-        path("b"),
-        EdgeBuilder::new(path("b")).input(path("c")).build(),
-    );
-    targets.insert(
-        path("c"),
-        EdgeBuilder::new(path("c")).input(path("b")).build(),
-    );
-
-    let report = analyse(&targets);
-
-    assert_eq!(report.cycle, Some(vec![path("b"), path("c"), path("b")]));
-    assert_eq!(
-        report.missing_dependencies,
-        vec![
-            (path("a"), path("missing")),
-            (path("a"), path("also_missing")),
-        ],
-    );
 }
 
 /// Generate a list of `count` distinct node names "n0", "n1", …
@@ -339,4 +312,21 @@ proptest! {
             prop_assert_eq!(&first, &next);
         }
     }
+
+    /// detect() reset semantics hold across cyclic graphs of several sizes.
+    #[test]
+    fn repeated_detect_resets_state_for_cyclic_graphs(count in 2usize..=8) {
+        let nodes = sequential_nodes(count);
+        let targets = make_cycle_graph(&nodes);
+        let expected = CycleDetector::find_cycle(&targets);
+        let mut detector = CycleDetector::new(&targets);
+
+        prop_assert_eq!(detector.detect(), expected.clone());
+        prop_assert_eq!(detector.detect(), expected);
+        prop_assert!(
+            detector.stack.is_empty(),
+            "stack must be empty after repeated detection",
+        );
+    }
+
 }
