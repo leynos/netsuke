@@ -165,8 +165,9 @@ fn render_circular_dependency_display_matches_snapshot() {
 fn render_circular_dependency_json_matches_snapshot() -> Result<()> {
     let _lock = localizer_test_lock().expect("localizer test lock poisoned");
     let _guard = set_en_localizer();
-    let error = circular_dependency_error();
-    let document = render_error_json(&error)?;
+    let error = anyhow::Error::new(circular_dependency_error())
+        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH));
+    let document = render_error_json(error.as_ref())?;
     let value = parse_json_value(&document)?;
     let rendered =
         serde_json::to_string_pretty(&value).context("render diagnostic JSON snapshot value")?;
