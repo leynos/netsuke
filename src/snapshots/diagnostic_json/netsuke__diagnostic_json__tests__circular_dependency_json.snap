@@ -10,12 +10,14 @@ expression: rendered
   },
   "diagnostics": [
     {
-      "message": "Circular dependency detected: ⁨[\"a\", \"b\", \"a\"]⁩.",
+      "message": "Failed to build graph from the manifest.",
       "code": null,
       "severity": "error",
       "help": null,
       "url": null,
-      "causes": [],
+      "causes": [
+        "Circular dependency detected: ⁨[\"a\", \"b\", \"a\"]⁩."
+      ],
       "source": null,
       "primary_span": null,
       "labels": [],
