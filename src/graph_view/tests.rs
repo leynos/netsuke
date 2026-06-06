@@ -34,6 +34,8 @@ struct EdgeFixture<'a> {
     explicit_outputs: &'a [&'a str],
     implicit_outputs: &'a [&'a str],
     order_only_deps: &'a [&'a str],
+    phony: bool,
+    always: bool,
 }
 
 fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
@@ -44,8 +46,8 @@ fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
         explicit_outputs: fixture.explicit_outputs.iter().map(|s| p(s)).collect(),
         implicit_outputs: fixture.implicit_outputs.iter().map(|s| p(s)).collect(),
         order_only_deps: fixture.order_only_deps.iter().map(|s| p(s)).collect(),
-        phony: false,
-        always: false,
+        phony: fixture.phony,
+        always: fixture.always,
     };
     for out in &edge.explicit_outputs {
         graph.targets.insert(out.clone(), edge.clone());
@@ -108,6 +110,37 @@ fn target_nodes_are_classified_as_targets(#[case] edges: &[(&str, &[&str], &[&st
         assert!(matches!(node.kind, NodeKind::Target { .. }));
         assert_eq!(node.description.as_deref(), Some("desc"));
     }
+}
+
+#[rstest]
+#[case::plain(false, false)]
+#[case::phony(true, false)]
+#[case::always(false, true)]
+fn target_node_kind_carries_phony_and_always_flags(#[case] phony: bool, #[case] always: bool) {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert("a".into(), make_action(None));
+    add_edge(
+        &mut graph,
+        EdgeFixture {
+            action_id: "a",
+            inputs: &["src/a.c"],
+            explicit_outputs: &["out/a"],
+            phony,
+            always,
+            ..EdgeFixture::default()
+        },
+    );
+    let view = GraphView::from_build_graph(&graph);
+    let node = view
+        .nodes
+        .iter()
+        .find(|n| n.path == p("out/a"))
+        .expect("target node");
+    assert_eq!(
+        node.kind,
+        NodeKind::Target { phony, always },
+        "target NodeKind should mirror BuildEdge.phony and BuildEdge.always",
+    );
 }
 
 #[test]
@@ -289,6 +322,8 @@ fn build_graph_from_edge_specs(
                 explicit_outputs: &explicit_outputs,
                 implicit_outputs: &implicit_outputs,
                 order_only_deps: &order_only_deps,
+                phony: false,
+                always: false,
             },
         );
     }

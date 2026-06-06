@@ -121,42 +121,58 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
 
 fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static str> {
     match subcommand_name {
-        None => match arg_id {
-            "file" => Some(keys::CLI_FLAG_FILE_HELP),
-            "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),
-            "config" => Some(keys::CLI_FLAG_CONFIG_HELP),
-            "jobs" => Some(keys::CLI_FLAG_JOBS_HELP),
-            "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
-            "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),
-            "fetch_allow_scheme" => Some(keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP),
-            "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
-            "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
-            "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
-            "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
-            "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
-            "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
-            "theme" => Some(keys::CLI_FLAG_THEME_HELP),
-            "colour_policy" => Some(keys::CLI_FLAG_COLOUR_POLICY_HELP),
-            "spinner_mode" => Some(keys::CLI_FLAG_SPINNER_MODE_HELP),
-            "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
-            "output_format" => Some(keys::CLI_FLAG_OUTPUT_FORMAT_HELP),
-            "default_targets" => Some(keys::CLI_FLAG_DEFAULT_TARGETS_HELP),
-            _ => None,
-        },
-        Some("build") => match arg_id {
-            "emit" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_EMIT_HELP),
-            "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
-            _ => None,
-        },
-        Some("graph") => match arg_id {
-            "html" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP),
-            "output" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_OUTPUT_HELP),
-            _ => None,
-        },
-        Some("manifest") => match arg_id {
-            "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
-            _ => None,
-        },
+        None => top_level_flag_help_key(arg_id),
+        Some("build") => build_flag_help_key(arg_id),
+        Some("graph") => graph_flag_help_key(arg_id),
+        Some("manifest") => manifest_flag_help_key(arg_id),
+        _ => None,
+    }
+}
+
+fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "file" => Some(keys::CLI_FLAG_FILE_HELP),
+        "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),
+        "config" => Some(keys::CLI_FLAG_CONFIG_HELP),
+        "jobs" => Some(keys::CLI_FLAG_JOBS_HELP),
+        "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
+        "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),
+        "fetch_allow_scheme" => Some(keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP),
+        "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
+        "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
+        "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
+        "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
+        "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
+        "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
+        "theme" => Some(keys::CLI_FLAG_THEME_HELP),
+        "colour_policy" => Some(keys::CLI_FLAG_COLOUR_POLICY_HELP),
+        "spinner_mode" => Some(keys::CLI_FLAG_SPINNER_MODE_HELP),
+        "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
+        "output_format" => Some(keys::CLI_FLAG_OUTPUT_FORMAT_HELP),
+        "default_targets" => Some(keys::CLI_FLAG_DEFAULT_TARGETS_HELP),
+        _ => None,
+    }
+}
+
+fn build_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "emit" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_EMIT_HELP),
+        "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
+        _ => None,
+    }
+}
+
+fn graph_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "html" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP),
+        "output" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_OUTPUT_HELP),
+        _ => None,
+    }
+}
+
+fn manifest_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
         _ => None,
     }
 }

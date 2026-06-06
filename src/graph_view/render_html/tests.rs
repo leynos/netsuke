@@ -128,6 +128,59 @@ fn implicit_dep_edge_emits_implicit_dep_class() {
 }
 
 #[test]
+fn implicit_output_edge_emits_implicit_output_class() {
+    let mut view = small_view();
+    view.nodes.push(NodeView {
+        path: Utf8PathBuf::from("out/app.d"),
+        kind: NodeKind::Target {
+            phony: false,
+            always: false,
+        },
+        action_id: Some("h".into()),
+        description: None,
+    });
+    view.edges.push(EdgeView {
+        from: Utf8PathBuf::from("src/main.c"),
+        to: Utf8PathBuf::from("out/app.d"),
+        class: EdgeClass::ImplicitOutput,
+    });
+    let html = render(None, &view);
+    assert!(
+        html.contains(".edge.implicit-output"),
+        "stylesheet should define .edge.implicit-output"
+    );
+    assert!(
+        html.contains("class=\"edge implicit-output\""),
+        "implicit-output edge should carry the implicit-output class"
+    );
+}
+
+#[test]
+fn order_only_edge_emits_order_only_class() {
+    let mut view = small_view();
+    view.nodes.push(NodeView {
+        path: Utf8PathBuf::from("build-dir"),
+        kind: NodeKind::Source,
+        action_id: None,
+        description: None,
+    });
+    view.edges.push(EdgeView {
+        from: Utf8PathBuf::from("build-dir"),
+        to: Utf8PathBuf::from("out/app"),
+        class: EdgeClass::OrderOnly,
+    });
+    let html = render(None, &view);
+    assert!(
+        html.contains(".edge.order-only"),
+        "stylesheet should define .edge.order-only"
+    );
+    assert!(
+        html.contains("class=\"edge order-only\""),
+        "order-only edge should carry the order-only class"
+    );
+}
+
+#[test]
 fn paths_with_angle_brackets_are_escaped() {
     let mut view = small_view();
     view.nodes.push(NodeView {

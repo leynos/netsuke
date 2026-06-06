@@ -12,9 +12,10 @@ Status: COMPLETE (Stages A–D 2026-05-26; Stage E 2026-06-03).
 After this work, a sighted user can produce a self-contained, offline-safe
 HTML file from any Netsuke manifest with
 `netsuke graph --html --output graph.html` and open it in a browser to see
-the build dependency graph rendered as SVG. Automation still receives the
-canonical DOT graph from `netsuke graph` on stdout, preserving the raw graph
-data contract. A new `--output <FILE>` flag, shared by both DOT and HTML
+the build dependency graph rendered as Scalable Vector Graphics (SVG).
+Automation still receives the canonical Graphviz DOT language (DOT) graph
+from `netsuke graph` on stdout, preserving the raw graph data contract.
+A new `--output <FILE>` flag, shared by both DOT and HTML
 emission, writes the chosen artefact to disk with the same atomic-write
 semantics already used by `netsuke manifest`, and a `-` sentinel selects
 stdout — matching the precedent set by

@@ -96,6 +96,40 @@ fn graph_html_writes_self_contained_document() -> Result<()> {
 }
 
 #[rstest]
+fn graph_with_output_dash_writes_to_stdout_and_not_file() -> Result<()> {
+    // Subprocess-driven test: the `-` sentinel must route DOT to stdout and
+    // not create any artefact on disk. Existing project precedent is
+    // `manifest_subcommand_streams_to_stdout_when_dash` in assert_cmd_tests,
+    // which uses `assert_cmd::Command` for stdout capture.
+    let (temp, manifest_path) = create_test_manifest()?;
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .arg("--file")
+        .arg(&manifest_path)
+        .arg("graph")
+        .arg("--output")
+        .arg("-")
+        .env("PATH", "")
+        .output()
+        .context("run netsuke graph --output -")?;
+    ensure!(
+        output.status.success(),
+        "graph --output - should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    ensure!(
+        stdout.starts_with("digraph netsuke {"),
+        "stdout should carry DOT header; got: {stdout:.80}"
+    );
+    ensure!(
+        !temp.path().join("-").exists(),
+        "no file named '-' should be created"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn graph_is_deterministic_across_repeated_runs() -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let mut outputs: Vec<String> = Vec::new();
