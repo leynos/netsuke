@@ -166,7 +166,7 @@ fn render_runner_diagnostic_json_records_help_without_spans() -> Result<()> {
 
 #[rstest]
 fn render_circular_dependency_display_matches_snapshot(en_localizer: EnLocalizer) {
-    let _ = &en_localizer;
+    let _en_localizer = en_localizer;
     let rendered = circular_dependency_error().to_string();
 
     snapshot_settings().bind(|| {
@@ -176,7 +176,7 @@ fn render_circular_dependency_display_matches_snapshot(en_localizer: EnLocalizer
 
 #[rstest]
 fn render_circular_dependency_json_matches_snapshot(en_localizer: EnLocalizer) -> Result<()> {
-    let _ = &en_localizer;
+    let _en_localizer = en_localizer;
     let error = anyhow::Error::new(circular_dependency_error())
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH));
     let document = render_error_json(error.as_ref())?;
