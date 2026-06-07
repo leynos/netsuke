@@ -8,10 +8,24 @@ use crate::runner::RunnerError;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use insta::{Settings, assert_snapshot};
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
-use test_support::{localizer_test_lock, set_en_localizer};
+use std::sync::MutexGuard;
+use test_support::{LocalizerGuard, localizer_test_lock, set_en_localizer};
+
+struct EnLocalizer {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
+}
+
+#[fixture]
+fn en_localizer() -> EnLocalizer {
+    EnLocalizer {
+        _lock: localizer_test_lock().expect("localizer test lock poisoned"),
+        _guard: set_en_localizer(),
+    }
+}
 
 fn parse_json_value(document: &str) -> Result<Value> {
     serde_json::from_str(document).context("parse diagnostics JSON")
@@ -151,9 +165,8 @@ fn render_runner_diagnostic_json_records_help_without_spans() -> Result<()> {
 }
 
 #[rstest]
-fn render_circular_dependency_display_matches_snapshot() {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let _guard = set_en_localizer();
+fn render_circular_dependency_display_matches_snapshot(en_localizer: EnLocalizer) {
+    let _ = &en_localizer;
     let rendered = circular_dependency_error().to_string();
 
     snapshot_settings().bind(|| {
@@ -162,9 +175,8 @@ fn render_circular_dependency_display_matches_snapshot() {
 }
 
 #[rstest]
-fn render_circular_dependency_json_matches_snapshot() -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let _guard = set_en_localizer();
+fn render_circular_dependency_json_matches_snapshot(en_localizer: EnLocalizer) -> Result<()> {
+    let _ = &en_localizer;
     let error = anyhow::Error::new(circular_dependency_error())
         .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH));
     let document = render_error_json(error.as_ref())?;
