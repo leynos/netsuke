@@ -102,81 +102,77 @@ fn outline_lists_targets_and_inputs() {
     assert!(html.contains("<code>src/main.c</code>"));
 }
 
-#[test]
-fn implicit_dep_edge_emits_implicit_dep_class() {
+fn assert_edge_class_rendered(extra_node: NodeView, extra_edge: EdgeView, edge_class_name: &str) {
     let mut view = small_view();
-    view.nodes.push(NodeView {
-        path: Utf8PathBuf::from("include/config.h"),
-        kind: NodeKind::Source,
-        action_id: None,
-        description: None,
-    });
-    view.edges.push(EdgeView {
-        from: Utf8PathBuf::from("include/config.h"),
-        to: Utf8PathBuf::from("out/app"),
-        class: EdgeClass::ImplicitDep,
-    });
+    view.nodes.push(extra_node);
+    view.edges.push(extra_edge);
     let html = render(None, &view);
+    let selector = format!(".edge.{edge_class_name}");
+    let class_attr = format!("class=\"edge {edge_class_name}\"");
     assert!(
-        html.contains(".edge.implicit-dep"),
-        "stylesheet should define .edge.implicit-dep"
+        html.contains(&selector),
+        "stylesheet should define {selector}",
     );
     assert!(
-        html.contains("class=\"edge implicit-dep\""),
-        "implicit-dep edge should carry the implicit-dep class"
+        html.contains(&class_attr),
+        "{edge_class_name} edge should carry the {edge_class_name} class",
+    );
+}
+
+#[test]
+fn implicit_dep_edge_emits_implicit_dep_class() {
+    assert_edge_class_rendered(
+        NodeView {
+            path: Utf8PathBuf::from("include/config.h"),
+            kind: NodeKind::Source,
+            action_id: None,
+            description: None,
+        },
+        EdgeView {
+            from: Utf8PathBuf::from("include/config.h"),
+            to: Utf8PathBuf::from("out/app"),
+            class: EdgeClass::ImplicitDep,
+        },
+        "implicit-dep",
     );
 }
 
 #[test]
 fn implicit_output_edge_emits_implicit_output_class() {
-    let mut view = small_view();
-    view.nodes.push(NodeView {
-        path: Utf8PathBuf::from("out/app.d"),
-        kind: NodeKind::Target {
-            phony: false,
-            always: false,
+    assert_edge_class_rendered(
+        NodeView {
+            path: Utf8PathBuf::from("out/app.d"),
+            kind: NodeKind::Target {
+                phony: false,
+                always: false,
+            },
+            action_id: Some("h".into()),
+            description: None,
         },
-        action_id: Some("h".into()),
-        description: None,
-    });
-    view.edges.push(EdgeView {
-        from: Utf8PathBuf::from("src/main.c"),
-        to: Utf8PathBuf::from("out/app.d"),
-        class: EdgeClass::ImplicitOutput,
-    });
-    let html = render(None, &view);
-    assert!(
-        html.contains(".edge.implicit-output"),
-        "stylesheet should define .edge.implicit-output"
-    );
-    assert!(
-        html.contains("class=\"edge implicit-output\""),
-        "implicit-output edge should carry the implicit-output class"
+        EdgeView {
+            from: Utf8PathBuf::from("src/main.c"),
+            to: Utf8PathBuf::from("out/app.d"),
+            class: EdgeClass::ImplicitOutput,
+        },
+        "implicit-output",
     );
 }
 
 #[test]
 fn order_only_edge_emits_order_only_class() {
-    let mut view = small_view();
-    view.nodes.push(NodeView {
-        path: Utf8PathBuf::from("build-dir"),
-        kind: NodeKind::Source,
-        action_id: None,
-        description: None,
-    });
-    view.edges.push(EdgeView {
-        from: Utf8PathBuf::from("build-dir"),
-        to: Utf8PathBuf::from("out/app"),
-        class: EdgeClass::OrderOnly,
-    });
-    let html = render(None, &view);
-    assert!(
-        html.contains(".edge.order-only"),
-        "stylesheet should define .edge.order-only"
-    );
-    assert!(
-        html.contains("class=\"edge order-only\""),
-        "order-only edge should carry the order-only class"
+    assert_edge_class_rendered(
+        NodeView {
+            path: Utf8PathBuf::from("build-dir"),
+            kind: NodeKind::Source,
+            action_id: None,
+            description: None,
+        },
+        EdgeView {
+            from: Utf8PathBuf::from("build-dir"),
+            to: Utf8PathBuf::from("out/app"),
+            class: EdgeClass::OrderOnly,
+        },
+        "order-only",
     );
 }
 
