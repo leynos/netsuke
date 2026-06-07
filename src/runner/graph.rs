@@ -52,24 +52,20 @@ pub(super) fn handle_graph(
     } else {
         keys::STATUS_TOOL_GRAPH.into()
     };
-    report_pipeline_stage(
-        reporter,
-        PipelineStage::NinjaSynthesisAndExecution,
-        Some(status_key),
-    );
+    report_pipeline_stage(reporter, PipelineStage::GraphRendering, Some(status_key));
 
     let mut buffer: Vec<u8> = Vec::new();
     if args.html {
         HtmlRenderer::new(cli.locale.as_deref())
             .render(&view, &mut buffer)
-            .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+            .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
     } else {
         DotRenderer::new()
             .render(&view, &mut buffer)
-            .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+            .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
     }
     let rendered = String::from_utf8(buffer)
-        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+        .context(localization::message(keys::RUNNER_CONTEXT_RENDER_GRAPH))?;
 
     write_graph_artefact(cli, args.output.as_deref(), &rendered)?;
     reporter.report_complete(status_key);

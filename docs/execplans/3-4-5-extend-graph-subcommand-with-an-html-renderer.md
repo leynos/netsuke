@@ -16,7 +16,7 @@ the build dependency graph rendered as Scalable Vector Graphics (SVG).
 Automation still receives the canonical Graphviz DOT language (DOT) graph
 from `netsuke graph` on stdout, preserving the raw graph data contract.
 A new `--output <FILE>` flag, shared by both DOT and HTML
-emission, writes the chosen artefact to disk with the same atomic-write
+emission, writes the chosen artefact to disk with the same create/write/sync
 semantics already used by `netsuke manifest`, and a `-` sentinel selects
 stdout — matching the precedent set by
 [`manifest`](../netsuke-design.md#83-command-behaviour).
@@ -52,8 +52,8 @@ Observable success means **all** of the following hold simultaneously:
 7. Two runs with `HashMap` insertion order shuffled produce byte-identical
    HTML; a `proptest` covers this.
 8. Snapshot tests under
-   [`src/snapshots/`](../../src/snapshots) verify the golden DOT and HTML
-   outputs for the smoke-manifest fixture.
+   [`src/snapshots/graph/`](../../src/snapshots/graph) verify the golden DOT
+   and HTML outputs for the smoke-manifest fixture.
 9. The user guide and the developer guide are updated to document the new
    CLI surface and the graph view's domain-projection layer.
 10. `make check-fmt`, `make lint`, and `make test` all pass on the final
@@ -252,6 +252,12 @@ a timestamp.
       ambiguous `.edge.implicit` was renamed `.edge.implicit-output`).
       Developer guide gained an edge-class taxonomy table.
       (2026-06-03)
+- [x] Stage F: close traceability gaps from post-implementation review:
+      add golden DOT/HTML snapshots, extend the shuffled-insertion
+      proptest to cover renderer output, add the HTML/SVG well-formedness
+      BDD scenario, update the graph status stage wording, and refresh
+      ADR/execplan references for the split HTML renderer modules.
+      (2026-06-07)
 - [x] `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
       `make nixie` pass on the final commit. (2026-05-26)
 - [x] `coderabbit review --agent` clear after each stage commit. All five
@@ -297,12 +303,13 @@ a timestamp.
   (`NODE_HEIGHT >> 1`) and an arithmetic right shift `((x2 - x1) >> 1)`
   for the orthogonal-connector midpoint. The shift is safe because the
   layout is strictly left-to-right (`x2 >= x1`).
-- 2026-05-26 (Stage C): `self_named_module_files` is denied at the
-  workspace level, so `src/graph_view/render_html/mod.rs` is forbidden.
-  Tests live in `src/graph_view/render_html_tests.rs` and are reached
-  via `#[path = "render_html_tests.rs"] mod tests;` in
-  `render_html.rs`. Same pattern is the project's standard escape from
-  the lint.
+- 2026-05-26 (Stage C): the initial single-file HTML renderer avoided
+  `self_named_module_files` by keeping tests in
+  `src/graph_view/render_html_tests.rs`. This is superseded as of the
+  post-review split: the HTML adapter now lives under
+  `src/graph_view/render_html/` with `mod`, `escape`, `layout`,
+  `noscript`, `outline`, `style`, `svg`, and `tests` modules, keeping
+  each module focused and under the 400-line file cap.
 - 2026-05-26 (Stage B): `write_ninja_file_utf8` became a thin wrapper
   with no callers outside its own test, so it was removed in favour of
   the new `write_text_file_utf8` helper that the runner and Stage C HTML
@@ -362,7 +369,7 @@ team. Add further decisions as work proceeds.
 - Decision: at the Stage C go/no-go gate, neither the `layout` crate nor
   the vendored viz-js fallback was adopted. Instead, the HTML renderer
   uses a hand-rolled topological-depth layered SVG layout written inline
-  in `src/graph_view/render_html.rs`. Rationale: the layout crate adds
+  in `src/graph_view/render_html/layout.rs`. Rationale: the layout crate adds
   approximately 8 transitive dependencies and ~700 KB of release binary
   growth even for the smoke fixture, exceeding the 1 MB net budget when
   combined with other in-flight features. The vendored viz-js fallback
@@ -396,12 +403,14 @@ team. Add further decisions as work proceeds.
   only. `coderabbit review --agent` reported zero findings.
 - **Stage C (2026-05-26):** the HTML renderer landed without any new
   dependency. The Stage C go/no-go gate accepted a hand-rolled
-  topological-depth layered SVG layout in `render_html.rs`; the
-  `layout` crate and the vendored viz-js fallback were both rejected
-  for binary-size reasons (see Decision log). The renderer produces a
-  byte-identical document across runs (proven by
-  `rendering_is_byte_identical_across_runs`) and exposes per-node
-  `aria-label`s plus per-edge `<title>`s for accessibility.
+  topological-depth layered SVG layout now housed in
+  `src/graph_view/render_html/layout.rs`; the `layout` crate and the
+  vendored viz-js fallback were both rejected for binary-size reasons
+  (see Decision log). The renderer produces a byte-identical document
+  across runs (proven by `rendering_is_byte_identical_across_runs`),
+  has golden DOT/HTML snapshots under `src/snapshots/graph/`, and
+  exposes per-node `aria-label`s plus per-edge `<title>`s for
+  accessibility.
   `coderabbit review --agent` reported zero findings.
 - **Stage D (2026-05-26):** user-guide section 12.2 and the top-level
   subcommand summary were rewritten to describe the in-process renderer
@@ -414,6 +423,13 @@ team. Add further decisions as work proceeds.
   dispatch. Roadmap item 3.4.5 was ticked. `make check-fmt`, `make
   lint`, `make test`, `make markdownlint`, and `make nixie` all
   passed.
+- **Stage F (2026-06-07):** a follow-up review closed traceability gaps
+  without changing the public CLI contract. The graph status stage now
+  reports graph rendering instead of Ninja synthesis, the outline's
+  no-input case emits XML-friendly list markup, DOT/HTML golden
+  snapshots landed, the proptest now compares renderer output as well
+  as `GraphView`, and `tests/features_unix/graph.feature` validates the
+  SVG island as well-formed XML.
 
 Retrospective lessons:
 
@@ -459,10 +475,10 @@ and what they contribute today are:
 
 - [`src/runner/process/file_io.rs`](../../src/runner/process/file_io.rs) —
   cap-std-based file writers. `is_stdout_path` recognises the `-` sentinel;
-  `write_ninja_file` performs the atomic-write dance with parent-directory
-  creation; `write_ninja_stdout` writes to a locked stdout handle. These
-  helpers must be generalised to take arbitrary text content, not just
-  `NinjaContent`.
+  `write_ninja_file` performs the existing create/write/sync sequence
+  with parent-directory creation; `write_ninja_stdout` writes to a locked
+  stdout handle. These helpers must be generalised to take arbitrary text
+  content, not just `NinjaContent`.
 
 - [`src/runner/path_helpers.rs`](../../src/runner/path_helpers.rs) —
   `resolve_output_path` interprets relative paths under `-C/--directory`.
@@ -720,10 +736,11 @@ depends on observed output quality.
    to each HTML artefact. Do not silently switch — escalate first.
 
 3. **Promote the spike** (assuming the gate passed). Move the
-   `HtmlRenderer` into `src/graph_view/render_html.rs` and drop the
-   `html-renderer-spike` cargo feature, unless the binary-size budget
-   dictates gating it behind a default-off feature (`html-renderer`).
-   The renderer constructs the document using a Rust string template:
+   `HtmlRenderer` into the `src/graph_view/render_html/` module tree and
+   drop the `html-renderer-spike` cargo feature, unless the binary-size
+   budget dictates gating it behind a default-off feature
+   (`html-renderer`). The renderer constructs the document using Rust
+   string-writing helpers:
 
    ```rust
    pub struct HtmlRenderer {
@@ -893,8 +910,8 @@ adapters continue to read `GraphView` only.
    2.4`) — visually denser than the explicit case to read as
    "rebuild-triggering hidden input." Emit the new class from
    `write_svg_edge` for `ImplicitDep`. Add tests in
-   [`render_html_tests.rs`][graph-view-html-tests] asserting the CSS
-   rule and class attribute appear when an implicit dep is present.
+   [`render_html/tests.rs`][graph-view-html-tests] asserting the CSS rule
+   and class attribute appear when an implicit dep is present.
 
 5. **Cover projection with unit and property tests.** Add an `rstest`
    in [`src/graph_view/tests.rs`][graph-view-tests] that builds a
@@ -921,8 +938,8 @@ adapters continue to read `GraphView` only.
 
 [graph-view-mod]: ../../src/graph_view/mod.rs
 [graph-view-dot]: ../../src/graph_view/render_dot.rs
-[graph-view-html]: ../../src/graph_view/render_html.rs
-[graph-view-html-tests]: ../../src/graph_view/render_html_tests.rs
+[graph-view-html]: ../../src/graph_view/render_html/mod.rs
+[graph-view-html-tests]: ../../src/graph_view/render_html/tests.rs
 [graph-view-tests]: ../../src/graph_view/tests.rs
 
 ## Concrete steps
@@ -1027,7 +1044,8 @@ Quality criteria for the final commit:
 - Snapshot updates are explicit (`cargo insta accept`). Never auto-accept
   in CI.
 - File writes go through the cap-std `write_text_file` helper, which is
-  idempotent — re-running the command overwrites the target atomically.
+  idempotent: re-running the command overwrites the target using the
+  existing create/write/sync sequence.
 - The Stage C spike lives behind a cargo feature initially so it can be
   removed cleanly if the go/no-go gate fails.
 - The branch is `3-4-5-extend-graph-subcommand-with-an-html-renderer`;
@@ -1199,7 +1217,7 @@ pub struct GraphArgs {
 }
 ```
 
-End of Stage C — `src/graph_view/render_html.rs`:
+End of Stage C — `src/graph_view/render_html/` module tree:
 
 ```rust
 use std::sync::Arc;

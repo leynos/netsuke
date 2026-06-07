@@ -83,6 +83,8 @@ fn write_svg_node(
         });
     let class = match node.kind {
         NodeKind::Source => "node source",
+        // A phony target has no on-disk artefact, so the phony style takes
+        // precedence even if `always` is also set.
         NodeKind::Target { phony: true, .. } => "node phony",
         NodeKind::Target {
             phony: false,

@@ -64,6 +64,8 @@ fn write_node(
     );
     let attrs = match kind {
         NodeKind::Source => format!("label=\"{label}\""),
+        // A phony target has no on-disk artefact, so the phony style takes
+        // precedence even if `always` is also set.
         NodeKind::Target { phony: true, .. } => {
             format!("label=\"{label}\", style=dashed, color=\"#666666\"")
         }
@@ -99,7 +101,7 @@ fn write_edge(
 }
 
 /// Escape a string for inclusion inside a double-quoted Graphviz identifier or
-/// label.
+/// label; Graphviz does not require XML escaping for `<`, `>`, or `&`.
 fn escape_dot(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     for ch in input.chars() {

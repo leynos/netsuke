@@ -61,11 +61,16 @@ fn write_outline_inputs(
     inputs: &[&Utf8Path],
     no_inputs_msg: &str,
 ) -> Result<(), GraphRenderError> {
+    writeln!(sink, "        <ul>")?;
     if inputs.is_empty() {
-        writeln!(sink, "        <p>{}</p>", escape_text(no_inputs_msg))?;
+        writeln!(
+            sink,
+            "          <li class=\"no-inputs\">{}</li>",
+            escape_text(no_inputs_msg)
+        )?;
+        writeln!(sink, "        </ul>")?;
         return Ok(());
     }
-    writeln!(sink, "        <ul>")?;
     for input in inputs {
         writeln!(
             sink,

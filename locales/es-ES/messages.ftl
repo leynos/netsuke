@@ -83,6 +83,7 @@ runner.context.load_manifest = No se pudo cargar el manifiesto en { $path }.
 runner.context.serialise_manifest = No se pudo serializar el manifiesto.
 runner.context.build_graph = No se pudo construir el grafo desde el manifiesto.
 runner.context.generate_ninja = No se pudo generar el manifiesto Ninja.
+runner.context.render_graph = No se pudo renderizar el artefacto de grafo.
 
 runner.io.create_temp_file = No se pudo crear el archivo Ninja temporal.
 runner.io.write_temp_ninja = No se pudo escribir el archivo Ninja temporal.
@@ -350,6 +351,8 @@ status.stage.final_rendering = Deserializando y renderizando valores del manifie
 status.stage.ir_generation_validation = Construyendo y validando el grafo de dependencias
 status.stage.ninja_synthesis = Sintetizando el plan de compilación Ninja
 status.stage.ninja_synthesis_execute = Sintetizando el plan Ninja y ejecutando { $tool }
+status.stage.graph_rendering = Renderizando el artefacto de grafo
+status.stage.graph_rendering_with_tool = Renderizando { $tool }
 status.complete = { $tool } completo.
 status.timing.summary_header = Resumen de tiempos por etapa:
 status.timing.stage_line = - { $label }: { $duration }

@@ -83,3 +83,25 @@ fn compute_depth<'a>(
     cache.insert(path, depth);
     depth
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use camino::Utf8PathBuf;
+
+    #[test]
+    fn compute_depth_terminates_for_synthetic_cycle() {
+        let a = Utf8PathBuf::from("a");
+        let b = Utf8PathBuf::from("b");
+        let mut predecessors: BTreeMap<&Utf8Path, Vec<&Utf8Path>> = BTreeMap::new();
+        predecessors.insert(a.as_path(), vec![b.as_path()]);
+        predecessors.insert(b.as_path(), vec![a.as_path()]);
+        let mut cache = BTreeMap::new();
+
+        let depth = compute_depth(a.as_path(), &predecessors, &mut cache);
+
+        assert_eq!(depth, 2);
+        assert_eq!(cache.get(a.as_path()), Some(&2));
+        assert_eq!(cache.get(b.as_path()), Some(&1));
+    }
+}

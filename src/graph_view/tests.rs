@@ -1,11 +1,16 @@
 //! Unit and property tests for [`super::GraphView`].
 
 use camino::Utf8PathBuf;
+use insta::assert_snapshot;
 use proptest::prelude::*;
 use rstest::rstest;
 
 use crate::ast::Recipe;
+use crate::graph_view::render::GraphRenderer;
+use crate::graph_view::render_dot::DotRenderer;
+use crate::graph_view::render_html::HtmlRenderer;
 use crate::ir::{Action, BuildEdge, BuildGraph};
+use crate::snapshot_test_support::snapshot_settings;
 
 use super::{EdgeClass, GraphView, NodeKind};
 
@@ -24,6 +29,22 @@ fn make_action(description: Option<&str>) -> Action {
 
 fn p(s: &str) -> Utf8PathBuf {
     Utf8PathBuf::from(s)
+}
+
+fn render_dot(view: &GraphView) -> String {
+    let mut out = Vec::new();
+    DotRenderer::new()
+        .render(view, &mut out)
+        .expect("render DOT graph");
+    String::from_utf8(out).expect("DOT renderer emits UTF-8")
+}
+
+fn render_html(view: &GraphView) -> String {
+    let mut out = Vec::new();
+    HtmlRenderer::new(Some("en-US"))
+        .render(view, &mut out)
+        .expect("render HTML graph");
+    String::from_utf8(out).expect("HTML renderer emits UTF-8")
 }
 
 #[derive(Default, Clone, Copy)]
@@ -356,6 +377,43 @@ fn default_targets_are_sorted_and_deduped() {
     assert_eq!(view.default_targets, vec![p("a"), p("m"), p("z")]);
 }
 
+fn golden_graph_view() -> GraphView {
+    let mut graph = BuildGraph::default();
+    graph
+        .actions
+        .insert("compile".into(), make_action(Some("compile app")));
+    graph.default_targets.push(p("out/app"));
+    add_edge(
+        &mut graph,
+        EdgeFixture {
+            action_id: "compile",
+            inputs: &["src/main.c"],
+            implicit_deps: &["include/config.h"],
+            explicit_outputs: &["out/app"],
+            implicit_outputs: &["out/app.d"],
+            order_only_deps: &["build"],
+            ..EdgeFixture::default()
+        },
+    );
+    GraphView::from_build_graph(&graph)
+}
+
+#[test]
+fn golden_dot_output_matches_snapshot() {
+    let view = golden_graph_view();
+    snapshot_settings("graph").bind(|| {
+        assert_snapshot!("golden_dot", render_dot(&view));
+    });
+}
+
+#[test]
+fn golden_html_output_matches_snapshot() {
+    let view = golden_graph_view();
+    snapshot_settings("graph").bind(|| {
+        assert_snapshot!("golden_html", render_html(&view));
+    });
+}
+
 fn build_graph_from_edge_specs(
     actions: &[(String, Option<String>)],
     edge_specs: &[EdgeSpec],
@@ -489,6 +547,8 @@ proptest! {
 
         let view_a = GraphView::from_build_graph(&g_forward);
         let view_b = GraphView::from_build_graph(&g_reversed);
-        prop_assert_eq!(view_a, view_b);
+        prop_assert_eq!(&view_a, &view_b);
+        prop_assert_eq!(render_dot(&view_a), render_dot(&view_b));
+        prop_assert_eq!(render_html(&view_a), render_html(&view_b));
     }
 }

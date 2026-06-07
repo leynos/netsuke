@@ -19,3 +19,11 @@ Feature: Graph subcommand execution
     And the CLI uses the temporary directory
     When the graph process is run
     Then the command should succeed
+
+  Scenario: Graph HTML contains well-formed SVG
+    Given no ninja executable is available
+    And the CLI is parsed with "graph --html --output graph.html"
+    And the CLI uses the temporary directory
+    When the graph process is run
+    Then the command should succeed
+    And the graph HTML file "graph.html" should contain well-formed SVG

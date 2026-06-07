@@ -88,7 +88,8 @@ fn running_stage6_reporter() -> IndicatifReporter {
 #[case(PipelineStage::FinalRendering, 4)]
 #[case(PipelineStage::IrGenerationValidation, 5)]
 #[case(PipelineStage::NinjaSynthesisAndExecution, 6)]
-fn stage_index_matches_discriminant(#[case] stage: PipelineStage, #[case] expected: u32) {
+#[case(PipelineStage::GraphRendering, 6)]
+fn stage_index_matches_pipeline_order(#[case] stage: PipelineStage, #[case] expected: u32) {
     assert_eq!(stage.index().get(), expected);
 }
 

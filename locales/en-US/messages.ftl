@@ -83,6 +83,7 @@ runner.context.load_manifest = Failed to load manifest at { $path }.
 runner.context.serialise_manifest = Failed to serialise manifest.
 runner.context.build_graph = Failed to build graph from the manifest.
 runner.context.generate_ninja = Failed to generate the Ninja manifest.
+runner.context.render_graph = Failed to render the graph artefact.
 
 runner.io.create_temp_file = Failed to create temporary Ninja file.
 runner.io.write_temp_ninja = Failed to write temporary Ninja file.
@@ -350,6 +351,8 @@ status.stage.final_rendering = Deserializing and rendering manifest values
 status.stage.ir_generation_validation = Building and validating dependency graph
 status.stage.ninja_synthesis = Synthesizing Ninja build plan
 status.stage.ninja_synthesis_execute = Synthesizing Ninja plan and executing { $tool }
+status.stage.graph_rendering = Rendering graph artefact
+status.stage.graph_rendering_with_tool = Rendering { $tool }
 status.complete = { $tool } complete.
 status.timing.summary_header = Stage timing summary:
 status.timing.stage_line = - { $label }: { $duration }

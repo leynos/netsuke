@@ -36,6 +36,8 @@ pub enum PipelineStage {
     IrGenerationValidation = 5,
     /// Stage 6: synthesize Ninja and execute command intent.
     NinjaSynthesisAndExecution = 6,
+    /// Stage 6 alternative: render a graph artefact without Ninja.
+    GraphRendering,
 }
 
 impl PipelineStage {
@@ -52,7 +54,15 @@ impl PipelineStage {
     /// Return the validated stage index for this variant.
     #[must_use]
     pub const fn index(self) -> StageNumber {
-        StageNumber::new_unchecked(self as u32)
+        let index = match self {
+            Self::ManifestIngestion => 1,
+            Self::InitialYamlParsing => 2,
+            Self::TemplateExpansion => 3,
+            Self::FinalRendering => 4,
+            Self::IrGenerationValidation => 5,
+            Self::NinjaSynthesisAndExecution | Self::GraphRendering => 6,
+        };
+        StageNumber::new_unchecked(index)
     }
 
     /// Return the localized description for this stage.
@@ -79,6 +89,15 @@ impl PipelineStage {
                 |tool_message_key| {
                     let tool = localization::message(tool_message_key.as_str()).to_string();
                     localization::message(keys::STATUS_STAGE_NINJA_SYNTHESIS_EXECUTE)
+                        .with_arg("tool", tool)
+                        .to_string()
+                },
+            ),
+            Self::GraphRendering => tool_key.map_or_else(
+                || localization::message(keys::STATUS_STAGE_GRAPH_RENDERING).to_string(),
+                |tool_message_key| {
+                    let tool = localization::message(tool_message_key.as_str()).to_string();
+                    localization::message(keys::STATUS_STAGE_GRAPH_RENDERING_WITH_TOOL)
                         .with_arg("tool", tool)
                         .to_string()
                 },

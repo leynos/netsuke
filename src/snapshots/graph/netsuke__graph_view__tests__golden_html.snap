@@ -1,0 +1,125 @@
+---
+source: src/graph_view/tests.rs
+expression: render_html(&view)
+---
+<!doctype html>
+<html lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Netsuke build graph</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 1.5rem; max-width: 100%; line-height: 1.5; }
+    svg { max-width: 100%; height: auto; }
+    .node rect { fill: var(--node-bg, #f3f4f6); stroke: #003366; stroke-width: 1.2; rx: 6; ry: 6; }
+    .node.source rect { stroke: #444; stroke-dasharray: 3 2; }
+    .node.phony rect { stroke: #666; stroke-dasharray: 4 2; }
+    .node.always rect { stroke: #cc6600; }
+    .node text { font-size: 12px; fill: currentColor; pointer-events: none; }
+    .edge { fill: none; stroke: #003366; stroke-width: 1.2; }
+    .edge.order-only { stroke: #888; stroke-dasharray: 4 3; }
+    .edge.implicit-output { stroke: #003366; stroke-dasharray: 2 2; }
+    .edge.implicit-dep { stroke: #003366; stroke-width: 2.4; }
+    details { margin-top: 1rem; } details > summary { cursor: pointer; font-weight: 600; }
+    pre { overflow: auto; padding: 0.5rem; background: #f3f4f6; }
+  </style>
+</head>
+<body>
+  <h1>Netsuke build graph</h1>
+  <svg role="img" aria-labelledby="svg-title svg-desc" viewBox="0 0 488 232" width="488" height="232" xmlns="http://www.w3.org/2000/svg">
+    <title id="svg-title">Netsuke build graph</title>
+    <desc id="svg-desc">Build graph rendered by Netsuke (5, 6)</desc>
+    <g class="edge order-only">
+      <title>build → out/app</title>
+      <path d="M224 46 L244 46 L244 46 L264 46"></path>
+    </g>
+    <g class="edge order-only">
+      <title>build → out/app.d</title>
+      <path d="M224 46 L244 46 L244 116 L264 116"></path>
+    </g>
+    <g class="edge implicit-dep">
+      <title>include/config.h → out/app</title>
+      <path d="M224 116 L244 116 L244 46 L264 46"></path>
+    </g>
+    <g class="edge implicit-dep">
+      <title>include/config.h → out/app.d</title>
+      <path d="M224 116 L244 116 L244 116 L264 116"></path>
+    </g>
+    <g class="edge">
+      <title>src/main.c → out/app</title>
+      <path d="M224 186 L244 186 L244 46 L264 46"></path>
+    </g>
+    <g class="edge implicit-output">
+      <title>src/main.c → out/app.d</title>
+      <path d="M224 186 L244 186 L244 116 L264 116"></path>
+    </g>
+    <g class="node source" aria-label="build">
+      <rect x="24" y="24" width="200" height="44"></rect>
+      <text x="32" y="42">build</text>
+    </g>
+    <g class="node source" aria-label="include/config.h">
+      <rect x="24" y="94" width="200" height="44"></rect>
+      <text x="32" y="112">include/config.h</text>
+    </g>
+    <g class="node target" aria-label="out/app">
+      <rect x="264" y="24" width="200" height="44"></rect>
+      <text x="272" y="42">out/app</text>
+      <text x="272" y="58" font-size="10" fill="#444">compile app</text>
+    </g>
+    <g class="node target" aria-label="out/app.d">
+      <rect x="264" y="94" width="200" height="44"></rect>
+      <text x="272" y="112">out/app.d</text>
+      <text x="272" y="128" font-size="10" fill="#444">compile app</text>
+    </g>
+    <g class="node source" aria-label="src/main.c">
+      <rect x="24" y="164" width="200" height="44"></rect>
+      <text x="32" y="182">src/main.c</text>
+    </g>
+  </svg>
+  <details open>
+    <summary>Targets and dependencies (text outline)</summary>
+    <ul>
+      <li>
+        <code>out/app</code>
+        <ul>
+          <li><code>build</code></li>
+          <li><code>include/config.h</code></li>
+          <li><code>src/main.c</code></li>
+        </ul>
+      </li>
+      <li>
+        <code>out/app.d</code>
+        <ul>
+          <li><code>build</code></li>
+          <li><code>include/config.h</code></li>
+          <li><code>src/main.c</code></li>
+        </ul>
+      </li>
+    </ul>
+  </details>
+  <noscript>
+    <p>JavaScript is disabled. The text outline above is the full graph; the DOT source follows.</p>
+    <pre><code>
+digraph netsuke {
+  rankdir="LR"
+  node [shape=box, fontsize=10]
+  edge [fontsize=10]
+  "build" [label="build"]
+  "include/config.h" [label="include/config.h"]
+  "out/app" [label="out/app\ncompile app", color="#003366"]
+  "out/app.d" [label="out/app.d\ncompile app", color="#003366"]
+  "src/main.c" [label="src/main.c"]
+  "build" -&gt; "out/app" [style=dashed]
+  "build" -&gt; "out/app.d" [style=dashed]
+  "include/config.h" -&gt; "out/app" [style=bold]
+  "include/config.h" -&gt; "out/app.d" [style=bold]
+  "src/main.c" -&gt; "out/app"
+  "src/main.c" -&gt; "out/app.d" [style=dotted]
+  // default targets:
+  // - out/app
+}
+</code></pre>
+  </noscript>
+</body>
+</html>
