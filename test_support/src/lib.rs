@@ -46,7 +46,7 @@ pub use cwd_guard::CwdGuard;
 pub use env_guard::{EnvGuard, Environment, StdEnv};
 
 /// Re-export localizer helpers for integration tests.
-pub use localizer::{localizer_test_lock, set_en_localizer};
+pub use localizer::{LocalizerGuard, localizer_test_lock, set_en_localizer};
 
 /// Re-export manifest helpers for integration tests.
 pub use manifest::ensure_manifest_exists;

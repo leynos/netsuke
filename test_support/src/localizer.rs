@@ -1,7 +1,8 @@
 //! Test helpers for localizer configuration.
 
 use netsuke::cli_localization;
-use netsuke::localization::{self, LocalizerGuard};
+use netsuke::localization;
+pub use netsuke::localization::LocalizerGuard;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// Mutex used to serialize process-wide localizer mutations in tests.
