@@ -112,21 +112,18 @@ fn target_nodes_are_classified_as_targets(#[case] edges: &[(&str, &[&str], &[&st
     }
 }
 
-#[rstest]
-#[case::plain(false, false)]
-#[case::phony(true, false)]
-#[case::always(false, true)]
-fn target_node_kind_carries_phony_and_always_flags(#[case] phony: bool, #[case] always: bool) {
+#[test]
+fn target_with_phony_flag_propagates_to_node_kind() {
     let mut graph = BuildGraph::default();
-    graph.actions.insert("a".into(), make_action(None));
+    graph
+        .actions
+        .insert("a".into(), make_action(Some("phony target")));
     add_edge(
         &mut graph,
         EdgeFixture {
             action_id: "a",
-            inputs: &["src/a.c"],
-            explicit_outputs: &["out/a"],
-            phony,
-            always,
+            explicit_outputs: &["out/phony"],
+            phony: true,
             ..EdgeFixture::default()
         },
     );
@@ -134,12 +131,76 @@ fn target_node_kind_carries_phony_and_always_flags(#[case] phony: bool, #[case] 
     let node = view
         .nodes
         .iter()
-        .find(|n| n.path == p("out/a"))
-        .expect("target node");
+        .find(|n| n.path.as_str() == "out/phony")
+        .expect("node must be present");
     assert_eq!(
         node.kind,
-        NodeKind::Target { phony, always },
-        "target NodeKind should mirror BuildEdge.phony and BuildEdge.always",
+        NodeKind::Target {
+            phony: true,
+            always: false
+        },
+        "phony flag must propagate to NodeKind::Target"
+    );
+}
+
+#[test]
+fn target_with_always_flag_propagates_to_node_kind() {
+    let mut graph = BuildGraph::default();
+    graph
+        .actions
+        .insert("b".into(), make_action(Some("always target")));
+    add_edge(
+        &mut graph,
+        EdgeFixture {
+            action_id: "b",
+            explicit_outputs: &["out/always"],
+            always: true,
+            ..EdgeFixture::default()
+        },
+    );
+    let view = GraphView::from_build_graph(&graph);
+    let node = view
+        .nodes
+        .iter()
+        .find(|n| n.path.as_str() == "out/always")
+        .expect("node must be present");
+    assert_eq!(
+        node.kind,
+        NodeKind::Target {
+            phony: false,
+            always: true
+        },
+        "always flag must propagate to NodeKind::Target"
+    );
+}
+
+#[test]
+fn target_with_no_flags_yields_plain_target_kind() {
+    let mut graph = BuildGraph::default();
+    graph
+        .actions
+        .insert("c".into(), make_action(Some("plain target")));
+    add_edge(
+        &mut graph,
+        EdgeFixture {
+            action_id: "c",
+            explicit_outputs: &["out/plain"],
+            ..EdgeFixture::default()
+        },
+    );
+    let view = GraphView::from_build_graph(&graph);
+    let node = view
+        .nodes
+        .iter()
+        .find(|n| n.path.as_str() == "out/plain")
+        .expect("node must be present");
+    assert_eq!(
+        node.kind,
+        NodeKind::Target {
+            phony: false,
+            always: false
+        },
+        "target with no flags must yield plain NodeKind::Target"
     );
 }
 
