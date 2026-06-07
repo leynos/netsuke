@@ -616,9 +616,10 @@ policy is configured by these global options:
   rules/targets to be properly configured for cleaning in Ninja (often via
   `phony` targets).
 
-- `graph`: Generates the build dependency graph by running `ninja -t graph` on
-  the generated `build.ninja`, outputting DOT to stdout (suitable for
-  Graphviz). Future versions may support other formats like `--html`.
+- `graph`: Renders the build dependency graph in-process. Writes a Graphviz
+  DOT document to stdout by default; `--html` selects a self-contained HTML
+  page instead, and `--output <FILE>` (with `-` for stdout) chooses the
+  destination. Ninja is not invoked. See section 12.2 for details.
 
 ### Configuration and Localization
 
@@ -1170,41 +1171,64 @@ state is available, depending on Ninja's behaviour.
 
 ### 12.2 The `graph` subcommand
 
-The `graph` subcommand generates a Graphviz DOT representation of the build
-dependency graph:
+The `graph` subcommand renders the build dependency graph in-process. It does
+not invoke Ninja; the projection is computed directly from the parsed manifest
+so the output is reproducible and does not depend on Ninja being installed.
+
+By default `graph` writes a Graphviz DOT document to stdout:
 
 ```sh
 netsuke graph > build.dot
 dot -Tpng build.dot -o build.png
 ```
 
-This produces a visual diagram showing:
+Use `--output <FILE>` to write the artefact to disk instead. The literal `-`
+selects stdout (matching the existing `manifest -` convention):
 
-- Nodes for each target and action.
-- Edges showing explicit dependencies (`sources:`, `deps:`).
-- Order-only dependencies (`order_only_deps:`).
+```sh
+netsuke graph --output build.dot
+netsuke graph --output -        # equivalent to omitting --output
+```
 
-**Interpreting the output:**
+Relative `--output` paths resolve under the `-C/--directory` working directory
+when one is configured, mirroring `build --emit`.
+
+Use `--html` to render a self-contained HTML page instead of DOT. The page
+contains a server-rendered SVG, a screen-reader-friendly textual outline of
+every target and its inputs, and a `<noscript>` block restating the graph in
+DOT for fully JavaScript-free viewing. No network access is required and no
+external assets are referenced:
+
+```sh
+netsuke graph --html --output graph.html
+```
+
+Open `graph.html` in any modern browser. The SVG layout is hierarchical: source
+files appear on the left, intermediate targets in the middle, and the
+right-most column contains the leaves of the dependency graph. Order-only
+dependencies are rendered as dashed edges; implicit outputs use a dotted
+style.
+
+**Interpreting the DOT output:**
 
 - Each node is labelled with the target or action name.
 - Directed edges (`->`) point from prerequisites to dependants.
-- Order-only dependencies are shown as dashed edges (if Graphviz is configured
-  to distinguish them).
+- Order-only dependencies are shown as dashed edges.
+- Implicit outputs are shown as dotted edges.
 
-**Example workflow:**
-
-To understand why a particular target rebuilds when a file changes:
+**Example workflow:** trace a specific target's prerequisites:
 
 ```sh
 netsuke graph | grep -A5 -B5 my_target
 ```
 
-This shows the subgraph around `my_target` and helps trace back to its
-dependencies.
-
-**Requirements:** The `graph` command requires a valid manifest. If the
+**Requirements:** the `graph` command requires a valid manifest. If the
 manifest is syntactically invalid or contains structural errors, `graph` will
-fail before rendering any DOT output.
+fail before writing any output.
+
+**Note on output streams:** `--diag-json` governs diagnostic output on stderr;
+the graph artefact on stdout (or in the chosen `--output` file) is unchanged
+when `--diag-json` is set.
 
 ### 12.3 The `manifest` subcommand
 

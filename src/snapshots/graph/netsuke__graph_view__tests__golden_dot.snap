@@ -1,0 +1,22 @@
+---
+source: src/graph_view/tests.rs
+expression: render_dot(&view)
+---
+digraph netsuke {
+  rankdir="LR"
+  node [shape=box, fontsize=10]
+  edge [fontsize=10]
+  "build" [label="build"]
+  "include/config.h" [label="include/config.h"]
+  "out/app" [label="out/app\ncompile app", color="#003366"]
+  "out/app.d" [label="out/app.d\ncompile app", color="#003366"]
+  "src/main.c" [label="src/main.c"]
+  "build" -> "out/app" [style=dashed]
+  "build" -> "out/app.d" [style=dashed]
+  "include/config.h" -> "out/app" [style=bold]
+  "include/config.h" -> "out/app.d" [style=bold]
+  "src/main.c" -> "out/app"
+  "src/main.c" -> "out/app.d" [style=dotted]
+  // default targets:
+  // - out/app
+}

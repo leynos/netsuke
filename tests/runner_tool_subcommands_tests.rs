@@ -1,7 +1,8 @@
 //! Integration tests for Netsuke tool subcommands.
 //!
-//! Covers the `clean` and `graph` subcommands which invoke Ninja tools via
-//! `ninja -t <tool>`.
+//! Covers the `clean` subcommand which still invokes `ninja -t <tool>`. The
+//! `graph` subcommand renders in-process and is covered by
+//! `tests/runner_graph_tests.rs`.
 
 use anyhow::{Context, Result, bail, ensure};
 use netsuke::cli::{Cli, Commands};
@@ -42,7 +43,6 @@ fn assert_ninja_failure_propagates(command: Commands) -> Result<()> {
     let (temp, manifest_path) = create_test_manifest()?;
     let expected_tool = match &command {
         Commands::Clean => "clean",
-        Commands::Graph => "graph",
         other => bail!("unsupported command for this helper: {other:?}"),
     };
     let cli = Cli {
@@ -150,27 +150,10 @@ fn ninja_expecting_clean() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)
     Ok((ninja_dir, ninja_path, guard))
 }
 
-/// Fixture: point `NINJA_ENV` at a fake `ninja` that expects `-t graph`.
-///
-/// Returns: (tempdir holding ninja, path to ninja, `NINJA_ENV` guard)
-#[fixture]
-fn ninja_expecting_graph() -> Result<(tempfile::TempDir, PathBuf, NinjaEnvGuard)> {
-    let (ninja_dir, ninja_path) = check_ninja::fake_ninja_expect_tool(ToolName::new("graph"))?;
-    let env = SystemEnv::new();
-    let guard = override_ninja_env(&env, ninja_path.as_path());
-    Ok((ninja_dir, ninja_path, guard))
-}
-
 #[cfg(unix)]
 #[rstest]
 fn run_clean_fails_with_failing_ninja() -> Result<()> {
     assert_ninja_failure_propagates(Commands::Clean)
-}
-
-#[cfg(unix)]
-#[rstest]
-fn run_graph_fails_with_failing_ninja() -> Result<()> {
-    assert_ninja_failure_propagates(Commands::Graph)
 }
 
 #[cfg(unix)]
@@ -181,12 +164,6 @@ fn run_graph_fails_with_failing_ninja() -> Result<()> {
     "clean"
 )]
 #[case(None, Commands::Clean, "clean")]
-#[case(
-    Some(ninja_expecting_graph as NinjaToolFixture),
-    Commands::Graph,
-    "graph"
-)]
-#[case(None, Commands::Graph, "graph")]
 fn run_tool_subcommand_table_cases(
     #[case] fixture: Option<NinjaToolFixture>,
     #[case] command: Commands,

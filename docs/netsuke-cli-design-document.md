@@ -278,12 +278,14 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   translate CLI output (especially tables or complex structures) into
   accessible formats like CSV or HTML. In line with this, the `netsuke graph`
   command outputs the dependency graph in DOT format by default, but
-  `netsuke graph --html` produces an HTML visualization (useful for sighted
-  users). For an accessible alternative, `netsuke graph --json` outputs the
-  graph data as JSON. A screen reader user could take that JSON and navigate
-  the structure with a JSON viewer, or script custom queries, rather than
-  trying to parse a raw DOT text dump (which is essentially a visually
-  structured representation). Documentation describes the structure of such
+  `netsuke graph --html` (shipped in milestone 3.4.5) produces a
+  self-contained HTML visualization for sighted users; the HTML page also
+  embeds a `<details>` textual outline so screen-reader users get a
+  structured fallback. A `--json` view of the same graph data is the open
+  follow-up (roadmap item `3.15.6`); when it ships, screen-reader users will
+  be able to take that JSON and navigate the structure with a JSON viewer,
+  or script custom queries, rather than parsing the visually-structured DOT
+  text dump. Documentation describes the structure of such
   outputs clearly so users know what to expect (e.g., which fields appear in
   the JSON), per Recommendation 3 about documenting output structure in advance.
 

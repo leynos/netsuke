@@ -100,6 +100,22 @@ fn extract_build(world: &TestWorld) -> Result<(Vec<String>, Option<PathBuf>)> {
         .context("expected build command")
 }
 
+/// Extract graph command args.
+fn extract_graph_args(world: &TestWorld) -> Result<netsuke::cli::GraphArgs> {
+    match get_command(world)? {
+        Commands::Graph(args) => Ok(args),
+        other => bail!("expected graph command, got {other:?}"),
+    }
+}
+
+/// Extract manifest command file path.
+fn extract_manifest_command_file(world: &TestWorld) -> Result<PathBuf> {
+    match get_command(world)? {
+        Commands::Manifest { file } => Ok(file),
+        other => bail!("expected manifest command, got {other:?}"),
+    }
+}
+
 /// Get the parsed CLI command.
 fn get_command(world: &TestWorld) -> Result<Commands> {
     world
@@ -142,7 +158,7 @@ impl ExpectedCommand {
             (self, actual),
             (Self::Build, Commands::Build(_))
                 | (Self::Clean, Commands::Clean)
-                | (Self::Graph, Commands::Graph)
+                | (Self::Graph, Commands::Graph(_))
                 | (Self::Manifest, Commands::Manifest { .. })
         )
     }
@@ -220,29 +236,27 @@ fn verify_first_target(world: &TestWorld, target: &TargetName) -> Result<()> {
     Ok(())
 }
 
+/// Assert that an optional path equals the expected value.
+fn ensure_optional_path(actual: Option<PathBuf>, expected: &PathString, label: &str) -> Result<()> {
+    ensure!(
+        actual.as_deref() == Some(expected.as_path()),
+        "expected {label} {expected}, got {actual:?}",
+    );
+    drop(actual);
+    Ok(())
+}
+
 fn verify_working_directory(world: &TestWorld, directory: &PathString) -> Result<()> {
     let actual = world
         .cli
         .with_ref(|cli| cli.directory.clone())
         .context("CLI has not been parsed")?;
-    ensure!(
-        actual.as_deref() == Some(directory.as_path()),
-        "expected working directory {}, got {:?}",
-        directory,
-        actual
-    );
-    Ok(())
+    ensure_optional_path(actual, directory, "working directory")
 }
 
 fn verify_emit_path(world: &TestWorld, path: &PathString) -> Result<()> {
     let (_, emit) = extract_build(world)?;
-    ensure!(
-        emit.as_deref() == Some(path.as_path()),
-        "expected emit path {}, got {:?}",
-        path,
-        emit
-    );
-    Ok(())
+    ensure_optional_path(emit, path, "emit path")
 }
 
 fn verify_cli_policy_allows(world: &TestWorld, url: &UrlString) -> Result<()> {
@@ -276,20 +290,26 @@ fn verify_cli_policy_rejects(
     Ok(())
 }
 
+fn verify_graph_output_path(world: &TestWorld, path: &PathString) -> Result<()> {
+    let output = extract_graph_args(world)?.output;
+    ensure_optional_path(output, path, "graph output path")
+}
+
+fn verify_graph_html_set(world: &TestWorld) -> Result<()> {
+    let args = extract_graph_args(world)?;
+    ensure!(args.html, "expected graph --html to be set");
+    Ok(())
+}
+
 fn verify_manifest_command_path(world: &TestWorld, path: &PathString) -> Result<()> {
-    let command = get_command(world)?;
-    match command {
-        Commands::Manifest { file } => {
-            ensure!(
-                file == path.to_path_buf(),
-                "expected manifest output {}, got {}",
-                path,
-                file.display()
-            );
-            Ok(())
-        }
-        other => bail!("expected manifest command, got {other:?}"),
-    }
+    let file = extract_manifest_command_file(world)?;
+    ensure!(
+        file == path.to_path_buf(),
+        "expected manifest output {}, got {}",
+        path,
+        file.display()
+    );
+    Ok(())
 }
 
 fn verify_error_contains(world: &TestWorld, fragment: &ErrorFragment) -> Result<()> {
@@ -378,6 +398,16 @@ fn cli_policy_rejects(world: &TestWorld, url: UrlString, message: ErrorFragment)
 #[then("the manifest command path is {path:string}")]
 fn manifest_command_path(world: &TestWorld, path: PathString) -> Result<()> {
     verify_manifest_command_path(world, &path)
+}
+
+#[then("the graph output path is {path:string}")]
+fn graph_output_path(world: &TestWorld, path: PathString) -> Result<()> {
+    verify_graph_output_path(world, &path)
+}
+
+#[then("the graph html flag is set")]
+fn graph_html_flag_is_set(world: &TestWorld) -> Result<()> {
+    verify_graph_html_set(world)
 }
 
 #[then]

@@ -30,6 +30,7 @@ pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
 pub use ninja_env::NINJA_ENV;
 
+mod graph;
 mod path_helpers;
 mod process;
 #[cfg(doctest)]
@@ -172,15 +173,7 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
             reporter.as_ref(),
             progress_enabled,
         ),
-        Commands::Graph => handle_ninja_tool(
-            cli,
-            NinjaToolSpec {
-                name: "graph",
-                key: keys::STATUS_TOOL_GRAPH.into(),
-            },
-            reporter.as_ref(),
-            progress_enabled,
-        ),
+        Commands::Graph(args) => graph::handle_graph(cli, &args, reporter.as_ref()),
     }
 }
 
@@ -362,7 +355,7 @@ fn generate_ninja(
     Ok(NinjaContent::new(ninja))
 }
 
-fn load_manifest_with_stage_reporting(
+pub(super) fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,
     reporter: &dyn StatusReporter,

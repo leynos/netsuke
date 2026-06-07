@@ -111,6 +111,64 @@ fn record_result(world: &TestWorld, result: Result<(), String>) {
     }
 }
 
+fn temp_workspace_file(world: &TestWorld, name: &str) -> Result<PathBuf> {
+    let temp = world.temp_dir.borrow();
+    let dir = temp
+        .as_ref()
+        .context("CLI temp directory has not been initialised")?;
+    Ok(dir.path().join(name))
+}
+
+fn extract_svg_island(html: &str) -> Result<&str> {
+    let start = html
+        .find("<svg")
+        .context("HTML output should contain an opening <svg> tag")?;
+    let end = html
+        .find("</svg>")
+        .map(|index| index + "</svg>".len())
+        .context("HTML output should contain a closing </svg> tag")?;
+    ensure!(start < end, "closing </svg> should follow opening <svg>");
+    html.get(start..end)
+        .context("SVG tag bounds should be valid UTF-8")
+}
+
+fn tag_name(tag: &str) -> &str {
+    tag.trim_start_matches('/')
+        .trim_end_matches('/')
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+}
+
+fn assert_well_formed_xml_fragment(fragment: &str) -> Result<()> {
+    let mut stack: Vec<&str> = Vec::new();
+    for raw_tag in fragment
+        .split('<')
+        .skip(1)
+        .filter_map(|part| part.split('>').next())
+    {
+        if raw_tag.starts_with('!') || raw_tag.starts_with('?') {
+            continue;
+        }
+        if raw_tag.starts_with('/') {
+            let name = tag_name(raw_tag);
+            let Some(open) = stack.pop() else {
+                anyhow::bail!("closing tag </{name}> had no matching opening tag");
+            };
+            ensure!(
+                open == name,
+                "closing tag </{name}> did not match opening <{open}>"
+            );
+        } else if !raw_tag.ends_with('/') {
+            let name = tag_name(raw_tag);
+            ensure!(!name.is_empty(), "empty XML tag in SVG fragment");
+            stack.push(name);
+        }
+    }
+    ensure!(stack.is_empty(), "unclosed SVG tags remained: {stack:?}");
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Given steps
 // ---------------------------------------------------------------------------
@@ -232,7 +290,6 @@ fn run(world: &TestWorld) -> Result<()> {
 
 #[cfg(unix)]
 fn run_subcommand(world: &TestWorld) -> Result<()> {
-    prepare_cli_with_absolute_file(world)?;
     let result = world
         .cli
         .with_ref(|cli| runner::run(cli, output_prefs::resolve(None)))
@@ -245,12 +302,14 @@ fn run_subcommand(world: &TestWorld) -> Result<()> {
 #[cfg(unix)]
 #[when("the clean process is run")]
 fn run_clean(world: &TestWorld) -> Result<()> {
+    prepare_cli_with_absolute_file(world)?;
     run_subcommand(world)
 }
 
 #[cfg(unix)]
 #[when("the graph process is run")]
 fn run_graph(world: &TestWorld) -> Result<()> {
+    prepare_cli_with_directory(world)?;
     run_subcommand(world)
 }
 
@@ -295,4 +354,13 @@ fn command_should_fail_with_error(world: &TestWorld, fragment: &str) -> Result<(
         "expected error message to contain '{fragment}', but was '{actual}'",
     );
     Ok(())
+}
+
+#[then("the graph HTML file {name:string} should contain well-formed SVG")]
+fn graph_html_file_should_contain_well_formed_svg(world: &TestWorld, name: &str) -> Result<()> {
+    let path = temp_workspace_file(world, name)?;
+    let html = fs::read_to_string(&path)
+        .with_context(|| format!("read graph HTML file {}", path.display()))?;
+    let svg = extract_svg_island(&html)?;
+    assert_well_formed_xml_fragment(svg)
 }

@@ -40,11 +40,7 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
     Ok(tmp)
 }
 
-pub fn write_ninja_file_utf8(
-    dir: &cap_fs::Dir,
-    path: &Utf8Path,
-    content: &NinjaContent,
-) -> AnyResult<()> {
+pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -> AnyResult<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {
         dir.create_dir_all(parent.as_str()).with_context(|| {
             localization::message(keys::RUNNER_IO_CREATE_PARENT_DIR)
@@ -54,10 +50,9 @@ pub fn write_ninja_file_utf8(
     let mut file = dir.create(path.as_str()).with_context(|| {
         localization::message(keys::RUNNER_IO_CREATE_NINJA_FILE).with_arg("path", path.as_str())
     })?;
-    file.write_all(content.as_str().as_bytes())
-        .with_context(|| {
-            localization::message(keys::RUNNER_IO_WRITE_NINJA_FILE).with_arg("path", path.as_str())
-        })?;
+    file.write_all(content.as_bytes()).with_context(|| {
+        localization::message(keys::RUNNER_IO_WRITE_NINJA_FILE).with_arg("path", path.as_str())
+    })?;
     file.flush().with_context(|| {
         localization::message(keys::RUNNER_IO_FLUSH_NINJA_FILE).with_arg("path", path.as_str())
     })?;
@@ -97,6 +92,11 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
 }
 
 pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
+    write_text_file(path, content.as_str())?;
+    Ok(())
+}
+
+pub fn write_text_file(path: &Path, content: &str) -> AnyResult<()> {
     let utf8_path = Utf8Path::from_path(path).ok_or_else(|| {
         anyhow!(
             localization::message(keys::RUNNER_IO_NON_UTF8_PATH)
@@ -105,8 +105,8 @@ pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
         )
     })?;
     let (dir, relative) = derive_dir_and_relative(utf8_path)?;
-    write_ninja_file_utf8(&dir, &relative, content)?;
-    info!("Wrote Ninja file to {utf8_path}");
+    write_text_file_utf8(&dir, &relative, content)?;
+    info!("Wrote file to {utf8_path}");
     Ok(())
 }
 
@@ -131,8 +131,12 @@ fn flush_ignoring_broken_pipe(writer: &mut impl Write) -> io::Result<()> {
 }
 
 pub fn write_ninja_stdout(content: &NinjaContent) -> AnyResult<()> {
+    write_text_stdout(content.as_str())
+}
+
+pub fn write_text_stdout(content: &str) -> AnyResult<()> {
     let mut stdout = io::stdout().lock();
-    write_all_ignoring_broken_pipe(&mut stdout, content.as_str().as_bytes())
+    write_all_ignoring_broken_pipe(&mut stdout, content.as_bytes())
         .context(localization::message(keys::RUNNER_IO_WRITE_STDOUT))?;
     flush_ignoring_broken_pipe(&mut stdout)
         .context(localization::message(keys::RUNNER_IO_FLUSH_STDOUT))?;
@@ -212,21 +216,20 @@ mod tests {
     }
 
     #[test]
-    fn write_ninja_file_utf8_creates_parent_directories() -> Result<()> {
+    fn write_text_file_utf8_creates_parent_directories() -> Result<()> {
         let temp = tempfile::tempdir().context("create temp dir")?;
         let dir = cap_fs::Dir::open_ambient_dir(temp.path(), ambient_authority())
             .context("open temp dir")?;
         let nested = Utf8PathBuf::from("nested/build.ninja");
-        let content = NinjaContent::new(String::from("build all: phony"));
+        let content = "build all: phony";
 
-        write_ninja_file_utf8(&dir, &nested, &content)?;
+        write_text_file_utf8(&dir, &nested, content)?;
 
         let nested_path = temp.path().join("nested").join("build.ninja");
         let written = std::fs::read_to_string(&nested_path).context("read nested file")?;
         ensure!(
-            written == content.as_str(),
-            "nested file contents '{written}' did not match '{expected}'",
-            expected = content.as_str()
+            written == content,
+            "nested file contents '{written}' did not match '{content}'"
         );
         let parent = nested_path.parent().context("determine parent path")?;
         ensure!(

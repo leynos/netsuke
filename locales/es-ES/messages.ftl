@@ -29,14 +29,18 @@ cli.subcommand.build.about = Compila objetivos definidos en el manifiesto (prede
 cli.subcommand.build.long_about = Compila los objetivos solicitados; si no se indican, usa los predeterminados del manifiesto.
 cli.subcommand.clean.about = Elimina artefactos de compilación mediante Ninja.
 cli.subcommand.clean.long_about = Genera un archivo Ninja temporal y ejecuta `ninja -t clean`.
-cli.subcommand.graph.about = Emite el grafo de dependencias en formato DOT.
-cli.subcommand.graph.long_about = Genera un archivo Ninja temporal y ejecuta `ninja -t graph` para emitir DOT.
+cli.subcommand.graph.about = Emite el grafo de dependencias de compilación. El formato predeterminado es DOT.
+cli.subcommand.graph.long_about = Proyecta el manifiesto Netsuke en un grafo canónico y lo escribe en formato Graphviz DOT, o como página HTML autocontenida con `--html`. Use `--output <ARCHIVO>` para escribir a un archivo; `-` escribe en stdout.
 cli.subcommand.manifest.about = Escribe el manifiesto Ninja sin ejecutar Ninja.
 cli.subcommand.manifest.long_about = Genera el archivo Ninja y lo escribe en la ruta indicada o '-' para stdout.
 
 # Texto de ayuda para opciones del subcomando build.
 cli.subcommand.build.flag.emit.help = Escribir el archivo Ninja generado en esta ruta y conservarlo.
 cli.subcommand.build.flag.targets.help = Objetivos a compilar (usa los predeterminados del manifiesto si se omite).
+
+# Texto de ayuda para opciones del subcomando graph.
+cli.subcommand.graph.flag.html.help = Renderizar el grafo como una página HTML autocontenida en lugar de DOT.
+cli.subcommand.graph.flag.output.help = Escribir el artefacto del grafo en ARCHIVO; use `-` para stdout.
 
 # Texto de ayuda para argumentos del subcomando manifest.
 cli.subcommand.manifest.flag.file.help = Ruta de salida para el archivo Ninja (use '-' para stdout).
@@ -79,6 +83,7 @@ runner.context.load_manifest = No se pudo cargar el manifiesto en { $path }.
 runner.context.serialise_manifest = No se pudo serializar el manifiesto.
 runner.context.build_graph = No se pudo construir el grafo desde el manifiesto.
 runner.context.generate_ninja = No se pudo generar el manifiesto Ninja.
+runner.context.render_graph = No se pudo renderizar el artefacto de grafo.
 
 runner.io.create_temp_file = No se pudo crear el archivo Ninja temporal.
 runner.io.write_temp_ninja = No se pudo escribir el archivo Ninja temporal.
@@ -346,6 +351,8 @@ status.stage.final_rendering = Deserializando y renderizando valores del manifie
 status.stage.ir_generation_validation = Construyendo y validando el grafo de dependencias
 status.stage.ninja_synthesis = Sintetizando el plan de compilación Ninja
 status.stage.ninja_synthesis_execute = Sintetizando el plan Ninja y ejecutando { $tool }
+status.stage.graph_rendering = Renderizando el artefacto de grafo
+status.stage.graph_rendering_with_tool = Renderizando { $tool }
 status.complete = { $tool } completo.
 status.timing.summary_header = Resumen de tiempos por etapa:
 status.timing.stage_line = - { $label }: { $duration }
@@ -353,7 +360,16 @@ status.timing.total_line = Tiempo total de la canalización: { $duration }
 status.tool.build = Compilación
 status.tool.clean = Limpieza
 status.tool.graph = Grafo
+status.tool.graph_html = Grafo (HTML)
 status.tool.manifest = Manifiesto
+
+# Cadenas del renderizador HTML del grafo.
+graph.html.title = Grafo de compilación de Netsuke
+graph.html.heading = Grafo de compilación de Netsuke
+graph.html.description = Grafo de compilación renderizado por Netsuke
+graph.html.outline.summary = Objetivos y dependencias (esquema textual)
+graph.html.outline.no_inputs = Sin entradas
+graph.html.noscript.notice = JavaScript está desactivado. El esquema textual anterior contiene el grafo completo; el código DOT figura a continuación.
 
 # Preferencias de accesibilidad.
 cli.flag.no_emoji.help = Suprimir glifos emoji en la salida.

@@ -2,5 +2,8 @@ target/
 **/*.rs.bk
 **/*~
 .crush
+.claude/
 build.ninja
 *:Zone.Identifier
+/graph.dot
+/graph.html

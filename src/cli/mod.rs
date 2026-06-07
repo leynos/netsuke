@@ -19,7 +19,7 @@ pub use config::{CliConfig, ColourPolicy, OutputFormat, SpinnerMode, Theme};
 pub use diag::resolve_merged_diag_json;
 pub use merge::merge_with_config;
 pub use parser::{
-    BuildArgs, Cli, Commands, diag_json_hint_from_args, locale_hint_from_args,
+    BuildArgs, Cli, Commands, GraphArgs, diag_json_hint_from_args, locale_hint_from_args,
     parse_with_localizer_from,
 };
 

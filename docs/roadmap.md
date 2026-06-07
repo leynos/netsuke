@@ -101,10 +101,10 @@ and agents.
 
 ### 3.4. Graph and explanation work
 
-- [ ] 3.4.5. Extend the graph subcommand with an optional `--html` renderer.
-  - [ ] Keep raw graph data available for automation.
-  - [ ] Add `--output <FILE>` for file-based graph artefacts.
-  - [ ] Document how `graph --html --output graph.html` differs from
+- [x] 3.4.5. Extend the graph subcommand with an optional `--html` renderer.
+  - [x] Keep raw graph data available for automation.
+  - [x] Add `--output <FILE>` for file-based graph artefacts.
+  - [x] Document how `graph --html --output graph.html` differs from
     structured graph inspection.
 
 - [ ] 3.4.6. Evaluate whether `netsuke explain <code>` should exist.

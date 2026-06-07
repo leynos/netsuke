@@ -113,6 +113,7 @@ const fn verify_public_api_symbols() {
     const _: usize = std::mem::size_of::<cli::BuildArgs>();
     const _: usize = std::mem::size_of::<cli::CliConfig>();
     const _: usize = std::mem::size_of::<cli::Commands>();
+    const _: usize = std::mem::size_of::<cli::GraphArgs>();
     const _: usize = std::mem::size_of::<cli::Theme>();
     const _: usize = std::mem::size_of::<HostPattern>();
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;

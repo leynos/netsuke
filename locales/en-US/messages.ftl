@@ -29,14 +29,18 @@ cli.subcommand.build.about = Build targets defined in the manifest (default).
 cli.subcommand.build.long_about = Build the requested targets; when none are provided, use the manifest defaults.
 cli.subcommand.clean.about = Remove build artefacts via Ninja.
 cli.subcommand.clean.long_about = Generate a temporary Ninja file, then run `ninja -t clean`.
-cli.subcommand.graph.about = Emit the dependency graph in DOT format.
-cli.subcommand.graph.long_about = Generate a temporary Ninja file, then run `ninja -t graph` to emit DOT output.
+cli.subcommand.graph.about = Emit the build dependency graph. Default format is DOT.
+cli.subcommand.graph.long_about = Project the parsed Netsuke manifest into a canonical build graph and write it as Graphviz DOT, or as a self-contained HTML page with `--html`. Use `--output <FILE>` to write to a file; `-` writes to stdout.
 cli.subcommand.manifest.about = Write the generated Ninja manifest without running Ninja.
 cli.subcommand.manifest.long_about = Generate the Ninja file and write it to the specified path or '-' for stdout.
 
 # Build subcommand flag help text.
 cli.subcommand.build.flag.emit.help = Write the generated Ninja file to this path and keep it.
 cli.subcommand.build.flag.targets.help = Targets to build (uses manifest defaults if omitted).
+
+# Graph subcommand flag help text.
+cli.subcommand.graph.flag.html.help = Render the graph as a self-contained HTML page instead of DOT.
+cli.subcommand.graph.flag.output.help = Write the graph artefact to FILE; use `-` for stdout.
 
 # Manifest subcommand argument help text.
 cli.subcommand.manifest.flag.file.help = Output path for the Ninja file (use '-' for stdout).
@@ -79,6 +83,7 @@ runner.context.load_manifest = Failed to load manifest at { $path }.
 runner.context.serialise_manifest = Failed to serialise manifest.
 runner.context.build_graph = Failed to build graph from the manifest.
 runner.context.generate_ninja = Failed to generate the Ninja manifest.
+runner.context.render_graph = Failed to render the graph artefact.
 
 runner.io.create_temp_file = Failed to create temporary Ninja file.
 runner.io.write_temp_ninja = Failed to write temporary Ninja file.
@@ -346,6 +351,8 @@ status.stage.final_rendering = Deserializing and rendering manifest values
 status.stage.ir_generation_validation = Building and validating dependency graph
 status.stage.ninja_synthesis = Synthesizing Ninja build plan
 status.stage.ninja_synthesis_execute = Synthesizing Ninja plan and executing { $tool }
+status.stage.graph_rendering = Rendering graph artefact
+status.stage.graph_rendering_with_tool = Rendering { $tool }
 status.complete = { $tool } complete.
 status.timing.summary_header = Stage timing summary:
 status.timing.stage_line = - { $label }: { $duration }
@@ -353,7 +360,16 @@ status.timing.total_line = Total pipeline time: { $duration }
 status.tool.build = Build
 status.tool.clean = Clean
 status.tool.graph = Graph
+status.tool.graph_html = Graph (HTML)
 status.tool.manifest = Manifest
+
+# Graph HTML renderer strings.
+graph.html.title = Netsuke build graph
+graph.html.heading = Netsuke build graph
+graph.html.description = Build graph rendered by Netsuke
+graph.html.outline.summary = Targets and dependencies (text outline)
+graph.html.outline.no_inputs = No inputs
+graph.html.noscript.notice = JavaScript is disabled. The text outline above is the full graph; the DOT source follows.
 
 # Accessibility preferences.
 cli.flag.no_emoji.help = Suppress emoji glyphs in output.

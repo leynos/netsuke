@@ -50,16 +50,17 @@ pub(crate) fn localize_command(mut command: Command, localizer: &dyn Localizer) 
 
 /// Localise help text for all arguments in a command.
 ///
-/// When `subcommand_name` is `None`, keys are looked up as `cli.flag.{arg_id}.help`.
-/// When a subcommand name is provided, keys are `cli.subcommand.{name}.flag.{arg_id}.help`.
+/// When `subcommand` is `None`, keys are looked up as `cli.flag.{arg_id}.help`.
+/// When a subcommand is provided, keys are
+/// `cli.subcommand.{name}.flag.{arg_id}.help`.
 fn localize_arguments(
     command: Command,
     localizer: &dyn Localizer,
-    subcommand_name: Option<&str>,
+    subcommand: Option<Subcommand>,
 ) -> Command {
     command.mut_args(|arg| {
         let arg_id = arg.get_id().as_str();
-        let Some(key) = flag_help_key(arg_id, subcommand_name) else {
+        let Some(key) = flag_help_key(arg_id, subcommand) else {
             return arg;
         };
         if let Some(help) = arg
@@ -90,11 +91,11 @@ fn localize_field(
 
 fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
     for subcommand in command.get_subcommands_mut() {
-        let name = subcommand.get_name().to_owned();
+        let known = Subcommand::from_name(subcommand.get_name());
         let mut updated = std::mem::take(subcommand);
         if let Some(localized) = localize_field(
             localizer,
-            subcommand_about_key(&name),
+            known.map(subcommand_about_key),
             updated
                 .get_about()
                 .map(|s: &clap::builder::StyledStr| s.to_string()),
@@ -104,7 +105,7 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
 
         if let Some(localized) = localize_field(
             localizer,
-            subcommand_long_about_key(&name),
+            known.map(subcommand_long_about_key),
             updated
                 .get_long_about()
                 .map(|s: &clap::builder::StyledStr| s.to_string()),
@@ -113,66 +114,109 @@ fn localize_subcommands(command: &mut Command, localizer: &dyn Localizer) {
         }
 
         // Localise subcommand argument help text.
-        updated = localize_arguments(updated, localizer, Some(&name));
+        updated = localize_arguments(updated, localizer, known);
 
         *subcommand = updated;
     }
 }
 
-fn flag_help_key(arg_id: &str, subcommand_name: Option<&str>) -> Option<&'static str> {
-    match subcommand_name {
-        None => match arg_id {
-            "file" => Some(keys::CLI_FLAG_FILE_HELP),
-            "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),
-            "config" => Some(keys::CLI_FLAG_CONFIG_HELP),
-            "jobs" => Some(keys::CLI_FLAG_JOBS_HELP),
-            "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
-            "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),
-            "fetch_allow_scheme" => Some(keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP),
-            "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
-            "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
-            "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
-            "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
-            "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
-            "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
-            "theme" => Some(keys::CLI_FLAG_THEME_HELP),
-            "colour_policy" => Some(keys::CLI_FLAG_COLOUR_POLICY_HELP),
-            "spinner_mode" => Some(keys::CLI_FLAG_SPINNER_MODE_HELP),
-            "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
-            "output_format" => Some(keys::CLI_FLAG_OUTPUT_FORMAT_HELP),
-            "default_targets" => Some(keys::CLI_FLAG_DEFAULT_TARGETS_HELP),
+/// The set of known CLI subcommands.
+///
+/// Replaces raw `&str` subcommand-name parameters in localisation helpers to
+/// eliminate primitive obsession.
+#[derive(Clone, Copy)]
+enum Subcommand {
+    Build,
+    Clean,
+    Graph,
+    Manifest,
+}
+
+impl Subcommand {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "build" => Some(Self::Build),
+            "clean" => Some(Self::Clean),
+            "graph" => Some(Self::Graph),
+            "manifest" => Some(Self::Manifest),
             _ => None,
-        },
-        Some("build") => match arg_id {
-            "emit" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_EMIT_HELP),
-            "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
-            _ => None,
-        },
-        Some("manifest") => match arg_id {
-            "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
-            _ => None,
-        },
+        }
+    }
+}
+
+fn flag_help_key(arg_id: &str, subcommand: Option<Subcommand>) -> Option<&'static str> {
+    match subcommand {
+        None => top_level_flag_help_key(arg_id),
+        Some(Subcommand::Build) => build_flag_help_key(arg_id),
+        Some(Subcommand::Graph) => graph_flag_help_key(arg_id),
+        Some(Subcommand::Manifest) => manifest_flag_help_key(arg_id),
+        Some(Subcommand::Clean) => None,
+    }
+}
+
+fn top_level_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "file" => Some(keys::CLI_FLAG_FILE_HELP),
+        "directory" => Some(keys::CLI_FLAG_DIRECTORY_HELP),
+        "config" => Some(keys::CLI_FLAG_CONFIG_HELP),
+        "jobs" => Some(keys::CLI_FLAG_JOBS_HELP),
+        "verbose" => Some(keys::CLI_FLAG_VERBOSE_HELP),
+        "locale" => Some(keys::CLI_FLAG_LOCALE_HELP),
+        "fetch_allow_scheme" => Some(keys::CLI_FLAG_FETCH_ALLOW_SCHEME_HELP),
+        "fetch_allow_host" => Some(keys::CLI_FLAG_FETCH_ALLOW_HOST_HELP),
+        "fetch_block_host" => Some(keys::CLI_FLAG_FETCH_BLOCK_HOST_HELP),
+        "fetch_default_deny" => Some(keys::CLI_FLAG_FETCH_DEFAULT_DENY_HELP),
+        "accessible" => Some(keys::CLI_FLAG_ACCESSIBLE_HELP),
+        "progress" => Some(keys::CLI_FLAG_PROGRESS_HELP),
+        "no_emoji" => Some(keys::CLI_FLAG_NO_EMOJI_HELP),
+        "theme" => Some(keys::CLI_FLAG_THEME_HELP),
+        "colour_policy" => Some(keys::CLI_FLAG_COLOUR_POLICY_HELP),
+        "spinner_mode" => Some(keys::CLI_FLAG_SPINNER_MODE_HELP),
+        "diag_json" => Some(keys::CLI_FLAG_DIAG_JSON_HELP),
+        "output_format" => Some(keys::CLI_FLAG_OUTPUT_FORMAT_HELP),
+        "default_targets" => Some(keys::CLI_FLAG_DEFAULT_TARGETS_HELP),
         _ => None,
     }
 }
 
-fn subcommand_about_key(name: &str) -> Option<&'static str> {
-    match name {
-        "build" => Some(keys::CLI_SUBCOMMAND_BUILD_ABOUT),
-        "clean" => Some(keys::CLI_SUBCOMMAND_CLEAN_ABOUT),
-        "graph" => Some(keys::CLI_SUBCOMMAND_GRAPH_ABOUT),
-        "manifest" => Some(keys::CLI_SUBCOMMAND_MANIFEST_ABOUT),
+fn build_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "emit" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_EMIT_HELP),
+        "targets" => Some(keys::CLI_SUBCOMMAND_BUILD_FLAG_TARGETS_HELP),
         _ => None,
     }
 }
 
-fn subcommand_long_about_key(name: &str) -> Option<&'static str> {
-    match name {
-        "build" => Some(keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT),
-        "clean" => Some(keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT),
-        "graph" => Some(keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT),
-        "manifest" => Some(keys::CLI_SUBCOMMAND_MANIFEST_LONG_ABOUT),
+fn graph_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "html" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP),
+        "output" => Some(keys::CLI_SUBCOMMAND_GRAPH_FLAG_OUTPUT_HELP),
         _ => None,
+    }
+}
+
+fn manifest_flag_help_key(arg_id: &str) -> Option<&'static str> {
+    match arg_id {
+        "file" => Some(keys::CLI_SUBCOMMAND_MANIFEST_FLAG_FILE_HELP),
+        _ => None,
+    }
+}
+
+const fn subcommand_about_key(subcommand: Subcommand) -> &'static str {
+    match subcommand {
+        Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_ABOUT,
+        Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_ABOUT,
+        Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_ABOUT,
+        Subcommand::Manifest => keys::CLI_SUBCOMMAND_MANIFEST_ABOUT,
+    }
+}
+
+const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
+    match subcommand {
+        Subcommand::Build => keys::CLI_SUBCOMMAND_BUILD_LONG_ABOUT,
+        Subcommand::Clean => keys::CLI_SUBCOMMAND_CLEAN_LONG_ABOUT,
+        Subcommand::Graph => keys::CLI_SUBCOMMAND_GRAPH_LONG_ABOUT,
+        Subcommand::Manifest => keys::CLI_SUBCOMMAND_MANIFEST_LONG_ABOUT,
     }
 }
 

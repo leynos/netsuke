@@ -1,29 +1,29 @@
 @unix
 Feature: Graph subcommand execution
 
-  Scenario: Graph invokes ninja with tool flag
-    Given a fake ninja executable that expects the graph tool
-    And the CLI is parsed with "graph"
-    And the CLI uses the temporary directory
-    When the graph process is run
-    Then the command should succeed
+  The `graph` subcommand renders the build graph in-process; it no longer
+  spawns `ninja -t graph`. These scenarios assert the dispatch and CLI
+  parsing for `--output` and `--html`. End-to-end DOT content is covered by
+  `tests/runner_graph_tests.rs`.
 
-  Scenario: Graph fails when ninja fails
-    Given a fake ninja executable that exits with 1
-    And the CLI is parsed with "graph"
-    And the CLI uses the temporary directory
-    When the graph process is run
-    Then the command should fail with error "ninja exited"
-
-  Scenario: Graph respects jobs flag
-    Given a fake ninja executable that expects graph with 4 jobs
-    And the CLI is parsed with "-j 4 graph"
-    And the CLI uses the temporary directory
-    When the graph process is run
-    Then the command should succeed
-
-  Scenario: Graph fails when ninja is missing
+  Scenario: Graph runs in-process and succeeds without ninja
     Given no ninja executable is available
-    And the CLI is parsed with "graph"
+    And the CLI is parsed with "graph --output -"
+    And the CLI uses the temporary directory
     When the graph process is run
-    Then the command should fail with error "No such file or directory"
+    Then the command should succeed
+
+  Scenario: Graph writes DOT to the specified file
+    Given no ninja executable is available
+    And the CLI is parsed with "graph --output graph.dot"
+    And the CLI uses the temporary directory
+    When the graph process is run
+    Then the command should succeed
+
+  Scenario: Graph HTML contains well-formed SVG
+    Given no ninja executable is available
+    And the CLI is parsed with "graph --html --output graph.html"
+    And the CLI uses the temporary directory
+    When the graph process is run
+    Then the command should succeed
+    And the graph HTML file "graph.html" should contain well-formed SVG

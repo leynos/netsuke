@@ -8,28 +8,7 @@ use predicates::prelude::*;
 use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::fs;
-use std::path::Path;
 use tempfile::{TempDir, tempdir};
-use test_support::env::{SystemEnv, override_ninja_env};
-
-#[cfg(unix)]
-fn make_script_executable(path: &Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = fs::metadata(path)
-        .with_context(|| format!("read metadata for {}", path.display()))?
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions)
-        .with_context(|| format!("set executable bit for {}", path.display()))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn make_script_executable(_path: &Path) -> Result<()> {
-    Ok(())
-}
-
 #[fixture]
 fn temp_with_minimal_manifest() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
@@ -37,48 +16,6 @@ fn temp_with_minimal_manifest() -> Result<TempDir> {
     fs::copy("tests/data/minimal.yml", &manifest_path)
         .with_context(|| format!("copy manifest to {}", manifest_path.display()))?;
     Ok(temp)
-}
-
-fn write_fake_ninja_script(
-    path: &Path,
-    stdout_lines: &[&str],
-    stderr_marker: Option<&str>,
-) -> Result<()> {
-    let script = if cfg!(windows) {
-        let mut script = String::from("@echo off\r\n");
-        for line in stdout_lines {
-            script.push_str("echo ");
-            script.push_str(line);
-            script.push_str("\r\n");
-        }
-        if let Some(marker) = stderr_marker {
-            script.push_str("echo ");
-            script.push_str(marker);
-            script.push_str(" 1>&2\r\n");
-        }
-        script.push_str("exit /B 0\r\n");
-        script
-    } else {
-        let mut script = String::from(
-            "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone <<'NETSUKE_OUTPUT'\n",
-        );
-        for line in stdout_lines {
-            script.push_str(line);
-            script.push('\n');
-        }
-        script.push_str("NETSUKE_OUTPUT\n");
-        if let Some(marker) = stderr_marker {
-            script.push_str("printf '%s\\n' '");
-            script.push_str(marker);
-            script.push_str("' >&2\n");
-        }
-        script.push_str("exit 0\n");
-        script
-    };
-
-    fs::write(path, script)
-        .with_context(|| format!("write fake ninja script {}", path.display()))?;
-    make_script_executable(path)
 }
 
 /// Verifies that runner errors are logged to stderr.
@@ -273,45 +210,30 @@ fn output_format_json_formats_config_load_failures_as_json() -> Result<()> {
 }
 
 #[rstest]
-fn diag_json_success_discards_child_stderr(
+fn diag_json_success_graph_keeps_clean_stderr(
     temp_with_minimal_manifest: Result<TempDir>,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
 
-    let ninja_temp = tempdir().context("create fake ninja dir")?;
-    let ninja_path = if cfg!(windows) {
-        ninja_temp.path().join("fake-ninja.cmd")
-    } else {
-        ninja_temp.path().join("fake-ninja")
-    };
-    write_fake_ninja_script(
-        &ninja_path,
-        &["digraph G { hello -> world; }"],
-        Some("NINJA_STDERR_MARKER"),
-    )?;
-    let env = SystemEnv::new();
-    let _guard = override_ninja_env(&env, &ninja_path);
-
+    // `graph` renders in-process and never spawns Ninja, so no child stderr
+    // is produced. Verify `--diag-json graph` still emits the DOT graph on
+    // stdout and keeps stderr empty.
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
         .arg("--diag-json")
         .arg("graph")
         .output()
-        .context("run netsuke graph with fake ninja")?;
+        .context("run netsuke graph")?;
 
     ensure!(output.status.success(), "expected graph command success");
     ensure!(
         output.stderr.is_empty(),
-        "stderr should stay empty in JSON mode even when ninja writes to stderr"
+        "stderr should stay empty in JSON mode"
     );
     let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
     ensure!(
-        stdout.contains("digraph G"),
-        "stdout should keep graph output"
-    );
-    ensure!(
-        !stdout.contains("NINJA_STDERR_MARKER"),
-        "child stderr should not leak into stdout"
+        stdout.contains("digraph netsuke"),
+        "stdout should carry the DOT graph; got: {stdout}"
     );
     Ok(())
 }

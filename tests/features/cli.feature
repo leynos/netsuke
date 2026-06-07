@@ -20,6 +20,31 @@ Feature: CLI parsing
     And the command is graph
     And the job count is 2
 
+  Scenario: Graph command accepts --output
+    When the CLI is parsed with "graph --output build.dot"
+    Then parsing succeeds
+    And the command is graph
+    And the graph output path is "build.dot"
+
+  Scenario: Graph command --output accepts stdout sentinel
+    When the CLI is parsed with "graph --output -"
+    Then parsing succeeds
+    And the command is graph
+    And the graph output path is "-"
+
+  Scenario: Graph command accepts --html
+    When the CLI is parsed with "graph --html"
+    Then parsing succeeds
+    And the command is graph
+    And the graph html flag is set
+
+  Scenario: Graph command accepts --html with --output
+    When the CLI is parsed with "graph --html --output graph.html"
+    Then parsing succeeds
+    And the command is graph
+    And the graph html flag is set
+    And the graph output path is "graph.html"
+
   Scenario: Manifest file can be overridden
     When the CLI is parsed with "--file alt.yml build target"
     Then parsing succeeds

@@ -272,6 +272,24 @@ pub struct BuildArgs {
     pub targets: Vec<String>,
 }
 
+/// Arguments accepted by the `graph` command.
+///
+/// `html` and `output` are per-invocation flags and are intentionally excluded
+/// from `OrthoConfig` layering (`#[serde(skip)]`); layering them through a
+/// configuration file would silently change the artefact destination.
+#[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
+pub struct GraphArgs {
+    /// Render the graph as a self-contained HTML page instead of DOT.
+    #[arg(long)]
+    #[serde(skip)]
+    pub html: bool,
+
+    /// Write the graph artefact to FILE. Use `-` for stdout.
+    #[arg(long, value_name = "FILE")]
+    #[serde(skip)]
+    pub output: Option<PathBuf>,
+}
+
 /// Available top-level commands for Netsuke.
 #[derive(Debug, Subcommand, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -283,7 +301,7 @@ pub enum Commands {
     Clean,
 
     /// Display the build dependency graph in DOT format for visualisation.
-    Graph,
+    Graph(GraphArgs),
 
     /// Write the Ninja manifest to the specified file without invoking Ninja.
     Manifest {
