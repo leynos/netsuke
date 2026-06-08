@@ -61,12 +61,12 @@ fn manifest_not_found_error() -> RunnerError {
     }
 }
 
-fn circular_dependency_error() -> IrGenError {
-    let cycle = vec![
-        Utf8PathBuf::from("a"),
-        Utf8PathBuf::from("b"),
-        Utf8PathBuf::from("a"),
-    ];
+/// Constructs an [`IrGenError::CircularDependency`] for the given cycle path.
+///
+/// `cycle_nodes` must contain at least two elements, and the first and last
+/// elements must be identical (i.e. it must form a valid closed cycle).
+fn circular_dependency_error_for(cycle_nodes: Vec<&str>) -> IrGenError {
+    let cycle: Vec<Utf8PathBuf> = cycle_nodes.into_iter().map(Utf8PathBuf::from).collect();
     let message =
         localization::message(keys::IR_CIRCULAR_DEPENDENCY).with_arg("cycle", format!("{cycle:?}"));
     IrGenError::CircularDependency {
@@ -74,6 +74,12 @@ fn circular_dependency_error() -> IrGenError {
         missing_dependencies: Vec::new(),
         message,
     }
+}
+
+/// Constructs the canonical three-node circular-dependency fixture used by
+/// snapshot tests.
+fn circular_dependency_error() -> IrGenError {
+    circular_dependency_error_for(vec!["a", "b", "a"])
 }
 
 #[rstest]
@@ -164,6 +170,53 @@ fn render_runner_diagnostic_json_records_help_without_spans() -> Result<()> {
     Ok(())
 }
 
+/// Verifies structural invariants of `IrGenError::CircularDependency` across
+/// cycle lengths without relying on snapshot output.
+#[rstest]
+#[case(vec!["x", "x"], "minimal two-node cycle")]
+#[case(vec!["a", "b", "a"], "three-node cycle")]
+#[case(vec!["a", "b", "c", "a"], "four-node cycle")]
+#[case(vec!["p", "q", "r", "s", "p"], "five-node cycle")]
+fn circular_dependency_structural_invariants(
+    en_localizer: EnLocalizer,
+    #[case] cycle_nodes: Vec<&str>,
+    #[case] description: &str,
+) {
+    let _en_localizer = en_localizer;
+    let error = circular_dependency_error_for(cycle_nodes.clone());
+
+    if let IrGenError::CircularDependency {
+        cycle,
+        missing_dependencies,
+        ..
+    } = &error
+    {
+        assert_eq!(
+            cycle.len(),
+            cycle_nodes.len(),
+            "{description}: cycle length must match the input"
+        );
+        assert_eq!(
+            cycle.first(),
+            cycle.last(),
+            "{description}: cycle must be closed: first and last nodes must be equal"
+        );
+        assert!(
+            missing_dependencies.is_empty(),
+            "{description}: fixture must not report missing dependencies"
+        );
+        let rendered = error.to_string();
+        for node in &cycle_nodes {
+            assert!(
+                rendered.contains(node),
+                "{description}: Display output must contain node {node:?}: got {rendered:?}"
+            );
+        }
+    } else {
+        panic!("expected CircularDependency variant");
+    }
+}
+
 #[rstest]
 fn render_circular_dependency_display_matches_snapshot(en_localizer: EnLocalizer) {
     let _en_localizer = en_localizer;
@@ -187,6 +240,37 @@ fn render_circular_dependency_json_matches_snapshot(en_localizer: EnLocalizer) -
     snapshot_settings().bind(|| {
         assert_snapshot!("circular_dependency_json", rendered);
     });
+    Ok(())
+}
+
+/// Verifies that `render_error_json` for a `CircularDependency` error produces
+/// a well-formed diagnostics document with a non-empty cause chain.
+#[rstest]
+fn render_circular_dependency_json_has_expected_shape(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
+    let error = anyhow::Error::new(circular_dependency_error())
+        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH));
+    let document = render_error_json(error.as_ref())?;
+    let value = parse_json_value(&document)?;
+    let diagnostic = first_diagnostic(&value)?;
+
+    let causes = diagnostic
+        .get("causes")
+        .and_then(Value::as_array)
+        .context("circular dependency JSON must include a causes array")?;
+    let message = diagnostic
+        .get("message")
+        .and_then(Value::as_str)
+        .context("circular dependency JSON must include a message string")?;
+
+    ensure!(
+        !causes.is_empty(),
+        "circular dependency must have at least one cause"
+    );
+    ensure!(
+        !message.is_empty(),
+        "circular dependency message must not be empty"
+    );
     Ok(())
 }
 
