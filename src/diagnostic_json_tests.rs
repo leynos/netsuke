@@ -88,6 +88,8 @@ fn circular_dependency_error() -> IrGenError {
     circular_dependency_error_for(vec!["a", "b", "a"])
 }
 
+/// Verifies that `render_error_json` records a plain error's full cause chain
+/// in the `causes` field and emits the expected schema version and generator name.
 #[rstest]
 fn render_plain_error_json_records_cause_chain() -> Result<()> {
     let error = anyhow::anyhow!("top level failure").context("outer context");
@@ -135,6 +137,8 @@ fn render_plain_error_json_records_cause_chain() -> Result<()> {
     Ok(())
 }
 
+/// Verifies that `render_diagnostic_json` for a `RunnerError` includes the
+/// diagnostic code and help text without fabricating source-file spans or labels.
 #[rstest]
 fn render_runner_diagnostic_json_records_help_without_spans() -> Result<()> {
     let _lock = localizer_test_lock().expect("localizer test lock poisoned");
@@ -223,6 +227,8 @@ fn circular_dependency_structural_invariants(
     }
 }
 
+/// Asserts that the `Display` output of `IrGenError::CircularDependency`
+/// matches the stored insta snapshot, preserving the user-facing format.
 #[rstest]
 fn render_circular_dependency_display_matches_snapshot(en_localizer: EnLocalizer) {
     let _en_localizer = en_localizer;
@@ -233,6 +239,8 @@ fn render_circular_dependency_display_matches_snapshot(en_localizer: EnLocalizer
     });
 }
 
+/// Asserts that the JSON diagnostic output for `IrGenError::CircularDependency`
+/// wrapped in a build-graph context matches the stored insta snapshot.
 #[rstest]
 fn render_circular_dependency_json_matches_snapshot(en_localizer: EnLocalizer) -> Result<()> {
     let _en_localizer = en_localizer;
@@ -280,6 +288,8 @@ fn render_circular_dependency_json_has_expected_shape(en_localizer: EnLocalizer)
     Ok(())
 }
 
+/// Asserts that the JSON diagnostic output for a YAML parse error in the
+/// manifest matches the stored insta snapshot.
 #[rstest]
 fn render_manifest_parse_diagnostic_matches_snapshot() -> Result<()> {
     let _lock = localizer_test_lock().expect("localizer test lock poisoned");
