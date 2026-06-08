@@ -317,6 +317,8 @@ side effects that can cause data races when tests run in parallel. The
 `test_support` crate and test fixtures provide resource acquisition is
 initialization (RAII)-based utilities to serialize and safely restore these
 mutations.
+For locale-sensitive snapshot tests, use the `EnLocalizer` RAII pattern
+documented in the [snapshot testing guide](snapshot-testing-in-netsuke-using-insta.md#locale-pinned-snapshot-tests).
 
 ### `EnvLock`
 

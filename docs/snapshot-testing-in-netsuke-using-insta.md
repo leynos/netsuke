@@ -222,6 +222,70 @@ include `tests/snapshots/ir/simple_manifest_ir.snap` and
 per test module). These snapshot files contain the expected IR debug output and
 Ninja file text respectively.
 
+## Locale-pinned snapshot tests
+
+Some `Display` implementations in Netsuke call `localization::message(...)`,
+so their output varies with the active locale.  A snapshot test that exercises
+such output must hold both the global localizer serialisation mutex and a
+`LocalizerGuard` for the entire duration of the assertion; otherwise concurrent
+tests may install a different locale and produce non-deterministic output.
+
+### The `EnLocalizer` pattern
+
+Wrap both guards in a struct with underscore-prefixed fields so the Rust
+compiler keeps them alive until the struct is dropped:
+
+```rust
+use std::sync::MutexGuard;
+use test_support::{LocalizerGuard, localizer_test_lock, set_en_localizer};
+
+/// RAII bundle that holds the global localizer test lock and the English
+/// locale guard for the duration of a test.
+struct EnLocalizer {
+    _lock: MutexGuard<'static, ()>,
+    _guard: LocalizerGuard,
+}
+```
+
+### Wiring with rstest
+
+Annotate a constructor function with `#[fixture]` and accept it as a parameter
+in `#[rstest]` tests, binding it immediately so the compiler recognises the
+RAII intent:
+
+```rust
+use rstest::{fixture, rstest};
+
+#[fixture]
+fn en_localizer() -> EnLocalizer {
+    EnLocalizer {
+        _lock: localizer_test_lock().expect("localizer test lock poisoned"),
+        _guard: set_en_localizer(),
+    }
+}
+
+#[rstest]
+fn my_locale_sensitive_snapshot(en_localizer: EnLocalizer) {
+    let _en_localizer = en_localizer;   // keep guards alive
+    let rendered = my_error().to_string();
+    snapshot_settings().bind(|| {
+        assert_snapshot!("my_error_display", rendered);
+    });
+}
+```
+
+Both guards are released when `_en_localizer` is dropped at the end of the
+test function, serialising locale state across the test suite.
+
+### Relevant utilities
+
+- `test_support::LocalizerGuard` — opaque guard returned by
+  `set_en_localizer()`; dropping it uninstalls the locale.
+- `test_support::localizer_test_lock()` — acquires the global mutex that
+  serialises all locale mutations across concurrent test threads.
+- `test_support::set_en_localizer()` — installs `en-US` as the active locale
+  and returns a `LocalizerGuard`.
+
 ## Running and Updating Snapshot Tests
 
 To execute the snapshot tests, run `cargo test`. All tests (including our new
