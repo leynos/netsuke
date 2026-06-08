@@ -128,7 +128,10 @@ mod tests {
 
     #[test]
     fn diag_json_from_layer_reads_diag_json_bool() {
-        assert_eq!(diag_json_from_layer(&json!({ "diag_json": true })), Some(true));
+        assert_eq!(
+            diag_json_from_layer(&json!({ "diag_json": true })),
+            Some(true)
+        );
         assert_eq!(
             diag_json_from_layer(&json!({ "diag_json": false })),
             Some(false)
