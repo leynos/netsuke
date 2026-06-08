@@ -2601,6 +2601,7 @@ dependencies = [
  "mockable",
  "netsuke",
  "ninja_env",
+ "proptest",
  "sha2",
  "tempfile",
  "thiserror 1.0.69",

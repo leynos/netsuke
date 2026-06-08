@@ -11,6 +11,9 @@ use super::{BuildEdge, CycleDetector, analyse, canonicalize_cycle};
 #[path = "cycle_analyse_tests.rs"]
 mod analyse_tests;
 
+#[path = "cycle_issue322_property_tests.rs"]
+mod issue322_property_tests;
+
 fn path(name: &str) -> camino::Utf8PathBuf {
     camino::Utf8PathBuf::from(name)
 }
@@ -328,5 +331,4 @@ proptest! {
             "stack must be empty after repeated detection",
         );
     }
-
 }
