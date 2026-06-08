@@ -1,0 +1,110 @@
+---
+source: src/cli/parser_tests.rs
+expression: normalized_help
+---
+Netsuke transforms YAML + Jinja manifests into reproducible Ninja graphs and runs Ninja with safe defaults.
+
+Usage: netsuke [OPTIONS] [COMMAND]
+
+Commands:
+  build     Build targets defined in the manifest (default).
+  clean     Remove build artefacts via Ninja.
+  graph     Emit the build dependency graph. Default format is DOT.
+  manifest  Write the generated Ninja manifest without running Ninja.
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -f, --file <FILE>
+          Path to the Netsuke manifest file to use.
+          
+          [default: Netsukefile]
+
+  -C, --directory <DIR>
+          Run as if started in this directory.
+          
+          This affects manifest lookup, output paths, and config discovery.
+
+      --config <FILE>
+          Path to a configuration file, bypassing automatic discovery.
+
+  -j, --jobs <N>
+          Set the number of parallel build jobs.
+          
+          Values must be between 1 and 64.
+
+  -v, --verbose
+          Enable verbose diagnostic logging and completion timing summaries.
+
+      --locale <LOCALE>
+          Locale tag for CLI copy (for example: en-US, es-ES).
+
+      --fetch-allow-scheme <SCHEME>
+          Additional URL schemes allowed for the fetch helper.
+
+      --fetch-allow-host <HOST>
+          Hostnames that are permitted when default deny is enabled.
+          
+          Supports wildcards such as `*.example.com`.
+
+      --fetch-block-host <HOST>
+          Hostnames that are always blocked, even when allowed elsewhere.
+          
+          Supports wildcards such as `*.example.com`.
+
+      --fetch-default-deny
+          Deny all hosts by default; only allow the declared allowlist.
+
+      --accessible <ACCESSIBLE>
+          Force accessible output mode on or off.
+          
+          [possible values: true, false]
+
+      --no-emoji <NO_EMOJI>
+          Suppress emoji glyphs in output.
+          
+          [possible values: true, false]
+
+      --diag-json
+          Emit machine-readable diagnostics as JSON on stderr.
+
+      --progress <PROGRESS>
+          Force standard progress summaries on or off.
+          
+          When omitted, Netsuke enables progress summaries in standard mode.
+          
+          [possible values: true, false]
+
+      --colour-policy <POLICY>
+          Colour output policy (auto, always, never).
+
+          Possible values:
+          - auto:   Follow the host environment
+          - always: Force colour output on when available
+          - never:  Force colour output off
+
+      --spinner-mode <MODE>
+          Progress spinner display mode (enabled, disabled).
+
+          Possible values:
+          - auto:     Follow Netsuke's default progress behaviour
+          - enabled:  Force progress summaries on
+          - disabled: Disable progress summaries
+
+      --output-format <FORMAT>
+          Diagnostic output format (human, json).
+
+          Possible values:
+          - human: Human-readable terminal output
+          - json:  Machine-readable JSON diagnostics
+
+      --theme <THEME>
+          CLI theme preset (auto, unicode, ascii).
+
+      --default-target <TARGET>
+          Default build targets when none are specified.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
