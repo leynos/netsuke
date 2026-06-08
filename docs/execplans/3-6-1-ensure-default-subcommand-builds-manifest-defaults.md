@@ -306,7 +306,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 ## Validation and acceptance
 
 - Running `netsuke` in an empty directory prints:
-  `Error: No \`Netsukefile\` found in the current directory.` followed by a
+  ``Error: No `Netsukefile` found in the current directory.`` followed by a
   hint mentioning `--help`.
 - Running `netsuke --file custom.yml` where `custom.yml` does not exist prints a
   similar error with the custom filename.

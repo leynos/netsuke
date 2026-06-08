@@ -742,8 +742,8 @@ Likewise, `spinner_mode = "enabled"` conflicts with `progress = false`.
 JSON diagnostics are implemented through `--diag-json` and the layered
 `diag_json` preference. The `--output-format json` flag and
 `NETSUKE_OUTPUT_FORMAT=json` environment variable are accepted for diagnostic
-mode, but configuration files intentionally reject `output_format = "json"`.
-Use `output_format = "human"` in configuration files.
+mode, but configuration files intentionally reject `output_format = "json"`. Use
+`output_format = "human"` in configuration files.
 
 `colour_policy` is accepted and layered today, so users can standardize their
 preferred setting, but Netsuke does not yet emit coloured terminal output, so
@@ -1206,8 +1206,7 @@ netsuke graph --html --output graph.html
 Open `graph.html` in any modern browser. The SVG layout is hierarchical: source
 files appear on the left, intermediate targets in the middle, and the
 right-most column contains the leaves of the dependency graph. Order-only
-dependencies are rendered as dashed edges; implicit outputs use a dotted
-style.
+dependencies are rendered as dashed edges; implicit outputs use a dotted style.
 
 **Interpreting the DOT output:**
 
