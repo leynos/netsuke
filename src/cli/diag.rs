@@ -82,10 +82,13 @@ fn diag_json_from_env(env: &impl EnvProvider) -> OrthoResult<Option<bool>> {
     let Some(value) = env.get("NETSUKE_DIAG_JSON") else {
         return Ok(None);
     };
-    let raw = value.into_string().map_err(|value| {
+    let raw = value.into_string().map_err(|invalid_value| {
         Arc::new(OrthoError::Validation {
             key: String::from("NETSUKE_DIAG_JSON"),
-            message: format!("NETSUKE_DIAG_JSON must be valid Unicode, got {value:?}"),
+            message: format!(
+                "NETSUKE_DIAG_JSON must be valid Unicode, got {}",
+                invalid_value.to_string_lossy()
+            ),
         })
     })?;
     match raw.as_str() {

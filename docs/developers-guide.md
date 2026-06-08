@@ -518,8 +518,8 @@ a two-pass approach:
 Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
 
-The same logic is mirrored in `collect_diag_file_layers` for early `diag_json`
-resolution (before full merging).
+The same logic is mirrored in `collect_diag_file_layers_with_env` for early
+`diag_json` resolution (before full merging).
 
 ### Layer precedence
 
@@ -537,18 +537,18 @@ Private helper functions for config discovery and diagnostic-JSON resolution.
 
 Table: Configuration merge helper functions
 
-| Function                     | Purpose                                                              |
-| :--------------------------- | :------------------------------------------------------------------- |
-| `config_discovery`           | Build single-pass `ConfigDiscovery` with optional directory anchor.  |
-| `project_scope_file_str`     | Resolve the expected project `.netsuke.toml` path as a string.       |
-| `project_scope_layers`       | Load project-scope config directly, bypassing discovery.             |
-| `push_file_layers`           | Push all file layers onto a `MergeComposer` in precedence order.     |
-| `collect_diag_file_layers`   | Mirror of `push_file_layers` for early `diag_json` resolution.       |
-| `is_empty_value`             | Return `true` for an empty JSON object (no CLI overrides).           |
-| `diag_json_from_layer`       | Extract `diag_json` from a config layer.                             |
-| `diag_json_from_matches`     | Resolve final `diag_json` from CLI matches with fallback.            |
-| `cli_overrides_from_matches` | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
-| `env_provider`               | Return the `NETSUKE_` prefixed Figment environment provider.         |
+| Function                            | Purpose                                                              |
+| :---------------------------------- | :------------------------------------------------------------------- |
+| `config_discovery`                  | Build single-pass `ConfigDiscovery` with optional directory anchor.  |
+| `project_scope_file_str`            | Resolve the expected project `.netsuke.toml` path as a string.       |
+| `project_scope_layers`              | Load project-scope config directly, bypassing discovery.             |
+| `push_file_layers`                  | Push all file layers onto a `MergeComposer` in precedence order.     |
+| `collect_diag_file_layers_with_env` | Mirror of `push_file_layers` for early `diag_json` resolution.       |
+| `is_empty_value`                    | Return `true` for an empty JSON object (no CLI overrides).           |
+| `diag_json_from_layer`              | Extract `diag_json` from a config layer.                             |
+| `diag_json_from_matches`            | Resolve final `diag_json` from CLI matches with fallback.            |
+| `cli_overrides_from_matches`        | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
+| `env_provider`                      | Return the `NETSUKE_` prefixed Figment environment provider.         |
 
 ### Environment lookup seams
 
@@ -598,7 +598,7 @@ the process environment.
 #### `diag_json` contract
 
 Tooling that wants a stable contract for early diagnostic-JSON resolution
-should treat the input consumed by `collect_diag_file_layers`,
+should treat the input consumed by `collect_diag_file_layers_with_env`,
 `diag_json_from_layer`, and `diag_json_from_matches` as versioned schema
 `netsuke.diag-json-resolution.v1`:
 
