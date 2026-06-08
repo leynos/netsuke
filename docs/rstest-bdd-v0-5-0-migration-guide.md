@@ -212,7 +212,7 @@ end-user wrapper code.
 - **Error:** `#[scenario] bodies must return () or a unit Result/StepResult`
   - **Fix:** Scenario signatures return `Result<(), E>` or `StepResult<(), E>`,
     with payload values moved into steps.
-- **Error:** `no \`sync_to_async\` in the root` when importing from
+- **Error:** ``no `sync_to_async` in the root`` when importing from
   `rstest_bdd::sync_to_async`
   - **Fix:** Update imports to `rstest_bdd::async_step::sync_to_async`.
 

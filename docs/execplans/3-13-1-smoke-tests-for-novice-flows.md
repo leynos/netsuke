@@ -154,7 +154,7 @@ the journey described in `docs/users-guide.md` and
   “No `Netsukefile` found … / Hint: Run `netsuke --help` …” copy still present
   in the docs. The runtime now renders
   `Manifest 'Netsukefile' not found in the current directory.` plus
-  `help: Ensure the manifest exists or pass \`--file\` with the correct path.`
+  ``help: Ensure the manifest exists or pass `--file` with the correct path.``
   The documentation and smoke suite should pin that newer wording.
 
 ## Decision Log
@@ -189,7 +189,7 @@ the journey described in `docs/users-guide.md` and
 - Decision: treat the current runtime missing-manifest message as
   authoritative and update the docs to match it. The smoke suite now pins
   `Manifest 'Netsukefile' not found in the current directory.` together with
-  `Ensure the manifest exists or pass \`--file\` with the correct path.`
+  ``Ensure the manifest exists or pass `--file` with the correct path.``
   Rationale: the current message is more specific than the older docs copy and
   reflects the localized diagnostic/help split users actually see. Date/Author:
   2026-03-30 / Codex.

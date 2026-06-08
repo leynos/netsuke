@@ -58,9 +58,8 @@ implementation begins.
 - If implementation unexpectedly adds a CLI, configuration, or help surface,
   use the existing OrthoConfig and localization pipeline: derive configuration
   from `src/cli/mod.rs` and `src/cli/config.rs`, merge layers in
-  `src/cli/merge.rs`, and add localized help in
-  `locales/en-US/messages.ftl`, `locales/es-ES/messages.ftl`, and
-  `src/localization/keys.rs`.
+  `src/cli/merge.rs`, and add localized help in `locales/en-US/messages.ftl`,
+  `locales/es-ES/messages.ftl`, and `src/localization/keys.rs`.
 - Use hexagonal architecture as a boundary check, not as a transplant. Keep
   verification policy in documentation and, if future code appears, keep pure
   domain or proof policy separate from adapters, process orchestration and

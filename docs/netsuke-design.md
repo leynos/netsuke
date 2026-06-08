@@ -2380,16 +2380,16 @@ the targets listed in the `defaults` section of the manifest are built.
   as `ninja -t clean`, to remove the outputs of the build rules.
 
 - `Netsuke graph [--html] [--output FILE]`: This command is an introspection
-  and debugging tool. It executes the manifest pipeline up to and including
-  IR generation and then renders the build graph in-process. With no flags it
-  writes a Graphviz DOT document to stdout. `--output FILE` writes the
-  artefact to disk; the `-` sentinel selects stdout explicitly. `--html`
-  produces a self-contained, offline-safe HTML document with a server-rendered
-  SVG, an accessible textual outline, and a `<noscript>` fallback. The
-  renderer adapters consume a canonical [`GraphView`](../src/graph_view/mod.rs)
+  and debugging tool. It executes the manifest pipeline up to and including IR
+  generation and then renders the build graph in-process. With no flags it
+  writes a Graphviz DOT document to stdout. `--output FILE` writes the artefact
+  to disk; the `-` sentinel selects stdout explicitly. `--html` produces a
+  self-contained, offline-safe HTML document with a server-rendered SVG, an
+  accessible textual outline, and a `<noscript>` fallback. The renderer
+  adapters consume a canonical [`GraphView`](../src/graph_view/mod.rs)
   projection of [`BuildGraph`](../src/ir/graph.rs); deterministic output is
-  guaranteed because the projection sorts every collection at the IR
-  boundary. Ninja is not invoked.
+  guaranteed because the projection sorts every collection at the IR boundary.
+  Ninja is not invoked.
 
 - `Netsuke manifest FILE`: This command performs the pipeline up to Ninja
   synthesis and writes the resulting Ninja file to `FILE` without invoking

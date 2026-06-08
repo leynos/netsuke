@@ -34,49 +34,47 @@ the hexagonal port/adapter pattern:
 
 - [`GraphView`](../src/graph_view/mod.rs) is the deterministic projection of
   [`BuildGraph`](../src/ir/graph.rs). It is constructed once, sorts every
-  collection (nodes, edges, default targets), and is invariant under
-  `HashMap` insertion order. The shuffled-insertion proptest in
-  [`src/graph_view/tests.rs`](../src/graph_view/tests.rs) covers this
-  invariant.
+  collection (nodes, edges, default targets), and is invariant under `HashMap`
+  insertion order. The shuffled-insertion proptest in
+  [`src/graph_view/tests.rs`](../src/graph_view/tests.rs) covers this invariant.
 - [`GraphRenderer`](../src/graph_view/render.rs) is the trait every renderer
   adapter implements. The contract is intentionally minimal:
-  `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(),
-  GraphRenderError>`. Adapters consume `GraphView` only — they never touch
-  `BuildGraph` directly.
+  `render(&self, view: &GraphView, sink: &mut dyn io::Write) -> Result<(), GraphRenderError>`.
+  Adapters consume `GraphView` only — they never touch `BuildGraph` directly.
 - [`DotRenderer`](../src/graph_view/render_dot.rs) emits Graphviz DOT.
 - [`HtmlRenderer`](../src/graph_view/render_html.rs) emits a self-contained
   HTML page (server-rendered SVG, accessible textual outline, and a
   `<noscript>` fallback containing the DOT source verbatim).
 
-`EdgeView::class` mirrors the four Ninja dependency relations so that
-renderers can style each one distinctly:
+`EdgeView::class` mirrors the four Ninja dependency relations so that renderers
+can style each one distinctly:
 
 | Variant          | Ninja separator           | DOT style       | SVG class              |
-|------------------|---------------------------|-----------------|------------------------|
+| ---------------- | ------------------------- | --------------- | ---------------------- |
 | `Explicit`       | none (input in `$in`)     | solid (no attr) | `edge`                 |
 | `ImplicitDep`    | single pipe (`\|`)        | `style=bold`    | `edge implicit-dep`    |
 | `ImplicitOutput` | single pipe on LHS (`\|`) | `style=dotted`  | `edge implicit-output` |
 | `OrderOnly`      | double pipe (`\|\|`)      | `style=dashed`  | `edge order-only`      |
 
-`ImplicitDep` carries Ninja's single-pipe implicit inputs — header files
-or schemas that trigger a rebuild without appearing in `$in`. The bold
-stroke reads as "rebuild-triggering hidden input," distinguishing it from
-the dashed order-only stroke (no rebuild trigger) and the dotted
-implicit-output stroke (auxiliary output side).
+`ImplicitDep` carries Ninja's single-pipe implicit inputs — header files or
+schemas that trigger a rebuild without appearing in `$in`. The bold stroke
+reads as "rebuild-triggering hidden input," distinguishing it from the dashed
+order-only stroke (no rebuild trigger) and the dotted implicit-output stroke
+(auxiliary output side).
 
 A new renderer — for example the `--json` view planned for roadmap item
 `3.15.6` — should be added as a sibling module under `src/graph_view/` that
 implements `GraphRenderer`. The runner dispatch in
 [`src/runner/mod.rs`](../src/runner/mod.rs) picks the appropriate renderer
-based on `GraphArgs` and writes through the shared
-`write_text_file`/`write_text_stdout` sink helpers. The `-` sentinel for
-`--output` is recognised by `process::is_stdout_path`.
+based on `GraphArgs` and writes through the shared `write_text_file`/
+`write_text_stdout` sink helpers. The `-` sentinel for `--output` is recognised
+by `process::is_stdout_path`.
 
 `--html` and `--output` are explicitly excluded from `OrthoConfig` layering:
 they are per-invocation arguments tagged `#[serde(skip)]` on
 [`GraphArgs`](../src/cli/mod.rs). Layering `--output` through a config file
-would silently change the artefact destination — a footgun the design avoids
-by construction.
+would silently change the artefact destination — a footgun the design avoids by
+construction.
 
 ## Quality gates
 
@@ -385,8 +383,8 @@ available when the guard is no longer needed after the read.
 
 Tests that call `std::env::set_current_dir` must restore the original working
 directory after the test. `CwdGuard` is available from `test_support`, and is
-used in `tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`. It
-captures the current directory on construction and restores it on drop:
+used in `tests/cli_tests/config_discovery.rs` and `tests/cli_tests/merge.rs`.
+It captures the current directory on construction and restores it on drop:
 
 ```rust
 use test_support::CwdGuard;
