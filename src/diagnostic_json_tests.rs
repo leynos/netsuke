@@ -14,11 +14,13 @@ use std::path::PathBuf;
 use std::sync::MutexGuard;
 use test_support::{LocalizerGuard, localizer_test_lock, set_en_localizer};
 
+/// RAII bundle holding both the global localizer test lock and the locale guard for a test.
 struct EnLocalizer {
     _lock: MutexGuard<'static, ()>,
     _guard: LocalizerGuard,
 }
 
+/// Rstest fixture that acquires the localizer test lock and installs the English localiser.
 #[fixture]
 fn en_localizer() -> EnLocalizer {
     EnLocalizer {
@@ -27,10 +29,12 @@ fn en_localizer() -> EnLocalizer {
     }
 }
 
+/// Parses a JSON string into a [`serde_json::Value`].
 fn parse_json_value(document: &str) -> Result<Value> {
     serde_json::from_str(document).context("parse diagnostics JSON")
 }
 
+/// Builds insta [`Settings`] pointing at the `src/snapshots/diagnostic_json` directory.
 fn snapshot_settings() -> Settings {
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
@@ -40,6 +44,7 @@ fn snapshot_settings() -> Settings {
     settings
 }
 
+/// Extracts the first diagnostic object from the top-level `diagnostics` array.
 fn first_diagnostic(value: &Value) -> Result<&Map<String, Value>> {
     value
         .get("diagnostics")
@@ -49,6 +54,7 @@ fn first_diagnostic(value: &Value) -> Result<&Map<String, Value>> {
         .context("diagnostic entry should be an object")
 }
 
+/// Constructs a deterministic [`RunnerError::ManifestNotFound`] fixture.
 fn manifest_not_found_error() -> RunnerError {
     RunnerError::ManifestNotFound {
         manifest_name: String::from("Netsukefile"),
