@@ -127,11 +127,6 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
         Err(err) => Err(err),
     }
 }
-
-pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
-    explicit_config_path_with_env(cli, &StdEnvProvider)
-}
-
 pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
     cli.config
         .clone()
@@ -163,11 +158,6 @@ pub(crate) fn load_layers_from_path(
         Err(err) => Err(err),
     }
 }
-
-pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    collect_diag_file_layers_with_env(cli, &StdEnvProvider)
-}
-
 pub(crate) fn collect_diag_file_layers_with_env(
     cli: &Cli,
     env: &impl EnvProvider,

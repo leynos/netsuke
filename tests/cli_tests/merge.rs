@@ -399,6 +399,7 @@ fn cli_runtime_canonicalizes_ascii_theme_from_no_emoji_alias() -> Result<()> {
     })
 }
 
+#[derive(Default)]
 struct TestEnv {
     values: HashMap<&'static str, OsString>,
 }
