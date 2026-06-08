@@ -2584,7 +2584,7 @@ flowchart LR
 ```
 
 Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
-Explicit file selection is handled by `explicit_config_path(...)`, which
+Explicit file selection is handled by `explicit_config_path_with_env(...)`, which
 applies the precedence `--config` > `NETSUKE_CONFIG`. Layer loading and
 automatic discovery are handled by `push_file_layers(...)`, which also applies
 the `-C/--directory` flag as the project-discovery root.
@@ -2622,7 +2622,6 @@ flowchart TD
   UseEnvConfig --> CheckEnvFile{"File exists<br/>and parses?"}
   CheckEnvFile -- Yes --> LoadConfig
   CheckEnvFile -- No --> ErrorMissing
-
   RunDiscovery --> LoadConfig
   LoadConfig --> End(["Proceed with merged config"])
   ErrorMissing --> End
@@ -2690,9 +2689,9 @@ manual flag repetition.
 
 **Implementation notes**:
 
-- The `explicit_config_path(...)` helper resolves explicit config selectors
-  before automatic discovery so missing or invalid explicit files remain hard
-  errors.
+- The `explicit_config_path_with_env(...)` helper resolves explicit config
+  selectors before automatic discovery so missing or invalid explicit files
+  remain hard errors.
 - The `merge_with_config()` function in `src/cli/merge.rs` orchestrates the
   full layer composition: it calls `push_file_layers(...)` to load explicit,
   project, and user file layers, merges them with defaults, adds environment

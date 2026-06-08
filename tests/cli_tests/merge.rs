@@ -324,6 +324,7 @@ fn cli_config_rejects_conflicting_or_unsupported_settings(
     assert_merge_rejects(default_cli_json?, file_layer, expected_error)
 }
 
+#[derive(Default)]
 struct TestEnv {
     values: HashMap<&'static str, OsString>,
 }

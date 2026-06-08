@@ -138,11 +138,6 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
         Err(err) => Err(err),
     }
 }
-
-pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
-    explicit_config_path_with_env(cli, &StdEnvProvider)
-}
-
 pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
     cli.config
         .clone()
