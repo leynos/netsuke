@@ -134,10 +134,7 @@ pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
     explicit_config_path_with_env(cli, &StdEnvProvider)
 }
 
-pub(crate) fn explicit_config_path_with_env(
-    cli: &Cli,
-    env: &impl EnvProvider,
-) -> Option<PathBuf> {
+pub(crate) fn explicit_config_path_with_env(cli: &Cli, env: &impl EnvProvider) -> Option<PathBuf> {
     cli.config
         .clone()
         .or_else(|| env_config_path(env, CONFIG_ENV_VAR))
