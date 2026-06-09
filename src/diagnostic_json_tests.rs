@@ -136,7 +136,9 @@ fn render_plain_error_json_records_cause_chain() -> Result<()> {
 /// Verifies that `render_diagnostic_json` for a `RunnerError` includes the
 /// diagnostic code and help text without fabricating source-file spans or labels.
 #[rstest]
-fn render_runner_diagnostic_json_records_help_without_spans(en_localizer: EnLocalizer) -> Result<()> {
+fn render_runner_diagnostic_json_records_help_without_spans(
+    en_localizer: EnLocalizer,
+) -> Result<()> {
     let _en_localizer = en_localizer;
     let document = render_diagnostic_json(&manifest_not_found_error())?;
     let value = parse_json_value(&document)?;
