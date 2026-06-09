@@ -224,8 +224,8 @@ Ninja file text respectively.
 
 ## Locale-pinned snapshot tests
 
-Some `Display` implementations in Netsuke call `localization::message(...)`,
-so their output varies with the active locale.  A snapshot test that exercises
+Some `Display` implementations in Netsuke call `localization::message(...)`, so
+their output varies with the active locale.  A snapshot test that exercises
 such output must hold both the global localizer serialisation mutex and a
 `LocalizerGuard` for the entire duration of the assertion; otherwise concurrent
 tests may install a different locale and produce non-deterministic output.
@@ -274,8 +274,8 @@ fn my_locale_sensitive_snapshot(en_localizer: EnLocalizer) {
 }
 ```
 
-Both guards are released when `_en_localizer` is dropped at the end of the
-test function, serialising locale state across the test suite.
+Both guards are released when `_en_localizer` is dropped at the end of the test
+function, serialising locale state across the test suite.
 
 ### Relevant utilities
 

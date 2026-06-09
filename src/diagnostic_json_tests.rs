@@ -9,26 +9,10 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use insta::{Settings, assert_snapshot};
 use proptest::prelude::*;
-use rstest::{fixture, rstest};
+use rstest::rstest;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
-use std::sync::MutexGuard;
-use test_support::{LocalizerGuard, localizer_test_lock, set_en_localizer};
-
-/// RAII bundle holding both the global localizer test lock and the locale guard for a test.
-struct EnLocalizer {
-    _lock: MutexGuard<'static, ()>,
-    _guard: LocalizerGuard,
-}
-
-/// Rstest fixture that acquires the localizer test lock and installs the English localiser.
-#[fixture]
-fn en_localizer() -> EnLocalizer {
-    EnLocalizer {
-        _lock: localizer_test_lock().expect("localizer test lock poisoned"),
-        _guard: set_en_localizer(),
-    }
-}
+use test_support::{EnLocalizer, en_localizer};
 
 /// Parses a JSON string into a [`serde_json::Value`].
 fn parse_json_value(document: &str) -> Result<Value> {
@@ -152,9 +136,8 @@ fn render_plain_error_json_records_cause_chain() -> Result<()> {
 /// Verifies that `render_diagnostic_json` for a `RunnerError` includes the
 /// diagnostic code and help text without fabricating source-file spans or labels.
 #[rstest]
-fn render_runner_diagnostic_json_records_help_without_spans() -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let _guard = set_en_localizer();
+fn render_runner_diagnostic_json_records_help_without_spans(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
     let document = render_diagnostic_json(&manifest_not_found_error())?;
     let value = parse_json_value(&document)?;
     let diagnostic = first_diagnostic(&value)?;
@@ -303,9 +286,8 @@ fn render_circular_dependency_json_has_expected_shape(en_localizer: EnLocalizer)
 /// Asserts that the JSON diagnostic output for a YAML parse error in the
 /// manifest matches the stored insta snapshot.
 #[rstest]
-fn render_manifest_parse_diagnostic_matches_snapshot() -> Result<()> {
-    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
-    let _guard = set_en_localizer();
+fn render_manifest_parse_diagnostic_matches_snapshot(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
     let err = manifest::from_str("targets:\n\t- name: test\n")
         .expect_err("invalid YAML should fail to parse");
     let manifest_err = err
