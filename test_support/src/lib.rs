@@ -4,6 +4,8 @@
 //! - creating fake executables for process-related tests
 //! - manipulating PATH safely (PathGuard)
 //! - serializing environment mutation across tests (EnvLock)
+//! - pinning the active locale for snapshot tests (LocalizerGuard,
+//!   localizer_test_lock, set_en_localizer)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
 //!
