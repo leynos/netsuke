@@ -14,16 +14,14 @@
 )]
 
 use super::*;
-use crate::cli_localization;
-use crate::localization::{self, LocalizerGuard};
+use crate::localization;
 use crate::output_prefs;
 use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
 use anyhow::{Result, ensure};
 use insta::assert_snapshot;
 use rstest::{fixture, rstest};
-use std::sync::{Arc, MutexGuard};
 use test_support::fluent::normalize_fluent_isolates;
-use test_support::localizer::localizer_test_lock;
+use test_support::{EnLocalizer, en_localizer};
 
 fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
@@ -39,23 +37,6 @@ fn stage6_message(reporter: &IndicatifReporter) -> String {
         .get(STAGE6_INDEX)
         .expect("stage 6 progress bar should exist")
         .message()
-}
-
-struct EnUsLocalizerFixture {
-    _lock: MutexGuard<'static, ()>,
-    _guard: LocalizerGuard,
-}
-
-#[fixture]
-fn en_us_localizer() -> Result<EnUsLocalizerFixture> {
-    let lock = localizer_test_lock()
-        .map_err(|err| anyhow::anyhow!("failed to acquire localizer test lock: {err}"))?;
-    let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
-    let guard = localization::set_localizer_for_tests(localizer);
-    Ok(EnUsLocalizerFixture {
-        _lock: lock,
-        _guard: guard,
-    })
 }
 
 #[fixture]
@@ -115,13 +96,13 @@ fn localization_key_from_static_str() {
 #[case(1, 2, "cc -c src/main.c", "Task 1/2: cc -c src/main.c")]
 #[case(2, 2, "", "Task 2/2")]
 fn task_progress_update_formats_expected_text(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
+    en_localizer: EnLocalizer,
     #[case] current: u32,
     #[case] total: u32,
     #[case] description: &str,
     #[case] expected: &str,
 ) -> Result<()> {
-    let _localizer = en_us_localizer?;
+    let _localizer = en_localizer;
     let rendered = task_progress_update(current, total, description);
     ensure!(
         normalize_fluent_isolates(&rendered) == expected,
@@ -132,10 +113,10 @@ fn task_progress_update_formats_expected_text(
 
 #[rstest]
 fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
+    en_localizer: EnLocalizer,
     force_text_reporter: IndicatifReporter,
 ) -> Result<()> {
-    let _localizer = en_us_localizer?;
+    let _localizer = en_localizer;
     force_text_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&force_text_reporter);
     ensure!(
@@ -147,10 +128,10 @@ fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
 
 #[rstest]
 fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
+    en_localizer: EnLocalizer,
     running_stage6_reporter: IndicatifReporter,
 ) -> Result<()> {
-    let _localizer = en_us_localizer?;
+    let _localizer = en_localizer;
     running_stage6_reporter.report_task_progress(1, 2, "cc -c src/a.c");
     let stage6_message = stage6_message(&running_stage6_reporter);
     let task = task_progress_update(1, 2, "cc -c src/a.c");
@@ -173,10 +154,8 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
 }
 
 #[rstest]
-fn accessible_reporter_formats_stage_with_info_prefix(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
-) -> Result<()> {
-    let _localizer = en_us_localizer?;
+fn accessible_reporter_formats_stage_with_info_prefix(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
     let prefs = test_prefs();
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
     reporter.report_stage(
@@ -203,10 +182,8 @@ fn accessible_reporter_formats_stage_with_info_prefix(
 }
 
 #[rstest]
-fn accessible_reporter_indents_task_progress(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
-) -> Result<()> {
-    let _localizer = en_us_localizer?;
+fn accessible_reporter_indents_task_progress(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
     let prefs = test_prefs();
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
     reporter.report_task_progress(1, 2, "cc -c src/main.c");
@@ -229,10 +206,8 @@ fn accessible_reporter_indents_task_progress(
 }
 
 #[rstest]
-fn completion_line_includes_success_prefix(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
-) -> Result<()> {
-    let _localizer = en_us_localizer?;
+fn completion_line_includes_success_prefix(en_localizer: EnLocalizer) -> Result<()> {
+    let _localizer = en_localizer;
     let prefs = test_prefs();
     let line = normalize_fluent_isolates(&format_completion_line(
         prefs,
@@ -256,11 +231,11 @@ fn completion_line_includes_success_prefix(
     "accessible_ascii_stage_and_completion"
 )]
 fn accessible_reporter_stage_and_completion_snapshot(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
+    en_localizer: EnLocalizer,
     #[case] theme: crate::theme::ThemePreference,
     #[case] snapshot_name: &str,
-) -> Result<()> {
-    let _localizer = en_us_localizer?;
+) {
+    let _localizer = en_localizer;
     let prefs = theme_prefs(theme);
     let reporter = AccessibleReporter::with_writer(prefs, Vec::new());
 
@@ -282,7 +257,6 @@ fn accessible_reporter_stage_and_completion_snapshot(
     snapshot_settings("status").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
-    Ok(())
 }
 
 #[rstest]
@@ -292,11 +266,11 @@ fn accessible_reporter_stage_and_completion_snapshot(
 )]
 #[case::ascii(crate::theme::ThemePreference::Ascii, "accessible_ascii_task_progress")]
 fn accessible_reporter_task_progress_snapshot(
-    en_us_localizer: Result<EnUsLocalizerFixture>,
+    en_localizer: EnLocalizer,
     #[case] theme: crate::theme::ThemePreference,
     #[case] snapshot_name: &str,
-) -> Result<()> {
-    let _localizer = en_us_localizer?;
+) {
+    let _localizer = en_localizer;
     let reporter = AccessibleReporter::with_writer(theme_prefs(theme), Vec::new());
     reporter.report_task_progress(1, 2, "cc -c src/a.c");
     reporter.report_task_progress(2, 2, "cc -c src/b.c");
@@ -310,5 +284,4 @@ fn accessible_reporter_task_progress_snapshot(
     snapshot_settings("status").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
-    Ok(())
 }

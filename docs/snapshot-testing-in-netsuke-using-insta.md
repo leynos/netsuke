@@ -230,39 +230,25 @@ such output must hold both the global localizer serialisation mutex and a
 `LocalizerGuard` for the entire duration of the assertion; otherwise concurrent
 tests may install a different locale and produce non-deterministic output.
 
-### The `EnLocalizer` pattern
+### The shared `EnLocalizer` fixture
 
-Wrap both guards in a struct with underscore-prefixed fields so the Rust
-compiler keeps them alive until the struct is dropped:
+`test_support` provides a single canonical fixture for this. Do **not** define
+a local `EnLocalizer`/`EnUsLocalizerFixture` in each test module; import the
+shared one so locale pinning stays consistent and free of duplication.
 
-```rust
-use std::sync::MutexGuard;
-use test_support::{LocalizerGuard, localizer_test_lock, set_en_localizer};
-
-/// RAII bundle that holds the global localizer test lock and the English
-/// locale guard for the duration of a test.
-struct EnLocalizer {
-    _lock: MutexGuard<'static, ()>,
-    _guard: LocalizerGuard,
-}
-```
+`test_support::EnLocalizer` is an RAII bundle that holds both the global
+localizer test lock and the English `LocalizerGuard` in underscore-prefixed
+fields, so the compiler keeps them alive until the bundle is dropped.
+`test_support::en_localizer` is the matching `#[fixture]` constructor.
 
 ### Wiring with rstest
 
-Annotate a constructor function with `#[fixture]` and accept it as a parameter
-in `#[rstest]` tests, binding it immediately so the compiler recognises the
-RAII intent:
+Import the shared type and fixture, accept it as a parameter in `#[rstest]`
+tests, and bind it immediately so the compiler recognises the RAII intent:
 
 ```rust
-use rstest::{fixture, rstest};
-
-#[fixture]
-fn en_localizer() -> EnLocalizer {
-    EnLocalizer {
-        _lock: localizer_test_lock().expect("localizer test lock poisoned"),
-        _guard: set_en_localizer(),
-    }
-}
+use rstest::rstest;
+use test_support::{EnLocalizer, en_localizer};
 
 #[rstest]
 fn my_locale_sensitive_snapshot(en_localizer: EnLocalizer) {
@@ -279,6 +265,10 @@ function, serialising locale state across the test suite.
 
 ### Relevant utilities
 
+- `test_support::EnLocalizer` — RAII bundle holding the global localizer test
+  lock and the English `LocalizerGuard`; both are released on drop.
+- `test_support::en_localizer` — `#[fixture]` constructor that builds an
+  `EnLocalizer`; prefer this over a per-module fixture.
 - `test_support::LocalizerGuard` — opaque guard returned by
   `set_en_localizer()`; dropping it uninstalls the locale.
 - `test_support::localizer_test_lock()` — acquires the global mutex that
