@@ -8,6 +8,7 @@ use crate::runner::RunnerError;
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use insta::{Settings, assert_snapshot};
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use serde_json::{Map, Value};
 use std::path::PathBuf;
@@ -86,6 +87,17 @@ fn circular_dependency_error_for(cycle_nodes: Vec<&str>) -> IrGenError {
 /// snapshot tests.
 fn circular_dependency_error() -> IrGenError {
     circular_dependency_error_for(vec!["a", "b", "a"])
+}
+
+/// Generates between `min` and `max` distinct single-character node names as
+/// [`Utf8PathBuf`] values.
+fn arb_unique_nodes(min: usize, max: usize) -> impl Strategy<Value = Vec<camino::Utf8PathBuf>> {
+    proptest::collection::vec("[a-z]", min..=max)
+        .prop_filter("nodes must be unique", |v| {
+            let set: std::collections::HashSet<_> = v.iter().collect();
+            set.len() == v.len()
+        })
+        .prop_map(|v| v.into_iter().map(camino::Utf8PathBuf::from).collect())
 }
 
 /// Verifies that `render_error_json` records a plain error's full cause chain
@@ -308,4 +320,73 @@ fn render_manifest_parse_diagnostic_matches_snapshot() -> Result<()> {
         assert_snapshot!("manifest_parse_error", rendered);
     });
     Ok(())
+}
+
+proptest! {
+    /// Cycle closure holds for arbitrary unique node sequences of length 2–8:
+    /// the first and last elements of the constructed cycle are always equal.
+    #[test]
+    fn prop_circular_dependency_cycle_is_closed(
+        nodes in arb_unique_nodes(2, 8),
+    ) {
+        let base_nodes: Vec<&str> = nodes.iter().map(|node| node.as_str()).collect();
+        let mut cycle_nodes = base_nodes;
+        cycle_nodes.push(cycle_nodes.first().copied().expect("nodes must be non-empty"));
+        let error = circular_dependency_error_for(cycle_nodes);
+        if let IrGenError::CircularDependency { cycle, .. } = &error {
+            prop_assert_eq!(cycle.first(), cycle.last());
+        }
+    }
+
+    /// Cycle length equals the number of input nodes plus one (the closure
+    /// node), for arbitrary unique node sequences of length 2–8.
+    #[test]
+    fn prop_circular_dependency_cycle_length_matches_input(
+        nodes in arb_unique_nodes(2, 8),
+    ) {
+        let input_len = nodes.len();
+        let base_nodes: Vec<&str> = nodes.iter().map(|node| node.as_str()).collect();
+        let mut cycle_nodes = base_nodes;
+        cycle_nodes.push(cycle_nodes.first().copied().expect("nodes must be non-empty"));
+        let error = circular_dependency_error_for(cycle_nodes);
+        if let IrGenError::CircularDependency { cycle, .. } = &error {
+            prop_assert_eq!(cycle.len(), input_len + 1);
+        }
+    }
+
+    /// The fixture never populates `missing_dependencies`, regardless of cycle
+    /// size.
+    #[test]
+    fn prop_circular_dependency_missing_deps_is_empty(
+        nodes in arb_unique_nodes(2, 8),
+    ) {
+        let base_nodes: Vec<&str> = nodes.iter().map(|node| node.as_str()).collect();
+        let mut cycle_nodes = base_nodes;
+        cycle_nodes.push(cycle_nodes.first().copied().expect("nodes must be non-empty"));
+        let error = circular_dependency_error_for(cycle_nodes);
+        if let IrGenError::CircularDependency { missing_dependencies, .. } = &error {
+            prop_assert!(missing_dependencies.is_empty());
+        }
+    }
+
+    /// The `Display` output contains every node in the cycle, for arbitrary
+    /// unique node sequences of length 2–8.
+    #[test]
+    fn prop_circular_dependency_display_contains_all_nodes(
+        nodes in arb_unique_nodes(2, 8),
+    ) {
+        let base_nodes: Vec<&str> = nodes.iter().map(|node| node.as_str()).collect();
+        let mut cycle_nodes = base_nodes;
+        cycle_nodes.push(cycle_nodes.first().copied().expect("nodes must be non-empty"));
+        // Display does not require locale pinning: it need not produce
+        // localised output for the structural node-presence assertion.
+        let error = circular_dependency_error_for(cycle_nodes);
+        let rendered = error.to_string();
+        for node in &nodes {
+            prop_assert!(
+                rendered.contains(node.as_str()),
+                "Display output must contain {node:?}; got {rendered:?}",
+            );
+        }
+    }
 }
