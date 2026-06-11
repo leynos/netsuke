@@ -1,4 +1,4 @@
-.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani-check kani-full install-verus verus formal-pr
+.PHONY: help all clean test build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -67,6 +67,8 @@ kani-check: ## Check the installed Kani verifier version
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI) $(KANI_FLAGS)
+
+kani-ir: kani-full ## Run the IR Kani verification suite
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2

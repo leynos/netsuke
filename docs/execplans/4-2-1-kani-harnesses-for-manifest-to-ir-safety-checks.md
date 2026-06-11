@@ -251,9 +251,24 @@ requires explicit user approval before implementation begins.
       `[package.metadata.kani]` table, the empty `#[cfg(kani)] mod
       verification` blocks in `src/ir/from_manifest.rs` and
       `src/ir/cycle.rs`, and a single placeholder
-      `#[kani::proof]` that calls `kani::assert(false, ...)`.
-      Confirm `make kani-full` discovers the harness and reports
-      failure for the expected reason.
+      `#[kani::proof]` in each module that calls
+      `kani::assert(true, ...)`. Confirm `cargo kani list`
+      discovers the harnesses and `make kani-full` runs them.
+- [x] (2026-06-11T22:18:05Z) Stage B scaffold edits made: added the
+      `cfg(kani)` lint declaration, `[package.metadata.kani.flags]`
+      `default-unwind = "6"`, the `make kani-ir` alias, and placeholder
+      `verification::scaffold_smoke` harnesses in `from_manifest` and
+      `cycle`.
+- [x] (2026-06-11T22:21:19Z) Stage B discovery succeeded with
+      `LD_LIBRARY_PATH` pointing at Kani's bundled toolchain libraries. The
+      installed driver lists both scaffold harnesses with `cargo kani list`.
+- [x] (2026-06-11T22:26:59Z) Stage B validation passed:
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+      `make nixie`, `cargo kani list`, `make kani-full`, and `make kani-ir`
+      all completed successfully. Kani commands used the local
+      `LD_LIBRARY_PATH` workaround documented in `Surprises & Discoveries`.
+- [x] (2026-06-11T22:39:09Z) Stage B CodeRabbit review completed with zero
+      findings.
 - [ ] Stage C (green): implement the duplicate-output, rule-error,
       cycle-detection, and missing-dependency harnesses. Each subtask
       commits separately so reviewers can isolate which harness
@@ -323,6 +338,35 @@ requires explicit user approval before implementation begins.
   metadata table to set a global `default-unwind` and keeps
   `make kani-full` unfiltered so future roadmap items (`4.2.2`,
   `4.2.3`) inherit the discovery surface.
+
+- Observation: Stage B implementation follows the revised scaffold
+  shape from the Revision note, not the stale Progress wording that
+  mentioned `kani::assert(false)`. The placeholder harnesses assert
+  `true`; discovery is verified with `cargo kani list`, and
+  execution is verified with `make kani-full`.
+
+- Observation: the installed Kani driver exposes harness discovery as
+  `cargo kani list`, not `cargo kani --list` or
+  `cargo kani --list-harnesses`. It also requires Cargo metadata flag
+  values to be strings, so `default-unwind = 6` fails with
+  `Unknown key type default-unwind`; the working table is
+  `default-unwind = "6"`, matching the official Kani usage guide.
+
+- Observation: invoking `cargo kani list` without an explicit
+  `LD_LIBRARY_PATH` failed while a build script called `kani-compiler`,
+  because `libLLVM.so.21.1-rust-1.93.0-nightly` was not found. Running with
+  `LD_LIBRARY_PATH=/home/leynos/.kani/kani-0.67.0/toolchain/lib:/home/leynos/.kani/kani-0.67.0/lib`
+  resolves the compiler runtime path. This is an environment quirk of the
+  local Kani installation rather than a source change.
+
+- Observation: Kani compilation surfaced an `unused variable: err` warning in
+  `src/stdlib/path/hash_utils.rs` because the Kani compiler did not treat the
+  implicit format capture inside `debug_assert!` as a use. The warning is
+  fixed by consuming the impossible `std::fmt::Error` value with
+  `let _ = err;` and using a static debug assertion message. Explicit `{}`
+  formatting satisfied Kani but violated Clippy's `uninlined_format_args`;
+  underscore-prefixed format capture satisfied Kani but violated Clippy's
+  `used_underscore_binding`.
 
 - Observation: `Recipe::Command` flows through `interpolate_command`
   and then `shlex::split`, both of which are large symbolic-execution
@@ -410,6 +454,19 @@ requires explicit user approval before implementation begins.
   required. Rationale: the research summary recommends a global
   default to avoid drift; per-harness annotations stay rare and
   intentional. Date/Author: 2026-06-07 / planning agent.
+
+- Decision: encode `default-unwind` as the string `"6"` in
+  `Cargo.toml`. Rationale: Kani's metadata parser accepts command-line
+  option values as strings and rejects the numeric value originally
+  sketched in this ExecPlan. The semantic unwind bound is unchanged.
+  Date/Author: 2026-06-11 / implementation agent.
+
+- Decision: keep the Kani `LD_LIBRARY_PATH` workaround in command invocations
+  for this task rather than changing the Makefile. Rationale: the issue is a
+  local installation/runtime-linking problem, not a repository portability
+  requirement, and changing the project target would make every contributor
+  inherit a machine-specific path. Date/Author: 2026-06-11 /
+  implementation agent.
 
 - Decision: introduce tiered `make` targets pre-emptively. Add
   `make kani-ir` as an alias for `make kani-full` in this item, even
@@ -593,7 +650,7 @@ proves the harness loop fails for the expected reason.
 
    ```toml
    [package.metadata.kani.flags]
-   default-unwind = 6
+   default-unwind = "6"
    ```
 
    The chosen default may be revisited at Stage C if a harness needs
@@ -989,7 +1046,7 @@ true:
   and `make nixie` all pass.
 - `Cargo.toml` declares `unexpected_cfgs` with
   `check-cfg = ["cfg(kani)"]` and a `[package.metadata.kani.flags]`
-  table with `default-unwind = 6`. No new `[dependencies]`,
+  table with `default-unwind = "6"`. No new `[dependencies]`,
   `[dev-dependencies]`, or `[build-dependencies]` entries appear.
 - `docs/developers-guide.md` documents the harness inventory and
   the new `cfg(kani)` lint convention.

@@ -289,3 +289,14 @@ fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
         .map(|p: &Utf8PathBuf| p.to_string())
         .unwrap_or_default()
 }
+
+#[cfg(kani)]
+mod verification {
+    //! Kani harnesses for manifest-to-IR safety properties.
+
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn scaffold_smoke() {
+        kani::assert(true, "scaffold: replace with real manifest-to-IR harness");
+    }
+}

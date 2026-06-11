@@ -17,6 +17,10 @@ description = "A YAML-powered Ninja/Jinja hybrid build system."
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
 locales   = ["en-US", "es-ES"]
+
+[package.metadata.kani.flags]
+default-unwind = "6"
+
 [features]
 default = []
 legacy-digests = ["sha1", "md5"]
@@ -134,6 +138,7 @@ result_large_err                    = "deny"
 unknown_lints                       = "deny"
 renamed_and_removed_lints           = "deny"
 missing_docs                        = "deny"
+unexpected_cfgs                     = { level = "warn", check-cfg = ["cfg(kani)"] }
 
 [lints.rustdoc]
 missing_crate_level_docs            = "deny"
