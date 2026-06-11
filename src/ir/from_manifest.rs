@@ -255,36 +255,77 @@ fn resolve_rule(
         || {
             let mut rules = to_string_vec(rule);
             if rules.is_empty() {
-                Err(IrGenError::EmptyRule {
-                    target_name: target_name.to_owned(),
-                    message: localization::message(keys::IR_EMPTY_RULE)
-                        .with_arg("target", target_name),
-                })
+                Err(empty_rule_error(target_name))
             } else {
                 rules.sort();
-                let rules_message = format!("{rules:?}");
-                Err(IrGenError::MultipleRules {
-                    target_name: target_name.to_owned(),
-                    rules,
-                    message: localization::message(keys::IR_MULTIPLE_RULES)
-                        .with_arg("target", target_name)
-                        .with_arg("rules", rules_message),
-                })
+                Err(multiple_rules_error(target_name, rules))
             }
         },
         |name| {
             rule_map
                 .get(name)
                 .cloned()
-                .ok_or_else(|| IrGenError::RuleNotFound {
-                    target_name: target_name.to_owned(),
-                    rule_name: name.to_owned(),
-                    message: localization::message(keys::IR_RULE_NOT_FOUND)
-                        .with_arg("target", target_name)
-                        .with_arg("rule", name),
-                })
+                .ok_or_else(|| rule_not_found_error(target_name, name))
         },
     )
+}
+
+fn empty_rule_error(target_name: &str) -> IrGenError {
+    IrGenError::EmptyRule {
+        target_name: target_name.to_owned(),
+        message: empty_rule_message(target_name),
+    }
+}
+
+#[cfg(not(kani))]
+fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
+    localization::message(keys::IR_EMPTY_RULE).with_arg("target", target_name)
+}
+
+#[cfg(kani)]
+fn empty_rule_message(_target_name: &str) -> localization::LocalizedMessage {
+    localization::message(keys::IR_EMPTY_RULE)
+}
+
+fn multiple_rules_error(target_name: &str, rules: Vec<String>) -> IrGenError {
+    let message = multiple_rules_message(target_name, &rules);
+    IrGenError::MultipleRules {
+        target_name: target_name.to_owned(),
+        rules,
+        message,
+    }
+}
+
+#[cfg(not(kani))]
+fn multiple_rules_message(target_name: &str, rules: &[String]) -> localization::LocalizedMessage {
+    localization::message(keys::IR_MULTIPLE_RULES)
+        .with_arg("target", target_name)
+        .with_arg("rules", format!("{rules:?}"))
+}
+
+#[cfg(kani)]
+fn multiple_rules_message(_target_name: &str, _rules: &[String]) -> localization::LocalizedMessage {
+    localization::message(keys::IR_MULTIPLE_RULES)
+}
+
+fn rule_not_found_error(target_name: &str, rule_name: &str) -> IrGenError {
+    IrGenError::RuleNotFound {
+        target_name: target_name.to_owned(),
+        rule_name: rule_name.to_owned(),
+        message: rule_not_found_message(target_name, rule_name),
+    }
+}
+
+#[cfg(not(kani))]
+fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::LocalizedMessage {
+    localization::message(keys::IR_RULE_NOT_FOUND)
+        .with_arg("target", target_name)
+        .with_arg("rule", rule_name)
+}
+
+#[cfg(kani)]
+fn rule_not_found_message(_target_name: &str, _rule_name: &str) -> localization::LocalizedMessage {
+    localization::message(keys::IR_RULE_NOT_FOUND)
 }
 
 fn find_duplicates(

@@ -82,6 +82,13 @@ solver budget in path and map hashing. Under `cfg(kani)`, this constructor also
 uses the real duplicate-output message key without formatted arguments so the
 proof does not execute localization formatting internals.
 
+The rule-selection harness follows the same boundary. It verifies private
+constructors for empty-rule, multiple-rules, and missing-rule errors, rather
+than the full `resolve_rule` dispatch. Direct attempts through `resolve_rule`
+pulled in default `HashMap` random-state initialisation, `StringOrList` vector
+conversion, and string sorting/drop internals. Existing Rust behavioural tests
+continue to cover the integration path from manifest shape to those errors.
+
 ## Known risks and limitations
 
 - The duplicate-output harness no longer proves that full manifest lowering or
@@ -90,6 +97,8 @@ proof does not execute localization formatting internals.
 - The duplicate-output harness does not prove rendered Fluent output for that
   error variant. It proves the message key is selected and the semantic payload
   is preserved.
+- The rule-selection harness no longer proves that full `resolve_rule` dispatch
+  reaches each branch; existing behavioural tests keep that path covered.
 - Graph coverage beyond one to three nodes remains a tracked future obligation
   for Proptest.
 - If the production IR representation changes away from `HashMap` or owned

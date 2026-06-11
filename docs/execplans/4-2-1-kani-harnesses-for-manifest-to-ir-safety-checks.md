@@ -295,6 +295,14 @@ requires explicit user approval before implementation begins.
       but both `coderabbit review --agent` invocations hung after
       `preparing_sandbox` for more than the local tolerance. No findings were
       emitted; retry before the next major milestone if the service recovers.
+- [x] (2026-06-11T23:46:32Z) Stage C rule-error harness implemented as
+      `rule_selection_errors_match_rule_shape`. The final proof verifies
+      private empty-rule, multiple-rules, and missing-rule error constructors,
+      preserving target and rule payloads while using real localization message
+      keys without formatted arguments under `cfg(kani)`.
+- [x] (2026-06-11T23:46:32Z) Stage C rule-error focused Kani run passed:
+      `rule_selection_errors_match_rule_shape` verified successfully with
+      zero failed checks and 16.44 seconds reported verification time.
 - [ ] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
@@ -421,6 +429,20 @@ requires explicit user approval before implementation begins.
   Impact: deterministic gates remain the source of truth for the layout
   refactor, and CodeRabbit should be retried before the next major milestone if
   the service recovers.
+
+- Observation: direct rule-selection Kani proofs failed or exceeded the
+  practical budget when they used `resolve_rule`. The first attempt pulled in
+  `HashMap::new` and reached OS randomness through `RandomState`; a
+  deterministic hasher avoided that, but the proof then spent its budget in
+  `StringOrList` vector conversion, `Vec<String>::sort`, string comparison, and
+  drop paths. Impact: the final harness proves the private rule-error
+  constructors and leaves the full dispatch integration to existing Rust
+  behavioural tests.
+
+- Observation: the rule-error constructor harness still needed short symbolic
+  identifiers. Six-byte names such as `rule-a` exceeded the global unwind bound
+  in `memcmp`, while one-byte names preserve the same semantic payload checks
+  within `default-unwind = "6"`.
 
 ## Decision Log
 

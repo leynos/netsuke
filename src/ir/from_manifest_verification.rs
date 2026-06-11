@@ -22,8 +22,54 @@ fn duplicate_output_always_rejected() {
     }
 }
 
+#[kani::proof]
+fn rule_selection_errors_match_rule_shape() {
+    let rule_seed = kani::any::<u8>();
+    kani::assume(rule_seed < 3);
+
+    match (rule_seed, symbolic_rule_selection_result(rule_seed)) {
+        (0, Err(IrGenError::EmptyRule { target_name, .. })) => {
+            kani::assert(target_name == "out", "empty-rule target is preserved");
+        }
+        (
+            1,
+            Err(IrGenError::MultipleRules {
+                target_name, rules, ..
+            }),
+        ) => {
+            kani::assert(target_name == "out", "multiple-rule target is preserved");
+            kani::assert(rules.len() == 2, "both provided rule names are reported");
+            kani::assert(rules[0] == "a", "multiple-rule names are preserved");
+            kani::assert(rules[1] == "b", "multiple-rule names are preserved");
+        }
+        (
+            2,
+            Err(IrGenError::RuleNotFound {
+                target_name,
+                rule_name,
+                ..
+            }),
+        ) => {
+            kani::assert(target_name == "out", "missing-rule target is preserved");
+            kani::assert(rule_name == "m", "missing rule name is preserved");
+        }
+        _ => kani::assert(false, "rule shape must select the matching error"),
+    }
+}
+
 fn symbolic_output_name(seed: u8) -> &'static str {
     if seed == 0 { "out-a" } else { "out-b" }
+}
+
+fn symbolic_rule_selection_result(seed: u8) -> Result<(), IrGenError> {
+    match seed {
+        0 => Err(empty_rule_error("out")),
+        1 => Err(multiple_rules_error(
+            "out",
+            vec!["a".to_owned(), "b".to_owned()],
+        )),
+        _ => Err(rule_not_found_error("out", "m")),
+    }
 }
 
 fn output_matches(actual: Option<&String>, expected: &str) -> bool {
