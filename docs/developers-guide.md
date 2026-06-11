@@ -165,6 +165,17 @@ Use the Make targets for day-to-day formal-verification checks:
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`.
 
+
+### Kani harness inventory
+
+The IR harnesses live inline in the modules they verify, under
+`#[cfg(kani)] mod verification`. They are private to those modules unless a
+future proof genuinely needs a wider helper.
+
+| Harness                            | Module                    | Property                                                                                           | Bound                         | Notes                                                                                                                                                                                               |
+| ---------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate_output_always_rejected` | `src/ir/from_manifest.rs` | A known duplicate path set produces `IrGenError::DuplicateOutput` and preserves the reported path. | Global `default-unwind = "6"` | Verifies the private duplicate-output error constructor rather than full manifest lowering. Kani uses the real message key without formatted arguments so the proof avoids localization formatting. |
+
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any first

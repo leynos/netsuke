@@ -110,12 +110,8 @@ impl BuildGraph {
                 always: target.always,
             };
 
-            if let Some(dups) = find_duplicates(&outputs, targets) {
-                return Err(IrGenError::DuplicateOutput {
-                    message: localization::message(keys::IR_DUPLICATE_OUTPUTS)
-                        .with_arg("outputs", format!("{dups:?}")),
-                    outputs: dups,
-                });
+            if let Some(error) = duplicate_output_error(&outputs, targets) {
+                return Err(error);
             }
             for out in outputs {
                 targets.insert(out, edge.clone());
@@ -196,6 +192,31 @@ fn register_action(
     })?;
     actions.entry(hash.clone()).or_insert(action);
     Ok(hash)
+}
+
+fn duplicate_output_error(
+    outputs: &[Utf8PathBuf],
+    targets: &HashMap<Utf8PathBuf, BuildEdge>,
+) -> Option<IrGenError> {
+    find_duplicates(outputs, targets).map(duplicate_output_error_from_paths)
+}
+
+fn duplicate_output_error_from_paths(dups: Vec<String>) -> IrGenError {
+    let message = duplicate_outputs_message(&dups);
+    IrGenError::DuplicateOutput {
+        message,
+        outputs: dups,
+    }
+}
+
+#[cfg(not(kani))]
+fn duplicate_outputs_message(dups: &[String]) -> localization::LocalizedMessage {
+    localization::message(keys::IR_DUPLICATE_OUTPUTS).with_arg("outputs", format!("{dups:?}"))
+}
+
+#[cfg(kani)]
+fn duplicate_outputs_message(_dups: &[String]) -> localization::LocalizedMessage {
+    localization::message(keys::IR_DUPLICATE_OUTPUTS)
 }
 
 fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
@@ -294,9 +315,33 @@ fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
 mod verification {
     //! Kani harnesses for manifest-to-IR safety properties.
 
+    use super::*;
+
     #[kani::proof]
-    #[kani::unwind(2)]
-    fn scaffold_smoke() {
-        kani::assert(true, "scaffold: replace with real manifest-to-IR harness");
+    fn duplicate_output_always_rejected() {
+        let output_seed = kani::any::<u8>();
+        kani::assume(output_seed < 2);
+
+        let expected_output = symbolic_output_name(output_seed);
+        let duplicates = vec![expected_output.to_owned()];
+
+        match duplicate_output_error_from_paths(duplicates) {
+            IrGenError::DuplicateOutput { outputs, .. } => {
+                kani::assert(outputs.len() == 1, "one duplicate output is reported");
+                kani::assert(
+                    output_matches(outputs.first(), expected_output),
+                    "reported duplicate must include the shared path",
+                );
+            }
+            _ => kani::assert(false, "expected DuplicateOutput"),
+        }
+    }
+
+    fn symbolic_output_name(seed: u8) -> &'static str {
+        if seed == 0 { "out-a" } else { "out-b" }
+    }
+
+    fn output_matches(actual: Option<&String>, expected: &str) -> bool {
+        actual.is_some_and(|output| output == expected)
     }
 }

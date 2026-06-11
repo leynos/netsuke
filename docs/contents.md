@@ -34,6 +34,8 @@ operator, user, and contributor references are easier to find.
   Human-first, agent-consistent CLI doctrine decision record.
 - [adr-003-actions-foreach-when-scope.md](adr-003-actions-foreach-when-scope.md):
   Manifest control-key scoping decision record.
+- [adr-004-bound-kani-ir-harnesses-to-small-n.md](adr-004-bound-kani-ir-harnesses-to-small-n.md):
+  Kani IR harness bound and Proptest hand-off decision record.
 
 ## User and operator guides
 
