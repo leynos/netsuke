@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IMPLEMENTING
 
 ## Purpose / big picture
 
@@ -44,9 +44,10 @@ requires explicit user approval before implementation begins.
 
 ## Constraints
 
-- Do not implement this plan until the user explicitly approves it,
-  including the bound reconciliation discussed in `Decision Log` entry
-  "Kani bound reduced relative to roadmap".
+- The user approved implementation on 2026-06-11 by asking the agent to
+  proceed with this ExecPlan. The bound reconciliation discussed in
+  `Decision Log` entry "Kani bound reduced relative to roadmap" is accepted
+  for this implementation.
 - Do not modify the public Application Programming Interface (API) of the
   `netsuke::ir` module. New harness-only items must be `#[cfg(kani)]` and
   either private to the module under test or `pub(crate)` at most. The
@@ -243,8 +244,9 @@ requires explicit user approval before implementation begins.
       harness collapse, duplicate-output assertion shape, 3-node
       fallback wiring, ADR-004 Options Considered, hexagonal-
       architecture rhetorical seasoning).
-- [ ] Stage A: review this draft with the user, resolve the open
-      questions, and obtain explicit approval to proceed.
+- [x] (2026-06-11T22:16:38Z) Stage A: reviewed this draft with the user by
+      implementation instruction, resolved the open questions using the plan's
+      recommended answers, and received approval to proceed.
 - [ ] Stage B (red): add the `check-cfg` declaration, the
       `[package.metadata.kani]` table, the empty `#[cfg(kani)] mod
       verification` blocks in `src/ir/from_manifest.rs` and
@@ -332,6 +334,17 @@ requires explicit user approval before implementation begins.
 - Decision: keep this ExecPlan pre-implementation and approval-gated.
   Rationale: the user stated the plan must be approved before
   implementation. Date/Author: 2026-06-07 / planning agent.
+
+- Decision: proceed with implementation using the plan's recommended
+  answers to the Stage A open questions. Rationale: the user explicitly
+  requested implementation of this ExecPlan on 2026-06-11, including the
+  `leta` workspace creation and the CodeRabbit review cadence. This accepts
+  Kani bounds of one to three nodes with Proptest hand-off at `4.3.1`, the
+  `ActionHasher::hash` constant-stub escape hatch if the duplicate-output
+  harness exceeds tolerance, the `make kani-ir` alias, `default-unwind = 6`,
+  the planned harness count budget, and mutation patches under
+  `docs/verification/mutations/`. Date/Author: 2026-06-11 / implementation
+  agent.
 
 - Decision: place harnesses inline as `#[cfg(kani)] mod verification`
   blocks inside `src/ir/from_manifest.rs` and `src/ir/cycle.rs`,
@@ -1120,3 +1133,6 @@ The references section should include:
   estimate added to Tolerances. The plan remains in DRAFT and
   approval-gated; remaining work is Stage A approval and then
   implementation.
+- 2026-06-11: Implementation approved by user instruction. Status moved to
+  IMPLEMENTING, Stage A marked complete, and recommended answers to the open
+  questions recorded in the Decision Log.
