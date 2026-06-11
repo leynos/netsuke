@@ -288,6 +288,13 @@ requires explicit user approval before implementation begins.
       review: moved Kani harness bodies from inline modules to sibling
       `src/ir/*_verification.rs` files while keeping the module declarations
       private and `#[cfg(kani)]`-gated.
+- [x] (2026-06-11T23:31:20Z) Verification-layout refactor committed as
+      `52a5614` after passing `make check-fmt`, `make kani-full`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`.
+- [ ] Verification-layout CodeRabbit review attempted twice after clean gates,
+      but both `coderabbit review --agent` invocations hung after
+      `preparing_sandbox` for more than the local tolerance. No findings were
+      emitted; retry before the next major milestone if the service recovers.
 - [ ] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
@@ -406,6 +413,14 @@ requires explicit user approval before implementation begins.
   message arguments. Impact: `duplicate_outputs_message` keeps the real message
   key under `cfg(kani)` but omits formatted arguments, so the harness proves
   the error variant and payload rather than rendered localization text.
+
+- Observation: two post-refactor `coderabbit review --agent` invocations for
+  commit `52a5614` connected to the review service and reached
+  `preparing_sandbox`, then emitted no further output for several minutes. They
+  were stopped by killing only the process pairs associated with this worktree.
+  Impact: deterministic gates remain the source of truth for the layout
+  refactor, and CodeRabbit should be retried before the next major milestone if
+  the service recovers.
 
 ## Decision Log
 
