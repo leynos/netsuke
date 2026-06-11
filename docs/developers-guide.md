@@ -168,13 +168,15 @@ Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 
 ### Kani harness inventory
 
-The IR harnesses live inline in the modules they verify, under
-`#[cfg(kani)] mod verification`. They are private to those modules unless a
-future proof genuinely needs a wider helper.
+The IR harnesses are declared by the modules they verify, under
+`#[cfg(kani)] mod verification`, with harness bodies stored in sibling
+`*_verification.rs` files. They are private to those modules unless a future
+proof genuinely needs a wider helper. This keeps production modules below the
+400-line source-file limit while preserving access to private helpers.
 
-| Harness                            | Module                    | Property                                                                                           | Bound                         | Notes                                                                                                                                                                                               |
-| ---------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `duplicate_output_always_rejected` | `src/ir/from_manifest.rs` | A known duplicate path set produces `IrGenError::DuplicateOutput` and preserves the reported path. | Global `default-unwind = "6"` | Verifies the private duplicate-output error constructor rather than full manifest lowering. Kani uses the real message key without formatted arguments so the proof avoids localization formatting. |
+| Harness                            | Module                                 | Property                                                                                           | Bound                         | Notes                                                                                                                                                                                               |
+| ---------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate_output_always_rejected` | `src/ir/from_manifest_verification.rs` | A known duplicate path set produces `IrGenError::DuplicateOutput` and preserves the reported path. | Global `default-unwind = "6"` | Verifies the private duplicate-output error constructor rather than full manifest lowering. Kani uses the real message key without formatted arguments so the proof avoids localization formatting. |
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is

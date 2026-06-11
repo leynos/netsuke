@@ -284,6 +284,10 @@ requires explicit user approval before implementation begins.
       `make lint`, `make test`, `make markdownlint`, and `make nixie`.
 - [x] (2026-06-11T23:43:02Z) Stage C duplicate-output CodeRabbit review
       completed with zero findings after commit `04aeda1`.
+- [x] (2026-06-11T23:48:36Z) Post-commit refactor started after line-count
+      review: moved Kani harness bodies from inline modules to sibling
+      `src/ir/*_verification.rs` files while keeping the module declarations
+      private and `#[cfg(kani)]`-gated.
 - [ ] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
@@ -309,9 +313,11 @@ requires explicit user approval before implementation begins.
 - Observation: Kani's official layout guidance is
   `#[cfg(kani)] mod verification { … }` *inside* the module under test, not a
   top-level umbrella file. Evidence: `model-checking.github.io/kani/usage.html`
-  (research agent summary). Impact: harnesses live inline in
+  (research agent summary). Impact: harness modules are still declared by
   `src/ir/from_manifest.rs` and `src/ir/cycle.rs`, which keeps them close to
-  the helpers they call and avoids `pub(crate)` re-exports.
+  the helpers they call and avoids `pub(crate)` re-exports. The harness bodies
+  live in sibling files so production modules stay below the 400-line
+  source-file limit.
 
 - Observation: Kani 0.55+ ships `kani::bounded_any` and a
   `BoundedArbitrary` derive that supersede hand-rolled symbolic vectors.
@@ -381,7 +387,7 @@ requires explicit user approval before implementation begins.
 - Observation: the duplicate-output harness needs private manifest
   constructors because all existing equivalent helpers are unit-test-local or
   prose examples. The helpers are deliberately owned by
-  `src/ir/from_manifest.rs::verification`; permitted call sites are Kani
+  `src/ir/from_manifest_verification.rs`; permitted call sites are Kani
   harnesses in that module only, and they must not be promoted to production
   APIs or shared test helpers unless a later harness proves real reuse pressure.
 
@@ -418,12 +424,14 @@ requires explicit user approval before implementation begins.
   `docs/verification/mutations/`. Date/Author: 2026-06-11 / implementation
   agent.
 
-- Decision: place harnesses inline as `#[cfg(kani)] mod verification`
-  blocks inside `src/ir/from_manifest.rs` and `src/ir/cycle.rs`, rather than as
-  sibling files or a top-level umbrella module. Rationale: matches Kani's own
-  layout guidance, avoids widening any module's public API to expose private
-  helpers to harnesses, and keeps the proof obligations close to the code they
-  verify. Date/Author: 2026-06-07 / planning agent with research agent input.
+- Decision: declare harnesses from `src/ir/from_manifest.rs` and
+  `src/ir/cycle.rs` as private `#[cfg(kani)] mod verification` modules, but
+  store the harness bodies in sibling `src/ir/*_verification.rs` files.
+  Rationale: this keeps Kani proof obligations scoped to the modules they
+  verify and avoids widening public APIs, while satisfying the repository rule
+  that source files stay below 400 lines. Date/Author: 2026-06-11 /
+  implementation agent, revising the 2026-06-07 planning preference for fully
+  inline bodies.
 
 - Decision: Kani bound reduced relative to roadmap, with Proptest
   hand-off treated as a blocker on closing the bound-reduction risk. Rationale:

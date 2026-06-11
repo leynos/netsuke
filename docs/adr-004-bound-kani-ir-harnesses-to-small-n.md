@@ -68,7 +68,8 @@ Netsuke accepts small bounded Kani harnesses for roadmap item `4.2.1`.
   three-node cycles.
 - The larger-N graph property is handed off to the future Proptest roadmap
   item `4.3.1`.
-- Kani harnesses live inline in `#[cfg(kani)] mod verification` blocks.
+- Kani harnesses are declared from the production modules they verify and
+  stored in sibling `*_verification.rs` files.
 - Harness helpers stay private unless reuse pressure justifies a narrower
   internal abstraction.
 
@@ -93,6 +94,8 @@ proof does not execute localization formatting internals.
   for Proptest.
 - If the production IR representation changes away from `HashMap` or owned
   strings, the Kani bound should be re-evaluated instead of copied forward.
+- The sibling-file harness layout is a project-local constraint caused by the
+  400-line source-file limit, not a general Kani requirement.
 
 ## Related documents
 

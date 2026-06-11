@@ -13,9 +13,8 @@
 //! iterates over every node in the target map and delegates depth-first
 //! visiting to `visit` and `visit_dependency`.  Detected cycles are
 //! normalized by [`canonicalize_cycle`] to produce deterministic error
-//! messages regardless of traversal order.
-//! Consumed by [`super::from_manifest`] after the full target map is
-//! constructed.
+//! messages regardless of traversal order.  Consumed by
+//! [`super::from_manifest`] after the full target map is constructed.
 
 use std::collections::HashMap;
 
@@ -395,14 +394,6 @@ mod tests {
         }
     }
 }
-
 #[cfg(kani)]
-mod verification {
-    //! Kani harnesses for IR cycle detection properties.
-
-    #[kani::proof]
-    #[kani::unwind(2)]
-    fn scaffold_smoke() {
-        kani::assert(true, "scaffold: replace with real cycle-detection harness");
-    }
-}
+#[path = "cycle_verification.rs"]
+mod verification;
