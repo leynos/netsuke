@@ -303,6 +303,11 @@ requires explicit user approval before implementation begins.
 - [x] (2026-06-11T23:46:32Z) Stage C rule-error focused Kani run passed:
       `rule_selection_errors_match_rule_shape` verified successfully with
       zero failed checks and 16.44 seconds reported verification time.
+- [ ] (2026-06-11T23:53:46Z) Stage C rule-error CodeRabbit review attempted
+      after clean gates and commit `c4f7361`, but `coderabbit review --agent`
+      again stalled at `preparing_sandbox` and emitted no findings. The stuck
+      invocation was stopped after confirming the process pair belonged to this
+      worktree.
 - [ ] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
@@ -443,6 +448,14 @@ requires explicit user approval before implementation begins.
   identifiers. Six-byte names such as `rule-a` exceeded the global unwind bound
   in `memcmp`, while one-byte names preserve the same semantic payload checks
   within `default-unwind = "6"`.
+
+- Observation: the Stage C rule-error CodeRabbit invocation reproduced the
+  post-layout stall mode, reaching `preparing_sandbox` and producing no review
+  findings. The process list also showed another agent's unrelated CodeRabbit
+  review, so only the process pair for this worktree's
+  `coderabbit-rule-selection` log was stopped. Impact: retry CodeRabbit after
+  later milestones, but do not block deterministic Kani work on a silent review
+  service stall.
 
 ## Decision Log
 
