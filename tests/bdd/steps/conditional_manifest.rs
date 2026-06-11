@@ -46,6 +46,16 @@ targets:
     command: "true"
 "#;
 
+const TARGET_COMMAND_AVAILABLE_MANIFEST: &str = r#"netsuke_version: "1.0.0"
+targets:
+  - name: "preferred-target"
+    command: "echo preferred"
+    when: command_available("preferred-tool")
+  - name: "fallback-target"
+    command: "echo fallback"
+    when: not command_available("preferred-tool")
+"#;
+
 fn reset_command_state(world: &TestWorld) {
     world.run_status.clear();
     world.run_error.clear();
@@ -124,6 +134,22 @@ fn command_available_actions_workspace(world: &TestWorld) -> Result<()> {
     let temp = tempfile::tempdir().context("create temp dir for command-available manifest")?;
     let netsukefile = temp.path().join("Netsukefile");
     fs::write(&netsukefile, COMMAND_AVAILABLE_MANIFEST)
+        .with_context(|| format!("write manifest to {}", netsukefile.display()))?;
+    let bin = temp.path().join("bin");
+    let tool = fixture_command_path(&bin, "preferred-tool");
+    write_executable(&tool)?;
+    prepend_path_for_child(world, &bin)?;
+    *world.temp_dir.borrow_mut() = Some(temp);
+    reset_command_state(world);
+    Ok(())
+}
+
+/// Create a workspace with complementary command-availability target branches.
+#[given("a Netsuke workspace with a preferred target command available")]
+fn command_available_targets_workspace(world: &TestWorld) -> Result<()> {
+    let temp = tempfile::tempdir().context("create temp dir for target command manifest")?;
+    let netsukefile = temp.path().join("Netsukefile");
+    fs::write(&netsukefile, TARGET_COMMAND_AVAILABLE_MANIFEST)
         .with_context(|| format!("write manifest to {}", netsukefile.display()))?;
     let bin = temp.path().join("bin");
     let tool = fixture_command_path(&bin, "preferred-tool");

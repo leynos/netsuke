@@ -1,0 +1,5 @@
+---
+source: tests/which_diagnostic_snapshot_tests.rs
+expression: normalized
+---
+invalid operation: netsuke::jinja::which::not_found: [netsuke::jinja::which::not_found] command '⁨./absent⁩' at '⁨[WORKSPACE]/./absent⁩' is missing or not executable. (in <string>:1)
