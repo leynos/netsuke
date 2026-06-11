@@ -282,6 +282,8 @@ requires explicit user approval before implementation begins.
       `make fmt`, focused `cargo kani --harness
       duplicate_output_always_rejected`, `make kani-full`, `make check-fmt`,
       `make lint`, `make test`, `make markdownlint`, and `make nixie`.
+- [x] (2026-06-11T23:43:02Z) Stage C duplicate-output CodeRabbit review
+      completed with zero findings after commit `04aeda1`.
 - [ ] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
