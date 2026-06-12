@@ -5,7 +5,6 @@ use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 use sha2::{Digest, Sha256};
-use tracing::{debug, dispatcher, subscriber::NoSubscriber};
 
 /// Counts of manifest entries excluded during template expansion.
 ///
@@ -17,6 +16,36 @@ use tracing::{debug, dispatcher, subscriber::NoSubscriber};
 pub(crate) struct FilteringStats {
     pub filtered_targets: usize,
     pub filtered_actions: usize,
+}
+
+/// A manifest entry removed by a `when` expression during expansion.
+///
+/// Carries only bounded, non-sensitive correlation data: the raw entry name
+/// has unbounded cardinality and may carry personally identifiable
+/// information, so only a short stable hash is recorded, and the raw `when`
+/// expression may contain secret literals, so only its length is exposed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FilteredEntry {
+    /// Manifest section the entry belonged to (`targets` or `actions`).
+    pub section: String,
+    /// Short stable hash of the entry name for correlation.
+    pub entry_name_hash: String,
+    /// Iteration index when the entry came from a `foreach` expansion.
+    pub iteration_index: Option<usize>,
+    /// Length of the `when` expression that filtered the entry.
+    pub when_expression_len: usize,
+}
+
+/// Outcome of manifest expansion: counts plus per-entry filtering events.
+///
+/// Expansion reports what it filtered through this data structure rather
+/// than emitting telemetry itself; the caller owns the tracing policy.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct ExpansionReport {
+    /// Counts of filtered entries per section.
+    pub stats: FilteringStats,
+    /// One event per entry removed by a `when` expression.
+    pub filtered_entries: Vec<FilteredEntry>,
 }
 
 /// Context shared by expansion operations.
@@ -35,29 +64,35 @@ struct ExpansionContext<'a> {
 ///
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialize, or when target metadata is malformed.
-pub(crate) fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats> {
+pub(crate) fn expand_foreach(
+    doc: &mut ManifestValue,
+    env: &Environment,
+) -> Result<ExpansionReport> {
     let filtered_targets = expand_section(doc, "targets", env)?;
     let filtered_actions = expand_section(doc, "actions", env)?;
     let stats = FilteringStats {
-        filtered_targets,
-        filtered_actions,
+        filtered_targets: filtered_targets.len(),
+        filtered_actions: filtered_actions.len(),
     };
-    debug!(
-        filtered_targets = stats.filtered_targets,
-        filtered_actions = stats.filtered_actions,
-        filtered_entry_count = stats.filtered_targets + stats.filtered_actions,
-        "expanded manifest foreach and when directives"
-    );
-    Ok(stats)
+    let mut filtered_entries = filtered_targets;
+    filtered_entries.extend(filtered_actions);
+    Ok(ExpansionReport {
+        stats,
+        filtered_entries,
+    })
 }
 
-fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<usize> {
+fn expand_section(
+    doc: &mut ManifestValue,
+    key: &str,
+    env: &Environment,
+) -> Result<Vec<FilteredEntry>> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
-        return Ok(0);
+        return Ok(Vec::new());
     };
 
     let mut expanded = Vec::new();
-    let mut filtered = 0;
+    let mut filtered = Vec::new();
     let context = ExpansionContext { env, section: key };
     for entry in std::mem::take(entries) {
         match entry {
@@ -75,7 +110,7 @@ fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Resu
 fn expand_target(
     mut map: ManifestMap,
     context: &ExpansionContext<'_>,
-    filtered: &mut usize,
+    filtered: &mut Vec<FilteredEntry>,
 ) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, context.env)?;
@@ -83,8 +118,8 @@ fn expand_target(
         for (index, item) in values.into_iter().enumerate() {
             let mut clone = map.clone();
             clone.remove("foreach");
-            if !when_allows(&mut clone, context, Some((&item, index)))? {
-                *filtered += 1;
+            if let Some(event) = when_allows(&mut clone, context, Some((&item, index)))? {
+                filtered.push(event);
                 continue;
             }
             inject_iteration_vars(&mut clone, &item, index)?;
@@ -94,8 +129,8 @@ fn expand_target(
     } else {
         // For targets without foreach, still evaluate and remove the `when` clause.
         // Use empty context since there's no iteration variable.
-        if !when_allows(&mut map, context, None)? {
-            *filtered += 1;
+        if let Some(event) = when_allows(&mut map, context, None)? {
+            filtered.push(event);
             return Ok(vec![]);
         }
         Ok(vec![ManifestValue::Object(map)])
@@ -186,35 +221,25 @@ fn when_allows(
     map: &mut ManifestMap,
     context: &ExpansionContext<'_>,
     iteration: Option<(&Value, usize)>,
-) -> Result<bool> {
+) -> Result<Option<FilteredEntry>> {
     let Some(when_val) = map.remove("when") else {
-        return Ok(true);
+        return Ok(None);
     };
     let expr = as_str(&when_val, "when")?;
     let ctx = when_context(map, iteration)?;
     let allowed = eval_when(context.env, expr, ctx)?;
-    if !allowed && has_subscriber() {
-        let entry_name = entry_name(map);
-        let iteration_index = iteration.map(|(_, index)| index);
-        let entry_name_hash = entry_name_hash(entry_name);
-        // Keep filtering logs useful without leaking manifest contents. The raw
-        // entry name has unbounded cardinality and may carry PII, so log only a
-        // short stable hash for correlation. The raw `when` expression may
-        // contain secret literals from the manifest, so expose only its length.
-        debug!(
-            section = context.section,
-            entry_name_hash,
-            iteration_index,
-            when_expression_len = expr.len(),
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
+    if allowed {
+        return Ok(None);
     }
-    Ok(allowed)
-}
-
-fn has_subscriber() -> bool {
-    dispatcher::get_default(|current| !current.is::<NoSubscriber>())
+    // Report what was filtered through data rather than telemetry; the
+    // caller owns the tracing policy. Only bounded, non-sensitive fields are
+    // captured (see `FilteredEntry`).
+    Ok(Some(FilteredEntry {
+        section: context.section.to_owned(),
+        entry_name_hash: entry_name_hash(entry_name(map)),
+        iteration_index: iteration.map(|(_, index)| index),
+        when_expression_len: expr.len(),
+    }))
 }
 
 fn when_context(map: &ManifestMap, iteration: Option<(&Value, usize)>) -> Result<Value> {
