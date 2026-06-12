@@ -860,6 +860,10 @@ implementation.
   `/tmp/markdownlint-docs-milestone3-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
   and
   `/tmp/nixie-docs-milestone3-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
+- [x] (2026-06-12T00:48:00Z) Milestone 3 documentation CodeRabbit review
+  completed after the documentation commit. Log:
+  `/tmp/coderabbit-milestone3-docs-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
+  CodeRabbit reported `findings: 0`.
 
 Once implementation begins, each milestone gets its own checked entry with a
 UTC timestamp, the commands run, the log paths under `/tmp/`, and a one-line
