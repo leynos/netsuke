@@ -1084,7 +1084,7 @@ accept optional `phony` and `always` booleans. They default to `false`, making
 it explicit when an action should run regardless of file timestamps. Targets
 listed in the `actions` section are deserialized using a custom helper so they
 are always treated as `phony` tasks. This ensures preparation actions never
-generate build artefacts. Convenience functions in `src/manifest.rs` load a
+generate build artefacts. Convenience functions in `src/manifest/mod.rs` load a
 manifest from a string or a file path, returning `anyhow::Result` for
 straightforward error handling. Diagnostics now wrap source and manifest
 identifiers in the `ManifestSource` and `ManifestName` newtypes, allowing
@@ -3121,9 +3121,9 @@ consistent across user-facing output. The build-time audit in
 omit a declared key, carry a key beyond the declared set, or interpolate a
 different set of variables from the English source catalogue. Missing or
 drifted strings therefore fail CI before release. CLI execution and dispatch
-live in `src/runner.rs`, keeping `main.rs` focused on parsing. Process
+live in `src/runner/mod.rs`, keeping `main.rs` focused on parsing. Process
 management, Ninja invocation, argument redaction, and the temporary file
-helpers reside in `src/runner/process.rs`, allowing the runner entry point to
+helpers reside in `src/runner/process/mod.rs`, allowing the runner entry point to
 delegate low-level concerns. The working directory flag mirrors Ninja's `-C`
 option but is resolved internally: Netsuke runs Ninja with a configured working
 directory and resolves relative output paths (for example `generate --output`)
