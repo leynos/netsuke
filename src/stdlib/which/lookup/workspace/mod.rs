@@ -7,9 +7,8 @@ use std::{
 
 use camino::Utf8PathBuf;
 use indexmap::IndexSet;
-use minijinja::Error;
 
-use crate::stdlib::which::env::EnvSnapshot;
+use crate::stdlib::which::{env::EnvSnapshot, resolve_error::ResolveError};
 
 #[cfg(not(windows))]
 mod posix;
@@ -81,7 +80,7 @@ pub(super) fn search_workspace(
     command: &str,
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
-) -> Result<Vec<Utf8PathBuf>, Error> {
+) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     if !workspace_fallback_enabled() {
         tracing::debug!(
             %command,

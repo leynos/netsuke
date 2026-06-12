@@ -15,16 +15,16 @@ use minijinja::{
 
 mod cache;
 mod env;
-mod error;
 mod lookup;
 mod options;
+mod resolve_error;
 pub(crate) use lookup::{WORKSPACE_SKIP_DIRS, WorkspaceSkipList};
 
 pub(crate) use cache::WhichResolver;
 pub(crate) use options::WhichOptions;
 
 use crate::localization::{self, keys};
-use error::{args_error, is_not_found_error};
+use resolve_error::ResolveError;
 
 #[derive(Clone, Debug)]
 pub(crate) struct WhichConfig {
@@ -95,9 +95,13 @@ fn resolve_with(
         .as_str()
         .map(str::trim)
         .filter(|candidate| !candidate.is_empty())
-        .ok_or_else(|| args_error(localization::message(keys::STDLIB_WHICH_COMMAND_EMPTY)))?;
-    let options = WhichOptions::from_kwargs(kwargs)?;
-    let matches = resolver.resolve(name, &options)?;
+        .ok_or_else(|| {
+            Error::from(ResolveError::args(localization::message(
+                keys::STDLIB_WHICH_COMMAND_EMPTY,
+            )))
+        })?;
+    let options = WhichOptions::from_kwargs(kwargs).map_err(Error::from)?;
+    let matches = resolver.resolve(name, &options).map_err(Error::from)?;
     Ok(render_value(&matches, &options))
 }
 
@@ -110,12 +114,24 @@ fn command_available_with(
         .as_str()
         .map(str::trim)
         .filter(|candidate| !candidate.is_empty())
-        .ok_or_else(|| args_error(localization::message(keys::STDLIB_WHICH_COMMAND_EMPTY)))?;
-    let options = WhichOptions::from_kwargs(kwargs)?;
+        .ok_or_else(|| {
+            Error::from(ResolveError::args(localization::message(
+                keys::STDLIB_WHICH_COMMAND_EMPTY,
+            )))
+        })?;
+    let options = WhichOptions::from_kwargs(kwargs).map_err(Error::from)?;
     kwargs.assert_all_used()?;
-    match resolver.resolve(name, &options) {
-        Ok(matches) => Ok(Value::from(!matches.is_empty())),
-        Err(err) if is_not_found_error(&err) => Ok(Value::from(false)),
+    is_command_available(resolver.resolve(name, &options))
+        .map(Value::from)
+        .map_err(Error::from)
+}
+
+pub(super) fn is_command_available(
+    result: Result<Vec<Utf8PathBuf>, ResolveError>,
+) -> Result<bool, ResolveError> {
+    match result {
+        Ok(matches) => Ok(!matches.is_empty()),
+        Err(ResolveError::NotFound { .. } | ResolveError::DirectNotFound { .. }) => Ok(false),
         Err(err) => Err(err),
     }
 }
@@ -143,5 +159,42 @@ pub(super) fn format_path_for_output(path: &Utf8Path) -> String {
     #[cfg(not(windows))]
     {
         path.as_str().to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    fn command_available_helper_returns_true_for_matches() {
+        let result = is_command_available(Ok(vec![Utf8PathBuf::from("/bin/tool")]));
+        assert!(result.expect("availability result"));
+    }
+
+    #[rstest]
+    fn command_available_helper_returns_false_for_search_misses() {
+        let result = is_command_available(Err(ResolveError::NotFound {
+            command: "tool".to_owned(),
+            dirs: Vec::new(),
+            cwd_mode: options::CwdMode::Never,
+        }));
+        assert!(!result.expect("availability result"));
+    }
+
+    #[rstest]
+    fn command_available_helper_returns_false_for_direct_misses() {
+        let result = is_command_available(Err(ResolveError::DirectNotFound {
+            command: "./tool".to_owned(),
+            path: Utf8PathBuf::from("/workspace/tool"),
+        }));
+        assert!(!result.expect("availability result"));
+    }
+
+    #[rstest]
+    fn command_available_helper_propagates_argument_errors() {
+        let result = is_command_available(Err(ResolveError::args("bad option")));
+        assert!(matches!(result, Err(ResolveError::Args { .. })));
     }
 }

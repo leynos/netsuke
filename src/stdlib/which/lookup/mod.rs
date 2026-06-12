@@ -4,9 +4,6 @@ use std::fs;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
-use minijinja::{Error, ErrorKind};
-
-use crate::localization::{self, keys};
 
 use super::options::CwdMode;
 
@@ -14,8 +11,8 @@ use super::options::CwdMode;
 use super::env;
 use super::{
     env::EnvSnapshot,
-    error::{direct_not_found, not_found_error},
     options::WhichOptions,
+    resolve_error::{ResolveError, direct_not_found_error, not_found},
 };
 mod workspace;
 use workspace::search_workspace;
@@ -39,7 +36,7 @@ pub(super) fn lookup(
     env: &EnvSnapshot,
     options: &WhichOptions,
     workspace_skips: &WorkspaceSkipList,
-) -> Result<Vec<Utf8PathBuf>, Error> {
+) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     if is_direct_path(command) {
         return resolve_direct(command, env, options);
     }
@@ -87,13 +84,13 @@ pub(super) fn resolve_direct(
     command: &str,
     env: &EnvSnapshot,
     options: &WhichOptions,
-) -> Result<Vec<Utf8PathBuf>, Error> {
+) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let resolved = normalize_direct_path(command, env);
     let candidates = direct_candidates(&resolved, env);
     let mut matches = Vec::new();
     let _ = push_matches(&mut matches, candidates, options.all);
     if matches.is_empty() {
-        return Err(direct_not_found(command, &resolved));
+        return Err(direct_not_found_error(command, &resolved));
     }
     if options.canonical {
         canonicalise(matches)
@@ -107,10 +104,10 @@ pub(super) fn resolve_direct(
     command: &str,
     env: &EnvSnapshot,
     options: &WhichOptions,
-) -> Result<Vec<Utf8PathBuf>, Error> {
+) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let resolved = normalize_direct_path(command, env);
     if !is_executable(&resolved) {
-        return Err(direct_not_found(command, &resolved));
+        return Err(direct_not_found_error(command, &resolved));
     }
     if options.canonical {
         canonicalise(vec![resolved])
@@ -210,7 +207,7 @@ struct HandleMissContext<'a> {
     workspace_skips: &'a WorkspaceSkipList,
 }
 
-fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
+fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let path_empty = ctx.env.raw_path.as_ref().is_none_or(|path| path.is_empty());
 
     if path_empty && !matches!(ctx.options.cwd_mode, CwdMode::Never) {
@@ -225,7 +222,7 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, Error> {
         }
     }
 
-    Err(not_found_error(ctx.command, ctx.dirs, ctx.options.cwd_mode))
+    Err(not_found(ctx.command, ctx.dirs, ctx.options.cwd_mode))
 }
 
 #[cfg(unix)]
@@ -243,25 +240,17 @@ fn has_execute_permission(metadata: &fs::Metadata) -> bool {
 ///
 /// Returns an error when canonicalization fails or when any canonical path
 /// cannot be represented as UTF-8.
-pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, Error> {
+pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let mut unique = IndexSet::new();
     let mut resolved = Vec::new();
     for path in paths {
-        let canonical = fs::canonicalize(path.as_std_path()).map_err(|err| {
-            Error::new(
-                ErrorKind::InvalidOperation,
-                localization::message(keys::STDLIB_WHICH_CANONICALISE_FAILED)
-                    .with_arg("path", path.as_str())
-                    .with_arg("details", err.to_string())
-                    .to_string(),
-            )
-        })?;
-        let utf8 = Utf8PathBuf::from_path_buf(canonical).map_err(|_| {
-            Error::new(
-                ErrorKind::InvalidOperation,
-                localization::message(keys::STDLIB_WHICH_CANONICALISE_NON_UTF8).to_string(),
-            )
-        })?;
+        let canonical =
+            fs::canonicalize(path.as_std_path()).map_err(|source| ResolveError::Canonicalise {
+                path: path.clone(),
+                source,
+            })?;
+        let utf8 =
+            Utf8PathBuf::from_path_buf(canonical).map_err(|_| ResolveError::CanonicaliseNonUtf8)?;
         if unique.insert(utf8.clone()) {
             resolved.push(utf8);
         }

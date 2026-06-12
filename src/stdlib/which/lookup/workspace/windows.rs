@@ -3,17 +3,17 @@
 use std::collections::HashSet;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use minijinja::{Error, ErrorKind};
 use walkdir::WalkDir;
-
-use crate::localization::{self, keys};
 
 use super::super::is_executable;
 use super::{
     WORKSPACE_MAX_DEPTH, WorkspaceSkipList, log_if_no_matches, should_visit_entry,
     unwrap_or_log_error,
 };
-use crate::stdlib::which::env::{self, EnvSnapshot};
+use crate::stdlib::which::{
+    env::{self, EnvSnapshot},
+    resolve_error::ResolveError,
+};
 
 /// Encapsulates the state and logic for collecting matching executables during
 /// workspace traversal.
@@ -38,7 +38,7 @@ impl CollectionState {
         entry: walkdir::DirEntry,
         command: &str,
         ctx: &WorkspaceMatchContext,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool, ResolveError> {
         if let Some(path) = match_workspace_entry(entry, command, ctx)? {
             self.matches.push(path);
             if !self.collect_all {
@@ -55,7 +55,7 @@ pub(super) fn search_workspace(
     command: &str,
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
-) -> Result<Vec<Utf8PathBuf>, Error> {
+) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let match_ctx = WorkspaceMatchContext::new(command, env);
     let mut collector = CollectionState::new(collect_all);
 
@@ -91,7 +91,7 @@ fn match_workspace_entry(
     entry: walkdir::DirEntry,
     command: &str,
     ctx: &WorkspaceMatchContext,
-) -> Result<Option<Utf8PathBuf>, Error> {
+) -> Result<Option<Utf8PathBuf>, ResolveError> {
     if !entry.file_type().is_file() {
         return Ok(None);
     }
@@ -104,13 +104,10 @@ fn match_workspace_entry(
     let path = entry.into_path();
     let utf8 = Utf8PathBuf::from_path_buf(path).map_err(|path_buf| {
         let lossy_path = path_buf.to_string_lossy();
-        Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_WHICH_WORKSPACE_NON_UTF8)
-                .with_arg("command", command)
-                .with_arg("path", lossy_path)
-                .to_string(),
-        )
+        ResolveError::WorkspaceNonUtf8 {
+            command: command.to_owned(),
+            path: lossy_path.into_owned(),
+        }
     })?;
 
     Ok(is_executable(&utf8).then_some(utf8))

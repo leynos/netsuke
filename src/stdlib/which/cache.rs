@@ -10,12 +10,13 @@ use std::{
 
 use camino::Utf8PathBuf;
 use lru::LruCache;
-use minijinja::Error;
+use tracing::field;
 
 use super::{
     env::EnvSnapshot,
     lookup::{WorkspaceSkipList, lookup},
     options::WhichOptions,
+    resolve_error::ResolveError,
 };
 
 #[derive(Clone, Debug)]
@@ -45,7 +46,13 @@ impl WhichResolver {
         &self,
         command: &str,
         options: &WhichOptions,
-    ) -> Result<Vec<Utf8PathBuf>, Error> {
+    ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
+        let span = tracing::trace_span!(
+            "stdlib.which.resolve",
+            command = %command,
+            cache_hit = field::Empty,
+        );
+        let _guard = span.enter();
         let env = EnvSnapshot::capture(
             self.cwd_override.as_deref().map(Utf8PathBuf::as_path),
             self.path_override.as_deref(),
@@ -54,8 +61,10 @@ impl WhichResolver {
         if !options.fresh
             && let Some(cached) = self.try_cache(&key)
         {
+            span.record("cache_hit", true);
             return Ok(cached);
         }
+        span.record("cache_hit", false);
         let matches = lookup(command, &env, options, &self.workspace_skips)?;
         self.store(key, matches.clone());
         Ok(matches)
@@ -122,7 +131,6 @@ mod tests {
     use super::*;
     use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
-    use minijinja::ErrorKind;
     use rstest::rstest;
     use std::{num::NonZeroUsize, sync::Arc};
     use tempfile::TempDir;
@@ -219,7 +227,7 @@ mod tests {
             .resolve("tool", &options)
             .expect_err("default skip should ignore target");
 
-        ensure!(matches!(err.kind(), ErrorKind::InvalidOperation));
+        ensure!(matches!(err, ResolveError::NotFound { .. }));
 
         let resolver_custom = WhichResolver::new(
             Some(Arc::new(cwd.clone())),

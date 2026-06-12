@@ -826,6 +826,30 @@ implementation.
   `/tmp/lint-precommit-milestone1-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
   and
   `/tmp/test-precommit-milestone1-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
+- [x] (2026-06-11T23:06:09Z) Milestone 2 typed resolver error refactor
+  implemented inside `src/stdlib/which/*`. Added `ResolveError`, removed the
+  string-matched `is_not_found_error` path, added `is_command_available`, and
+  wrapped resolver entry in `trace_span!("stdlib.which.resolve", ...)` with a
+  recorded `cache_hit` field.
+- [x] (2026-06-11T23:06:09Z) Ran focused Milestone 2 validation. Logs:
+  `/tmp/stdlib-which-after-typed-error-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/lookup-after-typed-error-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/cache-after-typed-error-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  and
+  `/tmp/which-diagnostic-snapshots-after-typed-error-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
+  All passed; the diagnostic snapshots had no drift.
+- [x] (2026-06-12T00:25:04Z) Ran full Milestone 2 validation and CodeRabbit
+  review after the typed resolver refactor. `make markdownlint`,
+  `make check-fmt`, `make lint`, and `make test` passed after fixing Clippy
+  findings. Logs:
+  `/tmp/markdownlint-milestone2-source-fix-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/check-fmt-milestone2-source-fix-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/lint-milestone2-source-fix-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  and
+  `/tmp/test-milestone2-source-fix-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
+  The final CodeRabbit review log is
+  `/tmp/coderabbit-milestone2-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`;
+  CodeRabbit reported `findings: 0`.
 
 Once implementation begins, each milestone gets its own checked entry with a
 UTC timestamp, the commands run, the log paths under `/tmp/`, and a one-line
@@ -858,6 +882,16 @@ None recorded yet. Append observations during implementation with the evidence
   diagnostic snapshot fixture writes a real `tool` in the workspace so the
   existing user-visible unknown-keyword diagnostic is captured rather than a
   not-found diagnostic.
+- 2026-06-11: `EnvSnapshot::capture` had two existing error sites outside the
+  execplan's original `ResolveError` sketch: failing to read the process cwd
+  and a non-UTF-8 process cwd. Impact: the implementation keeps those as typed
+  `CwdResolve` and `CwdNonUtf8` variants rather than coercing them into
+  argument errors, preserving the previous user-visible diagnostics.
+- 2026-06-12: CodeRabbit repeatedly stalled for several minutes at sandbox
+  setup before advancing. Impact: later review runs should wait on the same
+  process rather than spawning duplicate reviews unless the process is clearly
+  wedged; the successful Milestone 2 final review eventually reported
+  `findings: 0`.
 
 ## Decision log
 
