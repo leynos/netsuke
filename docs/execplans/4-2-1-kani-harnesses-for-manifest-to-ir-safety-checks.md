@@ -308,6 +308,15 @@ requires explicit user approval before implementation begins.
       again stalled at `preparing_sandbox` and emitted no findings. The stuck
       invocation was stopped after confirming the process pair belonged to this
       worktree.
+- [x] (2026-06-12T00:15:01Z) Stage C cycle proof spike backed out after the
+      self-edge harness exceeded the practical proof budget. Attempted
+      boundaries included `cycle::analyse` over `HashMap`, a generic target
+      lookup port with a vector-backed Kani target set, a Kani-only vector
+      visitation state store, direct short-string path comparison, Kani-only
+      no-op cycle canonicalization, and explicit dependency loops. Each still
+      spent the proof budget in dynamic allocation, vector growth, path/string
+      comparison, or recursion unwinding before producing a verification
+      result. No unverified cycle code remains in the worktree.
 - [ ] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
@@ -456,6 +465,16 @@ requires explicit user approval before implementation begins.
   `coderabbit-rule-selection` log was stopped. Impact: retry CodeRabbit after
   later milestones, but do not block deterministic Kani work on a silent review
   service stall.
+
+- Observation: direct Kani proofs for cycle detection are not viable through
+  `cycle::analyse` at the current IR representation. Even after removing
+  `HashMap` from the Kani target set, replacing the detector's Kani state map
+  with a vector, bypassing `Utf8Path` component ordering under `cfg(kani)`, and
+  expanding iterator chains into explicit loops, the self-edge proof did not
+  finish inside the five-minute tolerance. Impact: the cycle subtask needs a
+  smaller proof boundary or should be handed to the planned Proptest work item;
+  do not reattempt the same `BuildEdge`/`Utf8PathBuf`/`Vec` path without a new
+  modelling decision.
 
 ## Decision Log
 
