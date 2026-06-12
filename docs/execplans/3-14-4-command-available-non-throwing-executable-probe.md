@@ -864,6 +864,13 @@ implementation.
   completed after the documentation commit. Log:
   `/tmp/coderabbit-milestone3-docs-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
   CodeRabbit reported `findings: 0`.
+- [x] (2026-06-12T00:49:36Z) Ran final repository validation. `make check-fmt`,
+  `make test`, `make typecheck`, and `make lint` passed. Logs:
+  `/tmp/check-fmt-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/test-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/typecheck-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  and
+  `/tmp/lint-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
 
 Once implementation begins, each milestone gets its own checked entry with a
 UTC timestamp, the commands run, the log paths under `/tmp/`, and a one-line
