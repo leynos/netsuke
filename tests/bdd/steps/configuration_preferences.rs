@@ -77,23 +77,17 @@ fn write_theme_config(world: &TestWorld, theme: Theme) -> Result<()> {
 
 /// Write a colour policy value to the config file.
 fn write_colour_policy_config(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
-    write_config(
-        world,
-        &format!("colour_policy = \"{}\"\n", enum_name(&policy)),
-    )
+    write_config(world, &format!("colour_policy = \"{policy}\"\n"))
 }
 
 /// Write a spinner mode value to the config file.
 fn write_spinner_mode_config(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
-    write_config(world, &format!("spinner_mode = \"{}\"\n", enum_name(&mode)))
+    write_config(world, &format!("spinner_mode = \"{mode}\"\n"))
 }
 
 /// Write an output format value to the config file.
 fn write_output_format_config(world: &TestWorld, format: OutputFormat) -> Result<()> {
-    write_config(
-        world,
-        &format!("output_format = \"{}\"\n", enum_name(&format)),
-    )
+    write_config(world, &format!("output_format = \"{format}\"\n"))
 }
 
 /// Set the `NETSUKE_THEME` environment variable.
@@ -104,7 +98,7 @@ fn set_env_theme(world: &TestWorld, theme: Theme) -> Result<()> {
 
 /// Set the `NETSUKE_COLOUR_POLICY` environment variable.
 fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
-    let value = enum_name(&policy);
+    let value = policy.to_string();
     mutate_env_var(
         world,
         EnvVarKey::from("NETSUKE_COLOUR_POLICY"),
@@ -114,7 +108,7 @@ fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) -> Result<()> 
 
 /// Set the `NETSUKE_SPINNER_MODE` environment variable.
 fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
-    let value = enum_name(&mode);
+    let value = mode.to_string();
     mutate_env_var(world, EnvVarKey::from("NETSUKE_SPINNER_MODE"), Some(&value))
 }
 
@@ -152,7 +146,8 @@ fn set_environment_locale_override(world: &TestWorld, locale: &str) -> Result<()
 
 #[given("the Netsuke config file sets output format to {format:string}")]
 fn config_sets_output_format(world: &TestWorld, format: &str) -> Result<()> {
-    let typed = OutputFormat::from_str(format, true)
+    let typed: OutputFormat = format
+        .parse()
         .map_err(|err| anyhow!("invalid output format '{format}': {err}"))?;
     write_output_format_config(world, typed)
 }
@@ -171,14 +166,16 @@ fn config_sets_theme(world: &TestWorld, theme: &str) -> Result<()> {
 
 #[given("the Netsuke config file sets colour policy to {policy:string}")]
 fn config_sets_colour_policy(world: &TestWorld, policy: &str) -> Result<()> {
-    let typed = ColourPolicy::from_str(policy, true)
+    let typed: ColourPolicy = policy
+        .parse()
         .map_err(|err| anyhow!("invalid colour policy '{policy}': {err}"))?;
     write_colour_policy_config(world, typed)
 }
 
 #[given("the Netsuke config file sets spinner mode to {mode:string}")]
 fn config_sets_spinner_mode(world: &TestWorld, mode: &str) -> Result<()> {
-    let typed = SpinnerMode::from_str(mode, true)
+    let typed: SpinnerMode = mode
+        .parse()
         .map_err(|err| anyhow!("invalid spinner mode '{mode}': {err}"))?;
     write_spinner_mode_config(world, typed)
 }
@@ -192,14 +189,16 @@ fn set_environment_theme_override(world: &TestWorld, theme: &str) -> Result<()> 
 
 #[given("the NETSUKE_COLOUR_POLICY environment variable is {policy:string}")]
 fn set_environment_colour_policy_override(world: &TestWorld, policy: &str) -> Result<()> {
-    let typed = ColourPolicy::from_str(policy, true)
+    let typed: ColourPolicy = policy
+        .parse()
         .map_err(|err| anyhow!("invalid colour policy '{policy}': {err}"))?;
     set_env_colour_policy(world, typed)
 }
 
 #[given("the NETSUKE_SPINNER_MODE environment variable is {mode:string}")]
 fn set_environment_spinner_mode_override(world: &TestWorld, mode: &str) -> Result<()> {
-    let typed = SpinnerMode::from_str(mode, true)
+    let typed: SpinnerMode = mode
+        .parse()
         .map_err(|err| anyhow!("invalid spinner mode '{mode}': {err}"))?;
     set_env_spinner_mode(world, typed)
 }

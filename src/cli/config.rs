@@ -16,7 +16,7 @@ use crate::host_pattern::HostPattern;
 use crate::theme::ThemePreference;
 
 /// Colour-output policy accepted by layered configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum ColourPolicy {
     /// Follow the host environment.
@@ -42,12 +42,19 @@ impl FromStr for ColourPolicy {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid colour policy '{s}'"))
+        // Mirror the case-insensitive matching previously provided by
+        // `clap::ValueEnum::from_str(s, true)`.
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "always" => Ok(Self::Always),
+            "never" => Ok(Self::Never),
+            _ => Err(format!("invalid colour policy '{s}'")),
+        }
     }
 }
 
 /// Spinner and progress rendering policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum SpinnerMode {
     /// Follow Netsuke's default progress behaviour.
@@ -73,12 +80,17 @@ impl FromStr for SpinnerMode {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid spinner mode '{s}'"))
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "enabled" => Ok(Self::Enabled),
+            "disabled" => Ok(Self::Disabled),
+            _ => Err(format!("invalid spinner mode '{s}'")),
+        }
     }
 }
 
 /// Top-level diagnostics and output format.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum OutputFormat {
     /// Human-readable terminal output.
@@ -101,7 +113,11 @@ impl FromStr for OutputFormat {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ValueEnum>::from_str(s, true).map_err(|_| format!("invalid output format '{s}'"))
+        match s.to_ascii_lowercase().as_str() {
+            "human" => Ok(Self::Human),
+            "json" => Ok(Self::Json),
+            _ => Err(format!("invalid output format '{s}'")),
+        }
     }
 }
 
