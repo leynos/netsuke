@@ -8,7 +8,7 @@ fn duplicate_output_always_rejected() {
     kani::assume(output_seed < 2);
 
     let expected_output = symbolic_output_name(output_seed);
-    let duplicates = vec![expected_output.to_owned()];
+    let duplicates = vec![Utf8PathBuf::from(expected_output)];
 
     match duplicate_output_error_from_paths(duplicates) {
         IrGenError::DuplicateOutput { outputs, .. } => {
@@ -62,13 +62,14 @@ fn symbolic_output_name(seed: u8) -> &'static str {
 }
 
 fn symbolic_rule_selection_result(seed: u8) -> Result<(), IrGenError> {
+    let target_paths = vec![Utf8PathBuf::from("out")];
     match seed {
-        0 => Err(empty_rule_error("out")),
+        0 => Err(empty_rule_error(&target_paths)),
         1 => Err(multiple_rules_error(
-            "out",
+            &target_paths,
             vec!["a".to_owned(), "b".to_owned()],
         )),
-        _ => Err(rule_not_found_error("out", "m")),
+        _ => Err(rule_not_found_error(&target_paths, "m")),
     }
 }
 
