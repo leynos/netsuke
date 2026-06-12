@@ -128,12 +128,15 @@ fn conditional_actions_and_targets_workspace(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
-/// Create a workspace with complementary command-availability action branches.
-#[given("a Netsuke workspace with a preferred command available")]
-fn command_available_actions_workspace(world: &TestWorld) -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for command-available manifest")?;
+fn setup_command_available_workspace(
+    world: &TestWorld,
+    manifest: &str,
+    context_label: &str,
+) -> Result<()> {
+    let temp =
+        tempfile::tempdir().with_context(|| format!("create temp dir for {context_label}"))?;
     let netsukefile = temp.path().join("Netsukefile");
-    fs::write(&netsukefile, COMMAND_AVAILABLE_MANIFEST)
+    fs::write(&netsukefile, manifest)
         .with_context(|| format!("write manifest to {}", netsukefile.display()))?;
     let bin = temp.path().join("bin");
     let tool = fixture_command_path(&bin, "preferred-tool");
@@ -144,18 +147,22 @@ fn command_available_actions_workspace(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Create a workspace with complementary command-availability action branches.
+#[given("a Netsuke workspace with a preferred command available")]
+fn command_available_actions_workspace(world: &TestWorld) -> Result<()> {
+    setup_command_available_workspace(
+        world,
+        COMMAND_AVAILABLE_MANIFEST,
+        "command-available manifest",
+    )
+}
+
 /// Create a workspace with complementary command-availability target branches.
 #[given("a Netsuke workspace with a preferred target command available")]
 fn command_available_targets_workspace(world: &TestWorld) -> Result<()> {
-    let temp = tempfile::tempdir().context("create temp dir for target command manifest")?;
-    let netsukefile = temp.path().join("Netsukefile");
-    fs::write(&netsukefile, TARGET_COMMAND_AVAILABLE_MANIFEST)
-        .with_context(|| format!("write manifest to {}", netsukefile.display()))?;
-    let bin = temp.path().join("bin");
-    let tool = fixture_command_path(&bin, "preferred-tool");
-    write_executable(&tool)?;
-    prepend_path_for_child(world, &bin)?;
-    *world.temp_dir.borrow_mut() = Some(temp);
-    reset_command_state(world);
-    Ok(())
+    setup_command_available_workspace(
+        world,
+        TARGET_COMMAND_AVAILABLE_MANIFEST,
+        "target command manifest",
+    )
 }
