@@ -38,6 +38,11 @@
   declaration from `Cargo.toml`; `rust-toolchain.toml` is now the single source
   of truth for the compiler contract
   ([#465](https://github.com/leynos/netsuke/issues/465))
+- Open the capability used for glob metadata checks at the pattern's longest
+  literal directory prefix rather than at the filesystem root or the working
+  directory, so glob expansion holds only the authority its pattern can reach;
+  a pattern whose literal prefix is missing now expands to no matches
+  ([#173](https://github.com/leynos/netsuke/issues/173))
 
 ## [0.1.0] - 2026-07-28
 

@@ -3,14 +3,17 @@
 use super::normalize::force_literal_escapes;
 use super::normalize::normalize_separators;
 use super::validate::validate_brace_matching;
-use super::walk::process_glob_entry;
+use super::walk::{GlobRoot, literal_dir_prefix, open_root_dir, process_glob_entry};
 use super::{GlobPattern, glob_paths};
 use crate::localization::{self, keys};
 use anyhow::{Context, Result, anyhow, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
 use rstest::rstest;
 use tempfile::tempdir;
+use test_support::cwd_guard::CwdGuard;
+use test_support::env_lock::EnvLock;
 use test_support::fs as test_fs;
 
 /// Helper to assert that a pattern produces a syntax error.
@@ -189,7 +192,8 @@ fn process_glob_entry_rejects_non_utf8_paths() -> Result<()> {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
-    let root = Dir::open_ambient_dir("/", ambient_authority()).context("open ambient root dir")?;
+    let dir = Dir::open_ambient_dir("/", ambient_authority()).context("open ambient root dir")?;
+    let root = GlobRoot::new(dir, camino::Utf8PathBuf::from("/"));
     let path = std::path::PathBuf::from(OsString::from_vec(b"bad\xFF".to_vec()));
     let pattern = GlobPattern::new("pattern")?;
     match process_glob_entry(Ok(path), &pattern, &root) {
@@ -236,4 +240,120 @@ fn glob_pattern_new_normalizes_and_validates() -> Result<()> {
 fn glob_pattern_new_rejects_invalid_braces() {
     let err = GlobPattern::new("foo{").expect_err("invalid brace pattern must fail");
     assert_eq!(err.kind(), ErrorKind::SyntaxError);
+}
+
+#[cfg(unix)]
+#[rstest]
+#[case("src/*.c", "src/")]
+#[case("src/sub/**/*.c", "src/sub/")]
+#[case("*.c", ".")]
+#[case("a.txt", ".")]
+#[case("/tmp/x/*.txt", "/tmp/x/")]
+#[case("/*.txt", "/")]
+#[case("src/a.txt", "src/")]
+#[case("src/{a,b}/*.c", "src/")]
+fn literal_dir_prefix_stops_at_first_metacharacter(#[case] pattern: &str, #[case] expected: &str) {
+    assert_eq!(literal_dir_prefix(pattern), expected, "pattern {pattern}");
+}
+
+#[test]
+fn glob_paths_returns_empty_when_literal_prefix_missing() -> Result<()> {
+    let temp = tempdir()?;
+    let pattern = format!("{}/no-such-dir/*.txt", temp.path().display());
+    let results = glob_paths(&pattern)?;
+    ensure!(
+        results.is_empty(),
+        "expected empty result for missing prefix, got {results:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn open_root_dir_scopes_capability_to_literal_prefix() -> Result<()> {
+    // The capability must be opened at the pattern's literal prefix, not at
+    // the filesystem root, so a sibling of the prefix is unreachable through
+    // the handle even though it exists on disk.
+    let temp = tempdir()?;
+    let scoped = temp.path().join("scoped");
+    test_fs::create_dir(&scoped)?;
+    test_fs::write(scoped.join("in.txt"), "in")?;
+    test_fs::write(temp.path().join("out.txt"), "out")?;
+
+    let pattern = GlobPattern::new(&format!("{}/scoped/*.txt", temp.path().display()))?;
+    let root = open_root_dir(&pattern)
+        .context("open capability root")?
+        .ok_or_else(|| anyhow!("literal prefix exists, so a root was expected"))?;
+
+    let expected_prefix = Utf8PathBuf::try_from(scoped)?;
+    ensure!(
+        root.prefix() == expected_prefix,
+        "capability prefix {prefix} should be the literal prefix {expected_prefix}",
+        prefix = root.prefix()
+    );
+    ensure!(
+        root.dir().metadata("in.txt").is_ok(),
+        "files under the prefix must be reachable through the capability"
+    );
+    ensure!(
+        root.dir().metadata("../out.txt").is_err(),
+        "the capability must not reach outside the literal prefix"
+    );
+    Ok(())
+}
+
+#[test]
+fn glob_paths_matches_only_within_literal_prefix() -> Result<()> {
+    let temp = tempdir()?;
+    let scoped = temp.path().join("scoped");
+    test_fs::create_dir(&scoped)?;
+    test_fs::write(scoped.join("in.txt"), "in")?;
+    test_fs::write(temp.path().join("out.txt"), "out")?;
+
+    let pattern = format!("{}/scoped/*.txt", temp.path().display());
+    let results = glob_paths(&pattern)?;
+    ensure!(
+        results.iter().all(|p| p.ends_with("in.txt")),
+        "only files under the literal prefix should match: {results:?}"
+    );
+    ensure!(results.len() == 1, "expected one match: {results:?}");
+    Ok(())
+}
+
+#[test]
+fn glob_paths_matches_parent_relative_patterns() -> Result<()> {
+    // Scoping the capability at the literal prefix also reaches patterns that
+    // ascend past the working directory: a `..` component in a match used to
+    // be rejected by the working-directory handle as a sandbox escape.
+    let temp = tempdir()?;
+    let sub = temp.path().join("sub");
+    test_fs::create_dir(&sub)?;
+    test_fs::write(temp.path().join("out.txt"), "out")?;
+
+    let _lock = EnvLock::acquire();
+    let _guard = CwdGuard::acquire()?;
+    std::env::set_current_dir(&sub).context("switch to the subdirectory")?;
+
+    let results = glob_paths("../*.txt")?;
+    ensure!(
+        results == vec!["../out.txt".to_owned()],
+        "expected the parent-relative match, got {results:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn open_root_dir_falls_back_to_cwd_without_a_literal_prefix() -> Result<()> {
+    // Patterns whose first component is a wildcard have no literal directory
+    // component, so the capability stays scoped to the working directory —
+    // the pre-existing behaviour for relative patterns.
+    let pattern = GlobPattern::new("*.txt")?;
+    let root = open_root_dir(&pattern)
+        .context("open capability root")?
+        .ok_or_else(|| anyhow!("the working directory always exists"))?;
+    ensure!(
+        root.prefix() == Utf8Path::new("."),
+        "unexpected prefix {prefix}",
+        prefix = root.prefix()
+    );
+    Ok(())
 }
