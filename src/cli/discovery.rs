@@ -17,32 +17,63 @@ use super::parser::Cli;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
 
+/// Configuration file layers discovered and loaded once per invocation.
+///
+/// Both the diagnostic-mode pre-pass (`resolve_merged_diag_json_with_layers`)
+/// and the full merge (`merge_with_config_layers`) consume the same file
+/// layers. Loading them once and
+/// sharing the result avoids opening, reading, and deserialising every
+/// config file twice on startup.
+#[derive(Debug, Clone)]
+pub struct ConfigFileLayers(OrthoResult<Vec<MergeLayer<'static>>>);
+
+impl ConfigFileLayers {
+    /// Discover and load the configuration file layers for `cli`.
+    ///
+    /// Honours the explicit `--config` flag and the `NETSUKE_CONFIG` /
+    /// `NETSUKE_CONFIG_PATH` environment variables before falling back to
+    /// scope discovery.
+    #[must_use]
+    pub fn load(cli: &Cli) -> Self {
+        let explicit_path = explicit_config_path(cli);
+        if let Some(path) = &explicit_path {
+            tracing::debug!(layer = "file", path = %path.display(), "loading explicit configuration file");
+        } else {
+            tracing::debug!(layer = "file", "discovering configuration files");
+        }
+        Self(explicit_path.map_or_else(
+            || collect_file_layers(cli.directory.as_deref()),
+            |path| load_layers_from_path(&path),
+        ))
+    }
+
+    /// Borrow the discovery outcome.
+    pub(crate) fn as_result(
+        &self,
+    ) -> Result<&[MergeLayer<'static>], &Arc<ortho_config::OrthoError>> {
+        match &self.0 {
+            Ok(layers) => Ok(layers),
+            Err(err) => Err(err),
+        }
+    }
+}
+
 pub(crate) fn push_file_layers(
-    cli: &Cli,
+    file_layers: &ConfigFileLayers,
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
 ) {
-    let explicit_path = explicit_config_path(cli);
-    if let Some(path) = &explicit_path {
-        tracing::debug!(layer = "file", path = %path.display(), "loading explicit configuration file");
-    } else {
-        tracing::debug!(layer = "file", "discovering configuration files");
-    }
-    let layers_result = explicit_path.map_or_else(
-        || collect_file_layers(cli.directory.as_deref()),
-        |path| load_layers_from_path(&path),
-    );
-    match layers_result {
+    match file_layers.as_result() {
         Ok(layers) => push_discovered_layers(composer, layers),
         Err(err) => {
             tracing::debug!(layer = "file", error = %err, "configuration file discovery failed");
-            errors.push(err);
+            errors.push(Arc::clone(err));
         }
     }
 }
 
 /// Push discovered file layers onto the composer, logging each path.
-fn push_discovered_layers(composer: &mut MergeComposer, layers: Vec<MergeLayer<'static>>) {
+fn push_discovered_layers(composer: &mut MergeComposer, layers: &[MergeLayer<'static>]) {
     if layers.is_empty() {
         tracing::debug!(layer = "file", "no configuration file layers found");
     }
@@ -52,7 +83,7 @@ fn push_discovered_layers(composer: &mut MergeComposer, layers: Vec<MergeLayer<'
             path = ?layer.path(),
             "discovered configuration file layer"
         );
-        composer.push_layer(layer);
+        composer.push_layer(layer.clone());
     }
 }
 
@@ -151,11 +182,4 @@ pub(crate) fn load_layers_from_path(
         })),
         Err(err) => Err(err),
     }
-}
-
-pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
-    explicit_config_path(cli).map_or_else(
-        || collect_file_layers(cli.directory.as_deref()),
-        |path| load_layers_from_path(&path),
-    )
 }

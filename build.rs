@@ -122,6 +122,15 @@ const fn verify_public_api_symbols() {
     const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_diag_json;
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
+    const _: usize = std::mem::size_of::<cli::ConfigFileLayers>();
+    const _: fn(&cli::Cli) -> cli::ConfigFileLayers = cli::ConfigFileLayers::load;
+    const _: fn(&cli::Cli, &ArgMatches, &cli::ConfigFileLayers) -> bool =
+        cli::resolve_merged_diag_json_with_layers;
+    const _: fn(
+        &cli::Cli,
+        &ArgMatches,
+        &cli::ConfigFileLayers,
+    ) -> ortho_config::OrthoResult<cli::Cli> = cli::merge_with_config_layers;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;
     const _: fn(&cli::Cli) -> Option<bool> = cli::Cli::no_emoji_override;
     const _: fn(&cli::Cli) -> bool = cli::Cli::progress_enabled;

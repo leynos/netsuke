@@ -7,12 +7,11 @@
 
 use clap::ArgMatches;
 use clap::parser::ValueSource;
-use ortho_config::OrthoResult;
 use ortho_config::figment::Figment;
 use ortho_config::uncased::Uncased;
 use serde_json::Value;
 
-use super::discovery::collect_diag_file_layers;
+use super::discovery::ConfigFileLayers;
 use super::merge::env_provider;
 use super::parser::Cli;
 
@@ -23,8 +22,22 @@ use super::parser::Cli;
 /// environment.
 #[must_use]
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> bool {
-    let mut diag_json =
-        diag_json_from_file_layers(cli).unwrap_or_else(|_| Cli::default().diag_json);
+    resolve_merged_diag_json_with_layers(cli, matches, &ConfigFileLayers::load(cli))
+}
+
+/// Resolve the diagnostic JSON preference using pre-loaded file layers.
+///
+/// Callers that also run the full configuration merge should load the file
+/// layers once via [`ConfigFileLayers::load`] and share them with
+/// [`super::merge_with_config_layers`] so config files are read from disk
+/// only once per invocation.
+#[must_use]
+pub fn resolve_merged_diag_json_with_layers(
+    cli: &Cli,
+    matches: &ArgMatches,
+    file_layers: &ConfigFileLayers,
+) -> bool {
+    let mut diag_json = diag_json_from_file_layers(file_layers);
     diag_json = diag_json_from_env(diag_json);
     diag_json_from_matches(cli, matches, diag_json)
 }
@@ -46,16 +59,18 @@ fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> 
     }
 }
 
-fn diag_json_from_file_layers(cli: &Cli) -> OrthoResult<bool> {
+fn diag_json_from_file_layers(file_layers: &ConfigFileLayers) -> bool {
     let default = Cli::default().diag_json;
-    let layers = collect_diag_file_layers(cli)?;
+    let Ok(layers) = file_layers.as_result() else {
+        return default;
+    };
     let mut diag_json = default;
     for layer in layers {
-        if let Some(layer_diag_json) = diag_json_from_layer(&layer.into_value()) {
+        if let Some(layer_diag_json) = diag_json_from_layer(&layer.clone().into_value()) {
             diag_json = layer_diag_json;
         }
     }
-    Ok(diag_json)
+    diag_json
 }
 
 fn diag_json_from_env(fallback: bool) -> bool {

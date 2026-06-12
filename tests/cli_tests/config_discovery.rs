@@ -637,3 +637,35 @@ fetch_allow_scheme = ["https"]
     drop(cwd_guard);
     result
 }
+
+#[rstest]
+fn config_layers_are_loaded_once_and_shared() -> Result<()> {
+    // Deleting the config file after `ConfigFileLayers::load` proves both
+    // consumers reuse the cached layers instead of re-reading the disk.
+    let _env_lock = test_support::env_lock::EnvLock::acquire();
+    let temp_dir = tempfile::tempdir().context("create temporary config directory")?;
+    let config_path = temp_dir.path().join("netsuke.toml");
+    std::fs::write(&config_path, "diag_json = true\njobs = 7\n").context("write netsuke.toml")?;
+    let _config_guard =
+        test_support::EnvVarGuard::set("NETSUKE_CONFIG_PATH", config_path.as_os_str());
+
+    let localizer = std::sync::Arc::from(netsuke::cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI args")?;
+    let layers = netsuke::cli::ConfigFileLayers::load(&cli);
+
+    std::fs::remove_file(&config_path).context("delete config file after load")?;
+
+    ensure!(
+        netsuke::cli::resolve_merged_diag_json_with_layers(&cli, &matches, &layers),
+        "diag pre-pass should honour the cached file layer after deletion"
+    );
+    let merged = netsuke::cli::merge_with_config_layers(&cli, &matches, &layers)
+        .context("merge with cached layers")?;
+    ensure!(
+        merged.jobs == Some(7),
+        "merge should honour the cached file layer after deletion, got {:?}",
+        merged.jobs
+    );
+    Ok(())
+}
