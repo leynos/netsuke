@@ -140,23 +140,7 @@ fn from_str_named(
         None => crate::stdlib::register(&mut jinja),
     }?;
 
-    if let Some(vars_value) = doc.get("vars") {
-        let vars = vars_value
-            .as_object()
-            .cloned()
-            .ok_or_else(|| ManifestError::Parse {
-                source: map_data_error(
-                    serde_json::Error::custom(
-                        localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string(),
-                    ),
-                    name,
-                ),
-                message: localization::message(keys::MANIFEST_PARSE),
-            })?;
-        for (key, value) in vars {
-            jinja.add_global(key, Value::from_serialize(value));
-        }
-    }
+    register_manifest_vars(&doc, &mut jinja, name)?;
 
     notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros(&doc, &mut jinja)?;
@@ -171,6 +155,43 @@ fn from_str_named(
         })?;
 
     render_manifest(manifest, &jinja)
+}
+
+/// Expose the manifest's `vars` section as Jinja globals.
+///
+/// The optional `vars` value must be a JSON object with string keys; each
+/// entry becomes a global available to every template expression evaluated
+/// for this manifest. For example, given `vars: {greeting: hi}`, a target
+/// command of `"echo {{ greeting }}"` renders to `echo hi`.
+///
+/// # Errors
+///
+/// Returns [`ManifestError::Parse`] when `vars` is present but is not an
+/// object (for example a list or a scalar).
+fn register_manifest_vars(
+    doc: &ManifestValue,
+    jinja: &mut Environment<'_>,
+    name: &ManifestName,
+) -> Result<(), ManifestError> {
+    let Some(vars_value) = doc.get("vars") else {
+        return Ok(());
+    };
+    let vars = vars_value
+        .as_object()
+        .cloned()
+        .ok_or_else(|| ManifestError::Parse {
+            source: map_data_error(
+                serde_json::Error::custom(
+                    localization::message(keys::MANIFEST_VARS_NOT_OBJECT).to_string(),
+                ),
+                name,
+            ),
+            message: localization::message(keys::MANIFEST_PARSE),
+        })?;
+    for (key, value) in vars {
+        jinja.add_global(key, Value::from_serialize(value));
+    }
+    Ok(())
 }
 
 /// Parse a manifest string using Jinja for value templating.
