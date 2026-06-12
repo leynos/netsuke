@@ -76,11 +76,6 @@ impl<'a> BuildTargets<'a> {
     pub const fn as_slice(&self) -> &'a [String] {
         self.0
     }
-    /// Indicate whether no explicit targets were provided.
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
 }
 
 #[expect(
