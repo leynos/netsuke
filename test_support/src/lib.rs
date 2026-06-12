@@ -57,16 +57,13 @@ pub use localizer::{
 pub use manifest::ensure_manifest_exists;
 
 /// Helpers for writing executable stubs and setting executable bits in tests.
-pub use exec::{make_executable, write_exec};
+pub use exec::{make_executable, write_exec, write_exec_with_content};
 
 mod error;
 /// Format an error and its sources (outermost → root) using `Display`, joined
 /// with ": ", to produce deterministic text for test assertions.
 pub use error::display_error_chain;
-
 use anyhow::{Context, Result};
-use std::fs::File;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use tempfile::TempDir;
@@ -112,31 +109,22 @@ impl std::error::Error for ProbesError {}
 /// ```
 pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
     let dir = TempDir::new().context("fake_ninja: create temporary directory")?;
+    let root = camino::Utf8Path::from_path(dir.path())
+        .context("fake_ninja: temporary directory path is not valid UTF-8")?;
 
     #[cfg(unix)]
-    let path = dir.path().join("ninja");
+    let path =
+        exec::write_exec_with_content(root, "ninja", &format!("#!/bin/sh\nexit {exit_code}\n"))
+            .context("fake_ninja: write script")?;
     #[cfg(windows)]
-    let path = dir.path().join("ninja.cmd");
+    let path = exec::write_exec_with_content(
+        root,
+        "ninja.cmd",
+        &format!("@echo off\r\nexit /B {exit_code}\r\n"),
+    )
+    .context("fake_ninja: write batch file")?;
 
-    #[cfg(unix)]
-    {
-        let mut file = File::create(&path)
-            .with_context(|| format!("fake_ninja: create script {}", path.display()))?;
-        writeln!(file, "#!/bin/sh\nexit {}", exit_code)
-            .with_context(|| format!("fake_ninja: write script {}", path.display()))?;
-        crate::fs::set_mode(&path, 0o755)
-            .with_context(|| format!("fake_ninja: set permissions {}", path.display()))?;
-    }
-
-    #[cfg(windows)]
-    {
-        let mut file = File::create(&path)
-            .with_context(|| format!("fake_ninja: create batch file {}", path.display()))?;
-        writeln!(file, "@echo off\r\nexit /B {}", exit_code)
-            .with_context(|| format!("fake_ninja: write batch file {}", path.display()))?;
-    }
-
-    Ok((dir, path))
+    Ok((dir, path.into_std_path_buf()))
 }
 
 /// Probe that required binaries are available in `PATH`.
