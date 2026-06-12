@@ -12,6 +12,7 @@ mod locale;
 mod merge;
 mod merge_diag;
 mod merge_diag_proptests;
+mod merge_logging;
 mod merge_precedence_proptests;
 mod merge_probe;
 mod merge_targets_proptests;

@@ -309,6 +309,11 @@ fn validate_non_interactive(config: &CliConfig) -> OrthoResult<()> {
     if config.no_input.is_enabled() {
         Ok(())
     } else {
+        tracing::debug!(
+            key = "no_input",
+            reason = "no_input = false is unsupported because Netsuke has no interactive mode",
+            "validation rejected merged configuration"
+        );
         Err(validation_error(
             "no_input",
             "no_input = false is unsupported because Netsuke has no interactive mode",
@@ -326,6 +331,11 @@ fn validate_jobs(config: &CliConfig) -> OrthoResult<()> {
         return Ok(());
     };
     if jobs_out_of_bounds(jobs) {
+        tracing::debug!(
+            key = "jobs",
+            reason = "job count is outside the supported range",
+            "validation rejected merged configuration"
+        );
         return Err(validation_error(
             "jobs",
             &format!("jobs = {jobs} is out of range; must be between 1 and {MAX_JOBS}"),

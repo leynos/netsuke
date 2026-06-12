@@ -1,12 +1,9 @@
-//! Tracing-event capture for `test_support`'s own unit tests.
+//! Thread-local capture of structured tracing events for integration tests.
 //!
-//! This mirrors the netsuke crate's `test_tracing_capture`, which cannot be
-//! reused here: it is `#[cfg(test)] pub(crate)` and so is not part of the
-//! netsuke library `test_support` links against. The helper is confined to
-//! this crate's test builds and is not part of the published test surface.
+//! The capture layer is deliberately local to the calling thread, allowing
+//! observability assertions without installing or replacing a global subscriber.
 
 use std::sync::{Arc, Mutex, PoisonError};
-
 use tracing::{
     Event, Subscriber,
     field::{Field, Visit},
@@ -15,21 +12,19 @@ use tracing_subscriber::{
     Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*, registry::LookupSpan,
 };
 
-/// Captured tracing event fields.
-///
-/// Obtain an instance through [`with_test_subscriber`]; it shares the capture
-/// buffer with the installed layer.
+/// Events recorded by [`with_test_subscriber`].
 #[derive(Debug, Clone)]
-pub(crate) struct CapturedEvents {
+pub struct CapturedEvents {
     fields: Arc<Mutex<Vec<String>>>,
 }
 
 impl CapturedEvents {
-    /// Return a snapshot of all captured event fields.
+    /// Return a copy of every event captured so far.
     ///
-    /// Recovers the inner guard if the capture lock was poisoned, so a panic in
-    /// another test thread does not cascade into this snapshot.
-    pub(crate) fn snapshot(&self) -> Vec<String> {
+    /// A poisoned capture buffer remains readable so an earlier failing test
+    /// does not cascade into unrelated observability assertions.
+    #[must_use]
+    pub fn snapshot(&self) -> Vec<String> {
         self.fields
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -37,7 +32,7 @@ impl CapturedEvents {
     }
 }
 
-/// [`Layer`] that appends each event's rendered fields to a shared buffer.
+/// Layer that renders each event's fields into the shared capture buffer.
 #[derive(Debug, Clone, Default)]
 struct CapturedEventsLayer {
     events: Arc<Mutex<Vec<String>>>,
@@ -47,7 +42,7 @@ impl<S> Layer<S> for CapturedEventsLayer
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
-    fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
+    fn on_event(&self, event: &Event<'_>, _context: LayerContext<'_, S>) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
         self.events
@@ -57,13 +52,25 @@ where
     }
 }
 
-/// [`Visit`] implementation that renders each recorded field as `name=value`.
+/// Visitor that renders tracing fields as stable `name=value` strings.
 #[derive(Debug, Default)]
 struct FieldVisitor {
     fields: Vec<String>,
 }
 
 impl Visit for FieldVisitor {
+    fn record_bool(&mut self, field: &Field, value: bool) {
+        self.fields.push(format!("{}={value}", field.name()));
+    }
+
+    fn record_i64(&mut self, field: &Field, value: i64) {
+        self.fields.push(format!("{}={value}", field.name()));
+    }
+
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        self.fields.push(format!("{}={value}", field.name()));
+    }
+
     fn record_str(&mut self, field: &Field, value: &str) {
         self.fields.push(format!("{}={value:?}", field.name()));
     }
@@ -73,12 +80,11 @@ impl Visit for FieldVisitor {
     }
 }
 
-/// Run `test` with a temporary tracing subscriber that captures events.
+/// Run `test` with a thread-local subscriber that captures matching events.
 ///
-/// [`tracing::subscriber::with_default`] installs the subscriber as a
-/// thread-local default, so only events emitted on the calling thread are
-/// captured; events from threads spawned inside `test` are not recorded.
-pub(crate) fn with_test_subscriber<T>(
+/// Events emitted by threads spawned within `test` are not captured because
+/// `tracing::subscriber::with_default` scopes the subscriber to this thread.
+pub fn with_test_subscriber<T>(
     level_filter: LevelFilter,
     test: impl FnOnce(CapturedEvents) -> T,
 ) -> T {

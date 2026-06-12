@@ -31,7 +31,7 @@ mod trace;
 
 #[path = "discovery_telemetry.rs"]
 mod telemetry;
-use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning};
+use diagnostics::{BoundedConfigPath, ConfigLoadFailureKind, ConfigLoadWarning, short_hash};
 use layers::collect_file_layers_with_normalizer_and_trace;
 use paths::{FsPathNormalizer, PathNormalizer};
 /// Record the discovery series for an already-timed phase at the boundary.
@@ -173,8 +173,28 @@ pub(crate) fn push_discovered_file_layers(
     discovered: DiscoveredLayers,
 ) {
     let (layers, discovery_errors) = discovered.into_parts();
+    if discovery_errors.is_empty() {
+        tracing::debug!(
+            layer = "file",
+            layer_count = layers.len(),
+            "collected configuration file layers"
+        );
+    } else {
+        tracing::debug!(
+            layer = "file",
+            error_count = discovery_errors.len(),
+            "configuration file layer collection failed"
+        );
+    }
     errors.extend(discovery_errors);
     for layer in layers {
+        tracing::debug!(
+            layer = "file",
+            path_hash = layer
+                .path()
+                .map(|path| short_hash(path.as_str().as_bytes())),
+            "applied configuration file layer"
+        );
         composer.push_layer(layer);
     }
 }
