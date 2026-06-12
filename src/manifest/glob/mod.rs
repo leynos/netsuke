@@ -65,7 +65,11 @@ impl GlobPattern {
     }
 }
 
-pub type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
+/// Result of iterating a single entry produced by the `glob` crate walker.
+///
+/// Internal to the glob module: only [`glob_paths`] and the `walk` submodule
+/// consume it, so it is deliberately not part of the public API surface.
+type GlobEntryResult = std::result::Result<std::path::PathBuf, glob::GlobError>;
 
 /// Expand a glob pattern and collect the matching UTF-8 file paths.
 ///
