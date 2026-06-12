@@ -39,8 +39,7 @@ type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
 #[cfg(doctest)]
 pub mod doc {
     pub use super::redaction::{
-        CommandArg, contains_sensitive_keyword, is_sensitive_arg, redact_argument,
-        redact_sensitive_args,
+        CommandArg, is_sensitive_arg, redact_argument, redact_sensitive_args,
     };
     pub use super::{
         create_temp_ninja_file, resolve_ninja_program, resolve_ninja_program_utf8,
