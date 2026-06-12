@@ -265,4 +265,69 @@ mod tests {
         .expect("command");
         assert_eq!(command, "in out out");
     }
+
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
+
+        /// Strategy producing short, shell-safe path lists.
+        fn path_list(max: usize) -> impl Strategy<Value = Vec<Utf8PathBuf>> {
+            proptest::collection::vec("[a-z][a-z0-9]{0,5}", 1..=max)
+                .prop_map(|names| names.into_iter().map(Utf8PathBuf::from).collect())
+        }
+
+        fn token() -> impl Strategy<Value = &'static str> {
+            prop_oneof![
+                Just("$in"),
+                Just("$out"),
+                Just("__NETSUKE_INS_PLACEHOLDER__"),
+                Just("__NETSUKE_OUTS_PLACEHOLDER__"),
+            ]
+        }
+
+        proptest! {
+            /// Tokens inside backtick-delimited regions are never substituted
+            /// and survive verbatim.
+            #[test]
+            fn tokens_inside_backticks_are_preserved_verbatim(
+                ins in path_list(3),
+                outs in path_list(3),
+                guarded in token(),
+            ) {
+                let template = format!("echo `{guarded}` done");
+                let command = interpolate_command(&template, &ins, &outs)
+                    .map_err(|e| TestCaseError::fail(format!("interpolation failed: {e}")))?;
+                prop_assert_eq!(command, template);
+            }
+
+            /// Placeholder tokens outside backticks are always replaced with
+            /// the joined input and output lists.
+            #[test]
+            fn placeholders_outside_backticks_are_always_replaced(
+                ins in path_list(3),
+                outs in path_list(3),
+            ) {
+                let command = interpolate_command(
+                    "cp __NETSUKE_INS_PLACEHOLDER__ __NETSUKE_OUTS_PLACEHOLDER__",
+                    &ins,
+                    &outs,
+                )
+                .map_err(|e| TestCaseError::fail(format!("interpolation failed: {e}")))?;
+                let join = |paths: &[Utf8PathBuf]| {
+                    paths
+                        .iter()
+                        .map(|path| path.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                let expected = format!("cp {} {}", join(&ins), join(&outs));
+                prop_assert_eq!(&command, &expected);
+                prop_assert!(
+                    !command.contains("PLACEHOLDER"),
+                    "placeholder survived substitution: {}",
+                    command
+                );
+            }
+        }
+    }
 }
