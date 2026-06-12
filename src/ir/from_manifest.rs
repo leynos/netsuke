@@ -73,7 +73,8 @@ impl BuildGraph {
             );
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
-                    let tmpl = resolve_rule(rule, rule_map, &outputs)?;
+                    let target_name = get_target_display_name(&outputs);
+                    let tmpl = resolve_rule(rule, rule_map, &target_name)?;
                     // Future schema versions may allow targets to override
                     // recipe or description fields. If so, those values will
                     // take precedence over the rule template.
@@ -208,14 +209,49 @@ fn duplicate_output_error_from_paths(dups: Vec<Utf8PathBuf>) -> IrGenError {
     }
 }
 
-#[cfg(not(kani))]
 fn duplicate_outputs_message(dups: &[Utf8PathBuf]) -> localization::LocalizedMessage {
-    localization::message(keys::IR_DUPLICATE_OUTPUTS).with_arg("outputs", format!("{dups:?}"))
+    add_debug_arg(
+        localization::message(keys::IR_DUPLICATE_OUTPUTS),
+        "outputs",
+        dups,
+    )
+}
+
+#[cfg(not(kani))]
+fn add_arg<T: ToString + ?Sized>(
+    message: localization::LocalizedMessage,
+    key: &'static str,
+    value: &T,
+) -> localization::LocalizedMessage {
+    message.with_arg(key, value.to_string())
 }
 
 #[cfg(kani)]
-fn duplicate_outputs_message(_dups: &[Utf8PathBuf]) -> localization::LocalizedMessage {
-    localization::message(keys::IR_DUPLICATE_OUTPUTS)
+fn add_arg<T: ?Sized>(
+    message: localization::LocalizedMessage,
+    _key: &'static str,
+    _value: &T,
+) -> localization::LocalizedMessage {
+    message
+}
+
+#[cfg(not(kani))]
+fn add_debug_arg(
+    message: localization::LocalizedMessage,
+    key: &'static str,
+    value: impl std::fmt::Debug,
+) -> localization::LocalizedMessage {
+    let rendered = format!("{value:?}");
+    add_arg(message, key, &rendered)
+}
+
+#[cfg(kani)]
+fn add_debug_arg<T: ?Sized>(
+    message: localization::LocalizedMessage,
+    _key: &'static str,
+    _value: &T,
+) -> localization::LocalizedMessage {
+    message
 }
 
 fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
@@ -248,101 +284,68 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
 fn resolve_rule(
     rule: &StringOrList,
     rule_map: &HashMap<String, Arc<Rule>>,
-    target_paths: &[Utf8PathBuf],
+    target_name: &str,
 ) -> Result<Arc<Rule>, IrGenError> {
     extract_single(rule).map_or_else(
         || {
             let mut rules = to_string_vec(rule);
             if rules.is_empty() {
-                Err(empty_rule_error(target_paths))
+                Err(empty_rule_error(target_name))
             } else {
                 rules.sort();
-                Err(multiple_rules_error(target_paths, rules))
+                Err(multiple_rules_error(target_name, rules))
             }
         },
         |name| {
             rule_map
                 .get(name)
                 .cloned()
-                .ok_or_else(|| rule_not_found_error(target_paths, name))
+                .ok_or_else(|| rule_not_found_error(target_name, name))
         },
     )
 }
 
-fn empty_rule_error(target_paths: &[Utf8PathBuf]) -> IrGenError {
-    let target_name = get_target_display_name(target_paths);
+fn empty_rule_error(target_name: &str) -> IrGenError {
     IrGenError::EmptyRule {
-        message: empty_rule_message(target_paths),
-        target_name,
+        target_name: target_name.to_owned(),
+        message: empty_rule_message(target_name),
     }
 }
 
-#[cfg(not(kani))]
-fn empty_rule_message(target_paths: &[Utf8PathBuf]) -> localization::LocalizedMessage {
-    let target_name = get_target_display_name(target_paths);
-    localization::message(keys::IR_EMPTY_RULE).with_arg("target", target_name)
-}
-
-#[cfg(kani)]
-fn empty_rule_message(_target_paths: &[Utf8PathBuf]) -> localization::LocalizedMessage {
-    localization::message(keys::IR_EMPTY_RULE)
-}
-
-fn multiple_rules_error(target_paths: &[Utf8PathBuf], rules: Vec<String>) -> IrGenError {
-    let target_name = get_target_display_name(target_paths);
-    let message = multiple_rules_message(target_paths, &rules);
+fn multiple_rules_error(target_name: &str, rules: Vec<String>) -> IrGenError {
     IrGenError::MultipleRules {
-        target_name,
+        target_name: target_name.to_owned(),
+        message: multiple_rules_message(target_name, &rules),
         rules,
-        message,
     }
 }
 
-#[cfg(not(kani))]
-fn multiple_rules_message(
-    target_paths: &[Utf8PathBuf],
-    rules: &[String],
-) -> localization::LocalizedMessage {
-    let target_name = get_target_display_name(target_paths);
-    localization::message(keys::IR_MULTIPLE_RULES)
-        .with_arg("target", target_name)
-        .with_arg("rules", format!("{rules:?}"))
-}
-
-#[cfg(kani)]
-fn multiple_rules_message(
-    _target_paths: &[Utf8PathBuf],
-    _rules: &[String],
-) -> localization::LocalizedMessage {
-    localization::message(keys::IR_MULTIPLE_RULES)
-}
-
-fn rule_not_found_error(target_paths: &[Utf8PathBuf], rule_name: &str) -> IrGenError {
-    let target_name = get_target_display_name(target_paths);
+fn rule_not_found_error(target_name: &str, rule_name: &str) -> IrGenError {
     IrGenError::RuleNotFound {
-        target_name,
+        target_name: target_name.to_owned(),
         rule_name: rule_name.to_owned(),
-        message: rule_not_found_message(target_paths, rule_name),
+        message: rule_not_found_message(target_name, rule_name),
     }
 }
 
-#[cfg(not(kani))]
-fn rule_not_found_message(
-    target_paths: &[Utf8PathBuf],
-    rule_name: &str,
-) -> localization::LocalizedMessage {
-    let target_name = get_target_display_name(target_paths);
-    localization::message(keys::IR_RULE_NOT_FOUND)
-        .with_arg("target", target_name)
-        .with_arg("rule", rule_name)
+fn empty_rule_message(target_name: &str) -> localization::LocalizedMessage {
+    add_arg(
+        localization::message(keys::IR_EMPTY_RULE),
+        "target",
+        target_name,
+    )
 }
 
-#[cfg(kani)]
-fn rule_not_found_message(
-    _target_paths: &[Utf8PathBuf],
-    _rule_name: &str,
-) -> localization::LocalizedMessage {
-    localization::message(keys::IR_RULE_NOT_FOUND)
+fn multiple_rules_message(target_name: &str, rules: &[String]) -> localization::LocalizedMessage {
+    let message = localization::message(keys::IR_MULTIPLE_RULES);
+    let with_target = add_arg(message, "target", target_name);
+    add_debug_arg(with_target, "rules", rules)
+}
+
+fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::LocalizedMessage {
+    let message = localization::message(keys::IR_RULE_NOT_FOUND);
+    let with_target = add_arg(message, "target", target_name);
+    add_arg(with_target, "rule", rule_name)
 }
 
 fn find_duplicates(

@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 004: Bound Kani IR harnesses to small N
+# Architectural decision record (ADR) 004: Bound Kani Intermediate Representation (IR) harnesses to small N
 
 ## Status
 

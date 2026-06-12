@@ -62,14 +62,14 @@ fn symbolic_output_name(seed: u8) -> &'static str {
 }
 
 fn symbolic_rule_selection_result(seed: u8) -> Result<(), IrGenError> {
-    let target_paths = vec![Utf8PathBuf::from("out")];
+    let target_name = "out";
     match seed {
-        0 => Err(empty_rule_error(&target_paths)),
+        0 => Err(empty_rule_error(target_name)),
         1 => Err(multiple_rules_error(
-            &target_paths,
+            target_name,
             vec!["a".to_owned(), "b".to_owned()],
         )),
-        _ => Err(rule_not_found_error(&target_paths, "m")),
+        _ => Err(rule_not_found_error(target_name, "m")),
     }
 }
 

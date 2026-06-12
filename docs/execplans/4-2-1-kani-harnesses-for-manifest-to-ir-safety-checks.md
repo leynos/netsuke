@@ -926,7 +926,7 @@ surface, and the `StringOrList`/`Recipe` constructors. Helpers live in the same
 
 4. **Missing dependencies do not create false cycles** (same
    module). Two harnesses: one with a single target whose dependency is absent
-   from the target map, and one with a two- target chain where the deeper
+   from the target map, and one with a two-target chain where the deeper
    dependency is absent. Each asserts `report.cycle.is_none()` and that
    `report.missing_dependencies` records exactly the absent dependencies.
 
@@ -1167,7 +1167,7 @@ the `tee` path templated above.
 
 These questions must be resolved at Stage A before implementation begins:
 
-1. **Bound reconciliation.** Do you accept Kani harnesses bounded to
+1. **Bound reconciliation.** Confirm whether Kani harnesses bounded to
    1-3 nodes, with the larger "up to 10 nodes, depth limit 20 edges" property
    delivered by Proptest under roadmap item `4.3.1` (and `4.3.1` treated as the
    *closing* commitment on the bound-reduction risk, not a sibling concern)?
@@ -1177,8 +1177,8 @@ These questions must be resolved at Stage A before implementation begins:
    Option C (a verification-only collection port, rejected on scope and
    Clippy-suppression grounds).
 2. **`ActionHasher::hash` escape hatch.** If Stage C measures a
-   duplicate-output harness exceeding the five-minute tolerance, which escape
-   hatch do you prefer in advance? Hatch (i): a `#[cfg(kani)]`-only
+   duplicate-output harness exceeding the five-minute tolerance, select the
+   preferred escape hatch in advance. Hatch (i): a `#[cfg(kani)]`-only
    constant-return stub for `ActionHasher::hash`, accepting that the harness
    then proves "duplicate-output rejection given a collision-free hasher" and
    that the changed contract is recorded in the harness inventory and ADR-004.
@@ -1191,12 +1191,13 @@ These questions must be resolved at Stage A before implementation begins:
    remaining the bare unfiltered cumulative gate. Confirm this pre-emptive
    split, or instruct otherwise.
 4. **Default unwind value.** The draft proposes `default-unwind = 6`
-   in `[package.metadata.kani.flags]`. Confirm or specify an alternative.
+   in `[package.metadata.kani.flags]`. Confirm that value or specify an
+   alternative.
 5. **Harness count budget.** The revised plan sketches six
    harnesses (one duplicate, one parameterised rule-error, three cycle shapes,
    two missing-deps; the 3-node cycle harness may be dropped during Stage C
-   measurement). Acceptable?
-6. **Mutation patch storage.** Confirm that patch files under
+   measurement). Confirm whether that count is acceptable.
+6. **Mutation patch storage.** Confirm whether patch files under
    `docs/verification/mutations/` are an acceptable new sub-directory under
    `docs/`. The alternative is to keep them in `docs/execplans/` alongside this
    plan; the new sub-directory is recommended because the patches outlive any
@@ -1246,14 +1247,20 @@ The references section should include:
   stubbing reframed as a contract decision, not a budget tweak. Tiered
   `make kani-ir` alias added pre-emptively. Mutation evidence stored as literal
   patch files under `docs/verification/mutations/`. Rule-error harness trio
-  collapsed into one parameterised symbolic harness. Duplicate- output
-  assertion restated in input-shape terms. 3-node cycle fallback escalated as a
-  `4.3.1` blocker. Verification-only collection port recast as Option C in
-  ADR-004 with a tightened rejection rationale. Hexagonal-architecture
-  seasoning trimmed from Decision Log and Context; the skill is retained as a
-  boundary-policing tool in Skills. Cumulative solver-budget estimate added to
-  Tolerances. The plan remains in DRAFT and approval-gated; remaining work is
-  Stage A approval and then implementation.
+  collapsed into one parameterised symbolic harness. Duplicate output assertion
+  restated in input-shape terms. 3-node cycle fallback escalated as a `4.3.1`
+  blocker. Verification-only collection port recast as Option C in ADR-004 with
+  a tightened rejection rationale. Hexagonal-architecture seasoning trimmed
+  from Decision Log and Context; the skill is retained as a boundary-policing
+  tool in Skills. Cumulative solver-budget estimate added to Tolerances. The
+  plan remains in DRAFT and approval-gated; remaining work is Stage A approval
+  and then implementation.
 - 2026-06-11: Implementation approved by user instruction. Status moved to
   IMPLEMENTING, Stage A marked complete, and recommended answers to the open
   questions recorded in the Decision Log.
+- 2026-06-12: Code review response simplified manifest-to-IR message helpers
+  by centralising Kani-safe message arguments behind shared helpers and moving
+  rule target display-name derivation back to `process_targets`. Thin
+  string-based rule and duplicate-output error helpers remain as verifier-small
+  boundaries after focused Kani runs showed that `HashMap` construction reaches
+  unsupported random-state setup in the rule-selection harness.
