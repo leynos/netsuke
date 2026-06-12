@@ -157,6 +157,10 @@ fn expand_foreach_expands_sequence_values() -> Result<()> {
     anyhow::ensure!(targets.len() == 2, "expected two targets");
     for (idx, target) in targets.iter().enumerate() {
         let map = target.as_object().context("target map")?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed after target expansion"
+        );
         let vars = map
             .get("vars")
             .and_then(|v| v.as_object())
@@ -199,6 +203,13 @@ fn expand_foreach_applies_when_expression() -> Result<()> {
         "unexpected filtered indexes: {:?}",
         indexes
     );
+    for target in targets {
+        let map = target.as_object().context("target map")?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed from filtered targets"
+        );
+    }
     Ok(())
 }
 
@@ -241,6 +252,114 @@ fn expand_foreach_applies_action_when_expression() -> Result<()> {
     let actions = actions(&doc)?;
     anyhow::ensure!(actions.len() == 2, "expected filtered actions");
     anyhow::ensure!(indexes(actions, "action")? == vec![1, 2], "wrong indexes");
+    for action in actions {
+        let map = action.as_object().context("action map")?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed from filtered actions"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_empty_foreach_produces_no_entries() -> Result<()> {
+    let env = Environment::new();
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - name: literal
+    foreach: []
+    command: echo hi",
+    )?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(
+        targets.is_empty(),
+        "empty foreach should expand to no targets: {targets:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_non_object_entry_is_passed_through() -> Result<()> {
+    let env = Environment::new();
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - just-a-string
+  - name: real
+    command: echo hi",
+    )?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 2, "expected both entries to survive");
+    anyhow::ensure!(
+        targets.first().and_then(ManifestValue::as_str) == Some("just-a-string"),
+        "bare string entry should pass through unexpanded: {:?}",
+        targets.first()
+    );
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_iteration_vars_do_not_get_overwritten_by_entry_vars() -> Result<()> {
+    let env = Environment::new();
+    let mut doc: ManifestValue = serde_saphyr::from_str(
+        "targets:
+  - name: literal
+    foreach:
+      - from-iteration
+    vars:
+      item: from-entry
+      other: untouched",
+    )?;
+    expand_foreach(&mut doc, &env)?;
+    let targets = targets(&doc)?;
+    anyhow::ensure!(targets.len() == 1, "expected one expanded target");
+    let vars = targets
+        .first()
+        .and_then(ManifestValue::as_object)
+        .and_then(|map| map.get("vars"))
+        .and_then(ManifestValue::as_object)
+        .context("vars map")?;
+    // `inject_iteration_vars` inserts `item`/`index` after cloning the entry,
+    // so the iteration-injected value takes precedence over the entry's own
+    // `item` var while unrelated vars survive.
+    anyhow::ensure!(
+        vars.get("item").and_then(ManifestValue::as_str) == Some("from-iteration"),
+        "iteration item should override the entry's own item var: {vars:?}"
+    );
+    anyhow::ensure!(
+        vars.get("other").and_then(ManifestValue::as_str) == Some("untouched"),
+        "unrelated entry vars should survive expansion: {vars:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn expand_foreach_jinja_filter_in_name() -> Result<()> {
+    // Name rendering happens in the full pipeline (render_manifest), so this
+    // test drives manifest::from_str rather than expand_foreach directly.
+    let manifest = crate::manifest::from_str(
+        "netsuke_version: \"1.0.0\"
+targets:
+  - name: '{{ item | upper }}'
+    foreach:
+      - alpha
+      - beta
+    command: echo hi",
+    )?;
+    let names: Vec<&str> = manifest
+        .targets
+        .iter()
+        .map(|t| match &t.name {
+            crate::ast::StringOrList::String(s) => Ok(s.as_str()),
+            other => Err(anyhow::anyhow!("expected string name, got {other:?}")),
+        })
+        .collect::<Result<_>>()?;
+    anyhow::ensure!(
+        names == ["ALPHA", "BETA"],
+        "expected uppercased names from Jinja filter: {names:?}"
+    );
     Ok(())
 }
 
