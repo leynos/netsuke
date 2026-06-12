@@ -89,7 +89,7 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
 
     let pattern_state = GlobPattern::new(pattern)?;
 
-    let root = open_root_dir(&pattern_state).map_err(|e| {
+    let Some(root) = open_root_dir(&pattern_state).map_err(|e| {
         create_glob_error(
             &GlobErrorContext {
                 pattern: pattern_state.raw().to_owned(),
@@ -99,7 +99,12 @@ pub fn glob_paths(pattern: &str) -> std::result::Result<Vec<String>, Error> {
             },
             Some(e.to_string()),
         )
-    })?;
+    })?
+    else {
+        // The pattern's literal directory prefix does not exist, so the
+        // pattern cannot match anything.
+        return Ok(Vec::new());
+    };
 
     let entries = glob_with(pattern_state.normalized(), opts).map_err(|e| {
         create_glob_error(
