@@ -29,22 +29,10 @@ fn is_sensitive_key(key: &str) -> bool {
         .any(|candidate| key.eq_ignore_ascii_case(candidate))
 }
 
-/// Check if `arg` contains a sensitive keyword.
-///
-/// # Examples
-/// ```ignore
-/// use netsuke::runner::process::redaction::{CommandArg, contains_sensitive_keyword};
-/// assert!(contains_sensitive_keyword(&CommandArg::new("token=abc".into())));
-/// assert!(!contains_sensitive_keyword(&CommandArg::new("path=/tmp".into())));
-/// ```
-#[must_use]
-pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
-    arg.as_str()
-        .split_once('=')
-        .is_some_and(|(key, _)| is_sensitive_key(key.trim()))
-}
-
 /// Determine whether the argument should be redacted.
+///
+/// An argument is sensitive when it is a `key=value` pair whose key matches a
+/// known sensitive keyword such as `password`, `token`, or `secret`.
 ///
 /// # Examples
 /// ```ignore
@@ -54,7 +42,9 @@ pub fn contains_sensitive_keyword(arg: &CommandArg) -> bool {
 /// ```
 #[must_use]
 pub fn is_sensitive_arg(arg: &CommandArg) -> bool {
-    contains_sensitive_keyword(arg)
+    arg.as_str()
+        .split_once('=')
+        .is_some_and(|(key, _)| is_sensitive_key(key.trim()))
 }
 
 /// Redact sensitive information in a single argument.
@@ -103,18 +93,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn contains_sensitive_keyword_only_flags_known_keys() {
+    fn is_sensitive_arg_only_flags_known_keys() {
         let token = CommandArg::new(String::from("token=abc"));
-        assert!(contains_sensitive_keyword(&token));
+        assert!(is_sensitive_arg(&token));
 
         let positional = CommandArg::new(String::from("secrets.yml"));
-        assert!(!contains_sensitive_keyword(&positional));
+        assert!(!is_sensitive_arg(&positional));
 
         let path_arg = CommandArg::new(String::from("path=/tmp/secrets.yml"));
-        assert!(!contains_sensitive_keyword(&path_arg));
+        assert!(!is_sensitive_arg(&path_arg));
 
         let spaced = CommandArg::new(String::from("  PASSWORD = value "));
-        assert!(contains_sensitive_keyword(&spaced));
+        assert!(is_sensitive_arg(&spaced));
     }
 
     #[test]
