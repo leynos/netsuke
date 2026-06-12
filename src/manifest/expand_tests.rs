@@ -9,6 +9,9 @@ mod a_tracing_capture;
 mod action_condition_cases;
 #[path = "expand_test_cases/condition_cases.rs"]
 mod condition_cases;
+
+#[path = "expand_test_cases/property_cases.rs"]
+mod property_cases;
 #[path = "expand_test_cases/target_command_available_cases.rs"]
 mod target_command_available_cases;
 
