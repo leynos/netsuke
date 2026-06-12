@@ -20,6 +20,7 @@ mod merge_logging;
 mod merge_observer;
 mod merge_precedence_proptests;
 mod merge_probe;
+mod merge_property;
 mod merge_targets_proptests;
 mod parsing;
 mod policy;
