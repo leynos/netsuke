@@ -60,16 +60,21 @@ fn merge_cli(world: &TestWorld, args: &str) {
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 
-fn parse_value<T: clap::ValueEnum>(value: &str, label: &str) -> Result<T> {
-    T::from_str(value, true).map_err(|err| anyhow::anyhow!("invalid {label} '{value}': {err}"))
+fn parse_value<T>(value: &str, label: &str) -> Result<T>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    value
+        .parse()
+        .map_err(|err| anyhow::anyhow!("invalid {label} '{value}': {err}"))
 }
 
-fn config_sets_policy<T: clap::ValueEnum>(
-    world: &TestWorld,
-    policy: &str,
-    field: &str,
-    label: &str,
-) -> Result<()> {
+fn config_sets_policy<T>(world: &TestWorld, policy: &str, field: &str, label: &str) -> Result<()>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
     parse_value::<T>(policy, label)?;
     write_config(world, &format!("{field} = \"{policy}\"\n"))
 }
