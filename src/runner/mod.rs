@@ -10,13 +10,13 @@ pub use error::RunnerError;
 
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::{self, keys};
+use crate::manifest;
 use crate::output_mode::{self, OutputMode};
 use crate::output_prefs::OutputPrefs;
 use crate::status::{
     AccessibleReporter, IndicatifReporter, LocalizationKey, PipelineStage, SilentReporter,
     StatusReporter, VerboseTimingReporter, report_pipeline_stage,
 };
-use crate::{ir::BuildGraph, manifest, ninja_gen};
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use std::borrow::Cow;
@@ -30,6 +30,7 @@ pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
 pub use ninja_env::NINJA_ENV;
 
+mod generation;
 mod graph;
 mod path_helpers;
 mod process;
@@ -342,43 +343,41 @@ fn generate_ninja(
     }
 
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = BuildGraph::from_manifest(&manifest)
-        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
+    let graph = generation::build_graph(&manifest)?;
 
     report_pipeline_stage(
         reporter,
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    let ninja = ninja_gen::generate(&graph)
-        .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
-    Ok(NinjaContent::new(ninja))
+    generation::ninja_text(&graph)
 }
 
+/// Map manifest-loading stages onto the status reporter's pipeline stages.
+fn stage_reporting_callback(
+    reporter: &dyn StatusReporter,
+) -> impl FnMut(manifest::ManifestLoadStage) + '_ {
+    move |stage: manifest::ManifestLoadStage| {
+        let pipeline_stage = match stage {
+            manifest::ManifestLoadStage::ManifestIngestion => PipelineStage::ManifestIngestion,
+            manifest::ManifestLoadStage::InitialYamlParsing => PipelineStage::InitialYamlParsing,
+            manifest::ManifestLoadStage::TemplateExpansion => PipelineStage::TemplateExpansion,
+            manifest::ManifestLoadStage::FinalRendering => PipelineStage::FinalRendering,
+        };
+        report_pipeline_stage(reporter, pipeline_stage, None);
+    }
+}
+
+/// Load the manifest, translating loading stages into reporter updates.
+///
+/// Thin reporting wrapper over the pure [`generation::load_manifest`] step.
 pub(super) fn load_manifest_with_stage_reporting(
     manifest_path: &Utf8PathBuf,
     policy: crate::stdlib::NetworkPolicy,
     reporter: &dyn StatusReporter,
 ) -> Result<crate::ast::NetsukeManifest> {
-    let mut on_stage = |stage: manifest::ManifestLoadStage| match stage {
-        manifest::ManifestLoadStage::ManifestIngestion => {
-            report_pipeline_stage(reporter, PipelineStage::ManifestIngestion, None);
-        }
-        manifest::ManifestLoadStage::InitialYamlParsing => {
-            report_pipeline_stage(reporter, PipelineStage::InitialYamlParsing, None);
-        }
-        manifest::ManifestLoadStage::TemplateExpansion => {
-            report_pipeline_stage(reporter, PipelineStage::TemplateExpansion, None);
-        }
-        manifest::ManifestLoadStage::FinalRendering => {
-            report_pipeline_stage(reporter, PipelineStage::FinalRendering, None);
-        }
-    };
-    manifest::from_path_with_policy(manifest_path.as_std_path(), policy, Some(&mut on_stage))
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", manifest_path.as_str())
-        })
+    let mut on_stage = stage_reporting_callback(reporter);
+    generation::load_manifest(manifest_path, policy, Some(&mut on_stage))
 }
 
 #[cfg(test)]
