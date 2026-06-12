@@ -2,7 +2,6 @@
 //! Internal to `runner`; public API is defined in `runner.rs`.
 
 use super::{BuildTargets, NINJA_PROGRAM};
-use crate::cli::Cli;
 use camino::Utf8PathBuf;
 use ninja_env::NINJA_ENV;
 use std::{
@@ -70,16 +69,36 @@ pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
 }
 
+/// Options the subprocess layer needs to invoke Ninja.
+///
+/// Translated from CLI state at the `runner` orchestration boundary (see
+/// `runner::ninja_process_options`), keeping this module a narrow subprocess
+/// adapter with no dependency on the parser/config domain type.
+#[derive(Debug, Clone, Default)]
+pub struct NinjaProcessOptions {
+    /// Working directory for the Ninja child process.
+    pub working_dir: Option<PathBuf>,
+    /// Parallel job count forwarded as `-j`.
+    pub jobs: Option<usize>,
+    /// Suppress forwarding of the child's stderr to keep machine-readable
+    /// output clean (diagnostic JSON mode).
+    pub suppress_stderr: bool,
+}
+
 /// Configure the base Ninja command with working directory, job count, and build file.
 ///
 /// Sets up stdout/stderr pipes for streaming. Callers append targets or tool
 /// flags after this function returns.
-fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::Result<()> {
-    if let Some(dir) = &cli.directory {
+fn configure_ninja_base(
+    cmd: &mut Command,
+    options: &NinjaProcessOptions,
+    build_file: &Path,
+) -> io::Result<()> {
+    if let Some(dir) = &options.working_dir {
         let canonical = canonicalize_utf8_path(dir.as_path())?;
         cmd.current_dir(canonical.as_std_path());
     }
-    if let Some(jobs) = cli.jobs {
+    if let Some(jobs) = options.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
     let build_file_path = canonicalize_utf8_path(build_file).or_else(|_| {
@@ -101,22 +120,22 @@ fn configure_ninja_base(cmd: &mut Command, cli: &Cli, build_file: &Path) -> io::
 
 fn configure_ninja_build_command(
     cmd: &mut Command,
-    cli: &Cli,
+    options: &NinjaProcessOptions,
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
-    configure_ninja_base(cmd, cli, build_file)?;
+    configure_ninja_base(cmd, options, build_file)?;
     cmd.args(targets.as_slice());
     Ok(())
 }
 
 fn configure_ninja_tool_command(
     cmd: &mut Command,
-    cli: &Cli,
+    options: &NinjaProcessOptions,
     build_file: &Path,
     tool: &str,
 ) -> io::Result<()> {
-    configure_ninja_base(cmd, cli, build_file)?;
+    configure_ninja_base(cmd, options, build_file)?;
     cmd.arg("-t").arg(tool);
     Ok(())
 }
@@ -156,7 +175,7 @@ fn run_command_and_stream(
 #[derive(Clone, Copy)]
 pub(crate) struct NinjaBuildRequest<'a> {
     pub(crate) program: &'a Path,
-    pub(crate) cli: &'a Cli,
+    pub(crate) options: &'a NinjaProcessOptions,
     pub(crate) build_file: &'a Path,
     pub(crate) targets: &'a BuildTargets<'a>,
 }
@@ -165,12 +184,12 @@ pub(crate) struct NinjaBuildRequest<'a> {
 #[derive(Clone, Copy)]
 pub(crate) struct NinjaToolRequest<'a> {
     pub(crate) program: &'a Path,
-    pub(crate) cli: &'a Cli,
+    pub(crate) options: &'a NinjaProcessOptions,
     pub(crate) build_file: &'a Path,
     pub(crate) tool: &'a str,
 }
 
-/// Invoke the Ninja executable with the provided CLI settings.
+/// Invoke the Ninja executable with the provided process options.
 ///
 /// The function forwards the job count and working directory to Ninja,
 /// specifies the temporary build file, and streams its standard output and
@@ -182,20 +201,20 @@ pub(crate) struct NinjaToolRequest<'a> {
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja(
     program: &Path,
-    cli: &Cli,
+    options: &NinjaProcessOptions,
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
     let request = NinjaBuildRequest {
         program,
-        cli,
+        options,
         build_file,
         targets,
     };
     run_ninja_build_internal(request, None)
 }
 
-/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
+/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided process options.
 ///
 /// The function forwards the job count and working directory to Ninja,
 /// specifies the build file, and streams its standard output and error back to
@@ -205,10 +224,15 @@ pub fn run_ninja(
 ///
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
+pub fn run_ninja_tool(
+    program: &Path,
+    options: &NinjaProcessOptions,
+    build_file: &Path,
+    tool: &str,
+) -> io::Result<()> {
     let request = NinjaToolRequest {
         program,
-        cli,
+        options,
         build_file,
         tool,
     };
@@ -220,8 +244,13 @@ fn run_ninja_build_internal(
     status_observer: Option<StatusObserver<'_>>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
-    configure_ninja_build_command(&mut cmd, request.cli, request.build_file, request.targets)?;
-    run_command_and_stream(cmd, status_observer, request.cli.resolved_diag_json())
+    configure_ninja_build_command(
+        &mut cmd,
+        request.options,
+        request.build_file,
+        request.targets,
+    )?;
+    run_command_and_stream(cmd, status_observer, request.options.suppress_stderr)
 }
 
 fn run_ninja_tool_internal(
@@ -229,8 +258,8 @@ fn run_ninja_tool_internal(
     status_observer: Option<StatusObserver<'_>>,
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
-    configure_ninja_tool_command(&mut cmd, request.cli, request.build_file, request.tool)?;
-    run_command_and_stream(cmd, status_observer, request.cli.resolved_diag_json())
+    configure_ninja_tool_command(&mut cmd, request.options, request.build_file, request.tool)?;
+    run_command_and_stream(cmd, status_observer, request.options.suppress_stderr)
 }
 
 /// Invoke `ninja` build and stream parsed task updates from status lines.
