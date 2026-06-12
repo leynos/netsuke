@@ -1,0 +1,26 @@
+---
+source: src/diagnostic_json_tests.rs
+assertion_line: 198
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0"
+  },
+  "diagnostics": [
+    {
+      "message": "Circular dependency detected: ⁨[\"a\", \"b\", \"a\"]⁩.",
+      "code": null,
+      "severity": "error",
+      "help": null,
+      "url": null,
+      "causes": [],
+      "source": null,
+      "primary_span": null,
+      "labels": [],
+      "related": []
+    }
+  ]
+}

@@ -152,3 +152,50 @@ fn render_manifest_parse_diagnostic_matches_snapshot() -> Result<()> {
     });
     Ok(())
 }
+
+/// Build a real `IrGenError::CircularDependency` through the IR pipeline.
+///
+/// Two targets that consume each other's outputs guarantee a cycle, and the
+/// detector's canonicalisation keeps the reported sequence deterministic.
+fn circular_dependency_error() -> Result<crate::ir::IrGenError> {
+    let manifest = manifest::from_str(concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: a\n",
+        "    sources: b\n",
+        "    command: echo a\n",
+        "  - name: b\n",
+        "    sources: a\n",
+        "    command: echo b\n",
+    ))?;
+    match crate::ir::BuildGraph::from_manifest(&manifest) {
+        Err(err) => Ok(err),
+        Ok(graph) => anyhow::bail!("expected circular dependency error, got graph {graph:?}"),
+    }
+}
+
+#[rstest]
+fn circular_dependency_display_matches_snapshot() -> Result<()> {
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
+    let _guard = set_en_localizer();
+    let err = circular_dependency_error()?;
+    snapshot_settings().bind(|| {
+        assert_snapshot!("circular_dependency_display", err.to_string());
+    });
+    Ok(())
+}
+
+#[rstest]
+fn circular_dependency_error_json_matches_snapshot() -> Result<()> {
+    let _lock = localizer_test_lock().expect("localizer test lock poisoned");
+    let _guard = set_en_localizer();
+    let err = circular_dependency_error()?;
+    let document = render_error_json(&err)?;
+    let value = parse_json_value(&document)?;
+    let rendered =
+        serde_json::to_string_pretty(&value).context("render circular dependency JSON")?;
+    snapshot_settings().bind(|| {
+        assert_snapshot!("circular_dependency_error_json", rendered);
+    });
+    Ok(())
+}
