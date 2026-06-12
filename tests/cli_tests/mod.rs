@@ -7,5 +7,6 @@ mod config_selection;
 mod helpers;
 mod locale;
 mod merge;
+mod merge_logging;
 mod parsing;
 mod policy;
