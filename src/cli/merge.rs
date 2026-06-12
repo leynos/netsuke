@@ -87,8 +87,14 @@ pub fn merge_with_cached_file_layers(
     let mut composer = MergeComposer::with_capacity(4);
 
     match sanitize_value(&CliConfig::default()) {
-        Ok(value) => composer.push_defaults(value),
-        Err(err) => errors.push(err),
+        Ok(value) => {
+            tracing::debug!(layer = "defaults", "applied default configuration layer");
+            composer.push_defaults(value);
+        }
+        Err(err) => {
+            tracing::debug!(layer = "defaults", "default configuration layer failed");
+            errors.push(err);
+        }
     }
 
     push_discovered_file_layers(&mut composer, &mut errors, discovered);
@@ -97,14 +103,43 @@ pub fn merge_with_cached_file_layers(
         .extract::<Value>()
         .into_ortho_merge()
     {
-        Ok(value) => composer.push_environment(value),
-        Err(err) => errors.push(err),
+        Ok(value) => {
+            tracing::debug!(
+                layer = "environment",
+                is_empty = is_empty_value(&value),
+                "merged environment configuration layer"
+            );
+            composer.push_environment(value);
+        }
+        Err(err) => {
+            tracing::debug!(
+                layer = "environment",
+                "environment configuration layer failed"
+            );
+            errors.push(err);
+        }
     }
 
     match cli_overrides_from_matches(cli, matches) {
-        Ok(value) if !is_empty_value(&value) => composer.push_cli(value),
-        Ok(_) => {}
-        Err(err) => errors.push(err),
+        Ok(value) if !is_empty_value(&value) => {
+            // Values may echo user-supplied paths or host lists, so records
+            // identify only the keys that were explicitly overridden.
+            let override_keys = value
+                .as_object()
+                .map(|map| map.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            tracing::debug!(
+                layer = "cli",
+                override_keys = ?override_keys,
+                "applied CLI override layer"
+            );
+            composer.push_cli(value);
+        }
+        Ok(_) => tracing::debug!(layer = "cli", "no explicit CLI overrides supplied"),
+        Err(err) => {
+            tracing::debug!(layer = "cli", "CLI override layer failed");
+            errors.push(err);
+        }
     }
 
     let composition = LayerComposition::new(composer.layers(), errors);
@@ -262,3 +297,6 @@ fn resolve_command(parsed: Option<&Commands>, build_defaults: &BuildConfig) -> C
         }),
     }
 }
+
+/// Error type accumulated while composing configuration layers.
+type MergeError = std::sync::Arc<ortho_config::OrthoError>;

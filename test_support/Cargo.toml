@@ -22,8 +22,4 @@ assert_cmd = "2.0.0"
 netsuke = { package = "netsuke-build", path = ".." }
 rstest = "0.26.1"
 tracing = "0.1"
-
-[dev-dependencies]
-# Only this crate's own unit tests capture tracing events; the published test
-# surface emits them but never installs a subscriber.
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }

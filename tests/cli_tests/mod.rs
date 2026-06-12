@@ -7,6 +7,7 @@ mod config_selection;
 mod helpers;
 mod locale;
 mod merge;
+mod merge_logging;
 mod merge_diag;
 mod merge_precedence_proptests;
 mod merge_probe;

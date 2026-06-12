@@ -36,6 +36,7 @@ pub mod netsuke;
 pub mod ninja;
 pub mod ninja_gen;
 pub mod stdlib_assert;
+pub mod tracing_capture;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
 
@@ -54,8 +55,6 @@ pub use manifest::ensure_manifest_exists;
 pub use exec::{make_executable, write_exec, write_exec_with_content};
 
 mod error;
-#[cfg(test)]
-mod tracing_capture;
 use anyhow::{Context, Result};
 /// Format an error and its sources (outermost → root) using `Display`, joined
 /// with ": ", to produce deterministic text for test assertions.
