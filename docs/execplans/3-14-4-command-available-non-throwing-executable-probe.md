@@ -850,6 +850,16 @@ implementation.
   The final CodeRabbit review log is
   `/tmp/coderabbit-milestone2-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`;
   CodeRabbit reported `findings: 0`.
+- [x] (2026-06-12T00:28:43Z) Milestone 3 documentation update drafted. Added
+  ADR-005, expanded the user guide, design document, and developers' guide,
+  indexed the ADR in `docs/contents.md`, and marked roadmap item 3.14.4
+  complete without changing adjacent roadmap items.
+- [x] (2026-06-12T00:29:42Z) Ran Milestone 3 documentation validation.
+  `make fmt`, `make markdownlint`, and `make nixie` passed. Logs:
+  `/tmp/fmt-docs-milestone3-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/markdownlint-docs-milestone3-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  and
+  `/tmp/nixie-docs-milestone3-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
 
 Once implementation begins, each milestone gets its own checked entry with a
 UTC timestamp, the commands run, the log paths under `/tmp/`, and a one-line
