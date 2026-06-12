@@ -264,3 +264,89 @@ pub enum StringOrList {
     /// A list of string items.
     List(Vec<String>),
 }
+
+impl StringOrList {
+    /// Apply `f` to each contained string, collecting the results.
+    ///
+    /// `Empty` yields an empty vector, `String` a single-element vector, and
+    /// `List` one element per item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// let single = StringOrList::String("hello".into());
+    /// assert_eq!(single.map_each(str::len), vec![5]);
+    /// assert!(StringOrList::Empty.map_each(str::len).is_empty());
+    /// ```
+    pub fn map_each<T>(&self, f: impl Fn(&str) -> T) -> Vec<T> {
+        match self {
+            Self::Empty => Vec::new(),
+            Self::String(s) => vec![f(s)],
+            Self::List(v) => v.iter().map(|s| f(s)).collect(),
+        }
+    }
+
+    /// Convert the contained strings into UTF-8 paths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use camino::Utf8PathBuf;
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// let sources = StringOrList::List(vec!["a.c".into(), "b.c".into()]);
+    /// assert_eq!(
+    ///     sources.to_paths(),
+    ///     vec![Utf8PathBuf::from("a.c"), Utf8PathBuf::from("b.c")],
+    /// );
+    /// ```
+    #[must_use]
+    pub fn to_paths(&self) -> Vec<camino::Utf8PathBuf> {
+        self.map_each(|s| camino::Utf8PathBuf::from(s))
+    }
+
+    /// Collect the contained strings into owned `String`s.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// let rule = StringOrList::String("cc".into());
+    /// assert_eq!(rule.to_string_vec(), vec!["cc".to_owned()]);
+    /// ```
+    #[must_use]
+    pub fn to_string_vec(&self) -> Vec<String> {
+        self.map_each(str::to_owned)
+    }
+
+    /// Return the sole contained string, if exactly one is present.
+    ///
+    /// A `String` value or a one-element `List` yields `Some`; anything else
+    /// yields `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::ast::StringOrList;
+    ///
+    /// assert_eq!(
+    ///     StringOrList::String("cc".into()).as_single(),
+    ///     Some("cc"),
+    /// );
+    /// assert_eq!(
+    ///     StringOrList::List(vec!["a".into(), "b".into()]).as_single(),
+    ///     None,
+    /// );
+    /// ```
+    #[must_use]
+    pub fn as_single(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s),
+            Self::List(v) if v.len() == 1 => v.first().map(String::as_str),
+            _ => None,
+        }
+    }
+}

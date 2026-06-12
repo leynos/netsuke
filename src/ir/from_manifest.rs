@@ -63,9 +63,9 @@ impl BuildGraph {
         rule_map: &HashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
-            let outputs = to_paths(&target.name);
-            let inputs = to_paths(&target.sources);
-            let implicit_deps = to_paths(&target.deps);
+            let outputs = target.name.to_paths();
+            let inputs = target.sources.to_paths();
+            let implicit_deps = target.deps.to_paths();
             tracing::debug!(
                 target = ?target.name,
                 implicit_deps_count = implicit_deps.len(),
@@ -105,7 +105,7 @@ impl BuildGraph {
                 implicit_deps,
                 explicit_outputs: outputs.clone(),
                 implicit_outputs: Vec::new(),
-                order_only_deps: to_paths(&target.order_only_deps),
+                order_only_deps: target.order_only_deps.to_paths(),
                 phony: target.phony,
                 always: target.always,
             };
@@ -198,41 +198,14 @@ fn register_action(
     Ok(hash)
 }
 
-fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
-where
-    F: Fn(&str) -> T,
-{
-    match sol {
-        StringOrList::Empty => Vec::new(),
-        StringOrList::String(s) => vec![f(s)],
-        StringOrList::List(v) => v.iter().map(|s| f(s)).collect(),
-    }
-}
-
-fn to_paths(sol: &StringOrList) -> Vec<Utf8PathBuf> {
-    map_string_or_list(sol, |s| Utf8PathBuf::from(s))
-}
-
-fn to_string_vec(sol: &StringOrList) -> Vec<String> {
-    map_string_or_list(sol, str::to_owned)
-}
-
-fn extract_single(sol: &StringOrList) -> Option<&str> {
-    match sol {
-        StringOrList::String(s) => Some(s),
-        StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
-        _ => None,
-    }
-}
-
 fn resolve_rule(
     rule: &StringOrList,
     rule_map: &HashMap<String, Arc<Rule>>,
     target_name: &str,
 ) -> Result<Arc<Rule>, IrGenError> {
-    extract_single(rule).map_or_else(
+    rule.as_single().map_or_else(
         || {
-            let mut rules = to_string_vec(rule);
+            let mut rules = rule.to_string_vec();
             if rules.is_empty() {
                 Err(IrGenError::EmptyRule {
                     target_name: target_name.to_owned(),
