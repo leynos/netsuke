@@ -1,0 +1,11 @@
+error[E0597]: `captured` does not live long enough
+  --> tests/ui/captured_state_outlives_captured.rs:12:9
+   |
+10 |     let state_ref = {
+   |         --------- borrow later stored here
+11 |         let captured = template.render_captured(()).expect("render");
+   |             -------- binding `captured` declared here
+12 |         captured.state()
+   |         ^^^^^^^^ borrowed value does not live long enough
+13 |     };
+   |     - `captured` dropped here while still borrowed
