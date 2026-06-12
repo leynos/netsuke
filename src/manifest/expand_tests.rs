@@ -7,6 +7,8 @@ use minijinja::Environment;
 mod a_tracing_capture;
 #[path = "expand_test_cases/condition_cases.rs"]
 mod condition_cases;
+#[path = "expand_test_cases/property_cases.rs"]
+mod property_cases;
 
 pub(super) fn targets(doc: &ManifestValue) -> Result<&[ManifestValue]> {
     doc.get("targets")
