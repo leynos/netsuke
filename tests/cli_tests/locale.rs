@@ -115,6 +115,63 @@ fn diag_json_hint_from_args_honours_output_format(
 }
 
 #[rstest]
+fn locale_hint_from_args_keeps_earlier_value_when_last_flag_lacks_value() -> Result<()> {
+    let args = os_args(&["netsuke", "--locale=fr-FR", "--locale"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.as_deref() == Some("fr-FR"),
+        "a trailing valueless --locale should not discard the earlier value, got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn locale_hint_from_args_keeps_earlier_value_when_terminator_follows_flag() -> Result<()> {
+    let args = os_args(&["netsuke", "--locale", "es-ES", "--locale", "--"]);
+    let hint = locale_hint_from_args(&args);
+    ensure!(
+        hint.as_deref() == Some("es-ES"),
+        "--locale followed by \"--\" should stop scanning and keep the earlier value, got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_value_flag_consumes_following_flag_like_token() -> Result<()> {
+    // `--output-format` greedily consumes the next token as its value, so the
+    // `--diag-json` here is a (bogus) format value, not a bare flag.
+    let args = os_args(&["netsuke", "--output-format", "--diag-json"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(
+        hint.is_none(),
+        "--diag-json consumed as an --output-format value must not count as a flag, got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_later_invalid_output_format_resets_earlier_valid_one() -> Result<()> {
+    let args = os_args(&["netsuke", "--output-format=json", "--output-format=tap"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(
+        hint.is_none(),
+        "the last --output-format wins even when its value is unrecognised, got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn diag_json_hint_bare_flag_survives_invalid_output_format() -> Result<()> {
+    let args = os_args(&["netsuke", "--diag-json", "--output-format=tap"]);
+    let hint = diag_json_hint_from_args(&args);
+    ensure!(
+        hint == Some(true),
+        "an unrecognised --output-format should fall back to the bare flag, got: {hint:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(Some("es-ES")));
     let err = netsuke::cli::parse_with_localizer_from(
