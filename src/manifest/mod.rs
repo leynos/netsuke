@@ -49,10 +49,12 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
+
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
 pub use env_reader::{EnvReadError, EnvReader, process_env_reader};
+use expand::ExpansionReport;
 pub(crate) use expand::expand_foreach;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
@@ -63,6 +65,31 @@ pub use render::render_manifest;
 use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
+
+/// Emit tracing events for a manifest expansion report.
+///
+/// Expansion itself is a pure transformation that reports filtering through
+/// [`ExpansionReport`]; this orchestrator-side helper owns the telemetry
+/// policy. The report's fields are already bounded and non-sensitive (name
+/// hash, expression length), so they can be logged verbatim.
+fn trace_expansion_report(report: &ExpansionReport) {
+    for entry in &report.filtered_entries {
+        tracing::debug!(
+            section = entry.section.as_str(),
+            entry_name_hash = entry.entry_name_hash.as_str(),
+            iteration_index = entry.iteration_index,
+            when_expression_len = entry.when_expression_len,
+            when_result = false,
+            "filtered manifest entry by when expression"
+        );
+    }
+    tracing::debug!(
+        filtered_targets = report.stats.filtered_targets,
+        filtered_actions = report.stats.filtered_actions,
+        filtered_entry_count = report.stats.filtered_targets + report.stats.filtered_actions,
+        "expanded manifest foreach and when directives"
+    );
+}
 
 /// Invoke the stage callback when present.
 fn notify_stage(
@@ -152,7 +179,8 @@ fn from_str_named(
     notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros(&doc, &mut jinja)?;
 
-    expand_foreach(&mut doc, &jinja)?;
+    let expansion_report = expand_foreach(&mut doc, &jinja)?;
+    trace_expansion_report(&expansion_report);
 
     notify_stage(on_stage, ManifestLoadStage::FinalRendering);
     let manifest: NetsukeManifest =

@@ -7,7 +7,6 @@ use anyhow::{Context, Result};
 use minijinja::{Environment, context, value::Value};
 use serde_json::{Number as JsonNumber, map::Entry};
 use sha2::{Digest, Sha256};
-use tracing::{debug, dispatcher, subscriber::NoSubscriber};
 
 /// Counts of manifest entries excluded during template expansion.
 ///
@@ -23,6 +22,35 @@ pub(crate) struct FilteringStats {
     pub filtered_actions: usize,
 }
 
+/// A manifest entry removed by a `when` expression during expansion.
+///
+/// Carries only bounded, non-sensitive correlation data: the raw entry name
+/// has unbounded cardinality and may carry personally identifiable
+/// information, so only a short stable hash is recorded, and the raw `when`
+/// expression may contain secret literals, so only its length is exposed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct FilteredEntry {
+    /// Manifest section the entry belonged to (`targets` or `actions`).
+    pub section: String,
+    /// Short stable hash of the entry name for correlation.
+    pub entry_name_hash: String,
+    /// Iteration index when the entry came from a `foreach` expansion.
+    pub iteration_index: Option<usize>,
+    /// Length of the `when` expression that filtered the entry.
+    pub when_expression_len: usize,
+}
+
+/// Outcome of manifest expansion: counts plus per-entry filtering events.
+///
+/// Expansion reports what it filtered through this data structure rather
+/// than emitting telemetry itself; the caller owns the tracing policy.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct ExpansionReport {
+    /// Counts of filtered entries per section.
+    pub stats: FilteringStats,
+    /// One event per entry removed by a `when` expression.
+    pub filtered_entries: Vec<FilteredEntry>,
+}
 /// Context shared by expansion operations.
 ///
 /// `env` is the Jinja environment used to render templates. `section` is the
@@ -35,9 +63,9 @@ struct ExpansionContext<'a> {
     section: &'a str,
 }
 
-/// Decides how discovery should handle a manifest `when` expression.
+/// Decides how manifest discovery should handle an evaluated `when` expression.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum WhenResolution {
+enum WhenEvaluation {
     /// The expression evaluated to true.
     Include,
     /// The expression evaluated to false.
@@ -45,36 +73,54 @@ enum WhenResolution {
     /// A query-disabled helper prevents evaluation without making the entry invalid.
     Conditional,
 }
+
+/// Decides how expansion should handle a manifest entry after evaluating `when`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum WhenResolution {
+    /// The entry remains in the expanded manifest.
+    Include,
+    /// The entry is removed and supplies bounded metadata for caller-owned telemetry.
+    Exclude(FilteredEntry),
+    /// The entry remains conditional because a query-disabled helper prevented evaluation.
+    Conditional,
+}
+
 /// Expand manifest targets and actions defined with the `foreach` key.
 ///
 /// # Errors
 ///
 /// Returns an error when evaluating `foreach` or `when` expressions, when
 /// iteration values fail to serialize, or when target metadata is malformed.
-pub(crate) fn expand_foreach(doc: &mut ManifestValue, env: &Environment) -> Result<FilteringStats> {
+pub(crate) fn expand_foreach(
+    doc: &mut ManifestValue,
+    env: &Environment,
+) -> Result<ExpansionReport> {
     let filtered_targets = expand_section(doc, "targets", env)?;
     let filtered_actions = expand_section(doc, "actions", env)?;
     let stats = FilteringStats {
-        filtered_targets,
-        filtered_actions,
+        filtered_targets: filtered_targets.len(),
+        filtered_actions: filtered_actions.len(),
     };
-    debug!(
-        filtered_targets = stats.filtered_targets,
-        filtered_actions = stats.filtered_actions,
-        filtered_entry_count = stats.filtered_targets + stats.filtered_actions,
-        "expanded manifest foreach and when directives"
-    );
-    Ok(stats)
+    let mut filtered_entries = filtered_targets;
+    filtered_entries.extend(filtered_actions);
+    Ok(ExpansionReport {
+        stats,
+        filtered_entries,
+    })
 }
 
-/// Expand one manifest section, returning the number of filtered entries.
-fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Result<usize> {
+/// Expand one manifest section, returning metadata for each filtered entry.
+fn expand_section(
+    doc: &mut ManifestValue,
+    key: &str,
+    env: &Environment,
+) -> Result<Vec<FilteredEntry>> {
     let Some(entries) = doc.get_mut(key).and_then(|v| v.as_array_mut()) else {
-        return Ok(0);
+        return Ok(Vec::new());
     };
 
     let mut expanded = Vec::new();
-    let mut filtered = 0;
+    let mut filtered = Vec::new();
     let context = ExpansionContext { env, section: key };
     for entry in std::mem::take(entries) {
         match entry {
@@ -93,7 +139,7 @@ fn expand_section(doc: &mut ManifestValue, key: &str, env: &Environment) -> Resu
 fn expand_target(
     mut map: ManifestMap,
     context: &ExpansionContext<'_>,
-    filtered: &mut usize,
+    filtered: &mut Vec<FilteredEntry>,
 ) -> Result<Vec<ManifestValue>> {
     if let Some(expr_val) = map.get("foreach") {
         let values = parse_foreach_values(expr_val, context.env)?;
@@ -103,8 +149,8 @@ fn expand_target(
             clone.remove("foreach");
             match when_allows(&mut clone, context, Some((&item, index)))? {
                 WhenResolution::Include => {}
-                WhenResolution::Exclude => {
-                    *filtered += 1;
+                WhenResolution::Exclude(event) => {
+                    filtered.push(event);
                     continue;
                 }
                 WhenResolution::Conditional => {
@@ -120,8 +166,8 @@ fn expand_target(
         // Use empty context since there's no iteration variable.
         match when_allows(&mut map, context, None)? {
             WhenResolution::Include => {}
-            WhenResolution::Exclude => {
-                *filtered += 1;
+            WhenResolution::Exclude(event) => {
+                filtered.push(event);
                 return Ok(vec![]);
             }
             WhenResolution::Conditional => {
@@ -175,7 +221,7 @@ fn parse_foreach_values(expr_val: &ManifestValue, env: &Environment) -> Result<V
 /// checking for `{{` which could appear in string literals.
 ///
 /// Empty expressions are rejected as invalid.
-fn eval_when(env: &Environment, expr: &str, ctx: &Value) -> Result<WhenResolution> {
+fn eval_when(env: &Environment, expr: &str, ctx: &Value) -> Result<WhenEvaluation> {
     anyhow::ensure!(
         !expr.trim().is_empty(),
         "{}",
@@ -186,33 +232,33 @@ fn eval_when(env: &Environment, expr: &str, ctx: &Value) -> Result<WhenResolutio
     // like "item > 1" or "true" without needing template delimiters.
     if let Some(evaluation) = evaluate_when_expression(env, expr, ctx)? {
         return Ok(match evaluation {
-            QueryEvaluation::Value(is_true) => when_resolution(is_true),
-            QueryEvaluation::QueryDisabled => WhenResolution::Conditional,
+            QueryEvaluation::Value(is_true) => when_evaluation(is_true),
+            QueryEvaluation::QueryDisabled => WhenEvaluation::Conditional,
         });
     }
 
     // Expression parsing failed - treat as template syntax (e.g., "{{ path is dir }}")
     let rendered_template = match render_when_template(env, expr, ctx)? {
         QueryEvaluation::Value(output) => output,
-        QueryEvaluation::QueryDisabled => return Ok(WhenResolution::Conditional),
+        QueryEvaluation::QueryDisabled => return Ok(WhenEvaluation::Conditional),
     };
     // Treat "true" or "1" as truthy, anything else (including "false", "") as falsy
-    Ok(when_resolution(matches!(
+    Ok(when_evaluation(matches!(
         rendered_template.trim().to_lowercase().as_str(),
         "true" | "1"
     )))
 }
 
 /// Map a successfully evaluated boolean condition to its discovery resolution.
-const fn when_resolution(is_true: bool) -> WhenResolution {
+const fn when_evaluation(is_true: bool) -> WhenEvaluation {
     if is_true {
-        WhenResolution::Include
+        WhenEvaluation::Include
     } else {
-        WhenResolution::Exclude
+        WhenEvaluation::Exclude
     }
 }
 
-/// Evaluate a `when` clause if present, returning its discovery resolution.
+/// Evaluate a `when` clause and return the entry's expansion outcome.
 ///
 /// Accepts an optional iteration context (`item`, `index`) for foreach targets;
 /// static targets pass `None`.
@@ -226,32 +272,17 @@ fn when_allows(
     };
     let expr = as_str(&when_val, "when")?;
     let ctx = when_context(map, iteration)?;
-    let allowed = eval_when(context.env, expr, &ctx)?;
-    if allowed == WhenResolution::Exclude && has_subscriber() {
-        let entry_name = entry_name(map);
-        let iteration_index = iteration.map(|(_, index)| index);
-        let entry_name_hash = entry_name_hash(entry_name);
-        // Keep filtering logs useful without leaking manifest contents. The raw
-        // entry name has unbounded cardinality and may carry PII, so log only a
-        // short stable hash for correlation. The raw `when` expression may
-        // contain secret literals from the manifest, so expose only its length.
-        debug!(
-            section = context.section,
-            entry_name_hash,
-            iteration_index,
-            when_expression_len = expr.len(),
-            when_result = false,
-            "filtered manifest entry by when expression"
-        );
+    match eval_when(context.env, expr, &ctx)? {
+        WhenEvaluation::Include => Ok(WhenResolution::Include),
+        WhenEvaluation::Conditional => Ok(WhenResolution::Conditional),
+        WhenEvaluation::Exclude => Ok(WhenResolution::Exclude(FilteredEntry {
+            section: context.section.to_owned(),
+            entry_name_hash: entry_name_hash(entry_name(map)),
+            iteration_index: iteration.map(|(_, index)| index),
+            when_expression_len: expr.len(),
+        })),
     }
-    Ok(allowed)
 }
-
-/// Report whether a tracing subscriber is active for the default dispatcher.
-fn has_subscriber() -> bool {
-    dispatcher::get_default(|current| !current.is::<NoSubscriber>())
-}
-
 /// Build the Jinja context for a `when` condition, adding `item` and `index`.
 fn when_context(map: &ManifestMap, iteration: Option<(&Value, usize)>) -> Result<Value> {
     let mut vars = map
