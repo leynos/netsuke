@@ -73,32 +73,38 @@ Netsuke accepts small bounded Kani harnesses for roadmap item `4.2.1`.
 - Harness helpers stay private unless reuse pressure justifies a narrower
   internal abstraction.
 
-The duplicate-output harness verifies the private duplicate-output error
-constructor in `src/ir/from_manifest.rs`, rather than the full
-`BuildGraph::from_manifest` path or the target-map lookup. This keeps the proof
-focused on variant construction and duplicate reporting after direct attempts
-through manifest lowering and `HashMap<Utf8PathBuf, _>` lookup exceeded the
-solver budget in path and map hashing. Under `cfg(kani)`, this constructor also
-uses the real duplicate-output message key without formatted arguments so the
-proof does not execute localization formatting internals.
+The duplicate-output harness drives the private `find_duplicates` helper in
+`src/ir/from_manifest.rs`, rather than the full `BuildGraph::from_manifest`
+path. This keeps the proof focused on duplicate discovery after direct attempts
+through manifest lowering reached serde-backed action hashing before duplicate
+assertions became tractable. Under `cfg(kani)`, duplicate-output messages use
+the real message key without formatted arguments so the proof does not execute
+localization formatting internals.
 
-The rule-selection harness follows the same boundary. It verifies private
-constructors for empty-rule, multiple-rules, and missing-rule errors, rather
-than the full `resolve_rule` dispatch. Direct attempts through `resolve_rule`
-pulled in default `HashMap` random-state initialisation, `StringOrList` vector
-conversion, and string sorting/drop internals. Existing Rust behavioural tests
-continue to cover the integration path from manifest shape to those errors.
+The rule-selection harnesses drive the private `resolve_rule` helper for
+empty-rule, multiple-rules, and missing-rule shapes. The proof boundary covers
+the production dispatch and error construction while avoiding full manifest
+lowering and action registration.
+
+The cycle harnesses use a bounded string-level model for self-dependency and
+missing-dependency properties. Direct attempts through `cycle::analyse` and
+production `BuildEdge` values exceeded the local Kani budget in `Utf8PathBuf`,
+map traversal, and cycle canonicalization. Existing Rust unit and property
+tests continue to cover the production `cycle::analyse` path with real graph
+values.
 
 ## Known risks and limitations
 
-- The duplicate-output harness no longer proves that full manifest lowering or
-  target-map lookup reaches the duplicate-output branch; existing unit and
-  behavioural tests keep that integration path covered.
+- The duplicate-output harness does not prove that full manifest lowering
+  reaches the duplicate-output branch; existing unit and behavioural tests keep
+  that integration path covered.
 - The duplicate-output harness does not prove rendered Fluent output for that
   error variant. It proves the message key is selected and the semantic payload
   is preserved.
-- The rule-selection harness no longer proves that full `resolve_rule` dispatch
-  reaches each branch; existing behavioural tests keep that path covered.
+- The cycle harnesses prove the bounded cycle and missing-dependency input
+  shapes, not the full production cycle detector. Existing unit and property
+  tests keep the production detector covered until roadmap item `4.3.1` expands
+  generated graph coverage.
 - Graph coverage beyond one to three nodes remains a tracked future obligation
   for Proptest.
 - If the production IR representation changes away from `HashMap` or owned

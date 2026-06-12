@@ -6,7 +6,6 @@
 //! to [`super::cmd_interpolate`], and cycle/missing-dependency detection to
 //! [`super::cycle`].
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
@@ -18,7 +17,7 @@ use crate::localization::{self, keys};
 use super::{
     cmd_interpolate::interpolate_command,
     cycle::{self, CycleDetectionReport},
-    graph::{Action, BuildEdge, BuildGraph, IrGenError},
+    graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap},
 };
 
 impl BuildGraph {
@@ -30,7 +29,7 @@ impl BuildGraph {
     /// are specified for a single target, or no rule is provided.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
         let mut graph = Self::default();
-        let mut rule_map: HashMap<String, Arc<Rule>> = HashMap::new();
+        let mut rule_map = IrHashMap::<String, Arc<Rule>>::default();
 
         Self::process_rules(manifest, &mut rule_map);
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
@@ -50,7 +49,7 @@ impl BuildGraph {
     /// permit targets to override recipe fields such as `command` or
     /// `description`, those target-level values take precedence over the rule's
     /// defaults.
-    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Arc<Rule>>) {
+    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut IrHashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
         }
@@ -58,9 +57,9 @@ impl BuildGraph {
 
     fn process_targets(
         manifest: &NetsukeManifest,
-        actions: &mut HashMap<String, Action>,
-        targets: &mut HashMap<Utf8PathBuf, BuildEdge>,
-        rule_map: &HashMap<String, Arc<Rule>>,
+        actions: &mut IrHashMap<String, Action>,
+        targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>,
+        rule_map: &IrHashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
@@ -71,6 +70,10 @@ impl BuildGraph {
                 implicit_deps_count = implicit_deps.len(),
                 "populating implicit dependencies for target",
             );
+            if let Some(error) = duplicate_output_error(&outputs, targets) {
+                return Err(error);
+            }
+
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
                     let target_name = get_target_display_name(&outputs);
@@ -101,21 +104,16 @@ impl BuildGraph {
 
             let edge = BuildEdge {
                 action_id,
-                inputs: inputs.clone(),
+                inputs,
                 implicit_deps,
-                explicit_outputs: outputs.clone(),
+                explicit_outputs: outputs,
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
                 phony: target.phony,
                 always: target.always,
             };
 
-            if let Some(error) = duplicate_output_error(&outputs, targets) {
-                return Err(error);
-            }
-            for out in outputs {
-                targets.insert(out, edge.clone());
-            }
+            insert_edge_for_outputs(targets, edge);
         }
         Ok(())
     }
@@ -163,7 +161,7 @@ struct ActionBindings<'a> {
 }
 
 fn register_action(
-    actions: &mut HashMap<String, Action>,
+    actions: &mut IrHashMap<String, Action>,
     recipe: Recipe,
     description: Option<&str>,
     bindings: ActionBindings<'_>,
@@ -190,15 +188,26 @@ fn register_action(
             .with_arg("details", err.to_string()),
         source: err,
     })?;
-    actions.entry(hash.clone()).or_insert(action);
+    if !actions.contains_key(hash.as_str()) {
+        actions.insert(hash.clone(), action);
+    }
     Ok(hash)
 }
 
 fn duplicate_output_error(
     outputs: &[Utf8PathBuf],
-    targets: &HashMap<Utf8PathBuf, BuildEdge>,
+    targets: &IrHashMap<Utf8PathBuf, BuildEdge>,
 ) -> Option<IrGenError> {
     find_duplicates(outputs, targets).map(duplicate_output_error_from_paths)
+}
+
+fn insert_edge_for_outputs(targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>, edge: BuildEdge) {
+    if let Some((last_output, other_outputs)) = edge.explicit_outputs.split_last() {
+        for output in other_outputs {
+            targets.insert(output.clone(), edge.clone());
+        }
+        targets.insert(last_output.clone(), edge);
+    }
 }
 
 fn duplicate_output_error_from_paths(dups: Vec<Utf8PathBuf>) -> IrGenError {
@@ -283,7 +292,7 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
 
 fn resolve_rule(
     rule: &StringOrList,
-    rule_map: &HashMap<String, Arc<Rule>>,
+    rule_map: &IrHashMap<String, Arc<Rule>>,
     target_name: &str,
 ) -> Result<Arc<Rule>, IrGenError> {
     extract_single(rule).map_or_else(
@@ -350,19 +359,29 @@ fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::L
 
 fn find_duplicates(
     outputs: &[Utf8PathBuf],
-    targets: &HashMap<Utf8PathBuf, BuildEdge>,
+    targets: &IrHashMap<Utf8PathBuf, BuildEdge>,
 ) -> Option<Vec<Utf8PathBuf>> {
-    let mut dups: Vec<Utf8PathBuf> = outputs
-        .iter()
-        .filter(|o| targets.contains_key(*o))
-        .cloned()
-        .collect();
+    let mut seen: Vec<&Utf8PathBuf> = Vec::new();
+    let mut dups = Vec::new();
+    for output in outputs {
+        if targets.contains_key(output)
+            || seen.iter().any(|seen_output| path_eq(seen_output, output))
+        {
+            dups.push(output.clone());
+        } else {
+            seen.push(output);
+        }
+    }
     if dups.is_empty() {
         None
     } else {
-        dups.sort();
+        dups.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         Some(dups)
     }
+}
+
+fn path_eq(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
+    left.as_str() == right.as_str()
 }
 
 fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {

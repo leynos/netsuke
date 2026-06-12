@@ -1,7 +1,7 @@
 //! Cycle detection utilities for the IR target graph.
 //!
 //! The public entry point is [`analyse`], which accepts the target map
-//! (`HashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
+//! (`IrHashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
 //! returns a [`CycleDetectionReport`].  The report carries an optional
 //! detected cycle — an ordered, canonicalized list of paths — together
 //! with any dependencies referenced by a target but absent from the map.
@@ -16,11 +16,11 @@
 //! messages regardless of traversal order.  Consumed by
 //! [`super::from_manifest`] after the full target map is constructed.
 
-use std::collections::HashMap;
+use std::cmp::Ordering;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::BuildEdge;
+use super::graph::{BuildEdge, IrHashMap};
 
 #[cfg(test)]
 #[path = "cycle_property_tests.rs"]
@@ -51,7 +51,7 @@ pub(crate) struct CycleDetectionReport {
 ///
 /// Returns any detected cycle path and missing dependencies encountered
 /// before that cycle.  Missing dependencies emit debug-level tracing events.
-pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
+pub(crate) fn analyse(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
     let mut detector = CycleDetector::new(targets);
     let cycle = detector.detect();
     CycleDetectionReport {
@@ -84,20 +84,20 @@ pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetecti
 /// Create with [`CycleDetector::new`] and drive detection with
 /// [`CycleDetector::detect`].
 struct CycleDetector<'targets> {
-    targets: &'targets HashMap<Utf8PathBuf, BuildEdge>,
+    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
     stack: Vec<Utf8PathBuf>,
-    states: HashMap<Utf8PathBuf, VisitState>,
+    states: IrHashMap<Utf8PathBuf, VisitState>,
     missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
 }
 
 impl CycleDetector<'_> {
     /// Create a new detector borrowing `targets` for the duration of the
     /// traversal.
-    fn new(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
+    fn new(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
         CycleDetector {
             targets,
             stack: Vec::new(),
-            states: HashMap::new(),
+            states: IrHashMap::default(),
             missing_dependencies: Vec::new(),
         }
     }
@@ -112,7 +112,7 @@ impl CycleDetector<'_> {
         // Sort keys for deterministic traversal order.  The O(n log n) cost is
         // negligible for typical build graphs (100–10 000 targets) and is
         // outweighed by the benefit of stable, reproducible error messages.
-        nodes.sort();
+        nodes.sort_by(|left, right| path_cmp(left.as_path(), right.as_path()));
         for node in nodes {
             if self.is_visited(node.as_path()) {
                 continue;
@@ -126,7 +126,10 @@ impl CycleDetector<'_> {
 
     /// Return `true` if `node` has been fully visited.
     fn is_visited(&self, node: &Utf8Path) -> bool {
-        matches!(self.states.get(node), Some(VisitState::Visited))
+        matches!(
+            state_for_path(&self.states, node),
+            Some(VisitState::Visited)
+        )
     }
 
     /// Visit `node` depth-first.
@@ -134,13 +137,13 @@ impl CycleDetector<'_> {
     /// Returns `Some(cycle)` if a back-edge to an in-progress node is
     /// discovered, `None` otherwise.
     fn visit(&mut self, node: &Utf8Path) -> Option<Vec<Utf8PathBuf>> {
-        match self.states.get(node) {
+        match state_for_path(&self.states, node) {
             Some(VisitState::Visited) => return None,
             Some(VisitState::Visiting) => {
                 let idx = self
                     .stack
                     .iter()
-                    .position(|n| n.as_path() == node)
+                    .position(|n| path_eq(n.as_path(), node))
                     .unwrap_or_else(|| {
                         debug_assert!(false, "visiting node must be on the stack");
                         0
@@ -156,9 +159,7 @@ impl CycleDetector<'_> {
 
         self.stack.push(node.to_path_buf());
 
-        let cycle = self
-            .targets
-            .get(node)
+        let cycle = edge_for_path(self.targets, node)
             .into_iter()
             .flat_map(|edge| edge.inputs.iter().chain(&edge.implicit_deps))
             .find_map(|dep| self.visit_dependency(node, dep));
@@ -173,7 +174,7 @@ impl CycleDetector<'_> {
     }
 
     #[cfg(test)]
-    fn find_cycle(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
+    fn find_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
         analyse(targets).cycle
     }
 
@@ -182,7 +183,7 @@ impl CycleDetector<'_> {
     ///
     /// Missing dependencies are also emitted as debug-level tracing events.
     fn record_missing_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) -> bool {
-        if self.targets.contains_key(dep) {
+        if self.target_edge(dep).is_some() {
             return false;
         }
 
@@ -207,6 +208,10 @@ impl CycleDetector<'_> {
 
         self.visit(dep)
     }
+
+    fn target_edge(&self, node: &Utf8Path) -> Option<&BuildEdge> {
+        edge_for_path(self.targets, node)
+    }
 }
 
 /// Rotate `cycle` so that the lexicographically smallest node appears
@@ -224,7 +229,7 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
         .iter()
         .take(len)
         .enumerate()
-        .min_by(|(_, a), (_, b)| a.cmp(b))
+        .min_by(|(_, a), (_, b)| path_cmp(a.as_path(), b.as_path()))
         .map_or(0, |(idx, _)| idx);
     cycle.pop();
     cycle.rotate_left(start);
@@ -234,10 +239,70 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
     cycle
 }
 
+#[cfg(not(kani))]
+fn edge_for_path<'targets>(
+    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    path: &Utf8Path,
+) -> Option<&'targets BuildEdge> {
+    targets.get(path)
+}
+
+#[cfg(kani)]
+fn edge_for_path<'targets>(
+    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    path: &Utf8Path,
+) -> Option<&'targets BuildEdge> {
+    targets
+        .iter()
+        .find(|(candidate, _)| path_eq(candidate.as_path(), path))
+        .map(|(_, edge)| edge)
+}
+
+#[cfg(not(kani))]
+fn state_for_path(
+    states: &IrHashMap<Utf8PathBuf, VisitState>,
+    path: &Utf8Path,
+) -> Option<VisitState> {
+    states.get(path).copied()
+}
+
+#[cfg(kani)]
+fn state_for_path(
+    states: &IrHashMap<Utf8PathBuf, VisitState>,
+    path: &Utf8Path,
+) -> Option<VisitState> {
+    states
+        .iter()
+        .find(|(candidate, _)| path_eq(candidate.as_path(), path))
+        .map(|(_, state)| *state)
+}
+
+#[cfg(not(kani))]
+fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
+    left == right
+}
+
+#[cfg(kani)]
+fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
+    left.as_str() == right.as_str()
+}
+
+#[cfg(not(kani))]
+fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+    left.cmp(right)
+}
+
+#[cfg(kani)]
+fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+    left.as_str().cmp(right.as_str())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
+    use std::collections::HashMap;
+
     fn path(name: &str) -> Utf8PathBuf {
         Utf8PathBuf::from(name)
     }

@@ -248,8 +248,8 @@ requires explicit user approval before implementation begins.
 - [x] (2026-06-11T22:18:05Z) Stage B scaffold edits made: added the
       `cfg(kani)` lint declaration, `[package.metadata.kani.flags]`
       `default-unwind = "6"`, the `make kani-ir` alias, and placeholder
-      `verification::scaffold_smoke` harnesses in `from_manifest` and
-      `cycle`.
+      scaffold harnesses in `from_manifest` and `cycle`. These placeholders
+      were removed by the substantive Stage C and review-check harnesses.
 - [x] (2026-06-11T22:21:19Z) Stage B discovery succeeded with
       `LD_LIBRARY_PATH` pointing at Kani's bundled toolchain libraries. The
       installed driver lists both scaffold harnesses with `cargo kani list`.
@@ -295,14 +295,14 @@ requires explicit user approval before implementation begins.
       but both `coderabbit review --agent` invocations hung after
       `preparing_sandbox` for more than the local tolerance. No findings were
       emitted; retry before the next major milestone if the service recovers.
-- [x] (2026-06-11T23:46:32Z) Stage C rule-error harness implemented as
-      `rule_selection_errors_match_rule_shape`. The final proof verifies
-      private empty-rule, multiple-rules, and missing-rule error constructors,
-      preserving target and rule payloads while using real localization message
-      keys without formatted arguments under `cfg(kani)`.
-- [x] (2026-06-11T23:46:32Z) Stage C rule-error focused Kani run passed:
-      `rule_selection_errors_match_rule_shape` verified successfully with
-      zero failed checks and 16.44 seconds reported verification time.
+- [x] (2026-06-11T23:46:32Z) Stage C rule-error harness implemented first as
+      one combined symbolic proof, then split during review-check work into
+      `empty_rule_shape_is_rejected`, `multiple_rule_shape_is_rejected`, and
+      `missing_rule_shape_is_rejected`. The final proofs drive `resolve_rule`,
+      preserve target and rule payloads, and use real localization message keys
+      without formatted arguments under `cfg(kani)`.
+- [x] (2026-06-11T23:46:32Z) Stage C rule-error focused Kani runs passed for
+      all three split rule-shape harnesses with zero failed checks.
 - [ ] (2026-06-11T23:53:46Z) Stage C rule-error CodeRabbit review attempted
       after clean gates and commit `c4f7361`, but `coderabbit review --agent`
       again stalled at `preparing_sandbox` and emitted no findings. The stuck
@@ -770,24 +770,12 @@ harness loop fails for the expected reason.
    ```
 
    (Adjust the suppressed list to the minimum that the harness body actually
-   requires; do not pre-empt.) Add a single placeholder harness whose body is a
-   trivially true assertion:
-
-   ```rust
-   #[kani::proof]
-   #[kani::unwind(2)]
-   fn scaffold_smoke() {
-       kani::assert(true, "scaffold: replace with real harness");
-   }
-   ```
-
-   Do **not** use `kani::assert(false, ...)` as a scaffold. A `#[kani::proof]`
-   whose body asserts `false` proves the harness runs, but trains a bad
-   pattern: future contributors will copy it as a template for "intentional
-   failure" without distinguishing vacuous proof from falsified property.
-   Discovery is verified separately, by running `cargo kani --list` (or
-   `--list-harnesses`, depending on the installed Kani version) and confirming
-   the new harness names appear.
+   requires; do not pre-empt.) The initial scaffold harnesses were temporary
+   discovery checks only and have been replaced by substantive proofs. Future
+   scaffold work must avoid vacuous `kani::assert(true, ...)` proofs once a
+   property name is known. Discovery is verified separately, by running
+   `cargo kani --list` (or `--list-harnesses`, depending on the installed Kani
+   version) and confirming the new harness names appear.
 4. Repeat the `#[cfg(kani)] mod verification` block at the end of
    `src/ir/cycle.rs` with its own scaffold harness following the same shape.
 5. Run `cargo kani --list` (or `--list-harnesses`) and confirm both
@@ -1264,3 +1252,19 @@ The references section should include:
   string-based rule and duplicate-output error helpers remain as verifier-small
   boundaries after focused Kani runs showed that `HashMap` construction reaches
   unsupported random-state setup in the rule-selection harness.
+- 2026-06-12: Review-check response replaced the trivial cycle scaffold with
+  bounded self-dependency and missing-dependency cycle-model harnesses. The
+  manifest-to-IR proofs now drive production `find_duplicates` and
+  `resolve_rule` helpers directly, while full manifest lowering remains covered
+  by ordinary Rust tests because action hashing dominates the Kani path before
+  duplicate assertions become tractable. `process_targets` now performs
+  duplicate detection before edge construction, moves input and output vectors
+  into `BuildEdge`, and only clones a `BuildEdge` when one target has multiple
+  output keys. `IrHashMap` provides the Kani-only deterministic map backing
+  needed for the focused proofs without changing exported `IrGenError` field
+  types.
+- 2026-06-12: Review-check gates passed: `make check-fmt`, `make lint`,
+  `make test`, `make markdownlint`, `make nixie`, and `make kani-full`.
+  CodeRabbit review was requested after those gates, but the agent invocation
+  stalled at `preparing_sandbox` and emitted no findings before the local
+  process was stopped.

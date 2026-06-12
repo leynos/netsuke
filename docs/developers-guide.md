@@ -153,18 +153,22 @@ non-zero exit status on failure.
 Use the Make targets for day-to-day formal-verification checks:
 
 - `make kani-check` runs the fast local version check used by `formal-pr`.
-  Until roadmap item `4.2.*` adds substantive proof harnesses, this check
-  verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
-- `make kani-full` is reserved for the full Kani proof suite once harnesses
-  exist. Today it invokes `cargo kani` without additional smoke flags.
+  This check verifies the installed `cargo kani` command matches
+  `tools/kani/VERSION`.
+- `make kani-full` runs the complete Kani proof suite through `cargo kani`.
+- `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
+  It currently delegates to `make kani-full` because all Kani harnesses are IR
+  harnesses.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
   the optional Verus installer and proof runner. These targets are not part of
   the ordinary pull-request gate.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
-`make all`.
-
+`make all`. `Cargo.toml` declares `cfg(kani)` under
+`[lints.rust] unexpected_cfgs` and sets
+`[package.metadata.kani.flags] default-unwind = "6"`; both settings are part of
+the harness contract and must move in lockstep with new Kani-only modules.
 
 ### Kani harness inventory
 
@@ -174,10 +178,14 @@ The IR harnesses are declared by the modules they verify, under
 proof genuinely needs a wider helper. This keeps production modules below the
 400-line source-file limit while preserving access to private helpers.
 
-| Harness                                  | Module                                 | Property                                                                                                  | Bound                         | Notes                                                                                                                                                                                                       |
-| ---------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `duplicate_output_always_rejected`       | `src/ir/from_manifest_verification.rs` | A known duplicate path set produces `IrGenError::DuplicateOutput` and preserves the reported path.        | Global `default-unwind = "6"` | Verifies the private duplicate-output error constructor rather than full manifest lowering. Kani uses the real message key without formatted arguments so the proof avoids localization formatting.         |
-| `rule_selection_errors_match_rule_shape` | `src/ir/from_manifest_verification.rs` | Empty, multiple, and missing-rule shapes produce the expected rule-selection error variants and payloads. | Global `default-unwind = "6"` | Verifies private rule-error constructors rather than full `resolve_rule` dispatch. Kani uses real message keys without formatted arguments, and short symbolic names keep `memcmp` within the unwind bound. |
+| Harness                                    | Module                                 | Property                                                                                              | Bound                 | Notes                                                                                                                                                           |
+| ------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate_output_always_rejected`         | `src/ir/from_manifest_verification.rs` | A duplicate path in one target is detected and the reported duplicate path is preserved.              | `#[kani::unwind(12)]` | Drives the production `find_duplicates` helper directly. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
+| `empty_rule_shape_is_rejected`             | `src/ir/from_manifest_verification.rs` | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.                 | `#[kani::unwind(6)]`  | Drives the production `resolve_rule` helper with a minimal rule map.                                                                                            |
+| `multiple_rule_shape_is_rejected`          | `src/ir/from_manifest_verification.rs` | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.            | `#[kani::unwind(8)]`  | Drives the production `resolve_rule` helper with concrete short rule names to keep string comparison bounded.                                                   |
+| `missing_rule_shape_is_rejected`           | `src/ir/from_manifest_verification.rs` | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names.         | `#[kani::unwind(6)]`  | Drives the production `resolve_rule` helper with an empty rule map.                                                                                             |
+| `self_dependency_reports_cycle`            | `src/ir/cycle_verification.rs`         | A self-dependency in the bounded cycle model reports a cycle and no missing dependencies.             | `#[kani::unwind(8)]`  | Uses a bounded string-level model because the production path through `Utf8PathBuf`, map traversal, and stack rotation exceeds the local Kani budget.           |
+| `missing_dependency_does_not_report_cycle` | `src/ir/cycle_verification.rs`         | A missing dependency in the bounded cycle model is not reported as a cycle and is counted as missing. | `#[kani::unwind(8)]`  | Complements production unit and property tests that exercise `cycle::analyse` with real `BuildEdge` values.                                                     |
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
