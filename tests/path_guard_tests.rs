@@ -34,9 +34,7 @@ fn restores_path_without_touching_real_env() {
         .return_const(());
     {
         let mut guard = PathGuard::with_env(Some("/orig".into()), env);
-        unsafe {
-            guard.env_mut().set_var("PATH", OsStr::new("/tmp"));
-        }
+        guard.set_path(OsStr::new("/tmp"));
     }
 }
 
@@ -45,8 +43,8 @@ fn restores_path_without_touching_real_env() {
 fn capture_snapshots_and_restores_real_path() -> Result<()> {
     let original = std::env::var_os("PATH");
     {
-        let _guard = PathGuard::capture();
-        test_support::env::set_var("PATH", OsStr::new("/netsuke-capture-test"));
+        let mut guard = PathGuard::capture();
+        guard.set_path(OsStr::new("/netsuke-capture-test"));
         let mutated = std::env::var_os("PATH").context("PATH should be set after mutation")?;
         ensure!(
             mutated == OsStr::new("/netsuke-capture-test"),
