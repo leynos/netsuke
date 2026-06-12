@@ -9,6 +9,12 @@ use std::time::{Duration, Instant};
 
 type MonotonicClock = dyn Fn() -> Duration + Send + Sync;
 
+/// Destination for rendered timing summary lines.
+///
+/// Injectable so tests and alternative reporters can capture the timing
+/// output without relying on process-global stderr.
+pub type TimingSink = dyn Fn(&str) + Send + Sync;
+
 #[derive(Debug, Copy, Clone)]
 struct StageMarker {
     current: StageNumber,
@@ -73,29 +79,62 @@ pub struct VerboseTimingReporter {
     inner: Box<dyn StatusReporter>,
     prefs: OutputPrefs,
     clock: Box<MonotonicClock>,
+    sink: Box<TimingSink>,
     state: Mutex<TimingState>,
 }
 
 impl VerboseTimingReporter {
     /// Wrap an existing reporter with verbose timing summary support.
+    ///
+    /// Timing summary lines go to the process's stderr; use
+    /// [`VerboseTimingReporter::with_sink`] to capture them elsewhere.
     #[must_use]
     pub fn new(inner: Box<dyn StatusReporter>, prefs: OutputPrefs) -> Self {
-        let start = Instant::now();
-        Self::with_clock(inner, prefs, Box::new(move || start.elapsed()))
+        Self::with_sink(inner, prefs, Box::new(stderr_sink))
     }
 
+    /// Wrap an existing reporter, sending timing summary lines to `sink`.
+    ///
+    /// The sink receives one rendered line per call, without a trailing
+    /// newline.
+    #[must_use]
+    pub fn with_sink(
+        inner: Box<dyn StatusReporter>,
+        prefs: OutputPrefs,
+        sink: Box<TimingSink>,
+    ) -> Self {
+        let start = Instant::now();
+        Self::with_clock_and_sink(inner, prefs, Box::new(move || start.elapsed()), sink)
+    }
+
+    #[cfg(test)]
     fn with_clock(
         inner: Box<dyn StatusReporter>,
         prefs: OutputPrefs,
         clock: Box<MonotonicClock>,
     ) -> Self {
+        Self::with_clock_and_sink(inner, prefs, clock, Box::new(stderr_sink))
+    }
+
+    fn with_clock_and_sink(
+        inner: Box<dyn StatusReporter>,
+        prefs: OutputPrefs,
+        clock: Box<MonotonicClock>,
+        sink: Box<TimingSink>,
+    ) -> Self {
         Self {
             inner,
             prefs,
             clock,
+            sink,
             state: Mutex::new(TimingState::default()),
         }
     }
+}
+
+/// Default timing sink: one line per call to the process's stderr.
+fn stderr_sink(line: &str) {
+    drop(writeln!(io::stderr(), "{line}"));
 }
 
 impl StatusReporter for VerboseTimingReporter {
@@ -148,7 +187,7 @@ impl StatusReporter for VerboseTimingReporter {
         self.inner.report_complete(tool_key);
 
         for line in lines {
-            drop(writeln!(io::stderr(), "{line}"));
+            (self.sink)(&line);
         }
     }
 }
