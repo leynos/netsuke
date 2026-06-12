@@ -16,7 +16,6 @@ use crate::graph_view::GraphView;
 use crate::graph_view::render::GraphRenderer;
 use crate::graph_view::render_dot::DotRenderer;
 use crate::graph_view::render_html::HtmlRenderer;
-use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::result_json;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
@@ -24,7 +23,7 @@ use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipel
 use super::path_helpers::{
     ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path,
 };
-use super::{load_manifest_with_stage_reporting, process};
+use super::{generation, load_manifest_with_stage_reporting, process};
 
 /// Render the build graph in-process and write the selected artefact.
 ///
@@ -53,8 +52,7 @@ pub(super) fn handle_graph(
         .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?;
     let manifest = load_manifest_with_stage_reporting(&manifest_path, policy, reporter)?;
     report_pipeline_stage(reporter, PipelineStage::IrGenerationValidation, None);
-    let graph = BuildGraph::from_manifest(&manifest)
-        .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
+    let graph = generation::build_graph(&manifest)?;
     let view = GraphView::from_build_graph(&graph);
 
     let status_key: LocalizationKey = if args.html {
