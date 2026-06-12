@@ -161,6 +161,7 @@ strip-ansi-escapes = "0.2"
 toml = "0.8"
 serde_yaml = "0.9"
 proptest = "1.11.0"
+trybuild = { version = "1", features = ["diff"] }
 
 # Target-specific dev-deps
 [target.'cfg(unix)'.dev-dependencies]
