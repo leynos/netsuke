@@ -69,6 +69,28 @@ pub fn resolve_ninja_program() -> PathBuf {
     resolve_ninja_program_utf8().into()
 }
 
+/// Routing policy for a child process's standard error stream.
+///
+/// Choosing the policy is a reporting decision that belongs to the runner
+/// (for example, JSON diagnostics mode keeps stderr machine-readable by
+/// discarding child output); the process layer only consumes it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum StderrMode {
+    /// Forward the child's stderr to the parent's stderr.
+    #[default]
+    Forward,
+    /// Drain the child's stderr but discard it.
+    Suppress,
+}
+
+impl StderrMode {
+    /// True when child stderr should be discarded rather than forwarded.
+    #[must_use]
+    pub const fn is_suppressed(self) -> bool {
+        matches!(self, Self::Suppress)
+    }
+}
+
 /// Options the subprocess layer needs to invoke Ninja.
 ///
 /// Translated from CLI state at the `runner` orchestration boundary (see
@@ -80,9 +102,8 @@ pub struct NinjaProcessOptions {
     pub working_dir: Option<PathBuf>,
     /// Parallel job count forwarded as `-j`.
     pub jobs: Option<usize>,
-    /// Suppress forwarding of the child's stderr to keep machine-readable
-    /// output clean (diagnostic JSON mode).
-    pub suppress_stderr: bool,
+    /// Routing policy for the child's stderr stream.
+    pub stderr_mode: StderrMode,
 }
 
 /// Configure the base Ninja command with working directory, job count, and build file.
@@ -163,11 +184,11 @@ fn log_command_execution(cmd: &Command) {
 fn run_command_and_stream(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
 ) -> io::Result<()> {
     log_command_execution(&cmd);
     let child = cmd.spawn()?;
-    let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
+    let status = spawn_and_stream_output(child, status_observer, stderr_mode)?;
     check_exit_status(status)
 }
 
@@ -250,7 +271,7 @@ fn run_ninja_build_internal(
         request.build_file,
         request.targets,
     )?;
-    run_command_and_stream(cmd, status_observer, request.options.suppress_stderr)
+    run_command_and_stream(cmd, status_observer, request.options.stderr_mode)
 }
 
 fn run_ninja_tool_internal(
@@ -259,7 +280,7 @@ fn run_ninja_tool_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_tool_command(&mut cmd, request.options, request.build_file, request.tool)?;
-    run_command_and_stream(cmd, status_observer, request.options.suppress_stderr)
+    run_command_and_stream(cmd, status_observer, request.options.stderr_mode)
 }
 
 /// Invoke `ninja` build and stream parsed task updates from status lines.
@@ -306,7 +327,7 @@ fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_
 fn spawn_and_stream_output(
     mut child: Child,
     status_observer: Option<StatusObserver<'_>>,
-    suppress_stderr: bool,
+    stderr_mode: StderrMode,
 ) -> io::Result<ExitStatus> {
     let Some(stdout) = child.stdout.take() else {
         terminate_child(&mut child, "stdout pipe unavailable");
@@ -320,9 +341,10 @@ fn spawn_and_stream_output(
     let err_handle = thread::spawn(move || {
         // Avoid a long-lived stderr lock: status observers invoked while
         // draining stdout may emit task updates to stderr, and that path must
-        // not block behind stderr forwarding. In JSON diagnostics mode we still
-        // drain child stderr, but discard it to keep stderr machine-readable.
-        if suppress_stderr {
+        // not block behind stderr forwarding. Under `StderrMode::Suppress` we
+        // still drain child stderr, but discard it to keep stderr
+        // machine-readable.
+        if stderr_mode.is_suppressed() {
             forward_child_output(BufReader::new(stderr), io::sink(), "stderr")
         } else {
             forward_child_output(BufReader::new(stderr), io::stderr(), "stderr")
