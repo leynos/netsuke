@@ -33,9 +33,9 @@ pub use ninja_env::NINJA_ENV;
 mod graph;
 mod path_helpers;
 mod process;
-pub use process::NinjaProcessOptions;
 #[cfg(doctest)]
 pub use process::doc;
+pub use process::{NinjaProcessOptions, StderrMode};
 
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
 
@@ -183,10 +183,15 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
 /// [`process`] receives only the fields it needs rather than the whole
 /// parser/config domain type.
 fn ninja_process_options(cli: &Cli) -> NinjaProcessOptions {
+    let stderr_mode = if cli.resolved_diag_json() {
+        StderrMode::Suppress
+    } else {
+        StderrMode::Forward
+    };
     NinjaProcessOptions {
         working_dir: cli.directory.clone(),
         jobs: cli.jobs,
-        suppress_stderr: cli.resolved_diag_json(),
+        stderr_mode,
     }
 }
 
