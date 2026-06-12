@@ -53,7 +53,14 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(&parsed_cli, &matches));
+    // Load config file layers once; the diagnostic pre-pass and the full
+    // merge share the result, avoiding duplicate filesystem I/O on startup.
+    let config_layers = cli::ConfigFileLayers::load(&parsed_cli);
+    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json_with_layers(
+        &parsed_cli,
+        &matches,
+        &config_layers,
+    ));
 
     if !mode.is_json() && parsed_cli.verbose {
         // Initialise tracing before the merge so the configuration
@@ -64,7 +71,7 @@ fn run_with_args(
         init_tracing(Level::DEBUG);
     }
 
-    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
+    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode, &config_layers) {
         Ok(merged) => merged,
         Err(code) => return code,
     };
@@ -133,8 +140,9 @@ fn merge_cli_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     mode: DiagMode,
+    config_layers: &cli::ConfigFileLayers,
 ) -> Result<cli::Cli, ExitCode> {
-    match cli::merge_with_config(parsed_cli, matches) {
+    match cli::merge_with_config_layers(parsed_cli, matches, config_layers) {
         Ok(merged) => Ok(merged.with_default_command()),
         Err(err) => {
             if mode.is_json() {

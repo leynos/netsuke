@@ -31,7 +31,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use super::config::{BuildConfig, CliConfig, Theme};
-use super::discovery::push_file_layers;
+use super::discovery::{ConfigFileLayers, push_file_layers};
 use super::parser::{BuildArgs, Cli, Commands};
 use super::validation_error;
 use crate::theme::ThemePreference;
@@ -48,11 +48,30 @@ type MergeError = std::sync::Arc<ortho_config::OrthoError>;
 /// Returns an [`ortho_config::OrthoError`] if layer composition or merging
 /// fails.
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
+    merge_with_config_layers(cli, matches, &ConfigFileLayers::load(cli))
+}
+
+/// Merge configuration layers over parsed CLI input, reusing pre-loaded
+/// file layers.
+///
+/// Callers that also run the diagnostic pre-pass should load the file layers
+/// once via [`ConfigFileLayers::load`] and pass them to both functions so
+/// config files are read from disk only once per invocation.
+///
+/// # Errors
+///
+/// Returns an [`ortho_config::OrthoError`] if layer composition or merging
+/// fails.
+pub fn merge_with_config_layers(
+    cli: &Cli,
+    matches: &ArgMatches,
+    file_layers: &ConfigFileLayers,
+) -> OrthoResult<Cli> {
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
 
     push_defaults_layer(&mut composer, &mut errors);
-    push_file_layers(cli, &mut composer, &mut errors);
+    push_file_layers(file_layers, &mut composer, &mut errors);
     push_environment_layer(&mut composer, &mut errors);
     push_cli_layer(cli, matches, &mut composer, &mut errors);
 
