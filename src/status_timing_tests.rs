@@ -336,3 +336,54 @@ fn timing_summary_snapshot(
 
     Ok(())
 }
+
+struct SilentInner;
+
+impl StatusReporter for SilentInner {
+    fn report_stage(&self, _current: StageNumber, _total: StageNumber, _description: &str) {}
+    fn report_complete(&self, _tool_key: LocalizationKey) {}
+}
+
+#[rstest]
+fn verbose_timing_reporter_routes_summary_through_injected_sink(
+    test_prefs: OutputPrefs,
+    en_us_localizer: Result<EnUsLocalizerFixture>,
+) -> Result<()> {
+    let _localizer = en_us_localizer?;
+    let captured: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink_capture = Arc::clone(&captured);
+    let clock = Arc::new(FakeClock::from_millis(&[0, 15]));
+    let reporter_clock = Arc::clone(&clock);
+    let reporter = VerboseTimingReporter::with_clock_and_sink(
+        Box::new(SilentInner),
+        test_prefs,
+        Box::new(move || reporter_clock.now()),
+        Box::new(move |line| {
+            sink_capture
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(line.to_owned());
+        }),
+    );
+
+    reporter.report_stage(
+        StageNumber::new_unchecked(1),
+        StageNumber::new_unchecked(6),
+        "Reading manifest file",
+    );
+    reporter.report_complete(LocalizationKey::new(keys::STATUS_TOOL_MANIFEST));
+
+    let lines = captured
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let [header, stage_line, total_line] = lines.as_slice() else {
+        anyhow::bail!("expected 3 captured timing lines, got {lines:#?}");
+    };
+    anyhow::ensure!(normalize_fluent_isolates(header).contains("Stage timing summary:"));
+    anyhow::ensure!(
+        normalize_fluent_isolates(stage_line).contains("Stage 1/6: Reading manifest file")
+    );
+    anyhow::ensure!(normalize_fluent_isolates(total_line).contains("Total pipeline time: 15ms"));
+    Ok(())
+}
