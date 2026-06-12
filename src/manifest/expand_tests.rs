@@ -29,6 +29,21 @@ pub(super) fn actions(doc: &ManifestValue) -> Result<&[ManifestValue]> {
         .context("actions sequence missing")
 }
 
+pub(super) fn ensure_foreach_removed(
+    entries: &[ManifestValue],
+    section: &str,
+) -> Result<()> {
+    for entry in entries {
+        let map = entry
+            .as_object()
+            .with_context(|| format!("{section} entry map"))?;
+        anyhow::ensure!(
+            !map.contains_key("foreach"),
+            "foreach should be removed after {section} expansion"
+        );
+    }
+    Ok(())
+}
 pub(super) fn section_entries<'a>(
     doc: &'a ManifestValue,
     section: &str,
