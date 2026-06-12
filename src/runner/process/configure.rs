@@ -10,7 +10,9 @@ use std::process::{Command, Stdio};
 
 use camino::Utf8PathBuf;
 
-use super::{Cli, CommandEnv, NinjaBuildRequest, NinjaToolRequest, canonicalize_utf8_path};
+use super::{
+    CommandEnv, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest, canonicalize_utf8_path,
+};
 
 /// Configure the base Ninja command with working directory, job count, and build file.
 ///
@@ -18,16 +20,16 @@ use super::{Cli, CommandEnv, NinjaBuildRequest, NinjaToolRequest, canonicalize_u
 /// flags after this function returns.
 fn configure_ninja_base(
     cmd: &mut Command,
-    cli: &Cli,
+    options: &NinjaProcessOptions,
     build_file: &Path,
     env: &CommandEnv,
 ) -> io::Result<()> {
     env.apply(cmd);
-    if let Some(dir) = &cli.directory {
+    if let Some(dir) = &options.working_dir {
         let canonical = canonicalize_utf8_path(dir.as_path())?;
         cmd.current_dir(canonical.as_std_path());
     }
-    if let Some(jobs) = cli.jobs {
+    if let Some(jobs) = options.jobs {
         cmd.arg("-j").arg(jobs.to_string());
     }
     let build_file_path = canonicalize_utf8_path(build_file).or_else(|_| {
@@ -51,7 +53,7 @@ pub(super) fn configure_ninja_build_command(
     cmd: &mut Command,
     request: &NinjaBuildRequest<'_>,
 ) -> io::Result<()> {
-    configure_ninja_base(cmd, request.cli, request.build_file, request.env)?;
+    configure_ninja_base(cmd, request.options, request.build_file, request.env)?;
     let targets = request.targets;
     cmd.args(targets.as_slice());
     Ok(())
@@ -61,7 +63,7 @@ pub(super) fn configure_ninja_tool_command(
     cmd: &mut Command,
     request: &NinjaToolRequest<'_>,
 ) -> io::Result<()> {
-    configure_ninja_base(cmd, request.cli, request.build_file, request.env)?;
+    configure_ninja_base(cmd, request.options, request.build_file, request.env)?;
     cmd.arg("-t").arg(request.tool);
     Ok(())
 }

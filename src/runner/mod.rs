@@ -48,8 +48,8 @@ pub use ninja_content::NinjaContent;
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaToolRequest, StderrMode,
-    run_ninja_tool_with, run_ninja_with,
+    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest,
+    StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 
 use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
@@ -110,6 +110,14 @@ pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Path) -> 
     run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_path_buf())
 }
 
+/// Translate CLI state into the narrow options consumed by the process layer.
+fn ninja_process_options(cli: &Cli) -> NinjaProcessOptions {
+    NinjaProcessOptions {
+        working_dir: cli.directory.clone(),
+        jobs: cli.jobs,
+    }
+}
+
 /// Dispatch a command after resolving Ninja only for commands that require it.
 fn run_with_ninja_program_resolver(
     cli: &Cli,
@@ -162,9 +170,10 @@ pub fn run_ninja(
     build_file: &Path,
     targets: &BuildTargets<'_>,
 ) -> io::Result<()> {
+    let options = ninja_process_options(cli);
     run_ninja_with(&NinjaBuildRequest {
         program,
-        cli,
+        options: &options,
         build_file,
         targets,
         env: &CommandEnv::inherit(),
@@ -184,9 +193,10 @@ pub fn run_ninja(
 /// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
 /// streams are unavailable, or when Ninja reports a non-zero exit status.
 pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) -> io::Result<()> {
+    let options = ninja_process_options(cli);
     run_ninja_tool_with(&NinjaToolRequest {
         program,
-        cli,
+        options: &options,
         build_file,
         tool,
         env: &CommandEnv::inherit(),
@@ -227,11 +237,12 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
         )
     };
     if context.progress_enabled {
+        let options = ninja_process_options(cli);
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
                 program: context.ninja_program,
-                cli,
+                options: &options,
                 build_file: build_path,
                 targets: &targets,
                 env: &CommandEnv::inherit(),
@@ -290,11 +301,12 @@ fn handle_ninja_tool(
         )
     };
     if context.progress_enabled {
+        let options = ninja_process_options(cli);
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
                 program: context.ninja_program,
-                cli,
+                options: &options,
                 build_file: build_path,
                 tool: tool.name,
                 env: &CommandEnv::inherit(),

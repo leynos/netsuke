@@ -2,7 +2,6 @@
 //! Internal to `runner`; public API is defined in `runner.rs`.
 
 use super::BuildTargets;
-use crate::cli::Cli;
 use monotony::{MonotonicClock, StdMonotonicClock};
 use std::{io, path::Path, process::Command};
 
@@ -45,7 +44,7 @@ mod stderr_mode;
 pub use command_env::CommandEnv;
 use configure::{configure_ninja_build_command, configure_ninja_tool_command};
 pub use paths::*;
-pub use request::{NinjaBuildRequest, NinjaToolRequest};
+pub use request::{NinjaBuildRequest, NinjaProcessOptions, NinjaToolRequest};
 pub use stderr_mode::StderrMode;
 
 /// Per-invocation process settings passed only from Ninja setup to execution.
@@ -117,13 +116,13 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
 /// # Examples
 ///
 /// ```rust,no_run
-/// use netsuke::cli::Cli;
 /// use netsuke::runner::{
-///     BuildTargets, CommandEnv, NinjaBuildRequest, StderrMode, run_ninja_with,
+///     BuildTargets, CommandEnv, NinjaBuildRequest, NinjaProcessOptions, StderrMode,
+///     run_ninja_with,
 /// };
 /// use std::path::Path;
 ///
-/// let cli = Cli::default();
+/// let options = NinjaProcessOptions::default();
 /// let targets = BuildTargets::default();
 /// // `inherit()` reproduces `run_ninja`; `with_path` replaces the child's
 /// // `PATH` outright rather than prepending, so compose the whole value
@@ -133,11 +132,11 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
 /// let env = CommandEnv::inherit().with_path(&path);
 /// run_ninja_with(&NinjaBuildRequest {
 ///     program: Path::new("ninja"),
-///     cli: &cli,
+///     options: &options,
 ///     build_file: Path::new("build.ninja"),
 ///     targets: &targets,
 ///     env: &env,
-///     stderr_mode: StderrMode::from_json_enabled(cli.json),
+///     stderr_mode: StderrMode::Forward,
 /// })?;
 /// # Ok::<(), std::io::Error>(())
 /// ```
@@ -162,18 +161,19 @@ fn run_ninja_with_clock(
 /// # Examples
 ///
 /// ```rust,no_run
-/// use netsuke::cli::Cli;
-/// use netsuke::runner::{CommandEnv, NinjaToolRequest, StderrMode, run_ninja_tool_with};
+/// use netsuke::runner::{
+///     CommandEnv, NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with,
+/// };
 /// use std::path::Path;
 ///
-/// let cli = Cli::default();
+/// let options = NinjaProcessOptions::default();
 /// run_ninja_tool_with(&NinjaToolRequest {
 ///     program: Path::new("ninja"),
-///     cli: &cli,
+///     options: &options,
 ///     build_file: Path::new("build.ninja"),
 ///     tool: "clean",
 ///     env: &CommandEnv::inherit(),
-///     stderr_mode: StderrMode::from_json_enabled(cli.json),
+///     stderr_mode: StderrMode::Forward,
 /// })?;
 /// # Ok::<(), std::io::Error>(())
 /// ```

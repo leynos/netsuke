@@ -184,23 +184,24 @@ fn observed_value(dir: &tempfile::TempDir) -> Result<std::ffi::OsString> {
 fn composed_path_reaches_the_spawned_process(
     probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
 ) -> Result<()> {
-    use netsuke::cli::Cli;
-    use netsuke::runner::{BuildTargets, NinjaBuildRequest, StderrMode, run_ninja_with};
+    use netsuke::runner::{
+        BuildTargets, NinjaBuildRequest, NinjaProcessOptions, StderrMode, run_ninja_with,
+    };
     use std::path::Path;
     let (dir, probe, build_file) = probe_fixture?;
     let parent_before = std::env::var_os("PATH");
     let composed = prepend_path_value(parent_before.as_deref(), Path::new("/injected/marker"))
         .context("compose PATH")?;
-    let cli = Cli::default();
+    let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
 
     run_ninja_with(&NinjaBuildRequest {
         program: probe.as_path(),
-        cli: &cli,
+        options: &options,
         build_file: build_file.as_path(),
         targets: &targets,
         env: &CommandEnv::inherit().with_path(&composed),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
+        stderr_mode: StderrMode::Forward,
     })
     .context("run the probe")?;
 
@@ -230,8 +231,9 @@ fn unoverridden_parent_variables_are_inherited(
     #[from(probe_fixture)] baseline: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
     probe_fixture: Result<(tempfile::TempDir, PathBuf, PathBuf)>,
 ) -> Result<()> {
-    use netsuke::cli::Cli;
-    use netsuke::runner::{BuildTargets, NinjaBuildRequest, StderrMode, run_ninja_with};
+    use netsuke::runner::{
+        BuildTargets, NinjaBuildRequest, NinjaProcessOptions, StderrMode, run_ninja_with,
+    };
 
     // Baseline: the probe spawned directly, outside `CommandEnv`, records
     // the PATH a plainly inherited child sees. Comparing child against child
@@ -246,17 +248,17 @@ fn unoverridden_parent_variables_are_inherited(
     let inherited = observed_value(&baseline_dir)?;
 
     let (dir, probe, build_file) = probe_fixture?;
-    let cli = Cli::default();
+    let options = NinjaProcessOptions::default();
     let targets = BuildTargets::default();
 
     // The override touches only an unrelated marker; PATH is not configured.
     run_ninja_with(&NinjaBuildRequest {
         program: probe.as_path(),
-        cli: &cli,
+        options: &options,
         build_file: build_file.as_path(),
         targets: &targets,
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
+        stderr_mode: StderrMode::Forward,
     })
     .context("run the probe")?;
 
@@ -283,19 +285,18 @@ fn general_overrides_reach_the_spawned_tool_process(
         PathBuf,
     )>,
 ) -> Result<()> {
-    use netsuke::cli::Cli;
-    use netsuke::runner::{NinjaToolRequest, StderrMode, run_ninja_tool_with};
+    use netsuke::runner::{NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with};
 
     let (dir, probe, build_file) = probe_fixture?;
-    let cli = Cli::default();
+    let options = NinjaProcessOptions::default();
 
     run_ninja_tool_with(&NinjaToolRequest {
         program: probe.as_path(),
-        cli: &cli,
+        options: &options,
         build_file: build_file.as_path(),
         tool: "clean",
         env: &CommandEnv::inherit().with_var("NETSUKE_PROBE_MARKER", "sentinel"),
-        stderr_mode: StderrMode::from_json_enabled(cli.json),
+        stderr_mode: StderrMode::Forward,
     })
     .context("run the probe")?;
 

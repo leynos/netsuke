@@ -275,7 +275,10 @@ fn run(world: &TestWorld) -> Result<()> {
         .with_ref(|cli| {
             runner::run_ninja_with(&runner::NinjaBuildRequest {
                 program,
-                cli,
+                options: &runner::NinjaProcessOptions {
+                    working_dir: cli.directory.clone(),
+                    jobs: cli.jobs,
+                },
                 build_file: Path::new("build.ninja"),
                 targets: &targets,
                 env: &world.command_env.borrow(),

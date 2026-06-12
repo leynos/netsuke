@@ -6,7 +6,6 @@ use super::child_exit::finalize_streaming;
 use super::command_list_telemetry::COMMAND_LIST_FAILURE_DURATION;
 use super::streaming::ForwardStats;
 use super::*;
-use crate::cli::Cli;
 use crate::test_tracing_capture::with_test_subscriber;
 use camino::Utf8PathBuf;
 #[cfg(unix)]
@@ -267,9 +266,7 @@ proptest! {
 }
 
 /// Spawning a missing Ninja emits a spawn-failure warning whose
-/// `suppress_stderr` field follows the request's explicit `stderr_mode`, not
-/// the request's `cli.json` state. The mismatch in each case proves the process
-/// layer consumes the policy field and does not re-derive it from CLI JSON.
+/// `suppress_stderr` field follows the request's explicit `stderr_mode`.
 #[test]
 fn spawn_failure_logging_honours_explicit_stderr_mode() {
     let cases = [
@@ -277,15 +274,12 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
         (false, StderrMode::Suppress, "suppress_stderr=true"),
     ];
     for (json, mode, expected_field) in cases {
-        let cli = Cli {
-            json,
-            ..Cli::default()
-        };
+        let options = NinjaProcessOptions::default();
         let targets = BuildTargets::default();
         let events = with_test_subscriber(LevelFilter::WARN, |captured| {
             let result = run_ninja_with(&NinjaBuildRequest {
                 program: Path::new("netsuke-test-missing-ninja"),
-                cli: &cli,
+                options: &options,
                 build_file: Path::new("build.ninja"),
                 targets: &targets,
                 env: &CommandEnv::inherit(),
@@ -300,7 +294,7 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
         assert_eq!(
             events.len(),
             1,
-            "exactly one warning should be captured for {mode:?} with cli.json={json}, \
+            "exactly one warning should be captured for {mode:?} with input={json}, \
              got: {events:?}"
         );
         // The single captured warning is the spawn failure; inspect it alone so a
@@ -311,7 +305,7 @@ fn spawn_failure_logging_honours_explicit_stderr_mode() {
         assert!(
             event.contains("failure_category=\"spawn\"") && event.contains(expected_field),
             "the captured warning should be a spawn failure recording {expected_field} for \
-             {mode:?} with cli.json={json}, got: {events:?}"
+             {mode:?} with input={json}, got: {events:?}"
         );
     }
 }
