@@ -170,3 +170,160 @@ proptest! {
         );
     }
 }
+
+/// Build a graph of `count` nodes with the given forward `(from, to)` edges.
+///
+/// Forward edges (`to > from`) cannot create back-edges, so the result is a
+/// directed acyclic graph by construction.
+fn make_forward_edge_graph(
+    count: usize,
+    edges: &[(usize, usize)],
+) -> HashMap<camino::Utf8PathBuf, super::super::super::BuildEdge> {
+    let nodes = sequential_nodes(count);
+    let mut inputs: Vec<Vec<camino::Utf8PathBuf>> = vec![Vec::new(); count];
+    for &(from, to) in edges {
+        if to > from
+            && let (Some(target), Some(dep)) = (inputs.get_mut(from), nodes.get(to))
+        {
+            target.push(dep.clone());
+        }
+    }
+    nodes
+        .iter()
+        .zip(inputs)
+        .map(|(name, deps)| {
+            let mut builder = EdgeBuilder::new(name.clone());
+            for dep in deps {
+                builder = builder.input(dep);
+            }
+            (name.clone(), builder.build())
+        })
+        .collect()
+}
+
+proptest! {
+    /// A graph with no back-edges never produces a cycle, regardless of node
+    /// count or edge layout.
+    #[test]
+    fn forward_edge_graphs_never_report_cycles(
+        (count, edges) in (2usize..=8).prop_flat_map(|count| {
+            (
+                Just(count),
+                proptest::collection::vec((0..count, 0..count), 0..=count * 2),
+            )
+        }),
+    ) {
+        let targets = make_forward_edge_graph(count, &edges);
+        let report = analyse(&targets);
+        prop_assert!(report.cycle.is_none(), "unexpected cycle: {:?}", report.cycle);
+    }
+
+    /// Any graph containing a back-edge always produces a cycle, even with
+    /// extra forward edges layered on top.
+    #[test]
+    fn back_edge_graphs_always_report_cycles(
+        (count, edges) in (2usize..=8).prop_flat_map(|count| {
+            (
+                Just(count),
+                proptest::collection::vec((0..count, 0..count), 0..=count),
+            )
+        }),
+    ) {
+        let nodes = sequential_nodes(count);
+        // Guarantee a path from the first node to the last by including the
+        // chain edges alongside the random forward edges, then close the
+        // loop with a back-edge from the last node to the first.
+        let mut all_edges = edges;
+        all_edges.extend((0..count - 1).map(|i| (i, i + 1)));
+        let mut targets = make_forward_edge_graph(count, &all_edges);
+        let (Some(last), Some(first)) = (nodes.last(), nodes.first()) else {
+            prop_assert!(false, "graph requires at least two nodes");
+            return Ok(());
+        };
+        let builder = EdgeBuilder::new(last.clone()).input(first.clone());
+        targets.insert(last.clone(), builder.build());
+        let report = analyse(&targets);
+        prop_assert!(report.cycle.is_some(), "expected a cycle to be reported");
+    }
+
+    /// Missing-dependency records are exactly the edges whose targets are
+    /// absent from the target map.
+    #[test]
+    fn missing_dependencies_match_absent_edge_targets(
+        (count, ghost_edges) in (2usize..=6).prop_flat_map(|count| {
+            (
+                Just(count),
+                proptest::collection::hash_set((0..count, 0..3usize), 0..=count),
+            )
+        }),
+    ) {
+        let nodes = sequential_nodes(count);
+        let mut targets = make_acyclic_chain(&nodes);
+        let mut expected: Vec<(camino::Utf8PathBuf, camino::Utf8PathBuf)> = Vec::new();
+        for &(node_idx, ghost_idx) in &ghost_edges {
+            let ghost = path(&format!("ghost{ghost_idx}"));
+            let Some(name) = nodes.get(node_idx).cloned() else {
+                prop_assert!(false, "node index out of range");
+                return Ok(());
+            };
+            let Some(edge) = targets.remove(&name) else {
+                prop_assert!(false, "node should exist");
+                return Ok(());
+            };
+            let mut builder = EdgeBuilder::new(name.clone()).implicit_dep(ghost.clone());
+            for input in edge.inputs {
+                builder = builder.input(input);
+            }
+            for dep in edge.implicit_deps {
+                builder = builder.implicit_dep(dep);
+            }
+            targets.insert(name.clone(), builder.build());
+            expected.push((name, ghost));
+        }
+        let report = analyse(&targets);
+        prop_assert!(report.cycle.is_none());
+        let mut reported = report.missing_dependencies;
+        reported.sort();
+        expected.sort();
+        for (dependent, missing) in &reported {
+            prop_assert!(targets.contains_key(dependent));
+            prop_assert!(!targets.contains_key(missing));
+        }
+        prop_assert_eq!(reported, expected);
+    }
+
+    /// Results are stable across arbitrary `HashMap` insertion orderings.
+    #[test]
+    fn analyse_is_stable_across_insertion_orders(
+        (count, order) in (2usize..=6).prop_flat_map(|count| {
+            (
+                Just(count),
+                Just((0..count).collect::<Vec<_>>()).prop_shuffle(),
+            )
+        }),
+    ) {
+        let nodes = sequential_nodes(count);
+        let canonical = make_cycle_graph(&nodes);
+        let baseline = analyse(&canonical);
+
+        let mut shuffled = HashMap::new();
+        for index in order {
+            let Some(name) = nodes.get(index).cloned() else {
+                prop_assert!(false, "node index out of range");
+                return Ok(());
+            };
+            let Some(edge) = canonical.get(&name) else {
+                prop_assert!(false, "node should exist");
+                return Ok(());
+            };
+            shuffled.insert(name, edge.clone());
+        }
+        let report = analyse(&shuffled);
+        prop_assert_eq!(report.cycle, baseline.cycle);
+        let mut left = report.missing_dependencies;
+        let mut right = baseline.missing_dependencies;
+        left.sort();
+        right.sort();
+        prop_assert_eq!(left, right);
+    }
+}
