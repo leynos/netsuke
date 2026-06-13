@@ -640,23 +640,48 @@ installs a recorder (for example a Prometheus or OpenTelemetry exporter) at
 process start. Netsuke does not bundle a recorder; it only emits the
 measurements.
 
-Instruments emitted by `record_config_load_metrics`:
+Instruments emitted by `record_config_load_phase` (called once per phase):
 
-- `netsuke_config_load_total` — a counter incremented once per startup
-  configuration-load attempt. It carries a single label `outcome` with values
-  `success` or `failure`, where `failure` corresponds to a `merge_with_config`
-  error. Use it to compute the configuration-load failure rate.
+- `netsuke_config_load_total` — a counter incremented once per
+  configuration-load phase. It carries two labels: `phase`
+  (`diag_mode` for diagnostic-mode resolution, `merge` for the layer merge)
+  and `outcome` (`success` or `failure`). Diagnostic-mode resolution has an
+  internal fallback and cannot fail at this boundary, so `phase="diag_mode"`
+  is always `outcome="success"`; a `merge` failure corresponds to a
+  `merge_with_config` error. Use the `merge`/`failure` series to compute the
+  configuration-load failure rate.
 - `netsuke_config_load_duration_seconds` — a histogram recording the
-  wall-clock duration of the configuration-load phase in seconds (one sample
-  per startup). Suggested operator bucket boundaries: `0.001, 0.005, 0.01,
-  0.05, 0.1, 0.5, 1.0` seconds; configuration loading is expected to complete
-  in single-digit milliseconds, so buckets above one second exist only to
-  catch pathological filesystem or environment stalls.
+  wall-clock duration of each configuration-load phase in seconds (one sample
+  per phase per startup), labelled by `phase`. Suggested operator bucket
+  boundaries: `0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0` seconds;
+  configuration loading is expected to complete in single-digit milliseconds,
+  so buckets above one second exist only to catch pathological filesystem or
+  environment stalls.
 
 Naming convention: metric names use the `netsuke_` prefix and a `snake_case`
 unit suffix (`_total` for counters, `_seconds` for duration histograms),
-matching Prometheus conventions. Label values are bounded constant strings
-(`success`/`failure`) to keep cardinality fixed.
+matching Prometheus conventions. Label values are bounded constant strings to
+keep cardinality fixed.
+
+#### Structured log fields
+
+When a configuration load fails in human-output mode, `handle_config_load_error`
+in `src/main.rs` emits a `tracing::error!` event with the message
+`configuration load failed` and these structured fields:
+
+- `operation` — the failing startup phase. Any error reaching this handler
+  comes from the layer merge, so the value is `config_merge`. (Diagnostic-mode
+  resolution cannot fail at the call boundary; the field exists so a future
+  fallible diagnostic-resolution path can record `diag_mode_resolution`.)
+- `error_category` — a coarse classification of the underlying
+  `ortho_config::OrthoError`, mapped by `error_category`: `parse`
+  (`CliParsing`, `Gathering`), `io` (`File`), `validation` (`CyclicExtends`,
+  `Merge`, `Validation`), `aggregate` (`Aggregate`), or `other`.
+- `error` — the `Display` rendering of the error.
+
+In diagnostic-JSON mode (`--diag-json` / `--output-format json`) the failure is
+rendered as a JSON diagnostic instead, keeping stderr machine-readable; the
+structured fields above apply to the human-output path only.
 
 ## BDD command helpers and environment handling
 

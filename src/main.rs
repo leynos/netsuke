@@ -19,15 +19,22 @@ use std::time::{Duration, Instant};
 use tracing::Level;
 use tracing_subscriber::fmt;
 
-/// Counter recording the outcome of each configuration-load attempt.
+/// Counter recording the outcome of each configuration-load phase.
 ///
-/// Labelled by `outcome` (`success` or `failure`) so operators can track the
-/// startup configuration-load failure rate.
+/// Labelled by `phase` (`diag_mode` or `merge`) and `outcome` (`success` or
+/// `failure`) so operators can track the startup configuration-load failure
+/// rate per phase.
 const CONFIG_LOAD_TOTAL: &str = "netsuke_config_load_total";
 
-/// Histogram recording the wall-clock duration of the configuration-load
-/// phase (diagnostic-mode resolution through layer merge) in seconds.
+/// Histogram recording the wall-clock duration of each configuration-load
+/// phase in seconds, labelled by `phase` (`diag_mode` or `merge`).
 const CONFIG_LOAD_DURATION_SECONDS: &str = "netsuke_config_load_duration_seconds";
+
+/// The `diag_mode` configuration-load phase: diagnostic-mode resolution.
+const PHASE_DIAG_MODE: &str = "diag_mode";
+
+/// The `merge` configuration-load phase: full layer merge.
+const PHASE_MERGE: &str = "merge";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
@@ -136,30 +143,62 @@ fn resolve_configuration(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
 ) -> (DiagMode, Result<cli::Cli, Arc<OrthoError>>) {
-    let start = Instant::now();
+    let diag_start = Instant::now();
     let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(parsed_cli, matches));
+    // Diagnostic-mode resolution has an internal fallback and cannot fail at
+    // this boundary, so its phase outcome is always `success`.
+    record_config_load_phase(PHASE_DIAG_MODE, diag_start.elapsed(), true);
+
+    let merge_start = Instant::now();
     let merged = cli::merge_with_config(parsed_cli, matches);
-    record_config_load_metrics(start.elapsed(), merged.is_ok());
+    record_config_load_phase(PHASE_MERGE, merge_start.elapsed(), merged.is_ok());
     (mode, merged)
 }
 
-/// Emit the configuration-load metrics for one startup attempt.
+/// Emit the configuration-load metrics for one phase of one startup attempt.
 ///
 /// Recording goes through the `metrics` façade, so it is a no-op unless the
 /// operator has installed a recorder.
-fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
+fn record_config_load_phase(phase: &'static str, elapsed: Duration, succeeded: bool) {
     let outcome = if succeeded { "success" } else { "failure" };
-    metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
-    metrics::counter!(CONFIG_LOAD_TOTAL, "outcome" => outcome).increment(1);
+    metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS, "phase" => phase)
+        .record(elapsed.as_secs_f64());
+    metrics::counter!(CONFIG_LOAD_TOTAL, "phase" => phase, "outcome" => outcome).increment(1);
+}
+
+/// Coarse classification of a configuration-load error for log correlation.
+///
+/// Groups [`OrthoError`] variants into operational categories so operators can
+/// filter failures by cause without depending on the full error text.
+const fn error_category(err: &OrthoError) -> &'static str {
+    match err {
+        OrthoError::CliParsing(_) | OrthoError::Gathering(_) => "parse",
+        OrthoError::File { .. } => "io",
+        OrthoError::CyclicExtends { .. }
+        | OrthoError::Merge { .. }
+        | OrthoError::Validation { .. } => "validation",
+        OrthoError::Aggregate(_) => "aggregate",
+        _ => "other",
+    }
 }
 
 /// Render a configuration-load failure to the user and map it to an exit code.
+///
+/// Any error reaching this point comes from the `config_merge` phase
+/// (diagnostic-mode resolution cannot fail at the call boundary), so the
+/// structured log records `operation = "config_merge"` alongside a coarse
+/// `error_category`.
 fn handle_config_load_error(err: &Arc<OrthoError>, mode: DiagMode) -> ExitCode {
     if mode.is_json() {
         diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err.as_ref()))
     } else {
         init_tracing(Level::ERROR);
-        tracing::error!(error = %err, "configuration load failed");
+        tracing::error!(
+            error = %err,
+            operation = "config_merge",
+            error_category = error_category(err),
+            "configuration load failed"
+        );
         ExitCode::FAILURE
     }
 }
@@ -247,10 +286,16 @@ mod tests {
             .collect()
     }
 
+    fn has_label(labels: &[Label], key: &str, value: &str) -> bool {
+        labels
+            .iter()
+            .any(|label| label.key() == key && label.value() == value)
+    }
+
     #[test]
-    fn record_config_load_metrics_counts_failure_outcome() {
+    fn record_config_load_phase_counts_failure_outcome_with_phase_label() {
         let metrics = captured_metrics(|| {
-            record_config_load_metrics(Duration::from_millis(5), false);
+            record_config_load_phase(PHASE_MERGE, Duration::from_millis(5), false);
         });
 
         let counter = metrics
@@ -258,11 +303,8 @@ mod tests {
             .find(|(name, _, _)| name == CONFIG_LOAD_TOTAL)
             .expect("config-load counter should be recorded");
         assert!(
-            counter
-                .1
-                .iter()
-                .any(|label| label.key() == "outcome" && label.value() == "failure"),
-            "counter should carry outcome=failure: {:?}",
+            has_label(&counter.1, "phase", "merge") && has_label(&counter.1, "outcome", "failure"),
+            "counter should carry phase=merge, outcome=failure: {:?}",
             counter.1
         );
         assert_eq!(counter.2, DebugValue::Counter(1));
@@ -271,6 +313,11 @@ mod tests {
             .iter()
             .find(|(name, _, _)| name == CONFIG_LOAD_DURATION_SECONDS)
             .expect("config-load duration histogram should be recorded");
+        assert!(
+            has_label(&histogram.1, "phase", "merge"),
+            "histogram should carry phase=merge: {:?}",
+            histogram.1
+        );
         let DebugValue::Histogram(samples) = &histogram.2 else {
             panic!("expected a histogram value, got {:?}", histogram.2);
         };
@@ -278,21 +325,43 @@ mod tests {
     }
 
     #[test]
-    fn record_config_load_metrics_counts_success_outcome() {
+    fn record_config_load_phase_counts_success_outcome() {
         let metrics = captured_metrics(|| {
-            record_config_load_metrics(Duration::from_millis(1), true);
+            record_config_load_phase(PHASE_DIAG_MODE, Duration::from_millis(1), true);
         });
         let counter = metrics
             .iter()
             .find(|(name, _, _)| name == CONFIG_LOAD_TOTAL)
             .expect("config-load counter should be recorded");
         assert!(
-            counter
-                .1
-                .iter()
-                .any(|label| label.key() == "outcome" && label.value() == "success"),
-            "counter should carry outcome=success: {:?}",
+            has_label(&counter.1, "phase", "diag_mode")
+                && has_label(&counter.1, "outcome", "success"),
+            "counter should carry phase=diag_mode, outcome=success: {:?}",
             counter.1
+        );
+    }
+
+    #[test]
+    fn error_category_classifies_ortho_error_variants() {
+        assert_eq!(
+            error_category(&OrthoError::Validation {
+                key: "jobs".into(),
+                message: "out of range".into(),
+            }),
+            "validation"
+        );
+        assert_eq!(
+            error_category(&OrthoError::File {
+                path: std::path::PathBuf::from("netsuke.toml"),
+                source: Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "missing",)),
+            }),
+            "io"
+        );
+        assert_eq!(
+            error_category(&OrthoError::CyclicExtends {
+                cycle: "a -> b -> a".into(),
+            }),
+            "validation"
         );
     }
 }
