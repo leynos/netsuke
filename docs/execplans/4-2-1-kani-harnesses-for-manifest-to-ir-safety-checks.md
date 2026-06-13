@@ -669,10 +669,9 @@ requires explicit user approval before implementation begins.
   push `src/ir/graph.rs` and `src/ir/from_manifest.rs` over the repository's
   source-file size guideline. Moving the bounded Kani map to
   `src/ir/graph_kani_map.rs` and manifest lowering helpers to
-  `src/ir/from_manifest_support.rs` keeps the public IR model and
-  `BuildGraph` orchestration readable without creating a public verification
-  port or a harness-side algorithm. Date/Author: 2026-06-13 /
-  implementation agent.
+  `src/ir/from_manifest_support.rs` keeps the public IR model and `BuildGraph`
+  orchestration readable without creating a public verification port or a
+  harness-side algorithm. Date/Author: 2026-06-13 / implementation agent.
 
 ## Outcomes & Retrospective
 
@@ -1361,10 +1360,10 @@ The references section should include:
   `src/ir/from_manifest_support.rs`, keeping newly affected source files under
   the 400-line guideline. The manifest mutation patches were refreshed to
   target the moved production helpers. Final validation after the split passed
-  `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
-  `make nixie`, `make kani-ir`, and `git apply --check` for every mutation
-  patch. Kani reported nine successfully verified harnesses and zero failures.
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`, `make nixie`,
+  `make kani-ir`, and `git apply --check` for every mutation patch. Kani
+  reported nine successfully verified harnesses and zero failures.
 - 2026-06-13: A final CodeRabbit review attempt after the support-module split
-  again stalled at `preparing_sandbox` without emitting findings or a rate-limit
-  notice. The local process was stopped after confirming the process pipeline
-  belonged to this worktree.
+  again stalled at `preparing_sandbox` without emitting findings or a
+  rate-limit notice. The local process was stopped after confirming the process
+  pipeline belonged to this worktree.

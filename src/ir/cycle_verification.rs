@@ -42,7 +42,10 @@ fn two_node_cycle_reports_cycle_b_first() {
 
 /// Assert that the given target graph contains no cycle.
 fn assert_no_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>, _msg: &'static str) {
-    kani::assert(!contains_cycle(targets), "missing dependency is not a cycle");
+    kani::assert(
+        !contains_cycle(targets),
+        "missing dependency is not a cycle",
+    );
 }
 
 /// Prove an absent direct dependency is not cyclic.
