@@ -170,6 +170,45 @@ fn command_available_returns_false_for_missing_relative_path(
     Ok(())
 }
 
+#[cfg(not(windows))]
+#[rstest]
+fn command_available_surfaces_metadata_permission_errors(
+    stdlib_workspace: Result<StdlibWorkspace>,
+) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workspace_fixture = stdlib_workspace?;
+    let restricted = workspace_fixture.root.join("restricted");
+    let tool = restricted.join(tool_filename("restricted-helper"));
+    std::fs::create_dir(&restricted).with_context(|| format!("create {restricted}"))?;
+    std::fs::write(tool.as_std_path(), script_contents())
+        .with_context(|| format!("write fixture tool {tool}"))?;
+    mark_executable(&tool)?;
+
+    let mut restricted_perms = std::fs::metadata(restricted.as_std_path())?.permissions();
+    restricted_perms.set_mode(0o600);
+    std::fs::set_permissions(restricted.as_std_path(), restricted_perms)
+        .with_context(|| format!("restrict {restricted}"))?;
+
+    let env = env_without_path(&workspace_fixture)?;
+    let output = render_command_available(&env, tool.as_path(), "");
+
+    let mut restored_perms = std::fs::metadata(restricted.as_std_path())?.permissions();
+    restored_perms.set_mode(0o700);
+    std::fs::set_permissions(restricted.as_std_path(), restored_perms)
+        .with_context(|| format!("restore {restricted}"))?;
+
+    let err = output
+        .err()
+        .context("metadata permission error should fail")?;
+    let message = err.to_string();
+    ensure!(
+        message.contains("Failed to inspect whether"),
+        "expected executable probe error, got {message}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn command_available_returns_true_for_absolute_path(
     stdlib_workspace: Result<StdlibWorkspace>,

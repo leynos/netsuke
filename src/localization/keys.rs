@@ -285,6 +285,7 @@ define_keys! {
     STDLIB_WHICH_CWD_RESOLVE_FAILED => "stdlib.which.cwd.resolve_failed",
     STDLIB_WHICH_CWD_NON_UTF8 => "stdlib.which.cwd.non_utf8",
     STDLIB_WHICH_CANONICALISE_FAILED => "stdlib.which.canonicalise_failed",
+    STDLIB_WHICH_IS_EXECUTABLE => "stdlib.which.is_executable",
     STDLIB_WHICH_CANONICALISE_NON_UTF8 => "stdlib.which.canonicalise_non_utf8",
     STDLIB_WHICH_WORKSPACE_NON_UTF8 => "stdlib.which.workspace_non_utf8",
     STDLIB_REGISTER_OPEN_DIR => "stdlib.register.open_dir",

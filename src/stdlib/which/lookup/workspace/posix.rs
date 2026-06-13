@@ -75,5 +75,5 @@ fn process_workspace_entry(
         }
     })?;
 
-    Ok(is_executable(&utf8).then_some(utf8))
+    Ok(is_executable(&utf8)?.then_some(utf8))
 }

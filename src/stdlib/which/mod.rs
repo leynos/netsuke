@@ -178,6 +178,10 @@ fn resolve_error_parts(error: &ResolveError) -> (ErrorKind, String) {
             ErrorKind::InvalidOperation,
             canonicalise_message(path, source),
         ),
+        ResolveError::IsExecutable { path, source } => (
+            ErrorKind::InvalidOperation,
+            is_executable_message(path, source),
+        ),
         ResolveError::CanonicaliseNonUtf8 => (
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_WHICH_CANONICALISE_NON_UTF8).to_string(),
@@ -231,6 +235,13 @@ fn args_message(detail: impl std::fmt::Display) -> String {
 
 fn canonicalise_message(path: &Utf8Path, source: &std::io::Error) -> String {
     localization::message(keys::STDLIB_WHICH_CANONICALISE_FAILED)
+        .with_arg("path", path.as_str())
+        .with_arg("details", source.to_string())
+        .to_string()
+}
+
+fn is_executable_message(path: &Utf8Path, source: &std::io::Error) -> String {
+    localization::message(keys::STDLIB_WHICH_IS_EXECUTABLE)
         .with_arg("path", path.as_str())
         .with_arg("details", source.to_string())
         .to_string()

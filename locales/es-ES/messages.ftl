@@ -326,6 +326,7 @@ stdlib.which.cwd_mode.invalid = cwd_mode debe ser 'auto', 'always' o 'never', se
 stdlib.which.cwd.resolve_failed = No se pudo resolver el directorio actual: { $details }.
 stdlib.which.cwd.non_utf8 = El directorio actual contiene componentes no UTF-8.
 stdlib.which.canonicalise_failed = No se pudo canonicalizar '{ $path }': { $details }.
+stdlib.which.is_executable = No se pudo comprobar si '{ $path }' es ejecutable: { $details }.
 stdlib.which.canonicalise_non_utf8 = La ruta canónica contiene componentes no UTF-8.
 stdlib.which.workspace_non_utf8 = La ruta del workspace contiene componentes no UTF-8 al resolver el comando '{ $command }': { $path }.
 

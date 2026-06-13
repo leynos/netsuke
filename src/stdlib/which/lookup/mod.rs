@@ -1,6 +1,6 @@
 //! Filesystem search utilities for resolving commands for the `which` feature.
 
-use std::fs;
+use std::{fs, io};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
@@ -46,7 +46,7 @@ pub(super) fn lookup(
 
     for dir in &dirs {
         let candidates = candidates_for_dir(env, dir, command);
-        if push_matches(&mut matches, candidates, options.all) {
+        if push_matches(&mut matches, candidates, options.all)? {
             break;
         }
     }
@@ -88,7 +88,7 @@ pub(super) fn resolve_direct(
     let resolved = normalize_direct_path(command, env);
     let candidates = direct_candidates(&resolved, env);
     let mut matches = Vec::new();
-    let _ = push_matches(&mut matches, candidates, options.all);
+    let _ = push_matches(&mut matches, candidates, options.all)?;
     if matches.is_empty() {
         return Err(direct_not_found_error(command, &resolved));
     }
@@ -106,7 +106,7 @@ pub(super) fn resolve_direct(
     options: &WhichOptions,
 ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     let resolved = normalize_direct_path(command, env);
-    if !is_executable(&resolved) {
+    if !is_executable(&resolved)? {
         return Err(direct_not_found_error(command, &resolved));
     }
     if options.canonical {
@@ -147,21 +147,26 @@ fn direct_candidates(resolved: &Utf8PathBuf, env: &EnvSnapshot) -> Vec<Utf8PathB
 /// Returns `true` when at least one candidate was added and `collect_all` is
 /// `false`, signalling to callers that the search can stop; returns `false`
 /// otherwise.
+///
+/// # Errors
+///
+/// Returns a resolver error when checking whether a candidate is executable
+/// fails for a reason other than the candidate being absent.
 pub(super) fn push_matches(
     matches: &mut Vec<Utf8PathBuf>,
     candidates: Vec<Utf8PathBuf>,
     collect_all: bool,
-) -> bool {
+) -> Result<bool, ResolveError> {
     for candidate in candidates {
-        if !is_executable(&candidate) {
+        if !is_executable(&candidate)? {
             continue;
         }
         matches.push(candidate);
         if !collect_all {
-            return true;
+            return Ok(true);
         }
     }
-    false
+    Ok(false)
 }
 
 /// Return `true` when the command string already includes path separators or,
@@ -193,9 +198,20 @@ fn candidates_for_dir(env: &EnvSnapshot, dir: &Utf8Path, command: &str) -> Vec<U
 ///
 /// On Unix this requires at least one execute bit. On other platforms it only
 /// verifies that the path exists and is a file.
-pub(super) fn is_executable(path: &Utf8Path) -> bool {
-    fs::metadata(path.as_std_path())
-        .is_ok_and(|metadata| metadata.is_file() && has_execute_permission(&metadata))
+///
+/// # Errors
+///
+/// Returns a resolver error when metadata cannot be read for a reason other
+/// than the path not existing.
+pub(super) fn is_executable(path: &Utf8Path) -> Result<bool, ResolveError> {
+    match fs::metadata(path.as_std_path()) {
+        Ok(metadata) => Ok(metadata.is_file() && has_execute_permission(&metadata)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(source) => Err(ResolveError::IsExecutable {
+            path: path.to_owned(),
+            source,
+        }),
+    }
 }
 
 #[derive(Clone, Copy)]

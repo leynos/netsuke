@@ -24,6 +24,11 @@ pub(crate) enum ResolveError {
         path: Utf8PathBuf,
         source: io::Error,
     },
+    /// `fs::metadata` failed whilst checking whether a path is executable.
+    IsExecutable {
+        path: Utf8PathBuf,
+        source: io::Error,
+    },
     CanonicaliseNonUtf8,
     WorkspaceNonUtf8 {
         command: String,
@@ -53,6 +58,7 @@ impl ResolveError {
             Self::DirectNotFound { .. } => "direct_not_found",
             Self::Args { .. } => "args",
             Self::Canonicalise { .. } => "canonicalise",
+            Self::IsExecutable { .. } => "is_executable",
             Self::CanonicaliseNonUtf8 => "canonicalise_non_utf8",
             Self::WorkspaceNonUtf8 { .. } => "workspace_non_utf8",
             Self::CwdResolve { .. } => "cwd_resolve",
@@ -63,14 +69,24 @@ impl ResolveError {
 
 impl fmt::Display for ResolveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.category())
+        match self {
+            Self::IsExecutable { path, source } => {
+                write!(
+                    formatter,
+                    "failed to inspect executable path '{path}': {source}"
+                )
+            }
+            _ => formatter.write_str(self.category()),
+        }
     }
 }
 
 impl std::error::Error for ResolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Canonicalise { source, .. } | Self::CwdResolve { source } => Some(source),
+            Self::Canonicalise { source, .. }
+            | Self::IsExecutable { source, .. }
+            | Self::CwdResolve { source } => Some(source),
             Self::NotFound { .. }
             | Self::DirectNotFound { .. }
             | Self::Args { .. }
