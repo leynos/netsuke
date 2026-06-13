@@ -24,7 +24,7 @@ pub(super) fn search_workspace(
         .filter_entry(|entry| should_visit_entry(entry, skip_dirs));
 
     let matches = collect_matching_executables(walker, command, collect_all, skip_dirs)?;
-    log_if_no_matches(&matches, command, skip_dirs);
+    log_if_no_matches(&matches, skip_dirs);
     Ok(matches)
 }
 
@@ -37,7 +37,7 @@ fn collect_matching_executables(
     let mut matches = Vec::new();
 
     for walk_entry in walker {
-        let Some(entry) = unwrap_or_log_error(walk_entry, command) else {
+        let Some(entry) = unwrap_or_log_error(walk_entry) else {
             continue;
         };
 

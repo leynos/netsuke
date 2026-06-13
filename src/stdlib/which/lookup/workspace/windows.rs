@@ -66,7 +66,7 @@ pub(super) fn search_workspace(
         .into_iter()
         .filter_entry(|entry| should_visit_entry(entry, skip_dirs))
     {
-        let Some(entry) = unwrap_or_log_error(walk_entry, command) else {
+        let Some(entry) = unwrap_or_log_error(walk_entry) else {
             continue;
         };
 
@@ -75,7 +75,7 @@ pub(super) fn search_workspace(
         }
     }
 
-    log_if_no_matches(&collector.matches, command, skip_dirs);
+    log_if_no_matches(&collector.matches, skip_dirs);
 
     Ok(collector.matches)
 }

@@ -5,11 +5,12 @@ use std::{
     ffi::OsString,
     hash::{Hash, Hasher},
     num::NonZeroUsize,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard, Once},
 };
 
 use camino::Utf8PathBuf;
 use lru::LruCache;
+use metrics::{counter, describe_counter};
 use tracing::field;
 
 use super::{
@@ -18,6 +19,9 @@ use super::{
     options::WhichOptions,
     resolve_error::ResolveError,
 };
+
+const WHICH_CACHE_TOTAL: &str = "netsuke_stdlib_which_cache_total";
+const WHICH_RESOLUTION_TOTAL: &str = "netsuke_stdlib_which_resolution_total";
 
 #[derive(Clone, Debug)]
 pub(crate) struct WhichResolver {
@@ -34,6 +38,7 @@ impl WhichResolver {
         workspace_skips: WorkspaceSkipList,
         cache_capacity: NonZeroUsize,
     ) -> Self {
+        describe_metrics();
         Self {
             cache: Arc::new(Mutex::new(LruCache::new(cache_capacity))),
             cwd_override,
@@ -49,24 +54,42 @@ impl WhichResolver {
     ) -> Result<Vec<Utf8PathBuf>, ResolveError> {
         let span = tracing::trace_span!(
             "stdlib.which.resolve",
-            command = %command,
-            cache_hit = field::Empty,
+            cache_outcome = field::Empty,
+            result = field::Empty,
+            error_category = field::Empty,
         );
         let _guard = span.enter();
-        let env = EnvSnapshot::capture(
+        let env = match EnvSnapshot::capture(
             self.cwd_override.as_deref().map(Utf8PathBuf::as_path),
             self.path_override.as_deref(),
-        )?;
+        ) {
+            Ok(env) => env,
+            Err(err) => {
+                record_resolution_error(&span, &err);
+                return Err(err);
+            }
+        };
         let key = CacheKey::new(command, &env, options, &self.workspace_skips);
-        if !options.fresh
-            && let Some(cached) = self.try_cache(&key)
-        {
-            span.record("cache_hit", true);
+        if options.fresh {
+            record_cache_outcome(&span, "bypass");
+        } else if let Some(cached) = self.try_cache(&key) {
+            record_cache_outcome(&span, "hit");
+            span.record("result", "found");
+            counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
             return Ok(cached);
+        } else {
+            record_cache_outcome(&span, "miss");
         }
-        span.record("cache_hit", false);
-        let matches = lookup(command, &env, options, &self.workspace_skips)?;
+        let matches = match lookup(command, &env, options, &self.workspace_skips) {
+            Ok(matches) => matches,
+            Err(err) => {
+                record_resolution_error(&span, &err);
+                return Err(err);
+            }
+        };
         self.store(key, matches.clone());
+        span.record("result", "found");
+        counter!(WHICH_RESOLUTION_TOTAL, "outcome" => "found").increment(1);
         Ok(matches)
     }
 
@@ -86,6 +109,50 @@ impl WhichResolver {
             Err(poisoned) => poisoned.into_inner(),
         }
     }
+}
+
+fn describe_metrics() {
+    static DESCRIBE: Once = Once::new();
+    DESCRIBE.call_once(|| {
+        describe_counter!(
+            WHICH_CACHE_TOTAL,
+            "Counts which resolver cache outcomes labelled as hit, miss, or bypass."
+        );
+        describe_counter!(
+            WHICH_RESOLUTION_TOTAL,
+            "Counts which resolver outcomes labelled as found, not_found, or error."
+        );
+    });
+}
+
+fn record_cache_outcome(span: &tracing::Span, outcome: &'static str) {
+    span.record("cache_outcome", outcome);
+    counter!(WHICH_CACHE_TOTAL, "outcome" => outcome).increment(1);
+}
+
+fn record_resolution_error(span: &tracing::Span, error: &ResolveError) {
+    let category = error.category();
+    let outcome = if matches!(
+        error,
+        ResolveError::NotFound { .. } | ResolveError::DirectNotFound { .. }
+    ) {
+        "not_found"
+    } else {
+        "error"
+    };
+    span.record("result", outcome);
+    span.record("error_category", category);
+    tracing::debug!(
+        outcome,
+        error_category = category,
+        "which resolver finished with non-success result",
+    );
+    counter!(
+        WHICH_RESOLUTION_TOTAL,
+        "outcome" => outcome,
+        "category" => category,
+    )
+    .increment(1);
 }
 
 #[derive(Clone, Debug)]

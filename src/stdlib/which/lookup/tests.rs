@@ -141,19 +141,18 @@ fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Resul
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
     let err = EnvSnapshot::capture(Some(workspace.root()), Some(invalid_path))
         .expect_err("invalid PATH should fail EnvSnapshot::capture");
-    let msg = err.to_string();
 
     let details = localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
         .with_arg("index", 1)
         .to_string();
-    let expected = localization::message(keys::STDLIB_WHICH_ARGS_ERROR)
-        .with_arg("details", details)
-        .to_string();
 
-    ensure!(
-        msg.contains(&expected),
-        "expected PATH parsing error, got: {msg}"
-    );
+    match err {
+        ResolveError::Args { detail } => ensure!(
+            detail == details,
+            "expected PATH parsing detail, got: {detail}"
+        ),
+        other => return Err(anyhow!("expected argument error, got: {other:?}")),
+    }
 
     Ok(())
 }
@@ -260,12 +259,17 @@ fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) 
 
     let err = resolve_direct(script.as_str(), &snapshot, &WhichOptions::default())
         .expect_err("non-executable direct path should fail");
-    let msg = err.to_string();
 
-    ensure!(
-        msg.contains("not executable"),
-        "expected not executable message: {msg}"
-    );
+    match err {
+        ResolveError::DirectNotFound { command, path } => {
+            ensure!(
+                command == script.as_str(),
+                "expected direct command payload, got: {command}"
+            );
+            ensure!(path == script, "expected direct path payload, got: {path}");
+        }
+        other => return Err(anyhow!("expected direct not found error, got: {other:?}")),
+    }
 
     Ok(())
 }

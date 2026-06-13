@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -705,9 +705,12 @@ pub(super) enum ResolveError {
     CanonicaliseNonUtf8,
     WorkspaceNonUtf8 { command: String, path: String },
 }
-
-impl From<ResolveError> for minijinja::Error { ... }
 ```
+
+`ResolveError` remains framework-agnostic data. It does not import MiniJinja or
+localization helpers. The MiniJinja adapter in `src/stdlib/which/mod.rs`
+implements `From<ResolveError> for minijinja::Error`, preserving the existing
+diagnostic text and code prefixes at the registration boundary.
 
 In `src/stdlib/which/cache.rs`, change:
 
@@ -871,6 +874,19 @@ implementation.
   `/tmp/typecheck-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
   and
   `/tmp/lint-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
+- [x] (2026-06-13T00:00:00Z) Addressed post-PR review warnings. Closed the
+  execplan status gap, moved MiniJinja/localised `ResolveError` rendering into
+  the `src/stdlib/which/mod.rs` adapter boundary, removed unbounded `command`
+  fields from resolver/workspace tracing, and added low-cardinality metrics for
+  cache outcomes and resolution outcomes. Focused validation passed with
+  `/tmp/typecheck-pr-warning-fix-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`;
+  final validation passed with
+  `/tmp/check-fmt-pr-warning-fix-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/lint-pr-warning-fix-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/typecheck-pr-warning-fix-final2-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  `/tmp/markdownlint-nixie-pr-warning-fix-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`,
+  and
+  `/tmp/test-pr-warning-fix-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`.
 
 Once implementation begins, each milestone gets its own checked entry with a
 UTC timestamp, the commands run, the log paths under `/tmp/`, and a one-line
@@ -913,6 +929,13 @@ None recorded yet. Append observations during implementation with the evidence
   process rather than spawning duplicate reviews unless the process is clearly
   wedged; the successful Milestone 2 final review eventually reported
   `findings: 0`.
+- 2026-06-13: The first PR-ready review caught that `ResolveError` was typed
+  but still owned MiniJinja conversion and localised rendering. Impact:
+  `ResolveError` is now data plus low-cardinality category only; MiniJinja
+  conversion lives in `src/stdlib/which/mod.rs`.
+- 2026-06-13: The same review flagged unbounded command names in resolver
+  tracing. Impact: resolver and workspace fallback telemetry now emits cache
+  and error categories without recording arbitrary command strings.
 
 ## Decision log
 
@@ -968,10 +991,46 @@ None recorded yet. Append observations during implementation with the evidence
   cache test. Rationale: this is the existing project mechanism for safe
   environment mutation, and the requested `path_override` approach cannot
   express a post-registration PATH change.
+- 2026-06-13: moved `From<ResolveError> for minijinja::Error` from
+  `src/stdlib/which/resolve_error.rs` to `src/stdlib/which/mod.rs`. Rationale:
+  the resolver error model should be framework-agnostic data at the domain
+  boundary; only the MiniJinja registration adapter should render localised
+  messages or choose `ErrorKind`.
+- 2026-06-13: added the `metrics` facade dependency and instrumented
+  `WhichResolver` with counters for cache outcomes and resolution outcomes.
+  Rationale: the existing code emitted tracing only; low-cardinality metrics
+  make not-found/error rates and cache hit rate observable without installing a
+  global recorder in the library.
+- 2026-06-13: removed command names from resolver and workspace fallback
+  tracing. Rationale: manifest input is unbounded and may contain arbitrary
+  user data; cache outcome, result, and error category are sufficient for
+  operational triage without high-cardinality fields.
 
 ## Outcomes & retrospective
 
-To be completed at the end of the work. Compare the result against the three
-roadmap acceptance bullets, the new ADR, the documentation updates, and the
-test matrix. Note any tolerance breaches, escalations, or learnings that should
-inform the design of related items (`3.14.5`, `3.14.8`, `3.14.11`).
+Roadmap item 3.14.4 is complete. `command_available(name, **kwargs)` now reuses
+the `which` resolver and cache, returns `false` for both PATH-search and
+direct-path absence, and continues to raise the existing `which::args`
+diagnostics for misuse. The implementation no longer string-matches rendered
+error text; `WhichResolver::resolve` returns a typed `ResolveError`, and the
+MiniJinja adapter boundary converts that typed error into the existing
+localised diagnostics.
+
+The user-facing contract is documented in `docs/users-guide.md` and
+`docs/netsuke-design.md`, with the internal typed-error decision captured in
+ADR-005 and indexed from `docs/contents.md`. `docs/roadmap.md` marks 3.14.4
+complete, and this execplan status now matches that checkbox.
+
+Validation covered unit, behavioural, property, snapshot, lint, typecheck,
+formatting, Markdown, and Mermaid gates during the milestone work. A post-PR
+review then identified two architectural/observability refinements: keep
+`ResolveError` framework-agnostic, and avoid high-cardinality command fields in
+telemetry. Both refinements were applied before merge readiness, with focused
+typechecking and full gates passing before the final follow-up commit.
+
+The main lesson for related items (`3.14.5`, `3.14.8`, `3.14.11`) is that typed
+stdlib helper errors should be split from adapter rendering from the start.
+Future helpers should expose data and low-cardinality categories from their
+domain modules, translate into MiniJinja only in the registration module, and
+pair tracing spans with metrics counters when runtime behaviour affects
+operator diagnosis.
