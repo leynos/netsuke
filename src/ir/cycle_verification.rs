@@ -40,6 +40,11 @@ fn two_node_cycle_reports_cycle_b_first() {
     kani::assert(contains_cycle(&targets), "two-node cycle is rejected");
 }
 
+/// Assert that the given target graph contains no cycle.
+fn assert_no_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>, _msg: &'static str) {
+    kani::assert(!contains_cycle(targets), "missing dependency is not a cycle");
+}
+
 /// Prove an absent direct dependency is not cyclic.
 #[kani::proof]
 #[kani::solver(kissat)]
@@ -49,10 +54,7 @@ fn direct_missing_dependency_does_not_report_cycle() {
     targets.insert(path("a"), edge("a", deps("c"), Vec::new()));
     kani::assume(targets.len() == 1);
 
-    kani::assert(
-        !contains_cycle(&targets),
-        "direct missing dependency is not a cycle",
-    );
+    assert_no_cycle(&targets, "direct missing dependency is not a cycle");
 }
 
 /// Prove an absent dependency beyond a present target is not cyclic.
@@ -65,10 +67,7 @@ fn transitive_missing_dependency_does_not_report_cycle() {
     targets.insert(path("b"), edge("b", deps("c"), Vec::new()));
     kani::assume(targets.len() == 2);
 
-    kani::assert(
-        !contains_cycle(&targets),
-        "transitive missing dependency is not a cycle",
-    );
+    assert_no_cycle(&targets, "transitive missing dependency is not a cycle");
 }
 
 fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>) -> BuildEdge {
