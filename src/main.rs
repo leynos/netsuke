@@ -10,13 +10,24 @@ use netsuke::{
     cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
     output_prefs, runner,
 };
-use ortho_config::Localizer;
+use ortho_config::{Localizer, OrthoError};
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tracing::Level;
 use tracing_subscriber::fmt;
+
+/// Counter recording the outcome of each configuration-load attempt.
+///
+/// Labelled by `outcome` (`success` or `failure`) so operators can track the
+/// startup configuration-load failure rate.
+const CONFIG_LOAD_TOTAL: &str = "netsuke_config_load_total";
+
+/// Histogram recording the wall-clock duration of the configuration-load
+/// phase (diagnostic-mode resolution through layer merge) in seconds.
+const CONFIG_LOAD_DURATION_SECONDS: &str = "netsuke_config_load_duration_seconds";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DiagMode {
@@ -53,11 +64,10 @@ fn run_with_args(
         Ok(parsed) => parsed,
         Err(code) => return code,
     };
-    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(&parsed_cli, &matches));
-
-    let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
-        Ok(merged) => merged,
-        Err(code) => return code,
+    let (mode, merge_result) = resolve_configuration(&parsed_cli, &matches);
+    let merged_cli = match merge_result {
+        Ok(merged) => merged.with_default_command(),
+        Err(err) => return handle_config_load_error(&err, mode),
     };
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.diag_json);
     configure_runtime(&merged_cli, system_locale, runtime_mode);
@@ -115,24 +125,42 @@ fn parse_cli_or_exit(
     }
 }
 
-fn merge_cli_or_exit(
+/// Resolve the diagnostic mode and merge configuration layers, recording
+/// startup-latency and outcome metrics for the combined config-load phase.
+///
+/// The returned [`DiagMode`] is needed to render any merge failure, so it is
+/// produced even when the merge fails. The histogram spans diagnostic-mode
+/// resolution through the layer merge, and the counter is labelled by the
+/// merge outcome.
+fn resolve_configuration(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
-    mode: DiagMode,
-) -> Result<cli::Cli, ExitCode> {
-    match cli::merge_with_config(parsed_cli, matches) {
-        Ok(merged) => Ok(merged.with_default_command()),
-        Err(err) => {
-            if mode.is_json() {
-                Err(diagnostic_json::emit_or_fallback(
-                    diagnostic_json::render_error_json(err.as_ref()),
-                ))
-            } else {
-                init_tracing(Level::ERROR);
-                tracing::error!(error = %err, "configuration load failed");
-                Err(ExitCode::FAILURE)
-            }
-        }
+) -> (DiagMode, Result<cli::Cli, Arc<OrthoError>>) {
+    let start = Instant::now();
+    let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(parsed_cli, matches));
+    let merged = cli::merge_with_config(parsed_cli, matches);
+    record_config_load_metrics(start.elapsed(), merged.is_ok());
+    (mode, merged)
+}
+
+/// Emit the configuration-load metrics for one startup attempt.
+///
+/// Recording goes through the `metrics` façade, so it is a no-op unless the
+/// operator has installed a recorder.
+fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
+    let outcome = if succeeded { "success" } else { "failure" };
+    metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
+    metrics::counter!(CONFIG_LOAD_TOTAL, "outcome" => outcome).increment(1);
+}
+
+/// Render a configuration-load failure to the user and map it to an exit code.
+fn handle_config_load_error(err: &Arc<OrthoError>, mode: DiagMode) -> ExitCode {
+    if mode.is_json() {
+        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err.as_ref()))
+    } else {
+        init_tracing(Level::ERROR);
+        tracing::error!(error = %err, "configuration load failed");
+        ExitCode::FAILURE
     }
 }
 
@@ -191,4 +219,80 @@ fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> 
         return diagnostic_json::render_report_json(report);
     }
     diagnostic_json::render_error_json(err.as_ref())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use metrics::Label;
+    use metrics_util::debugging::{DebugValue, DebuggingRecorder};
+
+    /// Capture the metrics emitted while `body` runs against a local recorder.
+    fn captured_metrics(body: impl FnOnce()) -> Vec<(String, Vec<Label>, DebugValue)> {
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        metrics::with_local_recorder(&recorder, body);
+        snapshotter
+            .snapshot()
+            .into_vec()
+            .into_iter()
+            .map(|(composite, _unit, _desc, value)| {
+                let key = composite.key();
+                (
+                    key.name().to_owned(),
+                    key.labels().cloned().collect::<Vec<_>>(),
+                    value,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn record_config_load_metrics_counts_failure_outcome() {
+        let metrics = captured_metrics(|| {
+            record_config_load_metrics(Duration::from_millis(5), false);
+        });
+
+        let counter = metrics
+            .iter()
+            .find(|(name, _, _)| name == CONFIG_LOAD_TOTAL)
+            .expect("config-load counter should be recorded");
+        assert!(
+            counter
+                .1
+                .iter()
+                .any(|label| label.key() == "outcome" && label.value() == "failure"),
+            "counter should carry outcome=failure: {:?}",
+            counter.1
+        );
+        assert_eq!(counter.2, DebugValue::Counter(1));
+
+        let histogram = metrics
+            .iter()
+            .find(|(name, _, _)| name == CONFIG_LOAD_DURATION_SECONDS)
+            .expect("config-load duration histogram should be recorded");
+        let DebugValue::Histogram(samples) = &histogram.2 else {
+            panic!("expected a histogram value, got {:?}", histogram.2);
+        };
+        assert_eq!(samples.len(), 1, "exactly one duration sample expected");
+    }
+
+    #[test]
+    fn record_config_load_metrics_counts_success_outcome() {
+        let metrics = captured_metrics(|| {
+            record_config_load_metrics(Duration::from_millis(1), true);
+        });
+        let counter = metrics
+            .iter()
+            .find(|(name, _, _)| name == CONFIG_LOAD_TOTAL)
+            .expect("config-load counter should be recorded");
+        assert!(
+            counter
+                .1
+                .iter()
+                .any(|label| label.key() == "outcome" && label.value() == "success"),
+            "counter should carry outcome=success: {:?}",
+            counter.1
+        );
+    }
 }
