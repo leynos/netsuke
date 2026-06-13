@@ -45,6 +45,9 @@ fn scenario_step_result() -> StepResult<(), &'static str> {
 }
 ```
 
+**After:**
+
+```rust
 # use rstest_bdd_macros::scenario;
 #[scenario(path = "tests/features/example.feature")]
 fn scenario_step_result() -> StepResult<(), &'static str> {
