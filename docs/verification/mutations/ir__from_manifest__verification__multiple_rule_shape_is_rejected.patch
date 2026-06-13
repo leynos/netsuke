@@ -1,0 +1,12 @@
+diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+--- a/src/ir/from_manifest_support.rs
++++ b/src/ir/from_manifest_support.rs
+@@ -179,7 +179,6 @@ pub(super) fn resolve_rule(
+             let mut rules = to_string_vec(rule);
+             if rules.is_empty() {
+                 Err(empty_rule_error(target_name))
+             } else {
+-                sort_strings(&mut rules);
+                 Err(multiple_rules_error(target_name, rules))
+             }
+         },

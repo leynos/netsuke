@@ -1,0 +1,13 @@
+diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+--- a/src/ir/from_manifest_support.rs
++++ b/src/ir/from_manifest_support.rs
+@@ -288,7 +288,7 @@ pub(super) fn find_duplicates(
+     let mut index = 0;
+     while index < outputs.len() {
+         if let Some(output) = outputs.get(index) {
+-            if targets.contains_key(output) || has_seen_output(seen.as_slice(), output) {
++            if targets.contains_key(output) && has_seen_output(seen.as_slice(), output) {
+                 dups.push(output.clone());
+             } else {
+                 seen.push(output);
+         }

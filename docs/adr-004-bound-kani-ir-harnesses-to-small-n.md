@@ -4,9 +4,9 @@
 
 Accepted.
 
-Accepted: 2026-06-12. Netsuke will verify manifest-to-IR safety properties with
-small bounded Kani harnesses and delegate larger graph coverage to the future
-Proptest layer.
+Accepted: 2026-06-12. Netsuke will verify manifest-to-Intermediate
+Representation (IR) safety properties with small bounded Kani harnesses and
+delegate larger graph coverage to the future Proptest layer.
 
 ## Date
 
@@ -27,7 +27,9 @@ property-testing layers.
 ## Decision drivers
 
 - Keep `make kani-full` suitable for local use.
-- Avoid verification-only public API or collection ports.
+- Avoid verification-only public API.
+- Keep verification compatibility code production-owned and private to the IR
+  module.
 - Keep proofs close to the IR modules they verify.
 - Preserve ordinary `make check-fmt`, `make lint`, and `make test` behaviour.
 - Record any narrowed harness entry points as part of the proof contract.
@@ -51,10 +53,21 @@ It is accepted because it gives deterministic proofs over the most important
 branching logic while keeping the full Kani suite within the local runtime
 budget.
 
-### Option C: introduce verification-only ports
+### Option C: introduce a private Kani collection compatibility layer
 
-This would add traits or alternate collections so Kani could run against a
-simpler implementation.
+This adds a `cfg(kani)` `IrHashMap` implementation that preserves the small map
+operations used by the IR modules while replacing `HashMap` hashing with a
+fixed-capacity deterministic array.
+
+It is accepted with constraints. The layer is private to `src/ir`, preserves
+the ordinary public API through a `not(kani)` type alias, and may only
+implement the operations needed by production IR code under proof. It is not a
+harness-side model of cycle detection or manifest lowering.
+
+### Option D: introduce public verification ports
+
+This would add traits or alternate collections to the public or crate-visible
+IR surface so Kani could run against adapter implementations.
 
 It was rejected because it would widen the production module surface and add a
 second implementation of the data-flow mechanics being verified.
@@ -72,39 +85,47 @@ Netsuke accepts small bounded Kani harnesses for roadmap item `4.2.1`.
   stored in sibling `*_verification.rs` files.
 - Harness helpers stay private unless reuse pressure justifies a narrower
   internal abstraction.
+- `cfg(kani)` compatibility code must support production code paths rather than
+  replacing those paths in harnesses.
 
-The duplicate-output harness drives the private `find_duplicates` helper in
-`src/ir/from_manifest.rs`, rather than the full `BuildGraph::from_manifest`
-path. This keeps the proof focused on duplicate discovery after direct attempts
-through manifest lowering reached serde-backed action hashing before duplicate
-assertions became tractable. Under `cfg(kani)`, duplicate-output messages use
-the real message key without formatted arguments so the proof does not execute
-localization formatting internals.
+The duplicate-output harness drives the private production `find_duplicates`
+helper in `src/ir/from_manifest.rs`, rather than the full
+`BuildGraph::from_manifest` path. This keeps the proof focused on duplicate
+discovery after direct attempts through manifest lowering reached serde-backed
+action hashing before duplicate assertions became tractable. Under `cfg(kani)`,
+duplicate-output messages use the real message key without formatted arguments
+so the proof does not execute localization formatting internals.
 
 The rule-selection harnesses drive the private `resolve_rule` helper for
 empty-rule, multiple-rules, and missing-rule shapes. The proof boundary covers
 the production dispatch and error construction while avoiding full manifest
 lowering and action registration.
 
-The cycle harnesses use a bounded string-level model for self-dependency and
-missing-dependency properties. Direct attempts through `cycle::analyse` and
-production `BuildEdge` values exceeded the local Kani budget in `Utf8PathBuf`,
-map traversal, and cycle canonicalization. Existing Rust unit and property
-tests continue to cover the production `cycle::analyse` path with real graph
-values.
+The cycle harnesses drive `cycle::contains_cycle`, a `cfg(kani)` production
+entry point that shares the `CycleDetector` traversal with `cycle::analyse`.
+Direct attempts through the full `cycle::analyse` report path proved the
+self-cycle case but exceeded the local Kani budget for two-node cycles once
+cycle-path allocation and canonicalization were included. The boolean entry
+point is the production testability repair for that finding: it verifies the
+same traversal decision without constructing the human-facing report payload.
 
 ## Known risks and limitations
 
 - The duplicate-output harness does not prove that full manifest lowering
   reaches the duplicate-output branch; existing unit and behavioural tests keep
-  that integration path covered.
+  that integration path covered, and `find_duplicates` remains the production
+  duplicate-discovery helper.
 - The duplicate-output harness does not prove rendered Fluent output for that
   error variant. It proves the message key is selected and the semantic payload
   is preserved.
-- The cycle harnesses prove the bounded cycle and missing-dependency input
-  shapes, not the full production cycle detector. Existing unit and property
-  tests keep the production detector covered until roadmap item `4.3.1` expands
-  generated graph coverage.
+- The cycle harnesses prove the production cycle detector's boolean traversal,
+  not the full report-building path. Existing unit tests keep cycle path
+  canonicalization and missing-dependency reporting covered until roadmap item
+  `4.3.1` expands generated graph coverage.
+- The `cfg(kani)` `IrHashMap` implementation is a private compatibility layer,
+  not a public collection port. If future Kani versions model `HashMap`
+  efficiently enough for these harnesses, the compatibility layer should be
+  removed.
 - Graph coverage beyond one to three nodes remains a tracked future obligation
   for Proptest.
 - If the production IR representation changes away from `HashMap` or owned

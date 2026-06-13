@@ -10,107 +10,22 @@
 use crate::localization::LocalizedMessage;
 use camino::Utf8PathBuf;
 use serde::Serialize;
-#[cfg(kani)]
-use std::borrow::Borrow;
 #[cfg(not(kani))]
 use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::ast::Recipe;
 
+#[cfg(kani)]
+#[path = "graph_kani_map.rs"]
+mod kani_map;
+
+#[cfg(kani)]
+pub use kani_map::IrHashMap;
+
 /// Map used by the IR graph.
 #[cfg(not(kani))]
 pub type IrHashMap<K, V> = HashMap<K, V>;
-
-/// Map used by the IR graph under Kani.
-#[cfg(kani)]
-#[derive(Debug, Clone, PartialEq)]
-pub struct IrHashMap<K, V> {
-    entries: Vec<(K, V)>,
-}
-
-#[cfg(kani)]
-impl<K, V> Default for IrHashMap<K, V> {
-    fn default() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-}
-
-#[cfg(kani)]
-impl<K, V> IrHashMap<K, V>
-where
-    K: PartialEq,
-{
-    /// Insert `value` at `key`, replacing and returning any previous value.
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        if let Some((_, stored)) = self
-            .entries
-            .iter_mut()
-            .find(|(candidate, _)| candidate == &key)
-        {
-            Some(std::mem::replace(stored, value))
-        } else {
-            self.entries.push((key, value));
-            None
-        }
-    }
-}
-
-#[cfg(kani)]
-impl<K, V> IrHashMap<K, V> {
-    /// Return the value for `key`, if present.
-    pub fn get<Q>(&self, key: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: PartialEq + ?Sized,
-    {
-        self.entries
-            .iter()
-            .find(|(candidate, _)| candidate.borrow() == key)
-            .map(|(_, value)| value)
-    }
-
-    /// Return `true` when `key` is present in the map.
-    pub fn contains_key<Q>(&self, key: &Q) -> bool
-    where
-        K: Borrow<Q>,
-        Q: PartialEq + ?Sized,
-    {
-        self.get(key).is_some()
-    }
-
-    /// Iterate over keys in insertion order.
-    pub fn keys(&self) -> impl Iterator<Item = &K> {
-        self.entries.iter().map(|(key, _)| key)
-    }
-
-    /// Iterate over key-value pairs in insertion order.
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-        self.entries.iter().map(|(key, value)| (key, value))
-    }
-
-    /// Iterate over values in insertion order.
-    pub fn values(&self) -> impl Iterator<Item = &V> {
-        self.entries.iter().map(|(_, value)| value)
-    }
-
-    /// Remove every entry from the map.
-    pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-
-    /// Return the number of entries in the map.
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Return `true` when the map contains no entries.
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-}
 
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]

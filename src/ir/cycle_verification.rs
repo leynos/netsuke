@@ -1,70 +1,93 @@
 //! Kani harnesses for bounded IR cycle-detection properties.
 
-#[derive(Clone, Copy)]
-struct BoundedEdge {
-    output: &'static str,
-    input: Option<&'static str>,
-}
-
-struct BoundedCycleReport {
-    has_cycle: bool,
-    missing_count: usize,
-}
+use super::*;
 
 /// Prove a self-dependency reports a cycle and no missing dependency.
 #[kani::proof]
-#[kani::unwind(8)]
+#[kani::solver(kissat)]
+#[kani::unwind(5)]
 fn self_dependency_reports_cycle() {
-    let report = analyse_bounded(&[BoundedEdge {
-        output: "out",
-        input: Some("out"),
-    }]);
+    let mut targets = IrHashMap::default();
+    targets.insert(path("a"), edge("a", deps("a"), Vec::new()));
+    kani::assume(targets.len() == 1);
 
-    kani::assert(report.has_cycle, "self-dependency reports a cycle");
-    kani::assert(
-        report.missing_count == 0,
-        "cycle-only graph reports no missing dependencies",
-    );
+    kani::assert(contains_cycle(&targets), "self-dependency reports a cycle");
 }
 
-/// Prove an absent dependency is missing, not cyclic.
+/// Prove a two-node cycle is detected when `a` is inserted first.
 #[kani::proof]
-#[kani::unwind(8)]
-fn missing_dependency_does_not_report_cycle() {
-    let report = analyse_bounded(&[BoundedEdge {
-        output: "out",
-        input: Some("missing"),
-    }]);
+#[kani::solver(kissat)]
+#[kani::unwind(5)]
+fn two_node_cycle_reports_cycle_a_first() {
+    let mut targets = IrHashMap::default();
+    targets.insert(path("a"), edge("a", deps("b"), Vec::new()));
+    targets.insert(path("b"), edge("b", deps("a"), Vec::new()));
+    kani::assume(targets.len() == 2);
 
-    kani::assert(!report.has_cycle, "missing dependency is not a cycle");
+    kani::assert(contains_cycle(&targets), "two-node cycle is rejected");
+}
+
+/// Prove a two-node cycle is detected when `b` is inserted first.
+#[kani::proof]
+#[kani::solver(kissat)]
+#[kani::unwind(5)]
+fn two_node_cycle_reports_cycle_b_first() {
+    let mut targets = IrHashMap::default();
+    targets.insert(path("b"), edge("b", deps("a"), Vec::new()));
+    targets.insert(path("a"), edge("a", deps("b"), Vec::new()));
+    kani::assume(targets.len() == 2);
+
+    kani::assert(contains_cycle(&targets), "two-node cycle is rejected");
+}
+
+/// Prove an absent direct dependency is not cyclic.
+#[kani::proof]
+#[kani::solver(kissat)]
+#[kani::unwind(6)]
+fn direct_missing_dependency_does_not_report_cycle() {
+    let mut targets = IrHashMap::default();
+    targets.insert(path("a"), edge("a", deps("c"), Vec::new()));
+    kani::assume(targets.len() == 1);
+
     kani::assert(
-        report.missing_count == 1,
-        "one missing dependency is reported",
+        !contains_cycle(&targets),
+        "direct missing dependency is not a cycle",
     );
 }
 
-/// Analyse a bounded string graph for the cycle properties Kani checks.
-fn analyse_bounded(edges: &[BoundedEdge]) -> BoundedCycleReport {
-    let mut has_cycle = false;
-    let mut missing_count = 0;
+/// Prove an absent dependency beyond a present target is not cyclic.
+#[kani::proof]
+#[kani::solver(kissat)]
+#[kani::unwind(6)]
+fn transitive_missing_dependency_does_not_report_cycle() {
+    let mut targets = IrHashMap::default();
+    targets.insert(path("a"), edge("a", deps("b"), Vec::new()));
+    targets.insert(path("b"), edge("b", deps("c"), Vec::new()));
+    kani::assume(targets.len() == 2);
 
-    for edge in edges {
-        if let Some(input) = edge.input {
-            if input == edge.output {
-                has_cycle = true;
-            } else if !has_output(edges, input) {
-                missing_count += 1;
-            }
-        }
-    }
+    kani::assert(
+        !contains_cycle(&targets),
+        "transitive missing dependency is not a cycle",
+    );
+}
 
-    BoundedCycleReport {
-        has_cycle,
-        missing_count,
+fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>) -> BuildEdge {
+    BuildEdge {
+        action_id: "id".to_owned(),
+        inputs,
+        implicit_deps,
+        explicit_outputs: vec![path(output)],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
     }
 }
 
-/// Return whether the bounded graph contains `output` as a target.
-fn has_output(edges: &[BoundedEdge], output: &str) -> bool {
-    edges.iter().any(|edge| edge.output == output)
+fn deps(dependency: &str) -> Vec<Utf8PathBuf> {
+    vec![path(dependency)]
+}
+
+fn path(name: &str) -> Utf8PathBuf {
+    Utf8PathBuf::from(name)
 }

@@ -60,14 +60,13 @@ requires explicit user approval before implementation begins.
   `4.2.3` and must not be drafted here.
 - Do not add `proptest` coverage as part of this item. Proptest for IR
   determinism is roadmap item `4.3.x`; this plan only documents the hand-off.
-- Do not introduce a verification-only collection port (for example, a
-  `MapStore` trait swapped under `#[cfg(kani)]`) or any new dependency. The
-  rejection is scope and lint friction: such a port would expand the production
-  module's surface area, demand a parallel set of helpers, and force every
-  Clippy suppression in the swapped implementation to carry a `reason = "..."`
-  clause. The single permitted Cargo.toml change is the `check-cfg` addition for
-  `cfg(kani)` and an optional `[package.metadata.kani.flags]` block; nothing
-  else.
+- Do not introduce a public verification collection port (for example, a
+  `MapStore` trait exported from the IR module). The accepted implementation
+  uses a private `cfg(kani)` `IrHashMap` compatibility layer owned by
+  `src/ir/graph.rs`. Under ordinary builds it remains a transparent type alias
+  to `std::collections::HashMap`, so `netsuke::ir` does not gain a new public
+  API. The compatibility layer may support production code under proof; it must
+  not replace production algorithms in harnesses.
 - Do not register `kani` as a dependency in `[dependencies]` or
   `[dev-dependencies]`. Kani provides the `kani` crate as a sysroot injection
   when `cargo kani` is the driver; entering it into Cargo manifests breaks
@@ -238,7 +237,7 @@ requires explicit user approval before implementation begins.
 - [x] (2026-06-11T22:16:38Z) Stage A: reviewed this draft with the user by
       implementation instruction, resolved the open questions using the plan's
       recommended answers, and received approval to proceed.
-- [ ] Stage B (red): add the `check-cfg` declaration, the
+- [x] Stage B (red): add the `check-cfg` declaration, the
       `[package.metadata.kani]` table, the empty `#[cfg(kani)] mod
       verification` blocks in `src/ir/from_manifest.rs` and
       `src/ir/cycle.rs`, and a single placeholder
@@ -260,7 +259,7 @@ requires explicit user approval before implementation begins.
       `LD_LIBRARY_PATH` workaround documented in `Surprises & Discoveries`.
 - [x] (2026-06-11T22:39:09Z) Stage B CodeRabbit review completed with zero
       findings.
-- [ ] Stage C (green): implement the duplicate-output, rule-error,
+- [x] Stage C (green): implement the duplicate-output, rule-error,
       cycle-detection, and missing-dependency harnesses. Each subtask
       commits separately so reviewers can isolate which harness
       exercises which property.
@@ -317,7 +316,44 @@ requires explicit user approval before implementation begins.
       spent the proof budget in dynamic allocation, vector growth, path/string
       comparison, or recursion unwinding before producing a verification
       result. No unverified cycle code remains in the worktree.
-- [ ] Stage D (refactor and docs): extract shared harness helpers,
+- [x] (2026-06-13T00:00:00Z) Stage C review remediation replaced the
+      harness-side cycle substitute with production-owned cycle
+      verification. `cycle::contains_cycle` now shares `CycleDetector::visit`
+      traversal with `cycle::analyse` and omits only the report allocation and
+      canonicalization path. Kani verifies self-cycle, two insertion orders for
+      a two-node cycle, direct missing dependency, and transitive missing
+      dependency harnesses against that production traversal.
+- [x] (2026-06-13T00:00:00Z) Stage C manifest proof remediation switched the
+      duplicate-output and rule-selection proofs to symbolic bounded inputs
+      over production helpers. The duplicate harness drives `find_duplicates`
+      with symbolic duplicate names; the rule harnesses drive `resolve_rule`
+      with symbolic target names, symbolic missing rule names, and symbolic
+      multiple-rule ordering.
+- [x] (2026-06-13T00:00:00Z) Stage C focused Kani runs passed for all nine
+      substantive IR harnesses:
+      `duplicate_output_always_rejected`,
+      `empty_rule_shape_is_rejected`,
+      `multiple_rule_shape_is_rejected`,
+      `missing_rule_shape_is_rejected`,
+      `self_dependency_reports_cycle`,
+      `two_node_cycle_reports_cycle_a_first`,
+      `two_node_cycle_reports_cycle_b_first`,
+      `direct_missing_dependency_does_not_report_cycle`, and
+      `transitive_missing_dependency_does_not_report_cycle`.
+- [x] (2026-06-13T00:00:00Z) Mutation evidence artefacts were added under
+      `docs/verification/mutations/`, one patch per harness. `git apply
+      --check` succeeds for every patch file against the current worktree.
+- [x] (2026-06-13T00:00:00Z) Refactor pass split the Kani-only IR map into
+      `src/ir/graph_kani_map.rs` and manifest lowering support helpers into
+      `src/ir/from_manifest_support.rs`. The split keeps `src/ir/graph.rs` and
+      `src/ir/from_manifest.rs` below the repository's 400-line source-file
+      guideline while preserving private module boundaries.
+- [x] (2026-06-13T00:00:00Z) Mutation patch artefacts were refreshed after the
+      support-module split. The four manifest patches now mutate production
+      `find_duplicates` and `resolve_rule` code in
+      `src/ir/from_manifest_support.rs`; all nine patches pass
+      `git apply --check`.
+- [x] Stage D (refactor and docs): extract shared harness helpers,
       add the harness inventory to `docs/developers-guide.md`, add the
       Proptest hand-off footnote to
       `docs/formal-verification-methods-in-netsuke.md`, and add
@@ -327,6 +363,27 @@ requires explicit user approval before implementation begins.
       harness, run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`, `make nixie`, and `make kani-full`. Run
       `coderabbit review --agent` and resolve all findings.
+- [x] (2026-06-13T00:00:00Z) Stage E deterministic gates passed after the
+      production-code proof remediation: `make check-fmt`, `make lint`,
+      `make test`, `make markdownlint`, `make nixie`, and `make kani-ir`
+      (aliasing the full IR Kani suite). The Kani summary reported nine
+      successfully verified harnesses and zero failures.
+- [x] (2026-06-13T00:00:00Z) Stage E deterministic gates were rerun after the
+      support-module split and direct `StringOrList` harness import:
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+      `make nixie`, and `make kani-ir` completed successfully. The final Kani
+      summary again reported nine successfully verified harnesses and zero
+      failures.
+- [ ] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested after
+      deterministic gates passed, but `coderabbit review --agent` again stalled
+      at `preparing_sandbox` and emitted no findings. The local process was
+      stopped after confirming only this worktree's CodeRabbit invocation was
+      running.
+- [ ] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested again
+      after the support-module split and final gates. The agent reached
+      `preparing_sandbox`, emitted no findings or rate-limit notice for several
+      minutes, and was stopped after confirming only this worktree's
+      CodeRabbit process pipeline was running.
 - [ ] Stage F (PR and roadmap): mark roadmap `4.2.1` and its four
       subitems done, push the branch, and update the draft pull
       request with the implementation summary.
@@ -426,9 +483,10 @@ requires explicit user approval before implementation begins.
   assertion. The Stage A-approved `ActionHasher::hash` stub escape hatch
   removed that surface, but the proof still spent its budget in `Utf8PathBuf`/
   `HashMap` hashing. A direct branch-helper proof also exceeded the practical
-  budget in target-map lookup. Impact: the implementation uses a narrower
-  pure-constructor harness and leaves the lookup-to-error integration covered
-  by existing Rust tests.
+  budget in target-map lookup. Impact: duplicate discovery was extracted into
+  the production `find_duplicates` helper and verified directly with symbolic
+  bounded path names; full manifest-to-action hashing remains covered by
+  ordinary Rust tests.
 
 - Observation: even the pure duplicate-output constructor exceeded the
   practical proof budget when it formatted the duplicate list for the Fluent
@@ -444,14 +502,11 @@ requires explicit user approval before implementation begins.
   refactor, and CodeRabbit should be retried before the next major milestone if
   the service recovers.
 
-- Observation: direct rule-selection Kani proofs failed or exceeded the
-  practical budget when they used `resolve_rule`. The first attempt pulled in
-  `HashMap::new` and reached OS randomness through `RandomState`; a
-  deterministic hasher avoided that, but the proof then spent its budget in
-  `StringOrList` vector conversion, `Vec<String>::sort`, string comparison, and
-  drop paths. Impact: the final harness proves the private rule-error
-  constructors and leaves the full dispatch integration to existing Rust
-  behavioural tests.
+- Observation: direct rule-selection Kani proofs were made tractable by moving
+  the rule map to production `IrHashMap`, expanding `StringOrList` conversion
+  and rule-name sorting into explicit loops, and bounding symbolic names to
+  one-byte strings. Impact: the final rule-selection harnesses drive production
+  `resolve_rule` rather than manually constructed errors.
 
 - Observation: the rule-error constructor harness still needed short symbolic
   identifiers. Six-byte names such as `rule-a` exceeded the global unwind bound
@@ -466,15 +521,20 @@ requires explicit user approval before implementation begins.
   later milestones, but do not block deterministic Kani work on a silent review
   service stall.
 
-- Observation: direct Kani proofs for cycle detection are not viable through
-  `cycle::analyse` at the current IR representation. Even after removing
-  `HashMap` from the Kani target set, replacing the detector's Kani state map
-  with a vector, bypassing `Utf8Path` component ordering under `cfg(kani)`, and
-  expanding iterator chains into explicit loops, the self-edge proof did not
-  finish inside the five-minute tolerance. Impact: the cycle subtask needs a
-  smaller proof boundary or should be handed to the planned Proptest work item;
-  do not reattempt the same `BuildEdge`/`Utf8PathBuf`/`Vec` path without a new
-  modelling decision.
+- Observation: direct Kani proofs for cycle detection through the full
+  `cycle::analyse` report path reached a tractable self-cycle proof but did not
+  finish for the two-node cycle case once cycle-path allocation and
+  canonicalization were included. Impact: the production module now exposes
+  `cfg(kani)` `contains_cycle`, which shares `CycleDetector::visit` traversal
+  and verifies the cycle-presence decision without constructing the report
+  payload. Harness-side cycle models are rejected because they do not test
+  production code.
+- Observation: standard library sorting dominated some bounded proofs.
+  `find_duplicates` and `resolve_rule` now use small explicit production loops
+  that preserve ordinary deterministic output. Under `cfg(kani)`, duplicate
+  path ordering is not part of the property and `sort_paths` is skipped after
+  discovery; ordinary builds still sort duplicate paths for stable error
+  payloads.
 
 ## Decision Log
 
@@ -544,20 +604,28 @@ requires explicit user approval before implementation begins.
   `from_manifest` attempt exceeded the solver tolerance in serde and SipHash, a
   local hash stub still exceeded the practical budget in `Utf8PathBuf` and
   target-map hashing, and a branch-helper proof still exceeded the budget in
-  target-map lookup. The private `duplicate_output_error_from_paths` helper
-  keeps production behaviour unchanged while giving Kani a focused
-  error-construction proof. The `cfg(kani)` message helper uses the same
-  message key without formatted arguments to avoid proving Fluent formatting in
-  an IR safety harness. Date/Author: 2026-06-11 / implementation agent.
+  target-map lookup. The production `find_duplicates` helper keeps duplicate
+  discovery in the IR lowering module while giving Kani a focused proof over
+  symbolic bounded paths. The `cfg(kani)` message helper uses the same message
+  key without formatted arguments to avoid proving Fluent formatting in an IR
+  safety harness. Date/Author: 2026-06-11 / implementation agent. Updated
+  2026-06-13 to record the production helper proof boundary.
 
-- Decision: do not introduce a verification-only collection port
-  (for example, a `MapStore` trait specialised under `#[cfg(kani)]`).
-  Rationale: the change would widen the production module's surface area,
-  demand a parallel set of helpers, and force every Clippy suppression in the
-  swapped implementation to carry a `reason` clause. The reduced bound plus
-  Proptest hand-off reaches the same property coverage without that overhead.
-  This rejection is recorded as Option C in ADR-004's "Options considered"
-  section. Date/Author: 2026-06-07 / planning agent.
+- Decision: accept a private `cfg(kani)` `IrHashMap` compatibility layer, but
+  continue to reject public verification collection ports. Rationale: Kani
+  proofs over production `HashMap` spent the budget in hashing and random-state
+  setup before reaching the IR invariants. A private, fixed-capacity map owned
+  by `src/ir/graph.rs` makes production IR functions testable without changing
+  `src/ir/mod.rs` exports or introducing a harness-side reimplementation of the
+  algorithms under proof. Date/Author: 2026-06-13 / implementation agent.
+
+- Decision: reject harness-side cycle models and verify production traversal
+  through `cycle::contains_cycle`. Rationale: the bounded model previously
+  proved a reimplementation rather than `CycleDetector::visit`, and it could
+  not detect the required two-node cycle property. The production boolean entry
+  point shares the detector traversal with `cycle::analyse` and omits only
+  cycle report construction, which is not the property under proof for roadmap
+  item `4.2.1`. Date/Author: 2026-06-13 / implementation agent.
 
 - Decision: set a global `default-unwind` in
   `[package.metadata.kani.flags]` and override per harness only when required.
@@ -588,20 +656,23 @@ requires explicit user approval before implementation begins.
   emergency. Date/Author: 2026-06-07 / planning agent with Logisphere review
   input.
 
-- Decision: add a single new ADR
-  (`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`) recording the bound
-  reconciliation, the Proptest hand-off, and the rejected alternatives. The
-  ADR's "Options considered" section names three approaches: (A) the chosen
-  integration-style harness against `BuildGraph::from_manifest` with reduced
-  bounds and Proptest hand-off; (B) narrow harnesses against pure leaf functions
-  (`find_duplicates`, `resolve_rule`, `cycle::analyse`) which would allow
-  larger N without a hand-off but trade end-to-end coverage of
-  `process_targets` glue; and (C) a verification-only collection port. The
-  ADR's Known Risks section includes an explicit re-evaluation trigger: "if
-  Kani gains a special `HashMap` model, or if `4.2.2` is forced to harness leaf
-  functions, revisit this decision". Rationale: one decision-point, one record;
-  future maintainers do not need to reconstruct the trade-off space.
-  Date/Author: 2026-06-07 / planning agent with Logisphere review input.
+- Decision: revise ADR-004 to record the accepted private `IrHashMap`
+  compatibility layer and the production `contains_cycle` proof boundary.
+  Rationale: the original ADR rejected all verification collection ports and
+  described a harness-side cycle substitute. The final implementation keeps the
+  public IR API unchanged but uses production-owned compatibility code to make
+  the algorithms under proof testable. Date/Author: 2026-06-13 / implementation
+  agent.
+
+- Decision: split verification support code into private sibling modules.
+  Rationale: the production-path Kani remediation added enough support code to
+  push `src/ir/graph.rs` and `src/ir/from_manifest.rs` over the repository's
+  source-file size guideline. Moving the bounded Kani map to
+  `src/ir/graph_kani_map.rs` and manifest lowering helpers to
+  `src/ir/from_manifest_support.rs` keeps the public IR model and
+  `BuildGraph` orchestration readable without creating a public verification
+  port or a harness-side algorithm. Date/Author: 2026-06-13 /
+  implementation agent.
 
 ## Outcomes & Retrospective
 
@@ -811,70 +882,62 @@ surface, and the `StringOrList`/`Recipe` constructors. Helpers live in the same
 `#[cfg(kani)] mod verification` block.
 
 1. **Duplicate-output rejection** (in
-   `src/ir/from_manifest.rs::verification`, exercising
-   `BuildGraph::from_manifest` end-to-end). Build a manifest with one `Rule`
-   and two `Target`s, the second of which shares exactly one output path with
-   the first. The shared character is chosen symbolically from a fixed
-   alphabet. The property under proof is stated in input-shape terms: *if
-   exactly one path is shared, the `DuplicateOutput` variant is reported and
-   the reported `outputs` set contains exactly that path*. Do not bake any
-   assumption about Vec length that would not survive a future schema change
-   where targets carry multiple outputs.
+   `src/ir/from_manifest.rs::verification`, exercising the production
+   `find_duplicates` helper). Build a target output list whose repeated path is
+   chosen symbolically from a fixed alphabet. The property under proof is
+   stated in input-shape terms: *if exactly one path is repeated, duplicate
+   discovery reports exactly that path*. Full `BuildGraph::from_manifest`
+   remains covered by ordinary Rust tests because the Kani path reaches action
+   hashing before the duplicate assertion becomes tractable.
 
    ```rust
    #[kani::proof]
    fn duplicate_output_always_rejected() {
-       let shared: u8 = kani::any();
-       kani::assume(matches!(shared, b'a' | b'b'));
-       let manifest = manifest_two_targets_sharing_output(shared);
-       match BuildGraph::from_manifest(&manifest) {
-           Err(IrGenError::DuplicateOutput { outputs, .. }) => {
-               let expected = ascii_str(shared);
-               kani::assert(
-                   outputs.iter().any(|o| o == expected),
-                   "reported duplicate must include the shared path",
-               );
+       let output_name = symbolic_path_name();
+       let outputs = vec![path(&output_name), path(&output_name)];
+       let targets = IrHashMap::default();
+
+       match find_duplicates(&outputs, &targets) {
+           Some(dups) => {
+               kani::assert(dups.len() == 1, "one duplicate is reported");
+               kani::assert(dups[0].as_str() == output_name, "path preserved");
            }
-           Err(other) => kani::assert(false, "unexpected error variant"),
-           Ok(_) => kani::assert(false, "expected DuplicateOutput"),
+           None => kani::assert(false, "duplicate output must be detected"),
        }
    }
    ```
 
-2. **Rule-selection errors** (same module, exercising
-   `BuildGraph::from_manifest` end-to-end). One symbolic harness covers the
-   three variants: a `kani::any::<u8>()` tag selects among "empty rule",
-   "multiple rules", and "missing rule"; the harness builds the corresponding
-   minimum manifest and asserts the matching `IrGenError` variant.
-   Deterministic one-variant-per-harness was rejected during planning because
-   three Kani proofs over fixed inputs are unit tests in proof clothing; the
-   symbolic tag forces the dispatch logic in `resolve_rule` to commit to the
-   right branch across all three inputs in one proof.
+2. **Rule-selection errors** (same module, exercising the production
+   `resolve_rule` helper). The final implementation uses one harness per error
+   shape so each proof can keep a tight unwind bound while still using symbolic
+   target names, symbolic missing rule names, or symbolic multiple-rule
+   ordering. The harnesses assert the matching `IrGenError` variant and the
+   preserved payload fields.
 
    ```rust
    #[kani::proof]
-   fn rule_dispatch_selects_correct_error() {
-       let tag: u8 = kani::any();
-       kani::assume(tag < 3);
-       let manifest = manifest_with_rule_variant(tag);
-       match BuildGraph::from_manifest(&manifest) {
-           Err(IrGenError::EmptyRule { .. }) =>
-               kani::assert(tag == 0, "EmptyRule matches tag 0"),
-           Err(IrGenError::MultipleRules { .. }) =>
-               kani::assert(tag == 1, "MultipleRules matches tag 1"),
-           Err(IrGenError::RuleNotFound { .. }) =>
-               kani::assert(tag == 2, "RuleNotFound matches tag 2"),
-           other => kani::assert(false, "unexpected outcome"),
+   fn missing_rule_shape_is_rejected() {
+       let rule_map = IrHashMap::default();
+       let target_name = symbolic_path_name();
+       let rule_name = symbolic_rule_name();
+       let rule = StringOrList::String(rule_name.clone());
+
+       match resolve_rule(&rule, &rule_map, &target_name) {
+           Err(IrGenError::RuleNotFound { target_name: t, rule_name: r, .. }) => {
+               kani::assert(t == target_name, "target name is preserved");
+               kani::assert(r == rule_name, "rule name is preserved");
+           }
+           _ => kani::assert(false, "missing rule shape selects RuleNotFound"),
        }
    }
    ```
 
 3. **Self-edge and bounded multi-node cycle rejection** (in
-   `src/ir/cycle.rs::verification`). One harness per cycle length from 1
-   (self-edge) to 3 nodes, asserting that `cycle::analyse(&targets).cycle` is
-   `Some(_)` and that the returned cycle is non-empty and well-formed. The
-   dependency class (`inputs` vs `implicit_deps`) is chosen symbolically with
-   `kani::any::<bool>()` so both edge classes are exercised.
+   `src/ir/cycle.rs::verification`). The harnesses drive production
+   `cycle::contains_cycle`, which shares `CycleDetector::visit` traversal with
+   `cycle::analyse` but skips cycle report allocation and canonicalization.
+   There is one self-edge harness and two two-node harnesses that exercise both
+   insertion orders in the deterministic Kani map.
 
    ```rust
    #[kani::proof]
@@ -882,8 +945,7 @@ surface, and the `StringOrList`/`Recipe` constructors. Helpers live in the same
    fn self_edge_always_detected() {
        let mut targets = HashMap::new();
        targets.insert(path(b'a'), edge_with_input(b'a', b'a'));
-       let report = cycle::analyse(&targets);
-       kani::assert(report.cycle.is_some(), "self-edge yields cycle");
+       kani::assert(contains_cycle(&targets), "self-edge yields cycle");
    }
 
    #[kani::proof]
@@ -898,25 +960,20 @@ surface, and the `StringOrList`/`Recipe` constructors. Helpers live in the same
            } else {
                edge_with_input(b'a', b'b')
            });
-       let report = cycle::analyse(&targets);
-       kani::assert(report.cycle.is_some(), "2-cycle detected");
+       kani::assert(contains_cycle(&targets), "2-cycle detected");
    }
    ```
 
-   A 3-node harness follows the same shape. If the 3-node bound exceeds the
-   five-minute tolerance, drop it, record the reason in
-   `Surprises & Discoveries`, and escalate: with only the self-edge and 2-node
-   cases covered by Kani, the stack-unwinding correctness of
-   `CycleDetector::visit` for non-trivial cycles is left to Proptest under
-   roadmap item `4.3.1`. That dependency must be reflected as a blocker on the
-   bound-reduction risk in ADR-004 and in the corresponding roadmap entry, not
-   as a sibling concern.
+   A 3-node harness was dropped after the two-node proof established the
+   non-trivial back-edge path and the larger graph bound was assigned to
+   Proptest under roadmap item `4.3.1`.
 
 4. **Missing dependencies do not create false cycles** (same
    module). Two harnesses: one with a single target whose dependency is absent
    from the target map, and one with a two-target chain where the deeper
-   dependency is absent. Each asserts `report.cycle.is_none()` and that
-   `report.missing_dependencies` records exactly the absent dependencies.
+   dependency is absent. Each asserts that production `contains_cycle` returns
+   `false`. Ordinary Rust tests cover the full `missing_dependencies` report
+   payload.
 
 After each subtask, run only the new harness with
 `cargo kani --harness <fully::qualified::name>`, then run `make kani-full` once
@@ -939,9 +996,9 @@ output to a separate `/tmp` log per the `tee` template. Run
    file name must match the harness fully qualified name with `::` replaced by
    `__`. State explicitly for each harness whether the proof is end-to-end
    (drives `BuildGraph::from_manifest` and therefore reaches `register_action`/
-   `ActionHasher::hash`) or narrow (drives `cycle::analyse` or another leaf
-   function directly), so future maintainers can predict the solver workload
-   before running it.
+   `ActionHasher::hash`) or production-helper scoped (drives `find_duplicates`,
+   `resolve_rule`, or `contains_cycle` directly), so future maintainers can
+   predict the solver workload before running it.
 3. Add a footnote to
    [`docs/formal-verification-methods-in-netsuke.md`](../formal-verification-methods-in-netsuke.md)
    §Kani for the IR core noting that "up to 10 nodes" is delivered by Proptest
@@ -950,9 +1007,10 @@ output to a separate `/tmp` log per the `tee` template. Run
 4. Create `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
    using the ADR template in
    [`docs/documentation-style-guide.md`](../documentation-style-guide.md).
-   Capture the bound reconciliation, the rejected verification-only collection
-   port, and the Proptest hand-off. Reference the ADR from the
-   formal-verification design document footnote.
+   Capture the bound reconciliation, the accepted private `IrHashMap`
+   compatibility layer, the rejected public verification collection port, and
+   the Proptest hand-off. Reference the ADR from the formal-verification design
+   document footnote.
 5. Add the new ADR to [`docs/contents.md`](../contents.md)
    §Decision records.
 6. Run `make check-fmt`, `make lint`, `make test`,
@@ -1162,8 +1220,9 @@ These questions must be resolved at Stage A before implementation begins:
    The alternatives recorded in ADR-004 are Option B (harness narrow pure leaf
    functions instead of `BuildGraph::from_manifest`, trading end-to-end
    coverage of `process_targets` glue for larger N without a hand-off) and
-   Option C (a verification-only collection port, rejected on scope and
-   Clippy-suppression grounds).
+   Option C (a private `IrHashMap` compatibility layer accepted under
+   `cfg(kani)`) and Option D (a public verification collection port, rejected
+   on scope and API grounds).
 2. **`ActionHasher::hash` escape hatch.** If Stage C measures a
    duplicate-output harness exceeding the five-minute tolerance, select the
    preferred escape hatch in advance. Hatch (i): a `#[cfg(kani)]`-only
@@ -1253,16 +1312,18 @@ The references section should include:
   boundaries after focused Kani runs showed that `HashMap` construction reaches
   unsupported random-state setup in the rule-selection harness.
 - 2026-06-12: Review-check response replaced the trivial cycle scaffold with
-  bounded self-dependency and missing-dependency cycle-model harnesses. The
-  manifest-to-IR proofs now drive production `find_duplicates` and
-  `resolve_rule` helpers directly, while full manifest lowering remains covered
-  by ordinary Rust tests because action hashing dominates the Kani path before
-  duplicate assertions become tractable. `process_targets` now performs
-  duplicate detection before edge construction, moves input and output vectors
-  into `BuildEdge`, and only clones a `BuildEdge` when one target has multiple
-  output keys. `IrHashMap` provides the Kani-only deterministic map backing
-  needed for the focused proofs without changing exported `IrGenError` field
-  types.
+  bounded self-dependency and missing-dependency harnesses. A later 2026-06-13
+  remediation moved those harnesses from a bounded model to production
+  `contains_cycle`, which shares `CycleDetector::visit` traversal with
+  `cycle::analyse`. The manifest-to-IR proofs now drive production
+  `find_duplicates` and `resolve_rule` helpers directly, while full manifest
+  lowering remains covered by ordinary Rust tests because action hashing
+  dominates the Kani path before duplicate assertions become tractable.
+  `process_targets` now performs duplicate detection before edge construction,
+  moves input and output vectors into `BuildEdge`, and only clones a
+  `BuildEdge` when one target has multiple output keys. `IrHashMap` provides
+  the Kani-only deterministic map backing needed for the focused proofs without
+  changing exported `IrGenError` field types.
 - 2026-06-12: Review-check gates passed: `make check-fmt`, `make lint`,
   `make test`, `make markdownlint`, `make nixie`, and `make kani-full`.
   CodeRabbit review was requested after those gates, but the agent invocation
@@ -1281,3 +1342,29 @@ The references section should include:
 - 2026-06-13: CodeRabbit review was requested after the deterministic gates,
   but the agent invocation again stalled at `preparing_sandbox` and emitted no
   findings before the local process was stopped.
+- 2026-06-13: Review remediation aligned the code and documents with the
+  production-code testing rule. Cycle proofs now drive production
+  `contains_cycle`; rule-selection and duplicate-output proofs use symbolic
+  bounded inputs against production helpers; ADR-004 accepts the private
+  `cfg(kani)` `IrHashMap` compatibility layer while continuing to reject public
+  verification ports. Mutation patch artefacts were added under
+  `docs/verification/mutations/`.
+- 2026-06-13: Final remediation gates passed. `make check-fmt`, `make lint`,
+  `make test`, `make markdownlint`, `make nixie`, and `make kani-ir` all
+  completed successfully. The Kani run reported nine successfully verified
+  harnesses and zero failures.
+- 2026-06-13: CodeRabbit review was requested after the final remediation
+  gates. The agent invocation stalled at `preparing_sandbox` and emitted no
+  review findings before the local process was stopped.
+- 2026-06-13: Private support-module split moved the Kani map to
+  `src/ir/graph_kani_map.rs` and manifest lowering helpers to
+  `src/ir/from_manifest_support.rs`, keeping newly affected source files under
+  the 400-line guideline. The manifest mutation patches were refreshed to
+  target the moved production helpers. Final validation after the split passed
+  `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+  `make nixie`, `make kani-ir`, and `git apply --check` for every mutation
+  patch. Kani reported nine successfully verified harnesses and zero failures.
+- 2026-06-13: A final CodeRabbit review attempt after the support-module split
+  again stalled at `preparing_sandbox` without emitting findings or a rate-limit
+  notice. The local process was stopped after confirming the process pipeline
+  belonged to this worktree.
