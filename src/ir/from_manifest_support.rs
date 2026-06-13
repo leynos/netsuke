@@ -236,11 +236,21 @@ fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::L
     add_arg(with_target, "rule", rule_name)
 }
 
-fn sort_strings(values: &mut [String]) {
+fn insertion_sort_by<T, F>(values: &mut [T], cmp: F)
+where
+    F: Fn(&T, &T) -> std::cmp::Ordering,
+{
     let mut index = 1;
     while index < values.len() {
         let mut sorted_index = index;
-        while should_swap_strings(values, sorted_index) {
+        while sorted_index > 0 {
+            let swap = values
+                .get(sorted_index)
+                .zip(values.get(sorted_index - 1))
+                .is_some_and(|(cur, prev)| cmp(cur, prev) == std::cmp::Ordering::Less);
+            if !swap {
+                break;
+            }
             values.swap(sorted_index, sorted_index - 1);
             sorted_index -= 1;
         }
@@ -248,17 +258,8 @@ fn sort_strings(values: &mut [String]) {
     }
 }
 
-fn should_swap_strings(values: &[String], sorted_index: usize) -> bool {
-    if sorted_index == 0 {
-        return false;
-    }
-    let Some(current) = values.get(sorted_index) else {
-        return false;
-    };
-    let Some(previous) = values.get(sorted_index - 1) else {
-        return false;
-    };
-    string_cmp(current, previous) == std::cmp::Ordering::Less
+fn sort_strings(values: &mut [String]) {
+    insertion_sort_by(values, |a, b| string_cmp(a, b));
 }
 
 #[cfg(not(kani))]
@@ -308,29 +309,7 @@ pub(super) fn find_duplicates(
 
 #[cfg(not(kani))]
 fn sort_paths(paths: &mut [Utf8PathBuf]) {
-    let mut index = 1;
-    while index < paths.len() {
-        let mut sorted_index = index;
-        while should_swap_paths(paths, sorted_index) {
-            paths.swap(sorted_index, sorted_index - 1);
-            sorted_index -= 1;
-        }
-        index += 1;
-    }
-}
-
-#[cfg(not(kani))]
-fn should_swap_paths(paths: &[Utf8PathBuf], sorted_index: usize) -> bool {
-    if sorted_index == 0 {
-        return false;
-    }
-    let Some(current) = paths.get(sorted_index) else {
-        return false;
-    };
-    let Some(previous) = paths.get(sorted_index - 1) else {
-        return false;
-    };
-    path_cmp(current, previous) == std::cmp::Ordering::Less
+    insertion_sort_by(paths, path_cmp);
 }
 
 #[cfg(kani)]
