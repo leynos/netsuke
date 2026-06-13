@@ -397,6 +397,38 @@ fn target_entry_for_path<'targets>(
     None
 }
 
+/// Return the index of the lexicographically smallest node in `cycle[0..len]`.
+fn find_rotation_start(cycle: &[Utf8PathBuf], len: usize) -> usize {
+    let mut start = 0;
+    let mut index = 1;
+    while index < len {
+        if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
+            && path_cmp(candidate.as_path(), current.as_path()) == Ordering::Less
+        {
+            start = index;
+        }
+        index += 1;
+    }
+    start
+}
+
+/// Build a canonical, closed cycle by rotating `cycle` so that the node at
+/// `start` appears first, then appending that node again to close the cycle.
+fn rotate_cycle(cycle: &[Utf8PathBuf], start: usize, len: usize) -> Vec<Utf8PathBuf> {
+    let mut canonical = Vec::with_capacity(len + 1);
+    let mut offset = 0;
+    while offset < len {
+        if let Some(path) = cycle.get(rotate_index(start, offset, len)) {
+            canonical.push(path.clone());
+        }
+        offset += 1;
+    }
+    if let Some(first) = canonical.first().cloned() {
+        canonical.push(first);
+    }
+    canonical
+}
+
 /// Rotate `cycle` so that the lexicographically smallest node appears
 /// first, then re-close it by appending the first node.
 ///
@@ -408,30 +440,9 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
         "cycle detection should yield at least two nodes",
     );
     let len = cycle.len() - 1;
-    let mut start = 0;
-    let mut index = 1;
-    while index < len {
-        if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
-            && path_cmp(candidate.as_path(), current.as_path()) == Ordering::Less
-        {
-            start = index;
-        }
-        index += 1;
-    }
+    let start = find_rotation_start(&cycle, len);
     cycle.pop();
-    let mut canonical = Vec::new();
-    let mut offset = 0;
-    while offset < len {
-        let source_index = rotate_index(start, offset, len);
-        if let Some(path) = cycle.get(source_index) {
-            canonical.push(path.clone());
-        }
-        offset += 1;
-    }
-    if let Some(first) = canonical.first().cloned() {
-        canonical.push(first);
-    }
-    canonical
+    rotate_cycle(&cycle, start, len)
 }
 
 const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
