@@ -206,6 +206,47 @@ impl<'targets> CycleDetector<'targets> {
         )
     }
 
+    /// Build the [`CycleVisitResult`] for a node that is currently being
+    /// visited — i.e. a back-edge has been discovered.
+    ///
+    /// In `Path` mode the cycle is extracted from the DFS stack and
+    /// canonicalized.  In `Presence` mode (Kani only) a lightweight sentinel
+    /// is returned without allocating a path vector.
+    fn back_edge_result(&self, node: &'targets Utf8Path, search: CycleSearch) -> CycleVisitResult {
+        match search {
+            #[cfg(kani)]
+            CycleSearch::Presence => CycleVisitResult::Present,
+            CycleSearch::Path => CycleVisitResult::Path(canonicalize_cycle(
+                self.cycle_from_stack(self.stack_index(node), node),
+            )),
+        }
+    }
+
+    /// Visit the `inputs` and `implicit_deps` of a known edge in order,
+    /// returning early on the first detected cycle.
+    ///
+    /// `inputs` and `implicit_deps` must be slices borrowed from the
+    /// `'targets`-lifetime target map so that subsequent mutable borrows of
+    /// `self` inside `visit_dependencies` are permitted by the borrow
+    /// checker.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the separate borrowed slices document and preserve the target-map lifetime contract"
+    )]
+    fn visit_known_edge(
+        &mut self,
+        node: &'targets Utf8Path,
+        inputs: &'targets [Utf8PathBuf],
+        implicit_deps: &'targets [Utf8PathBuf],
+        search: CycleSearch,
+    ) -> CycleVisitResult {
+        let cycle = self.visit_dependencies(node, inputs, search);
+        if cycle.is_cycle() {
+            return cycle;
+        }
+        self.visit_dependencies(node, implicit_deps, search)
+    }
+
     /// Visit `node` depth-first.
     ///
     /// Returns a cycle result if a back-edge to an in-progress node is
@@ -213,15 +254,7 @@ impl<'targets> CycleDetector<'targets> {
     fn visit(&mut self, node: &'targets Utf8Path, search: CycleSearch) -> CycleVisitResult {
         match state_for_path(&self.states, node) {
             Some(VisitState::Visited) => return CycleVisitResult::None,
-            Some(VisitState::Visiting) => {
-                return match search {
-                    #[cfg(kani)]
-                    CycleSearch::Presence => CycleVisitResult::Present,
-                    CycleSearch::Path => CycleVisitResult::Path(canonicalize_cycle(
-                        self.cycle_from_stack(self.stack_index(node), node),
-                    )),
-                };
-            }
+            Some(VisitState::Visiting) => return self.back_edge_result(node, search),
             None => {
                 self.states.insert(node, VisitState::Visiting);
             }
@@ -231,13 +264,12 @@ impl<'targets> CycleDetector<'targets> {
             self.stack.push(node);
         }
 
-        let mut cycle = CycleVisitResult::None;
-        if let Some((_, edge)) = target_entry_for_path(self.targets, node) {
-            cycle = self.visit_dependencies(node, &edge.inputs, search);
-            if !cycle.is_cycle() {
-                cycle = self.visit_dependencies(node, &edge.implicit_deps, search);
+        let cycle = match target_entry_for_path(self.targets, node) {
+            Some((_, edge)) => {
+                self.visit_known_edge(node, &edge.inputs, &edge.implicit_deps, search)
             }
-        }
+            None => CycleVisitResult::None,
+        };
 
         if matches!(search, CycleSearch::Path) {
             self.stack.pop();
