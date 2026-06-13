@@ -1268,3 +1268,16 @@ The references section should include:
   CodeRabbit review was requested after those gates, but the agent invocation
   stalled at `preparing_sandbox` and emitted no findings before the local
   process was stopped.
+- 2026-06-13: Added compile-time cfg coverage for the Kani wiring. The
+  `trybuild` pass case verifies the repository policy sources, while the
+  Rust-based UI harness invokes `rustc --check-cfg=cfg(kani) -Dunexpected-cfgs`
+  against one compile-pass `cfg(kani)` snippet and one compile-fail unknown-cfg
+  snippet. This avoids mutating `RUSTFLAGS` inside tests and keeps the
+  `unexpected_cfgs` contract executable under `make test`.
+- 2026-06-13: Validation after the cfg UI coverage passed `make check-fmt`,
+  `make lint`, `make test`, `make markdownlint`, `make nixie`, and
+  `make kani-full`. Kani reported six successfully verified harnesses and zero
+  failures.
+- 2026-06-13: CodeRabbit review was requested after the deterministic gates,
+  but the agent invocation again stalled at `preparing_sandbox` and emitted no
+  findings before the local process was stopped.

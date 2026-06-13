@@ -3,6 +3,7 @@
 use super::*;
 use camino::Utf8PathBuf;
 
+/// Prove duplicate paths in one target are reported before edge insertion.
 #[kani::proof]
 #[kani::unwind(12)]
 fn duplicate_output_always_rejected() {
@@ -18,6 +19,7 @@ fn duplicate_output_always_rejected() {
     }
 }
 
+/// Prove an empty rule selector reaches the empty-rule error path.
 #[kani::proof]
 #[kani::unwind(6)]
 fn empty_rule_shape_is_rejected() {
@@ -31,6 +33,7 @@ fn empty_rule_shape_is_rejected() {
     }
 }
 
+/// Prove a multi-rule selector reports every provided rule name.
 #[kani::proof]
 #[kani::unwind(8)]
 fn multiple_rule_shape_is_rejected() {
@@ -50,6 +53,7 @@ fn multiple_rule_shape_is_rejected() {
     }
 }
 
+/// Prove an unknown single rule selector preserves target and rule names.
 #[kani::proof]
 #[kani::unwind(6)]
 fn missing_rule_shape_is_rejected() {

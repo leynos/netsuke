@@ -194,6 +194,7 @@ fn register_action(
     Ok(hash)
 }
 
+/// Report duplicate outputs already known or repeated within one target.
 fn duplicate_output_error(
     outputs: &[Utf8PathBuf],
     targets: &IrHashMap<Utf8PathBuf, BuildEdge>,
@@ -201,6 +202,7 @@ fn duplicate_output_error(
     find_duplicates(outputs, targets).map(duplicate_output_error_from_paths)
 }
 
+/// Register one edge under each explicit output, moving the final edge.
 fn insert_edge_for_outputs(targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>, edge: BuildEdge) {
     if let Some((last_output, other_outputs)) = edge.explicit_outputs.split_last() {
         for output in other_outputs {
@@ -290,6 +292,7 @@ fn extract_single(sol: &StringOrList) -> Option<&str> {
     }
 }
 
+/// Resolve a target rule selector into its single rule template.
 fn resolve_rule(
     rule: &StringOrList,
     rule_map: &IrHashMap<String, Arc<Rule>>,
@@ -357,6 +360,7 @@ fn rule_not_found_message(target_name: &str, rule_name: &str) -> localization::L
     add_arg(with_target, "rule", rule_name)
 }
 
+/// Find output paths that would collide with existing or sibling outputs.
 fn find_duplicates(
     outputs: &[Utf8PathBuf],
     targets: &IrHashMap<Utf8PathBuf, BuildEdge>,

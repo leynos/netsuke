@@ -11,6 +11,7 @@ struct BoundedCycleReport {
     missing_count: usize,
 }
 
+/// Prove a self-dependency reports a cycle and no missing dependency.
 #[kani::proof]
 #[kani::unwind(8)]
 fn self_dependency_reports_cycle() {
@@ -26,6 +27,7 @@ fn self_dependency_reports_cycle() {
     );
 }
 
+/// Prove an absent dependency is missing, not cyclic.
 #[kani::proof]
 #[kani::unwind(8)]
 fn missing_dependency_does_not_report_cycle() {
@@ -41,6 +43,7 @@ fn missing_dependency_does_not_report_cycle() {
     );
 }
 
+/// Analyse a bounded string graph for the cycle properties Kani checks.
 fn analyse_bounded(edges: &[BoundedEdge]) -> BoundedCycleReport {
     let mut has_cycle = false;
     let mut missing_count = 0;
@@ -61,6 +64,7 @@ fn analyse_bounded(edges: &[BoundedEdge]) -> BoundedCycleReport {
     }
 }
 
+/// Return whether the bounded graph contains `output` as a target.
 fn has_output(edges: &[BoundedEdge], output: &str) -> bool {
     edges.iter().any(|edge| edge.output == output)
 }

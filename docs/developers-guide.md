@@ -187,6 +187,26 @@ proof genuinely needs a wider helper. This keeps production modules below the
 | `self_dependency_reports_cycle`            | `src/ir/cycle_verification.rs`         | A self-dependency in the bounded cycle model reports a cycle and no missing dependencies.             | `#[kani::unwind(8)]`  | Uses a bounded string-level model because the production path through `Utf8PathBuf`, map traversal, and stack rotation exceeds the local Kani budget.           |
 | `missing_dependency_does_not_report_cycle` | `src/ir/cycle_verification.rs`         | A missing dependency in the bounded cycle model is not reported as a cycle and is counted as missing. | `#[kani::unwind(8)]`  | Complements production unit and property tests that exercise `cycle::analyse` with real `BuildEdge` values.                                                     |
 
+
+### Kani cfg compile-time checks
+
+`tests/kani_cfg_ui_tests.rs` keeps the Cargo-side `cfg(kani)` contract covered
+outside the Kani runner. The trybuild case `tests/ui/cfg_kani_policy_pass.rs`
+checks that `Cargo.toml` still declares `[package.metadata.kani.flags]`,
+`unexpected_cfgs`, and `check-cfg = ["cfg(kani)"]`, and that the Makefile still
+provides the `kani-ir` alias.
+
+The same test module invokes `rustc` directly for two small UI snippets:
+
+- `tests/ui/cfg_kani_compile_pass.rs` must compile with
+  `--check-cfg=cfg(kani) -Dunexpected-cfgs`.
+- `tests/ui/unknown_cfg_compile_fail.rs` must fail under the same flags and
+  name the rejected cfg in stderr.
+
+Do not mutate `RUSTFLAGS` in these tests. Trybuild removes ordinary `RUSTFLAGS`
+when it creates its temporary project, and repository tests avoid global
+environment mutation unless a guarded helper is already in place.
+
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is
 optional, proof-kernel-only, and not installed or run by default; any first
