@@ -123,14 +123,7 @@ impl<K, V> IrHashMap<K, V> {
 
     /// Return the key at `index`, if present.
     pub fn key_at(&self, index: usize) -> Option<&K> {
-        if index < self.len {
-            match &self.entries[index] {
-                Some((key, _)) => Some(key),
-                None => None,
-            }
-        } else {
-            None
-        }
+        self.entry_at(index).map(|(key, _)| key)
     }
 
     /// Return the key-value pair at `index`, if present.
