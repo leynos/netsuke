@@ -36,12 +36,26 @@ impl ThemePreference {
     ///
     /// Returns `Ok(ThemePreference)` on success, or `Err(Self::VALID_OPTIONS)`
     /// on failure so callers can construct localised error messages using the
-    /// same canonical list of valid options.
+    /// same canonical list of valid options. Matching is case-insensitive and
+    /// ignores surrounding whitespace.
     ///
     /// # Errors
     ///
     /// Returns `Err(Self::VALID_OPTIONS)` if the input string does not match
     /// any valid theme option (case-insensitive).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::theme::ThemePreference;
+    ///
+    /// assert_eq!(ThemePreference::parse_raw("  UNICODE "), Ok(ThemePreference::Unicode));
+    /// assert_eq!(ThemePreference::parse_raw("ascii"), Ok(ThemePreference::Ascii));
+    /// assert_eq!(
+    ///     ThemePreference::parse_raw("solarized"),
+    ///     Err(ThemePreference::VALID_OPTIONS),
+    /// );
+    /// ```
     pub fn parse_raw(s: &str) -> Result<Self, &'static [&'static str]> {
         let trimmed = s.trim().to_ascii_lowercase();
         match trimmed.as_str() {
