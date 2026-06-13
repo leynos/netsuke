@@ -15,6 +15,7 @@ use std::ffi::OsString;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{Registry, fmt, reload};
@@ -42,6 +43,15 @@ mod startup_tracing;
 use config_resolution::{merge_cli_or_exit, resolve_json_mode_or_exit};
 use startup_tracing::StartupWriter;
 
+/// Counter recording the outcome of each configuration-load attempt.
+///
+/// Labelled by `outcome` (`success` or `failure`) so operators can track the
+/// startup configuration-load failure rate.
+const CONFIG_LOAD_TOTAL: &str = "netsuke_config_load_total";
+
+/// Histogram recording the wall-clock duration of the configuration-load
+/// phase (diagnostic-mode resolution through layer merge) in seconds.
+const CONFIG_LOAD_DURATION_SECONDS: &str = "netsuke_config_load_duration_seconds";
 /// Send buffered startup diagnostics where `mode` says they belong.
 ///
 /// Human mode releases them to stderr; JSON mode drops them, so the diagnostic
@@ -93,10 +103,12 @@ fn run_with_args(
         return finish_run(run_cli(&parsed_cli, system_locale, startup_mode), verbose);
     }
 
+    let config_load_started = Instant::now();
     let (mode, discovered_layers) =
         match resolve_json_mode_or_exit(&parsed_cli, &matches, startup_mode) {
             Ok(resolved) => resolved,
             Err(code) => {
+                record_config_load_metrics(config_load_started.elapsed(), false);
                 settle_startup_diagnostics(&startup_writer, startup_mode);
                 return finish_run(code, verbose);
             }
@@ -106,8 +118,12 @@ fn run_with_args(
     settle_startup_diagnostics(&startup_writer, mode);
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode, discovered_layers) {
         Ok(merged) => merged,
-        Err(code) => return finish_run(code, verbose),
+        Err(code) => {
+            record_config_load_metrics(config_load_started.elapsed(), false);
+            return finish_run(code, verbose);
+        }
     };
+    record_config_load_metrics(config_load_started.elapsed(), true);
     let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
     finish_run(
@@ -246,6 +262,15 @@ fn parse_cli_or_exit(
     }
 }
 
+/// Emit the configuration-load metrics for one startup attempt.
+///
+/// Recording goes through the `metrics` façade, so it is a no-op unless the
+/// operator has installed a recorder.
+fn record_config_load_metrics(elapsed: Duration, succeeded: bool) {
+    let outcome = if succeeded { "success" } else { "failure" };
+    metrics::histogram!(CONFIG_LOAD_DURATION_SECONDS).record(elapsed.as_secs_f64());
+    metrics::counter!(CONFIG_LOAD_TOTAL, "outcome" => outcome).increment(1);
+}
 fn configure_runtime(
     merged_cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,
