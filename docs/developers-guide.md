@@ -626,6 +626,38 @@ Versioning and compatibility rules:
   present because the same layer object also participates in full config
   merging.
 
+### Configuration-load observability
+
+Startup configuration loading is instrumented through the
+[`metrics`](https://docs.rs/metrics) façade so operators can detect failure
+trends and startup-latency regressions in production. The instrumentation
+lives in `src/main.rs` around `resolve_configuration`, which spans
+diagnostic-mode resolution (`cli::resolve_merged_diag_json`) through the full
+layer merge (`cli::merge_with_config`).
+
+Because `metrics` is a façade, the macros are no-ops unless the operator
+installs a recorder (for example a Prometheus or OpenTelemetry exporter) at
+process start. Netsuke does not bundle a recorder; it only emits the
+measurements.
+
+Instruments emitted by `record_config_load_metrics`:
+
+- `netsuke_config_load_total` — a counter incremented once per startup
+  configuration-load attempt. It carries a single label `outcome` with values
+  `success` or `failure`, where `failure` corresponds to a `merge_with_config`
+  error. Use it to compute the configuration-load failure rate.
+- `netsuke_config_load_duration_seconds` — a histogram recording the
+  wall-clock duration of the configuration-load phase in seconds (one sample
+  per startup). Suggested operator bucket boundaries: `0.001, 0.005, 0.01,
+  0.05, 0.1, 0.5, 1.0` seconds; configuration loading is expected to complete
+  in single-digit milliseconds, so buckets above one second exist only to
+  catch pathological filesystem or environment stalls.
+
+Naming convention: metric names use the `netsuke_` prefix and a `snake_case`
+unit suffix (`_total` for counters, `_seconds` for duration histograms),
+matching Prometheus conventions. Label values are bounded constant strings
+(`success`/`failure`) to keep cardinality fixed.
+
 ## BDD command helpers and environment handling
 
 The BDD step module `tests/bdd/steps/manifest_command.rs` provides three
