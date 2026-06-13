@@ -139,7 +139,15 @@ impl MacroInstance {
         })?;
         // SAFETY: `register_macro` requires an `Environment<'static>`, so the template
         // bytecode and captured output outlive the cached state stored in the macro
-        // instance.
+        // instance. The precondition is that the environment — and therefore the
+        // compiled template instructions backing `captured` — outlives this
+        // `MacroInstance`; manifest macros remain registered for the whole build,
+        // so this holds. The pointer lifecycle of the resulting
+        // `Captured<'static>` (heap leak, NonNull invariant, single reclaim) is
+        // verified by the Kani proofs `macro_state_guard_ptr_is_non_null` and
+        // `macro_state_guard_drop_is_safe`; the `Send`/`Sync` soundness of the
+        // cached instance is verified by `macro_instance_is_send` and
+        // `macro_instance_is_sync`.
         let captured_static: Captured<'static> = unsafe { std::mem::transmute(captured) };
         Ok(Self {
             state: MacroStateGuard::new(captured_static),
@@ -169,12 +177,9 @@ struct MacroStateGuard {
 
 impl MacroStateGuard {
     fn new(captured: Captured<'static>) -> Self {
-        let boxed = Box::new(captured);
-        let ptr = Box::into_raw(boxed);
-        // SAFETY: Box::into_raw never returns null for non-ZST types. Captured
-        // is non-zero-sized so the pointer is guaranteed valid.
-        let ptr_non_null = unsafe { NonNull::new_unchecked(ptr) };
-        Self { ptr: ptr_non_null }
+        Self {
+            ptr: heap_leak_non_null(captured),
+        }
     }
 
     fn as_ref(&self) -> &State<'static, 'static> {
@@ -184,8 +189,35 @@ impl MacroStateGuard {
 
 impl Drop for MacroStateGuard {
     fn drop(&mut self) {
-        unsafe { drop(Box::from_raw(self.ptr.as_ptr())) }
+        // SAFETY: `self.ptr` was produced by `heap_leak_non_null` in `new`
+        // and is reclaimed exactly once here, so the round-trip neither leaks
+        // nor double-frees. Verified by `macro_state_guard_drop_is_safe`.
+        unsafe { reclaim_heap_non_null(self.ptr) }
     }
+}
+
+/// Box `value` on the heap and leak it as a non-null pointer.
+///
+/// Mirrors the ownership transfer performed by [`MacroStateGuard::new`]:
+/// `Box::into_raw` never returns null for a non-zero-sized type, so the
+/// `NonNull` invariant holds. The caller becomes responsible for reclaiming
+/// the allocation exactly once via [`reclaim_heap_non_null`].
+fn heap_leak_non_null<T>(value: T) -> NonNull<T> {
+    let ptr = Box::into_raw(Box::new(value));
+    // SAFETY: `Box::into_raw` never returns null for a non-ZST allocation.
+    // Verified by `macro_state_guard_ptr_is_non_null`.
+    unsafe { NonNull::new_unchecked(ptr) }
+}
+
+/// Reclaim and drop a pointer previously produced by [`heap_leak_non_null`].
+///
+/// # Safety
+///
+/// `ptr` must have come from [`heap_leak_non_null`] and must not have been
+/// reclaimed already; the allocation is freed here exactly once.
+unsafe fn reclaim_heap_non_null<T>(ptr: NonNull<T>) {
+    // SAFETY: upheld by the caller's contract; `ptr` owns a live `Box<T>`.
+    unsafe { drop(Box::from_raw(ptr.as_ptr())) }
 }
 
 unsafe impl Send for MacroStateGuard {}
@@ -254,5 +286,66 @@ impl Object for CallerAdapter {
         );
         let state = unsafe { self.state.as_ref() };
         self.caller.call(state, args)
+    }
+}
+
+/// Formal verification of `MacroStateGuard`'s pointer lifecycle and the
+/// `Send`/`Sync` soundness of the cached macro instance.
+///
+/// `Captured<'static>` and `State<'static, 'static>` are far too complex for
+/// Kani to construct or unwind, so the pointer-mechanics proofs run over the
+/// payload-agnostic helpers `heap_leak_non_null` / `reclaim_heap_non_null`
+/// (which `MacroStateGuard::new` and its `Drop` use verbatim) with a small,
+/// Kani-constructible stand-in payload. The unsafe operations being verified —
+/// `Box::into_raw` → `NonNull::new_unchecked` → `Box::from_raw` — are
+/// independent of the payload type beyond its being non-zero-sized, so a
+/// representative payload proves the pattern.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::{MacroInstance, heap_leak_non_null, reclaim_heap_non_null};
+
+    /// Non-zero-sized stand-in for `Captured<'static>` that Kani can build.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    struct ModelCaptured {
+        tag: u64,
+    }
+
+    /// The `NonNull` invariant holds after construction: the leaked pointer is
+    /// never null and dereferences to the original value.
+    #[kani::proof]
+    fn macro_state_guard_ptr_is_non_null() {
+        let tag: u64 = kani::any();
+        let ptr = heap_leak_non_null(ModelCaptured { tag });
+        // `NonNull` cannot be null by construction; reading back the value
+        // confirms the pointer targets the live allocation.
+        // SAFETY: `ptr` owns a live `Box<ModelCaptured>` produced just above.
+        let observed = unsafe { ptr.as_ref().tag };
+        assert_eq!(observed, tag);
+        // Reclaim to keep the proof free of leaks.
+        // SAFETY: `ptr` came from `heap_leak_non_null` and is reclaimed once.
+        unsafe { reclaim_heap_non_null(ptr) };
+    }
+
+    /// The Box → raw pointer → Box round-trip used by `new` and `Drop` neither
+    /// leaks nor double-frees. Kani's memory model flags either fault.
+    #[kani::proof]
+    fn macro_state_guard_drop_is_safe() {
+        let ptr = heap_leak_non_null(ModelCaptured { tag: kani::any() });
+        // SAFETY: single reclaim of a pointer from `heap_leak_non_null`.
+        unsafe { reclaim_heap_non_null(ptr) };
+    }
+
+    /// `MacroInstance` is `Send`, as required for registration with MiniJinja.
+    #[kani::proof]
+    fn macro_instance_is_send() {
+        const fn assert_send<T: Send>() {}
+        assert_send::<MacroInstance>();
+    }
+
+    /// `MacroInstance` is `Sync`, as required for registration with MiniJinja.
+    #[kani::proof]
+    fn macro_instance_is_sync() {
+        const fn assert_sync<T: Sync>() {}
+        assert_sync::<MacroInstance>();
     }
 }

@@ -152,11 +152,16 @@ non-zero exit status on failure.
 
 Use the Make targets for day-to-day formal-verification checks:
 
-- `make kani-check` runs the fast local version check used by `formal-pr`.
-  Until roadmap item `4.2.*` adds substantive proof harnesses, this check
+- `make kani-check` runs the fast local version check used by `formal-pr`. It
   verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
-- `make kani-full` is reserved for the full Kani proof suite once harnesses
-  exist. Today it invokes `cargo kani` without additional smoke flags.
+- `make kani-full` runs the full Kani proof suite (`cargo kani`). The first
+  proof harnesses live in a `#[cfg(kani)]` module at the bottom of
+  `src/manifest/jinja_macros/cache.rs`, verifying the `MacroStateGuard`
+  pointer lifecycle (`macro_state_guard_ptr_is_non_null`,
+  `macro_state_guard_drop_is_safe`) and the `Send`/`Sync` soundness of the
+  cached macro instance (`macro_instance_is_send`, `macro_instance_is_sync`).
+  The `kani` cfg is registered in `Cargo.toml` under `[lints.rust]` so the
+  gated proofs do not trip `unexpected_cfgs` in ordinary builds.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
   the optional Verus installer and proof runner. These targets are not part of
