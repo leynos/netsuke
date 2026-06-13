@@ -88,11 +88,10 @@ pub(crate) fn register(env: &mut Environment<'_>, config: WhichConfig) {
     }
 }
 
-fn resolve_with(
-    resolver: &WhichResolver,
-    command: &Value,
+fn resolve_command_name_and_options<'v>(
+    command: &'v Value,
     kwargs: &Kwargs,
-) -> Result<Value, Error> {
+) -> Result<(&'v str, WhichOptions), Error> {
     let name = command
         .as_str()
         .map(str::trim)
@@ -103,6 +102,15 @@ fn resolve_with(
             )))
         })?;
     let options = WhichOptions::from_kwargs(kwargs).map_err(Error::from)?;
+    Ok((name, options))
+}
+
+fn resolve_with(
+    resolver: &WhichResolver,
+    command: &Value,
+    kwargs: &Kwargs,
+) -> Result<Value, Error> {
+    let (name, options) = resolve_command_name_and_options(command, kwargs)?;
     let matches = resolver.resolve(name, &options).map_err(Error::from)?;
     Ok(render_value(&matches, &options))
 }
@@ -112,16 +120,7 @@ fn command_available_with(
     command: &Value,
     kwargs: &Kwargs,
 ) -> Result<Value, Error> {
-    let name = command
-        .as_str()
-        .map(str::trim)
-        .filter(|candidate| !candidate.is_empty())
-        .ok_or_else(|| {
-            Error::from(ResolveError::args(localization::message(
-                keys::STDLIB_WHICH_COMMAND_EMPTY,
-            )))
-        })?;
-    let options = WhichOptions::from_kwargs(kwargs).map_err(Error::from)?;
+    let (name, options) = resolve_command_name_and_options(command, kwargs)?;
     kwargs.assert_all_used()?;
     is_command_available(resolver.resolve(name, &options))
         .map(Value::from)
