@@ -18,6 +18,17 @@ pub fn is_stdout_path(path: &Path) -> bool {
     path.as_os_str() == "-"
 }
 
+/// Write `content` to a freshly created temporary `*.ninja` file.
+///
+/// The returned [`NamedTempFile`] keeps the file alive; it is deleted when the
+/// guard is dropped, so callers must retain it for as long as the build file
+/// is needed. The contents are flushed and `fsync`ed before returning so a
+/// spawned `ninja` reads a complete file.
+///
+/// # Errors
+///
+/// Returns an error if the temporary file cannot be created, written, flushed,
+/// or synced to disk.
 pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile> {
     let mut tmp = Builder::new()
         .prefix("netsuke.")
@@ -40,6 +51,16 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
     Ok(tmp)
 }
 
+/// Write `content` to `path`, relative to the capability-scoped `dir`.
+///
+/// Any missing parent directories under `dir` are created first. The file is
+/// flushed and `fsync`ed before returning. Using a [`cap_std`](cap_fs) handle
+/// confines the write to the directory tree rooted at `dir`.
+///
+/// # Errors
+///
+/// Returns an error if a parent directory cannot be created, or if the file
+/// cannot be created, written, flushed, or synced.
 pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -> AnyResult<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_str().is_empty()) {
         dir.create_dir_all(parent.as_str()).with_context(|| {
@@ -91,11 +112,31 @@ fn derive_dir_and_relative(path: &Utf8Path) -> AnyResult<(cap_fs::Dir, Utf8PathB
     Ok((dir, relative))
 }
 
+/// Write generated Ninja `content` to `path`.
+///
+/// Thin wrapper over [`write_text_file`] that unwraps the [`NinjaContent`]
+/// newtype.
+///
+/// # Errors
+///
+/// Returns an error if `path` is not valid UTF-8, if no existing ancestor
+/// directory can be opened, or if the write fails.
 pub fn write_ninja_file(path: &Path, content: &NinjaContent) -> AnyResult<()> {
     write_text_file(path, content.as_str())?;
     Ok(())
 }
 
+/// Write `content` to `path`, resolving it against a capability-scoped root.
+///
+/// The path is split into the deepest existing ancestor directory (opened as a
+/// [`cap_std`](cap_fs) handle) and the remaining relative path, so the write is
+/// confined to that directory tree. Relative paths resolve against the current
+/// working directory.
+///
+/// # Errors
+///
+/// Returns an error if `path` is not valid UTF-8, if no existing ancestor
+/// directory can be opened, or if [`write_text_file_utf8`] fails.
 pub fn write_text_file(path: &Path, content: &str) -> AnyResult<()> {
     let utf8_path = Utf8Path::from_path(path).ok_or_else(|| {
         anyhow!(
@@ -130,10 +171,30 @@ fn flush_ignoring_broken_pipe(writer: &mut impl Write) -> io::Result<()> {
     }
 }
 
+/// Write generated Ninja `content` to standard output.
+///
+/// Thin wrapper over [`write_text_stdout`] that unwraps the [`NinjaContent`]
+/// newtype, used for the `-` stdout sentinel.
+///
+/// # Errors
+///
+/// Returns an error if writing to or flushing standard output fails for a
+/// reason other than a broken pipe (a closed downstream reader is treated as
+/// success).
 pub fn write_ninja_stdout(content: &NinjaContent) -> AnyResult<()> {
     write_text_stdout(content.as_str())
 }
 
+/// Write `content` to standard output, tolerating a closed downstream pipe.
+///
+/// A `BrokenPipe` error (for example when piping into `head`) is treated as
+/// success so the runner exits cleanly rather than reporting spurious I/O
+/// failure.
+///
+/// # Errors
+///
+/// Returns an error if writing to or flushing standard output fails for any
+/// reason other than a broken pipe.
 pub fn write_text_stdout(content: &str) -> AnyResult<()> {
     let mut stdout = io::stdout().lock();
     write_all_ignoring_broken_pipe(&mut stdout, content.as_bytes())
