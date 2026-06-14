@@ -638,8 +638,9 @@ explicit file. Netsuke honours these file-selection inputs in precedence order:
 - Automatic discovery
 
 When one of the explicit selectors is set, Netsuke loads only that file and
-skips automatic discovery. Otherwise, Netsuke searches for configuration in
-three scopes:
+skips automatic discovery. If that file is missing, cannot be loaded, or cannot
+be parsed, Netsuke returns an error and stops, without falling back to
+discovery. Otherwise, Netsuke searches for configuration in three scopes:
 
 - **Project scope** — `.netsuke.toml` in the current working directory
   (or the directory specified by `-C` / `--directory`).
