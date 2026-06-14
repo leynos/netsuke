@@ -2523,7 +2523,7 @@ localization keys against English and Spanish Fluent bundles.
 
 ```mermaid
 flowchart TD
-    A_Start[Start build.rs] --> B_ReadKeys
+    A_Start["Start build.rs"] --> B_ReadKeys
     B_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> C_ReadEn
     C_ReadEn["extract_ftl_keys<br/>from locales/en-US/messages.ftl"] --> D_ReadEs
     D_ReadEs["extract_ftl_keys<br/>from locales/es-ES/messages.ftl"] --> E_Compare
@@ -2533,7 +2533,7 @@ flowchart TD
     F_CheckMissing{"Any missing<br/>keys?"} -->|No| G_Success["Audit passes<br/>continue build"]
     F_CheckMissing -->|Yes| H_Error["Emit error message<br/>with missing keys per locale<br/>and fail build"]
 
-    H_Error --> I_End[Build script returns Err]
+    H_Error --> I_End["Build script returns Err"]
     G_Success --> I_End
 ```
 

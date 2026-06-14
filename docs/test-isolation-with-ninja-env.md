@@ -1,9 +1,9 @@
 # Test isolation with `NETSUKE_NINJA`
 
 Netsuke resolves the Ninja binary from the `NETSUKE_NINJA` environment variable
-before falling back to `ninja` on `PATH`. Tests should override
-`NETSUKE_NINJA` instead of mutating `PATH` so they can execute in parallel
-without stepping on each other's environment.
+before falling back to `ninja` on `PATH`. Tests should override `NETSUKE_NINJA`
+instead of mutating `PATH` so they can execute in parallel without stepping on
+each other's environment.
 
 ## Why prefer `NETSUKE_NINJA`
 
