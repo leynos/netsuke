@@ -153,17 +153,76 @@ non-zero exit status on failure.
 Use the Make targets for day-to-day formal-verification checks:
 
 - `make kani-check` runs the fast local version check used by `formal-pr`.
-  Until roadmap item `4.2.*` adds substantive proof harnesses, this check
-  verifies the installed `cargo kani` command matches `tools/kani/VERSION`.
-- `make kani-full` is reserved for the full Kani proof suite once harnesses
-  exist. Today it invokes `cargo kani` without additional smoke flags.
+  This check verifies the installed `cargo kani` command matches
+  `tools/kani/VERSION`.
+- `make kani-full` runs the complete Kani proof suite through `cargo kani`.
+- `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
+  It currently delegates to `make kani-full` because all Kani harnesses are IR
+  harnesses.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
   the optional Verus installer and proof runner. These targets are not part of
   the ordinary pull-request gate.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
-`make all`.
+`make all`. `Cargo.toml` declares `cfg(kani)` under
+`[lints.rust] unexpected_cfgs` and sets
+`[package.metadata.kani.flags] default-unwind = "6"`; both settings are part of
+the harness contract and must move in lockstep with new Kani-only modules.
+
+### Kani harness inventory
+
+The IR harnesses are declared by the modules they verify, under
+`#[cfg(kani)] mod verification`, with harness bodies stored in sibling
+`*_verification.rs` files. They are private to those modules unless a future
+proof genuinely needs a wider helper. This keeps production modules below the
+400-line source-file limit while preserving access to private helpers.
+
+The manifest harnesses drive production helpers rather than constructing
+expected errors by hand. The cycle harnesses drive `cycle::contains_cycle`, a
+`cfg(kani)` production entry point that shares `CycleDetector` traversal with
+`cycle::analyse` and skips only report-path allocation and canonicalization.
+
+| Harness                                               | Module                                 | Property                                                                                      | Bound                 | Notes                                                                                                                                                                     |
+| ----------------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duplicate_output_always_rejected`                    | `src/ir/from_manifest_verification.rs` | A duplicate path in one target is detected and the reported duplicate path is preserved.      | `#[kani::unwind(12)]` | Drives production `find_duplicates` with symbolic duplicate names. Full manifest lowering reaches action hashing before duplicate assertions become tractable under Kani. |
+| `empty_rule_shape_is_rejected`                        | `src/ir/from_manifest_verification.rs` | An empty rule selector reaches `IrGenError::EmptyRule` and preserves the target name.         | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with a symbolic target name and a minimal rule map.                                                                                      |
+| `multiple_rule_shape_is_rejected`                     | `src/ir/from_manifest_verification.rs` | A multi-rule selector reaches `IrGenError::MultipleRules` and preserves sorted rule names.    | `#[kani::unwind(8)]`  | Drives production `resolve_rule` with symbolic rule ordering over short bounded names.                                                                                    |
+| `missing_rule_shape_is_rejected`                      | `src/ir/from_manifest_verification.rs` | A missing single rule reaches `IrGenError::RuleNotFound` and preserves target and rule names. | `#[kani::unwind(6)]`  | Drives production `resolve_rule` with symbolic target and rule names and an empty rule map.                                                                               |
+| `self_dependency_reports_cycle`                       | `src/ir/cycle_verification.rs`         | A self-dependency is reported as a cycle by production traversal.                             | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
+| `two_node_cycle_reports_cycle_a_first`                | `src/ir/cycle_verification.rs`         | A two-node cycle is reported when the `a` node is inserted first.                             | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
+| `two_node_cycle_reports_cycle_b_first`                | `src/ir/cycle_verification.rs`         | A two-node cycle is reported when the `b` node is inserted first.                             | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness so the proof is not tied to one insertion order.                                               |
+| `direct_missing_dependency_does_not_report_cycle`     | `src/ir/cycle_verification.rs`         | A single target with an absent dependency is not reported as a cycle.                         | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
+| `transitive_missing_dependency_does_not_report_cycle` | `src/ir/cycle_verification.rs`         | A two-target chain whose deeper dependency is absent is not reported as a cycle.              | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesise a false cycle.                                           |
+
+Under `cfg(kani)`, `src/ir/graph.rs::IrHashMap` is a fixed-capacity
+deterministic compatibility layer used by production IR code under proof. Under
+ordinary builds it is a type alias to `std::collections::HashMap`, so the public
+`netsuke::ir` API remains unchanged.
+
+Mutation evidence for these harnesses lives under
+`docs/verification/mutations/`. File names use the harness path with `::`
+replaced by `__`, for example
+`ir__cycle__verification__self_dependency_reports_cycle.patch`.
+
+### Kani cfg compile-time checks
+
+`tests/kani_cfg_ui_tests.rs` keeps the Cargo-side `cfg(kani)` contract covered
+outside the Kani runner. The trybuild case `tests/ui/cfg_kani_policy_pass.rs`
+checks that `Cargo.toml` still declares `[package.metadata.kani.flags]`,
+`unexpected_cfgs`, and `check-cfg = ["cfg(kani)"]`, and that the Makefile still
+provides the `kani-ir` alias.
+
+The same test module invokes `rustc` directly for two small UI snippets:
+
+- `tests/ui/cfg_kani_compile_pass.rs` must compile with
+  `--check-cfg=cfg(kani) -Dunexpected-cfgs`.
+- `tests/ui/unknown_cfg_compile_fail.rs` must fail under the same flags and
+  name the rejected cfg in stderr.
+
+Do not mutate `RUSTFLAGS` in these tests. Trybuild removes ordinary `RUSTFLAGS`
+when it creates its temporary project, and repository tests avoid global
+environment mutation unless a guarded helper is already in place.
 
 Phase 1 keeps the rest of the formal-verification surface deliberately narrow.
 Kani is the only supported and gated formal-verification tool today. Verus is

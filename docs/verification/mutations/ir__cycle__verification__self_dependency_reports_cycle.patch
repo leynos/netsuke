@@ -1,0 +1,12 @@
+diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
+--- a/src/ir/cycle.rs
++++ b/src/ir/cycle.rs
+@@ -216,7 +216,7 @@ impl<'targets> CycleDetector<'targets> {
+             Some(VisitState::Visiting) => {
+                 return match search {
+                     #[cfg(kani)]
+-                    CycleSearch::Presence => CycleVisitResult::Present,
++                    CycleSearch::Presence => CycleVisitResult::None,
+                     CycleSearch::Path => CycleVisitResult::Path(canonicalize_cycle(
+                         self.cycle_from_stack(self.stack_index(node), node),
+                     )),

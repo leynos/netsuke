@@ -6,19 +6,26 @@
 //! to [`super::cmd_interpolate`], and cycle/missing-dependency detection to
 //! [`super::cycle`].
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList};
-use crate::hasher::ActionHasher;
+use crate::ast::{NetsukeManifest, Recipe, Rule};
 use crate::localization::{self, keys};
 
 use super::{
-    cmd_interpolate::interpolate_command,
     cycle::{self, CycleDetectionReport},
-    graph::{Action, BuildEdge, BuildGraph, IrGenError},
+    graph::{Action, BuildEdge, BuildGraph, IrGenError, IrHashMap},
+};
+
+#[path = "from_manifest_support.rs"]
+mod support;
+
+#[cfg(kani)]
+use support::find_duplicates;
+use support::{
+    ActionBindings, duplicate_output_error, get_target_display_name, insert_edge_for_outputs,
+    register_action, resolve_rule, to_paths,
 };
 
 impl BuildGraph {
@@ -30,7 +37,7 @@ impl BuildGraph {
     /// are specified for a single target, or no rule is provided.
     pub fn from_manifest(manifest: &NetsukeManifest) -> Result<Self, IrGenError> {
         let mut graph = Self::default();
-        let mut rule_map: HashMap<String, Arc<Rule>> = HashMap::new();
+        let mut rule_map = IrHashMap::<String, Arc<Rule>>::default();
 
         Self::process_rules(manifest, &mut rule_map);
         Self::process_targets(manifest, &mut graph.actions, &mut graph.targets, &rule_map)?;
@@ -50,7 +57,7 @@ impl BuildGraph {
     /// permit targets to override recipe fields such as `command` or
     /// `description`, those target-level values take precedence over the rule's
     /// defaults.
-    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut HashMap<String, Arc<Rule>>) {
+    fn process_rules(manifest: &NetsukeManifest, rule_map: &mut IrHashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
         }
@@ -58,9 +65,9 @@ impl BuildGraph {
 
     fn process_targets(
         manifest: &NetsukeManifest,
-        actions: &mut HashMap<String, Action>,
-        targets: &mut HashMap<Utf8PathBuf, BuildEdge>,
-        rule_map: &HashMap<String, Arc<Rule>>,
+        actions: &mut IrHashMap<String, Action>,
+        targets: &mut IrHashMap<Utf8PathBuf, BuildEdge>,
+        rule_map: &IrHashMap<String, Arc<Rule>>,
     ) -> Result<(), IrGenError> {
         for target in manifest.actions.iter().chain(&manifest.targets) {
             let outputs = to_paths(&target.name);
@@ -71,9 +78,13 @@ impl BuildGraph {
                 implicit_deps_count = implicit_deps.len(),
                 "populating implicit dependencies for target",
             );
-            let target_name = get_target_display_name(&outputs);
+            if let Some(error) = duplicate_output_error(&outputs, targets) {
+                return Err(error);
+            }
+
             let action_id = match &target.recipe {
                 Recipe::Rule { rule } => {
+                    let target_name = get_target_display_name(&outputs);
                     let tmpl = resolve_rule(rule, rule_map, &target_name)?;
                     // Future schema versions may allow targets to override
                     // recipe or description fields. If so, those values will
@@ -81,7 +92,7 @@ impl BuildGraph {
                     register_action(
                         actions,
                         tmpl.recipe.clone(),
-                        tmpl.description.clone(),
+                        tmpl.description.as_deref(),
                         ActionBindings {
                             inputs: &inputs,
                             outputs: &outputs,
@@ -101,25 +112,16 @@ impl BuildGraph {
 
             let edge = BuildEdge {
                 action_id,
-                inputs: inputs.clone(),
+                inputs,
                 implicit_deps,
-                explicit_outputs: outputs.clone(),
+                explicit_outputs: outputs,
                 implicit_outputs: Vec::new(),
                 order_only_deps: to_paths(&target.order_only_deps),
                 phony: target.phony,
                 always: target.always,
             };
 
-            if let Some(dups) = find_duplicates(&outputs, targets) {
-                return Err(IrGenError::DuplicateOutput {
-                    message: localization::message(keys::IR_DUPLICATE_OUTPUTS)
-                        .with_arg("outputs", format!("{dups:?}")),
-                    outputs: dups,
-                });
-            }
-            for out in outputs {
-                targets.insert(out, edge.clone());
-            }
+            insert_edge_for_outputs(targets, edge);
         }
         Ok(())
     }
@@ -160,132 +162,6 @@ impl BuildGraph {
     }
 }
 
-#[derive(Clone, Copy)]
-struct ActionBindings<'a> {
-    inputs: &'a [Utf8PathBuf],
-    outputs: &'a [Utf8PathBuf],
-}
-
-fn register_action(
-    actions: &mut HashMap<String, Action>,
-    recipe: Recipe,
-    description: Option<String>,
-    bindings: ActionBindings<'_>,
-) -> Result<String, IrGenError> {
-    let resolved_recipe = match recipe {
-        Recipe::Command { command } => {
-            let interpolated = interpolate_command(&command, bindings.inputs, bindings.outputs)?;
-            Recipe::Command {
-                command: interpolated,
-            }
-        }
-        other => other,
-    };
-    let action = Action {
-        recipe: resolved_recipe,
-        description,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
-    let hash = ActionHasher::hash(&action).map_err(|err| IrGenError::ActionSerialisation {
-        message: localization::message(keys::IR_ACTION_SERIALISATION)
-            .with_arg("details", err.to_string()),
-        source: err,
-    })?;
-    actions.entry(hash.clone()).or_insert(action);
-    Ok(hash)
-}
-
-fn map_string_or_list<T, F>(sol: &StringOrList, f: F) -> Vec<T>
-where
-    F: Fn(&str) -> T,
-{
-    match sol {
-        StringOrList::Empty => Vec::new(),
-        StringOrList::String(s) => vec![f(s)],
-        StringOrList::List(v) => v.iter().map(|s| f(s)).collect(),
-    }
-}
-
-fn to_paths(sol: &StringOrList) -> Vec<Utf8PathBuf> {
-    map_string_or_list(sol, |s| Utf8PathBuf::from(s))
-}
-
-fn to_string_vec(sol: &StringOrList) -> Vec<String> {
-    map_string_or_list(sol, str::to_owned)
-}
-
-fn extract_single(sol: &StringOrList) -> Option<&str> {
-    match sol {
-        StringOrList::String(s) => Some(s),
-        StringOrList::List(v) if v.len() == 1 => v.first().map(String::as_str),
-        _ => None,
-    }
-}
-
-fn resolve_rule(
-    rule: &StringOrList,
-    rule_map: &HashMap<String, Arc<Rule>>,
-    target_name: &str,
-) -> Result<Arc<Rule>, IrGenError> {
-    extract_single(rule).map_or_else(
-        || {
-            let mut rules = to_string_vec(rule);
-            if rules.is_empty() {
-                Err(IrGenError::EmptyRule {
-                    target_name: target_name.to_owned(),
-                    message: localization::message(keys::IR_EMPTY_RULE)
-                        .with_arg("target", target_name),
-                })
-            } else {
-                rules.sort();
-                let rules_message = format!("{rules:?}");
-                Err(IrGenError::MultipleRules {
-                    target_name: target_name.to_owned(),
-                    rules,
-                    message: localization::message(keys::IR_MULTIPLE_RULES)
-                        .with_arg("target", target_name)
-                        .with_arg("rules", rules_message),
-                })
-            }
-        },
-        |name| {
-            rule_map
-                .get(name)
-                .cloned()
-                .ok_or_else(|| IrGenError::RuleNotFound {
-                    target_name: target_name.to_owned(),
-                    rule_name: name.to_owned(),
-                    message: localization::message(keys::IR_RULE_NOT_FOUND)
-                        .with_arg("target", target_name)
-                        .with_arg("rule", name),
-                })
-        },
-    )
-}
-
-fn find_duplicates(
-    outputs: &[Utf8PathBuf],
-    targets: &HashMap<Utf8PathBuf, BuildEdge>,
-) -> Option<Vec<String>> {
-    let mut dups: Vec<String> = outputs
-        .iter()
-        .filter(|o| targets.contains_key(*o))
-        .map(|p| p.as_str().to_owned())
-        .collect();
-    if dups.is_empty() {
-        None
-    } else {
-        dups.sort();
-        Some(dups)
-    }
-}
-
-fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
-    paths
-        .first()
-        .map(|p: &Utf8PathBuf| p.to_string())
-        .unwrap_or_default()
-}
+#[cfg(kani)]
+#[path = "from_manifest_verification.rs"]
+mod verification;

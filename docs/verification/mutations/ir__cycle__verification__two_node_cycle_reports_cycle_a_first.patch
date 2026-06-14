@@ -1,0 +1,13 @@
+diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
+index af663d5..6bfc100 100644
+--- a/src/ir/cycle.rs
++++ b/src/ir/cycle.rs
+@@ -334,6 +334,7 @@ impl<'targets> CycleDetector<'targets> {
+             return CycleVisitResult::None;
+         };
+
+-        self.visit(target, search)
++        let _ = (target, search);
++        CycleVisitResult::None
+     }
+ }

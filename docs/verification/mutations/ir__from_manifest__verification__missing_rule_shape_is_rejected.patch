@@ -1,0 +1,12 @@
+diff --git a/src/ir/from_manifest_support.rs b/src/ir/from_manifest_support.rs
+--- a/src/ir/from_manifest_support.rs
++++ b/src/ir/from_manifest_support.rs
+@@ -187,7 +187,7 @@ pub(super) fn resolve_rule(
+             rule_map
+                 .get(name)
+                 .cloned()
+-                .ok_or_else(|| rule_not_found_error(target_name, name))
++                .ok_or_else(|| rule_not_found_error(target_name, "m"))
+         },
+     )
+ }

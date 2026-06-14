@@ -10,18 +10,30 @@
 use crate::localization::LocalizedMessage;
 use camino::Utf8PathBuf;
 use serde::Serialize;
+#[cfg(not(kani))]
 use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::ast::Recipe;
 
+#[cfg(kani)]
+#[path = "graph_kani_map.rs"]
+mod kani_map;
+
+#[cfg(kani)]
+pub use kani_map::IrHashMap;
+
+/// Map used by the IR graph.
+#[cfg(not(kani))]
+pub type IrHashMap<K, V> = HashMap<K, V>;
+
 /// The complete, static build graph.
 #[derive(Debug, Default, Clone)]
 pub struct BuildGraph {
     /// All unique actions in the build keyed by a stable hash.
-    pub actions: HashMap<String, Action>,
+    pub actions: IrHashMap<String, Action>,
     /// All target files to be built keyed by output path.
-    pub targets: HashMap<Utf8PathBuf, BuildEdge>,
+    pub targets: IrHashMap<Utf8PathBuf, BuildEdge>,
     /// Targets built when no explicit target is requested.
     pub default_targets: Vec<Utf8PathBuf>,
 }

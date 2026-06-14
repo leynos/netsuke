@@ -32,10 +32,17 @@
 use semver::Version;
 use serde::{Deserialize, Serialize, de::Deserializer};
 use std::collections::HashMap;
+#[cfg(kani)]
+use std::{collections::hash_map::DefaultHasher, hash::BuildHasherDefault};
 
 /// Map type for `vars` blocks, preserving JSON values produced by the YAML
 /// parser.
+#[cfg(not(kani))]
 pub type Vars = HashMap<String, serde_json::Value>;
+
+/// Map type for `vars` blocks under Kani.
+#[cfg(kani)]
+pub type Vars = HashMap<String, serde_json::Value, BuildHasherDefault<DefaultHasher>>;
 
 fn deserialize_actions<'de, D>(deserializer: D) -> Result<Vec<Target>, D::Error>
 where

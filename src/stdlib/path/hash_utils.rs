@@ -102,7 +102,8 @@ fn encode_hex(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         if let Err(err) = write!(&mut out, "{byte:02x}") {
-            debug_assert!(false, "format hex byte failed: {err}");
+            let _ = err;
+            debug_assert!(false, "format hex byte failed");
         }
     }
     out

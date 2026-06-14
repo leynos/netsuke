@@ -1,0 +1,17 @@
+diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
+index af663d5..5546b84 100644
+--- a/src/ir/cycle.rs
++++ b/src/ir/cycle.rs
+@@ -331,7 +331,11 @@ impl<'targets> CycleDetector<'targets> {
+             if matches!(search, CycleSearch::Path) {
+                 self.record_missing_dependency(node, dep);
+             }
+-            return CycleVisitResult::None;
++            return match search {
++                #[cfg(kani)]
++                CycleSearch::Presence => CycleVisitResult::Present,
++                CycleSearch::Path => CycleVisitResult::None,
++            };
+         };
+
+         self.visit(target, search)

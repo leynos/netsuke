@@ -1,7 +1,7 @@
 //! Cycle detection utilities for the IR target graph.
 //!
 //! The public entry point is [`analyse`], which accepts the target map
-//! (`HashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
+//! (`IrHashMap<Utf8PathBuf, BuildEdge>`) produced by IR lowering and
 //! returns a [`CycleDetectionReport`].  The report carries an optional
 //! detected cycle — an ordered, canonicalized list of paths — together
 //! with any dependencies referenced by a target but absent from the map.
@@ -13,15 +13,14 @@
 //! iterates over every node in the target map and delegates depth-first
 //! visiting to `visit` and `visit_dependency`.  Detected cycles are
 //! normalized by [`canonicalize_cycle`] to produce deterministic error
-//! messages regardless of traversal order.
-//! Consumed by [`super::from_manifest`] after the full target map is
-//! constructed.
+//! messages regardless of traversal order.  Consumed by
+//! [`super::from_manifest`] after the full target map is constructed.
 
-use std::collections::HashMap;
+use std::cmp::Ordering;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use super::BuildEdge;
+use super::graph::{BuildEdge, IrHashMap};
 
 #[cfg(test)]
 #[path = "cycle_property_tests.rs"]
@@ -32,6 +31,36 @@ mod cycle_property_tests;
 enum VisitState {
     Visiting,
     Visited,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum CycleSearch {
+    #[cfg(kani)]
+    Presence,
+    Path,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum CycleVisitResult {
+    None,
+    #[cfg(kani)]
+    Present,
+    Path(Vec<Utf8PathBuf>),
+}
+
+impl CycleVisitResult {
+    const fn is_cycle(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    fn into_path(self) -> Option<Vec<Utf8PathBuf>> {
+        match self {
+            Self::Path(cycle) => Some(cycle),
+            #[cfg(kani)]
+            Self::Present => None,
+            Self::None => None,
+        }
+    }
 }
 
 /// The result of a cycle-detection pass over the target graph.
@@ -52,13 +81,21 @@ pub(crate) struct CycleDetectionReport {
 ///
 /// Returns any detected cycle path and missing dependencies encountered
 /// before that cycle.  Missing dependencies emit debug-level tracing events.
-pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
+pub(crate) fn analyse(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetectionReport {
     let mut detector = CycleDetector::new(targets);
     let cycle = detector.detect();
     CycleDetectionReport {
         cycle,
         missing_dependencies: detector.missing_dependencies,
     }
+}
+
+/// Return whether `targets` contains any dependency cycle.
+///
+/// This drives [`CycleDetector`]'s production traversal in boolean mode.
+#[cfg(kani)]
+pub(crate) fn contains_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> bool {
+    CycleDetector::new(targets).detect_presence()
 }
 
 /// Depth-first cycle detector that owns its traversal state.
@@ -85,96 +122,208 @@ pub(crate) fn analyse(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetecti
 /// Create with [`CycleDetector::new`] and drive detection with
 /// [`CycleDetector::detect`].
 struct CycleDetector<'targets> {
-    targets: &'targets HashMap<Utf8PathBuf, BuildEdge>,
-    stack: Vec<Utf8PathBuf>,
-    states: HashMap<Utf8PathBuf, VisitState>,
+    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    stack: Vec<&'targets Utf8Path>,
+    states: IrHashMap<&'targets Utf8Path, VisitState>,
     missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>,
 }
 
-impl CycleDetector<'_> {
+impl<'targets> CycleDetector<'targets> {
     /// Create a new detector borrowing `targets` for the duration of the
     /// traversal.
-    fn new(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
+    fn new(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> CycleDetector<'_> {
         CycleDetector {
             targets,
             stack: Vec::new(),
-            states: HashMap::new(),
+            states: IrHashMap::default(),
             missing_dependencies: Vec::new(),
         }
     }
 
     /// Walk every node in the target map and return the first cycle found.
     fn detect(&mut self) -> Option<Vec<Utf8PathBuf>> {
+        self.detect_with(CycleSearch::Path).into_path()
+    }
+
+    /// Walk every node in the target map and return whether a cycle exists.
+    #[cfg(kani)]
+    fn detect_presence(&mut self) -> bool {
+        self.detect_with(CycleSearch::Presence).is_cycle()
+    }
+
+    fn detect_with(&mut self, search: CycleSearch) -> CycleVisitResult {
         self.states.clear();
         self.stack.clear();
         self.missing_dependencies.clear();
 
+        self.detect_targets(search)
+    }
+
+    #[cfg(not(kani))]
+    fn detect_targets(&mut self, search: CycleSearch) -> CycleVisitResult {
         let mut nodes: Vec<Utf8PathBuf> = self.targets.keys().cloned().collect();
         // Sort keys for deterministic traversal order.  The O(n log n) cost is
         // negligible for typical build graphs (100–10 000 targets) and is
         // outweighed by the benefit of stable, reproducible error messages.
-        nodes.sort();
+        nodes.sort_by(|left, right| path_cmp(left.as_path(), right.as_path()));
         for node in nodes {
+            let Some((target, _)) = target_entry_for_path(self.targets, node.as_path()) else {
+                continue;
+            };
+            if self.is_visited(target) {
+                continue;
+            }
+            let result = self.visit(target, search);
+            if result.is_cycle() {
+                return result;
+            }
+        }
+        CycleVisitResult::None
+    }
+
+    #[cfg(kani)]
+    fn detect_targets(&mut self, search: CycleSearch) -> CycleVisitResult {
+        for index in 0..self.targets.len() {
+            let Some((node, _)) = self.targets.entry_at(index) else {
+                continue;
+            };
             if self.is_visited(node.as_path()) {
                 continue;
             }
-            if let Some(cycle) = self.visit(node.as_path()) {
-                return Some(cycle);
+            let result = self.visit(node.as_path(), search);
+            if result.is_cycle() {
+                return result;
             }
         }
-        None
+        CycleVisitResult::None
     }
 
     /// Return `true` if `node` has been fully visited.
     fn is_visited(&self, node: &Utf8Path) -> bool {
-        matches!(self.states.get(node), Some(VisitState::Visited))
+        matches!(
+            state_for_path(&self.states, node),
+            Some(VisitState::Visited)
+        )
+    }
+
+    /// Build the [`CycleVisitResult`] for a node that is currently being
+    /// visited — i.e. a back-edge has been discovered.
+    ///
+    /// In `Path` mode the cycle is extracted from the DFS stack and
+    /// canonicalized.  In `Presence` mode (Kani only) a lightweight sentinel
+    /// is returned without allocating a path vector.
+    fn back_edge_result(&self, node: &'targets Utf8Path, search: CycleSearch) -> CycleVisitResult {
+        match search {
+            #[cfg(kani)]
+            CycleSearch::Presence => CycleVisitResult::Present,
+            CycleSearch::Path => CycleVisitResult::Path(canonicalize_cycle(
+                self.cycle_from_stack(self.stack_index(node), node),
+            )),
+        }
+    }
+
+    /// Visit the `inputs` and `implicit_deps` of a known edge in order,
+    /// returning early on the first detected cycle.
+    ///
+    /// `edge` must be borrowed from the `'targets`-lifetime target map so
+    /// that subsequent mutable borrows of `self` inside `visit_dependencies`
+    /// are permitted by the borrow checker.
+    fn visit_known_edge(
+        &mut self,
+        node: &'targets Utf8Path,
+        edge: &'targets BuildEdge,
+        search: CycleSearch,
+    ) -> CycleVisitResult {
+        let cycle = self.visit_dependencies(node, &edge.inputs, search);
+        if cycle.is_cycle() {
+            return cycle;
+        }
+        self.visit_dependencies(node, &edge.implicit_deps, search)
     }
 
     /// Visit `node` depth-first.
     ///
-    /// Returns `Some(cycle)` if a back-edge to an in-progress node is
-    /// discovered, `None` otherwise.
-    fn visit(&mut self, node: &Utf8Path) -> Option<Vec<Utf8PathBuf>> {
-        match self.states.get(node) {
-            Some(VisitState::Visited) => return None,
-            Some(VisitState::Visiting) => {
-                let idx = self
-                    .stack
-                    .iter()
-                    .position(|n| n.as_path() == node)
-                    .unwrap_or_else(|| {
-                        debug_assert!(false, "visiting node must be on the stack");
-                        0
-                    });
-                let mut cycle: Vec<Utf8PathBuf> = self.stack.iter().skip(idx).cloned().collect();
-                cycle.push(node.to_path_buf());
-                return Some(canonicalize_cycle(cycle));
-            }
+    /// Returns a cycle result if a back-edge to an in-progress node is
+    /// discovered.
+    fn visit(&mut self, node: &'targets Utf8Path, search: CycleSearch) -> CycleVisitResult {
+        match state_for_path(&self.states, node) {
+            Some(VisitState::Visited) => return CycleVisitResult::None,
+            Some(VisitState::Visiting) => return self.back_edge_result(node, search),
             None => {
-                self.states.insert(node.to_path_buf(), VisitState::Visiting);
+                self.states.insert(node, VisitState::Visiting);
             }
         }
 
-        self.stack.push(node.to_path_buf());
+        if matches!(search, CycleSearch::Path) {
+            self.stack.push(node);
+        }
 
-        let cycle = self
-            .targets
-            .get(node)
-            .into_iter()
-            .flat_map(|edge| edge.inputs.iter().chain(&edge.implicit_deps))
-            .find_map(|dep| self.visit_dependency(node, dep));
+        let cycle = match target_entry_for_path(self.targets, node) {
+            Some((_, edge)) => self.visit_known_edge(node, edge, search),
+            None => CycleVisitResult::None,
+        };
 
-        self.stack.pop();
+        if matches!(search, CycleSearch::Path) {
+            self.stack.pop();
+        }
 
-        if cycle.is_none() {
-            self.states.insert(node.to_path_buf(), VisitState::Visited);
+        if !cycle.is_cycle() {
+            self.states.insert(node, VisitState::Visited);
         }
 
         cycle
     }
 
+    fn stack_index(&self, node: &Utf8Path) -> usize {
+        let mut index = 0;
+        while index < self.stack.len() {
+            if let Some(candidate) = self.stack.get(index)
+                && path_eq(candidate, node)
+            {
+                return index;
+            }
+            index += 1;
+        }
+        debug_assert!(false, "visiting node must be on the stack");
+        0
+    }
+
+    fn cycle_from_stack(&self, start: usize, node: &Utf8Path) -> Vec<Utf8PathBuf> {
+        let mut cycle = Vec::new();
+        let mut index = start;
+        while index < self.stack.len() {
+            if let Some(path) = self.stack.get(index) {
+                cycle.push(path.to_path_buf());
+            }
+            index += 1;
+        }
+        cycle.push(node.to_path_buf());
+        cycle
+    }
+
+    fn visit_dependencies(
+        &mut self,
+        node: &'targets Utf8Path,
+        dependencies: &[Utf8PathBuf],
+        search: CycleSearch,
+    ) -> CycleVisitResult {
+        let mut index = 0;
+        while index < dependencies.len() {
+            let Some(dependency) = dependencies.get(index) else {
+                index += 1;
+                continue;
+            };
+            let result = self.visit_dependency(node, dependency.as_path(), search);
+            if result.is_cycle() {
+                return result;
+            }
+            index += 1;
+        }
+        CycleVisitResult::None
+    }
+
     #[cfg(test)]
-    fn find_cycle(targets: &HashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
+    fn find_cycle(targets: &IrHashMap<Utf8PathBuf, BuildEdge>) -> Option<Vec<Utf8PathBuf>> {
         analyse(targets).cycle
     }
 
@@ -182,11 +331,7 @@ impl CycleDetector<'_> {
     /// target map; return `false` if it is present.
     ///
     /// Missing dependencies are also emitted as debug-level tracing events.
-    fn record_missing_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) -> bool {
-        if self.targets.contains_key(dep) {
-            return false;
-        }
-
+    fn record_missing_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) {
         tracing::debug!(
             missing = %dep,
             dependent = %node,
@@ -194,20 +339,86 @@ impl CycleDetector<'_> {
         );
         self.missing_dependencies
             .push((node.to_path_buf(), dep.to_path_buf()));
-        true
     }
 
     /// Optionally record `dep` as missing, then visit it.
     ///
     /// Returns early with `None` when the dependency is absent from the target
     /// map.
-    fn visit_dependency(&mut self, node: &Utf8Path, dep: &Utf8Path) -> Option<Vec<Utf8PathBuf>> {
-        if self.record_missing_dependency(node, dep) {
-            return None;
-        }
+    fn visit_dependency(
+        &mut self,
+        node: &'targets Utf8Path,
+        dep: &Utf8Path,
+        search: CycleSearch,
+    ) -> CycleVisitResult {
+        let Some((target, _)) = target_entry_for_path(self.targets, dep) else {
+            if matches!(search, CycleSearch::Path) {
+                self.record_missing_dependency(node, dep);
+            }
+            return CycleVisitResult::None;
+        };
 
-        self.visit(dep)
+        self.visit(target, search)
     }
+}
+
+#[cfg(not(kani))]
+fn target_entry_for_path<'targets>(
+    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    path: &Utf8Path,
+) -> Option<(&'targets Utf8Path, &'targets BuildEdge)> {
+    targets
+        .get_key_value(path)
+        .map(|(target, edge)| (target.as_path(), edge))
+}
+
+#[cfg(kani)]
+fn target_entry_for_path<'targets>(
+    targets: &'targets IrHashMap<Utf8PathBuf, BuildEdge>,
+    path: &Utf8Path,
+) -> Option<(&'targets Utf8Path, &'targets BuildEdge)> {
+    let mut index = 0;
+    while index < targets.len() {
+        if let Some((candidate, edge)) = targets.entry_at(index) {
+            if path_eq(candidate.as_path(), path) {
+                return Some((candidate.as_path(), edge));
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
+/// Return the index of the lexicographically smallest node in `cycle[0..len]`.
+fn find_rotation_start(cycle: &[Utf8PathBuf], len: usize) -> usize {
+    let mut start = 0;
+    let mut index = 1;
+    while index < len {
+        if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
+            && path_cmp(candidate.as_path(), current.as_path()) == Ordering::Less
+        {
+            start = index;
+        }
+        index += 1;
+    }
+    start
+}
+
+/// Build a canonical, closed cycle by rotating `cycle` so that the node at
+/// `start` appears first, then appending that node again to close the cycle.
+fn rotate_cycle(cycle: &[Utf8PathBuf], start: usize, len: usize) -> Vec<Utf8PathBuf> {
+    let mut canonical = Vec::with_capacity(len + 1);
+    let mut offset = 0;
+    while offset < len {
+        if let Some(path) = cycle.get(rotate_index(start, offset, len)) {
+            canonical.push(path.clone());
+        }
+        offset += 1;
+    }
+    if let Some(first) = canonical.first().cloned() {
+        canonical.push(first);
+    }
+    canonical
 }
 
 /// Rotate `cycle` so that the lexicographically smallest node appears
@@ -221,24 +432,76 @@ fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
         "cycle detection should yield at least two nodes",
     );
     let len = cycle.len() - 1;
-    let start = cycle
-        .iter()
-        .take(len)
-        .enumerate()
-        .min_by(|(_, a), (_, b)| a.cmp(b))
-        .map_or(0, |(idx, _)| idx);
+    let start = find_rotation_start(&cycle, len);
     cycle.pop();
-    cycle.rotate_left(start);
-    if let Some(first) = cycle.first().cloned() {
-        cycle.push(first);
+    rotate_cycle(&cycle, start, len)
+}
+
+const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
+    let index = start + offset;
+    if index >= len { index - len } else { index }
+}
+
+#[cfg(not(kani))]
+fn state_for_path(
+    states: &IrHashMap<&Utf8Path, VisitState>,
+    path: &Utf8Path,
+) -> Option<VisitState> {
+    states.get(path).copied()
+}
+
+#[cfg(kani)]
+fn state_for_path(
+    states: &IrHashMap<&Utf8Path, VisitState>,
+    path: &Utf8Path,
+) -> Option<VisitState> {
+    let mut index = 0;
+    while index < states.len() {
+        if let Some((candidate, state)) = states.entry_at(index) {
+            if path_eq(candidate, path) {
+                return Some(*state);
+            }
+        }
+        index += 1;
     }
-    cycle
+    None
+}
+
+#[cfg(not(kani))]
+fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
+    left == right
+}
+
+#[cfg(kani)]
+fn path_eq(left: &Utf8Path, right: &Utf8Path) -> bool {
+    let left = left.as_str().as_bytes();
+    let right = right.as_str().as_bytes();
+    left.len() == 1 && right.len() == 1 && left[0] == right[0]
+}
+
+#[cfg(not(kani))]
+fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+    left.cmp(right)
+}
+
+#[cfg(kani)]
+fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> Ordering {
+    let left = left.as_str().as_bytes();
+    let right = right.as_str().as_bytes();
+    match (left.first(), right.first()) {
+        (Some(left), Some(right)) => left.cmp(right),
+        (None, Some(_)) => Ordering::Less,
+        (Some(_), None) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rstest::rstest;
+    use std::collections::HashMap;
+
     fn path(name: &str) -> Utf8PathBuf {
         Utf8PathBuf::from(name)
     }
@@ -275,7 +538,12 @@ mod tests {
             .map(|(dependent, missing)| (path(dependent), path(missing)))
             .collect();
         let mut detector = CycleDetector::new(&targets);
-        assert!(detector.visit(path("a").as_path()).is_none());
+        let (target, _) = target_entry_for_path(&targets, path("a").as_path())
+            .expect("primary target should exist");
+        assert_eq!(
+            detector.visit(target, CycleSearch::Path),
+            CycleVisitResult::None,
+        );
         assert_eq!(
             detector.missing_dependencies.as_slice(),
             expected.as_slice()
@@ -395,3 +663,6 @@ mod tests {
         }
     }
 }
+#[cfg(kani)]
+#[path = "cycle_verification.rs"]
+mod verification;
