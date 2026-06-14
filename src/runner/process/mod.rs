@@ -12,19 +12,12 @@ use std::{
     process::{Child, Command, ExitStatus, Stdio},
     thread,
 };
-use tracing::info;
 
 mod file_io;
 mod ninja_status;
 mod paths;
 mod redaction;
 mod streaming;
-
-pub use file_io::*;
-pub use paths::*;
-use redaction::{CommandArg, redact_sensitive_args};
-use streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status};
-
 /// Callback contract for task-progress updates from parsed Ninja status lines.
 ///
 /// Accepts `(current, total, description)` where `current` and `total` are
@@ -120,39 +113,39 @@ fn configure_ninja_tool_command(
     Ok(())
 }
 
-fn log_command_execution(cmd: &Command) {
-    let program_path = PathBuf::from(cmd.get_program());
-    let program_display = Utf8PathBuf::from_path_buf(program_path.clone()).map_or_else(
-        |_| program_path.to_string_lossy().into_owned(),
-        Utf8PathBuf::into_string,
-    );
-    let args: Vec<CommandArg> = cmd
-        .get_args()
-        .map(|a| CommandArg::new(a.to_string_lossy().into_owned()))
-        .collect();
-    let redacted_args = redact_sensitive_args(&args);
-    let arg_strings: Vec<&str> = redacted_args.iter().map(CommandArg::as_str).collect();
-    info!(
-        "Executing command: {} {}",
-        program_display,
-        arg_strings.join(" ")
-    );
+fn check_exit_status_with_context(
+    status: ExitStatus,
+    context: &CommandLogContext,
+    operation: &str,
+    suppress_stderr: bool,
+) -> io::Result<()> {
+    if status.success() {
+        Ok(())
+    } else {
+        tracing::Span::current().record("failure_category", "exit_status");
+        log_command_exit_failure(context, operation, suppress_stderr, status);
+        ninja_exit_error(status)
+    }
 }
 
-/// Log, spawn, stream output, and check exit status for a prepared command.
-fn run_command_and_stream(
+fn run_command_and_stream_with_context(
     mut cmd: Command,
     status_observer: Option<StatusObserver<'_>>,
     suppress_stderr: bool,
+    operation: &str,
 ) -> io::Result<()> {
-    log_command_execution(&cmd);
-    let child = cmd.spawn()?;
-    let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
-    check_exit_status(status)
-}
+    let context = CommandLogContext::from_command(&cmd);
+    let span = command_span(&context, operation, suppress_stderr);
+    let _entered = span.enter();
 
-/// Borrowed parameter bundle for `ninja` build execution helpers.
-#[derive(Clone, Copy)]
+    log_command_execution(&context, operation, suppress_stderr);
+    let child = cmd.spawn().inspect_err(|err| {
+        tracing::Span::current().record("failure_category", "spawn");
+        log_command_spawn_failure(&context, operation, suppress_stderr, err);
+    })?;
+    let status = spawn_and_stream_output(child, status_observer, suppress_stderr)?;
+    check_exit_status_with_context(status, &context, operation, suppress_stderr)
+}
 pub(crate) struct NinjaBuildRequest<'a> {
     pub(crate) program: &'a Path,
     pub(crate) cli: &'a Cli,
@@ -220,7 +213,12 @@ fn run_ninja_build_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_build_command(&mut cmd, request.cli, request.build_file, request.targets)?;
-    run_command_and_stream(cmd, status_observer, request.cli.resolved_diag_json())
+    run_command_and_stream_with_context(
+        cmd,
+        status_observer,
+        request.cli.resolved_diag_json(),
+        "build",
+    )
 }
 
 fn run_ninja_tool_internal(
@@ -229,7 +227,12 @@ fn run_ninja_tool_internal(
 ) -> io::Result<()> {
     let mut cmd = Command::new(request.program);
     configure_ninja_tool_command(&mut cmd, request.cli, request.build_file, request.tool)?;
-    run_command_and_stream(cmd, status_observer, request.cli.resolved_diag_json())
+    run_command_and_stream_with_context(
+        cmd,
+        status_observer,
+        request.cli.resolved_diag_json(),
+        request.tool,
+    )
 }
 
 /// Invoke `ninja` build and stream parsed task updates from status lines.
@@ -260,7 +263,7 @@ pub(crate) fn run_ninja_tool_with_status(
 
 fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
     if stats.write_failed {
-        tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
+        debug!("{stream_name} forwarding encountered closed pipe; output truncated");
     }
 }
 
@@ -268,7 +271,7 @@ fn handle_forwarding_thread_result(result: thread::Result<ForwardStats>, stream_
     match result {
         Ok(stats) => handle_forwarding_stats(stats, stream_name),
         Err(err) => {
-            tracing::warn!("{stream_name} forwarding thread panicked: {err:?}");
+            warn!("{stream_name} forwarding thread panicked: {err:?}");
         }
     }
 }
@@ -330,49 +333,17 @@ fn terminate_child(child: &mut Child, context: &str) {
     }
 }
 
-fn check_exit_status(status: ExitStatus) -> io::Result<()> {
-    if status.success() {
-        Ok(())
-    } else {
-        #[expect(
-            clippy::io_other_error,
-            reason = "use explicit error kind for compatibility with older Rust"
-        )]
-        Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("ninja exited with {status}"),
-        ))
-    }
+fn ninja_exit_error(status: ExitStatus) -> io::Result<()> {
+    #[expect(
+        clippy::io_other_error,
+        reason = "use explicit error kind for compatibility with older Rust"
+    )]
+    Err(io::Error::new(
+        io::ErrorKind::Other,
+        format!("ninja exited with {status}"),
+    ))
 }
-
-#[cfg(test)]
 mod tests {
-    //! Unit tests for process invocation and environment preparation.
-
-    use super::*;
-    use camino::Utf8PathBuf;
-    use std::ffi::OsString;
-
-    #[test]
-    fn resolve_ninja_program_utf8_prefers_env_override() {
-        let resolved = resolve_ninja_program_utf8_with(|_| Some(OsString::from("/opt/ninja")));
-        assert_eq!(resolved, Utf8PathBuf::from("/opt/ninja"));
-    }
-
-    #[test]
-    fn resolve_ninja_program_utf8_defaults_without_override() {
-        let resolved = resolve_ninja_program_utf8_with(|_| None);
-        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn resolve_ninja_program_utf8_ignores_invalid_utf8_override() {
-        use std::os::unix::ffi::OsStringExt;
-
-        let resolved = resolve_ninja_program_utf8_with(|_| {
-            Some(OsString::from_vec(vec![0xff, b'n', b'i', b'n', b'j', b'a']))
-        });
-        assert_eq!(resolved, Utf8PathBuf::from(NINJA_PROGRAM));
-    }
 }
+
+mod command_logging;
