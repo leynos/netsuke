@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, ensure};
 use ninja_env::NINJA_ENV;
 use predicates::prelude::*;
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::fs;
@@ -234,6 +235,34 @@ fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
     Ok(())
 }
 
+#[rstest]
+fn diag_json_success_keeps_stdout_artefact_and_stderr_empty(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
+        .current_dir(temp.path())
+        .arg("--diag-json")
+        .arg("manifest")
+        .arg("-")
+        .output()
+        .context("run netsuke manifest with --diag-json")?;
+
+    ensure!(output.status.success(), "expected command success");
+    ensure!(
+        output.stderr.is_empty(),
+        "stderr should remain empty on success"
+    );
+
+    let stdout = String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?;
+    ensure!(
+        stdout.contains("build hello: "),
+        "stdout should contain the generated Ninja manifest, got:\n{stdout}",
+    );
+    Ok(())
+}
+
 /// Asserts that `--diag-json <flag>` produces human-readable stdout and an
 /// empty stderr (i.e. Clap's built-in handlers are not affected by JSON mode).
 fn assert_diag_json_passthrough(flag: &str, ctx: &str, stdout_marker: &str) -> Result<()> {
@@ -295,6 +324,33 @@ fn run_verbose_build_and_assert_ninja_log(
         "default build should log the fallback ninja program"
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
+    Ok(())
+}
+
+/// Runs a verbose build with `NETSUKE_NINJA` set to a fake executable whose
+/// stem is `stem` and asserts that the resulting log contains
+/// `Executing command: <full_path> `.
+fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    fs::copy("tests/data/minimal.yml", temp.path().join("Netsukefile"))
+        .context("copy minimal manifest")?;
+
+    let ninja_temp = tempdir().context("create fake ninja dir")?;
+    let ninja_path = ninja_temp.path().join(fake_ninja_name(stem));
+    write_fake_ninja_script(&ninja_path, &[], None)?;
+
+    let stderr = run_verbose_build_with_ninja_env(
+        temp.path(),
+        path_containing(ninja_temp.path())?,
+        Some(ninja_path.as_path()),
+    )?;
+
+    let expected = format!("Executing command: {} ", ninja_path.display());
+    ensure!(
+        stderr.contains(&expected),
+        "verbose log must contain the resolved ninja path for override \
+         stem {stem:?}; got:\n{stderr}"
+    );
     Ok(())
 }
 fn verbose_build_logs_default_ninja_command(
