@@ -2497,34 +2497,26 @@ localization keys against English and Spanish Fluent bundles.
 
 ```mermaid
 flowchart TD
-    A_Start[Start build.rs] --> B_ReadKeys
-    B_ReadKeys[extract_key_constants
-from src/localization/keys.rs] --> C_ReadEn
-    C_ReadEn[extract_ftl_keys
-from locales/en-US/messages.ftl] --> D_ReadEs
-    D_ReadEs[extract_ftl_keys
-from locales/es-ES/messages.ftl] --> E_Compare
+    A_Start["Start build.rs"] --> B_ReadKeys
+    B_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> C_ReadEn
+    C_ReadEn["extract_ftl_keys<br/>from locales/en-US/messages.ftl"] --> D_ReadEs
+    D_ReadEs["extract_ftl_keys<br/>from locales/es-ES/messages.ftl"] --> E_Compare
 
-    E_Compare[Compute differences
-between declared and en-US/es-ES keys] --> F_CheckMissing
+    E_Compare["Compute differences<br/>between declared and en-US/es-ES keys"] --> F_CheckMissing
 
-    F_CheckMissing{Any missing
-keys?} -->|No| G_Success[Audit passes
-continue build]
-    F_CheckMissing -->|Yes| H_Error[Emit error message
-with missing keys per locale
-and fail build]
+    F_CheckMissing{"Any missing<br/>keys?"} -->|No| G_Success["Audit passes<br/>continue build"]
+    F_CheckMissing -->|Yes| H_Error["Emit error message<br/>with missing keys per locale<br/>and fail build"]
 
-    H_Error --> I_End[Build script returns Err]
+    H_Error --> I_End["Build script returns Err"]
     G_Success --> I_End
 ```
 
 Figure: Build script localization audit flow for Fluent key validation.
 
-The Ninja executable may be overridden via the `NINJA_ENV` environment
-variable. For example, `NINJA_ENV=/opt/ninja/bin/ninja netsuke build` forces
-Netsuke to execute the specified binary while preserving the default when the
-variable is unset or invalid.
+The Ninja executable may be overridden via the `NETSUKE_NINJA` environment
+variable. For example, `NETSUKE_NINJA=/opt/ninja/bin/ninja netsuke build`
+forces Netsuke to execute the specified binary while preserving the default
+when the variable is unset or invalid.
 
 ### 8.4.1 Configuration File Discovery
 
@@ -2576,24 +2568,15 @@ config discovery and then proceed with the merged configuration.
 ```mermaid
 flowchart TD
   Start([Start netsuke invocation])
-  HasCliConfig{CLI flag
-  --config set?}
-  HasEnvConfig{Env NETSUKE_CONFIG
-  set?}
-  HasEnvConfigPath{Env NETSUKE_CONFIG_PATH
-  set?}
-  UseCliConfig[[Use CLI --config path
-  as config file]]
-  UseEnvConfig[[Use NETSUKE_CONFIG path
-  as config file]]
-  UseEnvConfigPath[[Use NETSUKE_CONFIG_PATH path
-  as config file]]
-  RunDiscovery[[Run two-pass
-  config discovery]]
-  LoadConfig[[Load selected config
-  into merge pipeline]]
-  ErrorMissing[[Error: explicit config
-  file missing or invalid]]
+  HasCliConfig{"CLI flag<br/>--config set?"}
+  HasEnvConfig{"Env NETSUKE_CONFIG<br/>set?"}
+  HasEnvConfigPath{"Env NETSUKE_CONFIG_PATH<br/>set?"}
+  UseCliConfig[["Use CLI --config path<br/>as config file"]]
+  UseEnvConfig[["Use NETSUKE_CONFIG path<br/>as config file"]]
+  UseEnvConfigPath[["Use NETSUKE_CONFIG_PATH path<br/>as config file"]]
+  RunDiscovery[["Run two-pass<br/>config discovery"]]
+  LoadConfig[["Load selected config<br/>into merge pipeline"]]
+  ErrorMissing[["Error: explicit config<br/>file missing or invalid"]]
 
   Start --> HasCliConfig
   HasCliConfig -- Yes --> UseCliConfig
@@ -2605,18 +2588,15 @@ flowchart TD
   HasEnvConfigPath -- Yes --> UseEnvConfigPath
   HasEnvConfigPath -- No --> RunDiscovery
 
-  UseCliConfig --> CheckCliFile{File exists
-  and parses?}
+  UseCliConfig --> CheckCliFile{"File exists<br/>and parses?"}
   CheckCliFile -- Yes --> LoadConfig
   CheckCliFile -- No --> ErrorMissing
 
-  UseEnvConfig --> CheckEnvFile{File exists
-  and parses?}
+  UseEnvConfig --> CheckEnvFile{"File exists<br/>and parses?"}
   CheckEnvFile -- Yes --> LoadConfig
   CheckEnvFile -- No --> ErrorMissing
 
-  UseEnvConfigPath --> CheckEnvPathFile{File exists
-  and parses?}
+  UseEnvConfigPath --> CheckEnvPathFile{"File exists<br/>and parses?"}
   CheckEnvPathFile -- Yes --> LoadConfig
   CheckEnvPathFile -- No --> ErrorMissing
 
