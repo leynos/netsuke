@@ -1,5 +1,17 @@
-//! Tests that [`super::explicit_config_path`] prioritizes selectors as
-//! `cli.config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`.
+//! Property and unit tests for the explicit config-path selector precedence
+//! enforced by [`super::explicit_config_path`] in `discovery.rs`.
+//!
+//! Three selectors are evaluated in priority order:
+//!
+//! 1. `cli.config` (CLI `--config` flag) - highest priority.
+//! 2. [`super::CONFIG_ENV_VAR`] (`NETSUKE_CONFIG`) - mid priority.
+//! 3. [`super::CONFIG_ENV_VAR_LEGACY`] (`NETSUKE_CONFIG_PATH`) - lowest priority.
+//!
+//! The [`resolve_config_path_precedence`] rstest suite exhaustively enumerates
+//! all 2^3 = 8 selector presence states. The
+//! [`resolve_config_path_obeys_precedence_invariant`] proptest asserts that for
+//! any combination of generated optional paths the resolved path equals the
+//! highest-priority present selector.
 
 use super::*;
 use proptest::prelude::*;
