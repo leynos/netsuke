@@ -1,0 +1,5 @@
+---
+source: tests/which_diagnostic_snapshot_tests.rs
+expression: normalized
+---
+invalid operation: [netsuke::jinja::which::args] ⁨which requires a non-empty string.⁩ (in <string>:1)

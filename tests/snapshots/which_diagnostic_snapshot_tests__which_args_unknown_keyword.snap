@@ -1,0 +1,5 @@
+---
+source: tests/which_diagnostic_snapshot_tests.rs
+expression: normalized
+---
+too many arguments: unknown keyword argument 'unexpected' (in <string>:1)

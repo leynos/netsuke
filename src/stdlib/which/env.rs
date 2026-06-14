@@ -5,11 +5,10 @@ use std::ffi::{OsStr, OsString};
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(windows)]
 use indexmap::IndexSet;
-use minijinja::{Error, ErrorKind};
 
 use crate::localization::{self, keys};
 
-use super::{error::args_error, options::CwdMode};
+use super::{options::CwdMode, resolve_error::ResolveError};
 
 #[derive(Clone, Debug)]
 pub(super) struct EnvSnapshot {
@@ -25,7 +24,7 @@ impl EnvSnapshot {
     pub(super) fn capture(
         cwd_override: Option<&Utf8Path>,
         path_override: Option<&OsStr>,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, ResolveError> {
         let cwd = if let Some(override_cwd) = cwd_override {
             override_cwd.to_path_buf()
         } else {
@@ -80,7 +79,10 @@ enum PathEntry {
     CurrentDir,
 }
 
-fn parse_path_entries(raw: Option<OsString>, cwd: &Utf8Path) -> Result<Vec<PathEntry>, Error> {
+fn parse_path_entries(
+    raw: Option<OsString>,
+    cwd: &Utf8Path,
+) -> Result<Vec<PathEntry>, ResolveError> {
     let mut entries = Vec::new();
     let Some(raw_value) = raw else {
         return Ok(entries);
@@ -91,7 +93,7 @@ fn parse_path_entries(raw: Option<OsString>, cwd: &Utf8Path) -> Result<Vec<PathE
             continue;
         }
         let utf8 = Utf8PathBuf::from_path_buf(component).map_err(|_| {
-            args_error(
+            ResolveError::args(
                 localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
                     .with_arg("index", index),
             )
@@ -135,21 +137,9 @@ fn parse_pathext(raw: Option<&OsStr>) -> Vec<String> {
     }
 }
 
-pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, Error> {
-    let cwd = std::env::current_dir().map_err(|err| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_WHICH_CWD_RESOLVE_FAILED)
-                .with_arg("details", err.to_string())
-                .to_string(),
-        )
-    })?;
-    Utf8PathBuf::from_path_buf(cwd).map_err(|_| {
-        Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_WHICH_CWD_NON_UTF8).to_string(),
-        )
-    })
+pub(super) fn current_dir_utf8() -> Result<Utf8PathBuf, ResolveError> {
+    let cwd = std::env::current_dir().map_err(|source| ResolveError::CwdResolve { source })?;
+    Utf8PathBuf::from_path_buf(cwd).map_err(|_| ResolveError::CwdNonUtf8)
 }
 
 #[cfg(windows)]

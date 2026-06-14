@@ -1,13 +1,13 @@
 //! Parse and hold options for the `which` filter and function.
 
-use minijinja::{Error, value::Kwargs};
+use minijinja::value::Kwargs;
 
 use crate::localization::{self, keys};
 
-use super::error::args_error;
+use super::resolve_error::ResolveError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-pub(super) enum CwdMode {
+pub(crate) enum CwdMode {
     #[default]
     Auto,
     Always,
@@ -38,7 +38,7 @@ pub(crate) struct WhichOptions {
 }
 
 impl WhichOptions {
-    pub(crate) fn from_kwargs(kwargs: &Kwargs) -> Result<Self, Error> {
+    pub(crate) fn from_kwargs(kwargs: &Kwargs) -> Result<Self, ResolveError> {
         let all = kwargs.get::<Option<bool>>("all")?.unwrap_or(false);
         let canonical = kwargs.get::<Option<bool>>("canonical")?.unwrap_or(false);
         let fresh = kwargs.get::<Option<bool>>("fresh")?.unwrap_or(false);
@@ -47,7 +47,7 @@ impl WhichOptions {
             .map(|mode| {
                 let lower = mode.to_ascii_lowercase();
                 CwdMode::parse(&lower).ok_or_else(|| {
-                    args_error(
+                    ResolveError::args(
                         localization::message(keys::STDLIB_WHICH_CWD_MODE_INVALID)
                             .with_arg("mode", mode),
                     )
@@ -66,5 +66,11 @@ impl WhichOptions {
         let mut clone = self.clone();
         clone.fresh = false;
         clone
+    }
+}
+
+impl From<minijinja::Error> for ResolveError {
+    fn from(value: minijinja::Error) -> Self {
+        Self::args(value)
     }
 }

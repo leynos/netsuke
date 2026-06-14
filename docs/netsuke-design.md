@@ -1262,6 +1262,8 @@ entries were inspected, a shortened preview of the path list, and platform
 appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
 Invalid arguments surface as `netsuke::jinja::which::args`.
 
+#### Executable Availability Predicate
+
 Netsuke also exposes a boolean executable probe for conditional manifest
 generation:
 
@@ -1277,6 +1279,30 @@ write complementary manifest-time branches without forcing authors through the
 impure `shell()` filter. It is intended for `when` clauses such as selecting a
 `cargo-nextest` action when `cargo-nextest` is installed and a legacy
 `cargo test` action otherwise.
+
+The resolver returns an internal typed result that separates absence from
+misuse and infrastructure failure. The MiniJinja registration boundary maps
+that result in two ways: `which` converts every resolver error into the existing
+`minijinja::Error` diagnostics, while `command_available` converts only search
+misses and direct-path misses to `false`. Argument, canonicalisation,
+workspace, and current-directory failures still become errors. This keeps
+absence detection in the resolver port and prevents manifest, AST, IR, Ninja,
+or CLI layers from matching user-visible diagnostic text.
+
+| Kwarg       | Default | Resolver effect                                                                                                 |
+| ----------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `all`       | `false` | Collects every match for `which`; accepted by the predicate but the bool only records whether any match exists. |
+| `canonical` | `false` | Canonicalises and de-duplicates matches before returning them.                                                  |
+| `fresh`     | `false` | Bypasses the cache for this lookup and stores the refreshed result.                                             |
+| `cwd_mode`  | `auto`  | Controls current-directory search with `auto`, `always`, or `never`.                                            |
+
+When `PATH` is empty and `cwd_mode` is not `never`, the resolver may use the
+bounded workspace fallback described below. If that fallback cannot find a
+match, the predicate returns `false`; the analogous `which` call raises
+`netsuke::jinja::which::not_found`. The no-place-to-search case is
+intentionally treated as absence for the predicate, matching the `-NOTFOUND`/
+`.found()` contracts used by comparable build systems. ADR-005 records this
+typed-result boundary and absence policy.
 
 Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
 reuse, and list-all semantics. Behavioural MiniJinja fixtures exercise the

@@ -499,29 +499,43 @@ Apply filters using the pipe `|` operator: `{{ value | filter_name(args...) }}`
   `shell`. Marks template as impure. The same output and streaming limits apply
   when `grep` emits large result sets.
 
-**Executable Discovery (`which`):**
+#### Executable discovery
 
-- `which` filter/function: Resolves executables using the current `PATH`
-  without marking the template as impure. Example: `{{ 'clang++' | which }}`
-  returns the first matching binary; the function alias
-  `{{ which('clang++') }}` is available if piping would be awkward.
-- `command_available` function: Uses the same resolver and options as `which`,
-  returning `true` when a matching executable is found and `false` when it is
-  absent. Absence is not an error.
-- Keyword arguments:
-  - `all` (default `false`): Return every match, ordered by `PATH`.
-  - `canonical` (default `false`): Resolve symlinks and deduplicate entries by
-    their canonical path.
-  - `fresh` (default `false`): Bypass the resolver cache for this lookup while
-    keeping previous entries available for future renders.
-  - `cwd_mode` (`auto` | `always` | `never`, default `auto`): Control whether
-    empty `PATH` segments (and, on Windows, the implicit current-directory
-    search) are honoured. Use `"always"` to force the working directory into
-    the search order when `PATH` is empty.
-- Errors include actionable diagnostic codes such as
-  `netsuke::jinja::which::not_found` along with a preview of the scanned
-  `PATH`. Supplying unknown keyword arguments or invalid values raises
-  `netsuke::jinja::which::args`.
+The `which` filter and function resolve executables using the current `PATH`
+without marking the template as impure. `{{ 'clang++' | which }}` returns the
+first matching binary; `{{ which('clang++') }}` is available when a function
+call is clearer than piping. Missing executables raise
+`netsuke::jinja::which::not_found` with a preview of the searched directories.
+
+Use `command_available(name, **kwargs)` when absence should select another
+manifest-time branch instead of failing the render. It uses the same resolver
+and cache as `which`, returns `true` when at least one executable is found, and
+returns `false` for absent commands. Invalid arguments still raise
+`netsuke::jinja::which::args`.
+
+| Kwarg       | Default | Effect on `command_available`                                                |
+| ----------- | ------- | ---------------------------------------------------------------------------- |
+| `all`       | `false` | Accepted for kwarg symmetry with `which`; does not change the bool return.   |
+| `canonical` | `false` | Canonicalises discovered paths before deciding whether any match exists.     |
+| `fresh`     | `false` | Bypasses the resolver cache for this lookup and refreshes the cached result. |
+| `cwd_mode`  | `auto`  | Controls current-directory search: `auto`, `always`, or `never`.             |
+
+When `PATH` is empty and `cwd_mode="auto"`, Netsuke can still discover a
+project-local executable through the bounded workspace fallback:
+
+```yaml
+actions:
+  - name: lint
+    command: ./tools/project-lint
+    when: command_available("project-lint", cwd_mode="auto")
+  - name: lint
+    command: cargo clippy --workspace --all-targets --all-features -- -D warnings
+    when: not command_available("project-lint", cwd_mode="auto")
+```
+
+The `which` filter remains the right choice when a missing tool should stop the
+manifest render. The predicate is for optional toolchains and complementary
+branches.
 
 Use `command_available` in manifest-time `when` clauses when optional tooling
 selects between actions:
