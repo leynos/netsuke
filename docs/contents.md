@@ -36,13 +36,19 @@ operator, user, and contributor references are easier to find.
   Manifest control-key scoping decision record.
 - [adr-004-bound-kani-ir-harnesses-to-small-n.md](adr-004-bound-kani-ir-harnesses-to-small-n.md):
   Kani IR harness bound and Proptest hand-off decision record.
+- [adr-004-graph-subcommand-in-process-rendering.md](adr-004-graph-subcommand-in-process-rendering.md):
+  Graph rendering architecture decision record.
+- [adr-005-typed-which-resolve-error.md](adr-005-typed-which-resolve-error.md):
+  Typed executable resolver error decision record for `which` and
+  `command_available`.
 
 ## User and operator guides
 
 - [quickstart.md](quickstart.md): First-run walkthrough for building with
   Netsuke.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
-  running Netsuke manifests.
+  running Netsuke manifests, including executable discovery and
+  `command_available` branch selection.
 - [ortho-config-users-guide.md](ortho-config-users-guide.md): Configuration
   system guide and precedence reference.
 - [translators-guide.md](translators-guide.md): Localization workflow and
@@ -51,7 +57,7 @@ operator, user, and contributor references are easier to find.
 ## Contributor guidance
 
 - [developers-guide.md](developers-guide.md): Engineering workflow, quality
-  gates, and testing strategy.
+  gates, testing strategy, and stdlib resolver-boundary conventions.
 - [documentation-style-guide.md](documentation-style-guide.md): Documentation
   conventions, roadmap-writing rules, and Markdown requirements.
 - [execplans/](execplans/): Execution plans and implementation handoff notes.

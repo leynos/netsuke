@@ -854,11 +854,22 @@ filtered during expansion.
 - Filtered entries are absent before IR generation, Ninja generation, and
   process execution. Build-time branching belongs inside the recipe command or
   script until a separately designed runtime-condition feature exists.
-- `command_available(...)` is a stdlib predicate registered beside the `which`
-  filter/function. It must stay at that resolver boundary, reuse
-  `WhichResolver` and `WhichOptions`, and return `false` only for
-  `netsuke::jinja::which::not_found` absence. Invalid arguments remain hard
-  manifest errors.
+
+### Executable availability predicate
+
+`command_available(...)` is a stdlib predicate registered beside the `which`
+filter/function. It stays at the resolver boundary, reuses `WhichResolver` and
+`WhichOptions`, and delegates absence coercion to `is_command_available`.
+
+Absence detection lives in the resolver port and never in manifest, AST, IR,
+Ninja, or CLI code. The predicate returns `false` only for typed search misses
+and direct-path misses; invalid arguments, canonicalisation failures, workspace
+encoding failures, and current-directory failures remain hard manifest errors.
+
+The `ResolveError` to `minijinja::Error` boundary and the
+`trace_span!("stdlib.<helper>.resolve", ...)` instrumentation are the template
+for future stdlib helpers such as `env` (roadmap 3.14.8) and `shell_join`;
+mirror the conversion boundary and absence-coercion helper.
 
 **Error conditions:** returns `Err` on malformed Jinja expressions,
 whitespace-only `when` values, or type mismatches in the iterable.

@@ -45,12 +45,13 @@ fn scenario_step_result() -> StepResult<(), &'static str> {
 }
 ```
 
-**After:**
+**After (supported):**
 
 ```rust
 # use rstest_bdd_macros::scenario;
 #[scenario(path = "tests/features/example.feature")]
-fn scenario_step_result() -> StepResult<(), &'static str> {
+fn scenario_returns_unit() -> Result<(), &'static str> {
+    do_setup()?;
     Ok(())
 }
 ```
