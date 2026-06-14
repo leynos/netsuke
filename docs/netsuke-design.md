@@ -1262,7 +1262,6 @@ entries were inspected, a shortened preview of the path list, and platform
 appropriate hints (for example suggesting `cwd_mode="always"` on Windows).
 Invalid arguments surface as `netsuke::jinja::which::args`.
 
-
 #### Executable Availability Predicate
 
 Netsuke also exposes a boolean executable probe for conditional manifest

@@ -855,7 +855,6 @@ filtered during expansion.
   process execution. Build-time branching belongs inside the recipe command or
   script until a separately designed runtime-condition feature exists.
 
-
 ### Executable availability predicate
 
 `command_available(...)` is a stdlib predicate registered beside the `which`
