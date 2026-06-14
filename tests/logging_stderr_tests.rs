@@ -6,6 +6,7 @@
 use anyhow::{Context, Result, ensure};
 use ninja_env::NINJA_ENV;
 use predicates::prelude::*;
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::fs;
@@ -268,6 +269,44 @@ fn run_verbose_build_and_assert_ninja_log(
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
     Ok(())
+}
+
+/// Runs a verbose build with `NETSUKE_NINJA` set to a fake executable whose
+/// stem is `stem` and asserts that the resulting log contains
+/// `Executing command: <full_path> `.
+fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    fs::copy("tests/data/minimal.yml", temp.path().join("Netsukefile"))
+        .context("copy minimal manifest")?;
+
+    let ninja_temp = tempdir().context("create fake ninja dir")?;
+    let ninja_path = ninja_temp.path().join(fake_ninja_name(stem));
+    write_fake_ninja_script(&ninja_path, &[], None)?;
+
+    let stderr = run_verbose_build_with_ninja_env(
+        temp.path(),
+        path_containing(ninja_temp.path())?,
+        Some(ninja_path.as_path()),
+    )?;
+
+    let expected = format!("Executing command: {} ", ninja_path.display());
+    ensure!(
+        stderr.contains(&expected),
+        "verbose log must contain the resolved ninja path for override \
+         stem {stem:?}; got:\n{stderr}"
+    );
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 16, ..ProptestConfig::default() })]
+    #[test]
+    fn verbose_build_logs_resolved_ninja_program_for_any_valid_override(
+        stem in "[a-z][a-z0-9_-]{0,15}",
+    ) {
+        assert_verbose_build_logs_ninja_override(&stem)
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
+    }
 }
 
 #[rstest]
