@@ -1,4 +1,8 @@
-//! Tests for localized Clap parser rendering.
+//! Parser rendering tests for localized CLI long-help output.
+//!
+//! These tests exercise the `parser.rs` localization path for `en-US` and
+//! `es-ES`, assert that `--config <FILE>` and its Fluent-resolved description
+//! are present, and pin the complete rendered help with Insta snapshots.
 
 use super::*;
 use crate::cli_localization::build_localizer;
@@ -27,14 +31,17 @@ fn localized_help_snapshots_include_config_flag(
     let mut command = localize_command(Cli::command(), localizer.as_ref());
     let rendered_help = command.render_long_help().to_string();
     let normalized_help = normalize_fluent_isolates(&rendered_help);
+    let missing_config_flag = format!("localized help for {locale} should include the config flag");
+    let missing_config_description =
+        format!("localized help for {locale} should include the config flag description");
 
     assert!(
         normalized_help.contains("--config <FILE>"),
-        "localized help for {locale} should include the config flag"
+        "{missing_config_flag}"
     );
     assert!(
         normalized_help.contains(config_help),
-        "localized help for {locale} should include the config flag description"
+        "{missing_config_description}"
     );
     snapshot_settings("cli").bind(|| {
         assert_snapshot!(snapshot_name, normalized_help);
