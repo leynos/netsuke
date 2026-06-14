@@ -308,7 +308,10 @@ invalid.
 Keep `[package.metadata.ortho_config]` in `Cargo.toml` aligned with the CLI
 when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
-tests and by `rstest-bdd` release-help scenarios.
+tests, plain `#[rstest]` parametrised cases for exhaustive state-enumeration
+unit tests, and `rstest-bdd` release-help scenarios.
+`src/cli/config_path_precedence_tests.rs` is the canonical exhaustive
+state-enumeration example.
 
 ## Formal-verification tooling
 
@@ -450,6 +453,9 @@ Netsuke uses a mixed strategy:
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
 - Dependabot configuration lives in `.github/dependabot.yml`, with coverage
   tests in `tests/dependabot_config_tests.rs`.
+- Property-based tests use `proptest` and live in `*_tests.rs` modules adjacent
+  to the code under test, included via `#[cfg(test)] #[path = ...] mod ...;`
+  declarations.
 
 The Dependabot integration tests parse the checked-in configuration and verify
 that repository dependency manifests remain covered as the tree changes. They
@@ -461,6 +467,27 @@ are not Git checkouts, because tracked-manifest hygiene cannot be determined
 there. The tests require workflow YAML files under `.github/workflows` and
 ensure local composite action manifests under `.github/actions` are covered by
 the configured Dependabot directory patterns.
+
+## Property-based testing with proptest
+
+Use `proptest` for property-based tests that exercise invariants across
+randomised input values. These tests complement hand-written examples by asking
+the test runner to search the generated input space and shrink failing cases.
+
+Write property tests with the `proptest!` macro. Inside `proptest!` bodies, use
+`prop_assert_eq!` and `prop_assert!` rather than `assert_eq!` and `assert!` so
+failures preserve proptest's shrinking and reporting behaviour.
+
+Property tests that mutate the process environment must keep environment
+locking inside the helper that performs the mutation. Acquire `EnvLock` inside
+that helper, as `resolve_config_path_with_selectors` does, and release it
+before returning from the helper. Do not hold `EnvLock` across a `proptest!`
+loop iteration boundary.
+
+`src/cli/config_path_precedence_tests.rs` is the reference example:
+`resolve_config_path_obeys_precedence_invariant` asserts that
+`explicit_config_path` always resolves to the highest-priority present selector
+for generated optional paths.
 
 ## IR dependency classes
 
