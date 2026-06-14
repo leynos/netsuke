@@ -4,6 +4,8 @@
 //! - creating fake executables for process-related tests
 //! - manipulating PATH safely (PathGuard)
 //! - serializing environment mutation across tests (EnvLock)
+//! - pinning the active locale for snapshot tests (EnLocalizer, en_localizer,
+//!   LocalizerGuard, localizer_test_lock, set_en_localizer)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
 //!
@@ -46,7 +48,9 @@ pub use cwd_guard::CwdGuard;
 pub use env_guard::{EnvGuard, Environment, StdEnv};
 
 /// Re-export localizer helpers for integration tests.
-pub use localizer::{localizer_test_lock, set_en_localizer};
+pub use localizer::{
+    EnLocalizer, LocalizerGuard, en_localizer, localizer_test_lock, set_en_localizer,
+};
 
 /// Re-export manifest helpers for integration tests.
 pub use manifest::ensure_manifest_exists;
