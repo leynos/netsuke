@@ -1,4 +1,5 @@
-//! Tests for explicit config path selector precedence.
+//! Tests that [`super::explicit_config_path`] prioritizes selectors as
+//! `cli.config`, then `NETSUKE_CONFIG`, then `NETSUKE_CONFIG_PATH`.
 
 use super::*;
 use proptest::prelude::*;
