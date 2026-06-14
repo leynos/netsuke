@@ -225,26 +225,20 @@ impl<'targets> CycleDetector<'targets> {
     /// Visit the `inputs` and `implicit_deps` of a known edge in order,
     /// returning early on the first detected cycle.
     ///
-    /// `inputs` and `implicit_deps` must be slices borrowed from the
-    /// `'targets`-lifetime target map so that subsequent mutable borrows of
-    /// `self` inside `visit_dependencies` are permitted by the borrow
-    /// checker.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the separate borrowed slices document and preserve the target-map lifetime contract"
-    )]
+    /// `edge` must be borrowed from the `'targets`-lifetime target map so
+    /// that subsequent mutable borrows of `self` inside `visit_dependencies`
+    /// are permitted by the borrow checker.
     fn visit_known_edge(
         &mut self,
         node: &'targets Utf8Path,
-        inputs: &'targets [Utf8PathBuf],
-        implicit_deps: &'targets [Utf8PathBuf],
+        edge: &'targets BuildEdge,
         search: CycleSearch,
     ) -> CycleVisitResult {
-        let cycle = self.visit_dependencies(node, inputs, search);
+        let cycle = self.visit_dependencies(node, &edge.inputs, search);
         if cycle.is_cycle() {
             return cycle;
         }
-        self.visit_dependencies(node, implicit_deps, search)
+        self.visit_dependencies(node, &edge.implicit_deps, search)
     }
 
     /// Visit `node` depth-first.
@@ -265,9 +259,7 @@ impl<'targets> CycleDetector<'targets> {
         }
 
         let cycle = match target_entry_for_path(self.targets, node) {
-            Some((_, edge)) => {
-                self.visit_known_edge(node, &edge.inputs, &edge.implicit_deps, search)
-            }
+            Some((_, edge)) => self.visit_known_edge(node, edge, search),
             None => CycleVisitResult::None,
         };
 
