@@ -1125,6 +1125,48 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 **Cross-references:** `docs/netsuke-design.md` §2.5 and roadmap task 3.14.2.
 
+## Runner process execution
+
+
+### Module: `runner::process::command_logging`
+
+`src/runner/process/command_logging.rs` owns the structured logging contract
+for all internal Ninja process invocations. `CommandLogContext` is the shared
+log payload builder for a prepared `Command`; it records `program_display` for
+the `ninja_program` field and `redacted_arg_count` for stable argument
+cardinality. `from_command` redacts sensitive arguments and stores the redacted
+command string only for the human-readable `"Executing command: {}"` message.
+
+All command events use the same structured fields:
+
+- `operation`: caller-provided operation label such as `"build"` or tool name.
+- `ninja_program`: command program after UTF-8 normalization.
+- `redacted_arg_count`: redacted argument count.
+- `suppress_stderr`: derived from `cli.resolved_diag_json()`, true when JSON
+  diagnostics suppress direct stderr logging.
+- `failure_category`: set to an empty span field at start and then set to
+  `"spawn"` or `"exit_status"` at failure points for alert bucketing.
+
+Use the logging helpers according to failure phase:
+
+- `log_command_execution` for the spawn attempt.
+- `log_command_spawn_failure` for `io::Error` during process creation.
+- `log_command_exit_failure` for non-zero child exit status.
+
+`check_exit_status_with_context` records `failure_category` before logging
+exits, which lets downstream filtering distinguish spawn failures from
+exit-status failures.
+
+`run_ninja_internal` is the shared execution pattern used by build and tool
+paths:
+
+1. Create `Command` with `Command::new(request.program)`.
+2. Pass it into a closure that applies operation-specific configuration.
+3. Call `run_command_and_stream_with_context` with optional status observer,
+   `cli.resolved_diag_json()` as `suppress_stderr`, and the chosen `operation`.
+4. Let `run_command_and_stream_with_context` handle span creation, execution
+   logging, failure logging, and exit-status enforcement via context helpers.
+
 ## IR cycle detection
 
 ### Module: `ir::cycle`
