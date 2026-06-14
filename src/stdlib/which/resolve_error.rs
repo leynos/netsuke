@@ -3,6 +3,7 @@
 use std::{fmt, io};
 
 use camino::Utf8PathBuf;
+use walkdir;
 
 use super::options::CwdMode;
 
@@ -34,6 +35,10 @@ pub(crate) enum ResolveError {
         command: String,
         path: String,
     },
+    /// A `walkdir` traversal error encountered during workspace fallback search.
+    WalkDir {
+        source: walkdir::Error,
+    },
     CwdResolve {
         source: io::Error,
     },
@@ -61,6 +66,7 @@ impl ResolveError {
             Self::IsExecutable { .. } => "is_executable",
             Self::CanonicaliseNonUtf8 => "canonicalise_non_utf8",
             Self::WorkspaceNonUtf8 { .. } => "workspace_non_utf8",
+            Self::WalkDir { .. } => "walkdir",
             Self::CwdResolve { .. } => "cwd_resolve",
             Self::CwdNonUtf8 => "cwd_non_utf8",
         }
@@ -87,6 +93,7 @@ impl std::error::Error for ResolveError {
             Self::Canonicalise { source, .. }
             | Self::IsExecutable { source, .. }
             | Self::CwdResolve { source } => Some(source),
+            Self::WalkDir { source } => Some(source),
             Self::NotFound { .. }
             | Self::DirectNotFound { .. }
             | Self::Args { .. }

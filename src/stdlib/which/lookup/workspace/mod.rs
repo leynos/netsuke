@@ -123,21 +123,19 @@ fn workspace_fallback_enabled() -> bool {
     }
 }
 
-/// Convert a walkdir item to an entry, logging and skipping unreadable paths to
-/// keep workspace traversal robust across platforms.
+/// Convert a walkdir item to an entry, propagating traversal errors as
+/// [`ResolveError::WalkDir`] so callers can surface IO failures rather than
+/// silently skipping them.
 pub(super) fn unwrap_or_log_error(
     walk_entry: Result<walkdir::DirEntry, walkdir::Error>,
-) -> Option<walkdir::DirEntry> {
-    match walk_entry {
-        Ok(entry) => Some(entry),
-        Err(err) => {
-            tracing::debug!(
-                error = %err,
-                "skipping unreadable workspace entry during which fallback",
-            );
-            None
-        }
-    }
+) -> Result<walkdir::DirEntry, ResolveError> {
+    walk_entry.map_err(|err| {
+        tracing::debug!(
+            error = %err,
+            "unreadable workspace entry during which fallback",
+        );
+        ResolveError::WalkDir { source: err }
+    })
 }
 
 /// Emit a debug message when fallback traversal yields no matches, helping

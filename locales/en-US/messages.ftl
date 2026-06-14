@@ -329,6 +329,7 @@ stdlib.which.canonicalise_failed = Failed to canonicalise '{ $path }': { $detail
 stdlib.which.is_executable = Failed to inspect whether '{ $path }' is executable: { $details }.
 stdlib.which.canonicalise_non_utf8 = Canonical path contains non-UTF-8 components.
 stdlib.which.workspace_non_utf8 = Workspace path contains non-UTF-8 components while resolving command '{ $command }': { $path }.
+stdlib.which.walkdir_error = Workspace traversal error while resolving command: { $details }.
 
 # Stdlib registration.
 stdlib.register.open_dir = Failed to open current directory for stdlib registration.

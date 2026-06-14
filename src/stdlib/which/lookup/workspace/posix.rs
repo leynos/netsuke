@@ -37,9 +37,7 @@ fn collect_matching_executables(
     let mut matches = Vec::new();
 
     for walk_entry in walker {
-        let Some(entry) = unwrap_or_log_error(walk_entry) else {
-            continue;
-        };
+        let entry = unwrap_or_log_error(walk_entry)?;
 
         if let Some(path) = process_workspace_entry(entry, command, skip_dirs)? {
             matches.push(path);

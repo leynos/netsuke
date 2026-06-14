@@ -66,9 +66,7 @@ pub(super) fn search_workspace(
         .into_iter()
         .filter_entry(|entry| should_visit_entry(entry, skip_dirs))
     {
-        let Some(entry) = unwrap_or_log_error(walk_entry) else {
-            continue;
-        };
+        let entry = unwrap_or_log_error(walk_entry)?;
 
         if collector.try_add(entry, command, &match_ctx)? {
             break;

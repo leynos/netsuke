@@ -109,7 +109,7 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
 
 #[cfg(unix)]
 #[rstest]
-fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Result<()> {
+fn search_workspace_surfaces_unreadable_entries(workspace: TempWorkspace) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let blocked = workspace.root().join("blocked");
     fs::create_dir_all(blocked.as_std_path()).context("mkdir blocked")?;
@@ -119,14 +119,21 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
     perms.set_mode(0o000);
     fs::set_permissions(blocked.as_std_path(), perms).context("chmod blocked")?;
 
-    let exec = write_exec(workspace.root(), "tool")?;
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
-    let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
+    let err = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())
+        .expect_err("unreadable workspace entries should fail");
+
+    let mut restored = fs::metadata(blocked.as_std_path())
+        .context("stat blocked for restore")?
+        .permissions();
+    restored.set_mode(0o700);
+    fs::set_permissions(blocked.as_std_path(), restored).context("restore blocked")?;
+
     ensure!(
-        results == vec![exec],
-        "expected readable executable despite blocked dir"
+        matches!(err, ResolveError::WalkDir { .. }),
+        "expected walkdir error, got {err:?}"
     );
     Ok(())
 }

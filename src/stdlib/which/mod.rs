@@ -200,6 +200,9 @@ fn resolve_error_parts(error: &ResolveError) -> (ErrorKind, String) {
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_WHICH_CWD_NON_UTF8).to_string(),
         ),
+        ResolveError::WalkDir { source } => {
+            (ErrorKind::InvalidOperation, walkdir_error_message(source))
+        }
     }
 }
 
@@ -251,6 +254,12 @@ fn workspace_non_utf8_message(command: &str, path: &str) -> String {
     localization::message(keys::STDLIB_WHICH_WORKSPACE_NON_UTF8)
         .with_arg("command", command)
         .with_arg("path", path)
+        .to_string()
+}
+
+fn walkdir_error_message(source: &walkdir::Error) -> String {
+    localization::message(keys::STDLIB_WHICH_WALKDIR_ERROR)
+        .with_arg("details", source.to_string())
         .to_string()
 }
 

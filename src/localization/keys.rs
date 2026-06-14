@@ -288,6 +288,7 @@ define_keys! {
     STDLIB_WHICH_IS_EXECUTABLE => "stdlib.which.is_executable",
     STDLIB_WHICH_CANONICALISE_NON_UTF8 => "stdlib.which.canonicalise_non_utf8",
     STDLIB_WHICH_WORKSPACE_NON_UTF8 => "stdlib.which.workspace_non_utf8",
+    STDLIB_WHICH_WALKDIR_ERROR => "stdlib.which.walkdir_error",
     STDLIB_REGISTER_OPEN_DIR => "stdlib.register.open_dir",
     STDLIB_REGISTER_RESOLVE_DIR => "stdlib.register.resolve_dir",
     STDLIB_REGISTER_DIR_NON_UTF8 => "stdlib.register.dir_non_utf8",
