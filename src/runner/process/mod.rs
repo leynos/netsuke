@@ -207,17 +207,38 @@ pub fn run_ninja_tool(program: &Path, cli: &Cli, build_file: &Path, tool: &str) 
     run_ninja_tool_internal(request, None)
 }
 
+struct NinjaInternalRequest<'request, 'observer> {
+    program: &'request Path,
+    cli: &'request Cli,
+    status_observer: Option<StatusObserver<'observer>>,
+    operation: &'request str,
+}
+
+fn run_ninja_internal<F>(request: NinjaInternalRequest<'_, '_>, configure: F) -> io::Result<()>
+where
+    F: FnOnce(&mut Command) -> io::Result<()>,
+{
+    let mut cmd = Command::new(request.program);
+    configure(&mut cmd)?;
+    run_command_and_stream_with_context(
+        cmd,
+        request.status_observer,
+        request.cli.resolved_diag_json(),
+        request.operation,
+    )
+}
 fn run_ninja_build_internal(
     request: NinjaBuildRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
 ) -> io::Result<()> {
-    let mut cmd = Command::new(request.program);
-    configure_ninja_build_command(&mut cmd, request.cli, request.build_file, request.targets)?;
-    run_command_and_stream_with_context(
-        cmd,
-        status_observer,
-        request.cli.resolved_diag_json(),
-        "build",
+    run_ninja_internal(
+        NinjaInternalRequest {
+            program: request.program,
+            cli: request.cli,
+            status_observer,
+            operation: "build",
+        },
+        |cmd| configure_ninja_build_command(cmd, request.cli, request.build_file, request.targets),
     )
 }
 
@@ -225,13 +246,14 @@ fn run_ninja_tool_internal(
     request: NinjaToolRequest<'_>,
     status_observer: Option<StatusObserver<'_>>,
 ) -> io::Result<()> {
-    let mut cmd = Command::new(request.program);
-    configure_ninja_tool_command(&mut cmd, request.cli, request.build_file, request.tool)?;
-    run_command_and_stream_with_context(
-        cmd,
-        status_observer,
-        request.cli.resolved_diag_json(),
-        request.tool,
+    run_ninja_internal(
+        NinjaInternalRequest {
+            program: request.program,
+            cli: request.cli,
+            status_observer,
+            operation: request.tool,
+        },
+        |cmd| configure_ninja_tool_command(cmd, request.cli, request.build_file, request.tool),
     )
 }
 
