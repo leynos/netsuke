@@ -31,17 +31,14 @@ fn localized_help_snapshots_include_config_flag(
     let mut command = localize_command(Cli::command(), localizer.as_ref());
     let rendered_help = command.render_long_help().to_string();
     let normalized_help = normalize_fluent_isolates(&rendered_help);
-    let missing_config_flag = format!("localized help for {locale} should include the config flag");
-    let missing_config_description =
-        format!("localized help for {locale} should include the config flag description");
 
     assert!(
         normalized_help.contains("--config <FILE>"),
-        "{missing_config_flag}"
+        "localized help for {locale} should include the config flag"
     );
     assert!(
         normalized_help.contains(config_help),
-        "{missing_config_description}"
+        "localized help for {locale} should include the config flag description"
     );
     snapshot_settings("cli").bind(|| {
         assert_snapshot!(snapshot_name, normalized_help);
