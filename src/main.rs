@@ -118,25 +118,24 @@ fn parse_cli_or_exit(
     }
 }
 
+fn config_err_to_exit(err: &(dyn std::error::Error + 'static), mode: DiagMode) -> ExitCode {
+    if mode.is_json() {
+        diagnostic_json::emit_or_fallback(diagnostic_json::render_error_json(err))
+    } else {
+        init_tracing(Level::ERROR);
+        tracing::error!(error = %err, "configuration load failed");
+        ExitCode::FAILURE
+    }
+}
+
 fn resolve_diag_mode_or_exit(
     parsed_cli: &cli::Cli,
     matches: &ArgMatches,
     fallback_mode: DiagMode,
 ) -> Result<DiagMode, ExitCode> {
-    match cli::resolve_merged_diag_json(parsed_cli, matches) {
-        Ok(enabled) => Ok(DiagMode::from_json_enabled(enabled)),
-        Err(err) => {
-            if fallback_mode.is_json() {
-                Err(diagnostic_json::emit_or_fallback(
-                    diagnostic_json::render_error_json(err.as_ref()),
-                ))
-            } else {
-                init_tracing(Level::ERROR);
-                tracing::error!(error = %err, "configuration load failed");
-                Err(ExitCode::FAILURE)
-            }
-        }
-    }
+    cli::resolve_merged_diag_json(parsed_cli, matches)
+        .map(DiagMode::from_json_enabled)
+        .map_err(|err| config_err_to_exit(err.as_ref(), fallback_mode))
 }
 
 fn merge_cli_or_exit(
@@ -144,20 +143,9 @@ fn merge_cli_or_exit(
     matches: &ArgMatches,
     mode: DiagMode,
 ) -> Result<cli::Cli, ExitCode> {
-    match cli::merge_with_config(parsed_cli, matches) {
-        Ok(merged) => Ok(merged.with_default_command()),
-        Err(err) => {
-            if mode.is_json() {
-                Err(diagnostic_json::emit_or_fallback(
-                    diagnostic_json::render_error_json(err.as_ref()),
-                ))
-            } else {
-                init_tracing(Level::ERROR);
-                tracing::error!(error = %err, "configuration load failed");
-                Err(ExitCode::FAILURE)
-            }
-        }
-    }
+    cli::merge_with_config(parsed_cli, matches)
+        .map(cli::Cli::with_default_command)
+        .map_err(|err| config_err_to_exit(err.as_ref(), mode))
 }
 
 fn configure_runtime(
