@@ -22,8 +22,8 @@ pub(super) struct CommandLogContext {
 impl CommandLogContext {
     pub(super) fn from_command(cmd: &Command) -> Self {
         let program_path = PathBuf::from(cmd.get_program());
-        let program_display = Utf8PathBuf::from_path_buf(program_path.clone()).map_or_else(
-            |_| program_path.to_string_lossy().into_owned(),
+        let program_display = Utf8PathBuf::from_path_buf(program_path).map_or_else(
+            |path| path.to_string_lossy().into_owned(),
             Utf8PathBuf::into_string,
         );
         let args: Vec<CommandArg> = cmd

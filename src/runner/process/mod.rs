@@ -44,12 +44,35 @@ fn resolve_ninja_program_utf8_with<F>(mut read_env: F) -> Utf8PathBuf
 where
     F: FnMut(&str) -> Option<OsString>,
 {
-    read_env(NINJA_ENV)
-        .and_then(|value| {
-            let path = PathBuf::from(value);
-            Utf8PathBuf::from_path_buf(path).ok()
-        })
-        .unwrap_or_else(|| Utf8PathBuf::from(NINJA_PROGRAM))
+    read_env(NINJA_ENV).map_or_else(
+        || {
+            debug!(
+                ninja_program = NINJA_PROGRAM,
+                source = "fallback",
+                "Resolved Ninja executable from default program",
+            );
+            Utf8PathBuf::from(NINJA_PROGRAM)
+        },
+        |value| match Utf8PathBuf::from_path_buf(PathBuf::from(value)) {
+            Ok(program) => {
+                debug!(
+                    ninja_program = %program,
+                    source = NINJA_ENV,
+                    "Resolved Ninja executable from environment override",
+                );
+                program
+            }
+            Err(path) => {
+                debug!(
+                    configured_ninja = %path.to_string_lossy(),
+                    fallback_program = NINJA_PROGRAM,
+                    source = "fallback",
+                    "Ignoring non-UTF-8 Ninja executable override",
+                );
+                Utf8PathBuf::from(NINJA_PROGRAM)
+            }
+        },
+    )
 }
 
 #[must_use]
