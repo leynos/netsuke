@@ -374,12 +374,12 @@ requires explicit user approval before implementation begins.
       `make nixie`, and `make kani-ir` completed successfully. The final Kani
       summary again reported nine successfully verified harnesses and zero
       failures.
-- [ ] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested after
+- [x] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested after
       deterministic gates passed, but `coderabbit review --agent` again stalled
       at `preparing_sandbox` and emitted no findings. The local process was
       stopped after confirming only this worktree's CodeRabbit invocation was
       running.
-- [ ] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested again
+- [x] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested again
       after the support-module split and final gates. The agent reached
       `preparing_sandbox`, emitted no findings or rate-limit notice for several
       minutes, and was stopped after confirming only this worktree's
@@ -394,7 +394,7 @@ requires explicit user approval before implementation begins.
       `make nixie`, and `make kani-ir`. The Kani run reported nine
       successfully verified harnesses and zero failures. Logs were captured
       under `/tmp/*-netsuke-4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks-merge.out`.
-- [ ] (2026-06-15T19:59:07Z) CodeRabbit review was requested after the
+- [x] (2026-06-15T19:59:07Z) CodeRabbit review was requested after the
       merge-refresh gates. The agent again reached `preparing_sandbox`, emitted
       no findings or rate-limit notice, and was stopped after confirming only
       this worktree's CodeRabbit process pipeline was terminated.
@@ -407,6 +407,11 @@ requires explicit user approval before implementation begins.
       `origin/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks` and
       created draft pull request
       [#386](https://github.com/leynos/netsuke/pull/386).
+- [x] (2026-06-16T00:00:00Z) Updated `docs/roadmap.md` to mirror the execplan's
+      current implementation status: the accepted small-N Kani decision,
+      private `cfg(kani)`/`IrHashMap` support boundary, nine-harness inventory,
+      validation gates, 4.3.1 Proptest hand-off, and CodeRabbit
+      `preparing_sandbox` observation.
 
 ## Surprises & Discoveries
 
@@ -718,7 +723,9 @@ hand-off for the original larger-N roadmap ambition.
 The main operational caveat is CodeRabbit availability. Multiple review
 requests, including the final 2026-06-15 merge-refresh review, stalled at
 `preparing_sandbox` and emitted no findings or rate-limit notice. Deterministic
-gates and Kani verification are clean.
+gates and Kani verification are clean. The roadmap now carries the same
+implementation status, decisions, findings, observations, and progress summary
+as this execplan.
 
 ## Context and orientation
 
