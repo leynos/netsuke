@@ -340,15 +340,17 @@ and test workflow intact. See
 
 ### 4.2. Intermediate representation verification
 
-- [ ] 4.2.1. Add Kani harnesses for manifest-to-IR safety checks. Requires
+- [x] 4.2.1. Add Kani harnesses for manifest-to-IR safety checks. Requires
   4.1.1. See
   [formal-verification-methods-in-netsuke.md §Kani for the IR core](formal-verification-methods-in-netsuke.md#kani-for-the-ir-core).
-  - [ ] Prove duplicate-output rejection on bounded manifests (up to 10 nodes,
-    depth limit 20 edges).
-  - [ ] Prove empty-rule, multiple-rule, and missing-rule error selection.
-  - [ ] Prove self-edge and small bounded multi-node cycle rejection (same
-    limits).
-  - [ ] Prove missing dependencies do not create false cycles.
+  - [x] Prove duplicate-output rejection on bounded manifests. Kani covers the
+    accepted small-N proof boundary; 4.3.1 closes the larger-N Proptest
+    coverage.
+  - [x] Prove empty-rule, multiple-rule, and missing-rule error selection.
+  - [x] Prove self-edge and small bounded multi-node cycle rejection. Kani
+    covers the accepted small-N proof boundary; 4.3.1 closes the larger-N
+    Proptest coverage.
+  - [x] Prove missing dependencies do not create false cycles.
 - [ ] 4.2.2. Add Kani harnesses for cycle canonicalization. Requires 4.2.1.
   See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel).

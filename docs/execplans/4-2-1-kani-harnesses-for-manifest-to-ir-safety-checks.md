@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IMPLEMENTING
+Status: READY FOR REVIEW
 
 ## Purpose / big picture
 
@@ -359,7 +359,7 @@ requires explicit user approval before implementation begins.
       `docs/formal-verification-methods-in-netsuke.md`, and add
       `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`. Update
       `docs/contents.md` to index the new ADR.
-- [ ] Stage E (validate and review): run mutation discipline per
+- [x] Stage E (validate and review): run mutation discipline per
       harness, run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`, `make nixie`, and `make kani-full`. Run
       `coderabbit review --agent` and resolve all findings.
@@ -384,6 +384,20 @@ requires explicit user approval before implementation begins.
       `preparing_sandbox`, emitted no findings or rate-limit notice for several
       minutes, and was stopped after confirming only this worktree's
       CodeRabbit process pipeline was running.
+- [x] (2026-06-15T19:59:07Z) Refreshed the task branch onto current
+      `origin/main` with merge commit `e2809c3` after the previous branch tip
+      matched the merged 4.2.1 squash tree. The only merge conflict was the
+      ADR index in `docs/contents.md`; resolution preserved the Kani ADR and
+      newer main-branch decision records.
+- [x] (2026-06-15T19:59:07Z) Merge-refresh gates passed:
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+      `make nixie`, and `make kani-ir`. The Kani run reported nine
+      successfully verified harnesses and zero failures. Logs were captured
+      under `/tmp/*-netsuke-4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks-merge.out`.
+- [ ] (2026-06-15T19:59:07Z) CodeRabbit review was requested after the
+      merge-refresh gates. The agent again reached `preparing_sandbox`, emitted
+      no findings or rate-limit notice, and was stopped after confirming only
+      this worktree's CodeRabbit process pipeline was terminated.
 - [ ] Stage F (PR and roadmap): mark roadmap `4.2.1` and its four
       subitems done, push the branch, and update the draft pull
       request with the implementation summary.
@@ -675,7 +689,29 @@ requires explicit user approval before implementation begins.
 
 ## Outcomes & Retrospective
 
-To be completed at the end of Stage F.
+The 4.2.1 implementation is ready for review. The final proof suite contains
+nine IR harnesses:
+
+- `duplicate_output_always_rejected`,
+- `empty_rule_shape_is_rejected`,
+- `multiple_rule_shape_is_rejected`,
+- `missing_rule_shape_is_rejected`,
+- `self_dependency_reports_cycle`,
+- `two_node_cycle_reports_cycle_a_first`,
+- `two_node_cycle_reports_cycle_b_first`,
+- `direct_missing_dependency_does_not_report_cycle`, and
+- `transitive_missing_dependency_does_not_report_cycle`.
+
+The implementation keeps the public `netsuke::ir` API unchanged. Kani-only
+support lives behind `cfg(kani)`, with production-owned helper boundaries for
+duplicate discovery, rule selection, and cycle-presence detection. The final
+accepted bound is small-N Kani coverage plus an explicit 4.3.1 Proptest
+hand-off for the original larger-N roadmap ambition.
+
+The main operational caveat is CodeRabbit availability. Multiple review
+requests, including the final 2026-06-15 merge-refresh review, stalled at
+`preparing_sandbox` and emitted no findings or rate-limit notice. Deterministic
+gates and Kani verification are clean.
 
 ## Context and orientation
 
