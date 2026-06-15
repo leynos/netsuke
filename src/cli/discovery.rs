@@ -8,6 +8,8 @@ use ortho_config::{
     ConfigDiscovery, MergeComposer, MergeLayer, OrthoResult, load_config_file_as_chain,
 };
 use std::borrow::Cow;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,6 +20,11 @@ use super::parser::Cli;
 const CONFIG_ENV_VAR: &str = "NETSUKE_CONFIG";
 const CONFIG_ENV_VAR_LEGACY: &str = "NETSUKE_CONFIG_PATH";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfigLoadFailureKind {
+    Missing,
+    LoadError,
+}
 pub(crate) fn push_file_layers(
     cli: &Cli,
     composer: &mut MergeComposer,
@@ -110,7 +117,14 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
 }
 
 pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
-    let (selector, resolved_path) = cli.config.clone().map_or_else(
+    let (selector, resolved_path) = resolve_config_selector(cli.config.clone());
+
+    debug!(selector, path = ?resolved_path, "resolved config path");
+    resolved_path
+}
+
+fn resolve_config_selector(cli_config: Option<PathBuf>) -> (&'static str, Option<PathBuf>) {
+    cli_config.map_or_else(
         || {
             env_config_path(CONFIG_ENV_VAR).map_or_else(
                 || {
@@ -121,12 +135,8 @@ pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
             )
         },
         |path| ("cli_flag", Some(path)),
-    );
-
-    debug!(selector, path = ?resolved_path, "resolved config path");
-    resolved_path
+    )
 }
-
 fn env_config_path(var_name: &str) -> Option<PathBuf> {
     let path = std::env::var_os(var_name)
         .filter(|value| !value.is_empty())
@@ -150,16 +160,30 @@ pub(crate) fn load_layers_from_path(path: &Path) -> OrthoResult<Vec<MergeLayer<'
                     "explicit configuration file not found",
                 )),
             });
-            warn!(path = ?path, error = %error, "explicit config load failed");
+            warn_explicit_config_load_failed(path, ConfigLoadFailureKind::Missing);
             Err(error)
         }
         Err(error) => {
-            warn!(path = ?path, error = %error, "explicit config load failed");
+            warn_explicit_config_load_failed(path, ConfigLoadFailureKind::LoadError);
             Err(error)
         }
     }
 }
 
+fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailureKind) {
+    warn!(
+        path_hash = %short_hash(path.to_string_lossy().as_bytes()),
+        path_file_name = ?path.file_name(),
+        failure_kind = ?failure_kind,
+        "explicit config load failed"
+    );
+}
+
+fn short_hash(value: &[u8]) -> String {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
 pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>> {
     let _span = debug_span!("collect_diag_file_layers").entered();
 
@@ -174,6 +198,10 @@ pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<
         },
     )
 }
+
+#[cfg(test)]
+#[path = "discovery_tests.rs"]
+mod tests;
 
 /// Tests for the explicit config-path selector precedence implemented by
 /// [`explicit_config_path`]. Enumerated cases cover all 2^3 combinations of
