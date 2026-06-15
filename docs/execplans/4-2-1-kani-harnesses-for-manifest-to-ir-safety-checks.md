@@ -398,9 +398,15 @@ requires explicit user approval before implementation begins.
       merge-refresh gates. The agent again reached `preparing_sandbox`, emitted
       no findings or rate-limit notice, and was stopped after confirming only
       this worktree's CodeRabbit process pipeline was terminated.
-- [ ] Stage F (PR and roadmap): mark roadmap `4.2.1` and its four
+- [x] Stage F (PR and roadmap): mark roadmap `4.2.1` and its four
       subitems done, push the branch, and update the draft pull
       request with the implementation summary.
+- [x] (2026-06-15T19:59:07Z) Pushed
+      `4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks` with upstream
+      tracking restored to
+      `origin/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks` and
+      created draft pull request
+      [#386](https://github.com/leynos/netsuke/pull/386).
 
 ## Surprises & Discoveries
 
@@ -689,8 +695,9 @@ requires explicit user approval before implementation begins.
 
 ## Outcomes & Retrospective
 
-The 4.2.1 implementation is ready for review. The final proof suite contains
-nine IR harnesses:
+The 4.2.1 implementation is ready for review in draft pull request
+[#386](https://github.com/leynos/netsuke/pull/386). The final proof suite
+contains nine IR harnesses:
 
 - `duplicate_output_always_rejected`,
 - `empty_rule_shape_is_rejected`,
