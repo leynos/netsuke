@@ -260,7 +260,6 @@ Netsuke uses a mixed strategy:
   to the code under test, included via `#[cfg(test)] #[path = ...] mod ...;`
   declarations.
 
-
 ## Property-based testing with proptest
 
 Use `proptest` for property-based tests that exercise invariants across
