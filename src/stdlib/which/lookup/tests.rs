@@ -109,7 +109,7 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
 
 #[cfg(unix)]
 #[rstest]
-fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Result<()> {
+fn search_workspace_surfaces_unreadable_entries(workspace: TempWorkspace) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
     let blocked = workspace.root().join("blocked");
     fs::create_dir_all(blocked.as_std_path()).context("mkdir blocked")?;
@@ -119,14 +119,21 @@ fn search_workspace_ignores_unreadable_entries(workspace: TempWorkspace) -> Resu
     perms.set_mode(0o000);
     fs::set_permissions(blocked.as_std_path(), perms).context("chmod blocked")?;
 
-    let exec = write_exec(workspace.root(), "tool")?;
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
-    let results = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())?;
+    let err = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())
+        .expect_err("unreadable workspace entries should fail");
+
+    let mut restored = fs::metadata(blocked.as_std_path())
+        .context("stat blocked for restore")?
+        .permissions();
+    restored.set_mode(0o700);
+    fs::set_permissions(blocked.as_std_path(), restored).context("restore blocked")?;
+
     ensure!(
-        results == vec![exec],
-        "expected readable executable despite blocked dir"
+        matches!(err, ResolveError::WalkDir { .. }),
+        "expected walkdir error, got {err:?}"
     );
     Ok(())
 }
@@ -141,19 +148,18 @@ fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Resul
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
     let err = EnvSnapshot::capture(Some(workspace.root()), Some(invalid_path))
         .expect_err("invalid PATH should fail EnvSnapshot::capture");
-    let msg = err.to_string();
 
     let details = localization::message(keys::STDLIB_WHICH_PATH_ENTRY_NON_UTF8)
         .with_arg("index", 1)
         .to_string();
-    let expected = localization::message(keys::STDLIB_WHICH_ARGS_ERROR)
-        .with_arg("details", details)
-        .to_string();
 
-    ensure!(
-        msg.contains(&expected),
-        "expected PATH parsing error, got: {msg}"
-    );
+    match err {
+        ResolveError::Args { detail } => ensure!(
+            detail == details,
+            "expected PATH parsing detail, got: {detail}"
+        ),
+        other => return Err(anyhow!("expected argument error, got: {other:?}")),
+    }
 
     Ok(())
 }
@@ -260,12 +266,17 @@ fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) 
 
     let err = resolve_direct(script.as_str(), &snapshot, &WhichOptions::default())
         .expect_err("non-executable direct path should fail");
-    let msg = err.to_string();
 
-    ensure!(
-        msg.contains("not executable"),
-        "expected not executable message: {msg}"
-    );
+    match err {
+        ResolveError::DirectNotFound { command, path } => {
+            ensure!(
+                command == script.as_str(),
+                "expected direct command payload, got: {command}"
+            );
+            ensure!(path == script, "expected direct path payload, got: {path}");
+        }
+        other => return Err(anyhow!("expected direct not found error, got: {other:?}")),
+    }
 
     Ok(())
 }

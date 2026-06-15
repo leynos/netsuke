@@ -7,9 +7,8 @@ use std::{
 
 use camino::Utf8PathBuf;
 use indexmap::IndexSet;
-use minijinja::Error;
 
-use crate::stdlib::which::env::EnvSnapshot;
+use crate::stdlib::which::{env::EnvSnapshot, resolve_error::ResolveError};
 
 #[cfg(not(windows))]
 mod posix;
@@ -81,10 +80,9 @@ pub(super) fn search_workspace(
     command: &str,
     collect_all: bool,
     skip_dirs: &WorkspaceSkipList,
-) -> Result<Vec<Utf8PathBuf>, Error> {
+) -> Result<Vec<Utf8PathBuf>, ResolveError> {
     if !workspace_fallback_enabled() {
         tracing::debug!(
-            %command,
             env = WORKSPACE_FALLBACK_ENV,
             "workspace which fallback disabled via env override",
         );
@@ -92,7 +90,6 @@ pub(super) fn search_workspace(
     }
 
     tracing::debug!(
-        %command,
         max_depth = WORKSPACE_MAX_DEPTH,
         skip = ?skip_dirs,
         "using workspace which fallback",
@@ -126,35 +123,26 @@ fn workspace_fallback_enabled() -> bool {
     }
 }
 
-/// Convert a walkdir item to an entry, logging and skipping unreadable paths to
-/// keep workspace traversal robust across platforms.
+/// Convert a walkdir item to an entry, propagating traversal errors as
+/// [`ResolveError::WalkDir`] so callers can surface IO failures rather than
+/// silently skipping them.
 pub(super) fn unwrap_or_log_error(
     walk_entry: Result<walkdir::DirEntry, walkdir::Error>,
-    command: &str,
-) -> Option<walkdir::DirEntry> {
-    match walk_entry {
-        Ok(entry) => Some(entry),
-        Err(err) => {
-            tracing::debug!(
-                %command,
-                error = %err,
-                "skipping unreadable workspace entry during which fallback",
-            );
-            None
-        }
-    }
+) -> Result<walkdir::DirEntry, ResolveError> {
+    walk_entry.map_err(|err| {
+        tracing::debug!(
+            error = %err,
+            "unreadable workspace entry during which fallback",
+        );
+        ResolveError::WalkDir { source: err }
+    })
 }
 
 /// Emit a debug message when fallback traversal yields no matches, helping
 /// callers diagnose unexpected latency or misses.
-pub(super) fn log_if_no_matches(
-    matches: &[Utf8PathBuf],
-    command: &str,
-    skip_dirs: &WorkspaceSkipList,
-) {
+pub(super) fn log_if_no_matches(matches: &[Utf8PathBuf], skip_dirs: &WorkspaceSkipList) {
     if matches.is_empty() {
         tracing::debug!(
-            %command,
             max_depth = WORKSPACE_MAX_DEPTH,
             skip = ?skip_dirs,
             "workspace which fallback found no matches",

@@ -1,0 +1,5 @@
+---
+source: tests/which_diagnostic_snapshot_tests.rs
+expression: normalized
+---
+invalid operation: netsuke::jinja::which::not_found: [netsuke::jinja::which::not_found] command '⁨absent⁩' not found after checking ⁨0⁩ PATH entries. Preview: ⁨<empty>⁩. Empty PATH segments are ignored; use cwd_mode="auto" to include the working directory. (in <string>:1)
