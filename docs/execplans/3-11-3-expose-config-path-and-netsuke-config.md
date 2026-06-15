@@ -54,10 +54,10 @@ Observable success means all of the following hold simultaneously:
 - Add `build.rs` symbol anchors for any new public helpers.
 - Do not use OrthoConfig's built-in `discovery(...)` attribute on the `Cli`
   struct. Netsuke manages its own discovery through `config_discovery()` in
-  `src/cli/config_merge.rs` because OrthoConfig's `compose_layers()` returns
-  only the first found file, and Netsuke's two-pass approach is needed for
-  correct project-over-user precedence. The new `--config` flag must integrate
-  with this custom discovery path, not replace it.
+  `src/cli/discovery.rs` because OrthoConfig's `compose_layers()` returns only
+  the first found file, and Netsuke's two-pass approach is needed for correct
+  project-over-user precedence. The new `--config` flag must integrate with
+  this custom discovery path, not replace it.
 - The `--config` flag must use a long-form argument only. The short `-c` is
   not assigned because `-C` (uppercase) is already taken by `--directory` and
   the visual similarity would cause confusion.
@@ -138,8 +138,8 @@ Observable success means all of the following hold simultaneously:
 
 ## Surprises & discoveries
 
-- Observation: a single `resolve_config_path()` helper in
-  `src/cli/config_merge.rs` cleanly keeps `merge_with_config()` and
+- Observation: a single `explicit_config_path()` helper in
+  `src/cli/discovery.rs` cleanly keeps `merge_with_config()` and
   `resolve_merged_diag_json()` aligned. This removed the old implicit reliance
   on `ConfigDiscovery::env_var(...)` for explicit file selection and avoided
   duplicating precedence logic. Date/Author: 2026-04-20 / implementation agent.
@@ -179,7 +179,7 @@ Observable success means all of the following hold simultaneously:
 - Decision: use a plain `config: Option<PathBuf>` field on `Cli` with
   `#[serde(skip)]` rather than OrthoConfig's
   `discovery(config_cli_long = "config", config_cli_visible = true)` attribute.
-  Rationale: Netsuke's two-pass discovery in `config_merge.rs` is required for
+  Rationale: Netsuke's two-pass discovery in `discovery.rs` is required for
   correct project-over-user file precedence. OrthoConfig's built-in
   `compose_layers()` returns only the first found file and cannot express this.
   Introducing the `discovery(...)` attribute would replace Netsuke's custom
@@ -207,7 +207,7 @@ Observable success means all of the following hold simultaneously:
 
 - Decision: retire `ConfigDiscovery::env_var(...)` from Netsuke's internal
   automatic-discovery helper and perform all explicit config-path selection in
-  `resolve_config_path()`. Rationale: once `NETSUKE_CONFIG`,
+  `explicit_config_path()`. Rationale: once `NETSUKE_CONFIG`,
   `NETSUKE_CONFIG_PATH`, and `--config` must share a single precedence ladder,
   keeping the file-selection logic in one helper is simpler and prevents drift
   between normal merging and early diag-JSON resolution. Date/Author:
@@ -253,7 +253,7 @@ Key outcomes:
 - Added `NETSUKE_CONFIG` as the documented environment-variable selector while
   preserving `NETSUKE_CONFIG_PATH` as a lower-precedence legacy alias.
 - Centralized explicit config selection in
-  `src/cli/config_merge.rs::resolve_config_path()`, which now drives both full
+  `src/cli/discovery.rs::explicit_config_path()`, which now drives both full
   merging and early `diag_json` resolution.
 - Added focused integration coverage in
   `tests/cli_tests/config_selection.rs` for CLI/env precedence, missing-file
@@ -283,61 +283,63 @@ Retrospective:
 
 Read these files in order before changing code.
 
-1. `src/cli/mod.rs` — the `Cli` struct (lines 40–142). This is the clap
-   parser and OrthoConfig merge root. It defines both config constants:
-   `CONFIG_ENV_VAR` (`"NETSUKE_CONFIG"`) and `CONFIG_ENV_VAR_LEGACY`
-   (`"NETSUKE_CONFIG_PATH"`), plus `ENV_PREFIX` (`"NETSUKE_"`).
+1. `src/cli/mod.rs` — the CLI module root. It re-exports the parser-facing
+   `Cli` type and the public merge and diagnostic helpers.
 
-2. `src/cli/config_merge.rs` — the merge pipeline. The key functions are:
+2. `src/cli/discovery.rs` — file-layer discovery and loading. The key
+   functions are:
 
-   - `resolve_config_path(cli)` (line 50): applies the precedence
+   - `explicit_config_path(cli)`: applies the precedence
      `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH` and returns the
      explicit config path when set.
-   - `config_discovery(directory)` (line 38): builds a `ConfigDiscovery` rooted
-     at `netsuke`, with `-C/--directory` forwarded via `cli.directory` as the
+   - `config_discovery(directory)`: builds a `ConfigDiscovery` rooted at
+     `netsuke`, with `-C/--directory` forwarded via `cli.directory` as the
      optional project-root anchor.
-   - `push_file_layers(composer, errors, cli)` (line 226): uses
-     `resolve_config_path(cli)`.
-     When a path is found, it loads that single file and skips discovery; otherwise,
-     it runs the two-pass discovery path.
-   - `collect_diag_file_layers(cli)` (line 141): uses the same `&Cli` driven
-     `resolve_config_path(cli)` path before discovery so diagnostic-json
+   - `push_file_layers(cli, composer, errors)`: uses
+     `explicit_config_path(cli)`.
+     When a path is found, it loads that single file and skips discovery;
+     otherwise, it runs the two-pass discovery path.
+   - `collect_diag_file_layers(cli)`: uses the same `&Cli` driven
+     `explicit_config_path(cli)` path before discovery so diagnostic-json
      resolution honours explicit selection.
-   - `merge_with_config(cli, matches)` (line 315): reads selection through
-     `resolve_config_path(cli)` and delegates to `push_file_layers` with `&Cli`.
+3. `src/cli/merge.rs` — the four-layer merge pipeline. It defines
+   `ENV_PREFIX` (`"NETSUKE_"`), delegates file loading to
+   `push_file_layers(...)`, and applies environment and CLI override layers.
+   `merge_with_config(cli, matches)` delegates file-layer selection to
+   `push_file_layers` with `&Cli`, so the full merge path shares the same
+   explicit and discovered file-layer behaviour.
 
-3. `src/cli/config.rs` — the `CliConfig` typed view. The `config` field does
+4. `src/cli/config.rs` — the `CliConfig` typed view. The `config` field does
    NOT belong here because it is a file selector, not a runtime preference.
 
-4. `src/cli_l10n.rs` — localization helpers. `flag_help_key()` (line 122)
+5. `src/cli_l10n.rs` — localization helpers. `flag_help_key()` (line 122)
    maps argument IDs to Fluent keys. A new mapping for `"config"` must be added.
 
-5. `src/localization/keys.rs` — Fluent key constants. A new key
+6. `src/localization/keys.rs` — Fluent key constants. A new key
    `CLI_FLAG_CONFIG_HELP` must be added.
 
-6. `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl` — Fluent
+7. `locales/en-US/messages.ftl` and `locales/es-ES/messages.ftl` — Fluent
    bundles. New messages for the `--config` flag help text.
 
-7. `build.rs` — symbol anchoring. If any new public helper is exposed from
-   `src/cli/mod.rs` or `src/cli/config_merge.rs`, a `const _` anchor must be
-   added.
+8. `build.rs` — symbol anchoring. If any new public helper is exposed from
+   `src/cli/mod.rs` or `src/cli/discovery.rs`, a `const _` anchor must be added.
 
-8. `tests/cli_tests/config_discovery.rs` — existing integration tests for
+9. `tests/cli_tests/config_discovery.rs` — existing integration tests for
    config discovery. New tests for `--config` and `NETSUKE_CONFIG` will be
    added here or in a neighbouring file.
 
-9. `tests/features/configuration_discovery.feature` and
+10. `tests/features/configuration_discovery.feature` and
    `tests/bdd/steps/configuration_discovery.rs` — existing BDD coverage for
    config discovery. New scenarios will extend this feature file.
 
-10. `docs/users-guide.md` (lines 543–630) — user-facing configuration
+11. `docs/users-guide.md` (lines 543–630) — user-facing configuration
     documentation. Must be updated to describe `--config` and
     `NETSUKE_CONFIG`.
 
-11. `docs/netsuke-design.md` (lines 2030–2111) — design decisions section
+12. `docs/netsuke-design.md` (lines 2030–2111) — design decisions section
     8.4. Must be updated to record the new config override surface.
 
-12. `docs/roadmap.md` (lines 296–298) — roadmap item 3.11.3. Must be marked
+13. `docs/roadmap.md` (lines 296–298) — roadmap item 3.11.3. Must be marked
     done after all gates pass.
 
 ## Plan of work
@@ -357,19 +359,18 @@ Add a new `config: Option<PathBuf>` field to the `Cli` struct in
 
 Update the default impl for `Cli` to set `config: None`.
 
-Then, align the merge pipeline in `src/cli/config_merge.rs` with the landed
-`resolve_config_path(cli)` contract:
+Then, align the merge pipeline in `src/cli/discovery.rs` with the landed
+`explicit_config_path(cli)` contract:
 
-1. `resolve_config_path(cli)` applies precedence as `--config` >
+1. `explicit_config_path(cli)` applies precedence as `--config` >
    `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`, before discovery.
-2. `push_file_layers(composer, errors, cli)` and
-   `collect_diag_file_layers(cli)` both call `resolve_config_path(cli)`
+2. `push_file_layers(cli, composer, errors)` and
+   `collect_diag_file_layers(cli)` both call `explicit_config_path(cli)`
    directly. When a path is selected they load that file only, bypassing
    discovery.
-3. `merge_with_config(cli, matches)` reads selection through
-   `resolve_config_path(cli)` and delegates to `push_file_layers` with the same
-   `&Cli` pipeline, so all config entry points resolve explicit selectors the
-   same way.
+3. `merge_with_config(cli, matches)` delegates file-layer selection to
+   `push_file_layers` with the same `&Cli` pipeline, so all config entry points
+   resolve explicit selectors the same way.
 
 Acceptance for Stage A:
 
@@ -382,7 +383,7 @@ Acceptance for Stage A:
 
 ### Stage B. Support `NETSUKE_CONFIG` environment variable
 
-Update `resolve_config_path()` to check `NETSUKE_CONFIG` before
+Update `explicit_config_path()` to check `NETSUKE_CONFIG` before
 `NETSUKE_CONFIG_PATH`. The full precedence for file selection is:
 
 ```plaintext
@@ -393,7 +394,7 @@ automatic discovery  (lowest, two-pass project > user)
 ```
 
 Update `push_file_layers()` and `collect_diag_file_layers()` to rely on
-`resolve_config_path(cli)` for explicit config selection. When that helper
+`explicit_config_path(cli)` for explicit config selection. When that helper
 returns a path, the selected file is loaded directly and discovery is skipped;
 otherwise these functions continue with the two-pass discovery flow.
 
@@ -427,10 +428,10 @@ Acceptance for Stage B:
 4. Update `flag_help_key()` in `src/cli_l10n.rs` to map `"config"` to
    `keys::CLI_FLAG_CONFIG_HELP`.
 
-5. If `resolve_config_path` or any other new helper is made `pub` and
+5. If `explicit_config_path` or any other new helper is made `pub` and
    used from `build.rs`-compiled modules, add a `const _` symbol anchor in
    `build.rs::assert_symbols_linked()`. If the helpers remain `pub(super)` or
-   private to `config_merge.rs`, no anchor is needed.
+   private to `discovery.rs`, no anchor is needed.
 
 Acceptance for Stage C:
 
@@ -638,34 +639,45 @@ pub config: Option<PathBuf>,
 The `#[serde(skip)]` annotation prevents the field from being serialized into
 the JSON value that feeds the merge pipeline.
 
-### Config path resolution helper (`src/cli/config_merge.rs`)
+### Config path resolution helper (`src/cli/discovery.rs`)
 
 ```rust
 /// Resolve the effective explicit config file path.
 ///
 /// Precedence: `--config` > `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`.
 /// Empty environment values are ignored.
-fn resolve_config_path(cli: &Cli) -> Option<PathBuf> {
+fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
     cli.config
-        .as_ref()
-        .map(PathBuf::from)
+        .clone()
         .or_else(|| env_config_path(CONFIG_ENV_VAR))
         .or_else(|| env_config_path(CONFIG_ENV_VAR_LEGACY))
 }
+
+fn env_config_path(var_name: &str) -> Option<PathBuf> {
+    std::env::var_os(var_name)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+```
+
+### Updated `collect_file_layers` signature
+
+```rust
+fn collect_file_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<'static>>>
 ```
 
 ### Updated `push_file_layers` signature
 
 ```rust
 fn push_file_layers(
+    cli: &Cli,
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
-    cli: &Cli,
 )
 ```
 
 The helper resolves an explicit config path internally with
-`resolve_config_path(cli)`. When a path is present, it loads that file via
+`explicit_config_path(cli)`. When a path is present, it loads that file via
 `load_layers_from_path()`, pushes every layer in the returned chain, and stops.
 If the file does not exist or fails to parse, the resulting error is appended to
 `errors` and discovery does not continue.
@@ -683,20 +695,28 @@ error from that direct load is appended to `errors`.
 ### Updated `collect_diag_file_layers` signature
 
 ```rust
-fn collect_diag_file_layers(cli: &Cli) -> Vec<MergeLayer<'static>>
+fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>>
 ```
 
 This mirrors the same resolution order for early diag-JSON evaluation. An
 explicit config path is resolved first and, when `load_layers_from_path()`
 succeeds, its layers are returned immediately. If that explicit load fails, the
-helper returns an empty vector and does not continue into automatic discovery,
-so an invalid explicit selector cannot inherit a discovered diagnostic
-preference. Without an explicit selector, the helper uses the same
+helper propagates the `OrthoError` and does not continue into automatic
+discovery, so an invalid explicit selector cannot inherit a discovered
+diagnostic preference. Without an explicit selector, the helper uses the same
 `config_discovery(cli.directory.as_deref())` path as `push_file_layers()`,
 returns the first-pass file layers when the project file was already
 discovered, and only falls back to `project_scope_layers()` when the first pass
-missed the project `.netsuke.toml`. If the direct project load fails, the
-helper returns the first-pass layers instead of propagating the error.
+missed the project `.netsuke.toml`. If the direct project load fails, that
+error is propagated to the diagnostic merge caller.
+
+### Updated `load_layers_from_path` signature
+
+```rust
+fn load_layers_from_path(
+    path: &std::path::Path,
+) -> OrthoResult<Vec<MergeLayer<'static>>>
+```
 
 ### Fluent key (`src/localization/keys.rs`)
 
@@ -756,9 +776,11 @@ Modified files:
 
 - `src/cli/mod.rs` — add `config: Option<PathBuf>` field; update `Default`
   impl.
-- `src/cli/config_merge.rs` — add `resolve_config_path`; update
-  `push_file_layers`, `collect_diag_file_layers`, and `merge_with_config` to
-  honour explicit config paths.
+- `src/cli/discovery.rs` — add `explicit_config_path`; update
+  `push_file_layers` and `collect_diag_file_layers` to honour explicit config
+  paths.
+- `src/cli/merge.rs` — update `merge_with_config` to delegate file-layer
+  selection with `&Cli`.
 - `src/cli_l10n.rs` — add `"config"` mapping in `flag_help_key`.
 - `src/localization/keys.rs` — add `CLI_FLAG_CONFIG_HELP` key.
 - `locales/en-US/messages.ftl` — add `cli.flag.config.help` message.
@@ -772,5 +794,5 @@ Modified files:
 - `docs/netsuke-design.md` — record design decision in section 8.4.
 - `docs/roadmap.md` — mark 3.11.3 done.
 - `build.rs` — add symbol anchor if new public helpers are exposed.
-- `src/cli/config_merge_tests.rs` — add unit tests for `resolve_config_path`
-  and updated `push_file_layers`.
+- Unit tests for `explicit_config_path` and updated `push_file_layers` were
+  added.
