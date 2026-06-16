@@ -246,13 +246,32 @@ fn run_verbose_build_and_assert_ninja_log(
     use_env_override: bool,
 ) -> Result<()> {
     let temp = temp_with_minimal_manifest?;
+    let description = if use_env_override {
+        "override build should log the resolved ninja program"
+    } else {
+        "default build should log the fallback ninja program"
+    };
+    run_verbose_build_with_fake_ninja_and_assert_log(
+        temp.path(),
+        ninja_stem,
+        use_env_override,
+        description,
+    )
+}
+
+fn run_verbose_build_with_fake_ninja_and_assert_log(
+    workspace: &Path,
+    ninja_stem: &str,
+    use_env_override: bool,
+    description: &str,
+) -> Result<()> {
     let ninja_temp = tempdir().context("create fake ninja dir")?;
     let ninja_path = ninja_temp.path().join(fake_ninja_name(ninja_stem));
     write_fake_ninja_script(&ninja_path, &[], None)?;
 
     let ninja_env = use_env_override.then_some(ninja_path.as_path());
     let stderr = run_verbose_build_with_ninja_env(
-        temp.path(),
+        workspace,
         path_containing(ninja_temp.path())?,
         ninja_env,
     )?;
@@ -261,11 +280,6 @@ fn run_verbose_build_and_assert_ninja_log(
         format!("Executing command: {} ", ninja_path.display())
     } else {
         format!("Executing command: {ninja_stem} ")
-    };
-    let description = if use_env_override {
-        "override build should log the resolved ninja program"
-    } else {
-        "default build should log the fallback ninja program"
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
     Ok(())
@@ -279,23 +293,12 @@ fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
     fs::copy("tests/data/minimal.yml", temp.path().join("Netsukefile"))
         .context("copy minimal manifest")?;
 
-    let ninja_temp = tempdir().context("create fake ninja dir")?;
-    let ninja_path = ninja_temp.path().join(fake_ninja_name(stem));
-    write_fake_ninja_script(&ninja_path, &[], None)?;
-
-    let stderr = run_verbose_build_with_ninja_env(
+    run_verbose_build_with_fake_ninja_and_assert_log(
         temp.path(),
-        path_containing(ninja_temp.path())?,
-        Some(ninja_path.as_path()),
-    )?;
-
-    let expected = format!("Executing command: {} ", ninja_path.display());
-    ensure!(
-        stderr.contains(&expected),
-        "verbose log must contain the resolved ninja path for override \
-         stem {stem:?}; got:\n{stderr}"
-    );
-    Ok(())
+        stem,
+        true,
+        &format!("verbose log must contain the resolved ninja path for override stem {stem:?}"),
+    )
 }
 
 proptest! {
