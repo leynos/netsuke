@@ -949,6 +949,12 @@ configuration resolution. The production `StdEnvProvider` adapter delegates
 to `std::env::var_os`; tests can inject map-backed providers without mutating
 process-global state.
 
+```rust
+pub trait EnvProvider {
+    fn get(&self, key: &str) -> Option<std::ffi::OsString>;
+}
+```
+
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
 
@@ -973,8 +979,8 @@ pub fn resolve_merged_json_with_env(
 
 Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
 `EnvLock` because the external discovery implementation reads platform
-environment variables directly. Tests for Netsuke's own environment port should
-avoid `EnvLock`.
+environment variables directly. Tests for Netsuke's own environment port
+should avoid `EnvLock`.
 
 Unit tests that only need to verify explicit config path precedence should test
 `explicit_config_path_with_env` with an injected provider instead of mutating
