@@ -901,7 +901,6 @@ whitespace-only `when` values, or type mismatches in the iterable.
 
 ## Runner process execution
 
-
 ### Module: `runner::process::command_logging`
 
 `src/runner/process/command_logging.rs` owns the structured logging contract
