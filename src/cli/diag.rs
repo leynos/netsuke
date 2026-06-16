@@ -113,6 +113,7 @@ mod tests {
     use super::*;
     use anyhow::ensure;
     use clap::CommandFactory;
+    use clap::Parser;
     use serde_json::json;
     use std::collections::HashMap;
     use std::ffi::OsString;
@@ -185,5 +186,26 @@ mod tests {
             matches!(error.as_ref(), OrthoError::Validation { key, .. } if key == JSON_ENV_VAR),
             "expected validation error for {JSON_ENV_VAR}, got {error:?}"
         );
+    }
+
+    #[test]
+    fn resolve_merged_json_honours_cli_before_malformed_env() -> anyhow::Result<()> {
+        let dir = tempdir()?;
+        let config_path = dir.path().join("netsuke.toml");
+        std::fs::write(&config_path, "json = false\n")?;
+        let config_path = config_path
+            .to_str()
+            .expect("temp config path should be UTF-8");
+        let args = ["netsuke", "--config", config_path, "--json"];
+        let cli = Cli::parse_from(args);
+        let matches = Cli::command().get_matches_from(args);
+        let env = TestEnv::default().with_var(JSON_ENV_VAR, "yes");
+
+        ensure!(
+            resolve_merged_json_with_env(&cli, &matches, &env)?,
+            "CLI --json should override malformed JSON env"
+        );
+
+        Ok(())
     }
 }
