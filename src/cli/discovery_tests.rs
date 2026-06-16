@@ -2,8 +2,9 @@
 
 use super::*;
 use anyhow::{Context, Result, ensure};
+use rstest::{fixture, rstest};
 use std::sync::{Arc, Mutex};
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 use test_support::{EnvVarGuard, env_lock::EnvLock};
 use tracing::{
     Event, Subscriber,
@@ -79,6 +80,15 @@ fn with_test_subscriber<T>(test: impl FnOnce(CapturedEvents) -> T) -> T {
     tracing::subscriber::with_default(subscriber, || test(captured))
 }
 
+fn capture_events<T, E>(
+    test: impl FnOnce() -> std::result::Result<T, E>,
+) -> std::result::Result<(T, Vec<String>), E> {
+    with_test_subscriber(|captured| {
+        let value = test()?;
+        Ok((value, captured.snapshot()))
+    })
+}
+
 fn find_event<'a>(events: &'a [String], message: &str) -> Result<&'a String> {
     events
         .iter()
@@ -86,148 +96,190 @@ fn find_event<'a>(events: &'a [String], message: &str) -> Result<&'a String> {
         .with_context(|| format!("expected event containing {message:?} in {events:?}"))
 }
 
-#[test]
-fn explicit_config_path_logs_selected_cli_path() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
-    let selected_path = PathBuf::from("selected.toml");
+#[fixture]
+fn clean_config_env() -> (EnvLock, EnvVarGuard, EnvVarGuard) {
+    (
+        EnvLock::acquire(),
+        EnvVarGuard::remove(CONFIG_ENV_VAR),
+        EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY),
+    )
+}
+
+#[derive(Debug, Clone, Copy)]
+enum EnvSetting {
+    Removed,
+    Set(&'static str),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ConfigPathScenario {
+    cli_config: Option<&'static str>,
+    config_env: EnvSetting,
+    legacy_env: EnvSetting,
+    expected_path: Option<&'static str>,
+    expected_selector: &'static str,
+    expected_env_trace: Option<&'static str>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LayerScenario {
+    ExplicitConfig,
+    Discovery,
+}
+
+fn apply_env_setting(var_name: &'static str, setting: EnvSetting) -> Option<EnvVarGuard> {
+    match setting {
+        EnvSetting::Removed => None,
+        EnvSetting::Set(value) => Some(EnvVarGuard::set(var_name, value)),
+    }
+}
+
+#[rstest]
+#[case::cli_flag_wins_over_environment(ConfigPathScenario {
+    cli_config: Some("selected.toml"),
+    config_env: EnvSetting::Removed,
+    legacy_env: EnvSetting::Removed,
+    expected_path: Some("selected.toml"),
+    expected_selector: "cli_flag",
+    expected_env_trace: None,
+})]
+#[case::primary_environment_wins_over_legacy(ConfigPathScenario {
+    cli_config: None,
+    config_env: EnvSetting::Set("env.toml"),
+    legacy_env: EnvSetting::Set("legacy.toml"),
+    expected_path: Some("env.toml"),
+    expected_selector: CONFIG_ENV_VAR,
+    expected_env_trace: Some(CONFIG_ENV_VAR),
+})]
+fn explicit_config_path_logs_selected_selector(
+    clean_config_env: (EnvLock, EnvVarGuard, EnvVarGuard),
+    #[case] scenario: ConfigPathScenario,
+) -> Result<()> {
+    let _clean_config_env = clean_config_env;
+    let _config_guard = apply_env_setting(CONFIG_ENV_VAR, scenario.config_env);
+    let _legacy_guard = apply_env_setting(CONFIG_ENV_VAR_LEGACY, scenario.legacy_env);
     let cli = Cli {
-        config: Some(selected_path.clone()),
+        config: scenario.cli_config.map(PathBuf::from),
         ..Cli::default()
     };
 
-    with_test_subscriber(|captured| {
-        let resolved = explicit_config_path(&cli);
-        let events = captured.snapshot();
-        let event = find_event(&events, "resolved config path")?;
+    let (resolved, events) = capture_events(|| Ok::<_, anyhow::Error>(explicit_config_path(&cli)))?;
+    let selector_event = find_event(&events, "resolved config path")?;
 
-        ensure!(
-            resolved == Some(selected_path),
-            "expected CLI config path to resolve"
-        );
-        ensure!(
-            event.contains("selector=\"cli_flag\""),
-            "selector field should identify CLI flag: {event}"
-        );
-        ensure!(
-            event.contains("path=Some(\"selected.toml\")"),
-            "path field should contain selected path: {event}"
-        );
-        Ok(())
-    })
-}
+    ensure!(
+        resolved == scenario.expected_path.map(PathBuf::from),
+        "expected selected config path for {scenario:?}"
+    );
+    ensure!(
+        selector_event.contains(&format!("selector={:?}", scenario.expected_selector)),
+        "selector field should identify winner: {selector_event}"
+    );
+    ensure!(
+        selector_event.contains(&format!("path={resolved:?}")),
+        "path field should contain selected path: {selector_event}"
+    );
 
-#[test]
-fn explicit_config_path_logs_env_lookup_and_selector() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _config_guard = EnvVarGuard::set(CONFIG_ENV_VAR, "env.toml");
-    let _legacy_guard = EnvVarGuard::set(CONFIG_ENV_VAR_LEGACY, "legacy.toml");
-
-    with_test_subscriber(|captured| {
-        let resolved = explicit_config_path(&Cli::default());
-        let events = captured.snapshot();
+    if let Some(var_name) = scenario.expected_env_trace {
         let env_event = events
             .iter()
             .find(|event| {
                 event.contains("read config path variable")
-                    && event.contains("var_name=\"NETSUKE_CONFIG\"")
+                    && event.contains(&format!("var_name={var_name:?}"))
             })
-            .with_context(|| format!("expected NETSUKE_CONFIG trace event in {events:?}"))?;
-        let selector_event = find_event(&events, "resolved config path")?;
-
-        ensure!(
-            resolved == Some(PathBuf::from("env.toml")),
-            "NETSUKE_CONFIG should win over legacy selector"
-        );
+            .with_context(|| format!("expected {var_name} trace event in {events:?}"))?;
         ensure!(
             env_event.contains("found=true"),
             "env trace should record that a path was found: {env_event}"
         );
-        ensure!(
-            selector_event.contains("selector=\"NETSUKE_CONFIG\""),
-            "selector should identify NETSUKE_CONFIG: {selector_event}"
-        );
-        Ok(())
-    })
+    }
+
+    Ok(())
 }
 
-#[test]
-fn collect_diag_file_layers_logs_explicit_path_branch() -> Result<()> {
+#[rstest]
+#[case::explicit_config_path(LayerScenario::ExplicitConfig, false, "using explicit config path")]
+#[case::isolated_directory_discovery(LayerScenario::Discovery, true, "using config discovery")]
+fn collect_diag_file_layers_logs_selected_branch(
+    clean_config_env: (EnvLock, EnvVarGuard, EnvVarGuard),
+    #[case] scenario: LayerScenario,
+    #[case] should_be_empty: bool,
+    #[case] expected_event: &str,
+) -> Result<()> {
+    let _clean_config_env = clean_config_env;
     let temp = tempdir().context("create temp dir")?;
-    let config_path = temp.path().join("config.toml");
-    std::fs::write(&config_path, "theme = \"ascii\"\n")
-        .with_context(|| format!("write {}", config_path.display()))?;
-    let cli = Cli {
-        config: Some(config_path),
-        ..Cli::default()
-    };
+    let cli = scenario_cli(scenario, &temp)?;
 
-    with_test_subscriber(|captured| {
-        let layers = collect_diag_file_layers(&cli)?;
-        let events = captured.snapshot();
-        let branch_event = find_event(&events, "using explicit config path")?;
+    let (layers, events) = capture_events(|| collect_diag_file_layers(&cli))?;
+    let branch_event = find_event(&events, expected_event)?;
 
-        ensure!(!layers.is_empty(), "explicit config should load layers");
+    ensure!(
+        layers.is_empty() == should_be_empty,
+        "layer collection result should match {scenario:?}"
+    );
+    ensure!(
+        branch_event.contains(&format!("message={expected_event}")),
+        "branch should emit the expected event: {branch_event}"
+    );
+    if matches!(scenario, LayerScenario::ExplicitConfig) {
         ensure!(
             branch_event.contains("path="),
             "explicit path branch should include a path field: {branch_event}"
         );
-        Ok(())
-    })
-}
+    }
 
-#[test]
-fn collect_diag_file_layers_logs_discovery_branch() -> Result<()> {
-    let _env_lock = EnvLock::acquire();
-    let _config_guard = EnvVarGuard::remove(CONFIG_ENV_VAR);
-    let _legacy_guard = EnvVarGuard::remove(CONFIG_ENV_VAR_LEGACY);
-
-    with_test_subscriber(|captured| {
-        let layers = collect_diag_file_layers(&Cli::default())?;
-        let events = captured.snapshot();
-        let branch_event = find_event(&events, "using config discovery")?;
-
-        ensure!(layers.is_empty(), "default workspace should not add layers");
-        ensure!(
-            branch_event.contains("message=using config discovery"),
-            "discovery branch should emit the expected event: {branch_event}"
-        );
-        Ok(())
-    })
+    Ok(())
 }
 
 #[test]
 fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
     let missing_path = PathBuf::from("missing-secret-name.toml");
 
-    with_test_subscriber(|captured| {
-        let error = load_layers_from_path(&missing_path)
-            .expect_err("missing explicit config file should fail");
-        let events = captured.snapshot();
-        let warn_event = find_event(&events, "explicit config load failed")?;
-        let path_hash = short_hash(missing_path.to_string_lossy().as_bytes());
+    let (error, events) = capture_events(|| {
+        Ok::<_, anyhow::Error>(
+            load_layers_from_path(&missing_path)
+                .expect_err("missing explicit config file should fail"),
+        )
+    })?;
+    let warn_event = find_event(&events, "explicit config load failed")?;
+    let path_hash = short_hash(missing_path.to_string_lossy().as_bytes());
 
-        ensure!(
-            error.to_string().contains("missing-secret-name.toml"),
-            "returned error should retain the diagnostic path"
-        );
-        ensure!(
-            warn_event.contains("failure_kind=Missing"),
-            "warn event should include bounded failure kind: {warn_event}"
-        );
-        ensure!(
-            warn_event.contains(&format!("path_hash={path_hash}")),
-            "warn event should include path hash: {warn_event}"
-        );
-        ensure!(
-            warn_event.contains("path_file_name=Some(\"missing-secret-name.toml\")"),
-            "warn event should include only the file name for path correlation: {warn_event}"
-        );
-        ensure!(
-            !warn_event.contains("error="),
-            "warn event should not include full formatted error text: {warn_event}"
-        );
-        Ok(())
-    })
+    ensure!(
+        error.to_string().contains("missing-secret-name.toml"),
+        "returned error should retain the diagnostic path"
+    );
+    ensure!(
+        warn_event.contains("failure_kind=Missing"),
+        "warn event should include bounded failure kind: {warn_event}"
+    );
+    ensure!(
+        warn_event.contains(&format!("path_hash={path_hash}")),
+        "warn event should include path hash: {warn_event}"
+    );
+    ensure!(
+        warn_event.contains("path_file_name=Some(\"missing-secret-name.toml\")"),
+        "warn event should include only the file name for path correlation: {warn_event}"
+    );
+    ensure!(
+        !warn_event.contains("error="),
+        "warn event should not include full formatted error text: {warn_event}"
+    );
+    Ok(())
+}
+
+fn scenario_cli(scenario: LayerScenario, temp: &TempDir) -> Result<Cli> {
+    match scenario {
+        LayerScenario::ExplicitConfig => {
+            let config_path = temp.path().join("config.toml");
+            std::fs::write(&config_path, "theme = \"ascii\"\n")
+                .with_context(|| format!("write {}", config_path.display()))?;
+            Ok(Cli {
+                config: Some(config_path),
+                ..Cli::default()
+            })
+        }
+        LayerScenario::Discovery => Ok(Cli {
+            directory: Some(temp.path().to_path_buf()),
+            ..Cli::default()
+        }),
+    }
 }
