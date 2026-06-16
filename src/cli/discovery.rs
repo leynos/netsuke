@@ -37,7 +37,7 @@ pub(crate) fn push_file_layers(
             collect_file_layers(cli.directory.as_deref())
         },
         |path| {
-            debug!(path = ?path, "using explicit config path");
+            debug_config_path("using explicit config path", &path);
             load_layers_from_path(&path)
         },
     );
@@ -79,11 +79,14 @@ pub(crate) fn collect_file_layers(
             .is_some_and(|path| project_file.as_deref() == Some(path.as_str()))
     });
     if has_project_layer {
-        debug!(project_file = ?project_file, "discovery included project-scope layers");
+        debug_optional_config_path(
+            "discovery included project-scope layers",
+            project_file.as_deref(),
+        );
         return Ok(file_layers.value);
     }
 
-    debug!(project_file = ?project_file, "appending project-scope layers");
+    debug_optional_config_path("appending project-scope layers", project_file.as_deref());
     let project_layers = project_scope_layers(directory)?;
     Ok(file_layers
         .value
@@ -120,7 +123,16 @@ fn project_scope_layers(directory: Option<&Path>) -> OrthoResult<Vec<MergeLayer<
 pub(crate) fn explicit_config_path(cli: &Cli) -> Option<PathBuf> {
     let (selector, resolved_path) = resolve_config_selector(cli.config.clone());
 
-    debug!(selector, path = ?resolved_path, "resolved config path");
+    debug!(
+        selector,
+        path_hash = resolved_path
+            .as_deref()
+            .map(|path| short_hash(path.to_string_lossy().as_bytes()))
+            .as_deref(),
+        path_file_name = ?resolved_path.as_deref().and_then(Path::file_name),
+        path_present = resolved_path.is_some(),
+        "resolved config path"
+    );
     resolved_path
 }
 
@@ -143,7 +155,16 @@ fn env_config_path(var_name: &str) -> Option<PathBuf> {
     let path = std::env::var_os(var_name)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from);
-    trace!(var_name, found = path.is_some(), path = ?path, "read config path variable");
+    trace!(
+        var_name,
+        found = path.is_some(),
+        path_hash = path
+            .as_deref()
+            .map(|value| short_hash(value.to_string_lossy().as_bytes()))
+            .as_deref(),
+        path_file_name = ?path.as_deref().and_then(Path::file_name),
+        "read config path variable"
+    );
     path
 }
 
@@ -181,6 +202,23 @@ fn warn_explicit_config_load_failed(path: &Path, failure_kind: ConfigLoadFailure
     );
 }
 
+fn debug_config_path(message: &'static str, path: &Path) {
+    debug!(
+        path_hash = %short_hash(path.to_string_lossy().as_bytes()),
+        path_file_name = ?path.file_name(),
+        message
+    );
+}
+
+fn debug_optional_config_path(message: &'static str, path: Option<&str>) {
+    debug!(
+        path_hash = path.map(|value| short_hash(value.as_bytes())).as_deref(),
+        path_file_name = ?path.and_then(|value| Path::new(value).file_name()),
+        path_present = path.is_some(),
+        message
+    );
+}
+
 fn short_hash(value: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
@@ -196,7 +234,7 @@ pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<
             collect_file_layers(cli.directory.as_deref())
         },
         |path| {
-            debug!(path = ?path, "using explicit config path");
+            debug_config_path("using explicit config path", &path);
             load_layers_from_path(&path)
         },
     )

@@ -552,20 +552,18 @@ Table: Configuration merge helper functions
 
 ### Environment lookup seams
 
-`resolve_config_path` is the crate-internal seam for explicit config-file
-selection. It accepts a `var_os` closure with this shape:
+`explicit_config_path` is the crate-internal seam for explicit config-file
+selection. `resolve_config_selector` applies the precedence order:
 
-```rust
-Fn(&str) -> Option<std::ffi::OsString>
-```
+1. `Cli.config` (`--config`) value.
+2. `NETSUKE_CONFIG` from `env_config_path`.
+3. `NETSUKE_CONFIG_PATH` from `env_config_path`.
 
-Production callers pass `std::env::var_os`, while unit tests pass a
-`HashMap`-backed closure. This keeps deterministic tests for `NETSUKE_CONFIG`
-and `NETSUKE_CONFIG_PATH` without threading an environment adapter through the
-public merge API.
+`env_config_path` reads `std::env::var_os` and drops empty values, returning
+`Option<PathBuf>`.
 
-`collect_diag_file_layers` and `push_file_layers` call `resolve_config_path`
-with `std::env::var_os`, so both early diagnostic resolution and the full merge
+`collect_diag_file_layers` and `push_file_layers` both call
+`explicit_config_path`, so both early diagnostic resolution and the full merge
 path use the same explicit config selector precedence. The public API remains
 two arguments:
 
@@ -574,9 +572,9 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
 ```
 
-Unit tests that only need to verify explicit config path precedence should test
-`resolve_config_path` with an injected closure instead of mutating the process
-environment.
+Unit tests that only need to verify explicit config path precedence should set
+`NETSUKE_CONFIG` / `NETSUKE_CONFIG_PATH` with `EnvVarGuard` while holding
+`EnvLock`, rather than by using a test-only closure.
 
 #### `diag_json` contract
 
