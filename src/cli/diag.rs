@@ -43,7 +43,9 @@ pub fn resolve_merged_diag_json_with_env(
     env: &impl EnvProvider,
 ) -> OrthoResult<bool> {
     let mut diag_json = diag_json_from_file_layers(cli, env)?;
-    if let Some(env_diag_json) = diag_json_from_env(env)? {
+    if !has_cli_diag_json_override(matches)
+        && let Some(env_diag_json) = diag_json_from_env(env)?
+    {
         diag_json = env_diag_json;
     }
     Ok(diag_json_from_matches(cli, matches, diag_json))
@@ -57,13 +59,25 @@ fn diag_json_from_layer(value: &Value) -> Option<bool> {
 }
 
 fn diag_json_from_matches(cli: &Cli, matches: &ArgMatches, discovered: bool) -> bool {
-    if matches.value_source("output_format") == Some(ValueSource::CommandLine) {
+    if has_cli_output_format_override(matches) {
         cli.resolved_diag_json()
-    } else if matches.value_source("diag_json") == Some(ValueSource::CommandLine) {
+    } else if has_cli_diag_json_flag(matches) {
         cli.diag_json
     } else {
         discovered
     }
+}
+
+fn has_cli_diag_json_override(matches: &ArgMatches) -> bool {
+    has_cli_output_format_override(matches) || has_cli_diag_json_flag(matches)
+}
+
+fn has_cli_output_format_override(matches: &ArgMatches) -> bool {
+    matches.value_source("output_format") == Some(ValueSource::CommandLine)
+}
+
+fn has_cli_diag_json_flag(matches: &ArgMatches) -> bool {
+    matches.value_source("diag_json") == Some(ValueSource::CommandLine)
 }
 
 fn diag_json_from_file_layers(cli: &Cli, env: &impl EnvProvider) -> OrthoResult<bool> {
@@ -106,6 +120,7 @@ mod tests {
     use super::*;
     use anyhow::ensure;
     use clap::CommandFactory;
+    use clap::Parser;
     use serde_json::json;
     use std::collections::HashMap;
     use std::ffi::OsString;
@@ -184,5 +199,70 @@ mod tests {
             matches!(error.as_ref(), OrthoError::Validation { key, .. } if key == "NETSUKE_DIAG_JSON"),
             "expected validation error for NETSUKE_DIAG_JSON, got {error:?}"
         );
+    }
+
+    #[test]
+    fn resolve_merged_diag_json_honours_cli_diag_json_before_malformed_env() -> anyhow::Result<()> {
+        let dir = tempdir()?;
+        let config_path = dir.path().join("netsuke.toml");
+        std::fs::write(&config_path, "diag_json = false\n")?;
+        let cli = Cli::parse_from([
+            "netsuke",
+            "--config",
+            config_path
+                .to_str()
+                .expect("temp config path should be UTF-8"),
+            "--diag-json",
+        ]);
+        let matches = Cli::command().get_matches_from([
+            "netsuke",
+            "--config",
+            config_path
+                .to_str()
+                .expect("temp config path should be UTF-8"),
+            "--diag-json",
+        ]);
+        let env = TestEnv::default().with_var("NETSUKE_DIAG_JSON", "yes");
+
+        ensure!(
+            resolve_merged_diag_json_with_env(&cli, &matches, &env)?,
+            "CLI --diag-json should override malformed diagnostic JSON env"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_merged_diag_json_honours_cli_output_format_before_malformed_env()
+    -> anyhow::Result<()> {
+        let dir = tempdir()?;
+        let config_path = dir.path().join("netsuke.toml");
+        std::fs::write(&config_path, "diag_json = false\n")?;
+        let cli = Cli::parse_from([
+            "netsuke",
+            "--config",
+            config_path
+                .to_str()
+                .expect("temp config path should be UTF-8"),
+            "--output-format",
+            "json",
+        ]);
+        let matches = Cli::command().get_matches_from([
+            "netsuke",
+            "--config",
+            config_path
+                .to_str()
+                .expect("temp config path should be UTF-8"),
+            "--output-format",
+            "json",
+        ]);
+        let env = TestEnv::default().with_var("NETSUKE_DIAG_JSON", "yes");
+
+        ensure!(
+            resolve_merged_diag_json_with_env(&cli, &matches, &env)?,
+            "CLI --output-format json should override malformed diagnostic JSON env"
+        );
+
+        Ok(())
     }
 }
