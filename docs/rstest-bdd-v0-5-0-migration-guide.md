@@ -45,16 +45,8 @@ fn scenario_returns_value() -> Result<u32, &'static str> {
 }
 ```
 
-# use rstest_bdd_macros::scenario;
-#[scenario(path = "tests/features/example.feature")]
-fn scenario_step_result() -> StepResult<(), &'static str> {
-    Ok(())
-}
-```
-
 Values needed by later steps should be returned from step functions and
 injected via fixtures or slots.
-
 ### 2) Use explicit `Result`/`StepResult` in scenario signatures
 
 Scenario return classification does not resolve type aliases. When using an

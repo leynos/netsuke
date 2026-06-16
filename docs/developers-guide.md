@@ -873,8 +873,8 @@ Table: Configuration merge helper functions
 `EnvProvider` is the crate-internal port for raw environment access during CLI
 configuration resolution. The production adapter delegates to
 `std::env::var_os`; unit tests use map-backed providers so they do not mutate
-process-wide environment variables when exercising explicit config selection
-or early diagnostic-mode resolution.
+process-wide environment variables when exercising explicit config selection or
+early diagnostic-mode resolution.
 
 ```rust
 pub trait EnvProvider {
@@ -894,10 +894,10 @@ environment variables directly. Tests for Netsuke's own environment port should
 avoid `EnvLock`.
 
 `collect_diag_file_layers_with_env` and `push_file_layers_with_env` call
-`explicit_config_path_with_env` with the same provider, so both early diagnostic
-resolution and the full merge path use the same explicit config selector
-precedence. The production public API remains two arguments, with an injected
-variant for tests and composition code:
+`explicit_config_path_with_env` with the same provider, so both early
+diagnostic resolution and the full merge path use the same explicit config
+selector precedence. The production public API remains two arguments, with an
+injected variant for tests and composition code:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
