@@ -2542,7 +2542,7 @@ Figure: Build script localization audit flow for Fluent key validation.
 The Ninja executable may be overridden via the `NETSUKE_NINJA` environment
 variable. For example, `NETSUKE_NINJA=/opt/ninja/bin/ninja netsuke build`
 forces Netsuke to execute the specified binary while preserving the default
-when the variable is unset or invalid.
+when the variable is unset, empty, or non-UTF-8.
 
 ### 8.4.1 Configuration File Discovery
 

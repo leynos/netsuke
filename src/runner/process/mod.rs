@@ -53,23 +53,35 @@ where
             );
             Utf8PathBuf::from(NINJA_PROGRAM)
         },
-        |value| match Utf8PathBuf::from_path_buf(PathBuf::from(value)) {
-            Ok(program) => {
+        |value| {
+            let path = PathBuf::from(value);
+            if path.as_os_str().is_empty() {
                 debug!(
-                    ninja_program = %program,
-                    source = NINJA_ENV,
-                    "Resolved Ninja executable from environment override",
-                );
-                program
-            }
-            Err(path) => {
-                debug!(
-                    configured_ninja = %path.to_string_lossy(),
                     fallback_program = NINJA_PROGRAM,
                     source = "fallback",
-                    "Ignoring non-UTF-8 Ninja executable override",
+                    "Ignoring empty Ninja executable override",
                 );
                 Utf8PathBuf::from(NINJA_PROGRAM)
+            } else {
+                match Utf8PathBuf::from_path_buf(path) {
+                    Ok(program) => {
+                        debug!(
+                            ninja_program = %program,
+                            source = NINJA_ENV,
+                            "Resolved Ninja executable from environment override",
+                        );
+                        program
+                    }
+                    Err(non_utf8_path) => {
+                        debug!(
+                            configured_ninja = %non_utf8_path.to_string_lossy(),
+                            fallback_program = NINJA_PROGRAM,
+                            source = "fallback",
+                            "Ignoring non-UTF-8 Ninja executable override",
+                        );
+                        Utf8PathBuf::from(NINJA_PROGRAM)
+                    }
+                }
             }
         },
     )

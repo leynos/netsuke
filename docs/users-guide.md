@@ -768,7 +768,8 @@ this value currently has no visible effect.
 `graph` commands. Leave it unset to use the default `ninja` command on `PATH`,
 or set it to another executable name such as `ninja-build` or to an absolute
 path such as `/opt/ninja/bin/ninja` when the binary is installed outside the
-default search path.
+default search path. Empty or non-UTF-8 values are ignored and fall back to the
+default `ninja` command.
 
 Use `--locale <LOCALE>`, `NETSUKE_LOCALE`, or a `locale = "..."` entry in a
 configuration file to select localized CLI copy and error messages. Locale
