@@ -893,30 +893,28 @@ Configuration merge helpers:
 ### Environment lookup seams
 
 `explicit_config_path` is the crate-internal seam for explicit config-file
-selection. It evaluates the precedence chain in this order:
+selection. `resolve_config_selector` applies the precedence order:
 
-1. `cli.config`
-2. `NETSUKE_CONFIG`
-3. `NETSUKE_CONFIG_PATH`
+1. `Cli.config` (`--config`) value.
+2. `NETSUKE_CONFIG` from `env_config_path`.
+3. `NETSUKE_CONFIG_PATH` from `env_config_path`.
 
-`env_config_path(var_name)` is the helper that reads `std::env::var_os`,
-discarding empty values and converting the value into `PathBuf`. For `merge` and
-`resolve_merged_diag_json`, both `collect_diag_file_layers` and
-`push_file_layers` therefore follow the same precedence by calling
-`explicit_config_path`, so they return either the same explicit path layers or
-the same fallback discovery path.
+`env_config_path` reads `std::env::var_os` and drops empty values, returning
+`Option<PathBuf>`.
 
-The public API remains two arguments:
+`collect_diag_file_layers` and `push_file_layers` both call
+`explicit_config_path`, so both early diagnostic resolution and the full merge
+path use the same explicit config selector precedence. The public API remains
+two arguments:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
 ```
 
-Unit tests that need to verify explicit config path precedence should exercise
-the public merge or diagnostic APIs with guarded environment variables. The
-explicit selector helper reads the process environment directly and remains
-private to `src/cli/discovery.rs`.
+Unit tests that only need to verify explicit config path precedence should set
+`NETSUKE_CONFIG` / `NETSUKE_CONFIG_PATH` with `EnvVarGuard` while holding
+`EnvLock`, rather than by using a test-only closure.
 
 #### `diag_json` contract
 

@@ -3,87 +3,14 @@
 use super::*;
 use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
-use std::sync::{Arc, Mutex};
 use tempfile::{TempDir, tempdir};
-use test_support::{EnvVarGuard, env_lock::EnvLock};
-use tracing::{
-    Event, Subscriber,
-    field::{Field, Visit},
-};
-use tracing_subscriber::{
-    Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*, registry::LookupSpan,
-};
-
-#[derive(Debug, Clone, Default)]
-struct CapturedEvents {
-    fields: Arc<Mutex<Vec<String>>>,
-}
-
-impl CapturedEvents {
-    fn snapshot(&self) -> Vec<String> {
-        self.fields.lock().expect("captured events lock").clone()
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-struct CapturedEventsLayer {
-    events: Arc<Mutex<Vec<String>>>,
-}
-
-impl<S> Layer<S> for CapturedEventsLayer
-where
-    S: Subscriber + for<'span> LookupSpan<'span>,
-{
-    fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
-        let mut visitor = FieldVisitor::default();
-        event.record(&mut visitor);
-        self.events
-            .lock()
-            .expect("captured events lock")
-            .push(visitor.fields.join(" "));
-    }
-}
-
-#[derive(Debug, Default)]
-struct FieldVisitor {
-    fields: Vec<String>,
-}
-
-impl Visit for FieldVisitor {
-    fn record_bool(&mut self, field: &Field, value: bool) {
-        self.fields.push(format!("{}={value}", field.name()));
-    }
-
-    fn record_i64(&mut self, field: &Field, value: i64) {
-        self.fields.push(format!("{}={value}", field.name()));
-    }
-
-    fn record_u64(&mut self, field: &Field, value: u64) {
-        self.fields.push(format!("{}={value}", field.name()));
-    }
-
-    fn record_str(&mut self, field: &Field, value: &str) {
-        self.fields.push(format!("{}={value:?}", field.name()));
-    }
-
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.fields.push(format!("{}={value:?}", field.name()));
-    }
-}
-
-fn with_test_subscriber<T>(test: impl FnOnce(CapturedEvents) -> T) -> T {
-    let layer = CapturedEventsLayer::default();
-    let captured = CapturedEvents {
-        fields: Arc::clone(&layer.events),
-    };
-    let subscriber = tracing_subscriber::registry().with(layer.with_filter(LevelFilter::TRACE));
-    tracing::subscriber::with_default(subscriber, || test(captured))
-}
+use test_support::{EnvVarGuard, env_lock::EnvLock, tracing_capture::with_test_subscriber};
+use tracing_subscriber::filter::LevelFilter;
 
 fn capture_events<T, E>(
     test: impl FnOnce() -> std::result::Result<T, E>,
 ) -> std::result::Result<(T, Vec<String>), E> {
-    with_test_subscriber(|captured| {
+    with_test_subscriber(LevelFilter::TRACE, |captured| {
         let value = test()?;
         Ok((value, captured.snapshot()))
     })
@@ -151,6 +78,30 @@ fn apply_env_setting(var_name: &'static str, setting: EnvSetting) -> Option<EnvV
     expected_selector: CONFIG_ENV_VAR,
     expected_env_trace: Some(CONFIG_ENV_VAR),
 })]
+#[case::legacy_environment_used_when_primary_missing(ConfigPathScenario {
+    cli_config: None,
+    config_env: EnvSetting::Removed,
+    legacy_env: EnvSetting::Set("legacy.toml"),
+    expected_path: Some("legacy.toml"),
+    expected_selector: CONFIG_ENV_VAR_LEGACY,
+    expected_env_trace: Some(CONFIG_ENV_VAR_LEGACY),
+})]
+#[case::empty_environment_values_are_ignored(ConfigPathScenario {
+    cli_config: None,
+    config_env: EnvSetting::Set(""),
+    legacy_env: EnvSetting::Set(""),
+    expected_path: None,
+    expected_selector: "none",
+    expected_env_trace: None,
+})]
+#[case::missing_selectors_resolve_none(ConfigPathScenario {
+    cli_config: None,
+    config_env: EnvSetting::Removed,
+    legacy_env: EnvSetting::Removed,
+    expected_path: None,
+    expected_selector: "none",
+    expected_env_trace: None,
+})]
 fn explicit_config_path_logs_selected_selector(
     clean_config_env: (EnvLock, EnvVarGuard, EnvVarGuard),
     #[case] scenario: ConfigPathScenario,
@@ -175,9 +126,17 @@ fn explicit_config_path_logs_selected_selector(
         "selector field should identify winner: {selector_event}"
     );
     ensure!(
-        selector_event.contains(&format!("path={resolved:?}")),
-        "path field should contain selected path: {selector_event}"
+        selector_event.contains(&format!("path_present={}", resolved.is_some())),
+        "path_present should record whether a path was selected: {selector_event}"
     );
+    match resolved.as_deref() {
+        Some(path) => ensure_bounded_path_fields(selector_event, path)?,
+        None => ensure!(
+            !selector_event.contains("path_hash=")
+                && selector_event.contains("path_file_name=None"),
+            "empty selection should not include path details: {selector_event}"
+        ),
+    }
 
     if let Some(var_name) = scenario.expected_env_trace {
         let env_event = events
@@ -217,13 +176,18 @@ fn collect_diag_file_layers_logs_selected_branch(
         "layer collection result should match {scenario:?}"
     );
     ensure!(
-        branch_event.contains(&format!("message={expected_event}")),
+        branch_event.contains(&format!("message={expected_event:?}"))
+            || branch_event.contains(&format!("message={expected_event}")),
         "branch should emit the expected event: {branch_event}"
     );
     if matches!(scenario, LayerScenario::ExplicitConfig) {
+        ensure_bounded_path_fields(
+            branch_event,
+            cli.config.as_deref().context("explicit config")?,
+        )?;
         ensure!(
-            branch_event.contains("path="),
-            "explicit path branch should include a path field: {branch_event}"
+            !branch_event.contains("path="),
+            "explicit path branch should avoid raw path fields: {branch_event}"
         );
     }
 
@@ -262,6 +226,26 @@ fn load_layers_from_path_logs_bounded_failure_fields() -> Result<()> {
     ensure!(
         !warn_event.contains("error="),
         "warn event should not include full formatted error text: {warn_event}"
+    );
+    Ok(())
+}
+
+fn ensure_bounded_path_fields(event: &str, path: &Path) -> Result<()> {
+    let path_hash = short_hash(path.to_string_lossy().as_bytes());
+    let file_name = path
+        .file_name()
+        .with_context(|| format!("expected file name for {}", path.display()))?;
+    ensure!(
+        event.contains(&format!("path_hash=\"{path_hash}\""))
+            || event.contains(&format!("path_hash=Some(\"{path_hash}\")"))
+            || event.contains(&format!("path_hash={path_hash}")),
+        "event should include path hash for {}: {event}",
+        path.display()
+    );
+    ensure!(
+        event.contains(&format!("path_file_name=Some({file_name:?})")),
+        "event should include path file name for {}: {event}",
+        path.display()
     );
     Ok(())
 }

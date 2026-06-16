@@ -17,5 +17,7 @@ thiserror = "1"
 assert_cmd = "2.0.0"
 netsuke = { path = ".." }
 rstest = "0.26.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
 
 [dev-dependencies]
