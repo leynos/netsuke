@@ -22,17 +22,37 @@ pub(crate) fn push_file_layers(
     composer: &mut MergeComposer,
     errors: &mut Vec<Arc<ortho_config::OrthoError>>,
 ) {
-    let layers_result = explicit_config_path(cli).map_or_else(
+    let explicit_path = explicit_config_path(cli);
+    if let Some(path) = &explicit_path {
+        tracing::debug!(layer = "file", path = %path.display(), "loading explicit configuration file");
+    } else {
+        tracing::debug!(layer = "file", "discovering configuration files");
+    }
+    let layers_result = explicit_path.map_or_else(
         || collect_file_layers(cli.directory.as_deref()),
         |path| load_layers_from_path(&path),
     );
     match layers_result {
-        Ok(layers) => {
-            for layer in layers {
-                composer.push_layer(layer);
-            }
+        Ok(layers) => push_discovered_layers(composer, layers),
+        Err(err) => {
+            tracing::debug!(layer = "file", error = %err, "configuration file discovery failed");
+            errors.push(err);
         }
-        Err(err) => errors.push(err),
+    }
+}
+
+/// Push discovered file layers onto the composer, logging each path.
+fn push_discovered_layers(composer: &mut MergeComposer, layers: Vec<MergeLayer<'static>>) {
+    if layers.is_empty() {
+        tracing::debug!(layer = "file", "no configuration file layers found");
+    }
+    for layer in layers {
+        tracing::debug!(
+            layer = "file",
+            path = ?layer.path(),
+            "discovered configuration file layer"
+        );
+        composer.push_layer(layer);
     }
 }
 

@@ -31,6 +31,7 @@ pub mod ninja;
 pub mod ninja_gen;
 pub mod path_guard;
 pub mod stdlib_assert;
+pub mod tracing_capture;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
 /// Re-export of [`PathGuard`] for crate-level ergonomics in tests.

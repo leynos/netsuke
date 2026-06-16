@@ -38,6 +38,9 @@ use crate::theme::ThemePreference;
 
 const ENV_PREFIX: &str = "NETSUKE_";
 
+/// Error type accumulated while composing configuration layers.
+type MergeError = std::sync::Arc<ortho_config::OrthoError>;
+
 /// Merge discovered configuration layers over parsed CLI input.
 ///
 /// # Errors
@@ -48,34 +51,85 @@ pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli> {
     let mut errors = Vec::new();
     let mut composer = MergeComposer::with_capacity(4);
 
-    match sanitize_value(&CliConfig::default()) {
-        Ok(value) => composer.push_defaults(value),
-        Err(err) => errors.push(err),
-    }
-
+    push_defaults_layer(&mut composer, &mut errors);
     push_file_layers(cli, &mut composer, &mut errors);
-
-    let env_provider = env_provider()
-        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
-        .split("__");
-    match Figment::from(env_provider)
-        .extract::<Value>()
-        .into_ortho_merge()
-    {
-        Ok(value) => composer.push_environment(value),
-        Err(err) => errors.push(err),
-    }
-
-    match cli_overrides_from_matches(cli, matches) {
-        Ok(value) if !is_empty_value(&value) => composer.push_cli(value),
-        Ok(_) => {}
-        Err(err) => errors.push(err),
-    }
+    push_environment_layer(&mut composer, &mut errors);
+    push_cli_layer(cli, matches, &mut composer, &mut errors);
 
     let composition = LayerComposition::new(composer.layers(), errors);
     let merged = composition.into_merge_result(CliConfig::merge_from_layers)?;
     validate_output_format_source(&merged, matches)?;
     Ok(apply_config(cli, merged))
+}
+
+/// Push the serialised `CliConfig::default()` layer, logging the outcome.
+fn push_defaults_layer(composer: &mut MergeComposer, errors: &mut Vec<MergeError>) {
+    match sanitize_value(&CliConfig::default()) {
+        Ok(value) => {
+            tracing::debug!(layer = "defaults", "applied default configuration layer");
+            composer.push_defaults(value);
+        }
+        Err(err) => {
+            tracing::debug!(layer = "defaults", error = %err, "default configuration layer failed");
+            errors.push(err);
+        }
+    }
+}
+
+/// Push the `NETSUKE_`-prefixed environment layer, logging the outcome.
+fn push_environment_layer(composer: &mut MergeComposer, errors: &mut Vec<MergeError>) {
+    let provider = env_provider()
+        .map(|key| Uncased::new(key.as_str().to_ascii_uppercase()))
+        .split("__");
+    match Figment::from(provider)
+        .extract::<Value>()
+        .into_ortho_merge()
+    {
+        Ok(value) => {
+            tracing::debug!(
+                layer = "environment",
+                is_empty = is_empty_value(&value),
+                "merged environment configuration layer"
+            );
+            composer.push_environment(value);
+        }
+        Err(err) => {
+            tracing::debug!(layer = "environment", error = %err, "environment configuration layer failed");
+            errors.push(err);
+        }
+    }
+}
+
+/// Push explicitly supplied CLI overrides, logging which keys were set.
+fn push_cli_layer(
+    cli: &Cli,
+    matches: &ArgMatches,
+    composer: &mut MergeComposer,
+    errors: &mut Vec<MergeError>,
+) {
+    match cli_overrides_from_matches(cli, matches) {
+        Ok(value) if !is_empty_value(&value) => {
+            // Log override keys only; values may echo user-supplied paths or
+            // host lists that do not belong in logs.
+            let override_keys = value
+                .as_object()
+                .map(|map| map.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            tracing::debug!(
+                layer = "cli",
+                override_keys = ?override_keys,
+                "applied CLI override layer"
+            );
+            composer.push_cli(value);
+        }
+        Ok(_) => {
+            tracing::debug!(layer = "cli", "no explicit CLI overrides supplied");
+        }
+        Err(err) => {
+            tracing::debug!(layer = "cli", error = %err, "CLI override layer failed");
+            errors.push(err);
+        }
+    }
 }
 
 pub(crate) fn env_provider() -> Env {
@@ -90,6 +144,11 @@ fn validate_output_format_source(config: &CliConfig, matches: &ArgMatches) -> Or
     if matches!(config.output_format, Some(super::OutputFormat::Json))
         && matches.value_source("output_format") != Some(ValueSource::CommandLine)
     {
+        tracing::debug!(
+            key = "output_format",
+            reason = "json output format must be requested explicitly on the command line",
+            "validation rejected merged configuration"
+        );
         return Err(validation_error(
             "output_format",
             "output_format = \"json\" is not supported yet; pass --output-format json explicitly",

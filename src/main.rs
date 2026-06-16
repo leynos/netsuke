@@ -55,6 +55,15 @@ fn run_with_args(
     };
     let mode = DiagMode::from_json_enabled(cli::resolve_merged_diag_json(&parsed_cli, &matches));
 
+    if !mode.is_json() && parsed_cli.verbose {
+        // Initialise tracing before the merge so the configuration
+        // pipeline's debug events are visible under a command-line
+        // `--verbose`. Diagnostic JSON mode skips initialisation to keep
+        // stderr machine-readable, and config-file-driven verbosity still
+        // takes effect from `configure_runtime` after the merge.
+        init_tracing(Level::DEBUG);
+    }
+
     let merged_cli = match merge_cli_or_exit(&parsed_cli, &matches, mode) {
         Ok(merged) => merged,
         Err(code) => return code,
@@ -73,10 +82,15 @@ fn run_with_args(
 }
 
 fn init_tracing(max_level: Level) {
-    fmt()
-        .with_max_level(max_level)
-        .with_writer(io::stderr)
-        .init();
+    // `try_init` keeps repeated calls harmless: the first initialisation
+    // (e.g. the early `--verbose` setup before the configuration merge)
+    // wins and later calls become no-ops.
+    drop(
+        fmt()
+            .with_max_level(max_level)
+            .with_writer(io::stderr)
+            .try_init(),
+    );
 }
 
 fn startup_localizer(
