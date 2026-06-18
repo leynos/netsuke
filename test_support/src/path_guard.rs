@@ -21,13 +21,35 @@ pub struct PathGuard<E: Env = StdEnv> {
 }
 
 impl PathGuard {
-    /// Create a guard capturing the current `PATH` using the real environment.
+    /// Create a guard that restores `PATH` to `original` when dropped.
     ///
-    /// Returns a guard that restores the variable when dropped.
+    /// Callers supply the value to reinstate; use [`PathGuard::capture`] to
+    /// snapshot the current `PATH` automatically.
     pub fn new(original: Option<OsString>) -> Self {
         Self {
             inner: EnvGuard::with_env_and_lock("PATH", original, StdEnv::default(), true),
         }
+    }
+
+    /// Capture the current `PATH` from the real environment.
+    ///
+    /// Zero-argument convenience for callers using the real environment: the
+    /// guard snapshots `PATH` at construction and restores that snapshot when
+    /// dropped, so tests need not fetch and pass the value manually.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use test_support::PathGuard;
+    ///
+    /// let guard = PathGuard::capture();
+    /// // Mutate PATH as the test requires; the original value is restored
+    /// // when `guard` drops.
+    /// drop(guard);
+    /// ```
+    #[must_use]
+    pub fn capture() -> Self {
+        Self::new(std::env::var_os("PATH"))
     }
 }
 
