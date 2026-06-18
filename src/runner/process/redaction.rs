@@ -1,13 +1,27 @@
 //! Argument redaction helpers for the Ninja runner.
 //! Provides the `CommandArg` wrapper used by doctests and logging.
 
+/// A single command-line argument passed to a spawned process.
+///
+/// Wrapping the raw `String` gives the redaction helpers a dedicated type to
+/// operate on, so call sites cannot accidentally log an unredacted argument
+/// where a redacted one is expected.
+///
+/// # Examples
+/// ```ignore
+/// use netsuke::runner::process::redaction::CommandArg;
+/// let arg = CommandArg::new("token=abc".into());
+/// assert_eq!(arg.as_str(), "token=abc");
+/// ```
 #[derive(Debug, Clone)]
 pub struct CommandArg(String);
 impl CommandArg {
+    /// Wrap a raw argument string.
     #[must_use]
     pub const fn new(arg: String) -> Self {
         Self(arg)
     }
+    /// Borrow the underlying argument text.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
