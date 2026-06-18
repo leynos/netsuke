@@ -78,15 +78,28 @@ actions:
     when: item != 'skip'";
     let mut doc: ManifestValue = serde_saphyr::from_str(yaml)?;
 
-    let stats = expand_foreach(&mut doc, &env)?;
+    let report = expand_foreach(&mut doc, &env)?;
 
     anyhow::ensure!(
-        stats
+        report.stats
             == FilteringStats {
                 filtered_targets: 1,
                 filtered_actions: 2,
             },
-        "unexpected filtering stats: {stats:?}"
+        "unexpected filtering stats: {report:?}"
+    );
+    anyhow::ensure!(
+        report.filtered_entries.len() == 3,
+        "expected one filtering event per removed entry: {report:?}"
+    );
+    anyhow::ensure!(
+        report
+            .filtered_entries
+            .iter()
+            .filter(|entry| entry.section == "targets")
+            .count()
+            == 1,
+        "expected one filtered target event: {report:?}"
     );
     anyhow::ensure!(targets(&doc)?.len() == 1, "expected one kept target");
     anyhow::ensure!(actions(&doc)?.len() == 1, "expected one kept action");
