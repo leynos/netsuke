@@ -40,8 +40,8 @@ Projects are affected if any of the following are true:
 ```rust
 # use rstest_bdd_macros::scenario;
 #[scenario(path = "tests/features/example.feature")]
-fn scenario_step_result() -> StepResult<(), &'static str> {
-    Ok(())
+fn scenario_returns_value() -> Result<u32, &'static str> {
+    Ok(42)
 }
 ```
 
@@ -55,6 +55,9 @@ fn scenario_returns_unit() -> Result<(), &'static str> {
     Ok(())
 }
 ```
+
+Values needed by later steps should be returned from step functions and
+injected via fixtures or slots.
 
 ### 2) Use explicit `Result`/`StepResult` in scenario signatures
 
@@ -105,7 +108,7 @@ state to fixture-based scenario isolation.
 
 ```mermaid
 flowchart TD
-    A[Start migration] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
+    A["Start migration"] --> B{"Does the suite rely on<br/>shared mutable state<br/>across scenarios?"}
 
     B -- Yes --> C["Identify global World like structures<br/>and cross-scenario mutation"]
     C --> D["Move shared mutable data into<br/>scenario-local fixtures<br/>using &mut FixtureType or Slot"]
@@ -123,7 +126,7 @@ flowchart TD
     I --> J
 
     J --> K["Update docs and templates<br/>around state sharing and fixtures"]
-    K --> L[End migration]
+    K --> L["End migration"]
 ```
 
 *Figure: Decision flow for migrating from shared mutable state to scenario-

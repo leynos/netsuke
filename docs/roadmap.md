@@ -123,6 +123,9 @@ and agents.
 ### 3.11. Configuration precedence verification
 
 - [ ] 3.11.4. Add OrthoConfig precedence-ladder regression tests.
+  - [x] Explicit config-path selector precedence (`--config` >
+    `NETSUKE_CONFIG` > `NETSUKE_CONFIG_PATH`) verified by exhaustive rstest
+    cases and a proptest property test (PR `#327`, closes `#291`).
   - [ ] Depend on OrthoConfig `5.2.3` for consumer boundary guidance.
   - [ ] Preserve Netsuke-specific precedence expectations for manifest path,
     display policies, locale, and profile selection.

@@ -139,3 +139,11 @@ pub(crate) fn collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<
         |path| load_layers_from_path(&path),
     )
 }
+
+/// Tests for the explicit config-path selector precedence implemented by
+/// [`explicit_config_path`]. Enumerated cases cover all 2^3 combinations of
+/// `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH` presence; a proptest
+/// property test asserts the invariant for generated path values.
+#[cfg(test)]
+#[path = "config_path_precedence_tests.rs"]
+mod config_path_precedence_tests;
