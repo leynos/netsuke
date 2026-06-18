@@ -61,6 +61,9 @@ type ResolveThemeFn = fn(
     fn(&str) -> Option<String>,
 ) -> theme::ResolvedTheme;
 
+type ResolveMergedDiagJsonWithEnvFn =
+    fn(&cli::Cli, &ArgMatches, &cli::ConfigStdEnvProvider) -> ortho_config::OrthoResult<bool>;
+
 fn manual_date() -> String {
     let Ok(raw) = env::var("SOURCE_DATE_EPOCH") else {
         return FALLBACK_DATE.into();
@@ -119,7 +122,10 @@ const fn verify_public_api_symbols() {
     const _: fn(&[OsString]) -> Option<String> = cli::locale_hint_from_args;
     const _: fn(&[OsString]) -> Option<bool> = cli::diag_json_hint_from_args;
     const _: fn(&str) -> Option<bool> = cli_l10n::parse_bool_hint;
-    const _: fn(&cli::Cli, &ArgMatches) -> bool = cli::resolve_merged_diag_json;
+    const _: usize = std::mem::size_of::<&dyn cli::ConfigEnvProvider>();
+    const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<bool> =
+        cli::resolve_merged_diag_json;
+    const _: ResolveMergedDiagJsonWithEnvFn = cli::resolve_merged_diag_json_with_env;
     const _: fn(&cli::Cli, &ArgMatches) -> ortho_config::OrthoResult<cli::Cli> =
         cli::merge_with_config;
     const _: LocalizedParseFn = cli::parse_with_localizer_from;

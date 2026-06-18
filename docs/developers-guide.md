@@ -580,8 +580,8 @@ a two-pass approach when no explicit config path is provided:
 Because `MergeComposer` uses last-wins semantics, pushing the project layers
 after user layers gives them higher precedence.
 
-The same logic is mirrored in `collect_diag_file_layers` for early `diag_json`
-resolution (before full merging).
+The same logic is mirrored in `collect_diag_file_layers_with_env` for early
+`diag_json` resolution (before full merging).
 
 ### Layer precedence
 
@@ -597,75 +597,70 @@ The final merge order is:
 
 Private helper functions for config discovery and diagnostic-JSON resolution.
 
-Configuration merge helpers:
+Table: Configuration merge helper functions
 
-- `config_discovery(directory: Option<&PathBuf>) -> ConfigDiscovery` builds
-  the single-pass OrthoConfig discovery scanner with an optional project-root
-  anchor.
-- `project_scope_file_str(directory: Option<&Path>) -> Option<String>`
-  resolves the expected project `.netsuke.toml` path for project-layer
-  detection.
-- `project_scope_layers(directory)` loads the project-scope config directly,
-  bypassing automatic discovery, and returns
-  `OrthoResult<Vec<MergeLayer<'static>>>`.
-- `env_config_path(var_name: &str) -> Option<PathBuf>` reads one config
-  environment variable, ignores empty values, and converts the value into a
-  `PathBuf`.
-- `explicit_config_path(cli: &Cli) -> Option<PathBuf>` resolves explicit config
-  selection from `--config`, `NETSUKE_CONFIG`, and `NETSUKE_CONFIG_PATH`.
-- `push_file_layers(cli, composer, errors) -> ()` pushes explicit or discovered
-  file layers onto a `MergeComposer`. Explicit load errors are pushed into
-  `errors`, and automatic discovery is not attempted after an explicit selector
-  fails.
-- `collect_file_layers(directory)` builds the fallback discovery layer chain,
-  applies the project-layer second pass, and returns
-  `OrthoResult<Vec<MergeLayer<'static>>>`.
-- `collect_diag_file_layers(cli: &Cli) -> OrthoResult<Vec<MergeLayer<'static>>>`
-  mirrors the file-load path used by `resolve_merged_diag_json` so early
-  `diag_json` resolution sees the same explicit or discovered file layers.
-- `is_empty_value(value: &serde_json::Value) -> bool` detects an empty CLI
-  override object.
-- `diag_json_from_layer(layer: &MergeLayer) -> Option<bool>` extracts
-  `diag_json` from a config layer, preferring `output_format`.
-- `diag_json_from_matches(cli, matches) -> OrthoResult<bool>` resolves final
-  `diag_json` from CLI matches with fallback.
-- `cli_overrides_from_matches(matches: &ArgMatches) -> OrthoValue` extracts
-  CLI-supplied fields, stripping defaults and non-CLI sources.
-- `env_provider() -> Figment` returns the `NETSUKE_` prefixed Figment
-  environment provider.
+| Function                            | Purpose                                                              |
+| :---------------------------------- | :------------------------------------------------------------------- |
+| `config_discovery`                  | Build single-pass `ConfigDiscovery` with optional directory anchor.  |
+| `project_scope_file_str`            | Resolve the expected project `.netsuke.toml` path as a string.       |
+| `project_scope_layers`              | Load project-scope config directly, bypassing discovery.             |
+| `push_file_layers`                  | Push all file layers onto a `MergeComposer` in precedence order.     |
+| `collect_diag_file_layers_with_env` | Mirror of `push_file_layers` for early `diag_json` resolution.       |
+| `is_empty_value`                    | Return `true` for an empty JSON object (no CLI overrides).           |
+| `diag_json_from_layer`              | Extract `diag_json` from a config layer.                             |
+| `diag_json_from_matches`            | Resolve final `diag_json` from CLI matches with fallback.            |
+| `cli_overrides_from_matches`        | Extract CLI-supplied fields, stripping defaults and non-CLI sources. |
+| `env_provider`                      | Return the `NETSUKE_` prefixed Figment environment provider.         |
 
 ### Environment lookup seams
 
-`explicit_config_path` is the crate-internal seam for explicit config-file
-selection. It evaluates the precedence chain in this order:
+`EnvProvider` is the crate-internal port for raw environment access during CLI
+configuration resolution. The production adapter delegates to
+`std::env::var_os`; unit tests use map-backed providers so they do not mutate
+process-wide environment variables when exercising explicit config selection or
+early diagnostic-mode resolution.
 
-1. `cli.config`
-2. `NETSUKE_CONFIG`
-3. `NETSUKE_CONFIG_PATH`
+```rust
+pub trait EnvProvider {
+    fn get(&self, key: &str) -> Option<std::ffi::OsString>;
+}
+```
 
-`env_config_path(var_name)` is the helper that reads `std::env::var_os`,
-discarding empty values and converting the value into `PathBuf`. For `merge` and
-`resolve_merged_diag_json`, both `collect_diag_file_layers` and
-`push_file_layers` therefore follow the same precedence by calling
-`explicit_config_path`, so they return either the same explicit path layers or
-the same fallback discovery path.
+`explicit_config_path_with_env`, `collect_diag_file_layers_with_env`, and the
+provider-injected diagnostic resolver all accept this port. This keeps
+deterministic tests for `NETSUKE_CONFIG`, `NETSUKE_CONFIG_PATH`, and
+`NETSUKE_DIAG_JSON` without coupling those tests to the global process
+environment.
 
-The public API remains two arguments:
+Discovery tests that exercise OrthoConfig's `ConfigDiscovery` may still need
+`EnvLock` because the external discovery implementation reads platform
+environment variables directly. Tests for Netsuke's own environment port should
+avoid `EnvLock`.
+
+`collect_diag_file_layers_with_env` and `push_file_layers_with_env` call
+`explicit_config_path_with_env` with the same provider, so both early
+diagnostic resolution and the full merge path use the same explicit config
+selector precedence. The production public API remains two arguments, with an
+injected variant for tests and composition code:
 
 ```rust
 pub fn merge_with_config(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Cli>;
 pub fn resolve_merged_diag_json(cli: &Cli, matches: &ArgMatches) -> OrthoResult<bool>;
+pub fn resolve_merged_diag_json_with_env(
+    cli: &Cli,
+    matches: &ArgMatches,
+    env: &impl EnvProvider,
+) -> OrthoResult<bool>;
 ```
 
-Unit tests that need to verify explicit config path precedence should exercise
-the public merge or diagnostic APIs with guarded environment variables. The
-explicit selector helper reads the process environment directly and remains
-private to `src/cli/discovery.rs`.
+Unit tests that only need to verify explicit config path precedence should test
+`explicit_config_path_with_env` with an injected provider instead of mutating
+the process environment.
 
 #### `diag_json` contract
 
 Tooling that wants a stable contract for early diagnostic-JSON resolution
-should treat the input consumed by `collect_diag_file_layers`,
+should treat the input consumed by `collect_diag_file_layers_with_env`,
 `diag_json_from_layer`, and `diag_json_from_matches` as versioned schema
 `netsuke.diag-json-resolution.v1`:
 
