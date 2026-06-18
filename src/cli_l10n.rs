@@ -220,35 +220,124 @@ const fn subcommand_long_about_key(subcommand: Subcommand) -> &'static str {
     }
 }
 
-/// Inspect raw arguments and extract the `--locale` value when present.
+/// Raw argument hints collected before clap parsing runs.
 ///
-/// When multiple `--locale` flags are provided, the last one is used.
-#[must_use]
-pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
-    let mut hint = None;
+/// `values` holds the last value seen for each requested value-taking flag
+/// (from either `--flag value` or `--flag=value`); `flags` records which
+/// requested bare flags appeared. Scanning stops at a `--` terminator.
+#[derive(Debug, Default)]
+struct RawArgHints {
+    values: std::collections::HashMap<&'static str, String>,
+    flags: std::collections::HashSet<&'static str>,
+}
+
+impl RawArgHints {
+    fn value(&self, flag: &str) -> Option<&str> {
+        self.values.get(flag).map(String::as_str)
+    }
+
+    fn has_flag(&self, flag: &str) -> bool {
+        self.flags.contains(flag)
+    }
+}
+
+/// Scan raw arguments for startup hints shared by locale and diagnostic-mode
+/// detection.
+///
+/// The scanner implements the option grammar both hint paths must agree on:
+///
+/// - scanning stops at a bare `--` terminator;
+/// - a flag in `value_flags` consumes the next argument as its value unless
+///   that argument is `--` or absent, in which case scanning stops;
+/// - `--flag=value` records the value inline;
+/// - the last occurrence of a value flag wins;
+/// - a flag in `bare_flags` is recorded by presence alone.
+///
+/// Value interpretation stays with the callers, keeping this scanner purely
+/// lexical.
+fn scan_raw_hints(
+    args: &[OsString],
+    value_flags: &[&'static str],
+    bare_flags: &[&'static str],
+) -> RawArgHints {
+    let mut hints = RawArgHints::default();
     let mut iter = args.iter().peekable();
     while let Some(arg) = iter.next() {
         let text = arg.to_string_lossy();
         if text == "--" {
             break;
         }
-        if text == "--locale" {
-            let Some(next) = iter.peek() else {
-                break;
-            };
-            let next_text = next.to_string_lossy();
-            if next_text == "--" {
-                break;
-            }
-            hint = Some(next_text.into_owned());
-            iter.next();
+        if let Some(flag) = bare_flags.iter().find(|flag| text == **flag) {
+            hints.flags.insert(flag);
             continue;
         }
-        if let Some(value) = text.strip_prefix("--locale=") {
-            hint = Some(value.to_owned());
+        if scan_value_flags(&text, &mut iter, value_flags, &mut hints) == ScanStep::Stop {
+            break;
         }
     }
-    hint
+    hints
+}
+
+/// Outcome of scanning one argument: keep going or stop at a terminator.
+#[derive(Debug, PartialEq, Eq)]
+enum ScanStep {
+    Continue,
+    Stop,
+}
+
+type RawArgIter<'a> = std::iter::Peekable<std::slice::Iter<'a, OsString>>;
+
+/// Match `text` against the value-taking flags, recording any value found.
+fn scan_value_flags(
+    text: &str,
+    iter: &mut RawArgIter<'_>,
+    value_flags: &[&'static str],
+    hints: &mut RawArgHints,
+) -> ScanStep {
+    for flag in value_flags {
+        if text == *flag {
+            return consume_flag_value(flag, iter, hints);
+        }
+        if let Some(value) = text
+            .strip_prefix(flag)
+            .and_then(|rest| rest.strip_prefix('='))
+        {
+            hints.values.insert(flag, value.to_owned());
+            return ScanStep::Continue;
+        }
+    }
+    ScanStep::Continue
+}
+
+/// Consume the argument following `flag` as its value.
+///
+/// A missing value or a `--` terminator stops the scan, mirroring the
+/// behaviour of the original per-flag scanners.
+fn consume_flag_value(
+    flag: &'static str,
+    iter: &mut RawArgIter<'_>,
+    hints: &mut RawArgHints,
+) -> ScanStep {
+    let Some(next) = iter.peek() else {
+        return ScanStep::Stop;
+    };
+    let next_text = next.to_string_lossy();
+    if next_text == "--" {
+        return ScanStep::Stop;
+    }
+    hints.values.insert(flag, next_text.into_owned());
+    iter.next();
+    ScanStep::Continue
+}
+
+/// Inspect raw arguments and extract the `--locale` value when present.
+///
+/// When multiple `--locale` flags are provided, the last one is used.
+#[must_use]
+pub fn locale_hint_from_args(args: &[OsString]) -> Option<String> {
+    scan_raw_hints(args, &["--locale"], &[])
+        .value("--locale")
+        .map(str::to_owned)
 }
 
 pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
@@ -268,34 +357,11 @@ pub(crate) fn parse_bool_hint(value: &str) -> Option<bool> {
 /// assignment.
 #[must_use]
 pub fn diag_json_hint_from_args(args: &[OsString]) -> Option<bool> {
-    let mut diag_json_hint = None;
-    let mut output_format_hint = None;
-    let mut iter = args.iter().peekable();
-    while let Some(arg) = iter.next() {
-        let text = arg.to_string_lossy();
-        if text == "--" {
-            break;
-        }
-        if text == "--diag-json" {
-            diag_json_hint = Some(true);
-            continue;
-        }
-        if text == "--output-format" {
-            let Some(next) = iter.peek() else {
-                break;
-            };
-            let next_text = next.to_string_lossy();
-            if next_text == "--" {
-                break;
-            }
-            output_format_hint = diag_json_hint_from_output_format(&next_text);
-            iter.next();
-            continue;
-        }
-        if let Some(value) = text.strip_prefix("--output-format=") {
-            output_format_hint = diag_json_hint_from_output_format(value);
-        }
-    }
+    let hints = scan_raw_hints(args, &["--output-format"], &["--diag-json"]);
+    let output_format_hint = hints
+        .value("--output-format")
+        .and_then(diag_json_hint_from_output_format);
+    let diag_json_hint = hints.has_flag("--diag-json").then_some(true);
     output_format_hint.or(diag_json_hint)
 }
 
