@@ -36,3 +36,27 @@ fn force_text_task_updates_when_required(
         expected
     );
 }
+
+#[rstest]
+fn generation_steps_run_without_reporter() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let manifest_path = temp.path().join("Netsukefile");
+    std::fs::write(
+        &manifest_path,
+        "netsuke_version: \"1.0.0\"\ntargets:\n  - name: hello\n    command: echo hi\n",
+    )?;
+    let utf8_path = camino::Utf8PathBuf::from_path_buf(manifest_path)
+        .map_err(|path| anyhow::anyhow!("non-UTF-8 temp path: {}", path.display()))?;
+
+    // The pure pipeline composes without any StatusReporter in sight.
+    let manifest =
+        generation::load_manifest(&utf8_path, crate::stdlib::NetworkPolicy::default(), None)?;
+    let graph = generation::build_graph(&manifest)?;
+    let ninja = generation::ninja_text(&graph)?;
+    anyhow::ensure!(
+        ninja.as_str().contains("build hello:"),
+        "expected generated Ninja to contain the hello build edge:\n{}",
+        ninja.as_str()
+    );
+    Ok(())
+}
