@@ -1,17 +1,12 @@
 //! Tests for output preference resolution and token-backed prefix rendering.
 
 use super::*;
-use crate::cli_localization;
-use crate::localization::{self, LocalizerGuard};
 use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
 use anyhow::{Result, ensure};
 use insta::assert_snapshot;
-use rstest::{fixture, rstest};
-use std::error::Error;
-use std::fmt;
-use std::sync::{Arc, MutexGuard};
+use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;
-use test_support::localizer::localizer_test_lock;
+use test_support::{EnLocalizer, en_localizer};
 
 #[derive(Debug)]
 struct ThemeResolutionCase<'a> {
@@ -59,17 +54,6 @@ fn resolve_output_prefs(
 ) {
     let env = fake_env(no_color, no_emoji_env);
     assert_eq!(resolve_with(no_emoji, env).emoji_allowed(), expected_emoji);
-}
-
-#[fixture]
-fn en_us_localizer() -> Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError> {
-    let lock = localizer_test_lock()?;
-    let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
-    let guard = localization::set_localizer_for_tests(localizer);
-    Ok(EnUsLocalizerFixture {
-        _lock: lock,
-        _guard: guard,
-    })
 }
 
 #[rstest]
@@ -155,12 +139,12 @@ fn resolve_from_theme_with_uses_theme_resolution(#[case] case: ThemeResolutionCa
 )]
 #[case::ascii_timing(Some(ThemePreference::Ascii), OutputPrefs::timing_prefix, "T Timing:")]
 fn prefix_rendering_uses_theme_symbols(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_localizer: EnLocalizer,
     #[case] theme: Option<ThemePreference>,
     #[case] prefix_fn: fn(OutputPrefs) -> String,
     #[case] expected: &str,
 ) -> Result<()> {
-    let _localizer = en_us_localizer?;
+    let _localizer = en_localizer;
     let prefs = resolve_from_theme_with(
         theme,
         ThemeContext::new(None, None, OutputMode::Standard),
@@ -185,36 +169,16 @@ fn spacing_accessors_follow_resolved_theme(#[case] mode: OutputMode) {
     assert_eq!(prefs.task_indent(), "  ");
     assert_eq!(prefs.timing_indent(), "  ");
 }
-struct EnUsLocalizerFixture {
-    _lock: MutexGuard<'static, ()>,
-    _guard: LocalizerGuard,
-}
-#[derive(Debug)]
-struct EnUsLocalizerFixtureError(String);
-
-impl fmt::Display for EnUsLocalizerFixtureError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl Error for EnUsLocalizerFixtureError {}
-
-impl From<std::sync::PoisonError<MutexGuard<'static, ()>>> for EnUsLocalizerFixtureError {
-    fn from(err: std::sync::PoisonError<MutexGuard<'static, ()>>) -> Self {
-        Self(err.to_string())
-    }
-}
 
 #[rstest]
 #[case::unicode(crate::theme::ThemePreference::Unicode, "all_prefixes_unicode")]
 #[case::ascii(crate::theme::ThemePreference::Ascii, "all_prefixes_ascii")]
 fn prefix_and_spacing_snapshot(
-    en_us_localizer: Result<EnUsLocalizerFixture, EnUsLocalizerFixtureError>,
+    en_localizer: EnLocalizer,
     #[case] theme: crate::theme::ThemePreference,
     #[case] snapshot_name: &str,
-) -> Result<()> {
-    let _localizer = en_us_localizer?;
+) {
+    let _localizer = en_localizer;
     let prefs = theme_prefs(theme);
     let rendered = normalize_fluent_isolates(&format!(
         concat!(
@@ -238,5 +202,4 @@ fn prefix_and_spacing_snapshot(
     snapshot_settings("output_prefs").bind(|| {
         assert_snapshot!(snapshot_name, rendered);
     });
-    Ok(())
 }

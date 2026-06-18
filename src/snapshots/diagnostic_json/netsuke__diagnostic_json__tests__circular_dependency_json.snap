@@ -1,0 +1,27 @@
+---
+source: src/diagnostic_json_tests.rs
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "0.1.0"
+  },
+  "diagnostics": [
+    {
+      "message": "Failed to build graph from the manifest.",
+      "code": null,
+      "severity": "error",
+      "help": null,
+      "url": null,
+      "causes": [
+        "Circular dependency detected: ⁨[\"a\", \"b\", \"a\"]⁩."
+      ],
+      "source": null,
+      "primary_span": null,
+      "labels": [],
+      "related": []
+    }
+  ]
+}
