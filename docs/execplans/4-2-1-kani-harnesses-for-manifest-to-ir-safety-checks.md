@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IMPLEMENTING
+Status: READY FOR REVIEW
 
 ## Purpose / big picture
 
@@ -359,7 +359,7 @@ requires explicit user approval before implementation begins.
       `docs/formal-verification-methods-in-netsuke.md`, and add
       `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`. Update
       `docs/contents.md` to index the new ADR.
-- [ ] Stage E (validate and review): run mutation discipline per
+- [x] Stage E (validate and review): run mutation discipline per
       harness, run `make check-fmt`, `make lint`, `make test`,
       `make markdownlint`, `make nixie`, and `make kani-full`. Run
       `coderabbit review --agent` and resolve all findings.
@@ -374,19 +374,44 @@ requires explicit user approval before implementation begins.
       `make nixie`, and `make kani-ir` completed successfully. The final Kani
       summary again reported nine successfully verified harnesses and zero
       failures.
-- [ ] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested after
+- [x] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested after
       deterministic gates passed, but `coderabbit review --agent` again stalled
       at `preparing_sandbox` and emitted no findings. The local process was
       stopped after confirming only this worktree's CodeRabbit invocation was
       running.
-- [ ] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested again
+- [x] (2026-06-13T00:00:00Z) Stage E CodeRabbit review was requested again
       after the support-module split and final gates. The agent reached
       `preparing_sandbox`, emitted no findings or rate-limit notice for several
       minutes, and was stopped after confirming only this worktree's
       CodeRabbit process pipeline was running.
-- [ ] Stage F (PR and roadmap): mark roadmap `4.2.1` and its four
+- [x] (2026-06-15T19:59:07Z) Refreshed the task branch onto current
+      `origin/main` with merge commit `e2809c3` after the previous branch tip
+      matched the merged 4.2.1 squash tree. The only merge conflict was the
+      ADR index in `docs/contents.md`; resolution preserved the Kani ADR and
+      newer main-branch decision records.
+- [x] (2026-06-15T19:59:07Z) Merge-refresh gates passed:
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+      `make nixie`, and `make kani-ir`. The Kani run reported nine
+      successfully verified harnesses and zero failures. Logs were captured
+      under `/tmp/*-netsuke-4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks-merge.out`.
+- [x] (2026-06-15T19:59:07Z) CodeRabbit review was requested after the
+      merge-refresh gates. The agent again reached `preparing_sandbox`, emitted
+      no findings or rate-limit notice, and was stopped after confirming only
+      this worktree's CodeRabbit process pipeline was terminated.
+- [x] Stage F (PR and roadmap): mark roadmap `4.2.1` and its four
       subitems done, push the branch, and update the draft pull
       request with the implementation summary.
+- [x] (2026-06-15T19:59:07Z) Pushed
+      `4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks` with upstream
+      tracking restored to
+      `origin/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks` and
+      created draft pull request
+      [#386](https://github.com/leynos/netsuke/pull/386).
+- [x] (2026-06-16T00:00:00Z) Updated `docs/roadmap.md` to mirror the execplan's
+      current implementation status: the accepted small-N Kani decision,
+      private `cfg(kani)`/`IrHashMap` support boundary, nine-harness inventory,
+      validation gates, 4.3.1 Proptest hand-off, and CodeRabbit
+      `preparing_sandbox` observation.
 
 ## Surprises & Discoveries
 
@@ -453,7 +478,7 @@ requires explicit user approval before implementation begins.
 - Observation: invoking `cargo kani list` without an explicit
   `LD_LIBRARY_PATH` failed while a build script called `kani-compiler`, because
   `libLLVM.so.21.1-rust-1.93.0-nightly` was not found. Running with
-  `LD_LIBRARY_PATH=/home/leynos/.kani/kani-0.67.0/toolchain/lib:/home/leynos/.kani/kani-0.67.0/lib`
+  `LD_LIBRARY_PATH=${KANI_HOME}/kani-0.67.0/toolchain/lib:${KANI_HOME}/kani-0.67.0/lib`
   resolves the compiler runtime path. This is an environment quirk of the
   local Kani installation rather than a source change.
 
@@ -675,7 +700,32 @@ requires explicit user approval before implementation begins.
 
 ## Outcomes & Retrospective
 
-To be completed at the end of Stage F.
+The 4.2.1 implementation is ready for review in draft pull request
+[#386](https://github.com/leynos/netsuke/pull/386). The final proof suite
+contains nine IR harnesses:
+
+- `duplicate_output_always_rejected`,
+- `empty_rule_shape_is_rejected`,
+- `multiple_rule_shape_is_rejected`,
+- `missing_rule_shape_is_rejected`,
+- `self_dependency_reports_cycle`,
+- `two_node_cycle_reports_cycle_a_first`,
+- `two_node_cycle_reports_cycle_b_first`,
+- `direct_missing_dependency_does_not_report_cycle`, and
+- `transitive_missing_dependency_does_not_report_cycle`.
+
+The implementation keeps the public `netsuke::ir` API unchanged. Kani-only
+support lives behind `cfg(kani)`, with production-owned helper boundaries for
+duplicate discovery, rule selection, and cycle-presence detection. The final
+accepted bound is small-N Kani coverage plus an explicit 4.3.1 Proptest
+hand-off for the original larger-N roadmap ambition.
+
+The main operational caveat is CodeRabbit availability. Multiple review
+requests, including the final 2026-06-15 merge-refresh review, stalled at
+`preparing_sandbox` and emitted no findings or rate-limit notice. Deterministic
+gates and Kani verification are clean. The roadmap now carries the same
+implementation status, decisions, findings, observations, and progress summary
+as this execplan.
 
 ## Context and orientation
 
@@ -1054,7 +1104,7 @@ output to a separate `/tmp` log per the `tee` template. Run
 All commands run from the repository root:
 
 ```bash
-cd /home/leynos/.lody/repos/github---leynos---netsuke/worktrees/8e1f0980-edb8-43a0-aacc-bad04b2e9b33
+cd /path/to/netsuke/worktree
 ```
 
 Confirm the branch and working tree before editing:
@@ -1281,7 +1331,7 @@ The references section should include:
 ## References
 
 - Lody session:
-  <https://lody.ai/leynos/sessions/${LODY_SESSION_ID}>
+  `<redacted-lody-session-url>`
 ```
 
 ## Revision note

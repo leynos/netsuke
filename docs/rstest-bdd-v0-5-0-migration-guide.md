@@ -45,17 +45,6 @@ fn scenario_step_result() -> StepResult<(), &'static str> {
 }
 ```
 
-**After (supported):**
-
-```rust
-# use rstest_bdd_macros::scenario;
-#[scenario(path = "tests/features/example.feature")]
-fn scenario_returns_unit() -> Result<(), &'static str> {
-    do_setup()?;
-    Ok(())
-}
-```
-
 ### 2) Use explicit `Result`/`StepResult` in scenario signatures
 
 Scenario return classification does not resolve type aliases. When using an
