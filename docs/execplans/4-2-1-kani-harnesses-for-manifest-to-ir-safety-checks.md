@@ -478,7 +478,7 @@ requires explicit user approval before implementation begins.
 - Observation: invoking `cargo kani list` without an explicit
   `LD_LIBRARY_PATH` failed while a build script called `kani-compiler`, because
   `libLLVM.so.21.1-rust-1.93.0-nightly` was not found. Running with
-  `LD_LIBRARY_PATH=/home/leynos/.kani/kani-0.67.0/toolchain/lib:/home/leynos/.kani/kani-0.67.0/lib`
+  `LD_LIBRARY_PATH=${KANI_HOME}/kani-0.67.0/toolchain/lib:${KANI_HOME}/kani-0.67.0/lib`
   resolves the compiler runtime path. This is an environment quirk of the
   local Kani installation rather than a source change.
 
@@ -1104,7 +1104,7 @@ output to a separate `/tmp` log per the `tee` template. Run
 All commands run from the repository root:
 
 ```bash
-cd /home/leynos/.lody/repos/github---leynos---netsuke/worktrees/8e1f0980-edb8-43a0-aacc-bad04b2e9b33
+cd /path/to/netsuke/worktree
 ```
 
 Confirm the branch and working tree before editing:
@@ -1331,7 +1331,7 @@ The references section should include:
 ## References
 
 - Lody session:
-  <https://lody.ai/leynos/sessions/${LODY_SESSION_ID}>
+  `<redacted-lody-session-url>`
 ```
 
 ## Revision note
