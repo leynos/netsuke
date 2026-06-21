@@ -390,3 +390,7 @@ fn configure_validation_parsers(
 
 /// Maximum number of jobs accepted by the CLI.
 pub(super) const MAX_JOBS: usize = 64;
+
+#[cfg(test)]
+#[path = "parser_tests.rs"]
+mod tests;
