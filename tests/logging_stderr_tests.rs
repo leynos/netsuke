@@ -4,11 +4,33 @@
 //! binary and asserting log messages appear on stderr rather than stdout.
 
 use anyhow::{Context, Result, ensure};
+use ninja_env::NINJA_ENV;
 use predicates::prelude::*;
+use proptest::prelude::*;
 use rstest::{fixture, rstest};
 use serde_json::Value;
 use std::fs;
+use std::path::Path;
 use tempfile::{TempDir, tempdir};
+
+#[cfg(unix)]
+fn make_script_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .with_context(|| format!("read metadata for {}", path.display()))?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)
+        .with_context(|| format!("set executable bit for {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_script_executable(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
 #[fixture]
 fn temp_with_minimal_manifest() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
@@ -16,6 +38,81 @@ fn temp_with_minimal_manifest() -> Result<TempDir> {
     fs::copy("tests/data/minimal.yml", &manifest_path)
         .with_context(|| format!("copy manifest to {}", manifest_path.display()))?;
     Ok(temp)
+}
+
+fn write_fake_ninja_script(
+    path: &Path,
+    stdout_lines: &[&str],
+    stderr_marker: Option<&str>,
+) -> Result<()> {
+    let script = if cfg!(windows) {
+        let mut script = String::from("@echo off\r\n");
+        for line in stdout_lines {
+            script.push_str("echo ");
+            script.push_str(line);
+            script.push_str("\r\n");
+        }
+        if let Some(marker) = stderr_marker {
+            script.push_str("echo ");
+            script.push_str(marker);
+            script.push_str(" 1>&2\r\n");
+        }
+        script.push_str("exit /B 0\r\n");
+        script
+    } else {
+        let mut script = String::from(
+            "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone <<'NETSUKE_OUTPUT'\n",
+        );
+        for line in stdout_lines {
+            script.push_str(line);
+            script.push('\n');
+        }
+        script.push_str("NETSUKE_OUTPUT\n");
+        if let Some(marker) = stderr_marker {
+            script.push_str("printf '%s\\n' '");
+            script.push_str(marker);
+            script.push_str("' >&2\n");
+        }
+        script.push_str("exit 0\n");
+        script
+    };
+
+    fs::write(path, script)
+        .with_context(|| format!("write fake ninja script {}", path.display()))?;
+    make_script_executable(path)
+}
+
+fn fake_ninja_name(stem: &str) -> String {
+    if cfg!(windows) {
+        format!("{stem}.cmd")
+    } else {
+        stem.to_owned()
+    }
+}
+
+fn path_containing(dir: &Path) -> Result<std::ffi::OsString> {
+    std::env::join_paths([dir]).context("build PATH containing fake ninja")
+}
+
+fn run_verbose_build_with_ninja_env(
+    current_dir: &Path,
+    path_env: std::ffi::OsString,
+    ninja_env: Option<&Path>,
+) -> Result<String> {
+    let mut command = assert_cmd::cargo::cargo_bin_cmd!("netsuke");
+    command
+        .current_dir(current_dir)
+        .env("PATH", path_env)
+        .env_remove(NINJA_ENV)
+        .arg("--verbose")
+        .arg("build");
+    if let Some(ninja) = ninja_env {
+        command.env(NINJA_ENV, ninja);
+    }
+
+    let output = command.output().context("run verbose netsuke build")?;
+    ensure!(output.status.success(), "expected verbose build to succeed");
+    String::from_utf8(output.stderr).context("stderr should be valid UTF-8")
 }
 
 /// Verifies that runner errors are logged to stderr.
@@ -141,6 +238,92 @@ fn diag_json_passthrough_uses_normal_clap_output(
     #[case] stdout_marker: &str,
 ) -> Result<()> {
     assert_diag_json_passthrough(flag, ctx, stdout_marker)
+}
+
+fn run_verbose_build_and_assert_ninja_log(
+    temp_with_minimal_manifest: Result<TempDir>,
+    ninja_stem: &str,
+    use_env_override: bool,
+) -> Result<()> {
+    let temp = temp_with_minimal_manifest?;
+    let description = if use_env_override {
+        "override build should log the resolved ninja program"
+    } else {
+        "default build should log the fallback ninja program"
+    };
+    run_verbose_build_with_fake_ninja_and_assert_log(
+        temp.path(),
+        ninja_stem,
+        use_env_override,
+        description,
+    )
+}
+
+fn run_verbose_build_with_fake_ninja_and_assert_log(
+    workspace: &Path,
+    ninja_stem: &str,
+    use_env_override: bool,
+    description: &str,
+) -> Result<()> {
+    let ninja_temp = tempdir().context("create fake ninja dir")?;
+    let ninja_path = ninja_temp.path().join(fake_ninja_name(ninja_stem));
+    write_fake_ninja_script(&ninja_path, &[], None)?;
+
+    let ninja_env = use_env_override.then_some(ninja_path.as_path());
+    let stderr = run_verbose_build_with_ninja_env(
+        workspace,
+        path_containing(ninja_temp.path())?,
+        ninja_env,
+    )?;
+
+    let expected = if use_env_override {
+        format!("Executing command: {} ", ninja_path.display())
+    } else {
+        format!("Executing command: {ninja_stem} ")
+    };
+    ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
+    Ok(())
+}
+
+/// Runs a verbose build with `NETSUKE_NINJA` set to a fake executable whose
+/// stem is `stem` and asserts that the resulting log contains
+/// `Executing command: <full_path> `.
+fn assert_verbose_build_logs_ninja_override(stem: &str) -> Result<()> {
+    let temp = tempdir().context("create temp dir")?;
+    fs::copy("tests/data/minimal.yml", temp.path().join("Netsukefile"))
+        .context("copy minimal manifest")?;
+
+    run_verbose_build_with_fake_ninja_and_assert_log(
+        temp.path(),
+        stem,
+        true,
+        &format!("verbose log must contain the resolved ninja path for override stem {stem:?}"),
+    )
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { cases: 16, ..ProptestConfig::default() })]
+    #[test]
+    fn verbose_build_logs_resolved_ninja_program_for_any_valid_override(
+        stem in "[a-z][a-z0-9_-]{0,15}",
+    ) {
+        assert_verbose_build_logs_ninja_override(&stem)
+            .map_err(|e| TestCaseError::fail(e.to_string()))?;
+    }
+}
+
+#[rstest]
+fn verbose_build_logs_default_ninja_command(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "ninja", false)
+}
+
+#[rstest]
+fn verbose_build_logs_ninja_env_override(
+    temp_with_minimal_manifest: Result<TempDir>,
+) -> Result<()> {
+    run_verbose_build_and_assert_ninja_log(temp_with_minimal_manifest, "custom-ninja", true)
 }
 
 #[test]

@@ -88,6 +88,9 @@ rewrite:
   expansion and complementary `command_available(...)` branches.
 - `3.14.4` is complete; `command_available(...)` now has the documented
   non-throwing executable-probe contract and typed resolver boundary.
+- Issue #83 is complete; `NETSUKE_NINJA` selects the Ninja executable for
+  builds, while unset, empty, and invalid values fall back to `ninja` with
+  documented verbose and structured tracing.
 - Phase 4 remains active because none of its formal-verification work has been
   delivered yet.
 - New CLI-redesign work starts at `3.15` and Phase 5 so historical numbers are
