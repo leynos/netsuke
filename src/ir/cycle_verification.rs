@@ -73,37 +73,94 @@ fn transitive_missing_dependency_does_not_report_cycle() {
     assert_no_cycle(&targets, "transitive missing dependency is not a cycle");
 }
 
-/// Red-stage scaffold for a two-node canonicalization proof.
+/// Prove two-node canonicalization preserves length and closure.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn canonicalize_two_node_cycle_is_canonical() {
-    let input = vec![path("b"), path("a"), path("b")];
+    let input = closed_two_node_cycle();
+    let input_len = input.len();
     let output = canonicalize_cycle(input);
 
-    kani::assert(output.len() == 0, "red scaffold fails before proof body");
+    kani::assert(
+        output.len() == input_len,
+        "canonical cycle preserves length",
+    );
+    kani::assert(is_closed_cycle(&output), "canonical output is closed");
 }
 
-/// Red-stage scaffold for a three-node canonicalization proof.
+/// Prove three-node canonicalization preserves length and closure.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn canonicalize_three_node_cycle_is_canonical() {
-    let input = vec![path("c"), path("a"), path("b"), path("c")];
+    let input = closed_three_node_cycle();
+    let input_len = input.len();
     let output = canonicalize_cycle(input);
 
-    kani::assert(output.len() == 0, "red scaffold fails before proof body");
+    kani::assert(
+        output.len() == input_len,
+        "canonical cycle preserves length",
+    );
+    kani::assert(is_closed_cycle(&output), "canonical output is closed");
 }
 
-/// Red-stage scaffold for a four-node canonicalization proof.
+/// Prove four-node canonicalization preserves length and closure.
 #[kani::proof]
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn canonicalize_four_node_cycle_is_canonical() {
-    let input = vec![path("d"), path("a"), path("b"), path("c"), path("d")];
+    let input = closed_four_node_cycle();
+    let input_len = input.len();
     let output = canonicalize_cycle(input);
 
-    kani::assert(output.len() == 0, "red scaffold fails before proof body");
+    kani::assert(
+        output.len() == input_len,
+        "canonical cycle preserves length",
+    );
+    kani::assert(is_closed_cycle(&output), "canonical output is closed");
+}
+
+fn closed_two_node_cycle() -> Vec<Utf8PathBuf> {
+    close_cycle(vec![symbolic_node(2), symbolic_node(2)])
+}
+
+fn closed_three_node_cycle() -> Vec<Utf8PathBuf> {
+    close_cycle(vec![symbolic_node(3), symbolic_node(3), symbolic_node(3)])
+}
+
+fn closed_four_node_cycle() -> Vec<Utf8PathBuf> {
+    close_cycle(vec![
+        symbolic_node(4),
+        symbolic_node(4),
+        symbolic_node(4),
+        symbolic_node(4),
+    ])
+}
+
+fn close_cycle(mut interior: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
+    if let Some(first) = interior.first().cloned() {
+        interior.push(first);
+    }
+    interior
+}
+
+fn symbolic_node(alphabet_len: u8) -> Utf8PathBuf {
+    let selector = kani::any::<u8>();
+    kani::assume(selector < alphabet_len);
+    match selector {
+        0 => path("a"),
+        1 => path("b"),
+        2 => path("c"),
+        _ => path("d"),
+    }
+}
+
+fn is_closed_cycle(cycle: &[Utf8PathBuf]) -> bool {
+    match (cycle.first(), cycle.last()) {
+        (Some(first), Some(last)) => path_eq(first.as_path(), last.as_path()),
+        _ => false,
+    }
 }
 
 fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>) -> BuildEdge {
