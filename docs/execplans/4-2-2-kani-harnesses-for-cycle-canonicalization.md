@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
 ## Purpose / big picture
 
@@ -49,9 +49,9 @@ of decisions that need the user's confirmation.
 
 ## Constraints
 
-- This is a draft. Do not begin Stage B until the user explicitly approves the
-  plan and resolves the Stage A open questions. Do not interpret silence as
-  approval.
+- The user approved implementation on 2026-06-22. Stage B may proceed using the
+  per-node-count harness shape, N ceiling of 4, and ADR-004 inheritance already
+  recommended in the Decision Log.
 - Do not modify the public Application Programming Interface (API) of the
   `netsuke::ir` module. The `pub use graph::{Action, BuildEdge, BuildGraph,
   IrGenError}` line in [`src/ir/mod.rs`](../../src/ir/mod.rs) is the public
@@ -232,9 +232,44 @@ of decisions that need the user's confirmation.
 - [x] (2026-06-20T00:00:00Z) Drafted this approval-gated ExecPlan and ran a
       Logisphere community-of-experts design review, revising the plan to
       address each finding.
-- [ ] Stage A: review this draft with the user, resolve the open questions, and
-      obtain explicit approval to proceed.
-- [ ] Stage B (red): add the placeholder harnesses to
+- [x] (2026-06-22T21:41:49Z) Stage A: implementation was explicitly approved by
+      the user. The combined-per-N harness shape, N ceiling of 4, and ADR-004
+      inheritance are accepted for implementation.
+- [ ] (2026-06-22T21:42:47Z) Stage B (red): added deliberately failing
+      canonicalization harness scaffolds to `src/ir/cycle_verification.rs`.
+      The expected failure is the scaffold assertion
+      `output.len() == 0`, which proves Kani reaches the new harness bodies
+      before the real properties replace them.
+- [x] (2026-06-22T21:44:50Z) Stage B discovery: `cargo kani list` initially
+      failed because `kani-compiler` could not load
+      `libLLVM.so.21.1-rust-1.93.0-nightly` when invoked from Cargo build
+      scripts. `make kani-check` confirmed the pinned `0.67.0` version, and
+      rerunning discovery with
+      `LD_LIBRARY_PATH=/home/leynos/.kani/kani-0.67.0/toolchain/lib:/home/leynos/.kani/kani-0.67.0/lib`
+      succeeded. The output at
+      `/tmp/kani-list-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`
+      lists 12 harnesses, including the three new canonicalization stubs.
+- [x] (2026-06-22T21:47:16Z) Stage B red run: `make kani-ir` with the explicit
+      Kani `LD_LIBRARY_PATH` completed the full harness set and reported
+      "9 successfully verified harnesses, 3 failures, 12 total". The only
+      failures were the deliberately false red-stage assertions in
+      `canonicalize_two_node_cycle_is_canonical`,
+      `canonicalize_three_node_cycle_is_canonical`, and
+      `canonicalize_four_node_cycle_is_canonical`. Evidence:
+      `/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+- [x] (2026-06-22T21:49:42Z) Stage B deterministic gates passed after the red
+      scaffold: `make check-fmt`, `make lint`, `make test`,
+      `make markdownlint`, and `make nixie`. Evidence logs:
+      `/tmp/check-fmt-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      `/tmp/lint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      `/tmp/test-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      `/tmp/markdownlint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      and
+      `/tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+- [x] (2026-06-22T21:52:06Z) Stage B CodeRabbit review completed with
+      zero findings. Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+- [x] Stage B (red): add the placeholder harnesses to
       `src/ir/cycle_verification.rs`, confirm `cargo kani list` discovers them,
       and confirm `make kani-ir` runs them.
 - [ ] Stage C (green): implement the length-and-closure, interior-multiset, and
@@ -295,6 +330,17 @@ of decisions that need the user's confirmation.
   `Cargo.toml` lint set and the `4.2.1` lint-friction lessons. Impact: the helper
   builds the name via `(b as char).to_string()` over an `assume`-constrained
   ASCII byte, which is total and needs no suppression.
+
+- Observation: the installed Kani 0.67.0 binary is version-correct but Cargo
+  build scripts could not load Kani's bundled LLVM library until
+  `LD_LIBRARY_PATH` included
+  `/home/leynos/.kani/kani-0.67.0/toolchain/lib` and
+  `/home/leynos/.kani/kani-0.67.0/lib`. Evidence:
+  `/tmp/kani-list-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`
+  after retry, and
+  `/tmp/kani-check-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+  Impact: Kani validation commands in this implementation run with that
+  explicit library path; no repository configuration is changed.
 
 ## Decision Log
 
@@ -367,6 +413,14 @@ of decisions that need the user's confirmation.
   extends ADR-004's consequences with one sentence recording the canonicalization
   bounding axis and its proptest tail. Date/Author: 2026-06-20 / planning agent.
   **Stage A open question:** confirm inheriting ADR-004 versus minting a new ADR.
+
+- Decision: proceed with implementation from this ExecPlan on 2026-06-22.
+  Rationale: the user explicitly instructed implementation of the planned
+  functionality, including keeping this ExecPlan current, using CodeRabbit after
+  major milestones, and committing frequently. This satisfies the approval gate
+  and accepts the open Stage A recommendations: one harness per node count for
+  N in {2, 3, 4}, plus inheriting ADR-004 rather than creating a new ADR.
+  Date/Author: 2026-06-22 / implementation agent.
 
 ## Outcomes & Retrospective
 
