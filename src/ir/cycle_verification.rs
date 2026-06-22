@@ -1,4 +1,4 @@
-//! Kani harnesses for bounded IR cycle-detection properties.
+//! Kani harnesses for bounded IR cycle-handling properties.
 
 use super::*;
 
@@ -71,6 +71,39 @@ fn transitive_missing_dependency_does_not_report_cycle() {
     kani::assume(targets.len() == 2);
 
     assert_no_cycle(&targets, "transitive missing dependency is not a cycle");
+}
+
+/// Red-stage scaffold for a two-node canonicalization proof.
+#[kani::proof]
+#[kani::solver(kissat)]
+#[kani::unwind(6)]
+fn canonicalize_two_node_cycle_is_canonical() {
+    let input = vec![path("b"), path("a"), path("b")];
+    let output = canonicalize_cycle(input);
+
+    kani::assert(output.len() == 0, "red scaffold fails before proof body");
+}
+
+/// Red-stage scaffold for a three-node canonicalization proof.
+#[kani::proof]
+#[kani::solver(kissat)]
+#[kani::unwind(6)]
+fn canonicalize_three_node_cycle_is_canonical() {
+    let input = vec![path("c"), path("a"), path("b"), path("c")];
+    let output = canonicalize_cycle(input);
+
+    kani::assert(output.len() == 0, "red scaffold fails before proof body");
+}
+
+/// Red-stage scaffold for a four-node canonicalization proof.
+#[kani::proof]
+#[kani::solver(kissat)]
+#[kani::unwind(6)]
+fn canonicalize_four_node_cycle_is_canonical() {
+    let input = vec![path("d"), path("a"), path("b"), path("c"), path("d")];
+    let output = canonicalize_cycle(input);
+
+    kani::assert(output.len() == 0, "red scaffold fails before proof body");
 }
 
 fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>) -> BuildEdge {
