@@ -102,6 +102,17 @@ impl ValidationState {
     }
 }
 
+/// Validate that brace groups in a glob `pattern` are balanced.
+///
+/// Braces inside a `[...]` character class are treated as literals, and on Unix
+/// a backslash-escaped brace does not affect nesting depth. An unmatched
+/// opening or closing brace yields a syntax error identifying the offending
+/// character and position.
+///
+/// # Errors
+///
+/// Returns a [`minijinja::Error`](Error) with kind `SyntaxError` when an
+/// opening brace is never closed or a closing brace has no matching opener.
 pub(super) fn validate_brace_matching(pattern: &str) -> std::result::Result<(), Error> {
     let mut state = ValidationState::new();
 
