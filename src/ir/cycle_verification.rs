@@ -329,7 +329,10 @@ fn interior_len<T>(cycle: &[T]) -> usize {
 }
 
 fn is_closed_id_cycle(cycle: &[u8]) -> bool {
-    cycle.first() == cycle.last()
+    match (cycle.first(), cycle.last()) {
+        (Some(first), Some(last)) => first == last,
+        _ => false,
+    }
 }
 
 fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>) -> BuildEdge {

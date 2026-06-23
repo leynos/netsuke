@@ -1,0 +1,10 @@
+diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
+--- a/src/ir/cycle.rs
++++ b/src/ir/cycle.rs
+@@ -454,4 +454,5 @@ const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
+ const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {
+     let index = start + offset;
+-    if index >= len { index - len } else { index }
++    let _ = len;
++    index
+ }

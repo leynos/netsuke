@@ -1,0 +1,12 @@
+diff --git a/src/ir/cycle.rs b/src/ir/cycle.rs
+--- a/src/ir/cycle.rs
++++ b/src/ir/cycle.rs
+@@ -397,7 +397,7 @@ fn find_rotation_start_by<T>(cycle: &[T], len: usize, compare: fn(&T, &T) -> Ord
+         if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
+             && compare(candidate, current) == Ordering::Less
+         {
+-            start = index;
++            let _ = index;
+         }
+         index += 1;
+     }
