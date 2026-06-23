@@ -359,6 +359,15 @@ of decisions that need the user's confirmation.
       canonicalization algorithm and cover production with mutation tests; or
       raise the memory cap for Kani. The current implementation agent has not
       taken any of those policy decisions.
+- [ ] (2026-06-23T00:00:00Z) Stage C approval gate: before any further
+      implementation beyond the one direct-proof salvage experiment, obtain
+      explicit approval for the tractability decision and record the selected
+      proof boundary in this ExecPlan. The boundary must state whether Kani
+      proves direct `Utf8PathBuf` harnesses, a production-owned generic kernel,
+      a functional tier with selected Kani checks disabled, or a reduced small-N
+      scope. Do not mark roadmap item `4.2.2` complete until the roadmap, PR,
+      harness inventory, and acceptance criteria all describe that same
+      boundary.
 - [ ] Stage D (refactor and docs): extract shared harness helpers, extend the
       harness inventory in `docs/developers-guide.md`, add the three mutation
       patches, and update the chosen ADR.
@@ -788,7 +797,7 @@ signatures adapt to the strict Clippy lint set. Shared helpers (`symbolic_node`,
    the interior of the output, iterating a fixed alphabet.
 
    ```rust
-   let alphabet = [b'a', b'b', b'c']; // four symbols for the N=4 harness
+   let alphabet = [b'a', b'b', b'c', b'd']; // four symbols for the N=4 harness
    let in_interior = &input[..input.len() - 1];
    let out_interior = &out[..out.len() - 1];
    for sym in alphabet {
@@ -838,15 +847,18 @@ signatures adapt to the strict Clippy lint set. Shared helpers (`symbolic_node`,
    not. Keep the count-based multiset assertion as the literal record of
    roadmap subitem two; the rotation assertion is the stronger superset.
 
-   The `canonicalize_three_node_cycle_is_canonical` (`#[kani::unwind(6)]`) and
-   `canonicalize_four_node_cycle_is_canonical` (`#[kani::unwind(7)]`) harnesses
-   repeat all four assertions over their larger fixed N. The harness contains
-   several sequential loops (`rotate_cycle`'s rebuild, the per-symbol counts,
-   the smallest-first scan, and the rotation search), and a single
-   `#[kani::unwind]` applies to all of them, so the bound must cover the
-   longest loop: start at `max(N, alphabet_len) + 1` and raise it by one or two
-   if an unwinding assertion fires. For N == 4 with a four-symbol alphabet that
-   is `unwind(7)`.
+   The `canonicalize_three_node_cycle_is_canonical` and
+   `canonicalize_four_node_cycle_is_canonical` harnesses repeat all four
+   assertions over their larger fixed N only if the selected proof boundary
+   keeps direct `Utf8PathBuf` harnesses for those sizes. The harness contains
+   several loops (`rotate_cycle`'s rebuild, the per-symbol counts, the
+   smallest-first scan, and the rotation search). `#[kani::unwind]` is a
+   per-loop bound: it must be greater than the maximum iteration count of each
+   individual loop that can run, including loops nested inside another loop,
+   but it is not the cumulative product or sum of all nested-loop work. Start
+   from the largest single loop bound in the selected harness, add one for
+   Kani's off-by-one unwind rule, and raise by one or two only if an unwinding
+   assertion identifies a specific loop that needs it.
 
 After each property commit, run the focused `cargo kani --harness <name>` for
 the affected harnesses and confirm verification success with zero failed checks.
@@ -957,14 +969,25 @@ failures (the nine inherited from `4.2.1` plus the three added here).
 
 Acceptance is behaviour a human can verify:
 
-- Before Stage C, the three canonicalization harnesses fail (the deliberately
-  false scaffold assertions). After Stage C, `cargo kani --harness <name>`
-  reports verification success with zero failed checks for each.
-- For each harness, applying its recorded mutation patch and re-running
-  `cargo kani --harness <name>` produces at least one failed check; reversing
-  the patch restores success. This proves each assertion is load-bearing.
-- `make kani-ir` reports twelve successfully verified harnesses and zero
-  failures.
+- Before Stage C, the three canonicalization harnesses fail because of the
+  deliberately false scaffold assertions. After the Stage C tractability gate,
+  this ExecPlan states the approved proof boundary in one place and every
+  harness, mutation, developer-guide row, roadmap update, and PR summary uses
+  the same boundary.
+- For the selected proof boundary, each focused
+  `cargo kani --harness <name>` command that is part of that boundary reports
+  verification success with zero failed checks under the required resource cap.
+  If the approved boundary excludes a direct N=3 or N=4 `Utf8PathBuf` harness,
+  acceptance records that exclusion explicitly rather than leaving a failing
+  harness in `make kani-ir`.
+- For each accepted proof harness, applying its recorded mutation patch and
+  re-running the matching focused Kani command produces at least one failed
+  check; reversing the patch restores success. This proves each accepted
+  assertion is load-bearing.
+- The final Kani target for the selected boundary reports success. If the
+  boundary introduces a dedicated canonicalization target or functional tier,
+  `make kani-ir` must not silently include permanently failing or unsupported
+  harnesses.
 - `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
   `make nixie` all pass unchanged.
 
@@ -974,8 +997,10 @@ Quality criteria (what "done" means):
   `cycle_property_tests.rs` continues to pass and remains the larger-N owner.
 - Lint/typecheck: `make lint` and `make check-fmt` pass with no new
   `#[allow(...)]` umbrellas lacking a `reason`.
-- Verification: `make kani-ir` verifies all twelve harnesses; every new harness
-  fails under its recorded mutation.
+- Verification: every harness inside the approved proof boundary verifies under
+  the resource cap; every new accepted harness fails under its recorded
+  mutation. Any direct N that remains out of scope is absent from the final
+  Kani target or explicitly marked as a measured, approved non-goal.
 - Review: `coderabbit review --agent` raises no unresolved correctness, testing,
   or documentation concerns (subject to the `preparing_sandbox` caveat).
 
@@ -1008,32 +1033,49 @@ fn canonicalize_cycle(cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf>;
 fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> std::cmp::Ordering; // #[cfg(kani)] single-byte form
 ```
 
-New harness-only items added to `src/ir/cycle_verification.rs`:
+Current harness-only items added to `src/ir/cycle_verification.rs`:
 
 ```rust
 // All #[cfg(kani)]; never compiled into ordinary builds.
-fn symbolic_node() -> Utf8PathBuf;                  // one symbolic byte from a small alphabet
-fn closed_cycle_n(n: usize) -> Vec<Utf8PathBuf>;    // builds vec![n0, .., n0] of fixed n
-fn count_byte(nodes: &[Utf8PathBuf], sym: u8) -> usize;
-fn is_rotation_of(out_interior: &[Utf8PathBuf], in_interior: &[Utf8PathBuf]) -> bool;
+fn symbolic_node(alphabet_len: u8) -> Utf8PathBuf;  // one symbolic selector from an N-sized alphabet
+fn closed_two_node_cycle() -> Vec<Utf8PathBuf>;     // builds vec![n0, n1, n0]
+fn closed_three_node_cycle() -> Vec<Utf8PathBuf>;   // builds vec![n0, n1, n2, n0]
+fn closed_four_node_cycle() -> Vec<Utf8PathBuf>;    // builds vec![n0, n1, n2, n3, n0]
+fn close_cycle(interior: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf>;
+fn is_closed_cycle(cycle: &[Utf8PathBuf]) -> bool;
 
 #[kani::proof] fn canonicalize_two_node_cycle_is_canonical();
 #[kani::proof] fn canonicalize_three_node_cycle_is_canonical();
 #[kani::proof] fn canonicalize_four_node_cycle_is_canonical();
 ```
 
+If the selected proof boundary retains multiset or rotation assertions inside
+the direct `Utf8PathBuf` harnesses, add helper functions such as
+`count_byte(...)` and `is_rotation_of(...)` in the same private verification
+module. Do not describe those helpers as implemented until they exist.
+
 `symbolic_node` must avoid `unwrap`/`expect`, because `Cargo.toml` denies
 `clippy::unwrap_used` and `clippy::expect_used` and
 `allow_attributes_without_reason = "deny"` is in force. Construct the one-byte
-name without a fallible conversion, for example:
+name without a fallible conversion. The current committed direct-proof attempt
+uses an N-sized symbolic selector over concrete one-byte path values:
 
 ```rust
-fn symbolic_node() -> Utf8PathBuf {
-    let b: u8 = kani::any();
-    kani::assume(b >= b'a' && b <= b'c'); // tiny alphabet; widen to b'd' for N == 4
-    Utf8PathBuf::from((b as char).to_string()) // b is an ASCII letter, so this is total
+fn symbolic_node(alphabet_len: u8) -> Utf8PathBuf {
+    let selector = kani::any::<u8>();
+    kani::assume(selector < alphabet_len);
+    match selector {
+        0 => path("a"),
+        1 => path("b"),
+        2 => path("c"),
+        _ => path("d"),
+    }
 }
 ```
+
+The direct-proof salvage experiment changes this shape only on the harness
+side: select and retain the symbolic integer ID first, map it to a static
+`&'static str`, and call `Utf8PathBuf::from` once after the match.
 
 If any harness body genuinely needs a suppressed lint (for example, the
 panic-on-failure shape), add a module-level
@@ -1058,6 +1100,14 @@ No new external dependency is introduced.
    target now, or defer it until `make kani-full` runtime approaches the
    thirty-minute tolerance. Recommendation: defer; `make kani-ir` already
    exists.
+5. Stage C tractability boundary: after the single direct-proof salvage
+   experiment, explicitly approve one proof boundary before further
+   implementation. The available boundaries are direct `Utf8PathBuf` harnesses
+   for the sizes that verify under the cap, a production-owned generic
+   canonicalization kernel proved over `u8`, a named functional-proof tier that
+   disables selected Kani checks only for canonicalization, or a reduced
+   small-N scope documented as such. Do not infer this decision from a failed
+   or passing experiment.
 
 ## Revision note
 
@@ -1066,12 +1116,14 @@ No new external dependency is introduced.
   harness so the suite is non-vacuous against order-scrambling bugs that the
   three roadmap properties alone would miss; the count-based multiset assertion
   is retained verbatim for roadmap subitem two. Specified that `symbolic_node`
-  must avoid `unwrap`/`expect` under the denied Clippy lints and build the name
-  via `(b as char).to_string()`. Reconciled the unwind guidance to
-  `max(N, alphabet_len) + 1` because one `#[kani::unwind]` covers all of the
-  harness's sequential loops. Recorded honestly that the interior-multiset
-  property is co-proven (not independently falsifiable by a small mutation) and
-  documented the three mutations accordingly. These changes affect Stage C,
-  Stage E, the Interfaces section, the Decision Log, and Surprises &
-  Discoveries; they do not change the scope, the file list, or the approval
-  gate.
+  must avoid `unwrap`/`expect` under the denied Clippy lints. Later
+  implementation evidence replaced the `(b as char).to_string()` sketch with a
+  symbolic selector over concrete one-byte path names, then recorded a planned
+  salvage experiment that maps retained symbolic IDs to static strings before
+  one `Utf8PathBuf::from` call. Reconciled the unwind guidance to the per-loop
+  maximum plus one, rather than cumulative nested-loop work. Recorded honestly
+  that the interior-multiset property is co-proven (not independently
+  falsifiable by a small mutation) and documented the three mutations
+  accordingly. These changes affect Stage C, Stage E, the Interfaces section,
+  the Decision Log, and Surprises & Discoveries; they do not change the scope,
+  the file list, or the approval gate.
