@@ -4,7 +4,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
 and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 ## Purpose / big picture
 
@@ -486,10 +486,15 @@ of decisions that need the user's confirmation.
       `/tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
       and
       `/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`.
-- [ ] Stage E final review: run `coderabbit review --agent` after committing
-      the final documentation and roadmap state.
-- [ ] Stage F (PR and roadmap): mark roadmap `4.2.2` and its three subitems
-      done, push the branch, and update the draft pull request.
+- [x] (2026-06-23T14:49:44Z) Stage E final review: `coderabbit review
+      --agent` completed with zero findings against the completed branch state.
+      Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`.
+- [x] (2026-06-23T14:49:44Z) Stage F (PR and roadmap): roadmap `4.2.2` and
+      its three subitems are marked done, and draft PR #392 now describes the
+      implemented production-kernel proof boundary rather than the obsolete
+      blocked direct-proof state. This final evidence commit is the branch
+      state to push to `origin/4-2-2-kani-harnesses-for-cycle-canonicalization`.
 
 ## Surprises & Discoveries
 
