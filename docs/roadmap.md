@@ -371,12 +371,18 @@ and test workflow intact. See
   - [x] Record the review observation that repeated
     `coderabbit review --agent` attempts reached `preparing_sandbox` and
     emitted no findings or rate-limit notice.
-- [ ] 4.2.2. Add Kani harnesses for cycle canonicalization. Requires 4.2.1.
+- [x] 4.2.2. Add Kani harnesses for cycle canonicalization. Requires 4.2.1.
   See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel).
-  - [ ] Prove preserved length and closed-cycle output.
-  - [ ] Prove the interior node multiset is preserved.
-  - [ ] Prove the selected start node is stable under the current ordering
+  Kani proves the private production `canonicalize_cycle_by` kernel over
+  distinct `u8` cycles for N=2, N=3, and N=4. A direct adapter harness checks
+  the `Utf8PathBuf` wrapper connection for two-node path cycles, and the
+  existing Proptest suite continues to cover larger path-bearing cycles. Direct
+  `Utf8PathBuf` property harnesses for N=2 through N=4 were measured and
+  rejected under the 8 GiB cap.
+  - [x] Prove preserved length and closed-cycle output.
+  - [x] Prove the interior node multiset is preserved.
+  - [x] Prove the selected start node is stable under the current ordering
     rule.
 - [ ] 4.2.3. Add Kani harnesses for command interpolation. Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Kani for command interpolation](formal-verification-methods-in-netsuke.md#kani-for-command-interpolation).

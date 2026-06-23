@@ -470,8 +470,24 @@ of decisions that need the user's confirmation.
       `/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-mutation.out`,
       and
       `/tmp/kani-four-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-mutation.out`.
-- [ ] Stage E (final validate and review): run the final deterministic gates,
-      run `make kani-ir`, and run `coderabbit review --agent`.
+- [x] (2026-06-23T14:33:14Z) Stage E CodeRabbit review for the proof-boundary
+      documentation and mutation-patch milestone completed with zero findings.
+      Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`.
+- [x] (2026-06-23T14:44:36Z) Stage E final deterministic and Kani gates:
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+      `make nixie`, and capped `make kani-ir` all passed. The final Kani target
+      reported "Complete - 13 successfully verified harnesses, 0 failures,
+      13 total." Evidence:
+      `/tmp/check-fmt-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/lint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/test-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/markdownlint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      and
+      `/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`.
+- [ ] Stage E final review: run `coderabbit review --agent` after committing
+      the final documentation and roadmap state.
 - [ ] Stage F (PR and roadmap): mark roadmap `4.2.2` and its three subitems
       done, push the branch, and update the draft pull request.
 
