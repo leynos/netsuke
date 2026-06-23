@@ -49,9 +49,16 @@ of decisions that need the user's confirmation.
 
 ## Constraints
 
-- The user approved implementation on 2026-06-22. Stage B may proceed using the
+- The user approved implementation on 2026-06-22. Stage B proceeded using the
   per-node-count harness shape, N ceiling of 4, and ADR-004 inheritance already
   recommended in the Decision Log.
+- The user approved private production changes on 2026-06-23 after the direct
+  `Utf8PathBuf` salvage experiment exceeded the resource cap at N=2. The
+  approved goal is to make production more legible and testable, not to create
+  a Kani-only duplicate. The selected boundary is a private, production-owned
+  generic canonicalization kernel instantiated by the existing
+  `canonicalize_cycle(Vec<Utf8PathBuf>)` wrapper and by Kani over small integer
+  cycles.
 - Do not modify the public Application Programming Interface (API) of the
   `netsuke::ir` module. The
   `pub use graph::{Action, BuildEdge, BuildGraph, IrGenError}` line in
@@ -60,11 +67,13 @@ of decisions that need the user's confirmation.
   `rotate_cycle`, `rotate_index`, `path_cmp`) are private to `src/ir/cycle.rs`
   and must stay private; the harnesses reach them through `use super::*` from
   the `#[cfg(kani)]` verification submodule.
-- Do not modify `canonicalize_cycle` or any other production code path in
-  `src/ir/cycle.rs` to make the harnesses tractable. The existing
-  `#[cfg(kani)]` single-byte `path_cmp`/`path_eq` helpers (lines ~475-497) are
-  already present from `4.2.1` and are reused as-is. If a production change
-  appears necessary, stop and escalate.
+- Production edits are limited to private implementation details in
+  `src/ir/cycle.rs`. Extract the rotation and closure algorithm into a private
+  generic helper that accepts an ordering function, keep `canonicalize_cycle`
+  as the path-bearing production wrapper, and do not add a public verification
+  port. The existing `#[cfg(kani)]` single-byte `path_cmp`/`path_eq` helpers
+  (lines ~475-497) are already present from `4.2.1` and are reused as-is for
+  the wrapper/comparator connection harness.
 - Do not add Kani harnesses, `cfg(kani)` modules, or `[package.metadata.kani]`
   changes to any code outside `src/ir/cycle.rs` and its sibling
   `src/ir/cycle_verification.rs`. Manifest lowering, command interpolation, the
@@ -140,12 +149,10 @@ of decisions that need the user's confirmation.
 
 - Scope: if implementation requires changes to more than 8 files beyond this
   ExecPlan, stop and escalate. The expected implementation files are
-  `src/ir/cycle_verification.rs`, `docs/developers-guide.md`,
+  `src/ir/cycle.rs`, `src/ir/cycle_verification.rs`, `docs/developers-guide.md`,
   `docs/roadmap.md`, the chosen ADR file (and `docs/contents.md` if a new ADR
   is added), the three per-harness mutation patch files under
-  `docs/verification/mutations/`, and this ExecPlan. `src/ir/cycle.rs`
-  production code is **not** expected to change; if it must, that is an
-  interface/constraint exception, not merely a scope one.
+  `docs/verification/mutations/`, and this ExecPlan.
 - Interface: if any change to the public API of `netsuke::ir`, or any widening
   of `canonicalize_cycle` or its helpers beyond their current private
   visibility, becomes necessary to make the harnesses compile, stop and present
@@ -392,6 +399,14 @@ of decisions that need the user's confirmation.
       The experiment stopped here: N=3 and N=4 were not run because N=2 did
       not establish that the new ID-retaining direct proof encoding avoided
       regression.
+- [ ] (2026-06-23T12:00:00Z) Stage D approval: the user explicitly approved
+      private production changes with the goal of making production more
+      legible and testable. The approved proof boundary is a production-owned
+      generic canonicalization kernel, private to `src/ir/cycle.rs`, with
+      `canonicalize_cycle(Vec<Utf8PathBuf>)` remaining the production wrapper.
+      Kani may instantiate the kernel over `u8` for N in {2, 3, 4} and must
+      include at least one direct `Utf8PathBuf` adapter harness to exercise the
+      wrapper/comparator connection.
 - [ ] Stage D (refactor and docs): extract shared harness helpers, extend the
       harness inventory in `docs/developers-guide.md`, add the three mutation
       patches, and update the chosen ADR.
@@ -597,6 +612,18 @@ of decisions that need the user's confirmation.
   applies the available systemd CPU, memory, swap, task-count, and I/O caps and
   delegates niceness to `/usr/bin/nice -n 15`. Date/Author: 2026-06-22 /
   implementation agent.
+
+- Decision: replace the direct `Vec<Utf8PathBuf>` proof boundary with a
+  private, production-owned generic canonicalization kernel. Rationale: the
+  direct path-bearing proof exceeded the required 8G cap at N=3 even for
+  length/closure only, and the prescribed ID-retaining salvage encoding
+  exceeded the same cap at N=2 once the full property set was added. A private
+  generic kernel keeps one production implementation of rotation and closure,
+  avoids a Kani-only duplicate, makes the algorithm easier to read and test,
+  and lets Kani prove the mathematical cycle properties over `u8` while a
+  direct adapter harness and the existing Proptest suite continue to exercise
+  the `Utf8PathBuf` wrapper. Date/Author: 2026-06-23 / implementation agent
+  after user approval.
 
 ## Outcomes & Retrospective
 
