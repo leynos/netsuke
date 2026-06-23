@@ -368,6 +368,30 @@ of decisions that need the user's confirmation.
       scope. Do not mark roadmap item `4.2.2` complete until the roadmap, PR,
       harness inventory, and acceptance criteria all describe that same
       boundary.
+- [ ] (2026-06-23T00:00:00Z) Stage C direct-proof salvage experiment prepared:
+      changed only harness-side input encoding. Each symbolic node now retains
+      its integer ID, maps that ID to a static string, and allocates the
+      `Utf8PathBuf` once after the match. The closed terminal path is rebuilt
+      from the first retained ID instead of cloning the first path. The main
+      direct proof constrains interior IDs to be pairwise distinct because
+      production DFS cycle witnesses contain unique interior stack entries; the
+      terminal node is the only duplicate. Length, closure, multiset,
+      smallest-start, and rotation assertions now compare against the retained
+      IDs where possible. The experiment must run only N=2, then N=3, and N=4
+      only if N=3 passes under the required cap.
+- [ ] (2026-06-23T11:42:45Z) Stage C direct-proof salvage experiment failed at
+      N=2. The deterministic gates (`make check-fmt`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`) passed before the
+      proof run. The capped focused
+      `canonicalize_two_node_cycle_is_canonical` run reached CBMC, generated
+      4691 verification conditions before simplification and 1562 afterwards,
+      then hit the 8G user-scope `MemoryMax`. `systemd` reported
+      `Result: oom-kill`, 8G peak memory, and 57.999 seconds CPU for
+      `run-p273324-i273624.scope`. Evidence:
+      `/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-salvage.out`.
+      The experiment stopped here: N=3 and N=4 were not run because N=2 did
+      not establish that the new ID-retaining direct proof encoding avoided
+      regression.
 - [ ] Stage D (refactor and docs): extract shared harness helpers, extend the
       harness inventory in `docs/developers-guide.md`, add the three mutation
       patches, and update the chosen ADR.
