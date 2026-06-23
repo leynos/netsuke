@@ -389,13 +389,13 @@ fn target_entry_for_path<'targets>(
     None
 }
 
-/// Return the index of the lexicographically smallest node in `cycle[0..len]`.
-fn find_rotation_start(cycle: &[Utf8PathBuf], len: usize) -> usize {
+/// Return the index of the smallest node in `cycle[0..len]`.
+fn find_rotation_start_by<T>(cycle: &[T], len: usize, compare: fn(&T, &T) -> Ordering) -> usize {
     let mut start = 0;
     let mut index = 1;
     while index < len {
         if let (Some(candidate), Some(current)) = (cycle.get(index), cycle.get(start))
-            && path_cmp(candidate.as_path(), current.as_path()) == Ordering::Less
+            && compare(candidate, current) == Ordering::Less
         {
             start = index;
         }
@@ -406,12 +406,12 @@ fn find_rotation_start(cycle: &[Utf8PathBuf], len: usize) -> usize {
 
 /// Build a canonical, closed cycle by rotating `cycle` so that the node at
 /// `start` appears first, then appending that node again to close the cycle.
-fn rotate_cycle(cycle: &[Utf8PathBuf], start: usize, len: usize) -> Vec<Utf8PathBuf> {
+fn rotate_cycle_by<T: Clone>(cycle: &[T], start: usize, len: usize) -> Vec<T> {
     let mut canonical = Vec::with_capacity(len + 1);
     let mut offset = 0;
     while offset < len {
-        if let Some(path) = cycle.get(rotate_index(start, offset, len)) {
-            canonical.push(path.clone());
+        if let Some(node) = cycle.get(rotate_index(start, offset, len)) {
+            canonical.push(node.clone());
         }
         offset += 1;
     }
@@ -421,20 +421,34 @@ fn rotate_cycle(cycle: &[Utf8PathBuf], start: usize, len: usize) -> Vec<Utf8Path
     canonical
 }
 
-/// Rotate `cycle` so that the lexicographically smallest node appears
-/// first, then re-close it by appending the first node.
+/// Rotate `cycle` so that its smallest node appears first, then re-close it by
+/// appending the first node.
 ///
 /// The input must contain at least two nodes; the first and last node are
 /// expected to be identical (the standard DFS cycle representation).
-fn canonicalize_cycle(mut cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
+fn canonicalize_cycle_by<T: Clone>(mut cycle: Vec<T>, compare: fn(&T, &T) -> Ordering) -> Vec<T> {
     debug_assert!(
         cycle.len() >= 2,
         "cycle detection should yield at least two nodes",
     );
     let len = cycle.len() - 1;
-    let start = find_rotation_start(&cycle, len);
+    let start = find_rotation_start_by(&cycle, len, compare);
     cycle.pop();
-    rotate_cycle(&cycle, start, len)
+    rotate_cycle_by(&cycle, start, len)
+}
+
+/// Rotate `cycle` so that the lexicographically smallest node appears
+/// first, then re-close it by appending the first node.
+///
+/// The input must contain at least two nodes; the first and last node are
+/// expected to be identical (the standard DFS cycle representation).
+fn canonicalize_cycle(cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
+    canonicalize_cycle_by(cycle, compare_cycle_paths)
+}
+
+/// Compare two path-backed cycle nodes using the production path ordering.
+fn compare_cycle_paths(left: &Utf8PathBuf, right: &Utf8PathBuf) -> Ordering {
+    path_cmp(left.as_path(), right.as_path())
 }
 
 const fn rotate_index(start: usize, offset: usize, len: usize) -> usize {

@@ -407,6 +407,26 @@ of decisions that need the user's confirmation.
       Kani may instantiate the kernel over `u8` for N in {2, 3, 4} and must
       include at least one direct `Utf8PathBuf` adapter harness to exercise the
       wrapper/comparator connection.
+- [ ] (2026-06-23T12:30:00Z) Stage D kernel implementation: extracted the
+      private `canonicalize_cycle_by<T: Clone>` production helper in
+      `src/ir/cycle.rs`, with `canonicalize_cycle(Vec<Utf8PathBuf>)`
+      delegating through `compare_cycle_paths`. Added ordinary tests that
+      exercise the integer kernel directly and replaced the direct
+      path-bearing Kani harnesses with N=2, N=3, and N=4 `u8` kernel
+      instantiations over distinct interior IDs. Added the direct
+      `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` harness for
+      the wrapper/comparator connection.
+- [ ] (2026-06-23T12:31:00Z) Stage D focused Kani success: after
+      `make check-fmt`, `make lint`, and `make test` passed, the focused Kani
+      harnesses all verified under the required user-scope resource cap:
+      N=2 kernel verification time 4.5772743 seconds
+      (`/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`),
+      N=3 verification time 7.6018724 seconds
+      (`/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`),
+      N=4 verification time 11.814992 seconds
+      (`/tmp/kani-four-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`),
+      and the path-wrapper adapter verification time 8.777743 seconds
+      (`/tmp/kani-wrapper-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`).
 - [ ] Stage D (refactor and docs): extract shared harness helpers, extend the
       harness inventory in `docs/developers-guide.md`, add the three mutation
       patches, and update the chosen ADR.
