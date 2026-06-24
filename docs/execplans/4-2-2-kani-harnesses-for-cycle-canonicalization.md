@@ -495,6 +495,13 @@ of decisions that need the user's confirmation.
       implemented production-kernel proof boundary rather than the obsolete
       blocked direct-proof state. This final evidence commit is the branch
       state to push to `origin/4-2-2-kani-harnesses-for-cycle-canonicalization`.
+- [x] (2026-06-24T00:00:00Z) Documentary status audit: confirmed this
+      ExecPlan records the direct-proof failure, the approved production-kernel
+      boundary, the final 13-harness Kani result, mutation evidence, and
+      CodeRabbit zero-finding review state. Expanded roadmap `4.2.2` with the
+      same implementation decision, validation count, mutation result, and
+      review status so the roadmap and ExecPlan agree on the current
+      implementation status.
 
 ## Surprises & Discoveries
 

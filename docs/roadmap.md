@@ -384,6 +384,16 @@ and test workflow intact. See
   - [x] Prove the interior node multiset is preserved.
   - [x] Prove the selected start node is stable under the current ordering
     rule.
+  - [x] Record the implementation decision to prove a private production-owned
+    `canonicalize_cycle_by` kernel rather than a direct path-bearing Kani proof
+    or a duplicated Kani-only model.
+  - [x] Validate the final branch with `make check-fmt`, `make lint`,
+    `make test`, `make markdownlint`, `make nixie`, and capped `make kani-ir`.
+    `make kani-ir` reported thirteen successfully verified harnesses and zero
+    failures.
+  - [x] Record the mutation and review evidence: the three canonicalization
+    mutation patches fail their matching harnesses, and
+    `coderabbit review --agent` returned zero findings.
 - [ ] 4.2.3. Add Kani harnesses for command interpolation. Requires 4.1.1. See
   [formal-verification-methods-in-netsuke.md §Kani for command interpolation](formal-verification-methods-in-netsuke.md#kani-for-command-interpolation).
   - [ ] Prove `$in` and `$out` rewrite only at valid token boundaries (bounded
