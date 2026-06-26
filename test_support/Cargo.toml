@@ -16,6 +16,6 @@ anyhow = "1"
 thiserror = "1"
 assert_cmd = "2.0.0"
 netsuke = { path = ".." }
-rstest = "0.18.0"
+rstest = "0.26.1"
 
 [dev-dependencies]
