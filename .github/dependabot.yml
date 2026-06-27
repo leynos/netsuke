@@ -12,7 +12,9 @@ updates:
 
   # Enable version updates for Cargo
   - package-ecosystem: "cargo"
-    directory: "/"
+    directories:
+      - "/"
+      - "/test_support"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
