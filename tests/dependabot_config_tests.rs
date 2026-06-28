@@ -1,10 +1,10 @@
 //! Validate Dependabot coverage for repository dependency manifests.
 
 use anyhow::{Context, Result, ensure};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde::Deserialize;
 use std::collections::BTreeSet;
-use std::fs;
-use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -29,14 +29,21 @@ struct DependabotSchedule {
     interval: String,
 }
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn repo_root_path() -> Utf8PathBuf {
+    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+fn repo_dir() -> Result<Dir> {
+    let root = repo_root_path();
+    Dir::open_ambient_dir(&root, ambient_authority())
+        .with_context(|| format!("open repository root {root}"))
 }
 
 fn dependabot_config() -> Result<DependabotConfig> {
-    let path = repo_root().join(".github").join("dependabot.yml");
-    let contents = fs::read_to_string(&path)
-        .with_context(|| format!("read Dependabot config from {}", path.display()))?;
+    let path = Utf8Path::new(".github").join("dependabot.yml");
+    let contents = repo_dir()?
+        .read_to_string(&path)
+        .with_context(|| format!("read Dependabot config from {path}"))?;
     serde_yaml::from_str(&contents).context("parse Dependabot config")
 }
 
@@ -99,107 +106,80 @@ fn assert_update_policy(
     );
 }
 
-fn repo_dir(root: &Path, path: &Path) -> Result<String> {
-    let relative = path
-        .strip_prefix(root)
-        .with_context(|| format!("{} should be under {}", path.display(), root.display()))?;
-    if relative.as_os_str().is_empty() {
-        return Ok(String::from("/"));
+fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
+    let relative_path = relative.as_str();
+    if relative_path.is_empty() || relative == Utf8Path::new(".") {
+        return String::from("/");
     }
-    Ok(format!(
-        "/{}",
-        relative
-            .components()
-            .map(|component| component.as_os_str().to_string_lossy())
-            .collect::<Vec<_>>()
-            .join("/")
-    ))
+    format!("/{}", relative_path.trim_start_matches("./"))
 }
 
-fn should_skip_dir(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| matches!(name, ".git" | "target"))
+fn should_skip_dir(name: &str) -> bool {
+    matches!(name, ".git" | "target")
 }
 
 fn collect_dirs_containing_file(
-    root: &Path,
-    current: &Path,
+    root: &Dir,
+    current: &Utf8Path,
     file_name: &str,
     dirs: &mut BTreeSet<String>,
 ) -> Result<()> {
-    for dir_entry in
-        fs::read_dir(current).with_context(|| format!("read directory {}", current.display()))?
+    for dir_entry in root
+        .read_dir(current)
+        .with_context(|| format!("read directory {current}"))?
     {
-        let entry = dir_entry.with_context(|| format!("read entry under {}", current.display()))?;
-        let path = entry.path();
+        let entry = dir_entry.with_context(|| format!("read entry under {current}"))?;
+        let entry_name = entry
+            .file_name()
+            .with_context(|| format!("read entry name under {current}"))?;
         let file_type = entry
             .file_type()
-            .with_context(|| format!("read file type for {}", path.display()))?;
+            .with_context(|| format!("read file type for {current}/{entry_name}"))?;
         if file_type.is_dir() {
-            if !should_skip_dir(&path) {
-                collect_dirs_containing_file(root, &path, file_name, dirs)?;
+            if !should_skip_dir(&entry_name) {
+                collect_dirs_containing_file(root, &current.join(&entry_name), file_name, dirs)?;
             }
             continue;
         }
-        if file_type.is_file() && path.file_name().and_then(|name| name.to_str()) == Some(file_name)
-        {
-            let parent = path
-                .parent()
-                .with_context(|| format!("{} should have a parent directory", path.display()))?;
-            dirs.insert(repo_dir(root, parent)?);
+        if file_type.is_file() && entry_name == file_name {
+            dirs.insert(dependabot_dir_from_relative(current));
         }
     }
     Ok(())
 }
 
-fn cargo_lock_dirs(root: &Path) -> Result<BTreeSet<String>> {
+fn cargo_lock_dirs(root: &Dir) -> Result<BTreeSet<String>> {
     let mut lock_dirs = BTreeSet::new();
-    collect_dirs_containing_file(root, root, "Cargo.lock", &mut lock_dirs)?;
+    collect_dirs_containing_file(root, Utf8Path::new("."), "Cargo.lock", &mut lock_dirs)?;
     Ok(lock_dirs
         .into_iter()
         .filter(|dir| {
-            let manifest_dir = if dir == "/" {
-                root.to_path_buf()
+            let manifest_path = if dir == "/" {
+                Utf8PathBuf::from("Cargo.toml")
             } else {
-                root.join(dir.trim_start_matches('/'))
+                Utf8Path::new(dir.trim_start_matches('/')).join("Cargo.toml")
             };
-            manifest_dir.join("Cargo.toml").is_file()
+            root.is_file(manifest_path)
         })
         .collect())
 }
 
-fn workflow_files_exist(root: &Path) -> bool {
-    root.join(".github")
-        .join("workflows")
-        .read_dir()
+fn workflow_files_exist(root: &Dir) -> bool {
+    root.read_dir(Utf8Path::new(".github").join("workflows"))
         .is_ok_and(|entries| {
             entries.filter_map(Result::ok).any(|entry| {
-                matches!(
-                    entry
-                        .path()
-                        .extension()
-                        .and_then(|extension| extension.to_str()),
-                    Some("yml" | "yaml")
-                )
+                entry.file_name().is_ok_and(|name| {
+                    matches!(Utf8Path::new(&name).extension(), Some("yml" | "yaml"))
+                })
             })
         })
 }
 
-fn local_action_manifest_dirs(root: &Path) -> Result<BTreeSet<String>> {
+fn local_action_manifest_dirs(root: &Dir) -> Result<BTreeSet<String>> {
     let mut action_dirs = BTreeSet::new();
-    collect_dirs_containing_file(
-        root,
-        &root.join(".github").join("actions"),
-        "action.yml",
-        &mut action_dirs,
-    )?;
-    collect_dirs_containing_file(
-        root,
-        &root.join(".github").join("actions"),
-        "action.yaml",
-        &mut action_dirs,
-    )?;
+    let actions_dir = Utf8Path::new(".github").join("actions");
+    collect_dirs_containing_file(root, &actions_dir, "action.yml", &mut action_dirs)?;
+    collect_dirs_containing_file(root, &actions_dir, "action.yaml", &mut action_dirs)?;
     Ok(action_dirs)
 }
 
@@ -249,7 +229,7 @@ fn cargo_update_directories_match_lockfile_manifests() -> Result<()> {
     let config = dependabot_config()?;
     let cargo_update = update_for(&config, "cargo")?;
     let configured_directory_refs = update_directories(cargo_update)?;
-    let expected_directories = cargo_lock_dirs(&repo_root())?;
+    let expected_directories = cargo_lock_dirs(&repo_dir()?)?;
     let configured_directories = configured_directory_refs
         .into_iter()
         .map(String::from)
@@ -264,7 +244,7 @@ fn cargo_update_directories_match_lockfile_manifests() -> Result<()> {
 
 #[test]
 fn github_actions_update_directories_cover_workflows_and_local_actions() -> Result<()> {
-    let root = repo_root();
+    let root = repo_dir()?;
     let config = dependabot_config()?;
     let github_actions_update = update_for(&config, "github-actions")?;
     let configured_directories = update_directories(github_actions_update)?;
