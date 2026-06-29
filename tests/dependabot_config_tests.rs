@@ -6,6 +6,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use serde::Deserialize;
 use std::collections::BTreeSet;
 
+/// Parsed Dependabot configuration root.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct DependabotConfig {
@@ -13,6 +14,7 @@ struct DependabotConfig {
     updates: Vec<DependabotUpdate>,
 }
 
+/// Parsed Dependabot update entry for one package ecosystem.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct DependabotUpdate {
@@ -24,21 +26,25 @@ struct DependabotUpdate {
     schedule: DependabotSchedule,
 }
 
+/// Parsed Dependabot schedule block.
 #[derive(Debug, Deserialize)]
 struct DependabotSchedule {
     interval: String,
 }
 
+/// Return the repository root as a UTF-8 Camino path.
 fn repo_root_path() -> Utf8PathBuf {
     Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// Open the repository root as a capability-scoped UTF-8 directory.
 fn repo_dir() -> Result<Dir> {
     let root = repo_root_path();
     Dir::open_ambient_dir(&root, ambient_authority())
         .with_context(|| format!("open repository root {root}"))
 }
 
+/// Load and parse the repository Dependabot configuration.
 fn dependabot_config() -> Result<DependabotConfig> {
     let path = Utf8Path::new(".github").join("dependabot.yml");
     let contents = repo_dir()?
@@ -47,6 +53,7 @@ fn dependabot_config() -> Result<DependabotConfig> {
     serde_yaml::from_str(&contents).context("parse Dependabot config")
 }
 
+/// Find the single update entry for a package ecosystem.
 fn update_for<'a>(config: &'a DependabotConfig, ecosystem: &str) -> Result<&'a DependabotUpdate> {
     let matches = config
         .updates
@@ -64,6 +71,7 @@ fn update_for<'a>(config: &'a DependabotConfig, ecosystem: &str) -> Result<&'a D
         .with_context(|| format!("{ecosystem} update block should exist"))
 }
 
+/// Return a normalized set of configured directories for one update block.
 fn update_directories(update: &DependabotUpdate) -> Result<BTreeSet<&str>> {
     match (&update.directory, &update.directories) {
         (Some(directory), None) => Ok(BTreeSet::from([directory.as_str()])),
@@ -79,6 +87,7 @@ fn update_directories(update: &DependabotUpdate) -> Result<BTreeSet<&str>> {
     }
 }
 
+/// Assert the shared Dependabot policy fields for one update block.
 fn assert_update_policy(
     update: &DependabotUpdate,
     interval: &str,
@@ -106,6 +115,7 @@ fn assert_update_policy(
     );
 }
 
+/// Convert a relative repository path to the POSIX directory form Dependabot uses.
 fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
     let components = relative
         .components()
@@ -120,10 +130,12 @@ fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
     format!("/{}", components.join("/"))
 }
 
+/// Return whether a repository traversal should skip a directory name.
 fn should_skip_dir(name: &str) -> bool {
     matches!(name, ".git" | "target")
 }
 
+/// Collect Dependabot directory names containing a file with the given name.
 fn collect_dirs_containing_file(
     root: &Dir,
     current: &Utf8Path,
@@ -144,12 +156,14 @@ fn collect_dirs_containing_file(
     Ok(())
 }
 
+/// Shared traversal state for a manifest-discovery pass.
 struct DirectorySearch<'a> {
     root: &'a Dir,
     file_name: &'a str,
     dirs: &'a mut BTreeSet<String>,
 }
 
+/// Handle one directory entry during manifest discovery.
 fn handle_dir_entry(
     search: &mut DirectorySearch<'_>,
     current: &Utf8Path,
@@ -179,6 +193,7 @@ fn handle_dir_entry(
     Ok(())
 }
 
+/// Return Cargo manifest directories that own checked-in lockfiles.
 fn cargo_lock_dirs(root: &Dir) -> Result<BTreeSet<String>> {
     let mut lock_dirs = BTreeSet::new();
     collect_dirs_containing_file(root, Utf8Path::new("."), "Cargo.lock", &mut lock_dirs)?;
@@ -195,18 +210,30 @@ fn cargo_lock_dirs(root: &Dir) -> Result<BTreeSet<String>> {
         .collect())
 }
 
-fn workflow_files_exist(root: &Dir) -> bool {
-    root.read_dir(Utf8Path::new(".github").join("workflows"))
-        .is_ok_and(|entries| {
-            entries.filter_map(Result::ok).any(|entry| {
-                entry.file_type().is_ok_and(|file_type| file_type.is_file())
-                    && entry.file_name().is_ok_and(|name| {
-                        matches!(Utf8Path::new(&name).extension(), Some("yml" | "yaml"))
-                    })
-            })
-        })
+/// Return whether the repository has at least one workflow YAML file.
+fn workflow_files_exist(root: &Dir) -> Result<bool> {
+    let workflows_dir = Utf8Path::new(".github").join("workflows");
+    for dir_entry in root
+        .read_dir(&workflows_dir)
+        .with_context(|| format!("read directory {workflows_dir}"))?
+    {
+        let entry = dir_entry.with_context(|| format!("read entry under {workflows_dir}"))?;
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("read file type under {workflows_dir}"))?;
+        let entry_name = entry
+            .file_name()
+            .with_context(|| format!("read entry name under {workflows_dir}"))?;
+        if file_type.is_file()
+            && matches!(Utf8Path::new(&entry_name).extension(), Some("yml" | "yaml"))
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
+/// Return local composite action directories that contain action manifests.
 fn local_action_manifest_dirs(root: &Dir) -> Result<BTreeSet<String>> {
     let mut action_dirs = BTreeSet::new();
     let actions_dir = Utf8Path::new(".github").join("actions");
@@ -215,6 +242,7 @@ fn local_action_manifest_dirs(root: &Dir) -> Result<BTreeSet<String>> {
     Ok(action_dirs)
 }
 
+/// Return whether a Dependabot directory pattern covers a concrete directory.
 fn directory_pattern_matches(pattern: &str, directory: &str) -> bool {
     let Some(prefix) = pattern.strip_suffix("/*") else {
         return pattern == directory;
@@ -226,6 +254,7 @@ fn directory_pattern_matches(pattern: &str, directory: &str) -> bool {
         .is_some_and(|suffix| !suffix.is_empty() && !suffix.contains('/'))
 }
 
+/// Return whether any configured directory covers a concrete directory.
 fn covered_by_any_directory(directory: &str, configured_directories: &BTreeSet<&str>) -> bool {
     configured_directories
         .iter()
@@ -286,7 +315,7 @@ fn github_actions_update_directories_cover_workflows_and_local_actions() -> Resu
         "GitHub Actions Dependabot config should include / for workflow files"
     );
     ensure!(
-        workflow_files_exist(&root),
+        workflow_files_exist(&root)?,
         "repository should contain GitHub workflow files covered by /"
     );
 
