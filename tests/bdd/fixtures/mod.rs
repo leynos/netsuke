@@ -6,12 +6,6 @@
 //! With rstest-bdd 0.3.1+, fixtures are injected directly into step functions
 //! as parameters, eliminating the need for thread-local storage.
 
-// The `#[fixture]` macro generates types that cannot have doc comments attached
-#![expect(
-    missing_docs,
-    reason = "Generated fixture types cannot have doc comments attached"
-)]
-
 use camino::Utf8PathBuf;
 use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
