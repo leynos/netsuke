@@ -124,26 +124,51 @@ fn collect_dirs_containing_file(
     file_name: &str,
     dirs: &mut BTreeSet<String>,
 ) -> Result<()> {
+    let mut search = DirectorySearch {
+        root,
+        file_name,
+        dirs,
+    };
     for dir_entry in root
         .read_dir(current)
         .with_context(|| format!("read directory {current}"))?
     {
-        let entry = dir_entry.with_context(|| format!("read entry under {current}"))?;
-        let entry_name = entry
-            .file_name()
-            .with_context(|| format!("read entry name under {current}"))?;
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("read file type for {current}/{entry_name}"))?;
-        if file_type.is_dir() {
-            if !should_skip_dir(&entry_name) {
-                collect_dirs_containing_file(root, &current.join(&entry_name), file_name, dirs)?;
-            }
-            continue;
+        handle_dir_entry(&mut search, current, dir_entry)?;
+    }
+    Ok(())
+}
+
+struct DirectorySearch<'a> {
+    root: &'a Dir,
+    file_name: &'a str,
+    dirs: &'a mut BTreeSet<String>,
+}
+
+fn handle_dir_entry(
+    search: &mut DirectorySearch<'_>,
+    current: &Utf8Path,
+    dir_entry: std::io::Result<cap_std::fs_utf8::DirEntry>,
+) -> Result<()> {
+    let entry = dir_entry.with_context(|| format!("read entry under {current}"))?;
+    let entry_name = entry
+        .file_name()
+        .with_context(|| format!("read entry name under {current}"))?;
+    let file_type = entry
+        .file_type()
+        .with_context(|| format!("read file type for {current}/{entry_name}"))?;
+    if file_type.is_dir() {
+        if !should_skip_dir(&entry_name) {
+            collect_dirs_containing_file(
+                search.root,
+                &current.join(&entry_name),
+                search.file_name,
+                search.dirs,
+            )?;
         }
-        if file_type.is_file() && entry_name == file_name {
-            dirs.insert(dependabot_dir_from_relative(current));
-        }
+        return Ok(());
+    }
+    if file_type.is_file() && entry_name == search.file_name {
+        search.dirs.insert(dependabot_dir_from_relative(current));
     }
     Ok(())
 }
