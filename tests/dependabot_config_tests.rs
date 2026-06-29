@@ -107,11 +107,17 @@ fn assert_update_policy(
 }
 
 fn dependabot_dir_from_relative(relative: &Utf8Path) -> String {
-    let relative_path = relative.as_str();
-    if relative_path.is_empty() || relative == Utf8Path::new(".") {
+    let components = relative
+        .components()
+        .filter_map(|component| {
+            let component_text = component.as_str();
+            (component_text != ".").then_some(component_text)
+        })
+        .collect::<Vec<_>>();
+    if components.is_empty() {
         return String::from("/");
     }
-    format!("/{}", relative_path.trim_start_matches("./"))
+    format!("/{}", components.join("/"))
 }
 
 fn should_skip_dir(name: &str) -> bool {
@@ -193,9 +199,10 @@ fn workflow_files_exist(root: &Dir) -> bool {
     root.read_dir(Utf8Path::new(".github").join("workflows"))
         .is_ok_and(|entries| {
             entries.filter_map(Result::ok).any(|entry| {
-                entry.file_name().is_ok_and(|name| {
-                    matches!(Utf8Path::new(&name).extension(), Some("yml" | "yaml"))
-                })
+                entry.file_type().is_ok_and(|file_type| file_type.is_file())
+                    && entry.file_name().is_ok_and(|name| {
+                        matches!(Utf8Path::new(&name).extension(), Some("yml" | "yaml"))
+                    })
             })
         })
 }
