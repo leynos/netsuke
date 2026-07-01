@@ -73,8 +73,8 @@ jobs:
 
       - name: Install uv
         if: inputs.platform != 'linux'
-        uses: astral-sh/setup-uv@4cda7d73322c50eac316ad623a716f09a2db2ac7
-        # v3.1.2
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        # v8.2.0
         with:
           python-version: ${{ inputs['python-version'] }}
 
