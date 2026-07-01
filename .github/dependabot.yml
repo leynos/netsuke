@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    schedule:
+      interval: "weekly"
+
+  # Enable version updates for Cargo
+  - package-ecosystem: "cargo"
+    directories:
+      - "/"
+      - "/test_support"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "cargo"
+    schedule:
+      interval: "daily"

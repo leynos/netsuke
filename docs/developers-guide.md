@@ -253,6 +253,16 @@ Netsuke uses a mixed strategy:
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
 - Behavioural test discovery is defined in `tests/bdd_tests.rs`.
+- Dependabot configuration lives in `.github/dependabot.yml`, with coverage
+  tests in `tests/dependabot_config_tests.rs`.
+
+The Dependabot integration tests parse the checked-in configuration and verify
+that repository dependency manifests remain covered as the tree changes. They
+assert the Cargo and GitHub Actions update policies, the configured schedules,
+open pull request limits, and labels. They also compare the Cargo directories
+against checked-in `Cargo.lock` owners, require workflow YAML files under
+`.github/workflows`, and ensure local composite action manifests under
+`.github/actions` are covered by the configured Dependabot directory patterns.
 
 ## IR dependency classes
 
