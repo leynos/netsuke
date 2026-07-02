@@ -13,7 +13,7 @@ kernel proof.
 
 ## Date
 
-2026-06-12.
+2026-06-23.
 
 ## Context and problem statement
 
@@ -121,7 +121,7 @@ proves that kernel over distinct symbolic `u8` cycles for N=2, N=3, and N=4,
 while `canonicalize_cycle(Vec<Utf8PathBuf>)` remains the production wrapper
 using the path comparator. A small direct adapter harness checks the
 wrapper/kernel connection for two-node path cycles, and Proptest continues to
-exercise path-bearing canonicalization up to the larger randomised bounds.
+exercise path-bearing canonicalization up to the larger randomized bounds.
 
 ## Known risks and limitations
 
