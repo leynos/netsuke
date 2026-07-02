@@ -154,13 +154,14 @@ and agents.
   - [x] Document that build-time branching belongs in recipes unless a future
     runtime-condition feature is designed.
 - [x] 3.14.2. Apply `foreach` and `when` expansion to top-level `actions`.
-  Requires 2.2.3. See [netsuke-design.md §2.5](netsuke-design.md).
+  Requires archived task `2.2.3`. See
+  [netsuke-design.md §2.5](netsuke-design.md).
   - [x] Preserve the existing implicit `phony: true` action behaviour after
     expansion.
   - [x] Support complementary branches such as `when: command_available(...)`
     and `when: not command_available(...)`.
 - [x] 3.14.3. Lower target and action `deps` into implicit IR and Ninja
-  dependency edges. Requires 1.2.2 and 1.3.2. See
+  dependency edges. Requires archived tasks `1.2.2` and `1.3.2`. See
   [netsuke-design.md §§2.4 and 5.3](netsuke-design.md).
   - [x] Keep `sources` in the explicit recipe-input class used for `ins` and
     `$in`.
@@ -169,7 +170,7 @@ and agents.
   - [x] Align cycle detection, generated Ninja output, and user-facing
     dependency documentation.
 - [x] 3.14.4. Add `command_available(name, **kwargs)` as a non-throwing
-  executable probe. Requires 3.5.1. See
+  executable probe. Requires archived task `3.5.1`. See
   [executable discovery](netsuke-design.md#executable-discovery-filter-which).
   - [x] Reuse the `which` resolver and cache.
   - [x] Return `false` for absent commands instead of raising
@@ -193,14 +194,15 @@ and agents.
   - [ ] Add parser, IR, Ninja output, and user-guide coverage once the feature
     is implemented.
 - [ ] 3.14.7. Escape backend dollar syntax after Netsuke placeholder lowering.
-  Requires 1.3.2. See [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
+  Requires archived task `1.3.2`. See
+  [netsuke-design.md §§2.6 and 5.4](netsuke-design.md).
   - [ ] Preserve shell variables such as `$PATH`, `${CARGO:-cargo}`, and
     `$RUSTFLAGS` in generated Ninja by emitting literal dollars as `$$`.
   - [ ] Keep the IR free of Ninja-specific dollar escaping.
   - [ ] Add command and script regression tests covering shell variables,
     `$in` / `$out`, and unrelated identifiers such as `$input`.
 - [ ] 3.14.8. Make Jinja command helpers match the documented ergonomics.
-  Requires 2.2.4 and 3.14.4. See
+  Requires archived task `2.2.4` and 3.14.4. See
   [netsuke-design.md §§4.4 and 4.5](netsuke-design.md).
   - [ ] Add `env(name, default=...)` without changing the existing missing and
     invalid UTF-8 diagnostics.

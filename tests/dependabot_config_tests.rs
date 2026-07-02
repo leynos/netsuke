@@ -193,21 +193,11 @@ fn handle_dir_entry(
     Ok(())
 }
 
-/// Return Cargo manifest directories that own checked-in lockfiles.
-fn cargo_lock_dirs(root: &Dir) -> Result<BTreeSet<String>> {
-    let mut lock_dirs = BTreeSet::new();
-    collect_dirs_containing_file(root, Utf8Path::new("."), "Cargo.lock", &mut lock_dirs)?;
-    Ok(lock_dirs
-        .into_iter()
-        .filter(|dir| {
-            let manifest_path = if dir == "/" {
-                Utf8PathBuf::from("Cargo.toml")
-            } else {
-                Utf8Path::new(dir.trim_start_matches('/')).join("Cargo.toml")
-            };
-            root.is_file(manifest_path)
-        })
-        .collect())
+/// Return Cargo manifest directories that Dependabot can update directly.
+fn cargo_manifest_dirs(root: &Dir) -> Result<BTreeSet<String>> {
+    let mut manifest_dirs = BTreeSet::new();
+    collect_dirs_containing_file(root, Utf8Path::new("."), "Cargo.toml", &mut manifest_dirs)?;
+    Ok(manifest_dirs)
 }
 
 /// Return whether the repository has at least one workflow YAML file.
@@ -286,11 +276,11 @@ fn dependabot_updates_have_expected_policy() -> Result<()> {
 }
 
 #[test]
-fn cargo_update_directories_match_lockfile_manifests() -> Result<()> {
+fn cargo_update_directories_match_manifests() -> Result<()> {
     let config = dependabot_config()?;
     let cargo_update = update_for(&config, "cargo")?;
     let configured_directory_refs = update_directories(cargo_update)?;
-    let expected_directories = cargo_lock_dirs(&repo_dir()?)?;
+    let expected_directories = cargo_manifest_dirs(&repo_dir()?)?;
     let configured_directories = configured_directory_refs
         .into_iter()
         .map(String::from)
@@ -298,7 +288,7 @@ fn cargo_update_directories_match_lockfile_manifests() -> Result<()> {
 
     ensure!(
         configured_directories == expected_directories,
-        "Cargo Dependabot directories should match checked-in Cargo lockfile manifest directories: configured={configured_directories:?}, expected={expected_directories:?}"
+        "Cargo Dependabot directories should match checked-in Cargo manifest directories: configured={configured_directories:?}, expected={expected_directories:?}"
     );
     Ok(())
 }
