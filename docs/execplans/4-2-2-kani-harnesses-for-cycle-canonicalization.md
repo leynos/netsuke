@@ -11,7 +11,7 @@ Status: COMPLETE
 Roadmap item `4.2.2` adds the second substantive set of Kani harnesses to
 Netsuke. Where roadmap item `4.2.1` proved cycle *detection* properties of
 `cycle::contains_cycle`, this item proves cycle *canonicalization* properties
-of the pure normalisation function `canonicalize_cycle` in
+of the pure normalization function `canonicalize_cycle` in
 [`src/ir/cycle.rs`](../../src/ir/cycle.rs). Canonicalization is what turns a
 raw depth-first-search (DFS) cycle witness such as `[c, a, b, c]` into a
 stable, reproducible report such as `[a, b, c, a]`, so a bug here would make
@@ -774,7 +774,7 @@ Cycle handling lives in [`src/ir/cycle.rs`](../../src/ir/cycle.rs):
   inputs and implicit dependencies to find a circular dependency. When a cycle
   is found, the DFS yields a raw witness path whose first and last nodes are
   the same (the standard closed-cycle representation).
-- `canonicalize_cycle` (lines ~440-447) normalises that raw witness so the
+- `canonicalize_cycle` (lines ~440-447) normalizes that raw witness so the
   diagnostic is stable by delegating to the private generic
   `canonicalize_cycle_by` kernel with the production path comparator. The
   kernel computes the rotation start with `find_rotation_start_by`, pops the
@@ -1121,7 +1121,7 @@ incomplete Stage C never affects `cargo build` or `cargo test`. Commits are
 small and per-property, so any stage can be rolled back with `git revert`
 without disturbing the others.
 
-## Artifacts and notes
+## Artefacts and notes
 
 The most important artefacts are the private `canonicalize_cycle_by` production
 kernel in `src/ir/cycle.rs`, the four canonicalization harnesses in
