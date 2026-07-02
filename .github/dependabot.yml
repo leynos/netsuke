@@ -11,15 +11,22 @@ updates:
       - "github-actions"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
 
   # Enable version updates for Cargo
   - package-ecosystem: "cargo"
     directories:
       - "/"
       - "/test_support"
+      - "/ninja_env"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "cargo"
     schedule:
       interval: "daily"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
