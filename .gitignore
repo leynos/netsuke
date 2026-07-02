@@ -3,6 +3,7 @@ target/
 **/*~
 .crush
 .claude/
+.memdb/
 build.ninja
 *:Zone.Identifier
 /graph.dot
