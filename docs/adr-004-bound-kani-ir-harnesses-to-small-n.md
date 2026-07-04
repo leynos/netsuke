@@ -24,7 +24,7 @@ production representation, which uses `HashMap`, owned strings, `Utf8PathBuf`,
 and serde-backed action hashing.
 
 The project needs a verification boundary that is useful now, cheap enough to
-run locally, and honest about what remains for the later randomised and
+run locally, and honest about what remains for the later randomized and
 property-testing layers.
 
 ## Decision drivers
