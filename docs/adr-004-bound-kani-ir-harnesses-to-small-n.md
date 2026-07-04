@@ -6,11 +6,14 @@ Accepted.
 
 Accepted: 2026-06-12. Netsuke will verify manifest-to-Intermediate
 Representation (IR) safety properties with small bounded Kani harnesses and
-delegate larger graph coverage to the future Proptest layer.
+delegate larger graph coverage to the future Proptest layer. Extended on
+2026-06-23 to cover cycle canonicalization with a private production-owned
+kernel proved over small integer cycles, plus path-wrapper coverage outside the
+kernel proof.
 
 ## Date
 
-2026-06-12.
+2026-06-23.
 
 ## Context and problem statement
 
@@ -21,7 +24,7 @@ production representation, which uses `HashMap`, owned strings, `Utf8PathBuf`,
 and serde-backed action hashing.
 
 The project needs a verification boundary that is useful now, cheap enough to
-run locally, and honest about what remains for the later randomised and
+run locally, and honest about what remains for the later randomized and
 property-testing layers.
 
 ## Decision drivers
@@ -109,6 +112,17 @@ cycle-path allocation and canonicalization were included. The boolean entry
 point is the production testability repair for that finding: it verifies the
 same traversal decision without constructing the human-facing report payload.
 
+Roadmap item `4.2.2` applies the same small-bound decision to cycle
+canonicalization. Direct `Utf8PathBuf` proofs reached the local 8 GiB cap
+before N=3 and the ID-retaining salvage encoding reached that cap at N=2 once
+the full property set was asserted. Netsuke therefore owns the rotation and
+closure algorithm in a private generic `canonicalize_cycle_by` kernel. Kani
+proves that kernel over distinct symbolic `u8` cycles for N=2, N=3, and N=4,
+while `canonicalize_cycle(Vec<Utf8PathBuf>)` remains the production wrapper
+using the path comparator. A small direct adapter harness checks the
+wrapper/kernel connection for two-node path cycles, and Proptest continues to
+exercise path-bearing canonicalization up to the larger randomized bounds.
+
 ## Known risks and limitations
 
 - The duplicate-output harness does not prove that full manifest lowering
@@ -122,6 +136,10 @@ same traversal decision without constructing the human-facing report payload.
   not the full report-building path. Existing unit tests keep cycle path
   canonicalization and missing-dependency reporting covered until roadmap item
   `4.3.1` expands generated graph coverage.
+- The cycle-canonicalization harnesses prove the private production kernel over
+  small `u8` cycles, not all direct `Utf8PathBuf` inputs. The wrapper adapter
+  harness and Proptest suite are the documented connection back to the
+  path-bearing production instantiation.
 - The `cfg(kani)` `IrHashMap` implementation is a private compatibility layer,
   not a public collection port. If future Kani versions model `HashMap`
   efficiently enough for these harnesses, the compatibility layer should be
@@ -137,5 +155,6 @@ same traversal decision without constructing the human-facing report payload.
 
 - [`docs/developers-guide.md`](developers-guide.md)
 - [`docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`](execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md)
+- [`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`](execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md)
 - [`docs/formal-verification-methods-in-netsuke.md`](formal-verification-methods-in-netsuke.md)
 - [`docs/roadmap.md`](roadmap.md)

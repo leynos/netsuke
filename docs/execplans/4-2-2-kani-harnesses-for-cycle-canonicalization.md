@@ -1,0 +1,1234 @@
+# 4.2.2. Add Kani harnesses for cycle canonicalization
+
+This ExecPlan (execution plan) is a living document. The sections `Constraints`,
+`Tolerances`, `Risks`, `Progress`, `Surprises & Discoveries`, `Decision Log`,
+and `Outcomes & Retrospective` must be kept up to date as work proceeds.
+
+Status: COMPLETE
+
+## Purpose / big picture
+
+Roadmap item `4.2.2` adds the second substantive set of Kani harnesses to
+Netsuke. Where roadmap item `4.2.1` proved cycle *detection* properties of
+`cycle::contains_cycle`, this item proves cycle *canonicalization* properties
+of the pure normalization function `canonicalize_cycle` in
+[`src/ir/cycle.rs`](../../src/ir/cycle.rs). Canonicalization is what turns a
+raw depth-first-search (DFS) cycle witness such as `[c, a, b, c]` into a
+stable, reproducible report such as `[a, b, c, a]`, so a bug here would make
+Netsuke's circular-dependency diagnostics non-deterministic or wrong even when
+detection itself is correct.
+
+`canonicalize_cycle` is a `Vec<Utf8PathBuf> -> Vec<Utf8PathBuf>` wrapper around
+the private production-owned `canonicalize_cycle_by` kernel. The kernel rotates
+a closed cycle so the smallest node under its comparator appears first, then
+re-closes it by appending that node again. It has no `HashMap`, no `serde`, no
+Fluent message formatting, and no recursion, so it is the strongest narrow
+proof candidate in the repository and a plausible later Verus kernel under
+roadmap item `4.4.3`.
+
+After the Stage C tractability measurements, the approved proof boundary is:
+Kani proves the production-owned kernel exhaustively over distinct symbolic
+`u8` cycles for N in {2, 3, 4}; a direct adapter harness proves the
+`Utf8PathBuf` wrapper agrees with that kernel for both two-node path orderings;
+the existing Proptest suite continues to exercise the path-bearing wrapper at
+larger randomized sizes. Within that boundary, Kani checks three classes of
+property at bounded but exhaustive coverage:
+
+- the canonical output preserves the input length and remains a closed cycle
+  (its first and last node are identical),
+- the multiset of interior nodes is preserved (canonicalization is a pure
+  rotation, never adding, dropping, or duplicating a node), and
+- the selected start node is stable under the current ordering rule: the first
+  node of the canonical output is lexicographically smallest among the interior
+  nodes.
+
+The proof claim is deliberately narrow and production-adjacent: Kani proves the
+production canonicalization algorithm exhaustively for small integer cycles; a
+direct adapter harness and Proptest exercise its `Utf8PathBuf` instantiation.
+
+The user-visible success criterion is operational: `make kani-ir` (and the
+unfiltered `make kani-full`) run a named set of `#[kani::proof]` harnesses to
+verification success, the recorded canonicalization mutation patches fail under
+their matching property harnesses, and the existing `make check-fmt`,
+`make lint`, `make test`, `make markdownlint`, and `make nixie` gates continue
+to pass without change.
+
+This plan is approval-gated. It must be reviewed and explicitly approved before
+any source file is edited. The open questions in Stage A list the small number
+of decisions that need the user's confirmation.
+
+## Constraints
+
+- The user approved implementation on 2026-06-22. Stage B proceeded using the
+  per-node-count harness shape, N ceiling of 4, and ADR-004 inheritance already
+  recommended in the Decision Log.
+- The user approved private production changes on 2026-06-23 after the direct
+  `Utf8PathBuf` salvage experiment exceeded the resource cap at N=2. The
+  approved goal is to make production more legible and testable, not to create
+  a Kani-only duplicate. The selected boundary is a private, production-owned
+  generic canonicalization kernel instantiated by the existing
+  `canonicalize_cycle(Vec<Utf8PathBuf>)` wrapper and by Kani over small integer
+  cycles.
+- Do not modify the public Application Programming Interface (API) of the
+  `netsuke::ir` module. The
+  `pub use graph::{Action, BuildEdge, BuildGraph, IrGenError}` line in
+  [`src/ir/mod.rs`](../../src/ir/mod.rs) is the public surface; it must not
+  change. `canonicalize_cycle`, `canonicalize_cycle_by`,
+  `find_rotation_start_by`, `rotate_cycle_by`, `rotate_index`, and `path_cmp`
+  are private to `src/ir/cycle.rs` and must stay private; the harnesses reach
+  them through `use super::*` from the `#[cfg(kani)]` verification submodule.
+- Production edits are limited to private implementation details in
+  `src/ir/cycle.rs`. Extract the rotation and closure algorithm into a private
+  generic helper that accepts an ordering function, keep `canonicalize_cycle`
+  as the path-bearing production wrapper, and do not add a public verification
+  port. The existing `#[cfg(kani)]` single-byte `path_cmp`/`path_eq` helpers
+  (lines ~475-497) are already present from `4.2.1` and are reused as-is for
+  the wrapper/comparator connection harness.
+- Do not add Kani harnesses, `cfg(kani)` modules, or `[package.metadata.kani]`
+  changes to any code outside `src/ir/cycle.rs` and its sibling
+  `src/ir/cycle_verification.rs`. Manifest lowering, command interpolation, the
+  Ninja generator, and the runner are out of scope. Command interpolation
+  harnesses are roadmap item `4.2.3` and must not be drafted here.
+- Do not register `kani` as a dependency in `[dependencies]` or
+  `[dev-dependencies]`. Kani injects the `kani` crate as a sysroot crate when
+  `cargo kani` is the driver; adding it to Cargo manifests breaks ordinary
+  `cargo build` and `cargo test`. Adding or amending the
+  `[package.metadata.kani]` table is permitted but is not expected, because the
+  table, the `cfg(kani)` lint declaration, and `default-unwind = "6"` already
+  exist from `4.2.1`.
+- Do not add `proptest` coverage as part of this item.
+  [`src/ir/cycle_property_tests.rs`](../../src/ir/cycle_property_tests.rs)
+  already exercises these exact canonicalization properties at larger N
+  (`canonicalize_is_idempotent`, `all_rotations_canonicalize_identically`,
+  `canonical_first_node_is_smallest`, `canonical_cycle_is_closed`). The Kani
+  harnesses are the bounded-exhaustive complement and must cross-reference
+  those proptests, not duplicate or replace them.
+- Do not add or modify any user-facing CLI flag, OrthoConfig field, or Fluent
+  message. This work is internal to the IR domain.
+- Keep [`docs/users-guide.md`](../users-guide.md) unchanged: canonicalization is
+  an internal representation detail with no new user-visible behaviour. Update
+  [`docs/developers-guide.md`](../developers-guide.md) to extend the existing
+  "Kani harness inventory" table. Update
+  [`docs/formal-verification-methods-in-netsuke.md`](../formal-verification-methods-in-netsuke.md)
+  only if a footnote is needed to record the bound; do not rewrite its
+  recommendation.
+- Extend the existing
+  [`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`](../adr-004-bound-kani-ir-harnesses-to-small-n.md)
+  rather than adding a new ADR. `4.2.2` applies the same small-bounded-N
+  decision along a different bounding axis (cycle length rather than map size)
+  and records the private production-kernel proof boundary as an extension of
+  that decision.
+- Documentation prose must follow
+  [`docs/documentation-style-guide.md`](../documentation-style-guide.md) and
+  use en-GB-oxendict spelling and grammar.
+- Run long validation commands sequentially. Do not run format checks, lints, or
+  tests in parallel. Capture each command's output with `tee` under `/tmp`
+  using the filename template described in `AGENTS.md`.
+- Run every Kani command under an explicit systemd resource cap. The wrapper is:
+
+  ```sh
+  timeout --kill-after=20s 5m \
+    systemd-run \
+      --user \
+      --scope \
+      --expand-environment=no \
+      -p CPUQuota=200% \
+      -p MemoryMax=8G \
+      -p MemorySwapMax=0 \
+      -p TasksMax=96 \
+      -p IOWeight=20 \
+      /usr/bin/nice -n 15 \
+      <kani-command>
+  ```
+
+  Include the known Kani `LD_LIBRARY_PATH` inside `<kani-command>` when invoking
+  `cargo kani`, `make kani-ir`, or `make kani-full`. On this host, the
+  original root-system scope form required interactive authentication and
+  `-p Nice=15` was not accepted as a unit property; the user-scope wrapper
+  above applies the available CPU, memory, swap, task, and I/O caps and runs
+  the verifier process through `nice`. Do not run uncapped Kani, CBMC, or
+  solver commands again.
+- Use `coderabbit review --agent` after each major implementation milestone, and
+  clear all concerns before moving to the next. Run it only after the
+  deterministic gates pass.
+- Commit only after gates pass. Use the file-based commit-message workflow (the
+  `commit-message` skill); do not pass `-m`. Skipping hooks (`--no-verify`) is
+  forbidden. Do not amend prior commits to fix issues; create new commits.
+
+## Tolerances (exception triggers)
+
+- Scope: if implementation requires changes to more than 8 files beyond this
+  ExecPlan, stop and escalate. The expected implementation files are
+  `src/ir/cycle.rs`, `src/ir/cycle_verification.rs`, `docs/developers-guide.md`,
+  `docs/roadmap.md`, the chosen ADR file (and `docs/contents.md` if a new ADR
+  is added), the three per-harness mutation patch files under
+  `docs/verification/mutations/`, and this ExecPlan.
+- Interface: if any change to the public API of `netsuke::ir`, or any widening
+  of `canonicalize_cycle` or its helpers beyond their current private
+  visibility, becomes necessary to make the harnesses compile, stop and present
+  options.
+- Dependencies: if any new `[dependencies]`, `[dev-dependencies]`, or
+  `[build-dependencies]` entry is required, stop and escalate.
+- Solver runtime: if any single harness takes more than five wall-clock minutes
+  on the reference machine (six-core Rocky 10, 64 GB RAM), stop and consider
+  narrowing the node bound, reducing the alphabet, or splitting the harness.
+  The selected kernel harnesses complete in seconds under the cap. Direct
+  path-bearing `Utf8PathBuf` harnesses are a measured non-goal beyond the
+  two-node adapter connection because they exceeded the 8 GiB cap.
+- Mutation discipline: if any harness still passes after the matching production
+  code path is deliberately broken (see Stage E), stop and redesign the
+  harness. A passing mutation is a falsified proof. Each mutation is recorded
+  as a literal patch file at
+  `docs/verification/mutations/<harness-name>.patch`, so future maintainers can
+  replay it. If a recorded mutation ceases to apply because of an intervening
+  refactor, the harness must be re-validated against an updated patch in the
+  same commit as the refactor.
+- Lint friction: if Clippy lints in `Cargo.toml` (notably `unwrap_used`,
+  `expect_used`, `indexing_slicing`, `panic_in_result_fn`,
+  `missing_docs_in_private_items`) cannot be satisfied or scoped with a
+  `reason = "..."` clause, stop and escalate before adding broad
+  `#[allow(...)]` umbrellas. `allow_attributes_without_reason = "deny"` is in
+  force.
+- Validation: if `make check-fmt`, `make lint`, or `make test` fails after two
+  focused fix attempts, stop and escalate with the captured `/tmp` log paths.
+- Review: if `coderabbit review --agent` raises unresolved correctness, testing,
+  or documentation concerns, do not proceed until they are addressed or
+  explicitly waived. The `4.2.1` work observed the review service stalling at
+  `preparing_sandbox`; if that recurs, record it and proceed on the strength of
+  the deterministic gates and Kani verification rather than blocking
+  indefinitely.
+- Ambiguity: if `make kani-full` cannot complete the full cumulative harness set
+  (the nine `4.2.1` harnesses plus the four new canonicalization harnesses) in
+  under thirty minutes, stop and propose splitting the smoke and full gates or
+  adding a filtered `make kani-cycle-canon` target.
+
+## Risks
+
+- Risk: direct symbolic `Vec<Utf8PathBuf>` proof remains intractable under the
+  approved cap. Severity: high. Likelihood: confirmed. Mitigation: do not use
+  symbolic strings or symbolic-length vectors, and do not claim direct N=2..4
+  path-bearing Kani coverage. The production algorithm is now factored into a
+  private generic kernel proved over `u8`; the wrapper connection is covered by
+  one small direct `Utf8PathBuf` adapter harness and by Proptest.
+
+- Risk: bounded proofs are incomplete. A property could hold for N in {2, 3, 4}
+  but fail for a larger cycle. Severity: medium. Likelihood: low. Mitigation:
+  the proptest suite in `cycle_property_tests.rs` already covers the same
+  properties for cycles up to length 8-10, so the larger-N assurance is
+  retained outside Kani. The developers' guide and the ADR record that Kani
+  covers small N and Proptest covers the tail, mirroring the `4.2.1`
+  reconciliation.
+
+- Risk: choosing the wrong unwind bound. `rotate_cycle_by` and the
+  multiset-count loops iterate over the cycle, so an under-set
+  `#[kani::unwind(N)]` yields a failed unwinding assertion and "undetermined"
+  checks. Severity: low. Likelihood: medium. Mitigation: bound against the
+  maximum iterations of each individual loop, not the cumulative product or sum
+  of nested-loop work. The current harnesses use `#[kani::unwind(6)]`, which is
+  above the largest single loop count in the N=4 proof. An under-set bound
+  fails loudly; it never produces a false pass.
+
+- Risk: the input precondition. `canonicalize_cycle` documents that the input
+  must contain at least two nodes with identical first and last elements and
+  carries a `debug_assert!`. A harness that fed an open or too-short vector
+  would prove nothing useful. Severity: medium. Likelihood: low. Mitigation:
+  harness helpers build the closed cycle by construction
+  (`vec![n0, n1, ..., n0]`) rather than `assume`-ing a symbolic vector into
+  shape, so the precondition holds without wasted symbolic search.
+
+- Risk: the kernel consumes its input by value (`mut cycle`) and calls
+  `cycle.pop()`, so post-call assertions cannot read the original interior from
+  the moved vector. Severity: low. Likelihood: medium. Mitigation: the
+  `CycleInput` harness helper retains the interior IDs and passes the closed ID
+  vector into `canonicalize_cycle_by`, avoiding an `input.clone()` solely for
+  post-call comparison.
+
+- Risk: future contributors might fold Kani into `make test`, `make lint`, or
+  `make check-fmt`, breaking the cache and runtime tolerances for ordinary
+  builds. Severity: medium. Likelihood: medium. Mitigation: the developers'
+  guide already states Kani is not part of those gates; the new inventory rows
+  do not change that.
+
+- Risk: ADR numbering collision. The repository already contains several files
+  numbered `adr-004-*` (a known artefact of parallel branches). Severity: low.
+  Likelihood: low. Mitigation: this plan inherits the existing
+  `adr-004-bound-kani-ir-harnesses-to-small-n.md` rather than minting a new
+  number; if Stage A elects a new ADR, the next genuinely free number must be
+  confirmed against `docs/contents.md` before writing it.
+
+## Progress
+
+- [x] (2026-06-20T00:00:00Z) Loaded the `leta`, `rust-router`,
+      `hexagonal-architecture`, and `execplans` skills for this planning task.
+- [x] (2026-06-20T00:00:00Z) Created a `leta` workspace for the repository
+      worktree.
+- [x] (2026-06-20T00:00:00Z) Reviewed `docs/roadmap.md` §4.2.2,
+      `docs/formal-verification-methods-in-netsuke.md` §Optional Verus proof
+      kernel, the predecessor execplan `4-2-1-*.md`, `src/ir/cycle.rs`
+      (canonicalization helpers and `#[cfg(kani)]` path helpers),
+      `src/ir/cycle_verification.rs`, `src/ir/cycle_property_tests.rs`,
+      `docs/developers-guide.md` §Kani harness inventory, `Makefile` Kani
+      targets, and the existing mutation patches under
+      `docs/verification/mutations/`.
+- [x] (2026-06-20T00:00:00Z) Ran a Plan-agent to design the harness milestone
+      structure and a Firecrawl-backed research agent to refresh Kani prior art
+      (bounded symbolic vectors, permutation/multiset encodings, unwind bounds,
+      solver choice).
+- [x] (2026-06-20T00:00:00Z) Drafted this approval-gated ExecPlan and ran a
+      Logisphere community-of-experts design review, revising the plan to
+      address each finding.
+- [x] (2026-06-22T21:41:49Z) Stage A: implementation was explicitly approved by
+      the user. The combined-per-N harness shape, N ceiling of 4, and ADR-004
+      inheritance are accepted for implementation.
+- [x] (2026-06-22T21:42:47Z) Stage B (red): added deliberately failing
+      canonicalization harness scaffolds to `src/ir/cycle_verification.rs`.
+      The expected failure is the scaffold assertion
+      `output.len() == 0`, which proves Kani reaches the new harness bodies
+      before the real properties replace them.
+- [x] (2026-06-22T21:44:50Z) Stage B discovery: `cargo kani list` initially
+      failed because `kani-compiler` could not load
+      `libLLVM.so.21.1-rust-1.93.0-nightly` when invoked from Cargo build
+      scripts. `make kani-check` confirmed the pinned `0.67.0` version, and
+      rerunning discovery with
+      `LD_LIBRARY_PATH=/home/leynos/.kani/kani-0.67.0/toolchain/lib:/home/leynos/.kani/kani-0.67.0/lib`
+      succeeded. The output at
+      `/tmp/kani-list-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`
+      lists 12 harnesses, including the three new canonicalization stubs.
+- [x] (2026-06-22T21:47:16Z) Stage B red run: `make kani-ir` with the explicit
+      Kani `LD_LIBRARY_PATH` completed the full harness set and reported
+      "9 successfully verified harnesses, 3 failures, 12 total". The only
+      failures were the deliberately false red-stage assertions in
+      `canonicalize_two_node_cycle_is_canonical`,
+      `canonicalize_three_node_cycle_is_canonical`, and
+      `canonicalize_four_node_cycle_is_canonical`. Evidence:
+      `/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+- [x] (2026-06-22T21:49:42Z) Stage B deterministic gates passed after the red
+      scaffold: `make check-fmt`, `make lint`, `make test`,
+      `make markdownlint`, and `make nixie`. Evidence logs:
+      `/tmp/check-fmt-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      `/tmp/lint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      `/tmp/test-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      `/tmp/markdownlint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`,
+      and
+      `/tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+- [x] (2026-06-22T21:52:06Z) Stage B CodeRabbit review completed with
+      zero findings. Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+- [x] Stage B (red): add the placeholder harnesses to
+      `src/ir/cycle_verification.rs`, confirm `cargo kani list` discovers them,
+      and confirm `make kani-ir` runs them.
+- [x] (2026-06-22T21:53:25Z) Stage C length/closure: replaced the false
+      scaffold assertions with symbolic closed-cycle construction and real
+      `canonicalize_cycle` length and closure assertions for N in {2, 3, 4}.
+      The new helpers are private to `src/ir/cycle_verification.rs`, are owned
+      by the Kani harnesses only, and must not become production abstractions.
+- [x] (2026-06-22T22:27:40Z) Stage C resource recovery: confirmed no Kani,
+      CBMC, solver, or `make kani` processes remained after the interrupted
+      uncapped run. System resources were healthy (`free -h` reported 122 GiB
+      available memory; `df -h . /tmp` reported 35% filesystem use). The
+      interrupted run showed symbolic `char`/`String` construction was too
+      expensive, so the then-current direct proof helper changed to a symbolic
+      selector over concrete one-byte paths. All future Kani commands must use
+      the resource-capped `systemd-run` wrapper recorded in Constraints.
+- [x] (2026-06-22T22:42:51Z) Stage C focused proof: the two-node
+      length-and-closure harness passed under the user-scope resource cap with
+      the explicit Kani `LD_LIBRARY_PATH`. Evidence:
+      `/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-c-length-selector.out`.
+      The run took 177.3307 seconds, which is under the five-minute timeout but
+      slow enough that three- and four-node harnesses must be tried one at a
+      time and treated as tractability evidence before expanding the property
+      set.
+- [x] (2026-06-22T22:58:13Z) Stage C tractability finding: the first
+      three-node length-and-closure run, still using a four-symbol alphabet,
+      reached SAT conversion and then hit the 8G user-scope `MemoryMax`.
+      `systemd` reported `Result: oom-kill`, 8G peak memory, and 35.288 seconds
+      CPU. Evidence:
+      `/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-c-length-selector.out`
+      plus the user-unit journal for `run-p9576-i9876.scope`. The harness model
+      now uses an alphabet of size N for each N-node harness, because N ordered
+      symbols cover every equality/order pattern among N interior nodes while
+      avoiding redundant smaller-harness states.
+- [x] (2026-06-22T23:14:11Z) Stage C second tractability finding: the reduced
+      three-node length-and-closure run with alphabet size 3 still reached
+      213332 symbolic steps, 2707 verification conditions after simplification,
+      and then hit the 8G user-scope `MemoryMax`. `systemd` reported
+      `Result: oom-kill`, 8G peak memory, and 41.280 seconds CPU. Evidence:
+      `/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-c-nalphabet.out`.
+- [x] (2026-06-22T23:19:46Z) Stage C rejected fallback: concrete finite
+      enumeration over the planned alphabets was tested as an alternative to
+      symbolic selectors. It was worse: even the two-node harness reached
+      216692 symbolic steps, 4096 verification conditions after
+      simplification, and hit the 8G user-scope `MemoryMax`. `systemd` reported
+      `Result: oom-kill`, 8G peak memory, and 54.441 seconds CPU for
+      `run-p52626-i52926.scope`. The code has been reverted to the N-sized
+      symbolic-selector model, where N=2 verifies but N=3 exceeds the mandated
+      resource cap.
+- [x] Stage C direct-proof green attempt: implement length-and-closure for the
+      direct path-bearing proof shape and record why it cannot be expanded to
+      all properties inside the cap.
+- [x] (2026-06-22T23:24:32Z) Stage C is blocked under the current tolerances:
+      the direct end-to-end `canonicalize_cycle(Vec<Utf8PathBuf>)` proof shape
+      verifies N=2 but cannot verify N=3 inside the required 8G memory cap. Do
+      not attempt N=4 or the interior-multiset/stable-start properties in this
+      shape until the tolerance is changed or the proof strategy is narrowed.
+      Viable next decisions are: lower the Kani bound to N=2 and rely on
+      Proptest for N>=3; allow `--no-memory-safety-checks` for this functional
+      canonicalization proof; allow a Kani-only non-allocating model of the
+      canonicalization algorithm and cover production with mutation tests; or
+      raise the memory cap for Kani. The current implementation agent has not
+      taken any of those policy decisions.
+- [x] (2026-06-23T00:00:00Z) Stage C approval gate: before any further
+      implementation beyond the one direct-proof salvage experiment, obtain
+      explicit approval for the tractability decision and record the selected
+      proof boundary in this ExecPlan. The boundary must state whether Kani
+      proves direct `Utf8PathBuf` harnesses, a production-owned generic kernel,
+      a functional tier with selected Kani checks disabled, or a reduced small-N
+      scope. Do not mark roadmap item `4.2.2` complete until the roadmap, PR,
+      harness inventory, and acceptance criteria all describe that same
+      boundary.
+- [x] (2026-06-23T00:00:00Z) Stage C direct-proof salvage experiment prepared:
+      changed only harness-side input encoding. Each symbolic node now retains
+      its integer ID, maps that ID to a static string, and allocates the
+      `Utf8PathBuf` once after the match. The closed terminal path is rebuilt
+      from the first retained ID instead of cloning the first path. The main
+      direct proof constrains interior IDs to be pairwise distinct because
+      production DFS cycle witnesses contain unique interior stack entries; the
+      terminal node is the only duplicate. Length, closure, multiset,
+      smallest-start, and rotation assertions now compare against the retained
+      IDs where possible. The experiment must run only N=2, then N=3, and N=4
+      only if N=3 passes under the required cap.
+- [x] (2026-06-23T11:42:45Z) Stage C direct-proof salvage experiment failed at
+      N=2. The deterministic gates (`make check-fmt`, `make lint`,
+      `make test`, `make markdownlint`, and `make nixie`) passed before the
+      proof run. The capped focused
+      `canonicalize_two_node_cycle_is_canonical` run reached CBMC, generated
+      4691 verification conditions before simplification and 1562 afterwards,
+      then hit the 8G user-scope `MemoryMax`. `systemd` reported
+      `Result: oom-kill`, 8G peak memory, and 57.999 seconds CPU for
+      `run-p273324-i273624.scope`. Evidence:
+      `/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-salvage.out`.
+      The experiment stopped here: N=3 and N=4 were not run because N=2 did
+      not establish that the new ID-retaining direct proof encoding avoided
+      regression.
+- [x] (2026-06-23T12:00:00Z) Stage D approval: the user explicitly approved
+      private production changes with the goal of making production more
+      legible and testable. The approved proof boundary is a production-owned
+      generic canonicalization kernel, private to `src/ir/cycle.rs`, with
+      `canonicalize_cycle(Vec<Utf8PathBuf>)` remaining the production wrapper.
+      Kani may instantiate the kernel over `u8` for N in {2, 3, 4} and must
+      include at least one direct `Utf8PathBuf` adapter harness to exercise the
+      wrapper/comparator connection.
+- [x] (2026-06-23T12:30:00Z) Stage D kernel implementation: extracted the
+      private `canonicalize_cycle_by<T: Clone>` production helper in
+      `src/ir/cycle.rs`, with `canonicalize_cycle(Vec<Utf8PathBuf>)`
+      delegating through `compare_cycle_paths`. Added ordinary tests that
+      exercise the integer kernel directly and replaced the direct
+      path-bearing Kani harnesses with N=2, N=3, and N=4 `u8` kernel
+      instantiations over distinct interior IDs. Added the direct
+      `canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes` harness for
+      the wrapper/comparator connection.
+- [x] (2026-06-23T12:31:00Z) Stage D focused Kani success: after
+      `make check-fmt`, `make lint`, and `make test` passed, the focused Kani
+      harnesses all verified under the required user-scope resource cap:
+      N=2 kernel verification time 4.5772743 seconds
+      (`/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`),
+      N=3 verification time 7.6018724 seconds
+      (`/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`),
+      N=4 verification time 11.814992 seconds
+      (`/tmp/kani-four-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`),
+      and the path-wrapper adapter verification time 8.777743 seconds
+      (`/tmp/kani-wrapper-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`).
+- [x] (2026-06-23T12:45:00Z) Stage D CodeRabbit review for the production
+      kernel milestone completed with zero findings. Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-kernel.out`.
+- [x] (2026-06-23T14:33:14Z) Stage D refactor and documentation: tightened
+      `is_closed_id_cycle` so empty output is not treated as closed, extended
+      the harness inventory in `docs/developers-guide.md`, extended ADR-004
+      with the approved production-kernel boundary, and added the three
+      mutation patches under `docs/verification/mutations/`. The
+      `git apply --check` validation confirmed that each patch applies cleanly.
+- [x] (2026-06-23T14:33:14Z) Stage E focused baseline rerun: after
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+      `make nixie` passed, the focused capped Kani runs still verified the
+      three kernel harnesses and adapter harness. Evidence:
+      `/tmp/check-fmt-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`,
+      `/tmp/lint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`,
+      `/tmp/test-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`,
+      `/tmp/markdownlint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`,
+      `/tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`,
+      `/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary-baseline.out`,
+      `/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary-baseline.out`,
+      `/tmp/kani-four-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary-baseline.out`,
+      and
+      `/tmp/kani-wrapper-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary-baseline.out`.
+- [x] (2026-06-23T14:33:14Z) Stage E mutation discipline: applied and reversed
+      each recorded mutation patch in turn under the required resource cap.
+      The two-node mutation failed at `canonical first node is smallest`; the
+      three-node mutation failed at `canonical cycle preserves length`; the
+      four-node mutation failed at `canonical cycle preserves length`. Evidence:
+      `/tmp/kani-two-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-mutation.out`,
+      `/tmp/kani-three-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-mutation.out`,
+      and
+      `/tmp/kani-four-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-mutation.out`.
+- [x] (2026-06-23T14:33:14Z) Stage E CodeRabbit review for the proof-boundary
+      documentation and mutation-patch milestone completed with zero findings.
+      Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-boundary.out`.
+- [x] (2026-06-23T14:44:36Z) Stage E final deterministic and Kani gates:
+      `make check-fmt`, `make lint`, `make test`, `make markdownlint`,
+      `make nixie`, and capped `make kani-ir` all passed. The final Kani target
+      reported "Complete - 13 successfully verified harnesses, 0 failures,
+      13 total." Evidence:
+      `/tmp/check-fmt-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/lint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/test-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/markdownlint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      `/tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`,
+      and
+      `/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`.
+- [x] (2026-06-23T14:49:44Z) Stage E final review: `coderabbit review
+      --agent` completed with zero findings against the completed branch state.
+      Evidence:
+      `/tmp/coderabbit-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-final.out`.
+- [x] (2026-06-23T14:49:44Z) Stage F (PR and roadmap): roadmap `4.2.2` and
+      its three subitems are marked done, and draft PR #392 now describes the
+      implemented production-kernel proof boundary rather than the obsolete
+      blocked direct-proof state. This final evidence commit is the branch
+      state to push to `origin/4-2-2-kani-harnesses-for-cycle-canonicalization`.
+- [x] (2026-06-24T00:00:00Z) Documentary status audit: confirmed this
+      ExecPlan records the direct-proof failure, the approved production-kernel
+      boundary, the final 13-harness Kani result, mutation evidence, and
+      CodeRabbit zero-finding review state. Expanded roadmap `4.2.2` with the
+      same implementation decision, validation count, mutation result, and
+      review status so the roadmap and ExecPlan agree on the current
+      implementation status.
+
+## Surprises & Discoveries
+
+- Observation: the three roadmap properties for `4.2.2` are already asserted by
+  the existing proptest suite in `cycle_property_tests.rs`
+  (`canonical_cycle_is_closed`, the implicit length preservation in
+  `all_rotations_canonicalize_identically`, and
+  `canonical_first_node_is_smallest`). Impact: the Kani work is a
+  bounded-exhaustive complement, not new coverage of an untested function; the
+  plan cross-references the proptests rather than re-deriving the properties.
+
+- Observation: `canonicalize_cycle` has no `HashMap`, `serde`, Fluent, or
+  recursion, but its `Utf8PathBuf` allocation and memory-safety proof surface
+  are still enough to exceed the 8 GiB cap once the proof grows beyond the
+  smallest direct shape. Evidence: the Stage C N=3 direct length/closure OOM
+  runs and the Stage C salvage N=2 OOM run. Impact: the useful production-owned
+  proof boundary is not the path-bearing wrapper itself. The wrapper now
+  delegates to a private generic kernel that Kani can verify over `u8`, with a
+  small adapter harness and Proptest covering the path instantiation.
+
+- Observation: Kani 0.55+ provides `kani::vec::exact_vec::<T, N>()` and
+  `kani::bounded_any::<T, N>()` for bounded symbolic vectors, and the official
+  reference templates a bounded "reverse is its own inverse" involution proof
+  over `Vec<bool>`. Evidence: Kani BoundedArbitrary reference. Impact: the plan
+  prefers fixed-length-per-harness construction (one symbolic byte per node)
+  over these APIs for clarity and minimal unwind cost, but records them as the
+  sanctioned alternative if a single variable-length harness is later wanted.
+
+- Observation: because canonicalization is specifically a *rotation*, "interior
+  multiset preserved" can be encoded either as per-alphabet-symbol count
+  equality or as the existential rotation statement
+  `∃k: out[i] == in[(i+k) % N]`. Evidence: research agent findings; Kani
+  permutation prior art (the verify-rust-std SmallSort challenge). Impact: the
+  plan uses the count-based encoding to match the roadmap wording ("interior
+  node multiset is preserved") *and* adds the rotation statement as a stronger
+  superset, after the Logisphere review flagged that the three roadmap
+  properties alone do not pin cyclic order.
+
+- Observation: the interior-multiset property cannot be falsified by a small
+  production mutation in isolation, because a rotation always preserves the
+  multiset; any structural break that disturbs it also disturbs length or the
+  rotation. Evidence: Logisphere (Telefono) analysis of the three candidate
+  mutations. Impact: the multiset assertion is honestly documented as co-proven
+  with length and the rotation check, rather than backed by a contrived
+  isolating patch; the rotation strengthening is what makes the harness
+  non-vacuous here.
+
+- Observation: the rejected direct `Utf8PathBuf` helper had to construct
+  one-byte path names without `unwrap`/`expect`, because `Cargo.toml` denies
+  those Clippy lints and `allow_attributes_without_reason = "deny"` is in
+  force. Evidence: the existing `Cargo.toml` lint set and the `4.2.1`
+  lint-friction lessons. Impact: the helper originally built the name via
+  `(b as char).to_string()` over an `assume`-constrained ASCII byte, which
+  satisfied Clippy but made Kani explore symbolic character and string
+  encoding. The current kernel harness keeps the symbolic baseline as `u8` IDs
+  and allocates path values only inside the small adapter harness.
+
+- Observation: the installed Kani 0.67.0 binary is version-correct but Cargo
+  build scripts could not load Kani's bundled LLVM library until
+  `LD_LIBRARY_PATH` included `/home/leynos/.kani/kani-0.67.0/toolchain/lib` and
+  `/home/leynos/.kani/kani-0.67.0/lib`. Evidence:
+  `/tmp/kani-list-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`
+  after retry, and
+  `/tmp/kani-check-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+  Impact: Kani validation commands in this implementation run with that
+  explicit library path; no repository configuration is changed.
+
+- Observation: uncapped Kani runs can consume excessive workstation resources
+  before the five-minute solver-runtime tolerance is reached. Evidence: the
+  interrupted Stage C length/closure run became silent during the four-node
+  harness after entering the solver, and the user subsequently required
+  resource capping. Impact: the solver-runtime tolerance remains, but every
+  Kani invocation is now additionally constrained by `timeout`, a transient
+  `systemd-run --user --scope` with CPU, memory, task, and I/O weight limits,
+  and `/usr/bin/nice -n 15`.
+
+- Observation: replacing symbolic `char`/`String` construction with a symbolic
+  selector over concrete one-byte paths makes the two-node length-and-closure
+  proof complete under the cap, but it still takes 177.3307 seconds. Impact:
+  continue Stage C by running N=3 and N=4 independently under the same cap; if
+  either exceeds the five-minute timeout, record that as a bounded-model
+  tractability limit before widening or changing the proof model.
+
+- Observation: the first capped three-node length-and-closure run exceeded the
+  8G memory cap before producing a verdict when every node used the four-symbol
+  alphabet. Impact: smaller harnesses now use an N-sized alphabet (`a|b` for
+  N=2, `a|b|c` for N=3, and `a|b|c|d` for N=4). This preserves the bounded
+  order/equality cases relevant to `canonicalize_cycle` while reducing
+  redundant symbolic states.
+
+- Observation: the N-sized symbolic alphabet did not materially reduce the
+  three-node solver problem; it still reached 2707 verification conditions and
+  hit the 8G memory cap. Concrete finite enumeration was tried next and hit the
+  8G cap even for N=2 because it duplicated the allocation-heavy production
+  paths across cases. Impact: keep the symbolic-selector model as the least bad
+  direct encoding, but treat N=3 as blocked under the required resource cap.
+
+- Observation: the private `u8` kernel proof is tractable under the same cap.
+  Evidence: the focused N=2, N=3, N=4, and path-wrapper adapter harnesses all
+  verified in under 12 seconds of Kani verification time after the production
+  kernel extraction. Impact: complete `4.2.2` against this selected boundary,
+  not by adding a duplicated Kani-only canonicalizer or weakening memory-safety
+  checks globally.
+
+- Observation: `cycle.first() == cycle.last()` returns true for an empty slice
+  because both sides are `None`. The canonical output should never be empty,
+  and length preservation already catches that state, but a helper named
+  `is_closed_id_cycle` should not classify it as closed. Impact: the helper now
+  pattern-matches both ends and returns false for empty output, making the
+  closure assertion independently meaningful during mutation failures.
+
+## Decision Log
+
+- Decision: keep this ExecPlan pre-implementation and approval-gated. Rationale:
+  the user stated the plan must be approved before implementation. Date/Author:
+  2026-06-20 / planning agent.
+
+- Decision: harness the canonicalization contract end-to-end rather than
+  proving `find_rotation_start_by`, `rotate_cycle_by`, or `rotate_index` in
+  isolation. Rationale: the three roadmap properties are all stated about the
+  canonical output; harnessing helpers separately would prove weaker
+  helper-local statements rather than the contract. The helpers receive
+  coverage through the kernel property harnesses and through the mutation
+  patches that break them. Date/Author: 2026-06-20 / planning agent; updated
+  2026-06-23 for the extracted production kernel.
+
+- Decision: construct symbolic input as a fixed-length closed cycle with one
+  symbolic byte per node, drawn from a tiny alphabet, rather than a
+  symbolic-length vector or symbolic strings. Rationale: symbolic strings and
+  symbolic-length heap structures are the documented Kani budget hazards; a
+  fixed N with single-byte node identity reuses the existing `#[cfg(kani)]`
+  `path_cmp` comparison and keeps each proof to a handful of symbolic bytes.
+  During implementation the alphabet was refined to size N per N-node harness,
+  because an N-symbol total order is sufficient to cover all equality/order
+  patterns among N interior nodes. After the three-node symbolic-selector proof
+  hit the 8G cap twice, concrete finite enumeration was tested and rejected
+  because it hit the 8G cap even for N=2. Date/Author: 2026-06-20 / planning
+  agent; refined 2026-06-22 / implementation agent.
+
+- Decision: add a fourth, stronger "output is a rotation of the input interior"
+  assertion to each harness, on top of the three roadmap properties. Rationale:
+  a Logisphere review (Telefono) observed that length, closure, multiset, and
+  smallest-first together do not pin the cyclic order, so an order-scrambling
+  bug could satisfy all three roadmap subitems vacuously. The rotation assertion
+  (`∃k: out[i] == in[(i+k) % N]`) is cheap for N <= 4, closes that gap, and
+  gives the otherwise co-proven multiset property a clean falsification path.
+  The count-based multiset assertion is retained verbatim as the record of
+  roadmap subitem two. Date/Author: 2026-06-20 / planning agent after
+  Logisphere review.
+
+- Decision: split by node count N rather than by property, with one harness per
+  N asserting the three roadmap properties plus the rotation strengthening, and
+  bind N to {2, 3, 4} interior nodes. Rationale: one solver invocation per
+  symbolic input covers every assertion cheaply, matching the `4.2.1` precedent
+  of one harness per concrete shape (`two_node_cycle_reports_cycle_a_first`/
+  `_b_first`). The mutation patches show which break each harness catches.
+  Date/Author: 2026-06-20 / planning agent. **Stage A open question:** confirm
+  the combined-per-N shape and the N ceiling of 4.
+
+- Decision: constrain the main symbolic interior IDs to be pairwise distinct.
+  Rationale: production DFS cycle witnesses contain unique interior stack
+  entries, with only the terminal node duplicated for closure. Allowing ties
+  broadens the mathematical input domain but also adds unreachable states and
+  increases the solver problem. The selected proof therefore targets the
+  production-reachable domain; duplicate interior nodes may be added later only
+  as a small robustness harness, not as the main production proof claim.
+  Date/Author: 2026-06-23 / implementation agent, superseding the 2026-06-20
+  planning assumption that repeated bytes should be included in the main
+  harnesses.
+
+- Decision: encode interior-multiset preservation as per-alphabet-symbol count
+  equality. Rationale: it matches the roadmap's exact wording and is cheaper
+  than general multiset machinery over a fixed alphabet; the
+  rotation-existential encoding is recorded as an alternative in Surprises &
+  Discoveries. Date/Author: 2026-06-20 / planning agent.
+
+- Decision: use `#[kani::solver(kissat)]` for every new harness. Rationale:
+  consistency with all existing `4.2.1` harnesses and the documented strong
+  bounded-SAT performance of kissat; for N <= 4 the proofs are tiny, so solver
+  choice is unlikely to matter, and the attribute is pinned rather than left to
+  the version-dependent default. Date/Author: 2026-06-20 / planning agent.
+
+- Decision: inherit ADR-004 rather than write a new ADR. Rationale: `4.2.2`
+  makes no new, hard-to-reverse architectural choice. It applies ADR-004's
+  small-bounded-N-with-Proptest-hand-off decision along a different bounding
+  axis (cycle length, not map size), introduces no public API, no collection
+  port, and no contract change (there is no hasher or serde to stub). The plan
+  extends ADR-004's consequences with one sentence recording the
+  canonicalization bounding axis and its proptest tail. Date/Author: 2026-06-20
+  / planning agent. **Stage A open question:** confirm inheriting ADR-004
+  versus minting a new ADR.
+
+- Decision: proceed with implementation from this ExecPlan on 2026-06-22.
+  Rationale: the user explicitly instructed implementation of the planned
+  functionality, including keeping this ExecPlan current, using CodeRabbit
+  after major milestones, and committing frequently. This satisfies the
+  approval gate and accepts the open Stage A recommendations: one harness per
+  node count for N in {2, 3, 4}, plus inheriting ADR-004 rather than creating a
+  new ADR. Date/Author: 2026-06-22 / implementation agent.
+
+- Decision: keep `symbolic_id`, `closed_id_cycle`, the per-N closed-cycle
+  builders, and the path-adapter helpers private to
+  `src/ir/cycle_verification.rs`. Rationale: these helpers model bounded proof
+  inputs only. They are not a domain abstraction, are not reusable outside the
+  verification module, and must not widen `canonicalize_cycle` or its private
+  helpers. This satisfies the repository's helper policy without adding a
+  production port. Date/Author: 2026-06-22 / implementation agent; helper names
+  updated after the 2026-06-23 kernel extraction.
+
+- Decision: execute all future Kani commands through the resource-capped
+  `timeout` and `systemd-run --user --scope` wrapper adapted from the user's
+  required cap. Rationale: bounded model checking can still stress CPU and
+  memory while a single harness remains under the logical runtime tolerance.
+  The root-system scope form requires interactive authentication on this host,
+  and `Nice` is not accepted as a unit property here, so the user-scope command
+  applies the available systemd CPU, memory, swap, task-count, and I/O caps and
+  delegates niceness to `/usr/bin/nice -n 15`. Date/Author: 2026-06-22 /
+  implementation agent.
+
+- Decision: replace the direct `Vec<Utf8PathBuf>` proof boundary with a
+  private, production-owned generic canonicalization kernel. Rationale: the
+  direct path-bearing proof exceeded the required 8G cap at N=3 even for
+  length/closure only, and the prescribed ID-retaining salvage encoding
+  exceeded the same cap at N=2 once the full property set was added. A private
+  generic kernel keeps one production implementation of rotation and closure,
+  avoids a Kani-only duplicate, makes the algorithm easier to read and test,
+  and lets Kani prove the mathematical cycle properties over `u8` while a
+  direct adapter harness and the existing Proptest suite continue to exercise
+  the `Utf8PathBuf` wrapper. Date/Author: 2026-06-23 / implementation agent
+  after user approval.
+
+- Decision: treat `--no-memory-safety-checks` as a rejected experiment for the
+  final proof boundary. Rationale: Kani 0.67.0 may support functional-only
+  proof modes, but adopting that route would require a distinct named target so
+  the existing nine IR harnesses retain normal memory-safety checking. The
+  private kernel verifies within the cap without disabling checks, so no global
+  `KANI_FLAGS` change or new weakened proof tier is justified. Date/Author:
+  2026-06-23 / implementation agent.
+
+## Outcomes & Retrospective
+
+The initial direct `Utf8PathBuf` proof boundary was not tractable under the
+approved resource cap. Even after the ID-retaining salvage encoding, the
+two-node full-property harness hit the 8 GiB memory limit. The useful outcome
+is therefore the approved production-kernel boundary: production now has one
+private `canonicalize_cycle_by` implementation that owns rotation and closure,
+`canonicalize_cycle(Vec<Utf8PathBuf>)` delegates to it, and Kani proves that
+kernel for distinct `u8` cycles of length two through four.
+
+The proof is production-adjacent rather than a duplicated model. It proves
+length preservation, closure, interior-multiset preservation, smallest start,
+and rotation for the private production kernel; a small adapter harness checks
+the path wrapper against the kernel for the two-node case; and the existing
+Proptest suite remains the larger-N path-bearing owner. The recorded mutations
+all fail their matching property harnesses, so the assertions are load-bearing
+within this boundary.
+
+## Context and orientation
+
+Netsuke is a Rust build-system compiler. It reads a YAML Ain't Markup Language
+(YAML) `Netsukefile`, expands MiniJinja-controlled manifest logic, lowers the
+result into a static Intermediate Representation (IR), emits a deterministic
+Ninja file, and delegates execution to the Ninja subprocess. The IR is the
+semantic commitment point; once constructed, downstream code treats it as
+authoritative.
+
+Cycle handling lives in [`src/ir/cycle.rs`](../../src/ir/cycle.rs):
+
+- `CycleDetector` and the `cycle::analyse` entry point traverse `BuildEdge`
+  inputs and implicit dependencies to find a circular dependency. When a cycle
+  is found, the DFS yields a raw witness path whose first and last nodes are
+  the same (the standard closed-cycle representation).
+- `canonicalize_cycle` (lines ~440-447) normalizes that raw witness so the
+  diagnostic is stable by delegating to the private generic
+  `canonicalize_cycle_by` kernel with the production path comparator. The
+  kernel computes the rotation start with `find_rotation_start_by`, pops the
+  duplicated closing node, and rebuilds the closed cycle with `rotate_cycle_by`
+  (which uses `rotate_index` for wrap-around). The net effect is that all
+  rotations of the same cycle, in either traversal direction's starting point,
+  collapse to one canonical sequence beginning at the smallest node.
+- Under `#[cfg(kani)]`, `path_cmp` and `path_eq` (lines ~475-497) compare paths
+  by their single leading byte. This is the device that keeps node identity
+  cheap for the model checker; the harnesses rely on it and must use one-byte
+  node names.
+
+The current canonicalization signatures and helpers, for reference:
+
+```rust
+// src/ir/cycle.rs
+fn find_rotation_start_by<T>(cycle: &[T], len: usize, compare: fn(&T, &T) -> Ordering) -> usize;
+fn rotate_cycle_by<T: Clone>(cycle: &[T], start: usize, len: usize) -> Vec<T>;
+fn canonicalize_cycle_by<T: Clone>(mut cycle: Vec<T>, compare: fn(&T, &T) -> Ordering) -> Vec<T>;
+fn canonicalize_cycle(cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf>;
+const fn rotate_index(start: usize, offset: usize, len: usize) -> usize;
+```
+
+The existing Kani harnesses for cycle *detection* live in
+[`src/ir/cycle_verification.rs`](../../src/ir/cycle_verification.rs), declared
+at the foot of `src/ir/cycle.rs` as:
+
+```rust
+#[cfg(kani)]
+#[path = "cycle_verification.rs"]
+mod verification;
+```
+
+That module begins with `use super::*;`, so it already reaches the private
+`canonicalize_cycle`, `canonicalize_cycle_by`, `rotate_index`, `path_cmp`, and
+`Ordering` symbols. The canonicalization harnesses are added to this same file.
+
+The relevant supporting files are:
+
+- [`src/ir/cycle_property_tests.rs`](../../src/ir/cycle_property_tests.rs): the
+  proptest suite that already covers idempotence, rotation-invariance,
+  smallest-first, and closure for cycles up to length 8-10. The Kani harnesses
+  are its bounded-exhaustive complement.
+- [`Cargo.toml`](../../Cargo.toml): the strict Clippy lint set, the
+  `[lints.rust] unexpected_cfgs` declaration for `cfg(kani)`, and
+  `[package.metadata.kani.flags] default-unwind = "6"`. None of these need to
+  change.
+- [`Makefile`](../../Makefile): `make kani-full` runs the bare cumulative
+  `cargo kani` suite and `make kani-ir` aliases it. A filtered
+  `make kani-cycle-canon` may be added if Stage A elects a per-feature target.
+- [`docs/developers-guide.md`](../developers-guide.md): the "Kani harness
+  inventory" table (rows around lines 186-196) that this plan extends.
+- [`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`](../adr-004-bound-kani-ir-harnesses-to-small-n.md):
+  the decision this plan inherits.
+- [`docs/verification/mutations/`](../verification/mutations/): the directory of
+  literal mutation patches, one per harness.
+
+Architectural rules this plan applies (concrete invariants, not pattern
+transplant): the IR is the part of the codebase with no input/output of its own;
+`canonicalize_cycle` is a pure function within it; Kani harnesses are added as
+a private `#[cfg(kani)]` module inside the file they verify; no private symbol
+is widened to make a harness compile; and the existing developer gates remain
+unaffected by harness code, which compiles only under `--cfg kani`.
+
+## Skills and references
+
+Use these skills while implementing this plan:
+
+- `execplans`: keep this document current as work proceeds.
+- `kani`: harness shape, the four-phase pattern (deterministic setup,
+  nondeterministic population, precondition `assume`, invariant `assert`),
+  unwind discipline, mutation discipline, and the "narrowest function that
+  still proves the contract" rule applied here at the function's contract
+  boundary.
+- `rust-verification`: justify the Kani-versus-Proptest split for the larger-N
+  property.
+- `hexagonal-architecture`: protect the IR domain boundary by forbidding any
+  visibility widening for verification; use the skill to police drift rather
+  than as a pattern source.
+- `arch-decision-records`: if Stage A elects a new ADR, write it with the
+  project's Y-statement template; otherwise extend ADR-004.
+- `rust-unit-testing`: model harness helpers after the existing `path` and
+  `edge` helpers in `src/ir/cycle_verification.rs`.
+- `leta`: use for symbol navigation when extracting helpers.
+- `firecrawl`: use again if implementation needs fresh external Kani facts.
+- `commit-message`: use the file-based commit workflow for every commit.
+- `pr-creation`: use when creating and updating the draft pull request.
+- `en-gb-oxendict`: applies to all prose written or revised by this plan.
+- `code-review`: align the `coderabbit review --agent` pass at Stage E with the
+  skill's expectations.
+
+Primary local references:
+
+- [`docs/roadmap.md`](../roadmap.md) §4.2.2.
+- [`docs/formal-verification-methods-in-netsuke.md`](../formal-verification-methods-in-netsuke.md)
+  §Optional Verus proof kernel (the cycle canonicalization contract: length
+  preserved, cycle closed, interior multiset preserved, chosen start node
+  stable).
+- [`docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`](4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md):
+  the predecessor whose structure, conventions, and lessons this plan mirrors.
+- [`docs/developers-guide.md`](../developers-guide.md) §Kani harness inventory.
+- [`docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`](../adr-004-bound-kani-ir-harnesses-to-small-n.md).
+- [`docs/documentation-style-guide.md`](../documentation-style-guide.md)
+  §Architecture Decision Records.
+
+External references consulted during planning:
+
+- Kani usage guide: <https://model-checking.github.io/kani/usage.html>.
+- Kani BoundedArbitrary reference (bounded vectors, the reverse-involution
+  template, the incompleteness caution):
+  <https://model-checking.github.io/kani/reference/bounded_arbitrary.html>.
+- Kani `kani::vec` module (`any_vec`, `exact_vec`):
+  <https://model-checking.github.io/kani/crates/doc/kani/vec/index.html>.
+- Kani attributes reference (`#[kani::unwind]`, `#[kani::solver]`, the small
+  array sort example):
+  <https://model-checking.github.io/kani/reference/attributes.html>.
+- Kani loop-unwinding tutorial (unwind = iterations + 1; string scaling limits):
+  <https://model-checking.github.io/kani/tutorial-loop-unwinding.html>.
+- Kani nondeterministic-variables tutorial (heap-structure scaling caution):
+  <https://model-checking.github.io/kani/tutorial-nondeterministic-variables.html>.
+- Kani "Turbocharging Rust Code Verification" (solver comparison; kissat and
+  CaDiCaL versus MiniSat):
+  <https://model-checking.github.io/kani-verifier-blog/2023/08/03/turbocharging-rust-code-verification.html>.
+- verify-rust-std SmallSort challenge (permutation/sortedness prior art):
+  <https://model-checking.github.io/verify-rust-std/challenges/0008-smallsort.html>.
+
+## Plan of work
+
+Stages run in order. Each stage ends with validation. Do not advance unless the
+validation passes.
+
+### Stage A — Approval gate (no code changes)
+
+Present this draft to the user. Resolve the open questions listed under "Open
+questions". Do not begin Stage B until the user explicitly approves the plan.
+If the user changes scope, revise this ExecPlan before any source file edit.
+
+### Stage B — Red: scaffold the verification surface
+
+Make the smallest change that compiles and exposes the new harnesses to Kani's
+discovery, proving the harness loop reaches the new names.
+
+1. In `src/ir/cycle_verification.rs`, add three harness stubs named
+   `canonicalize_two_node_cycle_is_canonical`,
+   `canonicalize_three_node_cycle_is_canonical`, and
+   `canonicalize_four_node_cycle_is_canonical`, each with the
+   `#[kani::proof] #[kani::solver(kissat)] #[kani::unwind(...)]` attributes. To
+   honour the `4.2.1` lesson against vacuous `kani::assert(true, ...)` proofs,
+   write each stub to assert a deliberately false shape (for example, assert
+   the output length is wrong) so the red stage fails for the expected reason,
+   then correct it in Stage C. No new `Cargo.toml` or `Makefile` change is
+   required because the `cfg(kani)` lint, `default-unwind`, and `make kani-ir`
+   alias already exist.
+2. Run `cargo kani list` and confirm the three new harness names appear. Capture
+   the output under
+   `/tmp/kani-list-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+3. Run `make kani-ir` and confirm the new harnesses fail for the expected
+   (deliberately false) reason while the existing nine harnesses still pass.
+   Capture the output under
+   `/tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out`.
+4. Run `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+   `make nixie` to confirm the harness scaffold (which compiles only under
+   `--cfg kani`) does not regress ordinary gates.
+5. Run `coderabbit review --agent` for the Stage B diff; resolve all concerns.
+6. Commit with subject "Scaffold Kani canonicalization harnesses (4.2.2)" using
+   the file-based commit-message workflow.
+
+### Stage C — Direct proof salvage and tractability decision
+
+Replace the red scaffold with the direct `Utf8PathBuf` proof attempt and run it
+only under the required resource cap. The direct harness keeps the logical
+baseline as symbolic integer IDs, maps each ID to a static one-byte name, calls
+`Utf8PathBuf::from` once after the match, closes the cycle from the first ID
+rather than cloning the first path, and asserts length, closure, multiset,
+smallest start, and rotation against retained IDs wherever possible.
+
+Run only N=2, then N=3 if N=2 verifies, then N=4 only if N=3 verifies. The
+experiment is complete: the full-property N=2 direct salvage run exceeded the 8
+GiB cap, so N=3 and N=4 were not run. The approved decision is to stop claiming
+direct path-bearing Kani coverage for N=2..4 and move to Stage D.
+
+### Stage D — Production kernel and documentation
+
+Extract one private production implementation of rotation and closure:
+`canonicalize_cycle_by<T: Clone>(cycle, compare)`. Keep
+`canonicalize_cycle(Vec<Utf8PathBuf>)` as the private path-bearing wrapper that
+delegates to the kernel with `compare_cycle_paths`; do not add a public
+verification port and do not duplicate the algorithm in the harness.
+
+In `src/ir/cycle_verification.rs`, instantiate the kernel over distinct symbolic
+`u8` interior IDs for N=2, N=3, and N=4. Each property harness asserts
+preserved length, closed output, preserved interior multiset, smallest start,
+and rotation. Add one direct `Utf8PathBuf` adapter harness that checks both
+two-node path orderings against the `u8` kernel. Keep all harness helpers
+private to the verification module.
+
+Extend the "Kani harness inventory" table in `docs/developers-guide.md` with
+the three kernel harnesses and the adapter harness. Extend ADR-004 with the
+canonicalization boundary. Add three mutation patches under
+`docs/verification/mutations/` and confirm each applies with
+`git apply --check`.
+
+Validate the production-kernel milestone with `make check-fmt`, `make lint`,
+`make test`, focused capped Kani runs for the N=2, N=3, N=4, and adapter
+harnesses, and `coderabbit review --agent` before moving to Stage E.
+
+### Stage E — Mutations, final gates, and review
+
+1. Run the mutation discipline, one patch per property harness. Apply each
+   patch with `git apply`, run the focused `cargo kani --harness <name>`,
+   confirm the harness now *fails*, then restore with `git apply -R` in the
+   same session. The three mutations are:
+
+   - `ir__cycle__verification__canonicalize_two_node_cycle_is_canonical.patch`:
+     break `find_rotation_start_by` by dropping the `start` update. This
+     isolates the stable-start assertion: the output is still a valid rotation
+     of the input, so length, closure, multiset, and the rotation check all
+     still hold, and only the smallest-first assertion fails.
+   - `ir__cycle__verification__canonicalize_three_node_cycle_is_canonical.patch`:
+     break `rotate_cycle_by` to omit the closing `push` of the first node. This
+     breaks the length and closed-output assertions.
+   - `ir__cycle__verification__canonicalize_four_node_cycle_is_canonical.patch`:
+     break `rotate_index` to drop the wrap-around (`index` instead of
+     `index - len`). With `start > 0` this indexes out of range, so
+     `rotate_cycle_by` skips nodes; the harness fails on the rotation, multiset,
+     and length assertions together.
+
+   Note on isolation: only the first mutation isolates a single property,
+   because rotation inherently preserves the interior multiset, so no small
+   production mutation can scramble the multiset while keeping the length,
+   closure, and order intact. The interior-multiset assertion is therefore
+   co-proven with length and the rotation check rather than independently
+   falsifiable; this is recorded honestly in the developers' guide note rather
+   than papered over with a contrived patch. The requirement that each harness
+   *fails* under its recorded mutation is still met for all three.
+
+2. Run the deterministic gates sequentially: `make check-fmt`, `make lint`,
+   `make test`, `make markdownlint`, and `make nixie`. Then run `make kani-ir`
+   and confirm the full IR suite (the nine `4.2.1` harnesses plus the four new
+   canonicalization harnesses) verifies with zero failures. Capture every
+   command's output under `/tmp` with the `tee` template.
+3. Run `coderabbit review --agent` and resolve all findings. If the service
+   stalls at `preparing_sandbox` as it did during `4.2.1`, record the
+   observation and proceed on the strength of the deterministic gates.
+
+### Stage F — PR and roadmap
+
+1. Mark roadmap `4.2.2` and its three subitems done in `docs/roadmap.md`, with a
+   short note that Kani covers small N and `cycle_property_tests.rs` covers the
+   larger-N tail.
+2. Rename the branch to `4-2-2-kani-harnesses-for-cycle-canonicalization` (via
+   GitHub's rename flow if a PR already exists), push with upstream tracking to
+   `origin/4-2-2-kani-harnesses-for-cycle-canonicalization`, and update the
+   draft pull request with the implementation summary.
+
+## Concrete steps
+
+Run all commands from the repository worktree root. The Kani commands inherit
+the local `LD_LIBRARY_PATH` workaround documented in the `4.2.1` execplan if
+the installed driver cannot find its bundled toolchain libraries.
+
+```bash
+# Stage B discovery
+cargo kani list \
+  | tee /tmp/kani-list-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization-stage-b.out
+
+# Stage D focused runs (one per selected harness, through the cap wrapper)
+cargo kani --harness canonicalize_two_node_cycle_is_canonical
+cargo kani --harness canonicalize_three_node_cycle_is_canonical
+cargo kani --harness canonicalize_four_node_cycle_is_canonical
+cargo kani --harness canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes
+
+# Stage E mutation discipline (repeat per patch)
+git apply docs/verification/mutations/ir__cycle__verification__canonicalize_two_node_cycle_is_canonical.patch
+cargo kani --harness canonicalize_two_node_cycle_is_canonical   # expect FAILURE
+git apply -R docs/verification/mutations/ir__cycle__verification__canonicalize_two_node_cycle_is_canonical.patch
+
+# Stage E gates
+make check-fmt | tee /tmp/check-fmt-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+make lint      | tee /tmp/lint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+make test      | tee /tmp/test-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+make markdownlint | tee /tmp/markdownlint-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+make nixie     | tee /tmp/nixie-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+make kani-ir   | tee /tmp/kani-ir-netsuke-4-2-2-kani-harnesses-for-cycle-canonicalization.out
+```
+
+Every `cargo kani` and `make kani-ir` command in the block above must be run
+inside the `timeout`/`systemd-run --user --scope` cap from Constraints with the
+explicit Kani `LD_LIBRARY_PATH`. The bare commands show the inner command only.
+
+Expected Stage E `make kani-ir` summary: thirteen harnesses verified, zero
+failures (the nine inherited from `4.2.1` plus the three kernel harnesses and
+the path-wrapper adapter harness added here).
+
+## Validation and acceptance
+
+Acceptance is behaviour a human can verify:
+
+- Before Stage C, the three canonicalization harnesses fail because of the
+  deliberately false scaffold assertions. After the Stage C tractability gate,
+  this ExecPlan states the approved proof boundary in one place and every
+  harness, mutation, developer-guide row, roadmap update, and PR summary uses
+  the same boundary.
+- For the selected proof boundary, each focused
+  `cargo kani --harness <name>` command that is part of that boundary reports
+  verification success with zero failed checks under the required resource cap.
+  If the approved boundary excludes a direct N=3 or N=4 `Utf8PathBuf` harness,
+  acceptance records that exclusion explicitly rather than leaving a failing
+  harness in `make kani-ir`.
+- For each recorded canonicalization property mutation, applying its patch and
+  re-running the matching focused Kani command produces at least one failed
+  check; reversing the patch restores success. This proves the accepted
+  property assertions are load-bearing. The adapter harness is a connection
+  proof and is validated by its focused Kani run rather than a separate
+  mutation patch.
+- The final Kani target for the selected boundary reports success. If the
+  boundary introduces a dedicated canonicalization target or functional tier,
+  `make kani-ir` must not silently include permanently failing or unsupported
+  harnesses.
+- `make check-fmt`, `make lint`, `make test`, `make markdownlint`, and
+  `make nixie` all pass unchanged.
+
+Quality criteria (what "done" means):
+
+- Tests: `make test` passes; the proptest canonicalization suite in
+  `cycle_property_tests.rs` continues to pass and remains the larger-N owner.
+- Lint/typecheck: `make lint` and `make check-fmt` pass with no new
+  `#[allow(...)]` umbrellas lacking a `reason`.
+- Verification: every harness inside the approved proof boundary verifies under
+  the resource cap; every recorded canonicalization property mutation fails the
+  matching harness. Direct N=2..4 `Utf8PathBuf` property harnesses are absent
+  from the final Kani target and explicitly recorded as a measured, approved
+  non-goal.
+- Review: `coderabbit review --agent` raises no unresolved correctness, testing,
+  or documentation concerns (subject to the `preparing_sandbox` caveat).
+
+## Idempotence and recovery
+
+All steps are re-runnable. The mutation patches are applied and reversed in the
+same shell session; if a session ends mid-mutation, run `git apply -R` (or
+`git checkout -- src/ir/cycle.rs`) to restore the production code before
+re-running gates. The harness code compiles only under `--cfg kani`, so an
+incomplete Stage C never affects `cargo build` or `cargo test`. Commits are
+small and per-property, so any stage can be rolled back with `git revert`
+without disturbing the others.
+
+## Artefacts and notes
+
+The most important artefacts are the private `canonicalize_cycle_by` production
+kernel in `src/ir/cycle.rs`, the four canonicalization harnesses in
+`src/ir/cycle_verification.rs`, the three mutation patches under
+`docs/verification/mutations/`, and the extended harness inventory in
+`docs/developers-guide.md`. Capture the Stage E `make kani-ir` transcript
+showing thirteen verified harnesses as the headline evidence.
+
+## Interfaces and dependencies
+
+No public interface changes. The harnesses depend only on private symbols of
+`src/ir/cycle.rs` reached through `use super::*`:
+
+```rust
+// src/ir/cycle.rs (private; reached from the #[cfg(kani)] verification module)
+fn canonicalize_cycle_by<T: Clone>(cycle: Vec<T>, compare: fn(&T, &T) -> Ordering) -> Vec<T>;
+fn canonicalize_cycle(cycle: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf>;
+fn path_cmp(left: &Utf8Path, right: &Utf8Path) -> std::cmp::Ordering; // #[cfg(kani)] single-byte form
+```
+
+Current harness-only items added to `src/ir/cycle_verification.rs`:
+
+```rust
+// All #[cfg(kani)]; never compiled into ordinary builds.
+struct CycleInput {
+    interior_ids: Vec<u8>,
+    closed_ids: Vec<u8>,
+    alphabet_len: u8,
+}
+
+fn closed_two_node_id_cycle() -> CycleInput;    // builds vec![n0, n1, n0]
+fn closed_three_node_id_cycle() -> CycleInput;  // builds vec![n0, n1, n2, n0]
+fn closed_four_node_id_cycle() -> CycleInput;   // builds vec![n0, n1, n2, n3, n0]
+fn closed_id_cycle(interior_ids: Vec<u8>, alphabet_len: u8) -> CycleInput;
+fn symbolic_id(alphabet_len: u8) -> u8;
+fn name_for_id(id: u8) -> &'static str;
+fn path_for_id(id: u8) -> Utf8PathBuf;
+fn is_closed_id_cycle(cycle: &[u8]) -> bool;
+
+#[kani::proof] fn canonicalize_two_node_cycle_is_canonical();
+#[kani::proof] fn canonicalize_three_node_cycle_is_canonical();
+#[kani::proof] fn canonicalize_four_node_cycle_is_canonical();
+#[kani::proof] fn canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes();
+```
+
+The current symbolic selector is ID-first and allocation-free:
+
+```rust
+fn symbolic_id(alphabet_len: u8) -> u8 {
+    let id = kani::any::<u8>();
+    kani::assume(id < alphabet_len);
+    id
+}
+
+fn name_for_id(id: u8) -> &'static str {
+    match id {
+        0 => "a",
+        1 => "b",
+        2 => "c",
+        _ => "d",
+    }
+}
+```
+
+The adapter harness calls `Utf8PathBuf::from(name_for_id(id))` only for the
+small concrete wrapper check. The kernel property harnesses keep the retained
+IDs as their logical baseline and never allocate path values.
+
+If any harness body genuinely needs a suppressed lint (for example, the
+panic-on-failure shape), add a module-level
+`#![allow(..., reason = "Kani harnesses panic on proof failure by design")]`
+preamble to `src/ir/cycle_verification.rs`, matching the `4.2.1` convention,
+rather than an unscoped `#[allow(...)]`.
+
+No new external dependency is introduced.
+
+## Resolved questions
+
+1. Harness shape: one combined property harness per node count N, plus one
+   direct path-wrapper adapter harness.
+2. Node-count ceiling: N in {2, 3, 4} interior nodes for the `u8` kernel; the
+   Proptest suite covers the larger path-bearing tail.
+3. ADR: extend
+   `adr-004-bound-kani-ir-harnesses-to-small-n.md` rather than minting a new
+   ADR.
+4. Make target: defer a filtered `make kani-cycle-canon` target unless
+   `make kani-ir` or `make kani-full` runtime approaches the tolerance.
+5. Tractability boundary: direct `Utf8PathBuf` N=2..4 property proofs are out of
+   scope after the capped salvage failure. The selected boundary is the private
+   production-owned `canonicalize_cycle_by` kernel over `u8`, plus the small
+   direct adapter harness and Proptest wrapper coverage.
+
+## Revision note
+
+- 2026-06-20 (planning agent, after Logisphere community-of-experts review):
+  Added a fourth "output is a rotation of the input interior" assertion to each
+  harness so the suite is non-vacuous against order-scrambling bugs that the
+  three roadmap properties alone would miss; the count-based multiset assertion
+  is retained verbatim for roadmap subitem two. Specified that the direct
+  symbolic-node helper must avoid `unwrap`/`expect` under the denied Clippy
+  lints. Later implementation evidence replaced the `(b as char).to_string()`
+  sketch with a symbolic selector over concrete one-byte path names, then
+  recorded a planned salvage experiment that maps retained symbolic IDs to
+  static strings before one `Utf8PathBuf::from` call. Reconciled the unwind
+  guidance to the per-loop maximum plus one, rather than cumulative nested-loop
+  work. Recorded honestly that the interior-multiset property is co-proven (not
+  independently falsifiable by a small mutation) and documented the three
+  mutations accordingly. These changes affect Stage C, Stage E, the Interfaces
+  section, the Decision Log, and Surprises & Discoveries; they do not change
+  the scope, the file list, or the approval gate.

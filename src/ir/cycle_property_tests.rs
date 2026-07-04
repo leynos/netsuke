@@ -6,7 +6,7 @@
 use proptest::prelude::*;
 use std::collections::HashMap;
 
-use super::{BuildEdge, CycleDetector, analyse, canonicalize_cycle};
+use super::{BuildEdge, CycleDetector, analyse, canonicalize_cycle, canonicalize_cycle_by};
 
 #[path = "cycle_analyse_tests.rs"]
 mod analyse_tests;
@@ -191,6 +191,22 @@ fn canonicalize_cycle_handles_reverse_direction() {
     check_canonicalize_cycle(
         &[path("c"), path("b"), path("a"), path("c")],
         &[path("a"), path("c"), path("b"), path("a")],
+    );
+}
+
+#[test]
+fn canonicalize_cycle_by_rotates_smallest_node() {
+    assert_eq!(
+        canonicalize_cycle_by(vec![2_u8, 0, 1, 2], std::cmp::Ord::cmp),
+        vec![0, 1, 2, 0],
+    );
+}
+
+#[test]
+fn canonicalize_cycle_by_preserves_cycle_orientation() {
+    assert_eq!(
+        canonicalize_cycle_by(vec![2_u8, 1, 0, 2], std::cmp::Ord::cmp),
+        vec![0, 2, 1, 0],
     );
 }
 
