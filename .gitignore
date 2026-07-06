@@ -8,3 +8,4 @@ build.ninja
 *:Zone.Identifier
 /graph.dot
 /graph.html
+__pycache__/
