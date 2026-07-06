@@ -1,3 +1,7 @@
+# Match the Python version the repository's uv-driven tooling targets, so lint
+# rules (including standard-library import classification, e.g. `tomllib`) and
+# version-gated fixes resolve correctly.
+target-version = "py313"
 line-length = 88
 
 [lint]
