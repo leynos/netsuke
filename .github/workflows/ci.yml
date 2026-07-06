@@ -44,6 +44,13 @@ jobs:
         run: make check-fmt
       - name: Lint
         run: make lint
+      - name: Setup uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          python-version: '3.13'
+          enable-cache: true
+      - name: Workflow contract tests
+        run: make test-workflow-contracts
       - name: Test
         run: make test
       - name: Test and Measure Coverage

@@ -1,0 +1,42 @@
+name: Mutation testing
+
+# Thin caller of the shared mutation-testing reusable workflow; caller
+# guide: leynos/shared-actions docs/mutation-cargo-workflow.md.
+# Scheduled runs mutate only files changed within the detection window;
+# manual dispatch runs mutate everything, fanned out across shards. To
+# test a branch, select it in the Actions "Run workflow" control.
+
+on:
+  schedule:
+    - cron: "5 3 * * *" # Daily, 03:05 UTC
+  workflow_dispatch:
+
+# Default the token to no scopes; the job opts in explicitly.
+permissions: {}
+
+# Serialize runs per ref: a dispatch during a scheduled run (or vice
+# versa) queues rather than racing. Runs are informational, so queued
+# runs wait instead of cancelling.
+concurrency:
+  group: mutation-testing-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mutation:
+    permissions:
+      contents: read
+      id-token: write # OIDC workflow-source resolution
+    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@47aea18960d24f33aedc4782ec6b73e365418313
+    with:
+      # Path dependency outside the root package's workspace; its
+      # coverage lives mainly in the root crate's tests, so treat its
+      # survivors table as advisory. test_support is deliberately
+      # omitted: it is a test-fixture crate whose survivors are noise.
+      extra-crate-dirs: "ninja_env"
+      # Kani-only verification modules gated behind #[cfg(kani)] mod
+      # declarations; cargo-mutants does not evaluate that cfg, so
+      # mutants there would compile to nothing and survive as noise.
+      exclude-globs: "src/ir/cycle_verification.rs,src/ir/from_manifest_verification.rs,src/ir/graph_kani_map.rs"
+      # Match the CI baseline (`make test` runs --all-features) so
+      # feature-gated tests (legacy-digests) run against mutants.
+      extra-args: "--all-features"
