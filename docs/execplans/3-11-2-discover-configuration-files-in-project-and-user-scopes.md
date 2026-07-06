@@ -267,7 +267,7 @@ documented.
 3. **User guide** (`docs/users-guide.md`):
    - Added configuration file discovery section (lines 550-585) documenting
      project-scope, user-scope, platform-specific locations, precedence rules,
-     and the `-C`/`--directory` flag behavior
+     and the `-C`/`--directory` flag behaviour
 
 ### Lessons learned
 
@@ -280,7 +280,7 @@ documented.
    "given/when/then" implementations.
 3. **Layered testing is effective**: Having both rstest integration tests (for
    precise, programmatic verification) and BDD scenarios (for user-observable
-   behavior) provides comprehensive coverage at different abstraction levels.
+   behaviour) provides comprehensive coverage at different abstraction levels.
 
 ## Context and orientation
 
@@ -538,7 +538,7 @@ set -o pipefail && make markdownlint 2>&1 | tee /tmp/3-11-2-markdownlint.log
 set -o pipefail && make nixie 2>&1 | tee /tmp/3-11-2-make-nixie.log
 ```
 
-Review the logs afterward, not only the exit codes, because the environment
+Review the logs afterwards, not only the exit codes, because the environment
 truncates long command output.
 
 Expected evidence:

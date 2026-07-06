@@ -792,7 +792,7 @@ independent specification of a single rule.[^6]
 
 ### 6.2 Declarative vs. Imperative Steps: Finding the Balance
 
-The most maintainable test suites favor a **declarative** style over an
+The most maintainable test suites favour a **declarative** style over an
 **imperative** one.
 
 - **Imperative steps** describe *how* an action is performed, often coupling the
@@ -1084,8 +1084,9 @@ aligned with what is needed.
 [^7]: *Reference - Cucumber*, accessed on 14 July 2025,
     <https://cucumber.io/docs/gherkin/reference/>
 
-[^8]: BDD (Behavior Driven Development) - ROBOT FRAMEWORK, accessed on 14 July
-      2025, <https://docs.robotframework.org/docs/testcase_styles/bdd>
+[^8]: BDD (`Behavior Driven Development`) - ROBOT FRAMEWORK, accessed on 14
+      July 2025,
+      <https://docs.robotframework.org/docs/testcase_styles/bdd>
 
 [^9]: Given-When-Then - Wikipedia, accessed on 14 July 2025,
     <https://en.wikipedia.org/wiki/Given-When-Then>

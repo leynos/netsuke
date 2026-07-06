@@ -307,7 +307,17 @@ project:
 
 ## Markdown guidance
 
-- Validate Markdown files using `make markdownlint`.
+- Validate Markdown files using `make markdownlint`. This target also enforces
+  en-GB-oxendict (Oxford) spelling over Markdown prose with
+  [`typos`](https://github.com/crate-ci/typos), pinned by the Makefile
+  `TYPOS_VERSION` variable and run through `uv tool run`.
+- `typos.toml` is generated; never edit its entries by hand. Change
+  `scripts/generate_typos_config.py` and regenerate with
+  `uv run scripts/generate_typos_config.py`. When the gate flags a legitimate
+  Oxford `-ize` word, add its stem to the generator's `STEMS`; for identifiers
+  or API names that must keep upstream spelling, prefer backticks (which the
+  gate ignores) over widening the accepted-word list. See the
+  [developers' guide](docs/developers-guide.md) for the full workflow.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
@@ -367,6 +377,9 @@ The following tooling is available in this environment:
   and enables editing by syntax tree patterns.
 - `difft` **(Difftastic)** — Semantic diff tool that compares code structure
   rather than just text differences.
+- `typos` — Source-code and prose spell checker. `make markdownlint` runs it
+  against Markdown at the pinned `TYPOS_VERSION` to enforce en-GB-oxendict
+  spelling; run it with `--write-changes` to apply corrections mechanically.
 
 ## Key takeaway
 

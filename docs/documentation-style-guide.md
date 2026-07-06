@@ -21,7 +21,14 @@ consistent, and easy to maintain across projects.
   - and so forth.
 - The words **"outwith"** and **"caveat"** are acceptable.
 - Keep United States (US) spelling when used in an API, for example, `color`.
+  Wrap such API names in backticks: the spelling gate ignores backticked spans,
+  so quoting an identifier both documents its origin and exempts it from the
+  Oxford-spelling check.
 - The project uses the filename `LICENSE` for community consistency.
+- `make markdownlint` enforces this spelling policy over Markdown prose with
+  [`typos`](https://github.com/crate-ci/typos). See the
+  [developers' guide](developers-guide.md) for how the generated `typos.toml`
+  works and how to fix findings.
 
 ## Punctuation and grammar
 
@@ -629,7 +636,7 @@ This hierarchy should align with the GIST framework:
   - Phases: 1, 2, 3, …
   - Steps: 1.1, 1.2, 1.3, …
   - Headline tasks: 1.1.1, 1.1.2, 1.1.3, …
-- **Checkboxes:** Precede task and sub-task items with a GitHub Flavored
+- **Checkboxes:** Precede task and sub-task items with a GitHub Flavoured
   Markdown (GFM) checkbox (`[ ]`) to track completion status.
 - **Dependencies:** Note non-linear dependencies explicitly. Where a task
   depends on another task outside its immediate sequence, cite the dependency

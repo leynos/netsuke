@@ -516,7 +516,7 @@ returns `false` for absent commands. Invalid arguments still raise
 | Kwarg       | Default | Effect on `command_available`                                                |
 | ----------- | ------- | ---------------------------------------------------------------------------- |
 | `all`       | `false` | Accepted for kwarg symmetry with `which`; does not change the bool return.   |
-| `canonical` | `false` | Canonicalises discovered paths before deciding whether any match exists.     |
+| `canonical` | `false` | Canonicalizes discovered paths before deciding whether any match exists.     |
 | `fresh`     | `false` | Bypasses the resolver cache for this lookup and refreshes the cached result. |
 | `cwd_mode`  | `auto`  | Controls current-directory search: `auto`, `always`, or `never`.             |
 

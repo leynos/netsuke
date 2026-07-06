@@ -199,7 +199,7 @@ All commands are run from the repository root (`/root/repo`). Use `tee` with
 - If tests fail mid-run, fix the underlying issue and re-run the same command
   with the same log path, overwriting the log file to keep evidence current.
 
-## Artifacts and Notes
+## Artefacts and Notes
 
 Keep the following short transcripts for evidence:
 

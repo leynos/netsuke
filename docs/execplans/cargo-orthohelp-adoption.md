@@ -265,7 +265,7 @@ itself does not change.
   file artefacts, and explicit file paths are easier to contract-test.
   Date/Author: 2026-05-01T15:50:05Z / Codex.
 
-- Decision: keep the Makefile `CARGO` variable overrideable while adding a
+- Decision: keep the Makefile `CARGO` variable overridable while adding a
   non-login-shell fallback to `$HOME/.cargo/bin/cargo`. Rationale: local users
   and CI can still set `CARGO=...`, while hooks that run without the usual
   shell profile can still execute the required Rust gates. Date/Author:

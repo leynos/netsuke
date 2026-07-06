@@ -142,7 +142,7 @@ until the user explicitly approves the plan.
 - Risk: a `BuildEdge { ... }` field addition ripples through many literals
   in production tests and doctests. Severity: medium. Likelihood: high.
   Mitigation: enumerate every literal during Stage B and add the new
-  `implicit_deps: Vec::new()` initialiser as a mechanical sweep before any
+  `implicit_deps: Vec::new()` initializer as a mechanical sweep before any
   cycle or generator changes go in.
 
 - Risk: the cycle detector currently iterates only `edge.inputs`. Extending
@@ -337,7 +337,7 @@ invent a Netsuke-specific term that diverges from the backend.
       `conditional_manifest_ninja_snapshot`, and
       `generate_multiline_script_snapshot`.
 - [x] (2026-05-24T00:00Z) Stage B added
-      `BuildEdge.implicit_deps` with empty initialisers at all current
+      `BuildEdge.implicit_deps` with empty initializers at all current
       construction sites. `cargo test --workspace` passed and logged to
       `/tmp/stage-b-netsuke-3-14-3-lower-target-and-action-deps.out`.
 - [x] (2026-05-24T00:00Z) Stage B follow-up committed the
