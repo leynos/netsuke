@@ -12,7 +12,13 @@ include = [
     "build.rs",
 ]
 license = "ISC"
+readme = "README.md"
 description = "A YAML-powered Ninja/Jinja hybrid build system."
+authors = ["Payton McIntosh <pmcintosh@df12.net>"]
+homepage = "https://github.com/leynos/netsuke"
+repository = "https://github.com/leynos/netsuke"
+keywords = ["build", "ninja", "jinja", "yaml", "automation"]
+categories = ["command-line-utilities", "development-tools::build-utils"]
 
 [package.metadata.ortho_config]
 root_type = "netsuke::cli::CliConfig"
