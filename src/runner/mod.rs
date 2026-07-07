@@ -33,9 +33,9 @@ pub use ninja_env::NINJA_ENV;
 mod graph;
 mod path_helpers;
 mod process;
+pub use process::NinjaProcessOptions;
 #[cfg(doctest)]
 pub use process::doc;
-pub use process::{run_ninja, run_ninja_tool};
 
 use path_helpers::{ensure_manifest_exists_or_error, resolve_manifest_path, resolve_output_path};
 
@@ -177,6 +177,57 @@ pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
     }
 }
 
+/// Translate CLI state into the narrow options consumed by the process layer.
+///
+/// This is the orchestration boundary: the subprocess adapter in
+/// [`process`] receives only the fields it needs rather than the whole
+/// parser/config domain type.
+fn ninja_process_options(cli: &Cli) -> NinjaProcessOptions {
+    NinjaProcessOptions {
+        working_dir: cli.directory.clone(),
+        jobs: cli.jobs,
+        suppress_stderr: cli.resolved_diag_json(),
+    }
+}
+
+/// Invoke the Ninja executable with the provided CLI settings.
+///
+/// Translates the CLI into [`NinjaProcessOptions`] and delegates to the
+/// process layer.
+///
+/// # Errors
+///
+/// Returns an [`std::io::Error`] if the Ninja process fails to spawn, the
+/// standard streams are unavailable, or when Ninja reports a non-zero exit
+/// status.
+pub fn run_ninja(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    targets: &BuildTargets<'_>,
+) -> std::io::Result<()> {
+    process::run_ninja(program, &ninja_process_options(cli), build_file, targets)
+}
+
+/// Invoke a Ninja tool (e.g., `ninja -t clean`) with the provided CLI settings.
+///
+/// Translates the CLI into [`NinjaProcessOptions`] and delegates to the
+/// process layer.
+///
+/// # Errors
+///
+/// Returns an [`std::io::Error`] if the Ninja process fails to spawn, the
+/// standard streams are unavailable, or when Ninja reports a non-zero exit
+/// status.
+pub fn run_ninja_tool(
+    program: &Path,
+    cli: &Cli,
+    build_file: &Path,
+    tool: &str,
+) -> std::io::Result<()> {
+    process::run_ninja_tool(program, &ninja_process_options(cli), build_file, tool)
+}
+
 fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
     move |current: u32, total: u32, description: &str| {
         reporter.report_task_progress(current, total, description);
@@ -226,11 +277,12 @@ fn handle_build(
         )
     };
     if progress_enabled {
+        let options = ninja_process_options(cli);
         let mut on_task_progress = on_task_progress_callback(reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
                 program: program.as_path(),
-                cli,
+                options: &options,
                 build_file: build_path.as_ref(),
                 targets: &targets,
             },
@@ -286,11 +338,12 @@ fn handle_ninja_tool(
         )
     };
     if progress_enabled {
+        let options = ninja_process_options(cli);
         let mut on_task_progress = on_task_progress_callback(reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
                 program: program.as_path(),
-                cli,
+                options: &options,
                 build_file: build_path,
                 tool: tool.name,
             },
