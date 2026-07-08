@@ -204,27 +204,10 @@ fn persist_tempfile(tempfile: NamedTempFile) -> Result<Utf8PathBuf, CommandFailu
 mod tests {
     //! Unit tests for command pipe capture and streaming limits.
     use super::*;
-    use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
+    use crate::stdlib::command::tests_support::test_command_config;
     use anyhow::{Context, Result, anyhow, ensure};
-    use cap_std::{ambient_authority, fs_utf8::Dir};
     use std::io::Cursor;
-    use tempfile::tempdir;
     use test_support::fs;
-
-    fn test_command_config() -> Result<(tempfile::TempDir, CommandConfig)> {
-        let temp = tempdir().context("create command temp workspace")?;
-        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow!("temp workspace should be valid UTF-8: {path:?}"))?;
-        let dir =
-            Dir::open_ambient_dir(&path, ambient_authority()).context("open temp workspace dir")?;
-        let config = CommandConfig::new(
-            DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
-            DEFAULT_COMMAND_MAX_STREAM_BYTES,
-            Arc::new(dir),
-            Some(Arc::new(path)),
-        );
-        Ok((temp, config))
-    }
 
     fn assert_output_limit_error(
         outcome: Result<PipeOutcome, CommandFailure>,

@@ -317,20 +317,11 @@ impl Default for CommandOptions {
 mod tests {
     //! Unit tests for command configuration and tempfile management.
     use super::*;
-    use anyhow::{Context, Result, anyhow, ensure};
+    use crate::stdlib::command::tests_support::test_command_config;
+    use anyhow::{Context, Result, ensure};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use tempfile::tempdir;
     use test_support::fs;
-
-    fn test_command_config() -> Result<(tempfile::TempDir, CommandConfig)> {
-        let temp = tempdir().context("create command temp workspace")?;
-        let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow!("temp workspace should be valid UTF-8: {path:?}"))?;
-        let dir =
-            Dir::open_ambient_dir(&path, ambient_authority()).context("open temp workspace dir")?;
-        let config = CommandConfig::new(1024, 2048, Arc::new(dir), Some(Arc::new(path)));
-        Ok((temp, config))
-    }
 
     #[test]
     fn sanitize_label_replaces_disallowed_characters() {
