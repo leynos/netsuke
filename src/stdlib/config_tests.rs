@@ -4,30 +4,15 @@ use super::{
     DEFAULT_WHICH_CACHE_CAPACITY, StdlibConfig,
 };
 use crate::localization::{self, keys};
-use anyhow::{Context, Result, anyhow, ensure};
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::{ambient_authority, fs_utf8::Dir};
+use anyhow::{Context, Result, ensure};
+use camino::Utf8Path;
 use rstest::{fixture, rstest};
-use std::env;
 
 #[fixture]
-fn workspace() -> Result<(Dir, Utf8PathBuf)> {
-    let dir =
-        Dir::open_ambient_dir(".", ambient_authority()).context("open workspace root fixture")?;
-    let path = Utf8PathBuf::from_path_buf(
-        env::current_dir().context("resolve cwd for workspace fixture")?,
-    )
-    .map_err(|path| anyhow!("cwd should be valid UTF-8: {path:?}"))?;
-    Ok((dir, path))
-}
-
-#[fixture]
-fn base_config(#[from(workspace)] workspace: Result<(Dir, Utf8PathBuf)>) -> Result<StdlibConfig> {
-    let (dir, path) = workspace?;
-    StdlibConfig::new(dir)
-        .context("construct stdlib config")?
-        .with_workspace_root_path(path)
-        .context("record workspace root")
+fn base_config() -> Result<StdlibConfig> {
+    // Exercise the public constructor directly rather than reimplementing its
+    // ambient-directory setup; both root the config at the process cwd.
+    StdlibConfig::from_current_dir()
 }
 
 #[rstest]

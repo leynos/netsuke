@@ -345,11 +345,18 @@ impl StdlibConfig {
     /// // The configuration is rooted at the process working directory.
     /// ```
     pub fn from_current_dir() -> anyhow::Result<Self> {
-        let root = Dir::open_ambient_dir(".", ambient_authority())
-            .context("open stdlib workspace root")?;
-        let cwd = env::current_dir().context("resolve current directory")?;
-        let path = Utf8PathBuf::from_path_buf(cwd)
-            .map_err(|path| anyhow!("cwd contains non-UTF-8 components: {}", path.display()))?;
+        let root = Dir::open_ambient_dir(".", ambient_authority()).context(
+            localization::message(keys::STDLIB_CONFIG_OPEN_WORKSPACE_ROOT),
+        )?;
+        let cwd =
+            env::current_dir().context(localization::message(keys::STDLIB_CONFIG_RESOLVE_CWD))?;
+        let path = Utf8PathBuf::from_path_buf(cwd).map_err(|path| {
+            anyhow!(
+                "{}",
+                localization::message(keys::STDLIB_CONFIG_CWD_NON_UTF8)
+                    .with_arg("path", path.display().to_string())
+            )
+        })?;
         Self::new(root)
             .context("default fetch cache path should be valid")?
             .with_workspace_root_path(path)

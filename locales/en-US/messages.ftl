@@ -197,6 +197,9 @@ stdlib.config.skip_dir_separator = Skip directory entries must not contain path 
 stdlib.config.fetch_cache_empty = Fetch cache path must not be empty.
 stdlib.config.fetch_cache_not_relative = Fetch cache path must be relative, got { $path }.
 stdlib.config.fetch_cache_escapes = Fetch cache path must not escape the workspace: { $path }.
+stdlib.config.open_workspace_root = Failed to open the current directory as the stdlib workspace root.
+stdlib.config.resolve_cwd = Failed to resolve the current directory for the stdlib workspace root.
+stdlib.config.cwd_non_utf8 = Current directory contains non-UTF-8 components: { $path }.
 
 # Fetch helper diagnostics.
 stdlib.fetch.url_invalid = Invalid URL '{ $url }': { $details }.
