@@ -19,7 +19,6 @@ updates:
     directories:
       - "/"
       - "/test_support"
-      - "/ninja_env"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"

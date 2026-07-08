@@ -1139,7 +1139,6 @@ dependencies = [
  "metrics",
  "miette",
  "minijinja",
- "ninja_env",
  "ortho_config",
  "semver",
  "serde",
@@ -1160,10 +1159,6 @@ dependencies = [
  "wait-timeout",
  "walkdir",
 ]
-
-[[package]]
-name = "ninja_env"
-version = "0.1.0"
 
 [[package]]
 name = "nohash-hasher"
@@ -1978,7 +1973,6 @@ dependencies = [
  "cap-std",
  "mockable",
  "netsuke",
- "ninja_env",
  "rstest",
  "sha2",
  "tempfile",

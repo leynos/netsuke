@@ -1,10 +1,9 @@
 //! Process helpers for Ninja file lifecycle, argument redaction, and subprocess I/O.
 //! Internal to `runner`; public API is defined in `runner.rs`.
 
-use super::{BuildTargets, NINJA_PROGRAM};
+use super::{BuildTargets, NINJA_ENV, NINJA_PROGRAM};
 use crate::cli::Cli;
 use camino::Utf8PathBuf;
-use ninja_env::NINJA_ENV;
 use std::{
     env,
     ffi::OsString,

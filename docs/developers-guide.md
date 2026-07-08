@@ -450,7 +450,7 @@ consuming `into_original(self)` would drop the guard prematurely:
 let guard = override_ninja_env(&SystemEnv::new(), &ninja_path);
 let previous = guard.original_ref().cloned();
 world.track_env_var(
-    ninja_env::NINJA_ENV.to_owned(),
+    netsuke::runner::NINJA_ENV.to_owned(),
     previous,
     Some(ninja_path.as_os_str().to_owned()),
 );
