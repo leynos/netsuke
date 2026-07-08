@@ -799,7 +799,7 @@ Versioning and compatibility rules:
 
 ## BDD command helpers and environment handling
 
-The BDD step module `tests/bdd/steps/manifest_command.rs` provides three
+The BDD step module `tests/bdd/steps/manifest_command_helpers.rs` provides three
 helpers that launch the netsuke binary in a controlled environment:
 
 - **`netsuke_executable()`** — locates the compiled netsuke binary using

@@ -112,7 +112,7 @@ pub(super) fn netsuke_executable() -> Result<PathBuf> {
     Ok(exe.to_path_buf())
 }
 
-/// Build a netsuke command with a sanitised environment.
+/// Build a netsuke command with a sanitized environment.
 ///
 /// This helper constructs an `assert_cmd::Command` configured with:
 /// - The resolved netsuke executable path
