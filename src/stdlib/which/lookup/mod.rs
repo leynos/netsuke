@@ -1,6 +1,10 @@
 //! Filesystem search utilities for resolving commands for the `which` feature.
+//!
+//! Executable probes and canonicalisation go through the `ambient_fs` crate:
+//! PATH lookup is deliberately ambient, so it cannot use the capability-based
+//! handles mandated elsewhere in Netsuke.
 
-use std::{fs, io};
+use std::io;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use indexmap::IndexSet;
@@ -204,8 +208,8 @@ fn candidates_for_dir(env: &EnvSnapshot, dir: &Utf8Path, command: &str) -> Vec<U
 /// Returns a resolver error when metadata cannot be read for a reason other
 /// than the path not existing.
 pub(super) fn is_executable(path: &Utf8Path) -> Result<bool, ResolveError> {
-    match fs::metadata(path.as_std_path()) {
-        Ok(metadata) => Ok(metadata.is_file() && has_execute_permission(&metadata)),
+    match ambient_fs::is_executable_file(path) {
+        Ok(executable) => Ok(executable),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(source) => Err(ResolveError::IsExecutable {
             path: path.to_owned(),
@@ -241,17 +245,6 @@ fn handle_miss(ctx: HandleMissContext<'_>) -> Result<Vec<Utf8PathBuf>, ResolveEr
     Err(not_found(ctx.command, ctx.dirs, ctx.options.cwd_mode))
 }
 
-#[cfg(unix)]
-fn has_execute_permission(metadata: &fs::Metadata) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    metadata.permissions().mode() & 0o111 != 0
-}
-
-#[cfg(not(unix))]
-fn has_execute_permission(metadata: &fs::Metadata) -> bool {
-    metadata.is_file()
-}
-
 /// Canonicalise, de-duplicate, and UTF-8 validate discovered paths.
 ///
 /// Returns an error when canonicalization fails or when any canonical path
@@ -261,7 +254,7 @@ pub(super) fn canonicalise(paths: Vec<Utf8PathBuf>) -> Result<Vec<Utf8PathBuf>, 
     let mut resolved = Vec::new();
     for path in paths {
         let canonical =
-            fs::canonicalize(path.as_std_path()).map_err(|source| ResolveError::Canonicalise {
+            ambient_fs::canonicalize(&path).map_err(|source| ResolveError::Canonicalise {
                 path: path.clone(),
                 source,
             })?;

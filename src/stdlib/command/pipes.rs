@@ -38,14 +38,18 @@ pub(super) fn join_reader(
         Some(join_handle) => join_handle
             .join()
             .map_err(|_| CommandFailure::Io(io::Error::other("pipe reader panicked")))?,
-        None => {
-            if matches!(spec.mode(), OutputMode::Tempfile) {
-                create_empty_tempfile(config, spec.stream().empty_tempfile_label())
-                    .map(PipeOutcome::Tempfile)
-            } else {
-                Ok(PipeOutcome::Bytes(Vec::new()))
-            }
-        }
+        None => empty_outcome(spec, config),
+    }
+}
+
+/// Produce the outcome for a stream that was never piped: an empty tempfile in
+/// streaming mode, or an empty byte buffer in capture mode.
+fn empty_outcome(spec: PipeSpec, config: &CommandConfig) -> Result<PipeOutcome, CommandFailure> {
+    if matches!(spec.mode(), OutputMode::Tempfile) {
+        create_empty_tempfile(config, spec.stream().empty_tempfile_label())
+            .map(PipeOutcome::Tempfile)
+    } else {
+        Ok(PipeOutcome::Bytes(Vec::new()))
     }
 }
 
@@ -149,11 +153,10 @@ where
             reason = "Read::read guarantees `read` does not exceed `chunk.len()`"
         )]
         tempfile
-            .as_file_mut()
             .write_all(&chunk[..read])
             .map_err(CommandFailure::Io)?;
     }
-    tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
+    tempfile.flush().map_err(CommandFailure::Io)?;
     let path = persist_tempfile(tempfile)?;
     Ok(PipeOutcome::Tempfile(path))
 }
@@ -163,7 +166,7 @@ fn create_empty_tempfile(
     label: &str,
 ) -> Result<Utf8PathBuf, CommandFailure> {
     let mut tempfile = config.create_tempfile(label).map_err(CommandFailure::Io)?;
-    tempfile.as_file_mut().flush().map_err(CommandFailure::Io)?;
+    tempfile.flush().map_err(CommandFailure::Io)?;
     persist_tempfile(tempfile)
 }
 
@@ -199,25 +202,28 @@ fn persist_tempfile(tempfile: NamedTempFile) -> Result<Utf8PathBuf, CommandFailu
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for command pipe capture and streaming limits.
     use super::*;
     use crate::stdlib::{DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES};
+    use anyhow::{Context, Result, anyhow, ensure};
     use cap_std::{ambient_authority, fs_utf8::Dir};
-    use std::{fs, io::Cursor};
+    use std::io::Cursor;
     use tempfile::tempdir;
+    use test_support::fs;
 
-    fn test_command_config() -> (tempfile::TempDir, CommandConfig) {
-        let temp = tempdir().expect("create command temp workspace");
+    fn test_command_config() -> Result<(tempfile::TempDir, CommandConfig)> {
+        let temp = tempdir().context("create command temp workspace")?;
         let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .expect("temp workspace should be valid UTF-8");
+            .map_err(|path| anyhow!("temp workspace should be valid UTF-8: {path:?}"))?;
         let dir =
-            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+            Dir::open_ambient_dir(&path, ambient_authority()).context("open temp workspace dir")?;
         let config = CommandConfig::new(
             DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
             DEFAULT_COMMAND_MAX_STREAM_BYTES,
             Arc::new(dir),
             Some(Arc::new(path)),
         );
-        (temp, config)
+        Ok((temp, config))
     }
 
     fn assert_output_limit_error(
@@ -266,28 +272,31 @@ mod tests {
     }
 
     #[test]
-    fn read_pipe_tempfile_writes_streamed_data() {
+    fn read_pipe_tempfile_writes_streamed_data() -> Result<()> {
         let payload = vec![b'x'; 32];
-        let (_temp_dir, config) = test_command_config();
+        let (_temp_dir, config) = test_command_config()?;
         let outcome = read_pipe_tempfile(
             Cursor::new(payload.clone()),
             PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 64).into_limit(),
             "stdout",
             &config,
         )
-        .expect("streaming should succeed within the configured limit");
-        let path = match outcome {
-            PipeOutcome::Tempfile(path) => path,
-            PipeOutcome::Bytes(_) => panic!("streaming mode should emit a tempfile path"),
+        .map_err(|err| anyhow!("streaming should succeed within the limit, got {err:?}"))?;
+        let PipeOutcome::Tempfile(path) = outcome else {
+            return Err(anyhow!("streaming mode should emit a tempfile path"));
         };
-        let disk = fs::read(path.as_std_path()).expect("read streamed output");
-        assert_eq!(disk, payload);
-        fs::remove_file(path.as_std_path()).expect("cleanup streamed file");
+        let disk = fs::read(path.as_std_path()).context("read streamed output")?;
+        ensure!(
+            disk == payload,
+            "streamed file contents did not match payload"
+        );
+        fs::remove_file(path.as_std_path()).context("cleanup streamed file")?;
+        Ok(())
     }
 
     #[test]
-    fn read_pipe_tempfile_respects_stream_limit() {
-        let (_temp_dir, config) = test_command_config();
+    fn read_pipe_tempfile_respects_stream_limit() -> Result<()> {
+        let (_temp_dir, config) = test_command_config()?;
         let outcome = read_pipe_tempfile(
             Cursor::new(vec![b'y'; 32]),
             PipeSpec::new(OutputStream::Stdout, OutputMode::Tempfile, 8).into_limit(),
@@ -295,5 +304,6 @@ mod tests {
             &config,
         );
         assert_output_limit_error(outcome, OutputStream::Stdout, OutputMode::Tempfile, 8);
+        Ok(())
     }
 }

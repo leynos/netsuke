@@ -11,6 +11,7 @@ use cap_std::{ambient_authority, fs::Dir};
 use minijinja::ErrorKind;
 use rstest::rstest;
 use tempfile::tempdir;
+use test_support::fs as test_fs;
 
 /// Helper to assert that a pattern produces a syntax error.
 fn assert_syntax_error(pattern: &str, context_msg: &str) -> Result<()> {
@@ -137,9 +138,9 @@ fn validate_brace_matching_rejects_unmatched_opening() -> Result<()> {
 fn glob_paths_filters_directories() -> Result<()> {
     let temp = tempdir()?;
     let dir = temp.path().join("dir");
-    std::fs::create_dir(&dir)?;
+    test_fs::create_dir(&dir)?;
     let file = temp.path().join("dir").join("file.txt");
-    std::fs::write(&file, "data")?;
+    test_fs::write(&file, "data")?;
 
     let pattern = format!("{}/dir/*", temp.path().display());
     let results = glob_paths(&pattern)?;
@@ -165,7 +166,7 @@ fn glob_paths_rejects_unmatched_brace() {
 fn glob_paths_accepts_escaped_braces_and_matches_files() -> Result<()> {
     let temp = tempdir()?;
     let file = temp.path().join("{file}.txt");
-    std::fs::write(&file, "data")?;
+    test_fs::write(&file, "data")?;
 
     let pattern = format!("{}/\\{{file\\}}.txt", temp.path().display());
     let normalized = GlobPattern::new(&pattern)?;

@@ -88,10 +88,10 @@ where
         if read == 0 {
             break;
         }
-        let chunk = buffer.get(..read).unwrap_or_else(|| {
-            debug_assert!(false, "read beyond buffer capacity: {read} bytes");
-            buffer.as_slice()
-        });
+        // A well-behaved Read never reports more bytes than the buffer holds;
+        // clamp to the full buffer rather than panicking on a misbehaving
+        // implementation.
+        let chunk = buffer.get(..read).unwrap_or(&buffer);
         hasher.update(chunk);
     }
     Ok(encode_hex(&hasher.finalize()))

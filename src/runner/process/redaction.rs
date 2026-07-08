@@ -100,6 +100,8 @@ pub fn redact_sensitive_args(args: &[CommandArg]) -> Vec<CommandArg> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for sensitive environment variable redaction.
+
     use super::*;
 
     #[test]

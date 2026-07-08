@@ -4,8 +4,9 @@
 use super::*;
 use anyhow::{Context, Result, anyhow, ensure};
 use rstest::{fixture, rstest};
-use std::fs;
 use tempfile::TempDir;
+use test_support::exec::write_exec;
+use test_support::fs as test_fs;
 
 struct TempWorkspace {
     root: Utf8PathBuf,
@@ -29,37 +30,18 @@ impl TempWorkspace {
 }
 
 #[fixture]
-fn workspace() -> TempWorkspace {
-    TempWorkspace::new().expect("create utf8 temp workspace")
-}
-
-#[cfg(unix)]
-fn make_executable(path: &Utf8Path) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = fs::metadata(path.as_std_path())
-        .context("stat exec")?
-        .permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(path.as_std_path(), perms).context("chmod exec")
-}
-
-#[cfg(not(unix))]
-fn make_executable(_path: &Utf8Path) -> Result<()> {
-    Ok(())
-}
-
-fn write_exec(root: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
-    let path = root.join(name);
-    fs::write(path.as_std_path(), b"#!/bin/sh\n").context("write exec stub")?;
-    make_executable(&path)?;
-    Ok(path)
+fn workspace() -> Result<TempWorkspace> {
+    TempWorkspace::new().context("create utf8 temp workspace")
 }
 
 #[rstest]
-fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspace) -> Result<()> {
+fn search_workspace_returns_executable_and_skips_non_exec(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
     let exec = write_exec(workspace.root(), "tool")?;
     let non_exec = workspace.root().join("tool2");
-    fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
+    test_fs::write(non_exec.as_std_path(), b"not exec").context("write non exec")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
@@ -73,10 +55,13 @@ fn search_workspace_returns_executable_and_skips_non_exec(workspace: TempWorkspa
 }
 
 #[rstest]
-fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()> {
+fn search_workspace_collects_all_matches(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
     let first = write_exec(workspace.root(), "tool")?;
     let subdir = workspace.root().join("bin");
-    fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
+    test_fs::create_dir_all(subdir.as_std_path()).context("mkdir bin")?;
     let second = write_exec(subdir.as_path(), "tool")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
@@ -94,9 +79,12 @@ fn search_workspace_collects_all_matches(workspace: TempWorkspace) -> Result<()>
 }
 
 #[rstest]
-fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<()> {
+fn search_workspace_skips_heavy_directories(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
     let heavy = workspace.root().join("target");
-    fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
+    test_fs::create_dir_all(heavy.as_std_path()).context("mkdir target")?;
     write_exec(heavy.as_path(), "tool")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
@@ -109,15 +97,13 @@ fn search_workspace_skips_heavy_directories(workspace: TempWorkspace) -> Result<
 
 #[cfg(unix)]
 #[rstest]
-fn search_workspace_surfaces_unreadable_entries(workspace: TempWorkspace) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
+fn search_workspace_surfaces_unreadable_entries(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
     let blocked = workspace.root().join("blocked");
-    fs::create_dir_all(blocked.as_std_path()).context("mkdir blocked")?;
-    let mut perms = fs::metadata(blocked.as_std_path())
-        .context("stat blocked")?
-        .permissions();
-    perms.set_mode(0o000);
-    fs::set_permissions(blocked.as_std_path(), perms).context("chmod blocked")?;
+    test_fs::create_dir_all(blocked.as_std_path()).context("mkdir blocked")?;
+    test_fs::set_mode(blocked.as_std_path(), 0o000).context("chmod blocked")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
@@ -125,11 +111,7 @@ fn search_workspace_surfaces_unreadable_entries(workspace: TempWorkspace) -> Res
     let err = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())
         .expect_err("unreadable workspace entries should fail");
 
-    let mut restored = fs::metadata(blocked.as_std_path())
-        .context("stat blocked for restore")?
-        .permissions();
-    restored.set_mode(0o700);
-    fs::set_permissions(blocked.as_std_path(), restored).context("restore blocked")?;
+    test_fs::set_mode(blocked.as_std_path(), 0o700).context("restore blocked")?;
 
     ensure!(
         matches!(err, ResolveError::WalkDir { .. }),
@@ -140,11 +122,14 @@ fn search_workspace_surfaces_unreadable_entries(workspace: TempWorkspace) -> Res
 
 #[cfg(unix)]
 #[rstest]
-fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Result<()> {
+fn path_with_invalid_utf8_triggers_args_error(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
     use std::os::unix::ffi::OsStrExt;
 
     use crate::localization::{self, keys};
 
+    let workspace = workspace_res?;
     let invalid_path = std::ffi::OsStr::from_bytes(b"/bin:\xFF");
     let err = EnvSnapshot::capture(Some(workspace.root()), Some(invalid_path))
         .expect_err("invalid PATH should fail EnvSnapshot::capture");
@@ -165,11 +150,14 @@ fn path_with_invalid_utf8_triggers_args_error(workspace: TempWorkspace) -> Resul
 }
 
 #[rstest]
-fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result<()> {
+fn relative_path_entries_resolve_against_cwd(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
     let bin = workspace.root().join("bin");
     let tools = workspace.root().join("tools");
-    fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
-    fs::create_dir_all(tools.as_std_path()).context("mkdir tools")?;
+    test_fs::create_dir_all(bin.as_std_path()).context("mkdir bin")?;
+    test_fs::create_dir_all(tools.as_std_path()).context("mkdir tools")?;
 
     let path_value = std::env::join_paths([
         workspace.root().as_std_path(),
@@ -196,8 +184,12 @@ fn relative_path_entries_resolve_against_cwd(workspace: TempWorkspace) -> Result
 
 #[cfg(windows)]
 #[rstest]
-fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
+fn pathext_empty_uses_default_fallback(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
     use test_support::env::VarGuard;
+
+    let workspace = workspace_res?;
     let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new(""));
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
 
@@ -205,11 +197,11 @@ fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
         .context("capture env for empty PATHEXT")?;
     let pathexts = snapshot.pathext();
 
-    assert!(
+    ensure!(
         pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(".com")),
         "default PATHEXT should include .COM",
     );
-    assert!(
+    ensure!(
         pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(".exe")),
         "default PATHEXT should include .EXE",
     );
@@ -220,9 +212,11 @@ fn pathext_empty_uses_default_fallback(workspace: TempWorkspace) -> Result<()> {
 #[cfg(windows)]
 #[rstest]
 fn pathext_without_leading_dots_is_normalised_and_deduplicated(
-    workspace: TempWorkspace,
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
 ) -> Result<()> {
     use test_support::env::VarGuard;
+
+    let workspace = workspace_res?;
     let _pathext_guard = VarGuard::set("PATHEXT", std::ffi::OsStr::new("COM;EXE;EXE; .BAT ;bat"));
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
 
@@ -232,9 +226,9 @@ fn pathext_without_leading_dots_is_normalised_and_deduplicated(
 
     let contains_ci = |needle: &str| pathexts.iter().any(|ext| ext.eq_ignore_ascii_case(needle));
 
-    assert!(contains_ci(".COM"));
-    assert!(contains_ci(".EXE"));
-    assert!(contains_ci(".BAT"));
+    ensure!(contains_ci(".COM"), "PATHEXT should include .COM");
+    ensure!(contains_ci(".EXE"), "PATHEXT should include .EXE");
+    ensure!(contains_ci(".BAT"), "PATHEXT should include .BAT");
 
     let mut lower: Vec<String> = pathexts
         .iter()
@@ -242,23 +236,23 @@ fn pathext_without_leading_dots_is_normalised_and_deduplicated(
         .collect();
     lower.sort_unstable();
     lower.dedup();
-    assert_eq!(lower.len(), pathexts.len());
+    ensure!(
+        lower.len() == pathexts.len(),
+        "PATHEXT entries should be deduplicated: {pathexts:?}"
+    );
 
     Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) -> Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-
+fn direct_path_not_executable_raises_direct_not_found(
+    #[from(workspace)] workspace_res: Result<TempWorkspace>,
+) -> Result<()> {
+    let workspace = workspace_res?;
     let script = workspace.root().join("script.sh");
-    fs::write(script.as_std_path(), "#!/bin/sh\necho test\n").context("write script")?;
-    let mut perms = fs::metadata(script.as_std_path())
-        .context("stat script")?
-        .permissions();
-    perms.set_mode(0o644);
-    fs::set_permissions(script.as_std_path(), perms).context("chmod script")?;
+    test_fs::write(script.as_std_path(), "#!/bin/sh\necho test\n").context("write script")?;
+    test_fs::set_mode(script.as_std_path(), 0o644).context("chmod script")?;
 
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
@@ -283,11 +277,17 @@ fn direct_path_not_executable_raises_direct_not_found(workspace: TempWorkspace) 
 
 #[cfg(windows)]
 #[rstest]
-fn resolve_direct_appends_pathext(env: TempWorkspace) -> Result<()> {
+fn resolve_direct_appends_pathext(workspace: Result<TempWorkspace>) -> Result<()> {
+    use test_support::exec::make_executable;
+
+    let env = workspace?;
     let base = env.root().join("tools").join("gradlew");
-    fs::create_dir_all(base.parent().expect("tools dir").as_std_path()).context("mkdir tools")?;
+    let tools_dir = base
+        .parent()
+        .ok_or_else(|| anyhow!("tools dir missing from {base}"))?;
+    test_fs::create_dir_all(tools_dir.as_std_path()).context("mkdir tools")?;
     let exe = base.with_extension("bat");
-    fs::write(exe.as_std_path(), b"@echo off\r\n").context("write stub")?;
+    test_fs::write(exe.as_std_path(), b"@echo off\r\n").context("write stub")?;
     make_executable(&exe)?;
 
     let snapshot = EnvSnapshot {

@@ -90,7 +90,7 @@ fn match_workspace_entry(
     command: &str,
     ctx: &WorkspaceMatchContext,
 ) -> Result<Option<Utf8PathBuf>, ResolveError> {
-    if !entry.file_type().is_file() {
+    if !ambient_fs::entry_is_file(&entry) {
         return Ok(None);
     }
 

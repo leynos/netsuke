@@ -99,7 +99,7 @@ pub(super) fn search_workspace(
 }
 
 pub(super) fn should_visit_entry(entry: &walkdir::DirEntry, skip_dirs: &WorkspaceSkipList) -> bool {
-    if !entry.file_type().is_dir() {
+    if !ambient_fs::entry_is_dir(entry) {
         return true;
     }
     let name = entry.file_name().to_string_lossy();

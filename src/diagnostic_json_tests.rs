@@ -262,14 +262,13 @@ fn arb_unique_nodes(min: usize, max: usize) -> impl Strategy<Value = Vec<camino:
 /// Appends the first node to `nodes` to close the cycle, returning the cycle
 /// path as borrowed string slices.
 ///
-/// `arb_unique_nodes` always yields at least two nodes, so the first element is
-/// guaranteed to exist; the `expect` documents that invariant.
+/// `arb_unique_nodes` always yields at least two nodes; an empty input simply
+/// yields an empty (already closed) cycle rather than panicking.
 fn closed_cycle_slices(nodes: &[camino::Utf8PathBuf]) -> Vec<&str> {
     let mut cycle_nodes: Vec<&str> = nodes.iter().map(|node| node.as_str()).collect();
-    let first = *cycle_nodes
-        .first()
-        .expect("arb_unique_nodes yields at least two nodes");
-    cycle_nodes.push(first);
+    if let Some(&first) = cycle_nodes.first() {
+        cycle_nodes.push(first);
+    }
     cycle_nodes
 }
 

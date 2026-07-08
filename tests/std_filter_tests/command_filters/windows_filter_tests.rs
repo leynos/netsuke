@@ -149,7 +149,7 @@ fn grep_streams_large_output_on_windows(env_lock: EnvLock) -> Result<()> {
         GREP_STREAM_STUB,
     )?;
 
-    let config = StdlibConfig::default()
+    let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(512)?
         .with_command_max_stream_bytes(200_000)?;
     let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;

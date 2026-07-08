@@ -1,13 +1,13 @@
 //! Tests covering manifest workspace resolution and filesystem helpers.
-use super::super::{from_path_with_policy, stdlib_config_for_manifest};
+use super::super::{from_path_with_policy, open_manifest_workspace};
 use crate::ast::Recipe;
 use crate::stdlib::NetworkPolicy;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use camino::Utf8Path;
 use rstest::rstest;
-use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
+use test_support::fs as test_fs;
 use test_support::{EnvVarGuard, env_lock::EnvLock, hash, http};
 use url::Url;
 
@@ -43,7 +43,7 @@ impl Drop for CurrentDirGuard {
 #[rstest]
 #[case(true)]
 #[case(false)]
-fn stdlib_config_for_manifest_resolves_workspace_root(#[case] use_relative: bool) -> AnyResult<()> {
+fn open_manifest_workspace_resolves_workspace_root(#[case] use_relative: bool) -> AnyResult<()> {
     let temp = tempdir().context("create temp workspace")?;
     let _guard = if use_relative {
         Some(CurrentDirGuard::change_to(temp.path())?)
@@ -55,33 +55,36 @@ fn stdlib_config_for_manifest_resolves_workspace_root(#[case] use_relative: bool
     } else {
         temp.path().join("Netsukefile")
     };
-    let config = stdlib_config_for_manifest(&manifest_path, NetworkPolicy::default())?;
-    let recorded = config
-        .workspace_root_path()
-        .context("workspace root path should be recorded")?;
+    let workspace = open_manifest_workspace(&manifest_path)?;
     let expected =
         Utf8Path::from_path(temp.path()).context("temp workspace path should be valid UTF-8")?;
     ensure!(
-        recorded == expected,
-        "expected workspace root {expected}, got {recorded}"
+        workspace.root == expected,
+        "expected workspace root {expected}, got {root}",
+        root = workspace.root
+    );
+    ensure!(
+        workspace.manifest_file == "Netsukefile",
+        "expected manifest file name Netsukefile, got {file}",
+        file = workspace.manifest_file
     );
     Ok(())
 }
 
 #[cfg(unix)]
 #[rstest]
-fn stdlib_config_for_manifest_rejects_non_utf_workspace_root() -> AnyResult<()> {
+fn open_manifest_workspace_rejects_non_utf_workspace_root() -> AnyResult<()> {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
     let temp = tempdir().context("create temp workspace")?;
     let invalid_component = OsString::from_vec(vec![0xFF]); // invalid standalone byte
     let manifest_dir = temp.path().join(&invalid_component);
-    fs::create_dir_all(&manifest_dir)
+    test_fs::create_dir_all(&manifest_dir)
         .context("create manifest directory with invalid UTF-8 component")?;
     let manifest_path = manifest_dir.join("manifest.yml");
-    let err = stdlib_config_for_manifest(&manifest_path, NetworkPolicy::default())
-        .expect_err("config should fail when workspace root contains non-UTF-8 components");
+    let err = open_manifest_workspace(&manifest_path)
+        .expect_err("workspace should fail when its root contains non-UTF-8 components");
     ensure!(
         err.to_string().contains("path is not valid UTF-8"),
         "error should mention non-UTF-8 components but was {err}"
@@ -93,9 +96,9 @@ fn stdlib_config_for_manifest_rejects_non_utf_workspace_root() -> AnyResult<()> 
 fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let temp = tempdir()?;
     let workspace = temp.path().join("workspace");
-    fs::create_dir_all(&workspace)?;
+    test_fs::create_dir_all(&workspace)?;
     let outside = temp.path().join("outside");
-    fs::create_dir_all(&outside)?;
+    test_fs::create_dir_all(&outside)?;
     let manifest_path = workspace.join("Netsukefile");
 
     let (url, server) = match http::spawn_http_server("workspace-body") {
@@ -116,7 +119,7 @@ fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
         "      url: \"{{ env('NETSUKE_MANIFEST_URL') }}\"\n",
         "    command: \"{{ fetch(url, cache=true) }}\"\n",
     );
-    fs::write(&manifest_path, manifest_yaml)?;
+    test_fs::write(&manifest_path, manifest_yaml)?;
 
     let _cwd_guard = CurrentDirGuard::change_to(&outside)?;
     let _url_guard = EnvVarGuard::set("NETSUKE_MANIFEST_URL", &url);

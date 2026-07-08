@@ -17,7 +17,7 @@ use super::*;
 use crate::localization;
 use crate::output_prefs;
 use crate::snapshot_test_support::{snapshot_settings, theme_prefs};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use insta::assert_snapshot;
 use rstest::{fixture, rstest};
 use test_support::fluent::normalize_fluent_isolates;
@@ -27,16 +27,16 @@ fn test_prefs() -> crate::output_prefs::OutputPrefs {
     output_prefs::resolve_with(None, |_| None)
 }
 
-fn stage6_message(reporter: &IndicatifReporter) -> String {
+fn stage6_message(reporter: &IndicatifReporter) -> Result<String> {
     let state = reporter
         .state
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    state
+    Ok(state
         .bars
         .get(STAGE6_INDEX)
-        .expect("stage 6 progress bar should exist")
-        .message()
+        .context("stage 6 progress bar should exist")?
+        .message())
 }
 
 #[fixture]
@@ -118,7 +118,7 @@ fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
 ) -> Result<()> {
     let _localizer = en_localizer;
     force_text_reporter.report_task_progress(1, 2, "cc -c src/a.c");
-    let stage6_message = stage6_message(&force_text_reporter);
+    let stage6_message = stage6_message(&force_text_reporter)?;
     ensure!(
         !normalize_fluent_isolates(&stage6_message).contains("Task 1/2"),
         "stage 6 should not include task progress before the stage is running"
@@ -133,7 +133,7 @@ fn indicatif_reporter_sets_stage6_bar_message_for_non_text_updates(
 ) -> Result<()> {
     let _localizer = en_localizer;
     running_stage6_reporter.report_task_progress(1, 2, "cc -c src/a.c");
-    let stage6_message = stage6_message(&running_stage6_reporter);
+    let stage6_message = stage6_message(&running_stage6_reporter)?;
     let task = task_progress_update(1, 2, "cc -c src/a.c");
     let state_label = localization::message(keys::STATUS_STATE_RUNNING).to_string();
     let stage_line = stage_label(

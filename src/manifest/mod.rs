@@ -28,7 +28,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::{Environment, Error, ErrorKind, UndefinedBehavior, value::Value};
 use serde::de::Error as _;
-use std::{env, fs, path::Path};
+use std::{env, path::Path};
 
 mod diagnostics;
 mod expand;
@@ -220,12 +220,18 @@ pub fn from_path_with_policy(
 ) -> Result<NetsukeManifest> {
     notify_stage(&mut on_stage, ManifestLoadStage::ManifestIngestion);
     let path_ref = path.as_ref();
-    let data = fs::read_to_string(path_ref).with_context(|| {
-        localization::message(keys::MANIFEST_READ_FAILED)
-            .with_arg("path", path_ref.display().to_string())
-    })?;
+    let workspace = open_manifest_workspace(path_ref)?;
+    let data = workspace
+        .dir
+        .read_to_string(&workspace.manifest_file)
+        .with_context(|| {
+            localization::message(keys::MANIFEST_READ_FAILED)
+                .with_arg("path", path_ref.display().to_string())
+        })?;
     let name = ManifestName::new(path_ref.display().to_string());
-    let config = stdlib_config_for_manifest(path_ref, policy)?;
+    let config = StdlibConfig::new(workspace.dir)?
+        .with_workspace_root_path(workspace.root)?
+        .with_network_policy(policy);
     from_str_named(&data, &name, Some(config), &mut on_stage)
 }
 
@@ -250,32 +256,52 @@ fn resolve_absolute_workspace_root(utf8_parent: &Utf8Path) -> Result<Utf8PathBuf
     })
 }
 
-fn stdlib_config_for_manifest(path: &Path, policy: NetworkPolicy) -> Result<StdlibConfig> {
+/// A manifest's workspace opened for capability-based access.
+#[derive(Debug)]
+struct ManifestWorkspace {
+    /// Capability-scoped handle on the workspace root.
+    dir: Dir,
+    /// Absolute UTF-8 path of the workspace root.
+    root: Utf8PathBuf,
+    /// Manifest file name relative to the workspace root.
+    manifest_file: String,
+}
+
+/// Open the directory containing `path` as a capability-scoped workspace.
+fn open_manifest_workspace(path: &Path) -> Result<ManifestWorkspace> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
     };
-    let manifest_label = path
+    let manifest_file = path
         .file_name()
         .and_then(|name| name.to_str())
-        .map_or_else(|| path.display().to_string(), str::to_owned);
+        .map(str::to_owned)
+        .ok_or_else(|| {
+            anyhow!(
+                "{}",
+                localization::message(keys::MANIFEST_PATH_NON_UTF8)
+                    .with_arg("manifest", path.display().to_string())
+                    .with_arg("path", path.display().to_string())
+            )
+        })?;
     let utf8_parent = Utf8Path::from_path(parent).ok_or_else(|| {
         anyhow!(
             "{}",
             localization::message(keys::MANIFEST_PATH_NON_UTF8)
-                .with_arg("manifest", &manifest_label)
+                .with_arg("manifest", &manifest_file)
                 .with_arg("path", path.display().to_string())
         )
     })?;
-    let workspace_root = resolve_absolute_workspace_root(utf8_parent)?;
-    let dir = Dir::open_ambient_dir(workspace_root.as_path(), ambient_authority()).with_context(
-        || {
-            localization::message(keys::MANIFEST_OPEN_WORKSPACE_FAILED)
-                .with_arg("workspace", workspace_root.as_str())
-                .with_arg("manifest", &manifest_label)
-        },
-    )?;
-    Ok(StdlibConfig::new(dir)?
-        .with_workspace_root_path(workspace_root)?
-        .with_network_policy(policy))
+    let root = resolve_absolute_workspace_root(utf8_parent)?;
+    let dir = Dir::open_ambient_dir(root.as_path(), ambient_authority()).with_context(|| {
+        localization::message(keys::MANIFEST_OPEN_WORKSPACE_FAILED)
+            .with_arg("workspace", root.as_str())
+            .with_arg("manifest", &manifest_file)
+    })?;
+    Ok(ManifestWorkspace {
+        dir,
+        root,
+        manifest_file,
+    })
 }

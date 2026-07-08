@@ -5,6 +5,7 @@
 //! sibling [`policy`] module so the I/O-focused code here stays small and
 //! explicit.
 
+mod cache;
 mod policy;
 /// Network policy that controls which schemes and hosts the fetch helper may reach.
 pub use self::policy::NetworkPolicy;
@@ -25,16 +26,18 @@ use std::{
     time::Duration,
 };
 
+use self::cache::{CacheEntry, FetchCache, cache_key, discard_partial_cache, read_cached};
+#[cfg(test)]
+use self::cache::{hex_string, open_cache_dir};
 use super::{NetworkConfig, StdlibConfig, value_from_bytes};
 use crate::localization::{self, keys};
 use crate::stdlib::io_helpers::io_action_error;
-use camino::{Utf8Path, Utf8PathBuf};
-use cap_std::fs_utf8::{Dir, File, OpenOptions};
+use camino::Utf8Path;
+use cap_std::fs_utf8::Dir;
 use minijinja::{
     Environment, Error, ErrorKind,
     value::{Kwargs, Value},
 };
-use sha2::{Digest, Sha256};
 use url::Url;
 
 /// Register network functions into the template environment.
@@ -109,38 +112,6 @@ fn fetch_remote(url: &Url, impure: &Arc<AtomicBool>, limit: u64) -> Result<Vec<u
     read_response(url, response.into_reader(), limit, None)
 }
 
-struct CacheEntry<'a> {
-    dir: &'a Dir,
-    name: &'a str,
-    path: Utf8PathBuf,
-}
-
-impl<'a> CacheEntry<'a> {
-    fn new(dir: &'a Dir, name: &'a str) -> Self {
-        Self {
-            dir,
-            name,
-            path: Utf8PathBuf::from(name),
-        }
-    }
-
-    fn path(&self) -> &Utf8Path {
-        self.path.as_path()
-    }
-
-    fn open_writer(&self) -> Result<File, Error> {
-        open_cache_writer(self.dir, self.path())
-    }
-
-    fn remove_file(&self) -> io::Result<()> {
-        self.dir.remove_file(self.path())
-    }
-
-    const fn name(&self) -> &str {
-        self.name
-    }
-}
-
 fn fetch_remote_with_cache(
     url: &Url,
     impure: &Arc<AtomicBool>,
@@ -157,17 +128,7 @@ fn fetch_remote_with_cache(
         }
         Err(err) => {
             drop(file);
-            if let Err(remove_err) = cache.remove_file() {
-                match remove_err.kind() {
-                    io::ErrorKind::NotFound => {}
-                    _ => {
-                        tracing::warn!(
-                            "failed to clean up partial fetch cache '{}': {remove_err}",
-                            cache.name()
-                        );
-                    }
-                }
-            }
+            discard_partial_cache(cache);
             Err(err)
         }
     }
@@ -192,52 +153,6 @@ fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Respons
     })
 }
 
-fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
-    if let Err(err) = StdlibConfig::validate_cache_relative(relative) {
-        return Err(Error::new(ErrorKind::InvalidOperation, err.to_string()));
-    }
-
-    root.create_dir_all(relative)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_CREATE_CACHE_DIR, relative, err))?;
-    root.open_dir(relative)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_DIR, relative, err))
-}
-
-fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Error> {
-    let path = Utf8Path::new(name);
-    let mut options = OpenOptions::new();
-    options.read(true);
-    match dir.open_with(path, &options) {
-        Ok(mut file) => {
-            let metadata = dir
-                .metadata(path)
-                .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_STAT_CACHE, path, err))?;
-            if metadata.len() > limit {
-                return Err(response_limit_error_from_cache(name, limit));
-            }
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf).map_err(|err| {
-                Error::new(
-                    ErrorKind::InvalidOperation,
-                    localization::message(keys::STDLIB_FETCH_CACHE_READ_FAILED)
-                        .with_arg("name", name)
-                        .with_arg("details", err.to_string())
-                        .to_string(),
-                )
-            })?;
-            Ok(Some(buf))
-        }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_CACHE_OPEN_FAILED)
-                .with_arg("name", name)
-                .with_arg("details", err.to_string())
-                .to_string(),
-        )),
-    }
-}
-
 fn read_response(
     url: &Url,
     mut reader: impl Read,
@@ -248,15 +163,7 @@ fn read_response(
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 8 * 1024];
     loop {
-        let read = reader.read(&mut chunk).map_err(|err| {
-            Error::new(
-                ErrorKind::InvalidOperation,
-                localization::message(keys::STDLIB_FETCH_RESPONSE_READ_FAILED)
-                    .with_arg("url", url.as_str())
-                    .with_arg("details", err.to_string())
-                    .to_string(),
-            )
-        })?;
+        let read = read_response_chunk(url, &mut reader, &mut chunk)?;
         if read == 0 {
             break;
         }
@@ -273,26 +180,42 @@ fn read_response(
             )
         })?;
         buffer.extend_from_slice(bytes);
-        if let Some(writer) = sink.as_deref_mut() {
-            writer.write_all(bytes).map_err(|err| {
-                Error::new(
-                    ErrorKind::InvalidOperation,
-                    localization::message(keys::STDLIB_FETCH_CACHE_WRITE_FAILED)
-                        .with_arg("url", url.as_str())
-                        .with_arg("details", err.to_string())
-                        .to_string(),
-                )
-            })?;
-        }
+        copy_to_sink(url, bytes, &mut sink)?;
     }
     Ok(buffer)
 }
 
-fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
-    let mut options = OpenOptions::new();
-    options.create(true).truncate(true).write(true);
-    dir.open_with(path, &options)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_ENTRY, path, err))
+/// Read one chunk from the response body, localising read failures.
+fn read_response_chunk(
+    url: &Url,
+    reader: &mut impl Read,
+    chunk: &mut [u8],
+) -> Result<usize, Error> {
+    reader.read(chunk).map_err(|err| {
+        Error::new(
+            ErrorKind::InvalidOperation,
+            localization::message(keys::STDLIB_FETCH_RESPONSE_READ_FAILED)
+                .with_arg("url", url.as_str())
+                .with_arg("details", err.to_string())
+                .to_string(),
+        )
+    })
+}
+
+/// Mirror a response chunk into the optional cache writer.
+fn copy_to_sink(url: &Url, bytes: &[u8], sink: &mut Option<&mut dyn Write>) -> Result<(), Error> {
+    let Some(writer) = sink.as_deref_mut() else {
+        return Ok(());
+    };
+    writer.write_all(bytes).map_err(|err| {
+        Error::new(
+            ErrorKind::InvalidOperation,
+            localization::message(keys::STDLIB_FETCH_CACHE_WRITE_FAILED)
+                .with_arg("url", url.as_str())
+                .with_arg("details", err.to_string())
+                .to_string(),
+        )
+    })
 }
 
 fn response_limit_error(url: &Url, limit: u64) -> Error {
@@ -315,25 +238,6 @@ fn response_limit_error_from_cache(name: &str, limit: u64) -> Error {
     )
 }
 
-fn cache_key(url: &str) -> String {
-    let digest = Sha256::digest(url.as_bytes());
-    hex_string(&digest)
-}
-
-fn hex_string(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        use std::fmt::Write;
-        let result = write!(out, "{byte:02x}");
-        #[expect(
-            clippy::expect_used,
-            reason = "hex output to String should be infallible"
-        )]
-        result.expect("writing hex to String never fails");
-    }
-    out
-}
-
 fn io_error(action_key: &'static str, path: &Utf8Path, err: io::Error) -> Error {
     io_action_error(
         keys::STDLIB_FETCH_IO_FAILED,
@@ -341,25 +245,6 @@ fn io_error(action_key: &'static str, path: &Utf8Path, err: io::Error) -> Error 
         path,
         err,
     )
-}
-
-/// Internal cache configuration and directory handle.
-#[derive(Clone)]
-struct FetchCache {
-    root: Arc<Dir>,
-    relative: Utf8PathBuf,
-}
-
-impl FetchCache {
-    fn new(config: &NetworkConfig) -> Self {
-        Self {
-            root: Arc::clone(&config.cache_root),
-            relative: config.cache_relative.clone(),
-        }
-    }
-
-    #[rustfmt::skip]
-    fn open_dir(&self) -> Result<Dir, Error> { open_cache_dir(&self.root, &self.relative) }
 }
 
 /// Encapsulates fetch cache and network policy for template function registration.

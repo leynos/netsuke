@@ -19,7 +19,7 @@ fn http_policy() -> Result<NetworkPolicy> {
 }
 
 fn env_with_policy(policy: NetworkPolicy) -> Result<(Environment<'static>, StdlibState)> {
-    fallible::stdlib_env_with_config(StdlibConfig::default().with_network_policy(policy))
+    fallible::stdlib_env_with_config(StdlibConfig::from_current_dir()?.with_network_policy(policy))
 }
 
 fn env_with_workspace_policy(

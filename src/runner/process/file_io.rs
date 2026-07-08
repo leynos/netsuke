@@ -24,20 +24,21 @@ pub fn create_temp_ninja_file(content: &NinjaContent) -> AnyResult<NamedTempFile
         .suffix(".ninja")
         .tempfile()
         .context(localization::message(keys::RUNNER_IO_CREATE_TEMP_FILE))?;
-    {
-        let handle = tmp.as_file_mut();
-        handle
-            .write_all(content.as_str().as_bytes())
-            .context(localization::message(keys::RUNNER_IO_WRITE_TEMP_NINJA))?;
-        handle
-            .flush()
-            .context(localization::message(keys::RUNNER_IO_FLUSH_TEMP_NINJA))?;
-        handle
-            .sync_all()
-            .context(localization::message(keys::RUNNER_IO_SYNC_TEMP_NINJA))?;
-    }
+    tmp.write_all(content.as_str().as_bytes())
+        .context(localization::message(keys::RUNNER_IO_WRITE_TEMP_NINJA))?;
+    tmp.flush()
+        .context(localization::message(keys::RUNNER_IO_FLUSH_TEMP_NINJA))?;
+    sync_temp_ninja_file(&tmp).context(localization::message(keys::RUNNER_IO_SYNC_TEMP_NINJA))?;
     info!("Wrote temporary Ninja file to {}", tmp.path().display());
     Ok(tmp)
+}
+
+/// Sync a temporary Ninja file to disk before handing its path to Ninja.
+///
+/// The tempfile lives in the ambient system temp directory, so the sync goes
+/// through `ambient_fs` rather than a capability-scoped handle.
+fn sync_temp_ninja_file(tmp: &NamedTempFile) -> io::Result<()> {
+    ambient_fs::sync_file(tmp.as_file())
 }
 
 pub fn write_text_file_utf8(dir: &cap_fs::Dir, path: &Utf8Path, content: &str) -> AnyResult<()> {
@@ -145,36 +146,36 @@ pub fn write_text_stdout(content: &str) -> AnyResult<()> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for temporary Ninja file creation and file writing helpers.
+
     use super::*;
     use crate::runner::NinjaContent;
     use anyhow::{Context, Result, ensure};
     use camino::Utf8PathBuf;
     use cap_std::{ambient_authority, fs as cap_fs};
     use rstest::rstest;
-    use std::io::{Read, Seek, SeekFrom};
+    use test_support::fs as test_fs;
 
     #[test]
     fn create_temp_ninja_file_supports_reopen() -> Result<()> {
         let content = NinjaContent::new(String::from("rule cc"));
         let file = create_temp_ninja_file(&content)?;
 
-        let mut reopened = file.reopen().context("reopen temp file")?;
-        let mut written = String::new();
-        reopened
-            .read_to_string(&mut written)
-            .context("read reopened temp file")?;
+        // Ninja reads the file by path, so reopening must succeed.
+        drop(file.reopen().context("reopen temp file")?);
+        let written = test_fs::read_to_string(file.path()).context("read temp file")?;
         ensure!(
             written == content.as_str(),
             "reopened file contents '{written}' did not match '{expected}'",
             expected = content.as_str()
         );
 
-        let metadata = std::fs::metadata(file.path()).context("query temp file metadata")?;
+        let observed_len = test_fs::file_len(file.path()).context("query temp file metadata")?;
         ensure!(
-            metadata.len() == content.as_str().len() as u64,
+            observed_len == content.as_str().len() as u64,
             "expected size {} but observed {}",
             content.as_str().len(),
-            metadata.len()
+            observed_len
         );
         let temp_display = file.path().display().to_string();
         let has_ninja_ext = file
@@ -187,16 +188,10 @@ mod tests {
             "temporary path should end with .ninja: {temp_display}"
         );
 
-        reopened
-            .seek(SeekFrom::Start(0))
-            .context("rewind reopened temp file")?;
-        written.clear();
-        reopened
-            .read_to_string(&mut written)
-            .context("re-read reopened temp file")?;
+        let reread = test_fs::read_to_string(file.path()).context("re-read temp file")?;
         ensure!(
-            written == content.as_str(),
-            "re-read file contents '{written}' did not match '{expected}'",
+            reread == content.as_str(),
+            "re-read file contents '{reread}' did not match '{expected}'",
             expected = content.as_str()
         );
         Ok(())
@@ -226,7 +221,7 @@ mod tests {
         write_text_file_utf8(&dir, &nested, content)?;
 
         let nested_path = temp.path().join("nested").join("build.ninja");
-        let written = std::fs::read_to_string(&nested_path).context("read nested file")?;
+        let written = test_fs::read_to_string(&nested_path).context("read nested file")?;
         ensure!(
             written == content,
             "nested file contents '{written}' did not match '{content}'"
@@ -248,7 +243,7 @@ mod tests {
 
         write_ninja_file(&nested, &content)?;
 
-        let written = std::fs::read_to_string(&nested).context("read nested file")?;
+        let written = test_fs::read_to_string(&nested).context("read nested file")?;
         ensure!(
             written == content.as_str(),
             "absolute path file contents '{written}' did not match '{expected}'",

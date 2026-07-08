@@ -166,7 +166,7 @@ fn shell_filter_rejects_empty_command() -> Result<()> {
 
 #[rstest]
 fn shell_filter_enforces_output_limit() -> Result<()> {
-    let config = StdlibConfig::default()
+    let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(1024)?;
     let mut fixture =
         CommandFixture::with_config(compile_large_output_helper, "cmd_large", config)?;
@@ -199,7 +199,7 @@ fn shell_filter_enforces_output_limit() -> Result<()> {
 
 #[rstest]
 fn shell_filter_streams_to_tempfiles() -> Result<()> {
-    let config = StdlibConfig::default()
+    let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(512)?
         .with_command_max_stream_bytes(200_000)?;
     let mut fixture =
@@ -239,7 +239,7 @@ fn shell_filter_streams_to_tempfiles() -> Result<()> {
 
 #[rstest]
 fn shell_streaming_honours_size_limit() -> Result<()> {
-    let config = StdlibConfig::default()
+    let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(256)?
         .with_command_max_stream_bytes(1024)?;
     let mut fixture =

@@ -18,6 +18,7 @@ pub fn workflow_contents(name: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the shared workflow-reading helper.
     use super::workflow_contents;
 
     #[test]

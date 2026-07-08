@@ -112,6 +112,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for output mode resolution from environment signals.
+
     use super::*;
     use rstest::rstest;
 

@@ -1,6 +1,6 @@
 //! Command helper configuration, option parsing, and pipe metadata.
 
-use std::{fs, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
@@ -61,9 +61,10 @@ impl CommandConfig {
             ));
         };
 
+        // The capability-scoped handle creates the directory; the ambient
+        // path below is only used to point the tempfile builder at it.
         self.workspace_root.create_dir_all(&self.temp_relative)?;
         let dir_path = root_path.join(&self.temp_relative);
-        fs::create_dir_all(dir_path.as_std_path())?;
 
         let prefix = sanitize_label(label);
         Builder::new()
@@ -206,7 +207,7 @@ impl PipeLimit {
     /// `CommandFailure::OutputLimit`.
     pub(super) fn record(&mut self, read: usize) -> Result<(), CommandFailure> {
         let bytes = read_size_to_u64(read);
-        let new_total = add_checked(self.consumed, bytes);
+        let new_total = add_saturating(self.consumed, bytes);
         if new_total > self.spec.limit() {
             return Err(CommandFailure::OutputLimit {
                 stream: self.spec.stream(),
@@ -219,24 +220,16 @@ impl PipeLimit {
     }
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "usize to u64 conversion cannot fail on 64-bit platforms; \
-              overflow on 32-bit systems indicates a logic error (reading >4GB in one call)"
-)]
+/// Convert a read size to `u64`, saturating on the (unreachable in practice)
+/// overflow so an oversized read trips the output limit instead of panicking.
 fn read_size_to_u64(read: usize) -> u64 {
-    u64::try_from(read).expect("pipe read size overflow should be impossible")
+    u64::try_from(read).unwrap_or(u64::MAX)
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "u64 addition overflow requires >18 exabytes; \
-              exceeding this indicates a logic error in limit enforcement"
-)]
-const fn add_checked(current: u64, delta: u64) -> u64 {
-    current
-        .checked_add(delta)
-        .expect("pipe output size overflow should be impossible")
+/// Add byte counts, saturating at `u64::MAX`; saturation exceeds every
+/// configurable limit, so `record` reports `OutputLimit` rather than panicking.
+const fn add_saturating(current: u64, delta: u64) -> u64 {
+    current.saturating_add(delta)
 }
 
 /// Parsed view of the filter options provided by the template author.
@@ -322,18 +315,21 @@ impl Default for CommandOptions {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for command configuration and tempfile management.
     use super::*;
+    use anyhow::{Context, Result, anyhow, ensure};
     use cap_std::{ambient_authority, fs_utf8::Dir};
     use tempfile::tempdir;
+    use test_support::fs;
 
-    fn test_command_config() -> (tempfile::TempDir, CommandConfig) {
-        let temp = tempdir().expect("create command temp workspace");
+    fn test_command_config() -> Result<(tempfile::TempDir, CommandConfig)> {
+        let temp = tempdir().context("create command temp workspace")?;
         let path = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .expect("temp workspace should be valid UTF-8");
+            .map_err(|path| anyhow!("temp workspace should be valid UTF-8: {path:?}"))?;
         let dir =
-            Dir::open_ambient_dir(&path, ambient_authority()).expect("open temp workspace dir");
+            Dir::open_ambient_dir(&path, ambient_authority()).context("open temp workspace dir")?;
         let config = CommandConfig::new(1024, 2048, Arc::new(dir), Some(Arc::new(path)));
-        (temp, config)
+        Ok((temp, config))
     }
 
     #[test]
@@ -342,33 +338,44 @@ mod tests {
     }
 
     #[test]
-    fn command_tempfile_drop_removes_file() {
-        let (_temp_dir, config) = test_command_config();
+    fn command_tempfile_drop_removes_file() -> Result<()> {
+        let (_temp_dir, config) = test_command_config()?;
         let temp_path = {
-            let tempfile = config.create_tempfile("stdout").expect("create temp file");
+            let tempfile = config
+                .create_tempfile("stdout")
+                .context("create temp file")?;
             let path = tempfile.path().to_path_buf();
-            assert!(path.exists(), "tempfile should exist while handle is alive");
+            ensure!(path.exists(), "tempfile should exist while handle is alive");
             path
         };
-        assert!(
+        ensure!(
             !temp_path.exists(),
             "temporary file should be removed on drop"
         );
+        Ok(())
     }
 
     #[test]
-    fn command_tempfile_into_path_persists_file() {
-        let (_temp_dir, config) = test_command_config();
-        let tempfile = config.create_tempfile("stdout").expect("create temp file");
+    fn command_tempfile_into_path_persists_file() -> Result<()> {
+        let (_temp_dir, config) = test_command_config()?;
+        let tempfile = config
+            .create_tempfile("stdout")
+            .context("create temp file")?;
         let expected = tempfile.path().to_path_buf();
         let kept = tempfile
             .into_temp_path()
             .keep()
             .map_err(|err| err.error)
-            .expect("persist temp file");
-        assert_eq!(kept.as_path(), expected.as_path());
-        assert!(kept.as_path().exists());
-        fs::remove_file(kept.as_path()).expect("cleanup persisted temp file");
+            .context("persist temp file")?;
+        ensure!(
+            kept.as_path() == expected.as_path(),
+            "kept path {} did not match {}",
+            kept.display(),
+            expected.display()
+        );
+        ensure!(kept.as_path().exists(), "persisted temp file should exist");
+        fs::remove_file(kept.as_path()).context("cleanup persisted temp file")?;
+        Ok(())
     }
 
     #[test]

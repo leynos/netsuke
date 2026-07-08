@@ -163,6 +163,7 @@ fn ensure_resolved(value: Value, attr: &str, item: &Value) -> Result<Value, Erro
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the stdlib collection helpers.
     use super::*;
     use anyhow::{Result, anyhow, ensure};
     use minijinja::context;

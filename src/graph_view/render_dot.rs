@@ -117,6 +117,9 @@ fn escape_dot(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the DOT renderer.
+
+    use anyhow::{Context, Result, ensure};
     use camino::Utf8PathBuf;
 
     use super::*;
@@ -131,23 +134,30 @@ mod tests {
         }
     }
 
-    fn render(view: &GraphView) -> String {
+    fn render(view: &GraphView) -> Result<String> {
         let mut out = Vec::new();
         DotRenderer::new()
             .render(view, &mut out)
-            .expect("render dot");
-        String::from_utf8(out).expect("utf-8")
+            .context("render dot")?;
+        String::from_utf8(out).context("utf-8")
     }
 
     #[test]
-    fn empty_graph_produces_well_formed_digraph() {
-        let dot = render(&empty_view());
-        assert!(dot.starts_with("digraph netsuke {"));
-        assert!(dot.trim_end().ends_with('}'));
+    fn empty_graph_produces_well_formed_digraph() -> Result<()> {
+        let dot = render(&empty_view())?;
+        ensure!(
+            dot.starts_with("digraph netsuke {"),
+            "dot output should start with the digraph header"
+        );
+        ensure!(
+            dot.trim_end().ends_with('}'),
+            "dot output should end with a closing brace"
+        );
+        Ok(())
     }
 
     #[test]
-    fn renders_source_target_and_explicit_edge() {
+    fn renders_source_target_and_explicit_edge() -> Result<()> {
         let view = GraphView {
             default_targets: vec![Utf8PathBuf::from("out/a.o")],
             nodes: vec![
@@ -174,16 +184,29 @@ mod tests {
             }],
             limit: None,
         };
-        let dot = render(&view);
-        assert!(dot.contains("\"src/a.c\" [label=\"src/a.c\"]"));
-        assert!(dot.contains("\"out/a.o\" [label=\"out/a.o\\ncompile a\""));
-        assert!(dot.contains("\"src/a.c\" -> \"out/a.o\"\n"));
-        assert!(dot.contains("// default targets:"));
-        assert!(dot.contains("// - out/a.o"));
+        let dot = render(&view)?;
+        ensure!(
+            dot.contains("\"src/a.c\" [label=\"src/a.c\"]"),
+            "missing source node label"
+        );
+        ensure!(
+            dot.contains("\"out/a.o\" [label=\"out/a.o\\ncompile a\""),
+            "missing target node label with description"
+        );
+        ensure!(
+            dot.contains("\"src/a.c\" -> \"out/a.o\"\n"),
+            "missing explicit edge"
+        );
+        ensure!(
+            dot.contains("// default targets:"),
+            "missing default targets comment"
+        );
+        ensure!(dot.contains("// - out/a.o"), "missing default target entry");
+        Ok(())
     }
 
     #[test]
-    fn order_only_and_implicit_edges_carry_style() {
+    fn order_only_and_implicit_edges_carry_style() -> Result<()> {
         let view = GraphView {
             default_targets: Vec::new(),
             nodes: vec![NodeView {
@@ -206,13 +229,20 @@ mod tests {
             ],
             limit: None,
         };
-        let dot = render(&view);
-        assert!(dot.contains("\"a\" -> \"o\" [style=dashed]"));
-        assert!(dot.contains("\"b\" -> \"o\" [style=dotted]"));
+        let dot = render(&view)?;
+        ensure!(
+            dot.contains("\"a\" -> \"o\" [style=dashed]"),
+            "order-only edge should be dashed"
+        );
+        ensure!(
+            dot.contains("\"b\" -> \"o\" [style=dotted]"),
+            "implicit output edge should be dotted"
+        );
+        Ok(())
     }
 
     #[test]
-    fn implicit_dep_edges_are_bold() {
+    fn implicit_dep_edges_are_bold() -> Result<()> {
         let view = GraphView {
             default_targets: Vec::new(),
             nodes: vec![NodeView {
@@ -228,12 +258,16 @@ mod tests {
             }],
             limit: None,
         };
-        let dot = render(&view);
-        assert!(dot.contains("\"dep\" -> \"o\" [style=bold]"));
+        let dot = render(&view)?;
+        ensure!(
+            dot.contains("\"dep\" -> \"o\" [style=bold]"),
+            "implicit dependency edge should be bold"
+        );
+        Ok(())
     }
 
     #[test]
-    fn paths_with_quotes_are_escaped() {
+    fn paths_with_quotes_are_escaped() -> Result<()> {
         let view = GraphView {
             default_targets: Vec::new(),
             nodes: vec![NodeView {
@@ -245,7 +279,11 @@ mod tests {
             edges: Vec::new(),
             limit: None,
         };
-        let dot = render(&view);
-        assert!(dot.contains("\"a\\\"b\""));
+        let dot = render(&view)?;
+        ensure!(
+            dot.contains("\"a\\\"b\""),
+            "quoted path should be escaped in dot output"
+        );
+        Ok(())
     }
 }

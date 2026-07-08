@@ -2,7 +2,7 @@
 
 use super::{command, network::NetworkPolicy, which::WORKSPACE_SKIP_DIRS};
 use crate::localization::{self, keys};
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{Context, anyhow, bail, ensure};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use indexmap::IndexSet;
@@ -328,26 +328,32 @@ impl StdlibConfig {
     }
 }
 
-impl Default for StdlibConfig {
+impl StdlibConfig {
     /// Construct a configuration rooted at the ambient current directory.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics when the workspace root cannot be opened with capability-based
-    /// I/O, when the current directory cannot be resolved, or when the current
-    /// directory contains non-UTF-8 components. Call [`StdlibConfig::new`]
-    /// instead when you need an error-returning API.
-    fn default() -> Self {
+    /// Returns an error when the workspace root cannot be opened with
+    /// capability-based I/O, when the current directory cannot be resolved,
+    /// or when the current directory contains non-UTF-8 components.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use netsuke::stdlib::StdlibConfig;
+    /// let config = StdlibConfig::from_current_dir().expect("open workspace at cwd");
+    /// // The configuration is rooted at the process working directory.
+    /// ```
+    pub fn from_current_dir() -> anyhow::Result<Self> {
         let root = Dir::open_ambient_dir(".", ambient_authority())
-            .unwrap_or_else(|err| panic!("open stdlib workspace root: {err}"));
-        let cwd =
-            env::current_dir().unwrap_or_else(|err| panic!("resolve current directory: {err}"));
+            .context("open stdlib workspace root")?;
+        let cwd = env::current_dir().context("resolve current directory")?;
         let path = Utf8PathBuf::from_path_buf(cwd)
-            .unwrap_or_else(|path| panic!("cwd contains non-UTF-8 components: {}", path.display()));
+            .map_err(|path| anyhow!("cwd contains non-UTF-8 components: {}", path.display()))?;
         Self::new(root)
-            .unwrap_or_else(|err| panic!("default fetch cache path should be valid: {err}"))
+            .context("default fetch cache path should be valid")?
             .with_workspace_root_path(path)
-            .unwrap_or_else(|err| panic!("workspace root must be absolute: {err}"))
+            .context("workspace root must be absolute")
     }
 }
 
@@ -365,162 +371,5 @@ pub struct NetworkConfig {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES,
-        DEFAULT_WHICH_CACHE_CAPACITY, StdlibConfig,
-    };
-    use crate::localization::{self, keys};
-    use camino::{Utf8Path, Utf8PathBuf};
-    use cap_std::{ambient_authority, fs_utf8::Dir};
-    use rstest::{fixture, rstest};
-    use std::env;
-
-    #[fixture]
-    fn workspace() -> (Dir, Utf8PathBuf) {
-        let dir =
-            Dir::open_ambient_dir(".", ambient_authority()).expect("open workspace root fixture");
-        let path = Utf8PathBuf::from_path_buf(
-            env::current_dir().expect("resolve cwd for workspace fixture"),
-        )
-        .expect("cwd should be valid UTF-8");
-        (dir, path)
-    }
-
-    #[fixture]
-    fn base_config(#[from(workspace)] workspace: (Dir, Utf8PathBuf)) -> StdlibConfig {
-        let (dir, path) = workspace;
-        StdlibConfig::new(dir)
-            .expect("construct stdlib config")
-            .with_workspace_root_path(path)
-            .expect("record workspace root")
-    }
-
-    #[rstest]
-    #[case(Utf8Path::new(""), keys::STDLIB_FETCH_CACHE_EMPTY)]
-    #[case(Utf8Path::new("/cache"), keys::STDLIB_FETCH_CACHE_NOT_RELATIVE)]
-    #[case(Utf8Path::new("../escape"), keys::STDLIB_FETCH_CACHE_ESCAPES)]
-    fn validate_cache_relative_rejects_invalid_inputs(
-        #[case] path: &Utf8Path,
-        #[case] message_key: &'static str,
-    ) {
-        let err =
-            StdlibConfig::validate_cache_relative(path).expect_err("invalid paths should fail");
-        let expected = match message_key {
-            keys::STDLIB_FETCH_CACHE_EMPTY => localization::message(message_key).to_string(),
-            keys::STDLIB_FETCH_CACHE_NOT_RELATIVE | keys::STDLIB_FETCH_CACHE_ESCAPES => {
-                localization::message(message_key)
-                    .with_arg("path", path.as_str())
-                    .to_string()
-            }
-            _ => panic!("unexpected message key {message_key}"),
-        };
-        assert_eq!(err.to_string(), expected);
-    }
-
-    #[rstest]
-    fn validate_cache_relative_accepts_workspace_relative_paths() {
-        StdlibConfig::validate_cache_relative(Utf8Path::new("nested/cache"))
-            .expect("relative path should be accepted");
-    }
-
-    #[rstest]
-    #[case::output(CommandLimitCase {
-        builder: StdlibConfig::with_command_max_output_bytes,
-        accessor: |cfg: &StdlibConfig| cfg.command_max_output_bytes,
-        default_value: DEFAULT_COMMAND_MAX_OUTPUT_BYTES,
-        updated: 2_048,
-        zero_err_key: keys::STDLIB_COMMAND_OUTPUT_LIMIT_POSITIVE,
-    })]
-    #[case::stream(CommandLimitCase {
-        builder: StdlibConfig::with_command_max_stream_bytes,
-        accessor: |cfg: &StdlibConfig| cfg.command_max_stream_bytes,
-        default_value: DEFAULT_COMMAND_MAX_STREAM_BYTES,
-        updated: 65_536,
-        zero_err_key: keys::STDLIB_COMMAND_STREAM_LIMIT_POSITIVE,
-    })]
-    fn command_limit_builders_validate_and_update(
-        base_config: StdlibConfig,
-        #[case] case: CommandLimitCase,
-    ) {
-        assert_eq!((case.accessor)(&base_config), case.default_value);
-
-        let updated_config =
-            (case.builder)(base_config.clone(), case.updated).expect("positive limit");
-        assert_eq!((case.accessor)(&updated_config), case.updated);
-
-        let err = (case.builder)(base_config, 0).expect_err("zero-byte limits must be rejected");
-        let expected = localization::message(case.zero_err_key).to_string();
-        assert_eq!(err.to_string(), expected);
-    }
-
-    struct CommandLimitCase {
-        builder: fn(StdlibConfig, u64) -> anyhow::Result<StdlibConfig>,
-        accessor: fn(&StdlibConfig) -> u64,
-        default_value: u64,
-        updated: u64,
-        zero_err_key: &'static str,
-    }
-
-    #[rstest]
-    fn command_limits_propagate_into_components(base_config: StdlibConfig) {
-        let config = base_config
-            .with_command_max_output_bytes(4_096)
-            .expect("set capture limit")
-            .with_command_max_stream_bytes(131_072)
-            .expect("set streaming limit");
-        let (_network, command) = config.into_components();
-        assert_eq!(command.max_capture_bytes, 4_096);
-        assert_eq!(command.max_stream_bytes, 131_072);
-    }
-
-    #[rstest]
-    fn which_cache_capacity_validates_and_updates(base_config: StdlibConfig) {
-        assert_eq!(
-            base_config.which_cache_capacity().get(),
-            DEFAULT_WHICH_CACHE_CAPACITY
-        );
-
-        let updated = base_config
-            .clone()
-            .with_which_cache_capacity(5)
-            .expect("positive capacity should be accepted");
-        assert_eq!(updated.which_cache_capacity().get(), 5);
-
-        let err = base_config
-            .with_which_cache_capacity(0)
-            .expect_err("zero capacity must be rejected");
-        let expected =
-            localization::message(keys::STDLIB_WHICH_CACHE_CAPACITY_POSITIVE).to_string();
-        assert_eq!(err.to_string(), expected);
-    }
-
-    #[rstest]
-    #[case(vec![""], keys::STDLIB_SKIP_DIR_EMPTY)]
-    #[case(vec!["."], keys::STDLIB_SKIP_DIR_NAVIGATION)]
-    #[case(vec![".."], keys::STDLIB_SKIP_DIR_NAVIGATION)]
-    #[case(vec!["dir/name"], keys::STDLIB_SKIP_DIR_SEPARATOR)]
-    #[case(vec!["dir\\name"], keys::STDLIB_SKIP_DIR_SEPARATOR)]
-    fn workspace_skip_dirs_validate_inputs(
-        base_config: StdlibConfig,
-        #[case] entries: Vec<&str>,
-        #[case] message_key: &'static str,
-    ) {
-        let err = base_config
-            .with_workspace_skip_dirs(entries)
-            .expect_err("invalid skip entries should error");
-        let expected = localization::message(message_key).to_string();
-        assert_eq!(err.to_string(), expected);
-    }
-
-    #[rstest]
-    fn workspace_skip_dirs_override_defaults(base_config: StdlibConfig) {
-        let config = base_config
-            .with_workspace_skip_dirs(["build", ".cache"])
-            .expect("configure skip dirs");
-        assert_eq!(
-            config.workspace_skip_dirs(),
-            &["build".to_owned(), ".cache".to_owned()]
-        );
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;

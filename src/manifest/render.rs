@@ -130,6 +130,7 @@ fn render_recipe_str_with(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for manifest template rendering.
     use super::*;
     use crate::ast::Rule;
     use minijinja::Environment;
@@ -186,9 +187,10 @@ mod tests {
     #[expect(clippy::panic, reason = "panic for clearer test failures")]
     fn expect_var(vars: &Vars, key: impl AsRef<str>) -> &str {
         let key_ref = key.as_ref();
-        vars.get(key_ref)
-            .and_then(|value| value.as_str())
-            .unwrap_or_else(|| panic!("expected rendered var '{key_ref}'"))
+        let Some(value) = vars.get(key_ref).and_then(|value| value.as_str()) else {
+            panic!("expected rendered var '{key_ref}'");
+        };
+        value
     }
 
     #[expect(clippy::panic, reason = "panic for clearer test failures")]

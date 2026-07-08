@@ -347,6 +347,8 @@ fn check_exit_status(status: ExitStatus) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for process invocation and environment preparation.
+
     use super::*;
     use camino::Utf8PathBuf;
     use std::ffi::OsString;

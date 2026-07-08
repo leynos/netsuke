@@ -1,82 +1,22 @@
-//! Unit and property tests for [`super::GraphView`].
+//! Unit tests for [`super::GraphView`]: node and edge classification,
+//! canonical ordering, and golden renderer snapshots. Shared fixtures live in
+//! `tests_support.rs`; property tests live in `tests_property.rs`.
 
-use camino::Utf8PathBuf;
+use anyhow::Result;
 use insta::assert_snapshot;
-use proptest::prelude::*;
 use rstest::rstest;
 
-use crate::ast::Recipe;
-use crate::graph_view::render::GraphRenderer;
-use crate::graph_view::render_dot::DotRenderer;
-use crate::graph_view::render_html::HtmlRenderer;
-use crate::ir::{Action, BuildEdge, BuildGraph};
+use crate::ir::BuildGraph;
 use crate::snapshot_test_support::snapshot_settings;
 
 use super::{EdgeClass, GraphView, NodeKind};
 
-fn make_action(description: Option<&str>) -> Action {
-    Action {
-        recipe: Recipe::Command {
-            command: "echo".into(),
-        },
-        description: description.map(str::to_owned),
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    }
-}
+#[path = "tests_property.rs"]
+mod property;
+#[path = "tests_support.rs"]
+mod support;
 
-fn p(s: &str) -> Utf8PathBuf {
-    Utf8PathBuf::from(s)
-}
-
-fn render_dot(view: &GraphView) -> String {
-    let mut out = Vec::new();
-    DotRenderer::new()
-        .render(view, &mut out)
-        .expect("render DOT graph");
-    String::from_utf8(out).expect("DOT renderer emits UTF-8")
-}
-
-fn render_html(view: &GraphView) -> String {
-    let mut out = Vec::new();
-    HtmlRenderer::new(Some("en-US"))
-        .render(view, &mut out)
-        .expect("render HTML graph");
-    String::from_utf8(out).expect("HTML renderer emits UTF-8")
-}
-
-#[derive(Default, Clone, Copy)]
-struct EdgeFixture<'a> {
-    action_id: &'a str,
-    inputs: &'a [&'a str],
-    implicit_deps: &'a [&'a str],
-    explicit_outputs: &'a [&'a str],
-    implicit_outputs: &'a [&'a str],
-    order_only_deps: &'a [&'a str],
-    phony: bool,
-    always: bool,
-}
-
-fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
-    let edge = BuildEdge {
-        action_id: fixture.action_id.into(),
-        inputs: fixture.inputs.iter().map(|s| p(s)).collect(),
-        implicit_deps: fixture.implicit_deps.iter().map(|s| p(s)).collect(),
-        explicit_outputs: fixture.explicit_outputs.iter().map(|s| p(s)).collect(),
-        implicit_outputs: fixture.implicit_outputs.iter().map(|s| p(s)).collect(),
-        order_only_deps: fixture.order_only_deps.iter().map(|s| p(s)).collect(),
-        phony: fixture.phony,
-        always: fixture.always,
-    };
-    for out in &edge.explicit_outputs {
-        graph.targets.insert(out.clone(), edge.clone());
-    }
-    for out in &edge.implicit_outputs {
-        graph.targets.insert(out.clone(), edge.clone());
-    }
-}
+use support::{EdgeFixture, add_edge, make_action, p, render_dot, render_html};
 
 #[test]
 fn empty_graph_yields_empty_view() {
@@ -399,156 +339,21 @@ fn golden_graph_view() -> GraphView {
 }
 
 #[test]
-fn golden_dot_output_matches_snapshot() {
+fn golden_dot_output_matches_snapshot() -> Result<()> {
     let view = golden_graph_view();
+    let dot = render_dot(&view)?;
     snapshot_settings("graph").bind(|| {
-        assert_snapshot!("golden_dot", render_dot(&view));
+        assert_snapshot!("golden_dot", dot);
     });
+    Ok(())
 }
 
 #[test]
-fn golden_html_output_matches_snapshot() {
+fn golden_html_output_matches_snapshot() -> Result<()> {
     let view = golden_graph_view();
+    let html = render_html(&view)?;
     snapshot_settings("graph").bind(|| {
-        assert_snapshot!("golden_html", render_html(&view));
+        assert_snapshot!("golden_html", html);
     });
-}
-
-fn build_graph_from_edge_specs(
-    actions: &[(String, Option<String>)],
-    edge_specs: &[EdgeSpec],
-) -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    for (id, desc) in actions {
-        graph
-            .actions
-            .insert(id.clone(), make_action(desc.as_deref()));
-    }
-    for spec in edge_specs {
-        let inputs: Vec<&str> = spec.inputs.iter().map(String::as_str).collect();
-        let implicit_deps: Vec<&str> = spec.implicit_deps.iter().map(String::as_str).collect();
-        let explicit_outputs: Vec<&str> =
-            spec.explicit_outputs.iter().map(String::as_str).collect();
-        let implicit_outputs: Vec<&str> =
-            spec.implicit_outputs.iter().map(String::as_str).collect();
-        let order_only_deps: Vec<&str> = spec.order_only_deps.iter().map(String::as_str).collect();
-        add_edge(
-            &mut graph,
-            EdgeFixture {
-                action_id: &spec.action_id,
-                inputs: &inputs,
-                implicit_deps: &implicit_deps,
-                explicit_outputs: &explicit_outputs,
-                implicit_outputs: &implicit_outputs,
-                order_only_deps: &order_only_deps,
-                phony: false,
-                always: false,
-            },
-        );
-    }
-    graph
-}
-
-#[derive(Debug, Clone)]
-struct EdgeSpec {
-    action_id: String,
-    inputs: Vec<String>,
-    implicit_deps: Vec<String>,
-    explicit_outputs: Vec<String>,
-    implicit_outputs: Vec<String>,
-    order_only_deps: Vec<String>,
-}
-
-fn arb_path() -> impl Strategy<Value = String> {
-    "[a-d]{1,3}".prop_map(String::from)
-}
-
-fn arb_edge_spec(action_id: String) -> impl Strategy<Value = EdgeSpec> {
-    (
-        prop::collection::vec(arb_path(), 0..3),
-        prop::collection::vec(arb_path(), 0..2),
-        prop::collection::vec(arb_path(), 1..3),
-        prop::collection::vec(arb_path(), 0..2),
-        prop::collection::vec(arb_path(), 0..2),
-    )
-        .prop_map(
-            move |(inputs, implicit_deps, explicit_outputs, implicit_outputs, order_only_deps)| {
-                EdgeSpec {
-                    action_id: action_id.clone(),
-                    inputs,
-                    implicit_deps,
-                    explicit_outputs,
-                    implicit_outputs,
-                    order_only_deps,
-                }
-            },
-        )
-}
-
-fn arb_graph_inputs() -> impl Strategy<Value = (Vec<(String, Option<String>)>, Vec<EdgeSpec>)> {
-    prop::collection::vec(0u8..4, 1..4).prop_flat_map(|action_ids| {
-        let actions: Vec<(String, Option<String>)> = action_ids
-            .into_iter()
-            .enumerate()
-            .map(|(i, _)| (format!("a{i}"), Some(format!("desc-{i}"))))
-            .collect();
-        let edge_strategies: Vec<_> = actions
-            .iter()
-            .map(|(id, _)| arb_edge_spec(id.clone()))
-            .collect();
-        let actions_clone = actions.clone();
-        edge_strategies.prop_map(move |edges| (actions_clone.clone(), edges))
-    })
-}
-
-proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 256,
-        .. ProptestConfig::default()
-    })]
-
-    /// Property: `GraphView` is invariant under non-deterministic insertion
-    /// order. The same logical graph projected through two distinct
-    /// construction sequences must produce equal views.
-    #[test]
-    fn graphview_is_insertion_order_invariant(
-        (actions, raw_edges) in arb_graph_inputs(),
-    ) {
-        // `BuildGraph::targets` is keyed by output path: any two edges
-        // sharing an output collide at insertion time, which `from_manifest`
-        // rejects as `DuplicateOutput`. Filter the generator's input space
-        // to the realistic case where outputs are globally disjoint.
-        let mut owned_outputs = std::collections::BTreeSet::new();
-        let edges: Vec<_> = raw_edges
-            .into_iter()
-            .filter(|e| {
-                let mut all = e.explicit_outputs.clone();
-                all.extend(e.implicit_outputs.iter().cloned());
-                if all.iter().any(|o| owned_outputs.contains(o)) {
-                    return false;
-                }
-                for o in &all {
-                    owned_outputs.insert(o.clone());
-                }
-                true
-            })
-            .collect();
-
-        let mut reversed_actions = actions.clone();
-        reversed_actions.reverse();
-        let mut reversed_edges = edges.clone();
-        reversed_edges.reverse();
-
-        // Each call constructs fresh `HashMap`s with independent
-        // `RandomState` seeds; combined with the reversed insertion order,
-        // any leak of iteration ordering into `GraphView` shows up here.
-        let g_forward = build_graph_from_edge_specs(&actions, &edges);
-        let g_reversed = build_graph_from_edge_specs(&reversed_actions, &reversed_edges);
-
-        let view_a = GraphView::from_build_graph(&g_forward);
-        let view_b = GraphView::from_build_graph(&g_reversed);
-        prop_assert_eq!(&view_a, &view_b);
-        prop_assert_eq!(render_dot(&view_a), render_dot(&view_b));
-        prop_assert_eq!(render_html(&view_a), render_html(&view_b));
-    }
+    Ok(())
 }
