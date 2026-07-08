@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use mockable::{DefaultEnv, Env, MockEnv};
-use ninja_env::NINJA_ENV;
+use netsuke::runner::NINJA_ENV;
 use std::{
     collections::HashMap,
     ffi::{OsStr, OsString},
@@ -262,7 +262,7 @@ impl std::fmt::Debug for NinjaEnvGuard {
 /// # Examples
 ///
 /// ```
-/// use ninja_env::NINJA_ENV;
+/// use netsuke::runner::NINJA_ENV;
 /// use test_support::env::{SystemEnv, override_ninja_env};
 ///
 /// let env = SystemEnv::new();

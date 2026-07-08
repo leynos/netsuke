@@ -41,7 +41,7 @@ fn install_test_ninja(
     let previous = ninja_guard.original_ref().cloned();
     *world.ninja_env_guard.borrow_mut() = Some(ninja_guard);
     world.track_env_var(
-        ninja_env::NINJA_ENV.to_owned(),
+        netsuke::runner::NINJA_ENV.to_owned(),
         previous,
         Some(ninja_path_os),
     );

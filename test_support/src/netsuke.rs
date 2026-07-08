@@ -5,7 +5,7 @@
 //! capturing stdout/stderr for assertions.
 
 use anyhow::{Context, Result, ensure};
-use ninja_env::NINJA_ENV;
+use netsuke::runner::NINJA_ENV;
 use std::path::Path;
 use std::path::PathBuf;
 

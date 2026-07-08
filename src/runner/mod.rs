@@ -28,7 +28,17 @@ use tracing::{debug, info};
 /// Default Ninja executable to invoke.
 pub const NINJA_PROGRAM: &str = "ninja";
 /// Environment variable override for the Ninja executable.
-pub use ninja_env::NINJA_ENV;
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use netsuke::runner::NINJA_ENV;
+///
+/// if let Ok(ninja) = std::env::var(NINJA_ENV) {
+///     println!("using ninja override: {ninja}");
+/// }
+/// ```
+pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
 mod path_helpers;

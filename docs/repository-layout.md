@@ -23,7 +23,6 @@ output and some leaf files so the long-lived structure remains visible.
 │   └── hello-world/
 ├── installer/
 ├── locales/
-├── ninja_env/
 ├── scripts/
 ├── src/
 │   ├── cli/
@@ -71,7 +70,6 @@ output and some leaf files so the long-lived structure remains visible.
   definitions.
 - `locales/`: Fluent localization catalogues for supported user-interface
   languages.
-- `ninja_env/`: Supporting crate for Ninja-related environment handling.
 - `scripts/`: Shell and helper scripts used by quality gates, release help
   generation, packaging, and formal checks.
 - `src/`: Main Netsuke Rust crate source code.

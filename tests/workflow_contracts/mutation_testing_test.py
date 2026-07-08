@@ -4,9 +4,9 @@ The executable logic lives in the ``leynos/shared-actions`` reusable
 workflow, which carries its own unit and integration tests; netsuke's
 caller is declarative configuration. These tests parse the caller with
 PyYAML and pin the contract it must uphold, so drift (repointing the pin
-at a branch, widening permissions, or losing the ninja_env target, the
-Kani-module excludes, or the feature args) fails CI on the pull request
-rather than surfacing in a scheduled or manual run.
+at a branch, widening permissions, or losing the Kani-module excludes or
+the feature args) fails CI on the pull request rather than surfacing in
+a scheduled or manual run.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -41,7 +41,6 @@ KANI_EXCLUDES = (
 #: The exact caller configuration; assert the whole block so an added or
 #: dropped input fails loudly.
 EXPECTED_WITH = {
-    "extra-crate-dirs": "ninja_env",
     "exclude-globs": ",".join(KANI_EXCLUDES),
     "extra-args": "--all-features",
 }
@@ -141,12 +140,12 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
 
 
 def test_with_block_carries_the_caller_configuration() -> None:
-    """The caller passes exactly the ninja_env target, excludes, and args."""
+    """The caller passes exactly the Kani excludes and feature args."""
     with_block = _mutation_job(_load()).get("with")
     assert isinstance(with_block, dict), "jobs.mutation.with is missing"
     assert with_block == EXPECTED_WITH, (
         "jobs.mutation.with must be exactly the documented configuration "
-        f"(ninja_env as an extra crate, the #[cfg(kani)] module excludes, "
-        f"and --all-features to match the CI baseline); expected "
+        f"(the #[cfg(kani)] module excludes and --all-features to match "
+        f"the CI baseline); expected "
         f"{EXPECTED_WITH!r}, got {with_block!r}"
     )

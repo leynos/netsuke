@@ -1434,7 +1434,6 @@ dependencies = [
  "minijinja",
  "mockable",
  "mockall",
- "ninja_env",
  "ortho_config",
  "predicates 3.1.3",
  "proptest",
@@ -1475,10 +1474,6 @@ name = "newt-hype"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c8b7b69b0eafaa88ec8dc9fe7c3860af0a147517e5207cfbd0ecd21cd7cde18"
-
-[[package]]
-name = "ninja_env"
-version = "0.1.0"
 
 [[package]]
 name = "nohash-hasher"
@@ -2636,7 +2631,6 @@ dependencies = [
  "cap-std",
  "mockable",
  "netsuke",
- "ninja_env",
  "rstest",
  "sha2",
  "tempfile",

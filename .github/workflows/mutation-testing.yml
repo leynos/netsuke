@@ -28,11 +28,8 @@ jobs:
       id-token: write # OIDC workflow-source resolution
     uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@47aea18960d24f33aedc4782ec6b73e365418313
     with:
-      # Path dependency outside the root package's workspace; its
-      # coverage lives mainly in the root crate's tests, so treat its
-      # survivors table as advisory. test_support is deliberately
-      # omitted: it is a test-fixture crate whose survivors are noise.
-      extra-crate-dirs: "ninja_env"
+      # test_support is deliberately omitted from extra crates: it is a
+      # test-fixture crate whose survivors are noise.
       # Kani-only verification modules gated behind #[cfg(kani)] mod
       # declarations; cargo-mutants does not evaluate that cfg, so
       # mutants there would compile to nothing and survive as noise.

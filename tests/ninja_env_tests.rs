@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use mockable::MockEnv;
-use ninja_env::NINJA_ENV;
+use netsuke::runner::NINJA_ENV;
 use rstest::{fixture, rstest};
 use serial_test::serial;
 use std::path::PathBuf;
