@@ -55,7 +55,10 @@ fn build_graph_from_edge_specs(
 }
 
 fn arb_path() -> impl Strategy<Value = String> {
-    "[a-d]{1,3}".prop_map(String::from)
+    // Draw from a wide alphabet and length range so output-path collisions are
+    // rare; the disjoint-output filter in the invariance property otherwise
+    // discards most multi-edge cases.
+    "[a-zA-Z0-9]{1,8}".prop_map(String::from)
 }
 
 fn arb_edge_spec(action_id: String) -> impl Strategy<Value = EdgeSpec> {
