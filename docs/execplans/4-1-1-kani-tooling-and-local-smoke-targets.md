@@ -39,7 +39,7 @@ job and substantive proof harnesses.
   repository files.
 - Keep Makefile additions consistent with the current target style: variables
   near the top, `.PHONY` declarations, target descriptions using `##`, and
-  recipes that honour overrideable variables.
+  recipes that honour overridable variables.
 - Preserve the existing OrthoConfig and localized CLI help surfaces. This
   item adds developer tooling, not a user-facing Netsuke subcommand or flag.
 - If any Kani-specific Rust source is introduced later during implementation,
@@ -379,7 +379,7 @@ environment variable such as `KANI_HOME` that callers may set; do not force an
 isolated cache by default.
 
 Stage C adds the Makefile targets. Extend the `.PHONY` line with `kani`,
-`kani-full`, and `formal-pr`. Add overrideable variables near the top, for
+`kani-full`, and `formal-pr`. Add overridable variables near the top, for
 example `KANI ?= cargo kani`, `KANI_FLAGS ?=`, and, if useful,
 `KANI_SMOKE_FLAGS ?= --no-default-checks` only after confirming the flag is
 valid for the pinned version. `make kani` must be the fast smoke target.

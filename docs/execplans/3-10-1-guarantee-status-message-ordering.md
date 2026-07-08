@@ -277,7 +277,7 @@ model provides the necessary ordering guarantees.
 2. **Status messages do not contaminate stdout in standard mode**: Verifies
    stream routing in non-accessible mode using the same stable markers.
 
-3. **Build artifacts can be captured via stdout redirection**: Verifies that
+3. **Build artefacts can be captured via stdout redirection**: Verifies that
    `netsuke manifest -` output goes to stdout without status contamination.
 
 Supporting infrastructure added:

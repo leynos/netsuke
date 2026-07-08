@@ -30,7 +30,7 @@ internal typed resolver error. The resolver returns
 `false` for those cases only.
 
 `command_available` therefore treats command absence as data and still treats
-argument misuse, canonicalisation failures, workspace encoding failures, and
+argument misuse, canonicalization failures, workspace encoding failures, and
 current-directory failures as errors.
 
 ## Rationale

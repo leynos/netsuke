@@ -226,7 +226,7 @@ Ninja file text respectively.
 
 Some `Display` implementations in Netsuke call `localization::message(...)`, so
 their output varies with the active locale.  A snapshot test that exercises
-such output must hold both the global localizer serialisation mutex and a
+such output must hold both the global localizer serialization mutex and a
 `LocalizerGuard` for the entire duration of the assertion; otherwise concurrent
 tests may install a different locale and produce non-deterministic output.
 
@@ -244,7 +244,7 @@ fields, so the compiler keeps them alive until the bundle is dropped.
 ### Wiring with rstest
 
 Import the shared type and fixture, accept it as a parameter in `#[rstest]`
-tests, and bind it immediately so the compiler recognises the RAII intent:
+tests, and bind it immediately so the compiler recognizes the RAII intent:
 
 ```rust
 use rstest::rstest;
@@ -261,7 +261,7 @@ fn my_locale_sensitive_snapshot(en_localizer: EnLocalizer) {
 ```
 
 Both guards are released when `_en_localizer` is dropped at the end of the test
-function, serialising locale state across the test suite.
+function, serializing locale state across the test suite.
 
 ### Relevant utilities
 
@@ -272,7 +272,7 @@ function, serialising locale state across the test suite.
 - `test_support::LocalizerGuard` — opaque guard returned by
   `set_en_localizer()`; dropping it uninstalls the locale.
 - `test_support::localizer_test_lock()` — acquires the global mutex that
-  serialises all locale mutations across concurrent test threads.
+  serializes all locale mutations across concurrent test threads.
 - `test_support::set_en_localizer()` — installs `en-US` as the active locale
   and returns a `LocalizerGuard`.
 

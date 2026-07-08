@@ -76,7 +76,7 @@ them requires escalation, not a workaround.
 3. **Deterministic output.** Same input must yield byte-identical output.
    `HashMap` iteration is the dominant source of non-determinism in
    [`src/ir/graph.rs`](../../src/ir/graph.rs); the new `GraphView` projection
-   must canonicalise sort order at the IR boundary, mirroring
+   must canonicalize sort order at the IR boundary, mirroring
    [`src/ninja_gen.rs`](../../src/ninja_gen.rs) which already sorts before
    emission.
 4. **Hexagonal boundaries.** Render code is an adapter, not a domain
@@ -181,7 +181,7 @@ proceeds.
 
 - Risk: HTML rendering for very large graphs (thousands of edges) makes
   the page slow or unreadable. Severity: medium. Likelihood: medium for
-  monorepo users, low for typical projects. Mitigation: bound visualisation via
+  monorepo users, low for typical projects. Mitigation: bound visualization via
   the upcoming `--target` and `--depth` flags (roadmap item `3.15.6`); for this
   plan, stub the boundary in the `GraphView` constructor and document the
   bounding behaviour as deferred. Emit a truncation hint in the HTML if the
@@ -451,10 +451,10 @@ contribute today are:
   in-process renderer.
 
 - [`src/runner/process/file_io.rs`](../../src/runner/process/file_io.rs) —
-  cap-std-based file writers. `is_stdout_path` recognises the `-` sentinel;
+  cap-std-based file writers. `is_stdout_path` recognizes the `-` sentinel;
   `write_ninja_file` performs the existing create/write/sync sequence with
   parent-directory creation; `write_ninja_stdout` writes to a locked stdout
-  handle. These helpers must be generalised to take arbitrary text content, not
+  handle. These helpers must be generalized to take arbitrary text content, not
   just `NinjaContent`.
 
 - [`src/runner/path_helpers.rs`](../../src/runner/path_helpers.rs) —
@@ -553,7 +553,7 @@ will consume. No user-visible behaviour change. Pure scaffolding.
      graphs, and multi-edge fan-in/fan-out.
    - `proptest` confirming `GraphView::from_build_graph` produces equal
      views for inputs whose `HashMap` insertion order differs (force this
-     by inserting into a fresh `BuildGraph` in a randomised order).
+     by inserting into a fresh `BuildGraph` in a randomized order).
 
 5. Wire the new module into [`src/lib.rs`](../../src/lib.rs) so the
    build-time audit picks up any new symbols.
@@ -629,14 +629,14 @@ add the shared `--output` flag.
      - `None` or `Some("-")` ⇒ stdout sink obtained via
        `io::stdout().lock()`.
      - `Some(path)` ⇒ resolved via `resolve_output_path`, written via a
-       new generalised `write_text_file(path, content)` derived from
+       new generalized `write_text_file(path, content)` derived from
        [`write_ninja_file`](../../src/runner/process/file_io.rs).
    - Calls `renderer.render(&view, &mut sink)`.
    - Reports completion via the existing `report_complete` channel using
      a new localization key `STATUS_TOOL_GRAPH` (already present) plus a
      new `STATUS_TOOL_GRAPH_HTML` for the HTML variant.
 
-5. Generalise `write_ninja_file` and `write_ninja_stdout` into
+5. Generalize `write_ninja_file` and `write_ninja_stdout` into
    `write_text_file` and `write_text_stdout` accepting `&str`. Keep
    `NinjaContent`-typed thin wrappers for existing callers so the change to
    `manifest`/`build --emit` is mechanical.
@@ -970,7 +970,7 @@ Behaviour-level acceptance (the user-observable contract):
    `/tmp/x.html`.
 6. Opening `/tmp/x.html` in any modern browser with no network access
    shows the dependency graph as an SVG plus an outline list.
-7. Disabling JavaScript in the browser does not break the visualisation;
+7. Disabling JavaScript in the browser does not break the visualization;
    the outline list remains rendered.
 8. `netsuke -C tests/data graph --output graph.dot` writes to
    `tests/data/graph.dot`.
@@ -980,7 +980,7 @@ Behaviour-level acceptance (the user-observable contract):
 Quality method:
 
 - Unit tests under `src/graph_view/tests.rs` and renderer-specific test
-  modules, parametrised with `rstest`.
+  modules, parametrized with `rstest`.
 - Snapshot tests under `src/snapshots/graph/`.
 - Property test with `proptest` asserting `GraphView` and renderer output
   are invariant under `HashMap`-insertion shuffles.
@@ -1156,7 +1156,7 @@ pub struct DotRenderer;
 impl crate::graph_view::render::GraphRenderer for DotRenderer { /* ... */ }
 ```
 
-End of Stage B — generalised file IO in `src/runner/process/file_io.rs`:
+End of Stage B — generalized file IO in `src/runner/process/file_io.rs`:
 
 ```rust
 pub fn write_text_file(path: &Path, content: &str) -> AnyResult<()>;

@@ -138,7 +138,7 @@ work around them.
   case in red first and confirm the failure mode before fixing it, so a quiet
   regression cannot hide behind a green suite.
 
-- Risk: Windows-only paths (`PATHEXT`, drive letters, backslash normalisation)
+- Risk: Windows-only paths (`PATHEXT`, drive letters, backslash normalization)
   are difficult to exercise on the Linux CI runner the agent uses for local
   validation. Severity: medium. Likelihood: high. Mitigation: gate the
   Windows-specific cases with `#[cfg(windows)]`, write them so they compile on
@@ -155,7 +155,7 @@ work around them.
 
 - Risk: the message-construction path moves through a `From` impl rather than
   inline `Error::new` calls, which makes a one-character drift (a stray full
-  stop, a re-ordered variable, a locale capitalisation change) easy to ship
+  stop, a re-ordered variable, a locale capitalization change) easy to ship
   undetected. Severity: high. Likelihood: medium. Mitigation: capture `insta`
   snapshots of every existing `which` diagnostic in Milestone 1 *before* the
   refactor and treat any drift as a Milestone 2 failure (see the
@@ -209,7 +209,7 @@ The stdlib resolver lives in `src/stdlib/which`:
   `Result<Vec<Utf8PathBuf>, ResolveError>`; the registration site converts to
   `minijinja::Error` once.
 - `lookup/mod.rs` is the search engine; `handle_miss` is where absence is
-  recognised. The refactor changes the return type but not the algorithm.
+  recognized. The refactor changes the return type but not the algorithm.
 - `options.rs` defines `WhichOptions` and `CwdMode`. No change required.
 - `lookup/workspace/` implements the workspace fallback walker. No change
   required.
@@ -443,7 +443,7 @@ pub(super) enum ResolveError {
 
 The variants exactly correspond to the existing `Error` constructions in
 `error.rs`. Move the existing constructors (`not_found_error`,
-`direct_not_found`, `args_error`, the canonicalise error site, and the
+`direct_not_found`, `args_error`, the `canonicalise` error site, and the
 workspace non-UTF-8 site in `lookup/workspace/mod.rs`) so they return
 `ResolveError` rather than `minijinja::Error`. Delete `is_not_found_error`
 entirely; nothing should string-match the error message after this milestone.
@@ -655,7 +655,7 @@ Cross-platform gate before merge:
 
 - The repository's Windows CI matrix must report green for the new
   `#[cfg(windows)]` cases (`PATHEXT`, drive-letter direct paths, backslash
-  normalisation). The agent runs on Linux and cannot execute these locally; do
+  normalization). The agent runs on Linux and cannot execute these locally; do
   not tick the roadmap entry until the Windows CI job on the open PR passes. If
   the Windows job is missing, treat that as a Tolerance breach and escalate.
 
@@ -930,7 +930,7 @@ None recorded yet. Append observations during implementation with the evidence
   wedged; the successful Milestone 2 final review eventually reported
   `findings: 0`.
 - 2026-06-13: The first PR-ready review caught that `ResolveError` was typed
-  but still owned MiniJinja conversion and localised rendering. Impact:
+  but still owned MiniJinja conversion and localized rendering. Impact:
   `ResolveError` is now data plus low-cardinality category only; MiniJinja
   conversion lives in `src/stdlib/which/mod.rs`.
 - 2026-06-13: The same review flagged unbounded command names in resolver
@@ -994,7 +994,7 @@ None recorded yet. Append observations during implementation with the evidence
 - 2026-06-13: moved `From<ResolveError> for minijinja::Error` from
   `src/stdlib/which/resolve_error.rs` to `src/stdlib/which/mod.rs`. Rationale:
   the resolver error model should be framework-agnostic data at the domain
-  boundary; only the MiniJinja registration adapter should render localised
+  boundary; only the MiniJinja registration adapter should render localized
   messages or choose `ErrorKind`.
 - 2026-06-13: added the `metrics` facade dependency and instrumented
   `WhichResolver` with counters for cache outcomes and resolution outcomes.
@@ -1014,7 +1014,7 @@ direct-path absence, and continues to raise the existing `which::args`
 diagnostics for misuse. The implementation no longer string-matches rendered
 error text; `WhichResolver::resolve` returns a typed `ResolveError`, and the
 MiniJinja adapter boundary converts that typed error into the existing
-localised diagnostics.
+localized diagnostics.
 
 The user-facing contract is documented in `docs/users-guide.md` and
 `docs/netsuke-design.md`, with the internal typed-error decision captured in

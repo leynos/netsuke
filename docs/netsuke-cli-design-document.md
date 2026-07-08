@@ -206,7 +206,7 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   clean, etc.) are non-interactive batch processes initiated by a single
   command, which aligns with keyboard-only usage.
 
-- **No Reliance on Color Alone:** Netsuke supports monochrome terminals and
+- **No Reliance on Colour Alone:** Netsuke supports monochrome terminals and
   users who cannot perceive colour. Any information conveyed with colour is
   **also conveyed in text or symbol form**[^1]. For example, if a successful
   build is indicated with a green message or a ✅ check mark, the text also
@@ -793,7 +793,7 @@ unified `config` object with all settings resolved in the right precedence.
   makes Netsuke always verbose unless `--quiet` is passed. Or a user who
   dislikes any extra output can set `quiet = true` globally.
 
-- **Color Theme:** Users can decide if they always want colour or never. For
+- **Colour Theme:** Users can decide if they always want colour or never. For
   instance, in some continuous integration setups, the terminal might actually
   support colour but they still prefer plain text logs – setting
   `color = "never"` in config handles that. Conversely, if someone’s workflow
@@ -908,7 +908,7 @@ like introspection commands and diagnostic modes come into play.
   immediately goes into building with intuitive output. The user sees a
   spinner/progress and a success message. If something is misconfigured (like
   no manifest), the error message gently guides them, as discussed earlier.
-  This positive first experience (immediate feedback, either a built artifact
+  This positive first experience (immediate feedback, either a built artefact
   or a clear next step) builds the user’s trust. They can also run
   `netsuke --help` to see available commands, which is formatted for quick
   scanning (each subcommand and flag is explained in a sentence). At this
@@ -929,7 +929,7 @@ like introspection commands and diagnostic modes come into play.
 - **Exploring Other Subcommands:** As the user becomes more comfortable, they
   may try the other subcommands Netsuke offers:
 
-- `netsuke clean`: They run this to clear build artifacts. The CLI prints a
+- `netsuke clean`: They run this to clear build artefacts. The CLI prints a
   short confirmation message (“Build directory cleaned”) or any relevant info
   from Ninja’s clean command. It’s straightforward.
 

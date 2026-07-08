@@ -51,6 +51,8 @@ jobs:
           enable-cache: true
       - name: Workflow contract tests
         run: make test-workflow-contracts
+      - name: Typos config drift test
+        run: make test-typos-config
       - name: Test
         run: make test
       - name: Test and Measure Coverage

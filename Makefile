@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-workflow-contracts build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
+.PHONY: help all clean test test-workflow-contracts test-typos-config build release lint fmt check-fmt typecheck markdownlint nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr
 
 APP ?= netsuke
 CARGO ?= $(shell command -v cargo 2>/dev/null || printf '%s' "$$HOME/.cargo/bin/cargo")
@@ -11,6 +11,16 @@ KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
 MDLINT ?= $(shell command -v markdownlint-cli2 2>/dev/null || printf '%s' "$$HOME/.bun/bin/markdownlint-cli2")
 NIXIE ?= nixie
+# Single source of truth for the typos version; the markdownlint target and CI
+# both consume it, so the Makefile and CI cannot drift apart.
+TYPOS_VERSION ?= 1.48.0
+TYPOS ?= uv tool run typos@$(TYPOS_VERSION)
+# Markdown files, excluding build output and tool caches. CRUSH.md is a symlink
+# to AGENTS.md, so `-type f` skips it and avoids double-checking the same prose.
+MD_FILES_FIND = find . -type f -name '*.md' \
+	-not -path './target/*' -not -path './.venv/*' \
+	-not -path './.uv-cache/*' -not -path './.uv-tools/*' \
+	-not -path './node_modules/*' -print0
 PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
@@ -33,6 +43,9 @@ test: ## Run tests with warnings treated as errors
 test-workflow-contracts: ## Validate the mutation-testing caller contract
 	uv run --with 'pytest>=8' --with 'pyyaml>=6' pytest tests/workflow_contracts -q
 
+test-typos-config: ## Verify typos.toml matches its generator
+	uv run --with 'pytest>=8' --with 'hypothesis>=6' pytest scripts/tests -q
+
 target/%/$(APP): ## Build binary in debug or release mode
 	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release) --bin $(APP)
 
@@ -50,8 +63,10 @@ check-fmt: ## Verify formatting
 typecheck: ## Typecheck all targets and features
 	RUSTFLAGS="-D warnings" $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
 
-markdownlint: ## Lint Markdown files
+markdownlint: ## Lint Markdown and enforce en-GB-oxendict spelling
 	$(MDLINT) "**/*.md"
+	@printf 'typos: version=%s config=typos.toml\n' '$(TYPOS_VERSION)' >&2
+	$(MD_FILES_FIND) | xargs -0 $(TYPOS) --config typos.toml --force-exclude
 
 nixie: ## Validate Mermaid diagrams
 	nixie --no-sandbox

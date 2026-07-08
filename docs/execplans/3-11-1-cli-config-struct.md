@@ -15,7 +15,7 @@ Roadmap item `3.11.1` asks for a dedicated `CliConfig` struct derived with
 configuration. This plan now targets `ortho_config` `0.8.0` and uses the
 repository copy of `docs/ortho-config-users-guide.md`, which has been replaced
 with the upstream `v0.8.0` guide. At planning time the repository already had
-partial layered configuration, but it was centered on `src/cli/mod.rs`, where
+partial layered configuration, but it was centred on `src/cli/mod.rs`, where
 `Cli` served three roles at once:
 
 1. Clap parser.

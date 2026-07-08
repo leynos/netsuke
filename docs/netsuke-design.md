@@ -22,7 +22,7 @@ builds as fast as possible.[^2]
 
 This design choice by Ninja's authors necessitates the existence of a higher-
 
-level generator tool. Netsuke fulfills this role. It provides a rich,
+level generator tool. Netsuke fulfils this role. It provides a rich,
 user-friendly language (YAML with Jinja) for describing the *what* and *why* of
 a build--the project's structure, its logical rules, and its configurable
 parameters. Netsuke's primary responsibility is to compile this high-level
@@ -1184,7 +1184,7 @@ Implementation notes:
 - Filters rely on `cap-std` directories opened with ambient authority for
   file-system work. Callers must ensure that templates granted access to the
   stdlib are trusted to read from the process' working tree.
-- `realpath` canonicalises the parent directory before joining the resolved
+- `realpath` canonicalizes the parent directory before joining the resolved
   entry so results are absolute and symlink-free.
 - `contents` and `linecount` currently support UTF-8 input; other encodings are
   rejected with an explicit error. `contents` streams data from the ambient
@@ -1284,7 +1284,7 @@ The resolver returns an internal typed result that separates absence from
 misuse and infrastructure failure. The MiniJinja registration boundary maps
 that result in two ways: `which` converts every resolver error into the existing
 `minijinja::Error` diagnostics, while `command_available` converts only search
-misses and direct-path misses to `false`. Argument, canonicalisation,
+misses and direct-path misses to `false`. Argument, canonicalization,
 workspace, and current-directory failures still become errors. This keeps
 absence detection in the resolver port and prevents manifest, AST, IR, Ninja,
 or CLI layers from matching user-visible diagnostic text.
@@ -1292,7 +1292,7 @@ or CLI layers from matching user-visible diagnostic text.
 | Kwarg       | Default | Resolver effect                                                                                                 |
 | ----------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `all`       | `false` | Collects every match for `which`; accepted by the predicate but the bool only records whether any match exists. |
-| `canonical` | `false` | Canonicalises and de-duplicates matches before returning them.                                                  |
+| `canonical` | `false` | Canonicalizes and de-duplicates matches before returning them.                                                  |
 | `fresh`     | `false` | Bypasses the cache for this lookup and stores the refreshed result.                                             |
 | `cwd_mode`  | `auto`  | Controls current-directory search with `auto`, `always`, or `never`.                                            |
 
@@ -1365,7 +1365,7 @@ sequenceDiagram
 Workspace traversal honours a configurable skip list to avoid expensive scans
 of tool caches and IDE metadata. The default skips `.git`, `target`,
 `node_modules`, `.idea`, and `.vscode`, and callers can replace the list via
-`StdlibConfig::with_workspace_skip_dirs`. Entries are normalised
+`StdlibConfig::with_workspace_skip_dirs`. Entries are normalized
 case-insensitively on Windows so users can pass either casing without surprises.
 
 Structural view of the which module and configuration wiring:
@@ -2033,7 +2033,7 @@ The command construction will follow this pattern:
    will also be passed through.[^8]
 
 3. The working directory for the Ninja process will be set using
-   `.current_dir()`. When the user supplies a `-C` flag, Netsuke canonicalises
+   `.current_dir()`. When the user supplies a `-C` flag, Netsuke canonicalizes
    the path and applies it via `current_dir` rather than forwarding the flag to
    Ninja.
 
@@ -2099,7 +2099,7 @@ The concept of being "friendlier" than `make` extends beyond syntactic sugar to
 encompass safety and reliability. A tool that is easy to use but exposes the
 user to trivial security vulnerabilities is fundamentally unfriendly. In many
 build systems, the burden of correct shell quoting falls on the user, an
-error-prone task that requires specialised knowledge.
+error-prone task that requires specialized knowledge.
 
 Netsuke's design elevates security to a core feature by making it automatic and
 transparent. The user writes a simple, unquoted command template, and Netsuke
@@ -2760,7 +2760,7 @@ Astral's Python package manager (uv) with `astral-sh/setup-uv`, double-checks
 the tool is present, and only then launches the Python entry point so workflows
 stay declarative. The helper writes SHA-256 sums for every staged file and
 exports a JSON map of the artefact outputs, allowing the workflow to hydrate
-downstream steps without hard-coded path logic. Figure 8.1 summarises the
+downstream steps without hard-coded path logic. Figure 8.1 summarizes the
 configuration entities, including optional keys reserved for templated
 directories and explicit artefact destinations that the helper can adopt
 without breaking compatibility.

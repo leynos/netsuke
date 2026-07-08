@@ -25,7 +25,7 @@ by Kani at bounded but exhaustive coverage:
 - self-edges and small bounded multi-node dependency cycles are always
   detected as `IrGenError::CircularDependency`,
 - references to dependencies that are not registered as targets are recorded
-  but do not synthesise a false cycle.
+  but do not synthesize a false cycle.
 
 The user-visible success criterion is operational: `make kani-full` runs a
 named set of `#[kani::proof]` harnesses to verification success, each harness
@@ -35,7 +35,7 @@ fails when its targeted production code path is deliberately broken (the Kani
 without change.
 
 This plan is approval-gated. The roadmap states the harnesses should cover "up
-to 10 nodes, depth limit 20 edges". The research summarised in
+to 10 nodes, depth limit 20 edges". The research summarized in
 `Surprises & Discoveries` shows that bound is not realistic against the real
 `std::collections::HashMap`-backed implementation at current Kani 0.67. The
 plan therefore proposes a smaller Kani harness bound and defers the larger
@@ -155,7 +155,7 @@ requires explicit user approval before implementation begins.
   keep each harness at 2-3 hash-map entries, prefer `Recipe::Rule` manifests so
   only one `Action` is hashed, and document the bound choice in the ADR.
 
-- Risk: `register_action` calls `ActionHasher::hash`, which serialises an
+- Risk: `register_action` calls `ActionHasher::hash`, which serializes an
   `Action` to JavaScript Object Notation (JSON) via `serde_json` and
   `serde_json_canonicalizer`. Symbolic execution through serde is expensive.
   Severity: high. Likelihood: medium. Mitigation: harness manifests share one
@@ -442,7 +442,7 @@ requires explicit user approval before implementation begins.
   use a small ASCII alphabet (`b"a"`, `b"b"`, `b"c"`) as identifier seeds
   rather than symbolic strings.
 
-- Observation: Rust 1.80 warns on unrecognised `cfg` names. Without
+- Observation: Rust 1.80 warns on unrecognized `cfg` names. Without
   `[lints.rust] unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }`,
   every non-Kani build emits a warning for the `#[cfg(kani)]` modules.
   Evidence: Kani issue
@@ -1255,7 +1255,7 @@ its bound or add a `#[kani::unwind(N)]` override.
 ## Artifacts and notes
 
 Captured `/tmp` logs from Stage B onward must be referenced in the PR
-description when summarising validation evidence. Each command's log lives at
+description when summarizing validation evidence. Each command's log lives at
 the `tee` path templated above.
 
 ## Open questions
@@ -1290,7 +1290,7 @@ These questions must be resolved at Stage A before implementation begins:
    in `[package.metadata.kani.flags]`. Confirm that value or specify an
    alternative.
 5. **Harness count budget.** The revised plan sketches six
-   harnesses (one duplicate, one parameterised rule-error, three cycle shapes,
+   harnesses (one duplicate, one parameterized rule-error, three cycle shapes,
    two missing-deps; the 3-node cycle harness may be dropped during Stage C
    measurement). Confirm whether that count is acceptable.
 6. **Mutation patch storage.** Confirm whether patch files under
@@ -1313,7 +1313,7 @@ The description must:
   `4.2.1`;
 - link this ExecPlan,
   `docs/execplans/4-2-1-kani-harnesses-for-manifest-to-ir-safety-checks.md`;
-- summarise the eight (or revised) named harnesses, the bound
+- summarize the eight (or revised) named harnesses, the bound
   reconciliation, and the Proptest hand-off;
 - include the captured validation evidence;
 - reference ADR-004; and
@@ -1343,7 +1343,7 @@ The references section should include:
   stubbing reframed as a contract decision, not a budget tweak. Tiered
   `make kani-ir` alias added pre-emptively. Mutation evidence stored as literal
   patch files under `docs/verification/mutations/`. Rule-error harness trio
-  collapsed into one parameterised symbolic harness. Duplicate output assertion
+  collapsed into one parameterized symbolic harness. Duplicate output assertion
   restated in input-shape terms. 3-node cycle fallback escalated as a `4.3.1`
   blocker. Verification-only collection port recast as Option C in ADR-004 with
   a tightened rejection rationale. Hexagonal-architecture seasoning trimmed
@@ -1355,7 +1355,7 @@ The references section should include:
   IMPLEMENTING, Stage A marked complete, and recommended answers to the open
   questions recorded in the Decision Log.
 - 2026-06-12: Code review response simplified manifest-to-IR message helpers
-  by centralising Kani-safe message arguments behind shared helpers and moving
+  by centralizing Kani-safe message arguments behind shared helpers and moving
   rule target display-name derivation back to `process_targets`. Thin
   string-based rule and duplicate-output error helpers remain as verifier-small
   boundaries after focused Kani runs showed that `HashMap` construction reaches

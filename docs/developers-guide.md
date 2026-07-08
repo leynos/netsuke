@@ -67,7 +67,7 @@ A new renderer — for example the `--json` view planned for roadmap item
 implements `GraphRenderer`. The runner dispatch in
 [`src/runner/mod.rs`](../src/runner/mod.rs) picks the appropriate renderer
 based on `GraphArgs` and writes through the shared `write_text_file`/
-`write_text_stdout` sink helpers. The `-` sentinel for `--output` is recognised
+`write_text_stdout` sink helpers. The `-` sentinel for `--output` is recognized
 by `process::is_stdout_path`.
 
 `--html` and `--output` are explicitly excluded from `OrthoConfig` layering:
@@ -96,6 +96,61 @@ For documentation changes, also run:
 - `make fmt`
 - `make markdownlint`
 - `make nixie`
+
+## Spelling enforcement
+
+`make markdownlint` enforces en-GB-oxendict (Oxford) spelling over the
+repository's Markdown prose with [`typos`](https://github.com/crate-ci/typos),
+as required by the [documentation style guide](documentation-style-guide.md).
+The configuration lives in the repository-root `typos.toml` and works in two
+layers:
+
+1. The `en-gb` locale corrects American spellings (`color` to `colour`,
+   `behavior` to `behaviour`, `analyzed` to `analysed`).
+2. Generated `extend-words` entries restore Oxford spelling, which the locale
+   alone would not enforce: identity entries accept `-ize` inflections that the
+   locale would otherwise "correct" to `-ise`, and `-ise` entries are corrected
+   to `-ize`. Stems taking `-yse` (`analyse`, `paralyse`) are left to the
+   locale, which already enforces them.
+
+`typos.toml` is a generated file. Never edit its entries by hand; change
+`scripts/generate_typos_config.py` and regenerate:
+
+```bash
+uv run scripts/generate_typos_config.py
+```
+
+The generator owns three maintainer-facing lists:
+
+- `STEMS` — word stems that take Oxford `-ize`. When the gate flags a
+  legitimate `-ize` word (or silently accepts its `-ise` variant) because the
+  stem is missing, add the stem here and regenerate. Do not add genuinely
+  `-ise`-only words (`advise`, `revise`, `exercise`, `supervise`).
+- `EXTRA_ACCEPTED_WORDS` — words accepted verbatim, such as suffix fragments
+  quoted in prose (`yse`, `mis`) and non-English example text (`inventario`).
+- `extend-ignore-re` patterns in `HEADER` — regions exempt from spelling
+  checks: inline code spans, fenced code blocks, tool and target names that
+  keep their upstream spelling (`rust-analyzer`, `release-artifact`), and the
+  ExecPlan template heading. Quoted APIs keep US spelling per the documentation
+  style guide, so put them in backticks rather than adding accepted words.
+
+`make markdownlint` runs the gate with `--force-exclude`, so the `typos.toml`
+excludes also apply to explicitly passed paths. To fix findings mechanically,
+rerun `typos` with `--write-changes` at the pinned version printed by
+`make markdownlint`:
+
+```bash
+uv tool run typos@<TYPOS_VERSION> --config typos.toml --force-exclude \
+  --write-changes <files>
+```
+
+Review automated rewrites before committing; spelling corrections must not
+touch code samples, API names, or quoted material.
+
+The `typos` version is pinned once in the Makefile `TYPOS_VERSION` variable and
+run through `uv tool run typos@$(TYPOS_VERSION)`, so the local gate and CI
+cannot drift. `make test-typos-config` (also run in CI) asserts that the
+committed `typos.toml` matches the generator output, so the two never diverge.
 
 ## Release help tooling
 
@@ -908,7 +963,7 @@ filter/function. It stays at the resolver boundary, reuses `WhichResolver` and
 
 Absence detection lives in the resolver port and never in manifest, AST, IR,
 Ninja, or CLI code. The predicate returns `false` only for typed search misses
-and direct-path misses; invalid arguments, canonicalisation failures, workspace
+and direct-path misses; invalid arguments, canonicalization failures, workspace
 encoding failures, and current-directory failures remain hard manifest errors.
 
 The `ResolveError` to `minijinja::Error` boundary and the

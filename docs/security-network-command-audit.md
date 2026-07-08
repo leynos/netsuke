@@ -2,7 +2,7 @@
 
 This note captures a quick security and resilience review of the helper
 functions exposed to MiniJinja templates from the `network` and `command`
-stdlib modules. Each finding summarises the observed behaviour, the risk it
+stdlib modules. Each finding summarizes the observed behaviour, the risk it
 introduces, and concrete remediation tasks that would harden the helpers.
 
 ## Network helper findings
