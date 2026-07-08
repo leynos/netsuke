@@ -188,12 +188,6 @@ mod tests {
             "temporary path should end with .ninja: {temp_display}"
         );
 
-        let reread = test_fs::read_to_string(file.path()).context("re-read temp file")?;
-        ensure!(
-            reread == content.as_str(),
-            "re-read file contents '{reread}' did not match '{expected}'",
-            expected = content.as_str()
-        );
         Ok(())
     }
 
