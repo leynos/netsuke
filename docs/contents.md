@@ -76,6 +76,8 @@ operator, user, and contributor references are easier to find.
   dry-run guidance.
 - [rust-testing-with-rstest-fixtures.md](rust-testing-with-rstest-fixtures.md):
   `rstest` fixture patterns used in the repository.
+- [whitaker-users-guide.md](whitaker-users-guide.md): Installing and
+  configuring the Whitaker Dylint lint suite enforced by `make lint`.
 - [snapshot-testing-in-netsuke-using-insta.md](snapshot-testing-in-netsuke-using-insta.md):
   Snapshot-testing strategy and examples.
 - [test-isolation-with-ninja-env.md](test-isolation-with-ninja-env.md): Test

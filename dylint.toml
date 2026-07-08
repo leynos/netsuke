@@ -1,0 +1,44 @@
+# Whitaker lint configuration.
+#
+# Crates excluded from the no_std_fs_operations lint because they legitimately
+# require std::fs access:
+# - build_script_build: the Cargo build script writes generated man pages and
+#   audit artefacts to ambient paths supplied by Cargo (`OUT_DIR`, `target/`),
+#   where capability-based handles offer no benefit.
+# - ambient_fs: the leaf crate that deliberately confines the ambient
+#   filesystem probes needed by the `which` resolver (PATH lookup, full-path
+#   canonicalisation, workspace walking); see ambient_fs/src/lib.rs.
+# - test_support: the shared test-fixture crate; fixture management uses
+#   ambient tempdir access by design (see test_support/src/fs.rs), matching
+#   the "test support utilities" exclusion in the Whitaker user's guide.
+# - integration test crates (tests/*.rs): fixture management writes manifests,
+#   workspaces, and captured output with ambient tempdir access, which the
+#   Whitaker user's guide lists as a sanctioned exclusion. Add new test crates
+#   here deliberately when they need ambient fixture I/O.
+[no_std_fs_operations]
+excluded_crates = [
+    "build_script_build",
+    "ambient_fs",
+    "test_support",
+    "advanced_usage_tests",
+    "assert_cmd_tests",
+    "bdd_tests",
+    "cli_tests",
+    "dependabot_config_tests",
+    "logging_stderr_tests",
+    "manifest_glob_tests",
+    "ninja_snapshot_tests",
+    "novice_flow_smoke_tests",
+    "prover_tools_make_tests",
+    "release_help_script_tests",
+    "release_staging_tests",
+    "runner_graph_tests",
+    "runner_tests",
+    "runner_tool_subcommands_tests",
+    "stdlib_which_tests",
+    "which_diagnostic_snapshot_tests",
+    "workflow_build_and_package",
+    "workflow_ci",
+    "workflow_release",
+    "workflow_shared_actions_pins",
+]

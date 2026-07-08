@@ -146,11 +146,16 @@ project:
   - `make lint` executes:
 
     ```sh
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    cargo doc --no-deps
+    cargo clippy --all-targets --all-features -- -D warnings
+    whitaker --all -- --all-targets --all-features
     ```
 
-    linting every target with all features enabled and denying all Clippy
-    warnings.
+    linting every target with all features enabled, denying all Clippy
+    warnings, and running the Whitaker Dylint suite (see
+    `docs/whitaker-users-guide.md`; install via `cargo install
+    whitaker-installer && whitaker-installer`). `make lint-clippy` runs the
+    Clippy-only subset when Whitaker is unavailable.
   - `make test` executes:
 
     ```sh
