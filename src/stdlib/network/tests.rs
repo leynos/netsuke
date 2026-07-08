@@ -306,35 +306,50 @@ fn fetch_rejects_cached_entries_exceeding_limit(
     Ok(())
 }
 
-#[rstest]
-fn fetch_rejects_disallowed_scheme(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
-    let (_temp, root, _path) = cache_workspace?;
-    let url = "http://example.com";
-    let details = localization::message(keys::NETWORK_POLICY_SCHEME_NOT_ALLOWED)
-        .with_arg("scheme", "http")
-        .to_string();
-    let expected = localization::message(keys::STDLIB_FETCH_DISALLOWED)
-        .with_arg("url", url)
-        .with_arg("details", details)
-        .to_string();
-    assert_fetch_policy_rejection(root, NetworkPolicy::default(), url, &expected)
+/// A disallowed-fetch scenario: the request URL, the localization key and
+/// argument describing why the network policy rejects it, and the policy to
+/// enforce.
+struct DisallowedRequestCase {
+    url: &'static str,
+    details_key: &'static str,
+    details_arg_name: &'static str,
+    details_arg_value: &'static str,
+    policy: NetworkPolicy,
 }
 
 #[rstest]
-fn fetch_rejects_not_allowlisted_host(cache_workspace: Result<CacheWorkspace>) -> Result<()> {
+#[case(DisallowedRequestCase {
+    url: "http://example.com",
+    details_key: keys::NETWORK_POLICY_SCHEME_NOT_ALLOWED,
+    details_arg_name: "scheme",
+    details_arg_value: "http",
+    policy: NetworkPolicy::default(),
+})]
+#[case(DisallowedRequestCase {
+    url: "https://example.com",
+    details_key: keys::NETWORK_POLICY_HOST_NOT_ALLOWLISTED,
+    details_arg_name: "host",
+    details_arg_value: "example.com",
+    policy: NetworkPolicy::default().deny_all_hosts(),
+})]
+fn fetch_rejects_disallowed_request(
+    cache_workspace: Result<CacheWorkspace>,
+    #[case] case: DisallowedRequestCase,
+) -> Result<()> {
+    let DisallowedRequestCase {
+        url,
+        details_key,
+        details_arg_name,
+        details_arg_value,
+        policy,
+    } = case;
     let (_temp, root, _path) = cache_workspace?;
-    let url = "https://example.com";
-    let details = localization::message(keys::NETWORK_POLICY_HOST_NOT_ALLOWLISTED)
-        .with_arg("host", "example.com")
+    let details = localization::message(details_key)
+        .with_arg(details_arg_name, details_arg_value)
         .to_string();
     let expected = localization::message(keys::STDLIB_FETCH_DISALLOWED)
         .with_arg("url", url)
         .with_arg("details", details)
         .to_string();
-    assert_fetch_policy_rejection(
-        root,
-        NetworkPolicy::default().deny_all_hosts(),
-        url,
-        &expected,
-    )
+    assert_fetch_policy_rejection(root, policy, url, &expected)
 }

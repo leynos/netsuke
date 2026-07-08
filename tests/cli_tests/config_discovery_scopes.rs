@@ -200,6 +200,17 @@ fn assert_project_precedence_applied(merged: &netsuke::cli::Cli) -> Result<()> {
     Ok(())
 }
 
+fn run_precedence_scenario(temp_project: &tempfile::TempDir) -> Result<netsuke::cli::Cli> {
+    std::env::set_current_dir(temp_project).context("change to project directory")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI for precedence test")?;
+    Ok(netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge configs")?
+        .with_default_command())
+}
+
 #[cfg(unix)]
 #[rstest]
 fn project_config_takes_precedence_over_user_config() -> Result<()> {
@@ -233,15 +244,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI for precedence test")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge configs")?
-        .with_default_command();
-
+    let merged = run_precedence_scenario(&temp_project)?;
     let result = assert_project_precedence_applied(&merged);
     drop(cwd_guard);
     result
@@ -280,15 +283,7 @@ fn project_config_takes_precedence_over_user_config() -> Result<()> {
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _colour_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI for precedence test")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge configs")?
-        .with_default_command();
-
+    let merged = run_precedence_scenario(&temp_project)?;
     let result = assert_project_precedence_applied(&merged);
     drop(cwd_guard);
     result
