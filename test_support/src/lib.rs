@@ -23,6 +23,7 @@ pub mod env_lock;
 pub mod env_var_guard;
 pub mod exec;
 pub mod fluent;
+pub mod fs;
 pub mod hash;
 pub mod http;
 pub mod locale_stubs;
@@ -64,7 +65,7 @@ mod error;
 pub use error::display_error_chain;
 
 use anyhow::{Context, Result};
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
@@ -124,11 +125,11 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
         writeln!(file, "#!/bin/sh\nexit {}", exit_code)
             .with_context(|| format!("fake_ninja: write script {}", path.display()))?;
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&path)
+        let mut perms = std::fs::metadata(&path)
             .with_context(|| format!("fake_ninja: read metadata {}", path.display()))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&path, perms)
+        std::fs::set_permissions(&path, perms)
             .with_context(|| format!("fake_ninja: set permissions {}", path.display()))?;
     }
 

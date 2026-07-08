@@ -18,6 +18,7 @@ updates:
   - package-ecosystem: "cargo"
     directories:
       - "/"
+      - "/ambient_fs"
       - "/test_support"
     open-pull-requests-limit: 5
     labels:
