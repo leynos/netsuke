@@ -87,6 +87,13 @@ pub(super) fn canonicalize_cycle_by<T: Clone>(
         cycle.len() >= 2,
         "cycle detection should yield at least two nodes",
     );
+    // Runtime guard: `debug_assert` does not fire in release builds, so guard
+    // against the underflow `cycle.len() - 1` would otherwise cause on an empty
+    // or single-element cycle. Such cycles are structurally impossible from the
+    // detector, so returning the input unchanged is a pure defensive measure.
+    if cycle.len() < 2 {
+        return cycle;
+    }
     let len = cycle.len() - 1;
     let start = find_rotation_start_by(&cycle, len, compare);
     cycle.pop();
