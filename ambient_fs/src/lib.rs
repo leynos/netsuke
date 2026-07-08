@@ -129,9 +129,20 @@ pub fn sync_file(file: &fs::File) -> io::Result<()> {
 mod tests {
     //! Unit tests for the ambient filesystem probes.
     use super::{canonicalize, is_executable_file, sync_file};
-    use camino::Utf8Path;
-    use rstest::rstest;
+    use camino::{Utf8Path, Utf8PathBuf};
+    use rstest::{fixture, rstest};
     use std::fs;
+
+    /// Create a temporary directory and its owned UTF-8 path. The `TempDir` is
+    /// returned so the caller keeps it alive for the directory's lifetime.
+    #[fixture]
+    fn temp_dir() -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = Utf8Path::from_path(dir.path())
+            .expect("temp path is UTF-8")
+            .to_owned();
+        (dir, path)
+    }
 
     #[cfg(unix)]
     #[rstest]
@@ -163,26 +174,23 @@ mod tests {
     }
 
     #[rstest]
-    fn is_executable_file_rejects_directories() {
-        let dir = tempfile::tempdir().expect("create tempdir");
-        let utf8 = Utf8Path::from_path(dir.path()).expect("temp path is UTF-8");
-        assert!(!is_executable_file(utf8).expect("probe directory"));
+    fn is_executable_file_rejects_directories(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+        let (_dir, utf8) = temp_dir;
+        assert!(!is_executable_file(&utf8).expect("probe directory"));
     }
 
     #[rstest]
-    fn is_executable_file_reports_missing_paths() {
-        let dir = tempfile::tempdir().expect("create tempdir");
-        let missing = dir.path().join("does-not-exist");
-        let utf8 = Utf8Path::from_path(&missing).expect("temp path is UTF-8");
-        let err = is_executable_file(utf8).expect_err("missing path should error");
+    fn is_executable_file_reports_missing_paths(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+        let (_dir, dir_path) = temp_dir;
+        let missing = dir_path.join("does-not-exist");
+        let err = is_executable_file(&missing).expect_err("missing path should error");
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[rstest]
-    fn canonicalize_resolves_to_absolute_path() {
-        let dir = tempfile::tempdir().expect("create tempdir");
-        let utf8 = Utf8Path::from_path(dir.path()).expect("temp path is UTF-8");
-        let canonical = canonicalize(utf8).expect("canonicalize tempdir");
+    fn canonicalize_resolves_to_absolute_path(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+        let (_dir, utf8) = temp_dir;
+        let canonical = canonicalize(&utf8).expect("canonicalize tempdir");
         assert!(canonical.is_absolute());
     }
 
