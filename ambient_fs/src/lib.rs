@@ -124,3 +124,71 @@ pub fn entry_is_dir(entry: &walkdir::DirEntry) -> bool {
 pub fn sync_file(file: &fs::File) -> io::Result<()> {
     file.sync_all()
 }
+
+#[cfg(test)]
+mod tests {
+    //! Unit tests for the ambient filesystem probes.
+    use super::{canonicalize, is_executable_file, sync_file};
+    use camino::Utf8Path;
+    use rstest::rstest;
+    use std::fs;
+
+    #[cfg(unix)]
+    #[rstest]
+    #[case(0o755, true)]
+    #[case(0o644, false)]
+    fn is_executable_file_reflects_unix_execute_bits(#[case] mode: u32, #[case] expected: bool) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("candidate");
+        fs::write(&path, b"").expect("write candidate file");
+        let mut perms = fs::metadata(&path).expect("read metadata").permissions();
+        perms.set_mode(mode);
+        fs::set_permissions(&path, perms).expect("set permissions");
+        let utf8 = Utf8Path::from_path(&path).expect("temp path is UTF-8");
+        assert_eq!(
+            is_executable_file(utf8).expect("probe execute bit"),
+            expected
+        );
+    }
+
+    #[cfg(not(unix))]
+    #[rstest]
+    fn is_executable_file_accepts_any_regular_file() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let path = dir.path().join("candidate");
+        fs::write(&path, b"").expect("write candidate file");
+        let utf8 = Utf8Path::from_path(&path).expect("temp path is UTF-8");
+        assert!(is_executable_file(utf8).expect("probe regular file"));
+    }
+
+    #[rstest]
+    fn is_executable_file_rejects_directories() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let utf8 = Utf8Path::from_path(dir.path()).expect("temp path is UTF-8");
+        assert!(!is_executable_file(utf8).expect("probe directory"));
+    }
+
+    #[rstest]
+    fn is_executable_file_reports_missing_paths() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let missing = dir.path().join("does-not-exist");
+        let utf8 = Utf8Path::from_path(&missing).expect("temp path is UTF-8");
+        let err = is_executable_file(utf8).expect_err("missing path should error");
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[rstest]
+    fn canonicalize_resolves_to_absolute_path() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let utf8 = Utf8Path::from_path(dir.path()).expect("temp path is UTF-8");
+        let canonical = canonicalize(utf8).expect("canonicalize tempdir");
+        assert!(canonical.is_absolute());
+    }
+
+    #[rstest]
+    fn sync_file_flushes_open_handle() {
+        let file = tempfile::tempfile().expect("create tempfile");
+        sync_file(&file).expect("sync tempfile");
+    }
+}

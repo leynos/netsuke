@@ -10,6 +10,7 @@ camino = "1.2.0"
 walkdir = "2.5"
 
 [dev-dependencies]
+rstest = "0.26.1"
 tempfile = "3.8.0"
 
 [lints.clippy]
