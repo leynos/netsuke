@@ -78,7 +78,7 @@ pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Ve
     let mut options = OpenOptions::new();
     options.read(true);
     match dir.open_with(path, &options) {
-        Ok(file) => read_cached_file(dir, name, file, limit).map(Some),
+        Ok(file) => read_cached_file(name, file, limit).map(Some),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(Error::new(
             ErrorKind::InvalidOperation,
@@ -91,11 +91,20 @@ pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Ve
 }
 
 /// Read an opened cache entry, enforcing the response size limit.
-fn read_cached_file(dir: &Dir, name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, Error> {
-    let path = Utf8Path::new(name);
-    let metadata = dir
-        .metadata(path)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_STAT_CACHE, path, err))?;
+///
+/// The size check reads metadata from the open file handle (an `fstat` on the
+/// already-open descriptor) rather than re-resolving `name` through the
+/// directory, so the limit applies to the exact bytes subsequently consumed and
+/// cannot be bypassed by another process replacing the entry between the stat
+/// and the read.
+fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, Error> {
+    let metadata = file.metadata().map_err(|err| {
+        io_error(
+            keys::STDLIB_FETCH_ACTION_STAT_CACHE,
+            Utf8Path::new(name),
+            err,
+        )
+    })?;
     if metadata.len() > limit {
         return Err(response_limit_error_from_cache(name, limit));
     }
