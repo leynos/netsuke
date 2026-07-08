@@ -180,3 +180,19 @@ trybuild = "1.0.116"
 [target.'cfg(unix)'.dev-dependencies]
 # Used only to construct FIFOs and device nodes in tests.
 rustix = { version = "1.0.8", features = ["fs"] }
+
+[workspace]
+# `ambient_fs` is the sanctioned ambient-filesystem escape hatch, so it must be a
+# workspace member for the root-level `cargo fmt`, `cargo doc`, `cargo clippy`, and
+# `cargo test` gates to format, document, lint, and run its doctests and unit tests.
+members = ["ambient_fs"]
+# Operate on both packages by default so the bare-cargo gates (`cargo test`,
+# `cargo check`, `cargo clippy`, `cargo doc`) cover `ambient_fs` without needing
+# `--workspace`; the root package (netsuke, ".") is listed explicitly because a
+# default set that omitted it would stop gating netsuke itself.
+default-members = [".", "ambient_fs"]
+# `test_support` is a path dependency that Cargo would otherwise auto-include as a
+# member. It is excluded here to keep its gate coverage unchanged in this focused
+# change; folding it into the workspace is tracked separately as it requires
+# clearing its own lint backlog.
+exclude = ["test_support"]
