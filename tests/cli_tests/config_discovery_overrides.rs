@@ -62,6 +62,9 @@ output_format = "human"
         merged.output_format == Some(OutputFormat::Human),
         "project config value should apply when no env override exists"
     );
+    // Restore the cwd before `temp_project` (declared later) drops: implicit
+    // reverse-declaration drop order would remove the temp dir while it is still
+    // the process cwd, which fails on Windows.
     drop(cwd_guard);
     Ok(())
 }
