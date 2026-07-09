@@ -11,7 +11,8 @@ define_newtype!(
 
 define_newtype!(
     /// Comma-separated list of expected tokens from shlex parsing.
-    TokenList
+    TokenList,
+    accessors: []
 );
 
 impl TokenList {
