@@ -132,16 +132,21 @@ mod tests {
     use camino::{Utf8Path, Utf8PathBuf};
     use rstest::{fixture, rstest};
     use std::fs;
+    use std::io;
 
     /// Create a temporary directory and its owned UTF-8 path. The `TempDir` is
     /// returned so the caller keeps it alive for the directory's lifetime.
+    ///
+    /// Returns a `Result` because Whitaker's `no_expect_outside_tests` does
+    /// not recognise `#[fixture]` functions as test context; each test
+    /// unwraps the fixture in its own body instead.
     #[fixture]
-    fn temp_dir() -> (tempfile::TempDir, Utf8PathBuf) {
-        let dir = tempfile::tempdir().expect("create tempdir");
+    fn temp_dir() -> io::Result<(tempfile::TempDir, Utf8PathBuf)> {
+        let dir = tempfile::tempdir()?;
         let path = Utf8Path::from_path(dir.path())
-            .expect("temp path is UTF-8")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "temp path is not UTF-8"))?
             .to_owned();
-        (dir, path)
+        Ok((dir, path))
     }
 
     #[cfg(unix)]
@@ -174,26 +179,32 @@ mod tests {
     }
 
     #[rstest]
-    fn is_executable_file_rejects_directories(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
-        let (_dir, utf8) = temp_dir;
+    fn is_executable_file_rejects_directories(
+        temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
+    ) {
+        let (_dir, utf8) = temp_dir.expect("create tempdir");
         assert!(!is_executable_file(&utf8).expect("probe directory"));
     }
 
     #[rstest]
-    fn is_executable_file_reports_missing_paths(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
-        let (_dir, dir_path) = temp_dir;
+    fn is_executable_file_reports_missing_paths(
+        temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
+    ) {
+        let (_dir, dir_path) = temp_dir.expect("create tempdir");
         let missing = dir_path.join("does-not-exist");
         let err = is_executable_file(&missing).expect_err("missing path should error");
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[rstest]
-    fn canonicalize_resolves_relative_traversal(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+    fn canonicalize_resolves_relative_traversal(
+        temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
+    ) {
         // Force real filesystem resolution: a `..` round-trip only collapses
         // back to the original directory if `canonicalize` consults the
         // filesystem rather than returning its input unchanged. `std::fs`
         // canonicalization of the un-traversed path is the oracle.
-        let (_dir, root) = temp_dir;
+        let (_dir, root) = temp_dir.expect("create tempdir");
         let nested = root.join("nested");
         fs::create_dir(nested.as_std_path()).expect("create nested dir");
         let traversed = nested.join("..").join("nested");
@@ -203,13 +214,13 @@ mod tests {
     }
 
     #[rstest]
-    fn sync_file_persists_written_bytes(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+    fn sync_file_persists_written_bytes(temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>) {
         // Behavioural oracle: sync then reopen by path and read back, proving
         // the bytes are persisted rather than merely that `sync_all` returned
         // `Ok`. (True crash durability cannot be verified without OS-level
         // fault injection, which is out of scope here.)
         use std::io::Write as _;
-        let (_dir, root) = temp_dir;
+        let (_dir, root) = temp_dir.expect("create tempdir");
         let path = root.join("synced");
         let payload = b"ambient_fs sync payload".to_vec();
         let mut file = fs::File::create(path.as_std_path()).expect("create file for sync");

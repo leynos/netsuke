@@ -91,14 +91,16 @@ where
         // A well-behaved Read never reports more bytes than the buffer holds;
         // clamp to the full buffer rather than panicking on a misbehaving
         // implementation, but surface the anomaly for diagnosis.
-        let chunk = buffer.get(..read).unwrap_or_else(|| {
+        let chunk = if let Some(chunk) = buffer.get(..read) {
+            chunk
+        } else {
             tracing::debug!(
                 read,
                 capacity = buffer.len(),
                 "Read reported more bytes than the buffer holds; clamping to full buffer"
             );
             &buffer
-        });
+        };
         hasher.update(chunk);
     }
     Ok(encode_hex(&hasher.finalize()))
