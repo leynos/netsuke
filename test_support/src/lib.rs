@@ -124,12 +124,7 @@ pub fn fake_ninja(exit_code: u8) -> Result<(TempDir, PathBuf)> {
             .with_context(|| format!("fake_ninja: create script {}", path.display()))?;
         writeln!(file, "#!/bin/sh\nexit {}", exit_code)
             .with_context(|| format!("fake_ninja: write script {}", path.display()))?;
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&path)
-            .with_context(|| format!("fake_ninja: read metadata {}", path.display()))?
-            .permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&path, perms)
+        crate::fs::set_mode(&path, 0o755)
             .with_context(|| format!("fake_ninja: set permissions {}", path.display()))?;
     }
 

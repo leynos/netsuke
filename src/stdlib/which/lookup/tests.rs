@@ -108,11 +108,14 @@ fn search_workspace_surfaces_unreadable_entries(
     let path_value = std::ffi::OsString::from(workspace.root().as_str());
     let snapshot = EnvSnapshot::capture(Some(workspace.root()), Some(path_value.as_os_str()))
         .expect("capture env for workspace search");
-    let err = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default())
-        .expect_err("unreadable workspace entries should fail");
+    let result = search_workspace(&snapshot, "tool", false, &WorkspaceSkipList::default());
 
+    // Restore permissions before asserting so the tempdir can always be cleaned
+    // up, even if `search_workspace` unexpectedly succeeds and the assertion
+    // below panics.
     test_fs::set_mode(blocked.as_std_path(), 0o700).context("restore blocked")?;
 
+    let err = result.expect_err("unreadable workspace entries should fail");
     ensure!(
         matches!(err, ResolveError::WalkDir { .. }),
         "expected walkdir error, got {err:?}"

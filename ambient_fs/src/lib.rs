@@ -197,46 +197,51 @@ mod tests {
     #[rstest]
     fn is_executable_file_rejects_directories(
         temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
-    ) {
-        let (_dir, utf8) = temp_dir.expect("create tempdir");
+    ) -> io::Result<()> {
+        let (_dir, utf8) = temp_dir?;
         assert_executable_probe!(&utf8, false);
+        Ok(())
     }
 
     #[rstest]
     fn is_executable_file_reports_missing_paths(
         temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
-    ) {
-        let (_dir, dir_path) = temp_dir.expect("create tempdir");
+    ) -> io::Result<()> {
+        let (_dir, dir_path) = temp_dir?;
         let missing = dir_path.join("does-not-exist");
         let err = is_executable_file(&missing).expect_err("missing path should error");
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        Ok(())
     }
 
     #[rstest]
     fn canonicalize_resolves_relative_traversal(
         temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
-    ) {
+    ) -> io::Result<()> {
         // Force real filesystem resolution: a `..` round-trip only collapses
         // back to the original directory if `canonicalize` consults the
         // filesystem rather than returning its input unchanged. `std::fs`
         // canonicalization of the un-traversed path is the oracle.
-        let (_dir, root) = temp_dir.expect("create tempdir");
+        let (_dir, root) = temp_dir?;
         let nested = root.join("nested");
         fs::create_dir(nested.as_std_path()).expect("create nested dir");
         let traversed = nested.join("..").join("nested");
         let resolved = canonicalize(&traversed).expect("canonicalize traversal");
         let expected = fs::canonicalize(nested.as_std_path()).expect("canonicalize nested");
         assert_eq!(resolved, expected);
+        Ok(())
     }
 
     #[rstest]
-    fn sync_file_persists_written_bytes(temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>) {
+    fn sync_file_persists_written_bytes(
+        temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
+    ) -> io::Result<()> {
         // Behavioural oracle: sync then reopen by path and read back, proving
         // the bytes are persisted rather than merely that `sync_all` returned
         // `Ok`. (True crash durability cannot be verified without OS-level
         // fault injection, which is out of scope here.)
         use std::io::Write as _;
-        let (_dir, root) = temp_dir.expect("create tempdir");
+        let (_dir, root) = temp_dir?;
         let path = root.join("synced");
         let payload = b"ambient_fs sync payload".to_vec();
         let mut file = fs::File::create(path.as_std_path()).expect("create file for sync");
@@ -244,5 +249,6 @@ mod tests {
         sync_file(&file).expect("sync file");
         let read_back = fs::read(path.as_std_path()).expect("read synced file");
         assert_eq!(read_back, payload);
+        Ok(())
     }
 }

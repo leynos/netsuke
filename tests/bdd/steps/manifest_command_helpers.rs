@@ -73,6 +73,23 @@ pub(super) struct RunResult {
     success: bool,
 }
 
+impl RunResult {
+    /// Build a `RunResult` from a completed process's captured output, so the
+    /// stdout/stderr decoding and status handling stay identical across callers.
+    pub(super) fn from_output(output: std::process::Output) -> Self {
+        let std::process::Output {
+            status,
+            stdout,
+            stderr,
+        } = output;
+        Self {
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            success: status.success(),
+        }
+    }
+}
+
 pub(super) fn run_manifest_command(
     world: &TestWorld,
     output: &ManifestOutputPath,
@@ -80,11 +97,7 @@ pub(super) fn run_manifest_command(
     let args = ["manifest", output.as_str()];
     let mut cmd = build_netsuke_command(world, &args)?;
     let result = cmd.output().context("run netsuke manifest command")?;
-    Ok(RunResult {
-        stdout: String::from_utf8_lossy(&result.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&result.stderr).into_owned(),
-        success: result.status.success(),
-    })
+    Ok(RunResult::from_output(result))
 }
 
 pub(super) fn store_run_result(world: &TestWorld, result: RunResult) {
@@ -164,13 +177,6 @@ pub(super) fn run_netsuke_and_store(world: &TestWorld, args: &[&str]) -> Result<
 
     let output = cmd.output().context("run netsuke command")?;
 
-    store_run_result(
-        world,
-        RunResult {
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            success: output.status.success(),
-        },
-    );
+    store_run_result(world, RunResult::from_output(output));
     Ok(())
 }

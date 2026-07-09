@@ -105,13 +105,7 @@ pub(super) fn assert_fetch_policy_rejection(
     url: &str,
     expected_message: &str,
 ) -> Result<()> {
-    let config = NetworkConfig {
-        cache_root: root,
-        cache_relative: Utf8PathBuf::from(DEFAULT_FETCH_CACHE_DIR),
-        policy,
-        max_response_bytes: DEFAULT_FETCH_MAX_RESPONSE_BYTES,
-    };
-    let context = FetchContext::new(config);
+    let context = make_context_with(root, policy, DEFAULT_FETCH_MAX_RESPONSE_BYTES);
     let kwargs = std::iter::empty::<(String, Value)>().collect::<Kwargs>();
     let impure = Arc::new(AtomicBool::new(false));
     let Err(err) = fetch(url, &kwargs, &impure, &context) else {

@@ -54,6 +54,29 @@ fn build_graph_from_edge_specs(
     graph
 }
 
+/// Retain only edges whose combined explicit and implicit outputs are globally
+/// disjoint. `BuildGraph::targets` is keyed by output path, so two edges sharing
+/// an output collide at insertion time (`from_manifest` rejects them as
+/// `DuplicateOutput`); this restricts the generator's input space to that
+/// realistic case.
+fn retain_disjoint_output_edges(edges: Vec<EdgeSpec>) -> Vec<EdgeSpec> {
+    let mut owned_outputs = std::collections::BTreeSet::new();
+    edges
+        .into_iter()
+        .filter(|e| {
+            let mut all = e.explicit_outputs.clone();
+            all.extend(e.implicit_outputs.iter().cloned());
+            if all.iter().any(|o| owned_outputs.contains(o)) {
+                return false;
+            }
+            for o in &all {
+                owned_outputs.insert(o.clone());
+            }
+            true
+        })
+        .collect()
+}
+
 fn arb_path() -> impl Strategy<Value = String> {
     // Draw from a wide alphabet and length range so output-path collisions are
     // rare; the disjoint-output filter in the invariance property otherwise
@@ -117,25 +140,10 @@ proptest! {
     fn graphview_is_insertion_order_invariant(
         (actions, raw_edges) in arb_graph_inputs(),
     ) {
-        // `BuildGraph::targets` is keyed by output path: any two edges
-        // sharing an output collide at insertion time, which `from_manifest`
-        // rejects as `DuplicateOutput`. Filter the generator's input space
-        // to the realistic case where outputs are globally disjoint.
-        let mut owned_outputs = std::collections::BTreeSet::new();
-        let edges: Vec<_> = raw_edges
-            .into_iter()
-            .filter(|e| {
-                let mut all = e.explicit_outputs.clone();
-                all.extend(e.implicit_outputs.iter().cloned());
-                if all.iter().any(|o| owned_outputs.contains(o)) {
-                    return false;
-                }
-                for o in &all {
-                    owned_outputs.insert(o.clone());
-                }
-                true
-            })
-            .collect();
+        // Restrict to globally-disjoint outputs so `from_manifest` does not
+        // reject the input as `DuplicateOutput` (see
+        // `retain_disjoint_output_edges`).
+        let edges = retain_disjoint_output_edges(raw_edges);
 
         let mut reversed_actions = actions.clone();
         reversed_actions.reverse();

@@ -90,6 +90,17 @@ fn assert_user_config_applied(merged: &netsuke::cli::Cli) -> Result<()> {
     Ok(())
 }
 
+fn run_user_scope_scenario(temp_project: &tempfile::TempDir) -> Result<netsuke::cli::Cli> {
+    std::env::set_current_dir(temp_project).context("change to project directory")?;
+
+    let localizer = Arc::from(cli_localization::build_localizer(None));
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+        .context("parse CLI for user config discovery")?;
+    Ok(netsuke::cli::merge_with_config(&cli, &matches)
+        .context("merge with user config")?
+        .with_default_command())
+}
+
 #[cfg(unix)]
 #[rstest]
 fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
@@ -116,16 +127,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _jobs_guard = EnvVarGuard::remove("NETSUKE_JOBS");
     let _colour_policy_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
 
-    // Change to empty project directory
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI for user config discovery")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge with user config")?
-        .with_default_command();
-
+    let merged = run_user_scope_scenario(&temp_project)?;
     let result = assert_user_config_applied(&merged);
     drop(cwd_guard);
     result
@@ -157,16 +159,7 @@ fn user_scope_config_discovered_when_no_project_config() -> Result<()> {
     let _colour_policy_guard = EnvVarGuard::remove("NETSUKE_COLOUR_POLICY");
     let _localappdata_guard = EnvVarGuard::remove("LOCALAPPDATA");
 
-    // Change to empty project directory
-    std::env::set_current_dir(&temp_project).context("change to project directory")?;
-
-    let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI for user config discovery")?;
-    let merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge with user config")?
-        .with_default_command();
-
+    let merged = run_user_scope_scenario(&temp_project)?;
     let result = assert_user_config_applied(&merged);
     drop(cwd_guard);
     result
