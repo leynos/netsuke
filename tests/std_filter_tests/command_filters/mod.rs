@@ -50,7 +50,7 @@ impl CommandFixture {
     }
 
     pub(super) fn new(compiler: CommandCompiler, binary: &str) -> Result<Self> {
-        Self::with_config(compiler, binary, StdlibConfig::default())
+        Self::with_config(compiler, binary, StdlibConfig::from_current_dir()?)
     }
 
     pub(super) fn env(&mut self) -> &mut Environment<'static> {

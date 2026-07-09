@@ -44,7 +44,7 @@ pub(crate) mod fallible {
     }
 
     pub(crate) fn stdlib_env_with_state() -> Result<(Environment<'static>, StdlibState)> {
-        stdlib_env_with_config(StdlibConfig::default())
+        stdlib_env_with_config(StdlibConfig::from_current_dir()?)
     }
 
     pub(crate) fn stdlib_env() -> Result<Environment<'static>> {

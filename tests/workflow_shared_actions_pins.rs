@@ -1,5 +1,6 @@
 //! Verify shared-actions pinning remains consistent across workflows.
 
+use anyhow::{Context, Result, ensure};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -12,9 +13,9 @@ fn workflow_dir() -> PathBuf {
     repo_root().join(".github").join("workflows")
 }
 
-fn read_workflow(path: &Path) -> String {
+fn read_workflow(path: &Path) -> Result<String> {
     fs::read_to_string(path)
-        .unwrap_or_else(|err| panic!("workflow file {} should be readable: {err}", path.display()))
+        .with_context(|| format!("workflow file {} should be readable", path.display()))
 }
 
 fn extract_shared_actions_pins(contents: &str) -> Vec<String> {
@@ -49,30 +50,28 @@ fn unit_extracts_pins_from_workflow_lines() {
 }
 
 #[test]
-fn behavioural_shared_actions_pins_are_consistent() {
-    let workflows = fs::read_dir(workflow_dir())
-        .unwrap_or_else(|err| panic!("workflow directory should exist: {err}"));
+fn behavioural_shared_actions_pins_are_consistent() -> Result<()> {
+    let workflows = fs::read_dir(workflow_dir()).context("workflow directory should exist")?;
     let mut pins = BTreeSet::new();
 
     for entry in workflows {
-        let workflow_entry = entry
-            .unwrap_or_else(|err| panic!("workflow directory entries should be readable: {err}"));
+        let workflow_entry = entry.context("workflow directory entries should be readable")?;
         let path = workflow_entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("yml") {
             continue;
         }
-        for pin in extract_shared_actions_pins(&read_workflow(&path)) {
+        for pin in extract_shared_actions_pins(&read_workflow(&path)?) {
             pins.insert(pin);
         }
     }
 
-    assert!(
+    ensure!(
         !pins.is_empty(),
         "expected at least one shared-actions pin in workflows"
     );
-    assert_eq!(
-        pins.len(),
-        1,
+    ensure!(
+        pins.len() == 1,
         "shared-actions pins should be identical across workflows, found {pins:?}"
     );
+    Ok(())
 }

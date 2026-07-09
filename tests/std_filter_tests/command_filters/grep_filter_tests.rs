@@ -10,7 +10,7 @@ use super::{StdlibConfig, fallible, streaming_match_payload};
 #[cfg(not(windows))]
 #[rstest]
 fn grep_filter_streams_to_tempfiles() -> Result<()> {
-    let config = StdlibConfig::default()
+    let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(512)?
         .with_command_max_stream_bytes(200_000)?;
     let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
@@ -47,7 +47,7 @@ fn grep_filter_streams_to_tempfiles() -> Result<()> {
 #[cfg(not(windows))]
 #[rstest]
 fn grep_filter_enforces_output_limit() -> Result<()> {
-    let config = StdlibConfig::default()
+    let config = StdlibConfig::from_current_dir()?
         .with_command_max_output_bytes(1024)?;
     let (mut env, mut state) = fallible::stdlib_env_with_config(config)?;
     state.reset_impure();

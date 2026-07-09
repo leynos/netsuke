@@ -163,6 +163,7 @@ fn expected_offset(src: &str, column: u64) -> usize {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for YAML error mapping and diagnostic hints.
     use super::*;
     use anyhow::{Context, Result, anyhow, ensure};
     use std::error::Error as StdError;
@@ -263,6 +264,7 @@ mod tests {
 
 #[cfg(test)]
 mod byte_index_tests {
+    //! Unit tests for byte-index calculation over multibyte lines.
     use super::{byte_index_components, expected_offset};
 
     #[test]

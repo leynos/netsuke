@@ -209,6 +209,7 @@ fn substitute(template: &str, ins: &[String], outs: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for command interpolation and backtick validation.
     use super::*;
 
     use camino::Utf8PathBuf;

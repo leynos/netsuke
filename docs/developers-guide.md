@@ -84,6 +84,18 @@ Run these commands before finalizing any change:
 - `make lint`
 - `make test`
 
+`make lint` runs rustdoc with warnings denied, `cargo clippy`, and the
+[Whitaker](whitaker-users-guide.md) Dylint suite
+(`whitaker --all -- --all-targets --all-features`). Install Whitaker through
+the standalone installer described in the
+[Whitaker user's guide](whitaker-users-guide.md) so local linting matches
+continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
+Whitaker is configured by `dylint.toml` at the repository root. The
+`no_std_fs_operations` lint currently ignores in-source `allow`/`expect`
+attributes, so deliberately ambient filesystem access is confined to the
+`ambient_fs` leaf crate and the `test_support` test-fixture crate, both of
+which `dylint.toml` excludes from that lint with a documented rationale.
+
 When command output is long, preserve exit codes and logs:
 
 ```bash
@@ -787,7 +799,7 @@ Versioning and compatibility rules:
 
 ## BDD command helpers and environment handling
 
-The BDD step module `tests/bdd/steps/manifest_command.rs` provides three
+The BDD step module `tests/bdd/steps/manifest_command_helpers.rs` provides three
 helpers that launch the netsuke binary in a controlled environment:
 
 - **`netsuke_executable()`** — locates the compiled netsuke binary using

@@ -86,6 +86,8 @@ fn compute_depth<'a>(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the deterministic layered graph layout.
+
     use super::*;
     use camino::Utf8PathBuf;
 

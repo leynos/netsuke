@@ -313,6 +313,8 @@ pub(super) fn format_path_for_output(path: &Utf8Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the which module facade, covering the command
+    //! availability helper across hit, miss, and error outcomes.
     use super::*;
     use rstest::rstest;
 

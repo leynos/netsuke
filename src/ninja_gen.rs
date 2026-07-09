@@ -306,6 +306,8 @@ impl Display for DisplayEdge<'_> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for Ninja file generation and rule synthesis.
+
     use super::*;
     use crate::ir::{Action, BuildEdge, BuildGraph};
     use anyhow::{Result, ensure};

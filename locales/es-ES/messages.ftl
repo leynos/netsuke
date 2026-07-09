@@ -119,6 +119,7 @@ manifest.read_failed = No se pudo leer el manifiesto en { $path }.
 manifest.resolve_workspace_root = No se pudo resolver la raíz del workspace.
 manifest.workspace_non_utf8 = La ruta de la raíz del workspace '{ $path }' no es UTF-8 válida.
 manifest.path_non_utf8 = La ruta del manifiesto '{ $manifest }' no es UTF-8 válida: { $path }.
+manifest.path_missing_name = La ruta del manifiesto '{ $path }' no tiene nombre de archivo.
 manifest.open_workspace_failed = No se pudo abrir el workspace { $workspace } para el manifiesto { $manifest }.
 manifest.foreach.not_iterable = La expresión `foreach` no es iterable.
 manifest.foreach.serialise_item = No se pudo serializar el elemento de foreach.
@@ -197,6 +198,9 @@ stdlib.config.skip_dir_separator = Las entradas de directorio a omitir no deben 
 stdlib.config.fetch_cache_empty = La ruta de caché de fetch no debe estar vacía.
 stdlib.config.fetch_cache_not_relative = La ruta de caché de fetch debe ser relativa, se obtuvo { $path }.
 stdlib.config.fetch_cache_escapes = La ruta de caché de fetch no debe salir del workspace: { $path }.
+stdlib.config.open_workspace_root = No se pudo abrir el directorio actual como raíz del workspace de la stdlib.
+stdlib.config.resolve_cwd = No se pudo resolver el directorio actual para la raíz del workspace de la stdlib.
+stdlib.config.cwd_non_utf8 = El directorio actual contiene componentes no UTF-8: { $path }.
 
 # Diagnósticos de fetch.
 stdlib.fetch.url_invalid = URL inválida '{ $url }': { $details }.

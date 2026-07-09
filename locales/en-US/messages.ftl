@@ -119,6 +119,7 @@ manifest.read_failed = Failed to read manifest at { $path }.
 manifest.resolve_workspace_root = Failed to resolve workspace root.
 manifest.workspace_non_utf8 = Workspace root path '{ $path }' is not valid UTF-8.
 manifest.path_non_utf8 = Manifest '{ $manifest }' path is not valid UTF-8: { $path }.
+manifest.path_missing_name = Manifest path '{ $path }' has no file name.
 manifest.open_workspace_failed = Failed to open workspace { $workspace } for manifest { $manifest }.
 manifest.foreach.not_iterable = `foreach` expression is not iterable.
 manifest.foreach.serialise_item = Failed to serialise foreach item.
@@ -197,6 +198,9 @@ stdlib.config.skip_dir_separator = Skip directory entries must not contain path 
 stdlib.config.fetch_cache_empty = Fetch cache path must not be empty.
 stdlib.config.fetch_cache_not_relative = Fetch cache path must be relative, got { $path }.
 stdlib.config.fetch_cache_escapes = Fetch cache path must not escape the workspace: { $path }.
+stdlib.config.open_workspace_root = Failed to open the current directory as the stdlib workspace root.
+stdlib.config.resolve_cwd = Failed to resolve the current directory for the stdlib workspace root.
+stdlib.config.cwd_non_utf8 = Current directory contains non-UTF-8 components: { $path }.
 
 # Fetch helper diagnostics.
 stdlib.fetch.url_invalid = Invalid URL '{ $url }': { $details }.

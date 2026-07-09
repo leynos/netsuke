@@ -3,27 +3,37 @@
 //! These wrappers distinguish between different string parameter types,
 //! improving type safety and self-documentation in step definitions.
 
-// The `define_newtype` macro generates `as_str` and `into_string` methods for
-// API completeness. Some types use all methods while others don't. Using
-// `#[expect(dead_code)]` is not feasible because it requires the lint to fire,
-// which varies per type instantiation. The `#[allow(dead_code)]` within the
-// macro requires this module-level exception to `clippy::allow_attributes`.
-#![expect(
-    clippy::allow_attributes,
-    reason = "macro-generated dead_code suppression varies per type instantiation"
-)]
-
 use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// Generates a newtype wrapper for string parameters.
 ///
-/// Each generated type:
-/// - Wraps a `String`
-/// - Provides `as_str()` and `into_string()` accessors
-/// - Implements `Display` and `Debug`
+/// Each generated type wraps a `String` and implements `Debug`, `Clone`,
+/// `Display`, `From<String>`, `From<&str>`, `FromStr`, and `AsRef<str>`.
+///
+/// Inherent string accessors are opt-in per type so no generated method is ever
+/// dead code: the bare form `define_newtype!(Name)` emits `as_str` (the common
+/// case), while `define_newtype!(Name, accessors: [..])` emits exactly the
+/// listed accessors (`as_str`, `into_string`, or neither via `[]`).
 macro_rules! define_newtype {
+    (@accessor as_str) => {
+        /// Return the inner string as a slice.
+        pub fn as_str(&self) -> &str {
+            &self.0
+        }
+    };
+    (@accessor into_string) => {
+        /// Consume the wrapper and return the inner string.
+        pub fn into_string(self) -> String {
+            self.0
+        }
+    };
+
     ($(#[$meta:meta])* $name:ident) => {
+        define_newtype!($(#[$meta])* $name, accessors: [as_str]);
+    };
+
+    ($(#[$meta:meta])* $name:ident, accessors: [$($acc:ident),* $(,)?]) => {
         $(#[$meta])*
         #[derive(Debug, Clone)]
         pub struct $name(String);
@@ -34,17 +44,7 @@ macro_rules! define_newtype {
                 Self(s.into())
             }
 
-            /// Return the inner string as a slice.
-            #[allow(dead_code, reason = "newtype provides complete API; usage varies per type")]
-            pub fn as_str(&self) -> &str {
-                &self.0
-            }
-
-            /// Consume the wrapper and return the inner string.
-            #[allow(dead_code, reason = "newtype provides complete API; usage varies per type")]
-            pub fn into_string(self) -> String {
-                self.0
-            }
+            $(define_newtype!(@accessor $acc);)*
         }
 
         impl From<String> for $name {
@@ -97,7 +97,8 @@ define_newtype!(
 
 define_newtype!(
     /// File or directory path string.
-    PathString
+    PathString,
+    accessors: []
 );
 
 impl PathString {
@@ -120,7 +121,8 @@ impl AsRef<Path> for PathString {
 
 define_newtype!(
     /// URL string for network policy checks.
-    UrlString
+    UrlString,
+    accessors: []
 );
 
 impl UrlString {
@@ -153,12 +155,6 @@ impl ManifestPath {
     pub fn as_path(&self) -> &Path {
         Path::new(&self.0)
     }
-
-    /// Convert to an owned `PathBuf`.
-    #[allow(dead_code, reason = "path wrapper provides complete API; usage varies")]
-    pub fn to_path_buf(&self) -> PathBuf {
-        PathBuf::from(&self.0)
-    }
 }
 
 impl AsRef<Path> for ManifestPath {
@@ -169,12 +165,14 @@ impl AsRef<Path> for ManifestPath {
 
 define_newtype!(
     /// Environment variable name.
-    EnvVarKey
+    EnvVarKey,
+    accessors: [as_str, into_string]
 );
 
 define_newtype!(
     /// Environment variable value.
-    EnvVarValue
+    EnvVarValue,
+    accessors: [as_str, into_string]
 );
 
 define_newtype!(
@@ -184,7 +182,8 @@ define_newtype!(
 
 define_newtype!(
     /// Script content from a target recipe.
-    ScriptText
+    ScriptText,
+    accessors: []
 );
 
 define_newtype!(
@@ -209,7 +208,8 @@ define_newtype!(
 
 define_newtype!(
     /// Macro signature string.
-    MacroSignature
+    MacroSignature,
+    accessors: []
 );
 
 define_newtype!(
@@ -219,7 +219,8 @@ define_newtype!(
 
 define_newtype!(
     /// Comma-separated list of names.
-    NamesList
+    NamesList,
+    accessors: []
 );
 
 impl NamesList {
@@ -277,17 +278,20 @@ define_newtype!(
 
 define_newtype!(
     /// Template context variable value.
-    ContextValue
+    ContextValue,
+    accessors: [into_string]
 );
 
 define_newtype!(
     /// HTTP response body content.
-    HttpResponseBody
+    HttpResponseBody,
+    accessors: [into_string]
 );
 
 define_newtype!(
     /// File contents for stdlib fixtures.
-    FileContents
+    FileContents,
+    accessors: []
 );
 
 impl FileContents {
@@ -333,76 +337,9 @@ impl From<&'static str> for HelperName {
 }
 
 // ---------------------------------------------------------------------------
-// Ninja domain types
+// Ninja domain and non-string CLI types
 // ---------------------------------------------------------------------------
 
-define_newtype!(
-    /// Fragment expected to appear in ninja output (e.g., "build: phony").
-    NinjaFragment
-);
-
-define_newtype!(
-    /// Comma-separated list of expected tokens from shlex parsing.
-    TokenList
-);
-
-impl TokenList {
-    /// Parse the token list into a Vec of strings, replacing escaped newlines.
-    pub fn to_vec(&self) -> Vec<String> {
-        self.0
-            .split(',')
-            .map(|w| w.trim().replace("\\n", "\n"))
-            .collect()
-    }
-}
-
-/// Content name for error messages in ninja-related assertions.
-#[derive(Debug, Clone, Copy)]
-pub enum ContentName {
-    /// Ninja file content.
-    NinjaContent,
-    /// Ninja generation error.
-    NinjaError,
-}
-
-impl ContentName {
-    /// Return the content name as a static string slice.
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::NinjaContent => "ninja content",
-            Self::NinjaError => "ninja error",
-        }
-    }
-}
-
-impl fmt::Display for ContentName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// CLI domain types (non-string)
-// ---------------------------------------------------------------------------
-
-/// Job count for parallel execution.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct JobCount(usize);
-
-impl JobCount {
-    /// Create a new job count.
-    pub const fn new(count: usize) -> Self {
-        Self(count)
-    }
-
-    /// Return the job count value.
-    pub const fn value(self) -> usize {
-        self.0
-    }
-}
-
-impl From<usize> for JobCount {
-    fn from(count: usize) -> Self {
-        Self(count)
-    }
-}
+#[path = "types_ninja.rs"]
+mod types_ninja;
+pub use types_ninja::{ContentName, JobCount, NinjaFragment, TokenList};

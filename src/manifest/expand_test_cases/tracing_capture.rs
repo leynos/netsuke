@@ -3,7 +3,7 @@
 use super::*;
 use anyhow::{Context, Result};
 use minijinja::Environment;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 use tracing::{
     Event, Subscriber,
     field::{Field, Visit},
@@ -19,7 +19,12 @@ struct CapturedEvents {
 
 impl CapturedEvents {
     fn snapshot(&self) -> Vec<String> {
-        self.fields.lock().expect("captured events lock").clone()
+        // Recover the captured events even if a panicking test poisoned the
+        // lock; the data remains usable for assertions.
+        self.fields
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -35,9 +40,11 @@ where
     fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
         let mut visitor = FieldVisitor::default();
         event.record(&mut visitor);
+        // Recover from a poisoned lock so event capture keeps working even if
+        // a panicking test poisoned it.
         self.events
             .lock()
-            .expect("captured events lock")
+            .unwrap_or_else(PoisonError::into_inner)
             .push(visitor.fields.join(" "));
     }
 }

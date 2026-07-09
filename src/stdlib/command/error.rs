@@ -213,6 +213,7 @@ impl LimitExceeded {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for command failure rendering and localization.
     use super::*;
     use crate::localization::{self, keys};
 

@@ -87,6 +87,8 @@ pub(super) fn parse_ninja_status_line(line: &str) -> Option<NinjaTaskProgress> {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for Ninja status line parsing and progress tracking.
+
     use super::{NinjaTaskProgressTracker, parse_ninja_status_line};
     use rstest::rstest;
 

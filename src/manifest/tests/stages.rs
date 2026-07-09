@@ -4,6 +4,7 @@ use crate::manifest::{self, ManifestLoadStage};
 use crate::stdlib::NetworkPolicy;
 use anyhow::{Context, Result, ensure};
 use rstest::{fixture, rstest};
+use test_support::fs as test_fs;
 
 /// Create a temporary workspace with a manifest path but no file content.
 #[fixture]
@@ -18,7 +19,7 @@ fn stage_callback_reports_expected_order_for_valid_manifest(
     temp_workspace: Result<(tempfile::TempDir, std::path::PathBuf)>,
 ) -> Result<()> {
     let (_dir, manifest_path) = temp_workspace?;
-    std::fs::write(
+    test_fs::write(
         &manifest_path,
         concat!(
             "netsuke_version: \"1.0.0\"\n",
@@ -61,7 +62,7 @@ fn stage_callback_stops_after_parse_failure(
     temp_workspace: Result<(tempfile::TempDir, std::path::PathBuf)>,
 ) -> Result<()> {
     let (_dir, manifest_path) = temp_workspace?;
-    std::fs::write(&manifest_path, "targets:\n\t- name: broken\n")
+    test_fs::write(&manifest_path, "targets:\n\t- name: broken\n")
         .with_context(|| format!("write {}", manifest_path.display()))?;
 
     let mut stages = Vec::new();
@@ -90,7 +91,7 @@ fn stage_callback_stops_after_template_expansion_failure(
 ) -> Result<()> {
     let (_dir, manifest_path) = temp_workspace?;
     // Reference a non-existent Jinja variable to trigger expansion failure.
-    std::fs::write(
+    test_fs::write(
         &manifest_path,
         concat!(
             "netsuke_version: \"1.0.0\"\n",
@@ -132,7 +133,7 @@ fn stage_callback_stops_after_final_rendering_failure(
     let (_dir, manifest_path) = temp_workspace?;
     // Missing required `netsuke_version` causes a deserialization error during
     // FinalRendering.
-    std::fs::write(
+    test_fs::write(
         &manifest_path,
         concat!(
             "rules:\n",

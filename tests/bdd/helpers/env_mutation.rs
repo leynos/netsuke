@@ -62,6 +62,7 @@ pub fn mutate_env_var(world: &TestWorld, key: EnvVarKey, new_value: Option<&str>
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for environment-mutation helpers.
     use super::*;
     use crate::bdd::fixtures::TestWorld;
     use crate::bdd::types::EnvVarKey;

@@ -58,53 +58,56 @@ fn merge_cli(world: &TestWorld, args: &str) {
 
 /// Convert a clap `ValueEnum` to its canonical name string.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the enum variant does not have a possible value (which should
-/// never happen for well-formed `ValueEnum` implementations).
-fn enum_name<T: clap::ValueEnum>(value: &T) -> String {
-    value
+/// Returns an error if the enum variant does not have a possible value
+/// (which should never happen for well-formed `ValueEnum` implementations).
+fn enum_name<T: clap::ValueEnum>(value: &T) -> Result<String> {
+    Ok(value
         .to_possible_value()
-        .unwrap_or_else(|| panic!("all ValueEnum variants must have a possible value"))
+        .context("all ValueEnum variants must have a possible value")?
         .get_name()
-        .to_owned()
+        .to_owned())
 }
 
 /// Write a theme value to the config file.
 fn write_theme_config(world: &TestWorld, theme: Theme) -> Result<()> {
-    write_config(world, &format!("theme = \"{}\"\n", enum_name(&theme)))
+    write_config(world, &format!("theme = \"{}\"\n", enum_name(&theme)?))
 }
 
 /// Write a colour policy value to the config file.
 fn write_colour_policy_config(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
     write_config(
         world,
-        &format!("colour_policy = \"{}\"\n", enum_name(&policy)),
+        &format!("colour_policy = \"{}\"\n", enum_name(&policy)?),
     )
 }
 
 /// Write a spinner mode value to the config file.
 fn write_spinner_mode_config(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
-    write_config(world, &format!("spinner_mode = \"{}\"\n", enum_name(&mode)))
+    write_config(
+        world,
+        &format!("spinner_mode = \"{}\"\n", enum_name(&mode)?),
+    )
 }
 
 /// Write an output format value to the config file.
 fn write_output_format_config(world: &TestWorld, format: OutputFormat) -> Result<()> {
     write_config(
         world,
-        &format!("output_format = \"{}\"\n", enum_name(&format)),
+        &format!("output_format = \"{}\"\n", enum_name(&format)?),
     )
 }
 
 /// Set the `NETSUKE_THEME` environment variable.
 fn set_env_theme(world: &TestWorld, theme: Theme) -> Result<()> {
-    let value = enum_name(&theme);
+    let value = enum_name(&theme)?;
     mutate_env_var(world, EnvVarKey::from("NETSUKE_THEME"), Some(&value))
 }
 
 /// Set the `NETSUKE_COLOUR_POLICY` environment variable.
 fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) -> Result<()> {
-    let value = enum_name(&policy);
+    let value = enum_name(&policy)?;
     mutate_env_var(
         world,
         EnvVarKey::from("NETSUKE_COLOUR_POLICY"),
@@ -114,7 +117,7 @@ fn set_env_colour_policy(world: &TestWorld, policy: ColourPolicy) -> Result<()> 
 
 /// Set the `NETSUKE_SPINNER_MODE` environment variable.
 fn set_env_spinner_mode(world: &TestWorld, mode: SpinnerMode) -> Result<()> {
-    let value = enum_name(&mode);
+    let value = enum_name(&mode)?;
     mutate_env_var(world, EnvVarKey::from("NETSUKE_SPINNER_MODE"), Some(&value))
 }
 

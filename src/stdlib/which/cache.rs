@@ -195,6 +195,8 @@ fn env_fingerprint(env: &EnvSnapshot) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the which resolver cache: key derivation, capacity
+    //! bounds, and skip-list handling during resolution.
     use super::*;
     use anyhow::{Result, anyhow, ensure};
     use camino::Utf8PathBuf;
@@ -269,16 +271,8 @@ mod tests {
             .map_err(|path| anyhow!("temp path should be utf8: {path:?}"))?;
 
         let target = cwd.join("target");
-        std::fs::create_dir_all(target.as_std_path())?;
-        std::fs::write(target.join("tool").as_std_path(), b"#!/bin/sh\n")?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let path = target.join("tool");
-            let mut perms = std::fs::metadata(path.as_std_path())?.permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(path.as_std_path(), perms)?;
-        }
+        test_support::fs::create_dir_all(target.as_std_path())?;
+        test_support::write_exec(target.as_path(), "tool")?;
 
         let capacity = NonZeroUsize::new(64).expect("non-zero cache capacity");
         // Use path_override to set empty PATH instead of mutating global env

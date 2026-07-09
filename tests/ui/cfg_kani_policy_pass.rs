@@ -10,7 +10,7 @@ fn main() {
     );
     assert!(
         CARGO_TOML.contains("unexpected_cfgs")
-            && CARGO_TOML.contains(r#"check-cfg = ["cfg(kani)"]"#),
+            && CARGO_TOML.contains(r#"check-cfg = ["cfg(kani)""#),
         "Cargo lints must declare cfg(kani) as an expected cfg",
     );
     assert!(

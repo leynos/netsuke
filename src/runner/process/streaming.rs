@@ -175,6 +175,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for streaming child process output forwarding.
+
     use super::{forward_child_output, forward_child_output_with_ninja_status};
     use std::{
         io::{BufReader, Cursor, Write},

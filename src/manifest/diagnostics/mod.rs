@@ -196,6 +196,7 @@ pub fn map_data_error(
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for manifest diagnostic construction and rendering.
     use super::*;
     use anyhow::{Context, Result, ensure};
     use miette::Diagnostic;

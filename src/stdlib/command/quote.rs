@@ -144,6 +144,7 @@ mod tests {
 
 #[cfg(all(test, not(windows)))]
 mod non_windows_tests {
+    //! Unit tests for Unix-specific shell quoting behaviour.
     use super::*;
 
     #[test]

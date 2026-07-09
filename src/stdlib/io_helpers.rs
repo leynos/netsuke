@@ -124,6 +124,7 @@ const fn io_error_kind_label(kind: IoErrorKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the stdlib I/O helper functions.
     use super::*;
     use camino::Utf8PathBuf;
     use rstest::rstest;

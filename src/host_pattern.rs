@@ -284,6 +284,7 @@ impl<'de> Deserialize<'de> for HostPattern {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for host pattern parsing and wildcard matching.
     use super::*;
 
     use anyhow::{Result, ensure};

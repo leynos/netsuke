@@ -26,6 +26,7 @@ jobs:
       BUILD_PROFILE: debug
       # Override rust-toolchain.toml to actually use the matrix toolchain
       RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
+      WHITAKER_INSTALLER_VERSION: '0.2.5'
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
       - name: Setup Rust
@@ -42,8 +43,34 @@ jobs:
         run: ninja --version
       - name: Format
         run: make check-fmt
+      - name: Cache Whitaker installer
+        if: matrix.rust == 'stable'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            ~/.cargo/bin/whitaker-installer
+            ~/.cache/cargo-binstall
+          key: whitaker-installer-${{ runner.os }}-${{ runner.arch }}-${{ env.WHITAKER_INSTALLER_VERSION }}
+      - name: Install Whitaker
+        if: matrix.rust == 'stable'
+        run: |
+          if ! command -v whitaker-installer >/dev/null 2>&1; then
+            if cargo binstall --version >/dev/null 2>&1; then
+              cargo binstall --no-confirm --locked "whitaker-installer@${WHITAKER_INSTALLER_VERSION}"
+            else
+              echo "cargo-binstall unavailable; building whitaker-installer from crates.io"
+              cargo install --locked whitaker-installer --version "${WHITAKER_INSTALLER_VERSION}"
+            fi
+          fi
+          whitaker-installer
       - name: Lint
+        if: matrix.rust == 'stable'
         run: make lint
+      # Whitaker lints under its own pinned toolchain, so re-running it per
+      # matrix leg repeats identical work; non-stable legs run Clippy only.
+      - name: Lint (Clippy only)
+        if: matrix.rust != 'stable'
+        run: make lint-clippy
       - name: Setup uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
         with:
