@@ -134,12 +134,31 @@ mod tests {
     use std::fs;
     use std::io;
 
+    /// Assert that probing `path` with `is_executable_file` yields
+    /// `expected`.
+    ///
+    /// Splits the fallible probe (the command) from the assertion on its
+    /// result (the query) so an I/O failure reads as a probe error, not a
+    /// wrong answer; a macro rather than a helper fn keeps panic line
+    /// numbers pointing at the calling test.
+    macro_rules! assert_executable_probe {
+        ($path:expr, $expected:expr) => {
+            let probed = is_executable_file($path).expect("probe executable state");
+            assert_eq!(
+                probed, $expected,
+                "unexpected executable probe for {}",
+                $path
+            );
+        };
+    }
+
     /// Create a temporary directory and its owned UTF-8 path. The `TempDir` is
     /// returned so the caller keeps it alive for the directory's lifetime.
     ///
-    /// Returns a `Result` because Whitaker's `no_expect_outside_tests` does
-    /// not recognise `#[fixture]` functions as test context; each test
-    /// unwraps the fixture in its own body instead.
+    /// Returns a `Result` because fixtures arrange state rather than assert
+    /// on it: arrangement failures must propagate to the test body, which is
+    /// the only place a panic is a test verdict (and the only context
+    /// Whitaker's `no_expect_outside_tests` recognises).
     #[fixture]
     fn temp_dir() -> io::Result<(tempfile::TempDir, Utf8PathBuf)> {
         let dir = tempfile::tempdir()?;
@@ -162,10 +181,7 @@ mod tests {
         perms.set_mode(mode);
         fs::set_permissions(&path, perms).expect("set permissions");
         let utf8 = Utf8Path::from_path(&path).expect("temp path is UTF-8");
-        assert_eq!(
-            is_executable_file(utf8).expect("probe execute bit"),
-            expected
-        );
+        assert_executable_probe!(utf8, expected);
     }
 
     #[cfg(not(unix))]
@@ -175,7 +191,7 @@ mod tests {
         let path = dir.path().join("candidate");
         fs::write(&path, b"").expect("write candidate file");
         let utf8 = Utf8Path::from_path(&path).expect("temp path is UTF-8");
-        assert!(is_executable_file(utf8).expect("probe regular file"));
+        assert_executable_probe!(utf8, true);
     }
 
     #[rstest]
@@ -183,7 +199,7 @@ mod tests {
         temp_dir: io::Result<(tempfile::TempDir, Utf8PathBuf)>,
     ) {
         let (_dir, utf8) = temp_dir.expect("create tempdir");
-        assert!(!is_executable_file(&utf8).expect("probe directory"));
+        assert_executable_probe!(&utf8, false);
     }
 
     #[rstest]
