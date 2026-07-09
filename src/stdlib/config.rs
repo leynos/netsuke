@@ -357,6 +357,7 @@ impl StdlibConfig {
                     .with_arg("path", path.display().to_string())
             )
         })?;
+        tracing::debug!(path = %path, "resolved stdlib workspace root from current directory");
         Self::new(root)
             .context("default fetch cache path should be valid")?
             .with_workspace_root_path(path)

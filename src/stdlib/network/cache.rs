@@ -63,14 +63,19 @@ pub(super) fn discard_partial_cache(cache: &CacheEntry<'_>) {
 }
 
 pub(super) fn open_cache_dir(root: &Dir, relative: &Utf8Path) -> Result<Dir, Error> {
+    tracing::debug!(cache_dir = %relative, "opening fetch cache directory");
     if let Err(err) = StdlibConfig::validate_cache_relative(relative) {
         return Err(Error::new(ErrorKind::InvalidOperation, err.to_string()));
     }
 
-    root.create_dir_all(relative)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_CREATE_CACHE_DIR, relative, err))?;
-    root.open_dir(relative)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_DIR, relative, err))
+    root.create_dir_all(relative).map_err(|err| {
+        tracing::warn!(cache_dir = %relative, error = %err, "failed to create fetch cache directory");
+        io_error(keys::STDLIB_FETCH_ACTION_CREATE_CACHE_DIR, relative, err)
+    })?;
+    root.open_dir(relative).map_err(|err| {
+        tracing::warn!(cache_dir = %relative, error = %err, "failed to open fetch cache directory");
+        io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_DIR, relative, err)
+    })
 }
 
 pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Vec<u8>>, Error> {
@@ -79,14 +84,20 @@ pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Ve
     options.read(true);
     match dir.open_with(path, &options) {
         Ok(file) => read_cached_file(name, file, limit).map(Some),
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_CACHE_OPEN_FAILED)
-                .with_arg("name", name)
-                .with_arg("details", err.to_string())
-                .to_string(),
-        )),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            tracing::debug!(key = name, "cache entry not found");
+            Ok(None)
+        }
+        Err(err) => {
+            tracing::warn!(key = name, error = %err, "cache read failed");
+            Err(Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::STDLIB_FETCH_CACHE_OPEN_FAILED)
+                    .with_arg("name", name)
+                    .with_arg("details", err.to_string())
+                    .to_string(),
+            ))
+        }
     }
 }
 
@@ -99,6 +110,7 @@ pub(super) fn read_cached(dir: &Dir, name: &str, limit: u64) -> Result<Option<Ve
 /// and the read.
 fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, Error> {
     let metadata = file.metadata().map_err(|err| {
+        tracing::warn!(key = name, error = %err, "cache read failed");
         io_error(
             keys::STDLIB_FETCH_ACTION_STAT_CACHE,
             Utf8Path::new(name),
@@ -110,6 +122,7 @@ fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, E
     }
     let mut buf = Vec::new();
     file.read_to_end(&mut buf).map_err(|err| {
+        tracing::warn!(key = name, error = %err, "cache read failed");
         Error::new(
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_FETCH_CACHE_READ_FAILED)
@@ -124,8 +137,10 @@ fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, E
 fn open_cache_writer(dir: &Dir, path: &Utf8Path) -> Result<File, Error> {
     let mut options = OpenOptions::new();
     options.create(true).truncate(true).write(true);
-    dir.open_with(path, &options)
-        .map_err(|err| io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_ENTRY, path, err))
+    dir.open_with(path, &options).map_err(|err| {
+        tracing::warn!(entry = %path, error = %err, "failed to open cache writer");
+        io_error(keys::STDLIB_FETCH_ACTION_OPEN_CACHE_ENTRY, path, err)
+    })
 }
 
 pub(super) fn cache_key(url: &str) -> String {

@@ -93,10 +93,15 @@ fn fetch(
     let bytes = if use_cache {
         let dir = context.open_cache_dir()?;
         let key = cache_key(parsed.as_str());
+        // Log the host and cache key rather than the full URL: the parsed URL
+        // may carry userinfo, and the key already identifies the entry uniquely.
+        let host = parsed.host_str().unwrap_or("");
         if let Some(cached) = read_cached(&dir, &key, limit)? {
+            tracing::debug!(host, key = %key, "fetch cache hit");
             impure.store(true, Ordering::Relaxed);
             cached
         } else {
+            tracing::debug!(host, key = %key, "fetch cache miss");
             let cache = CacheEntry::new(&dir, &key);
             fetch_remote_with_cache(&parsed, impure, limit, &cache)?
         }

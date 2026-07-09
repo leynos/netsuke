@@ -294,11 +294,16 @@ fn open_manifest_workspace(path: &Path) -> Result<ManifestWorkspace> {
         )
     })?;
     let root = resolve_absolute_workspace_root(utf8_parent)?;
-    let dir = Dir::open_ambient_dir(root.as_path(), ambient_authority()).with_context(|| {
-        localization::message(keys::MANIFEST_OPEN_WORKSPACE_FAILED)
-            .with_arg("workspace", root.as_str())
-            .with_arg("manifest", &manifest_file)
-    })?;
+    tracing::debug!(workspace = %root, manifest = %manifest_file, "opening manifest workspace directory");
+    let dir = Dir::open_ambient_dir(root.as_path(), ambient_authority())
+        .inspect_err(|err| {
+            tracing::warn!(workspace = %root, manifest = %manifest_file, error = %err, "failed to open manifest workspace directory");
+        })
+        .with_context(|| {
+            localization::message(keys::MANIFEST_OPEN_WORKSPACE_FAILED)
+                .with_arg("workspace", root.as_str())
+                .with_arg("manifest", &manifest_file)
+        })?;
     Ok(ManifestWorkspace {
         dir,
         root,
