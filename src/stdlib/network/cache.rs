@@ -121,16 +121,26 @@ fn read_cached_file(name: &str, mut file: File, limit: u64) -> Result<Vec<u8>, E
         return Err(response_limit_error_from_cache(name, limit));
     }
     let mut buf = Vec::new();
-    file.read_to_end(&mut buf).map_err(|err| {
-        tracing::warn!(key = name, error = %err, "cache read failed");
-        Error::new(
-            ErrorKind::InvalidOperation,
-            localization::message(keys::STDLIB_FETCH_CACHE_READ_FAILED)
-                .with_arg("name", name)
-                .with_arg("details", err.to_string())
-                .to_string(),
-        )
-    })?;
+    // Cap the read itself, not just the fstat check. The cache writer truncates
+    // and rewrites the same inode, so the entry can grow between the stat above
+    // and this read; reading at most `limit + 1` bytes bounds memory and lets an
+    // over-limit entry be detected rather than silently truncated.
+    file.by_ref()
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut buf)
+        .map_err(|err| {
+            tracing::warn!(key = name, error = %err, "cache read failed");
+            Error::new(
+                ErrorKind::InvalidOperation,
+                localization::message(keys::STDLIB_FETCH_CACHE_READ_FAILED)
+                    .with_arg("name", name)
+                    .with_arg("details", err.to_string())
+                    .to_string(),
+            )
+        })?;
+    if u64::try_from(buf.len()).unwrap_or(u64::MAX) > limit {
+        return Err(response_limit_error_from_cache(name, limit));
+    }
     Ok(buf)
 }
 
