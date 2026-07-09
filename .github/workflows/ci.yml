@@ -28,8 +28,12 @@ jobs:
       RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     steps:
       - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633  # v4.1.2
+        with:
+          # Full history so the deferred cs-coverage check step can reach
+          # the pull request's merge base once the gate is wired in.
+          fetch-depth: 0
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7da7c6d89033d13cbb1c64803d108ddca97e69c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
         with:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
@@ -57,19 +61,23 @@ jobs:
         run: make test
       - name: Test and Measure Coverage
         if: matrix.rust == 'stable'
-        uses: leynos/shared-actions/.github/actions/generate-coverage@7da7c6d89033d13cbb1c64803d108ddca97e69c2
+        uses: leynos/shared-actions/.github/actions/generate-coverage@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
         with:
           output-path: lcov.info
           format: lcov
-      - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: matrix.rust == 'stable' && env.CS_ACCESS_TOKEN != ''
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@7da7c6d89033d13cbb1c64803d108ddca97e69c2
-        with:
-          format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+          # Compare changed-line coverage against the baseline written by
+          # coverage-main.yml (caches saved on main are readable by every PR).
+          with-ratchet: 'true'
+      # The `mode: check` step is deliberately not wired in yet: CodeScene
+      # project 69281 has no coverage-gates configuration, so
+      # `cs-coverage check` fails every run with "HTTP call succeeded,
+      # but the received project-config isn't valid. Lacks the gates
+      # configuration." — a CodeScene-side per-project setting, not a CI
+      # defect (ddlint and chutoro hit the byte-identical error). Add the
+      # check step in a fast-follow PR once coverage-main.yml has
+      # uploaded to main at least once and the gate is confirmed to
+      # resolve, or once CodeScene confirms the project's coverage gate
+      # is enabled.
 
   kani-smoke:
     if: github.event_name == 'pull_request'
@@ -86,7 +94,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@7da7c6d89033d13cbb1c64803d108ddca97e69c2
+        uses: leynos/shared-actions/.github/actions/setup-rust@927edd45ae77be4251a8a18ca9eb5613a2e32cbd
         with:
           toolchain: stable
       - name: Install uv
