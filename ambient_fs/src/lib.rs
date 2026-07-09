@@ -188,15 +188,34 @@ mod tests {
     }
 
     #[rstest]
-    fn canonicalize_resolves_to_absolute_path(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
-        let (_dir, utf8) = temp_dir;
-        let canonical = canonicalize(&utf8).expect("canonicalize tempdir");
-        assert!(canonical.is_absolute());
+    fn canonicalize_resolves_relative_traversal(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+        // Force real filesystem resolution: a `..` round-trip only collapses
+        // back to the original directory if `canonicalize` consults the
+        // filesystem rather than returning its input unchanged. `std::fs`
+        // canonicalization of the un-traversed path is the oracle.
+        let (_dir, root) = temp_dir;
+        let nested = root.join("nested");
+        fs::create_dir(nested.as_std_path()).expect("create nested dir");
+        let traversed = nested.join("..").join("nested");
+        let resolved = canonicalize(&traversed).expect("canonicalize traversal");
+        let expected = fs::canonicalize(nested.as_std_path()).expect("canonicalize nested");
+        assert_eq!(resolved, expected);
     }
 
     #[rstest]
-    fn sync_file_flushes_open_handle() {
-        let file = tempfile::tempfile().expect("create tempfile");
-        sync_file(&file).expect("sync tempfile");
+    fn sync_file_persists_written_bytes(temp_dir: (tempfile::TempDir, Utf8PathBuf)) {
+        // Behavioural oracle: sync then reopen by path and read back, proving
+        // the bytes are persisted rather than merely that `sync_all` returned
+        // `Ok`. (True crash durability cannot be verified without OS-level
+        // fault injection, which is out of scope here.)
+        use std::io::Write as _;
+        let (_dir, root) = temp_dir;
+        let path = root.join("synced");
+        let payload = b"ambient_fs sync payload".to_vec();
+        let mut file = fs::File::create(path.as_std_path()).expect("create file for sync");
+        file.write_all(&payload).expect("write payload");
+        sync_file(&file).expect("sync file");
+        let read_back = fs::read(path.as_std_path()).expect("read synced file");
+        assert_eq!(read_back, payload);
     }
 }
