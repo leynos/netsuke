@@ -288,6 +288,7 @@ fn finalize_duration_buffer(mut buffer: String, time_section: &str) -> String {
 fn format_seconds_with_fraction(seconds: i64, nanos: i32) -> String {
     // Callers pass the remainder of an absolute duration, so `seconds` is
     // non-negative; `unsigned_abs` is the total conversion for that domain.
+    debug_assert!(seconds >= 0, "seconds must be non-negative (got {seconds})");
     let seconds_u64 = seconds.unsigned_abs();
     if nanos == 0 {
         return format!("{seconds_u64}S");

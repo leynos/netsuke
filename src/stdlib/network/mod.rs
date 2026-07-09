@@ -148,6 +148,8 @@ fn dispatch_request(url: &Url, impure: &Arc<AtomicBool>) -> Result<ureq::Respons
         .timeout(Duration::from_secs(60))
         .build();
     agent.get(url.as_str()).call().map_err(|err| {
+        // Log the host, not the full URL, which may carry userinfo.
+        tracing::warn!(host = url.host_str().unwrap_or(""), error = %err, "fetch request failed");
         Error::new(
             ErrorKind::InvalidOperation,
             localization::message(keys::STDLIB_FETCH_FAILED)
