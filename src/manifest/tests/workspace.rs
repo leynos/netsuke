@@ -93,6 +93,52 @@ fn open_manifest_workspace_rejects_non_utf_workspace_root() -> AnyResult<()> {
 }
 
 #[rstest]
+fn open_manifest_workspace_reports_missing_file_name() -> AnyResult<()> {
+    // The filesystem root has no file-name component, so extraction fails with a
+    // missing-name error, distinct from the non-UTF-8 case.
+    let err = open_manifest_workspace(Path::new("/"))
+        .expect_err("workspace should fail when the path has no file name");
+    ensure!(
+        err.to_string().contains("has no file name"),
+        "error should report the missing file name but was {err}"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[rstest]
+fn open_manifest_workspace_rejects_non_utf_file_name() -> AnyResult<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = tempdir().context("create temp workspace")?;
+    let invalid_name = OsString::from_vec(vec![b'm', 0xFF]); // invalid trailing byte
+    let manifest_path = temp.path().join(&invalid_name);
+    let err = open_manifest_workspace(&manifest_path)
+        .expect_err("workspace should fail when the file name is not valid UTF-8");
+    ensure!(
+        err.to_string().contains("path is not valid UTF-8"),
+        "error should mention the non-UTF-8 file name but was {err}"
+    );
+    Ok(())
+}
+
+#[rstest]
+fn open_manifest_workspace_reports_open_failure() -> AnyResult<()> {
+    // The parent directory does not exist, so `Dir::open_ambient_dir` fails and
+    // the error is wrapped as a workspace open failure.
+    let temp = tempdir().context("create temp workspace")?;
+    let manifest_path = temp.path().join("missing-subdir").join("Netsukefile");
+    let err = open_manifest_workspace(&manifest_path)
+        .expect_err("workspace open should fail when the parent directory is absent");
+    ensure!(
+        err.to_string().contains("Failed to open workspace"),
+        "error should mention the workspace open failure but was {err}"
+    );
+    Ok(())
+}
+
+#[rstest]
 fn from_path_uses_manifest_directory_for_caches() -> AnyResult<()> {
     let temp = tempdir()?;
     let workspace = temp.path().join("workspace");

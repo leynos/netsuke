@@ -104,6 +104,7 @@ define_keys! {
     MANIFEST_RESOLVE_WORKSPACE_ROOT => "manifest.resolve_workspace_root",
     MANIFEST_WORKSPACE_NON_UTF8 => "manifest.workspace_non_utf8",
     MANIFEST_PATH_NON_UTF8 => "manifest.path_non_utf8",
+    MANIFEST_PATH_MISSING_NAME => "manifest.path_missing_name",
     MANIFEST_OPEN_WORKSPACE_FAILED => "manifest.open_workspace_failed",
     MANIFEST_FOREACH_NOT_ITERABLE => "manifest.foreach.not_iterable",
     MANIFEST_FOREACH_SERIALISE_ITEM => "manifest.foreach.serialise_item",

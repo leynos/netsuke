@@ -119,6 +119,7 @@ manifest.read_failed = No se pudo leer el manifiesto en { $path }.
 manifest.resolve_workspace_root = No se pudo resolver la raíz del workspace.
 manifest.workspace_non_utf8 = La ruta de la raíz del workspace '{ $path }' no es UTF-8 válida.
 manifest.path_non_utf8 = La ruta del manifiesto '{ $manifest }' no es UTF-8 válida: { $path }.
+manifest.path_missing_name = La ruta del manifiesto '{ $path }' no tiene nombre de archivo.
 manifest.open_workspace_failed = No se pudo abrir el workspace { $workspace } para el manifiesto { $manifest }.
 manifest.foreach.not_iterable = La expresión `foreach` no es iterable.
 manifest.foreach.serialise_item = No se pudo serializar el elemento de foreach.

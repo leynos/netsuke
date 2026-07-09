@@ -119,6 +119,7 @@ manifest.read_failed = Failed to read manifest at { $path }.
 manifest.resolve_workspace_root = Failed to resolve workspace root.
 manifest.workspace_non_utf8 = Workspace root path '{ $path }' is not valid UTF-8.
 manifest.path_non_utf8 = Manifest '{ $manifest }' path is not valid UTF-8: { $path }.
+manifest.path_missing_name = Manifest path '{ $path }' has no file name.
 manifest.open_workspace_failed = Failed to open workspace { $workspace } for manifest { $manifest }.
 manifest.foreach.not_iterable = `foreach` expression is not iterable.
 manifest.foreach.serialise_item = Failed to serialise foreach item.

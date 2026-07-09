@@ -273,18 +273,23 @@ fn open_manifest_workspace(path: &Path) -> Result<ManifestWorkspace> {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
     };
-    let manifest_file = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(str::to_owned)
-        .ok_or_else(|| {
+    let manifest_file = match path.file_name() {
+        None => {
+            return Err(anyhow!(
+                "{}",
+                localization::message(keys::MANIFEST_PATH_MISSING_NAME)
+                    .with_arg("path", path.display().to_string())
+            ));
+        }
+        Some(name) => name.to_str().map(str::to_owned).ok_or_else(|| {
             anyhow!(
                 "{}",
                 localization::message(keys::MANIFEST_PATH_NON_UTF8)
                     .with_arg("manifest", path.display().to_string())
                     .with_arg("path", path.display().to_string())
             )
-        })?;
+        })?,
+    };
     let utf8_parent = Utf8Path::from_path(parent).ok_or_else(|| {
         anyhow!(
             "{}",
