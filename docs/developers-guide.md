@@ -93,8 +93,8 @@ continuous integration (CI); `make lint-clippy` runs the Clippy-only subset.
 Whitaker is configured by `dylint.toml` at the repository root. The
 `no_std_fs_operations` lint currently ignores in-source `allow`/`expect`
 attributes, so deliberately ambient filesystem access is confined to the
-`ambient_fs` leaf crate, which `dylint.toml` excludes from that lint with a
-documented rationale.
+`ambient_fs` leaf crate and the `test_support` test-fixture crate, both of
+which `dylint.toml` excludes from that lint with a documented rationale.
 
 When command output is long, preserve exit codes and logs:
 
