@@ -193,11 +193,52 @@ fn handle_dir_entry(
     Ok(())
 }
 
-/// Return Cargo manifest directories that Dependabot can update directly.
-fn cargo_manifest_dirs(root: &Dir) -> Result<BTreeSet<String>> {
-    let mut manifest_dirs = BTreeSet::new();
-    collect_dirs_containing_file(root, Utf8Path::new("."), "Cargo.toml", &mut manifest_dirs)?;
-    Ok(manifest_dirs)
+/// Result of enumerating tracked Cargo manifests via git.
+enum TrackedManifests {
+    /// Dependabot directory names for every tracked `Cargo.toml`.
+    Dirs(BTreeSet<String>),
+    /// The source tree is not a git checkout, so tracked files cannot
+    /// be enumerated (for example the scratch copy cargo-mutants
+    /// builds in, which omits `.git`).
+    NotAGitCheckout,
+}
+
+/// Return tracked Cargo manifest directories that Dependabot can update.
+///
+/// Manifests are enumerated with `git ls-files` rather than a file-system
+/// walk so untracked content (mutation-workflow checkouts such as
+/// `workflow-src/`, build artefacts, and scratch directories) cannot
+/// perturb the comparison. The git pathspec `*Cargo.toml` matches at any
+/// depth.
+fn tracked_cargo_manifest_dirs() -> Result<TrackedManifests> {
+    let root = repo_root_path();
+    let output = std::process::Command::new("git")
+        .args(["-C", root.as_str(), "ls-files", "-z", "--", "*Cargo.toml"])
+        .output()
+        .context("run git ls-files to enumerate tracked Cargo manifests")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("not a git repository") {
+            return Ok(TrackedManifests::NotAGitCheckout);
+        }
+        anyhow::bail!("git ls-files failed ({}): {stderr}", output.status);
+    }
+    let stdout = String::from_utf8(output.stdout).context("decode git ls-files output")?;
+    let manifest_dirs = stdout
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .map(|path| {
+            let parent = Utf8Path::new(path)
+                .parent()
+                .with_context(|| format!("tracked manifest {path} should have a parent"))?;
+            Ok(dependabot_dir_from_relative(parent))
+        })
+        .collect::<Result<BTreeSet<String>>>()?;
+    ensure!(
+        !manifest_dirs.is_empty(),
+        "git ls-files should report at least the workspace root Cargo.toml"
+    );
+    Ok(TrackedManifests::Dirs(manifest_dirs))
 }
 
 /// Return whether the repository has at least one workflow YAML file.
@@ -280,7 +321,21 @@ fn cargo_update_directories_match_manifests() -> Result<()> {
     let config = dependabot_config()?;
     let cargo_update = update_for(&config, "cargo")?;
     let configured_directory_refs = update_directories(cargo_update)?;
-    let expected_directories = cargo_manifest_dirs(&repo_dir()?)?;
+    let expected_directories = match tracked_cargo_manifest_dirs()? {
+        TrackedManifests::Dirs(dirs) => dirs,
+        TrackedManifests::NotAGitCheckout => {
+            // cargo-mutants builds in a scratch copy without `.git`;
+            // tracked-manifest hygiene is meaningless there, so skip.
+            #[expect(
+                clippy::print_stderr,
+                reason = "surface the skip in captured test output; no logger is set up here"
+            )]
+            {
+                eprintln!("skipping: source tree is not a git checkout");
+            }
+            return Ok(());
+        }
+    };
     let configured_directories = configured_directory_refs
         .into_iter()
         .map(String::from)
